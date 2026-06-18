@@ -1,0 +1,10 @@
+---
+description: Core Cursor agent rules
+alwaysApply: true
+---
+
+- Follow `AGENTS.md`.
+- Use `.cursor/plans/` for Cursor-native working plans.
+- Promote accepted plans that matter into `docs/plans/` or `docs/contracts/`.
+- Keep changes scoped to the task.
+- Produce verification evidence before review.

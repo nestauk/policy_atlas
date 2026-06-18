@@ -1,0 +1,14 @@
+# Knowledge conventions
+
+Knowledge files follow a lightweight OKF-style convention.
+
+Non-index concept files must include YAML frontmatter with at least:
+
+type:
+title:
+description:
+tags:
+
+Use docs/knowledge/index.md for navigation.
+
+Only durable, reviewed knowledge belongs here. Do not use this as a scratchpad or a copy of the architecture spec.
