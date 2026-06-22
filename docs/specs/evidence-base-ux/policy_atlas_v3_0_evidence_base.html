@@ -1,0 +1,817 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Policy Atlas — Evidence Base full workflow (wireframe)</title>
+<meta name="viewport" content="width=1320">
+<style>
+
+  :root{
+    --blue:#0000FF; --navy:#0F294A; --ink:#1c1c1e; --grey:#646363;
+    --line:#e4e4e7; --line-2:#d3d3d8; --bg:#f4f4f5;
+    --paper:#ffffff; --paper-2:#fafafa; --blue-tint:#ececff; --blue-tint-2:#f5f5ff;
+    --green:#18A48C; --green-tint:#e7f5f2; --yellow:#FDB633; --yellow-tint:#fff6e3;
+    --orange:#FF6E47; --red:#EB003B; --sand:#D2C9C0; --aqua:#97D9E3;
+    --violet:#A59BEE; --purple:#9A1BBE; --display:Averta,Arial,sans-serif; --sans:Averta,Arial,sans-serif;
+    --r:0px; --cut:10px;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{ background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:14px; }
+  a{ color:var(--blue); }
+  .deckhead{ max-width:1320px; margin:0 auto; padding:26px 28px 10px; display:flex; gap:24px; align-items:flex-start; }
+  .deckhead__brand{ flex:0 0 320px; }
+  .deckhead__logo,.nav__logo{ font-family:var(--display); font-weight:800; color:var(--navy); letter-spacing:-.4px; }
+  .deckhead__logo{ font-size:26px; }
+  .deckhead__logo b,.nav__logo b{ color:var(--blue); }
+  .deckhead__tag{ margin-top:5px; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--grey); }
+  .deckhead__note{ margin:0; max-width:820px; font-size:13px; line-height:1.55; color:var(--grey); }
+  .deck{ max-width:1320px; margin:0 auto; padding:0 20px 60px; }
+  .frame{ background:var(--paper); border:1px solid var(--line-2); margin:22px 0; padding:16px; }
+  .frame__cap{ display:flex; align-items:center; gap:10px; margin-bottom:7px; }
+  .frame__no{ width:34px; height:24px; display:inline-grid; place-items:center; background:var(--blue); color:#fff; font-weight:800; font-size:12px; }
+  .frame__title{ font-family:var(--display); font-size:19px; font-weight:800; color:var(--navy); margin:0; }
+  .frame__desc{ margin:0 0 12px 44px; max-width:1120px; color:var(--grey); font-size:12.5px; line-height:1.55; }
+  .screen{ background:var(--paper-2); border:1px solid var(--line-2); min-height:620px; overflow:hidden; }
+  .nav{ height:56px; border-bottom:1px solid var(--line); background:var(--paper); display:flex; align-items:center; justify-content:space-between; gap:16px; padding:0 18px; }
+  .nav__brand{ display:flex; align-items:center; gap:12px; min-width:0; }
+  .nav__logo{ font-size:19px; }
+  .nav__crumb{ display:flex; align-items:center; gap:8px; color:var(--grey); font-size:13px; min-width:0; white-space:nowrap; }
+  .nav__proj{ color:var(--navy); font-weight:700; }
+  .sep{ color:var(--line-2); }
+  .nav__right{ display:flex; align-items:center; gap:10px; white-space:nowrap; }
+  .nav__links{ display:flex; align-items:center; gap:12px; }
+  .nav__link{ font-size:13px; font-weight:700; color:var(--navy); text-decoration:none; padding:18px 0 15px; }
+  .nav__link--on{ border-bottom:2px solid var(--blue); }
+  .btn{ --cut:10px; display:inline-flex; align-items:center; justify-content:center; gap:6px; border:0; background:var(--blue); color:#fff; padding:11px 18px; font:700 13px/1 var(--sans); cursor:pointer; clip-path:polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%); }
+  .btn--sec{ background:#fff; color:var(--navy); border:1px solid var(--line-2); }
+  .btn--ghost{ background:transparent; color:var(--blue); clip-path:none; padding:7px 9px; border:0; }
+  .btn--sm{ --cut:7px; padding:7px 10px; font-size:12px; }
+  .iconbtn{ display:inline-grid; place-items:center; min-width:26px; min-height:26px; border:0; background:transparent; color:var(--navy); cursor:pointer; font-family:var(--sans); }
+  .avatar{ width:30px; height:30px; border-radius:50%; background:var(--navy); color:#fff; display:inline-grid; place-items:center; font-size:10px; font-weight:800; }
+  .chip{ display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line-2); padding:3px 7px; font-size:11px; color:var(--navy); background:#fff; }
+  .chip--blue{ background:var(--blue-tint); border-color:var(--blue); color:var(--blue); font-weight:800; }
+  .chip--soft{ background:var(--paper-2); color:var(--grey); }
+  .chip--yellow{ background:var(--yellow-tint); border-color:var(--yellow); color:#8a5a00; }
+  .chip--green{ background:var(--green-tint); border-color:var(--green); color:var(--green); }
+  .sdot{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .sdot--prog{ background:var(--blue); }
+  .sdot--paused{ background:var(--yellow); }
+  .sdot--done{ background:var(--green); }
+  .pane-h{ min-height:46px; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 16px; border-bottom:1px solid var(--line); font-size:12.5px; font-weight:800; color:var(--navy); }
+  .nav__switch{ position:relative; font-weight:800; color:var(--navy); padding-bottom:2px; border-bottom:2px solid var(--blue); cursor:pointer; }
+  .switchmenu{ display:none; position:absolute; z-index:20; left:0; top:22px; min-width:210px; background:#fff; border:1px solid var(--line-2); box-shadow:0 8px 22px rgba(15,41,74,.20); padding:6px; }
+  .nav__switch:hover .switchmenu{ display:flex; flex-direction:column; gap:2px; }
+  .switchmenu a{ padding:8px 10px; text-decoration:none; color:var(--navy); font-size:12px; font-weight:700; }
+  .switchmenu a.on{ background:var(--blue-tint); color:var(--blue); }
+  .sm-sep{ display:block; height:1px; background:var(--line); margin:4px 0; }
+
+  .cite{ font-size:11px; font-weight:700; color:var(--blue); background:var(--blue-tint); padding:0 4px; cursor:help; }
+  .ev-tab{ font-size:13px; font-weight:600; color:var(--grey); padding:12px 14px; border-bottom:2px solid transparent; cursor:pointer; }
+  .ev-tab--on{ font-weight:800; color:var(--navy); border-bottom-color:var(--blue); }
+  .ev-block{ border:1px solid var(--line-2); margin-bottom:12px; }
+  .ev-block__h{ display:flex; align-items:center; gap:8px; padding:9px 14px; background:var(--paper-2); border-bottom:1px solid var(--line); }
+  .ev-block__h b{ font-size:12.5px; color:var(--navy); flex:1; }
+  .ev-block__st{ font-size:11px; color:var(--grey); }
+  .ev-block__body{ padding:14px 16px; font-size:13.5px; line-height:1.6; color:var(--ink); }
+  .ev-finding{ display:flex; gap:12px; padding:10px 0; border-bottom:1px solid var(--line); }
+  .ev-finding:last-child{ border-bottom:none; }
+  /* rendering fixes */
+  body{ min-width:1280px; }
+  .chip{ white-space:nowrap; }
+  .deckhead__logo{ white-space:nowrap; }
+  .frame__title{ line-height:1.3; }
+  /* strength = defensible descriptive descriptor; no star ratings */
+  .ev-finding__bar{ flex:0 0 122px; display:flex; flex-direction:column; gap:2px; letter-spacing:0; text-transform:none; }
+  .ev-strength{ font-size:9.5px; font-weight:700; color:var(--grey); line-height:1.3; }
+  .ev-grade{ font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:var(--navy); }
+  /* amber check-in flag on a block */
+  .ev-block--flag{ border-left:3px solid var(--orange); background:#fffaf7; }
+  /* numbered references */
+  .refs{ margin:0; padding:0; list-style:none; }
+  .refs li{ display:flex; gap:10px; padding:7px 0; border-bottom:1px solid var(--line); font-size:12.5px; color:var(--ink); line-height:1.5; }
+  .refs li:last-child{ border-bottom:none; }
+  .refs .n{ flex:0 0 26px; height:18px; font-size:11px; font-weight:700; color:var(--blue); background:var(--blue-tint); display:inline-grid; place-items:center; margin-top:1px; }
+  /* monochrome emoji — Nesta icon guidance (placeholder for real icon set) */
+  .ico{ filter:grayscale(1); opacity:.78; }
+</style>
+</head>
+<body>
+
+<header class="deckhead">
+  <div class="deckhead__brand">
+    <div class="deckhead__logo">Policy <b>Atlas</b></div>
+    <div class="deckhead__tag">Evidence Base · full workflow wireframe</div>
+  </div>
+  <p class="deckhead__note">The complete journey for the <b>Evidence Base</b> capability — landing → workspace → planning → build (with a thin-evidence check-in) → synthesis artefact → evidence table → comments → <b>re-run (v1.1)</b> → re-entry. Nesta brand. <b>Implementation-context update:</b> this is a static UX reference for spec, rubric, and task-contract agents; it is not an API/data-model contract. Aggregate rating badges and share/export are deliberately absent from V1. Emoji are rendered monochrome per Nesta icon guidance — hi-fi will use the real icon set.</p>
+</header>
+
+<main class="deck">
+
+<!-- ============ 00 · LANDING ============ -->
+<section class="frame">
+  <div class="frame__cap"><span class="frame__no">00</span><h2 class="frame__title">Projects — landing</h2></div>
+  <p class="frame__desc">The home surface. Calm and functional (no marketing hero). One create action, top right. Each card's ⋯ menu holds rename / delete. App settings live under the avatar, here and on every frame.</p>
+  <div class="screen">
+    <nav class="nav">
+      <div class="nav__brand">
+        <div class="nav__logo">Policy <b>Atlas</b></div>
+      </div>
+      <div class="nav__right">
+        <div class="nav__links">
+          <a class="nav__link nav__link--on">Projects</a>
+        </div>
+        
+        <span class="avatar" title="Account &amp; settings">AK</span>
+      </div>
+    </nav>
+
+    <div style="padding:28px 32px;">
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:22px;">
+        <div>
+          <h1 style="font-family:var(--display); font-weight:800; font-size:30px; color:var(--navy); margin:0; letter-spacing:-.5px;">Projects</h1>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <button class="btn">＋ New project</button>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:8px; margin-bottom:20px;">
+        <span class="chip chip--blue">All</span>
+        <span class="chip chip--soft">Mine</span>
+        <span class="chip chip--soft">Shared with me</span>
+      </div>
+
+      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px;">
+        <!-- card 1 -->
+        <a style="text-decoration:none; color:inherit; border:1px solid var(--line-2); background:var(--paper); padding:18px; display:flex; flex-direction:column; gap:14px; min-height:150px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="font-family:var(--display); font-weight:700; font-size:16px; color:var(--navy); line-height:1.25;">SR26 — DSIT growth bid</div>
+            <span style="color:var(--grey);">⋯</span>
+          </div>
+          <div style="font-size:12.5px; color:var(--grey);"><span class="ico">📖</span> Evidence Base</div>
+          <div style="margin-top:auto; display:flex; align-items:center; gap:10px;">
+            <span style="display:flex; gap:-6px;"><span class="avatar" style="width:22px;height:22px;font-size:9px;">GB</span><span class="avatar" style="width:22px;height:22px;font-size:9px;background:var(--blue);margin-left:-6px;">AK</span><span class="avatar" style="width:22px;height:22px;font-size:9px;background:var(--violet);color:var(--navy);margin-left:-6px;">NR</span></span>
+            <span style="margin-left:auto; font-size:11.5px; color:var(--navy); display:flex; align-items:center; gap:6px;"><span class="sdot sdot--prog"></span>In progress</span>
+          </div>
+        </a>
+        <!-- card 2 -->
+        <a style="text-decoration:none; color:inherit; border:1px solid var(--line-2); background:var(--paper); padding:18px; display:flex; flex-direction:column; gap:14px; min-height:150px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="font-family:var(--display); font-weight:700; font-size:16px; color:var(--navy); line-height:1.25;">Solar rollout — rural England</div>
+            <span style="color:var(--grey);">⋯</span>
+          </div>
+          <div style="font-size:12.5px; color:var(--grey);"><span class="ico">📖</span> Evidence Base · <span class="ico">📋</span> Options · <span class="ico">💷</span> VfM +1</div>
+          <div style="margin-top:auto; display:flex; align-items:center; gap:10px;">
+            <span style="display:flex;"><span class="avatar" style="width:22px;height:22px;font-size:9px;">JM</span><span class="avatar" style="width:22px;height:22px;font-size:9px;background:var(--orange);color:#fff;margin-left:-6px;">PT</span></span>
+            <span style="margin-left:auto; font-size:11.5px; color:var(--navy); display:flex; align-items:center; gap:6px;"><span class="sdot sdot--prog"></span>In progress</span>
+          </div>
+        </a>
+        <!-- card 3 -->
+        <a style="text-decoration:none; color:inherit; border:1px solid var(--line-2); background:var(--paper); padding:18px; display:flex; flex-direction:column; gap:14px; min-height:150px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="font-family:var(--display); font-weight:700; font-size:16px; color:var(--navy); line-height:1.25;">Heat pump subsidy review</div>
+            <span style="color:var(--grey);">⋯</span>
+          </div>
+          <div style="font-size:12.5px; color:var(--grey);"><span class="ico">📖</span> Evidence Base</div>
+          <div style="margin-top:auto; display:flex; align-items:center; gap:10px;">
+            <span class="chip chip--yellow" style="font-weight:700;"><span class="sdot sdot--paused"></span>Paused — waiting on your input</span>
+          </div>
+        </a>
+        <!-- card 4 -->
+        <a style="text-decoration:none; color:inherit; border:1px solid var(--line-2); background:var(--paper); padding:18px; display:flex; flex-direction:column; gap:14px; min-height:150px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="font-family:var(--display); font-weight:700; font-size:16px; color:var(--navy); line-height:1.25;">School attendance strategy</div>
+            <span style="color:var(--grey);">⋯</span>
+          </div>
+          <div style="font-size:12.5px; color:var(--grey);"><span class="ico">📖</span> Evidence Base · <span class="ico">📋</span> Options +3</div>
+          <div style="margin-top:auto; display:flex; align-items:center; gap:10px;">
+            <span style="display:flex;"><span class="avatar" style="width:22px;height:22px;font-size:9px;">RC</span><span class="avatar" style="width:22px;height:22px;font-size:9px;background:var(--green);color:#fff;margin-left:-6px;">DA</span></span>
+            <span style="margin-left:auto; font-size:11.5px; color:var(--navy); display:flex; align-items:center; gap:6px;"><span class="sdot sdot--done"></span>Completed</span>
+          </div>
+        </a>
+        <!-- card 5 -->
+        <a style="text-decoration:none; color:inherit; border:1px solid var(--line-2); background:var(--paper); padding:18px; display:flex; flex-direction:column; gap:14px; min-height:150px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="font-family:var(--display); font-weight:700; font-size:16px; color:var(--navy); line-height:1.25;">Preventative health spend</div>
+            <span style="color:var(--grey);">⋯</span>
+          </div>
+          <div style="font-size:12.5px; color:var(--grey);"><span class="ico">📖</span> Evidence Base · <span class="ico">📊</span> Baseline</div>
+          <div style="margin-top:auto; display:flex; align-items:center; gap:10px;">
+            <span style="margin-left:auto; font-size:11.5px; color:var(--navy); display:flex; align-items:center; gap:6px;"><span class="sdot sdot--prog"></span>In progress</span>
+          </div>
+        </a>
+        <!-- new -->
+        <a style="text-decoration:none; color:inherit; border:1px solid var(--line-2); background:var(--paper); padding:18px; display:flex; flex-direction:column; gap:14px; min-height:150px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="font-family:var(--display); font-weight:700; font-size:16px; color:var(--navy); line-height:1.25;">Childcare expansion costing</div>
+            <span style="color:var(--grey);">⋯</span>
+          </div>
+          <div style="font-size:12.5px; color:var(--grey);"><span class="ico">📖</span> Evidence Base · <span class="ico">📊</span> Baseline</div>
+          <div style="margin-top:auto; display:flex; align-items:center; gap:10px;">
+            <span style="display:flex;"><span class="avatar" style="width:22px;height:22px;font-size:9px;background:var(--aqua);color:var(--navy);">LH</span></span>
+            <span style="margin-left:auto; font-size:11.5px; color:var(--navy); display:flex; align-items:center; gap:6px;"><span class="sdot sdot--done"></span>Completed</span>
+          </div>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============ 01 · WORKSPACE (template picker) ============ -->
+<!-- ============ 01 · WORKSPACE (template picker) ============ -->
+<section class="frame">
+  <div class="frame__cap"><span class="frame__no">01</span><h2 class="frame__title">Open project — workspace</h2></div>
+  <p class="frame__desc">Empty project. Pick a starting point — the four high-impact moments as compact cards — or describe the work in the composer beneath. The <b>Library</b> is a collapsible left rail with upload — closed on a new project like this one; it opens automatically when you return to a project with history (frame 09).</p>
+  <div class="screen">
+    <nav class="nav">
+      <div class="nav__brand">
+        <div class="nav__logo">Policy <b>Atlas</b></div>
+        <div class="nav__crumb"><span class="sep">/</span><span class="nav__proj">SR26 — DSIT growth bid</span><span class="sep">/</span>
+          <span style="font-weight:700; color:var(--navy); padding-bottom:2px; border-bottom:2px solid var(--blue);">Workspace</span>
+        </div>
+      </div>
+      <div class="nav__right">
+        <button class="btn--ghost btn">＋ Invite</button>
+        
+        <span class="avatar" title="Account &amp; settings">AK</span>
+      </div>
+    </nav>
+    <div style="display:grid; grid-template-columns:46px 1fr; min-height:560px;">
+      <aside style="border-right:1px solid var(--line); background:var(--paper); display:flex; flex-direction:column; align-items:center; padding:12px 0; gap:3px;">
+        <button class="iconbtn" title="Open Library" style="font-size:13px;">⟩</button>
+        <span style="writing-mode:vertical-rl; font-size:10.5px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:var(--grey); margin-top:10px;">Library</span>
+        <button class="iconbtn" title="Upload a source" style="font-size:16px; color:var(--blue); padding:2px; margin-top:8px;">＋</button>
+      </aside>
+      <main style="display:flex; flex-direction:column; background:var(--paper-2);">
+        <div style="flex:1; padding:34px 32px; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
+          <div style="width:100%; max-width:560px; display:flex; flex-direction:column; align-items:center;">
+          <h2 style="font-family:var(--display); font-weight:800; font-size:27px; color:var(--navy); margin:0 0 8px; letter-spacing:-.4px;">What are you trying to do?</h2>
+          <p style="font-size:13px; color:var(--grey); margin:0 0 18px; max-width:440px;">Pick a starting point — or just describe what you're working on below.</p>
+          <div style="width:100%; display:grid; grid-template-columns:1fr 1fr; gap:8px; text-align:left;">
+              <button style="text-align:left; background:var(--paper); border:1px solid var(--line-2); padding:11px 12px; cursor:pointer; display:flex; flex-direction:column; gap:4px;"><strong style="font-size:12.5px; color:var(--navy);"><span class="ico">💷</span> Making a spending decision</strong><span style="font-size:11px; color:var(--grey); line-height:1.4;">Defending or scrutinising a bid in a spending review.</span></button>
+              <button style="text-align:left; background:var(--paper); border:1px solid var(--line-2); padding:11px 12px; cursor:pointer; display:flex; flex-direction:column; gap:4px;"><strong style="font-size:12.5px; color:var(--navy);"><span class="ico">🔍</span> Scrutinising a proposal</strong><span style="font-size:11px; color:var(--grey); line-height:1.4;">Reviewing a proposal from a department or team.</span></button>
+              <button style="text-align:left; background:var(--paper); border:1px solid var(--line-2); padding:11px 12px; cursor:pointer; display:flex; flex-direction:column; gap:4px;"><strong style="font-size:12.5px; color:var(--navy);"><span class="ico">🧭</span> Scoping options</strong><span style="font-size:11px; color:var(--grey); line-height:1.4;">Shaping a new area — what options exist, what's tried.</span></button>
+              <button style="text-align:left; background:var(--paper); border:2px solid var(--blue); padding:10px 11px; cursor:pointer; display:flex; flex-direction:column; gap:4px;"><strong style="font-size:12.5px; color:var(--navy);"><span class="ico">📖</span> Find evidence</strong><span style="font-size:11px; color:var(--grey); line-height:1.4;">Synthesise the evidence on a policy question from scratch.</span></button>
+          </div>
+          <div style="width:100%; margin-top:14px; display:flex; align-items:center; gap:10px; border:1px solid var(--line-2); background:#fff; padding:8px 8px 8px 14px;">
+            <button class="iconbtn" title="Add a file — goes to your Library" style="font-size:17px; padding:0; color:var(--blue);">＋</button>
+            <span style="flex:1; font-size:13px; color:var(--grey); text-align:left;">Find evidence on…</span>
+            <span style="width:30px; height:30px; background:var(--blue); color:#fff; display:grid; place-items:center; clip-path:polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 0 100%);">→</span>
+          </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</section>
+
+
+
+<!-- ============ 01b–01d · PLANNING CONVERSATION ============ -->
+<section class="frame">
+  <div class="frame__cap"><span class="frame__no">02</span><h2 class="frame__title">Planning conversation</h2></div>
+  <p class="frame__desc">The Conversation (centre) and the Plan forming on the right; the Library rail stays collapsed on the left. Quick/Deep stays in the UX as a user intent signal about search breadth and effort appetite; the orchestrator still compiles the actual per-section depth from the full intent and plan. No disabled Build button — it only appears once the plan is ready (03); its arrival is the signal.</p>
+  <div class="screen">
+    <nav class="nav"><div class="nav__brand"><div class="nav__logo">Policy <b>Atlas</b></div><div class="nav__crumb"><span class="sep">/</span><span class="nav__proj">SR26 — DSIT growth bid</span><span class="sep">/</span><span style="font-weight:700; color:var(--navy); padding-bottom:2px; border-bottom:2px solid var(--blue);">Workspace</span></div></div><div class="nav__right"><button class="btn--ghost btn">＋ Invite</button><span class="avatar" title="Account &amp; settings">AK</span></div></nav>
+    <div style="display:grid; grid-template-columns:46px 1.6fr 1.15fr; min-height:560px;">
+      <aside style="border-right:1px solid var(--line); background:var(--paper); display:flex; flex-direction:column; align-items:center; padding:12px 0; gap:3px;">
+        <button class="iconbtn" title="Open Library" style="font-size:13px;">⟩</button>
+        <span style="writing-mode:vertical-rl; font-size:10.5px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:var(--grey); margin-top:10px;">Library</span>
+        <button class="iconbtn" title="Upload a source" style="font-size:16px; color:var(--blue); padding:2px; margin-top:8px;">＋</button>
+      </aside>
+      <main style="display:flex; flex-direction:column; background:var(--paper-2);">
+        <div style="flex:1; padding:24px 28px; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
+          <div style="max-width:86%; font-size:13.5px; color:var(--navy); line-height:1.5;">What are you trying to do?</div>
+          <div style="align-self:flex-end; max-width:78%; background:var(--blue); color:#fff; padding:10px 14px; font-size:13px; clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,0 100%);">I want the evidence on R&amp;D tax-credit additionality for the DSIT growth bid.</div>
+          <div style="max-width:86%; font-size:13.5px; color:var(--navy); line-height:1.5;">I'll generate an <b>Evidence Base</b> from the curated library. First — do you want a quick or deep search? This gives me a signal about how widely to search — I'll still use the full plan to infer actual depth, and check-in frequency is set separately.</div>
+          <div style="display:flex; gap:8px; align-self:flex-start; max-width:90%;">
+            <button class="btn--sec btn btn--sm" style="border:1px solid var(--line-2); --cut:7px; line-height:1.35; text-align:left; flex-direction:column; align-items:flex-start; gap:3px;"><b style="font-size:12.5px; color:var(--navy); white-space:nowrap;"><span class="ico">⚡</span> Quick search</b><span style="font-size:11px; color:var(--grey); font-weight:400;">Top sources first, headline synthesis · lower effort, fewer scoping questions</span></button>
+            <button class="btn--sec btn btn--sm" style="border:2px solid var(--blue); --cut:7px; line-height:1.35; text-align:left; flex-direction:column; align-items:flex-start; gap:3px;"><b style="font-size:12.5px; color:var(--navy); white-space:nowrap;"><span class="ico">🔬</span> Deep search</b><span style="font-size:11px; color:var(--grey); font-weight:400;">Systematic-style sweep · wider effort, more scoping questions</span></button>
+          </div>
+          <div style="align-self:flex-end; max-width:78%; background:var(--blue); color:#fff; padding:10px 14px; font-size:13px; clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,0 100%);">Deep search.</div>
+          <div style="max-width:86%; font-size:13.5px; color:var(--navy); line-height:1.5;">Good — I'll ask a few scoping questions then. Which population: SMEs, large firms, or both?</div>
+          <div style="align-self:flex-end; max-width:78%; background:var(--blue); color:#fff; padding:10px 14px; font-size:13px; clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,0 100%);">Both, but flag where they differ.</div>
+          <div style="max-width:86%; font-size:13.5px; color:var(--navy); line-height:1.5;">Noted. Any geographic or recency limits — UK only, or OECD-wide?</div>
+        </div>
+        <div style="padding:14px 20px; background:var(--paper-2);"><div style="display:flex; align-items:center; gap:10px; border:1px solid var(--line-2); background:#fff; padding:8px 8px 8px 14px;"><button class="iconbtn" title="Add a file — goes to your Library" style="font-size:17px; padding:0; color:var(--blue);">＋</button><span style="flex:1; font-size:13px; color:var(--grey);">Reply to Policy Atlas…</span><span style="width:30px; height:30px; background:var(--blue); color:#fff; display:grid; place-items:center; clip-path:polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,0 100%);">→</span></div></div>
+      </main>
+      <aside style="border-left:1px solid var(--line); display:flex; flex-direction:column; background:#fff;">
+        <div class="pane-h" style="display:flex; align-items:center; justify-content:space-between;">
+          <span>Plan <span class="chip chip--soft" style="text-transform:none; letter-spacing:0; margin-left:6px;">forming…</span></span>
+        </div>
+        <div style="padding:0 16px 16px; display:flex; flex-direction:column; gap:16px;">
+          <div>
+            <div style="border:1px solid var(--line-2); border-left:3px solid var(--blue); padding:8px 11px; display:flex; align-items:center; gap:8px;">
+              <span style="font-size:13px; font-weight:700; color:var(--navy);"><span class="ico">📖</span> Evidence Base</span>
+              <span style="font-size:11px; color:var(--grey); margin-left:auto;">search signal: deep</span>
+            </div>
+            <button class="btn--sec btn" style="border:none; --cut:0; justify-content:flex-start; width:auto; padding:6px 0 0; margin-top:2px; color:var(--blue); font-size:12px; font-weight:700;">＋ Add a capability</button>
+          </div>
+          <div>
+            <div style="font-size:10.5px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:var(--grey); margin-bottom:8px;">Scope</div>
+            <div style="display:flex; flex-direction:column; gap:7px; font-size:12px; color:var(--ink);">
+              <div style="display:flex; align-items:flex-start; gap:8px;"><span style="flex:0 0 15px; width:15px; height:15px; background:var(--green); border:1px solid var(--green); color:#fff; display:grid; place-items:center; font-size:9px; margin-top:1px;">✓</span><span><b>Population</b> — SMEs &amp; large firms</span></div>
+              <div style="display:flex; align-items:flex-start; gap:8px; color:var(--grey);"><span style="flex:0 0 15px; width:15px; height:15px; border:1.5px solid var(--line-2); margin-top:1px;"></span><span><b style="color:var(--navy);">Geography</b> <span style="font-style:italic;">— asking…</span></span></div>
+              <div style="display:flex; align-items:flex-start; gap:8px; color:var(--grey);"><span style="flex:0 0 15px; width:15px; height:15px; border:1.5px solid var(--line-2); margin-top:1px;"></span><span><b style="color:var(--navy);">Study types</b> <span style="font-style:italic;">— pending</span></span></div>
+              <div style="display:flex; align-items:flex-start; gap:8px; color:var(--grey);"><span style="flex:0 0 15px; width:15px; height:15px; border:1.5px solid var(--line-2); margin-top:1px;"></span><span><b style="color:var(--navy);">Outcome</b> <span style="font-style:italic;">— pending</span></span></div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============ 01d' · ENOUGH CONTEXT ============ -->
+<section class="frame">
+  <div class="frame__cap"><span class="frame__no">03</span><h2 class="frame__title">Plan ready — build directly</h2></div>
+  <p class="frame__desc">The conversation has gathered enough context, so the full plan sits ready on the right — no separate "review" step. The user reads it, tweaks inline if they want, sets how often to be checked in with, and hits <b>Build evidence base</b>. Keep refining in chat, or build.</p>
+  <div class="screen">
+    <nav class="nav"><div class="nav__brand"><div class="nav__logo">Policy <b>Atlas</b></div><div class="nav__crumb"><span class="sep">/</span><span class="nav__proj">SR26 — DSIT growth bid</span><span class="sep">/</span><span style="font-weight:700; color:var(--navy); padding-bottom:2px; border-bottom:2px solid var(--blue);">Workspace</span></div></div><div class="nav__right"><button class="btn--ghost btn">＋ Invite</button><span class="avatar" title="Account &amp; settings">AK</span></div></nav>
+    <div style="display:grid; grid-template-columns:46px 1.6fr 1.15fr; min-height:0;">
+      <aside style="border-right:1px solid var(--line); background:var(--paper); display:flex; flex-direction:column; align-items:center; padding:12px 0; gap:3px;">
+        <button class="iconbtn" title="Open Library" style="font-size:13px;">⟩</button>
+        <span style="writing-mode:vertical-rl; font-size:10.5px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:var(--grey); margin-top:10px;">Library</span>
+        <button class="iconbtn" title="Upload a source" style="font-size:16px; color:var(--blue); padding:2px; margin-top:8px;">＋</button>
+      </aside>
+      <main style="border-right:1px solid var(--line); display:flex; flex-direction:column; background:var(--paper-2);">
+        <div style="flex:1; padding:24px 28px; display:flex; flex-direction:column; gap:14px;">
+          <div style="align-self:flex-end; max-width:80%; background:var(--blue); color:#fff; padding:10px 14px; font-size:13px; clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,0 100%);">UK and OECD, last 10 years. Prioritise RCTs and reviews.</div>
+          <div style="max-width:90%; font-size:13.5px; color:var(--navy); line-height:1.55;">Noted — anything else you'd like me to fold in before I draw up the plan?</div>
+          <div style="align-self:flex-end; max-width:80%; background:var(--blue); color:#fff; padding:10px 14px; font-size:13px; clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,0 100%);">Also look into whether additionality differs for first-time vs repeat R&amp;D claimants.</div>
+          <div style="max-width:90%; font-size:13.5px; color:var(--navy); line-height:1.55;">Good angle — folded in. That's everything I need: the plan's ready on the right. Read it over, tweak anything, and hit <b>Build evidence base</b> when you're happy — or keep refining here.</div>
+        </div>
+        <div style="padding:14px 20px; background:var(--paper-2);"><div style="display:flex; align-items:center; gap:10px; border:1px solid var(--line-2); background:#fff; padding:8px 8px 8px 14px;"><button class="iconbtn" title="Add a file — goes to your Library" style="font-size:17px; padding:0; color:var(--blue);">＋</button><span style="flex:1; font-size:13px; color:var(--grey);">Refine the plan, or say "build it"…</span><span style="width:30px; height:30px; background:var(--blue); color:#fff; display:grid; place-items:center; clip-path:polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,0 100%);">→</span></div></div>
+      </main>
+
+      <!-- RIGHT: the full plan, ready -->
+      <aside style="display:flex; flex-direction:column; background:#fbfcff;">
+        <div class="pane-h">Plan <span class="chip chip--soft" style="text-transform:none; letter-spacing:0; margin-left:6px;">ready</span></div>
+        <div style="flex:1; padding:0 18px 16px; display:flex; flex-direction:column; gap:16px; overflow:auto;">
+          <!-- single-column stacked detail -->
+          <div style="display:flex; flex-direction:column; gap:16px;">
+            <!-- what I'll do + sections -->
+              <div>
+                <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;"><span style="font-size:10.5px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:var(--grey);">What I'll do</span><span style="font-size:11px; color:var(--blue);">✎</span></div>
+                <div title="Click to edit" class="wf-editable" style="position:relative; border:1px dashed var(--line-2); border-radius:2px; padding:8px 9px; cursor:text;">
+                  <p style="font-size:12px; line-height:1.6; color:var(--ink); margin:0;">Using your deep-search signal, I'll start with a wider evidence sweep on <b>R&amp;D tax-credit additionality</b> — both SMEs and large firms, UK &amp; OECD, last 10 years, RCTs and reviews — then infer section-by-section depth from the approved plan. I'll synthesise, describe strength, and check in if evidence is thin or conflicting. <span style="background:var(--blue-tint);">Let's also look into first-time vs repeat claimants.</span></p>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:10.5px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:var(--grey); margin-bottom:8px;">Sections</div>
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                  <label style="display:flex; align-items:flex-start; gap:9px; border:1px solid var(--line-2); padding:8px 10px;"><span style="flex:0 0 14px; width:14px; height:14px; background:var(--blue); display:grid; place-items:center; color:#fff; font-size:9px; margin-top:1px;">✓</span><span style="flex:1;"><span style="display:block; font-size:12px; color:var(--navy); font-weight:600;">Synthesis</span><span style="display:block; font-size:11px; color:var(--grey); line-height:1.45; margin-top:1px;">A narrative pulling the evidence together — what the literature says overall.</span></span></label>
+                  <label style="display:flex; align-items:flex-start; gap:9px; border:1px solid var(--line-2); padding:8px 10px;"><span style="flex:0 0 14px; width:14px; height:14px; background:var(--blue); display:grid; place-items:center; color:#fff; font-size:9px; margin-top:1px;">✓</span><span style="flex:1;"><span style="display:block; font-size:12px; color:var(--navy); font-weight:600;">Key findings &amp; strength</span><span style="display:block; font-size:11px; color:var(--grey); line-height:1.45; margin-top:1px;">The headline results, each rated by how robust the underlying evidence is.</span></span></label>
+                  <label style="display:flex; align-items:flex-start; gap:9px; border:1px solid var(--line-2); padding:8px 10px;"><span style="flex:0 0 14px; width:14px; height:14px; background:var(--blue); display:grid; place-items:center; color:#fff; font-size:9px; margin-top:1px;">✓</span><span style="flex:1;"><span style="display:block; font-size:12px; color:var(--navy); font-weight:600;">Gaps &amp; conflicts</span><span style="display:block; font-size:11px; color:var(--grey); line-height:1.45; margin-top:1px;">Where evidence is thin, missing, or where studies disagree.</span></span></label>
+                  <button style="display:flex; align-items:center; gap:9px; border:1px dashed var(--line-2); background:none; padding:8px 10px; cursor:pointer; width:100%;"><span style="width:14px; height:14px; display:grid; place-items:center; color:var(--blue); font-size:13px;">＋</span><span style="flex:1; font-size:12px; color:var(--grey); text-align:left;">Add section</span></button>
+                </div>
+              </div>
+          </div>
+          <!-- footer: check-in stacked above build -->
+          <div style="margin-top:auto; padding-top:14px; border-top:1px solid var(--line); display:flex; flex-direction:column; gap:14px;">
+            <div>
+              <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
+                <span style="font-size:11.5px; font-weight:700; color:var(--navy);">Check in with me</span>
+                <span title="How often Policy Atlas pauses to ask you during the build" style="font-size:10px; color:var(--grey); border:1px solid var(--line-2); border-radius:50%; width:14px; height:14px; display:inline-grid; place-items:center; cursor:help;">i</span>
+              </div>
+              <div style="display:flex; border:1px solid var(--line-2); max-width:300px;">
+                <span style="flex:1; text-align:center; font-size:11.5px; padding:6px 4px; color:var(--grey); cursor:pointer;">Rarely</span>
+                <span style="flex:1; text-align:center; font-size:11.5px; padding:6px 4px; background:var(--blue-tint); color:var(--navy); font-weight:700; box-shadow:inset 0 -2px 0 var(--blue); cursor:pointer;">At key points</span>
+                <span style="flex:1; text-align:center; font-size:11.5px; padding:6px 4px; color:var(--grey); cursor:pointer;">Often</span>
+              </div>
+            </div>
+            <button class="btn btn--block">Build evidence base →</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+
+
+<!-- ============ E2 · BUILD (with check-in) ============ -->
+<section class="frame">
+  <div class="frame__cap"><span class="frame__no">04</span><h2 class="frame__title">Build — sections stream, with a check-in</h2></div>
+  <p class="frame__desc">The evidence table lands first, then summary sections stream in block-by-block — content readable as it arrives, and the decision log evolving alongside. Status is carried by the coloured edge (green = done, amber = paused, plain = queued) rather than a tag on every block. When evidence is thin the build pauses: the block flags amber and the question waits in the copilot — answering (or skipping) resumes.</p>
+  <div class="screen">
+    <nav class="nav">
+      <div class="nav__brand">
+        <div class="nav__logo">Policy <b>Atlas</b></div>
+        <div class="nav__crumb"><span class="sep">/</span><span class="nav__proj">SR26 — DSIT growth bid</span><span class="sep">/</span>
+          <span class="nav__switch" tabindex="0">Evidence Base <span class="car">▾</span>
+            <span class="switchmenu"><a class="sm-ws">◇ Back to Workspace</a><span class="sm-sep"></span><a class="on"><span class="ico">📖</span> Evidence Base</a></span>
+          </span>
+        </div>
+      </div>
+      <div class="nav__right"><button class="btn--ghost btn">＋ Invite</button><span class="avatar" title="Account &amp; settings">AK</span></div>
+    </nav>
+    <div style="display:grid; grid-template-columns:320px 1fr; flex:1; min-height:0;">
+     <!-- COPILOT — left, simple chat thread, one question at a time -->
+     <aside style="border-right:1px solid var(--line); display:flex; flex-direction:column; background:var(--paper-2);">
+       <div class="pane-h" style="display:flex; align-items:center; gap:7px;"><span style="width:8px; height:8px; border-radius:50%; background:var(--orange);"></span>Policy Atlas copilot<span style="margin-left:auto;"><button class="iconbtn" title="Minimise — docks as a pill below" style="font-size:13px; padding:0;">⌄</button></span></div>
+       <div style="flex:1; padding:10px 14px; display:flex; flex-direction:column; gap:10px; overflow:auto;">
+         <div style="background:#fff; border:1px solid var(--line-2); border-left:3px solid var(--orange); border-radius:2px; padding:11px 12px;">
+           <div style="font-size:13px; line-height:1.55; color:var(--ink);">For the <b>long-run growth effect</b>, the firm-level evidence is strong but there's little on economy-wide spillovers — should I widen the search to capture them, or keep it firm-level?</div>
+           <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;">
+             <button class="btn btn--sm">Widen to economy-wide</button>
+             <button class="btn--sec btn btn--sm" style="border:1px solid var(--line-2); --cut:7px;">Keep it firm-level</button>
+           </div>
+           <button class="btn--ghost btn btn--sm" style="margin-top:4px; padding-left:0;">Skip — note the gap and continue</button>
+         </div>
+       </div>
+       <div style="padding:12px 14px; border-top:1px solid var(--line);"><div style="display:flex; align-items:center; gap:9px; border:1px solid var(--line-2); background:#fff; padding:7px 8px 7px 12px;"><span style="flex:1; font-size:12.5px; color:var(--grey);">Reply…</span><span style="width:26px; height:26px; background:var(--blue); color:#fff; display:grid; place-items:center; clip-path:polygon(0 0,calc(100% - 6px) 0,100% 6px,100% 100%,0 100%);">→</span></div></div>
+     </aside>
+     <div style="position:relative; overflow:auto;">
+      <div style="flex:0 0 auto; display:flex; gap:2px; border-bottom:1px solid var(--line); padding:0 18px; background:var(--paper);">
+        <span class="ev-tab ev-tab--on">Summary</span>
+        <span class="ev-tab">Evidence table</span>
+        <span class="ev-tab">Decision log</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid var(--line); background:var(--yellow-tint);">
+        <div style="flex:1;"><div style="height:6px; background:var(--line); position:relative;"><div style="position:absolute; inset:0 50% 0 0; background:var(--blue);"></div><div style="position:absolute; inset:0 42% 0 50%; background:var(--orange);"></div></div></div>
+        <span style="font-size:12px; color:var(--grey);"><b style="color:#8a5a00;">Paused</b> — waiting on your answer</span>
+      </div>
+      <div style="padding:18px 20px; max-width:880px; margin:0 auto;">
+        <div class="ev-block" style="border-left:3px solid var(--green);">
+          <div class="ev-block__h"><b>Synthesis — what the evidence says</b></div>
+          <div class="ev-block__body">Tax-credit schemes raise business R&amp;D, but additionality varies sharply by firm size: stronger for SMEs, weaker among large incumbents where deadweight is higher <span class="cite">[1,4]</span>. The most credible UK estimate puts additionality at roughly £0.32 of extra R&amp;D per £1 of forgone revenue <span class="cite">[3]</span>.</div>
+        </div>
+        <div class="ev-block" style="border-left:3px solid var(--green);">
+          <div class="ev-block__h"><b>Key findings &amp; strength</b></div>
+          <div class="ev-block__body" style="padding-top:6px; padding-bottom:6px;">
+            <div class="ev-finding"><span class="ev-finding__bar"><span class="ev-grade">Strong</span><span class="ev-strength">5 RCTs, consistent</span></span><span>SME additionality is consistently positive across 5 RCTs <span class="cite">[1,2]</span>.</span></div>
+            <div class="ev-finding"><span class="ev-finding__bar"><span class="ev-grade">Moderate</span><span class="ev-strength">mixed results</span></span><span>Large-firm effects are mixed; deadweight is the key risk <span class="cite">[4]</span>.</span></div>
+          </div>
+        </div>
+
+        <!-- block paused on the check-in — flagged amber, anchored to the copilot question -->
+        <div class="ev-block ev-block--flag">
+          <div class="ev-block__h" style="background:#fff3ec;"><b>Long-run growth effect</b><span class="ev-block__st" style="color:#b34a1f; font-weight:700;">⚠ question in copilot</span></div>
+        </div>
+
+        <div class="ev-block"><div class="ev-block__h"><b>Gaps &amp; conflicts</b><span class="ev-block__st">queued</span></div></div>
+      </div>
+     </div>
+
+     <!-- COPILOT — simple chat thread, one question at a time -->
+    </div>
+  </div>
+</section>
+
+
+<!-- ============ E3 · ARTEFACT · SUMMARY ============ -->
+<section class="frame">
+  <div class="frame__cap"><span class="frame__no">05</span><h2 class="frame__title">Evidence Base artefact — Summary</h2></div>
+  <p class="frame__desc">The finished synthesis. A quiet ready line (no banner); factual coverage snapshot; prose synthesis with inline <b>[n]</b> citations resolving to the numbered references at the foot; key findings with a defensible descriptive strength descriptor (no star scores, no artefact-level rating badge); gaps &amp; conflicts. The copilot is collapsed to a pill, bottom-left — same side it docks during planning and build.</p>
+  <div class="screen">
+    <nav class="nav">
+      <div class="nav__brand">
+        <div class="nav__logo">Policy <b>Atlas</b></div>
+        <div class="nav__crumb"><span class="sep">/</span><span class="nav__proj">SR26 — DSIT growth bid</span><span class="sep">/</span>
+          <span class="nav__switch" tabindex="0">Evidence Base <span class="car">▾</span>
+            <span class="switchmenu"><a class="sm-ws">◇ Back to Workspace</a><span class="sm-sep"></span><a class="on"><span class="ico">📖</span> Evidence Base</a></span>
+          </span>
+        </div>
+      </div>
+      <div class="nav__right"><button class="btn--ghost btn">＋ Invite</button><span class="avatar" style="width:26px;height:26px;font-size:9px;">GB</span><button class="btn">Open comments</button><button class="iconbtn" title="Artefact actions — versions">⋯</button><span class="avatar" title="Account &amp; settings">AK</span></div>
+    </nav>
+    <div style="position:relative; min-height:0;">
+      <article style="overflow:auto; padding:0;">
+        <div style="border-bottom:1px solid var(--line); background:var(--paper); position:sticky; top:0;">
+          <div style="max-width:880px; margin:0 auto; padding:0 40px; display:flex; gap:2px;">
+          <span class="ev-tab ev-tab--on">Summary</span>
+          <span class="ev-tab">Evidence table</span>
+          <span class="ev-tab">Decision log</span>
+          </div>
+        </div>
+        <div style="padding:28px 40px; max-width:880px; margin:0 auto;">
+        <div style="display:flex; align-items:center; gap:9px; padding:8px 0 10px; border-bottom:1px solid var(--line); margin-bottom:18px;">
+          <span style="width:8px; height:8px; border-radius:50%; background:var(--green); flex:0 0 8px;"></span>
+          <span style="font-size:12.5px; color:var(--navy);"><b>Ready</b> — 1 check-in resolved <span style="color:var(--grey);">(kept firm-level; gap noted)</span></span>
+        </div>
+        <div style="font-size:11.5px; color:var(--grey);">Produced by Policy Atlas</div>
+        <h1 style="font-family:var(--display); font-weight:800; font-size:26px; color:var(--navy); margin:8px 0 4px; letter-spacing:-.5px;">Evidence Base — R&amp;D tax-credit additionality</h1>
+        <div style="font-size:13px; color:var(--grey); margin-bottom:18px;">SR26 — DSIT growth bid · v1.0 · 9 Jun</div>
+
+        <div style="border:1px solid var(--line-2); background:var(--paper-2); padding:14px 16px; margin-bottom:22px;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;"><span style="font-weight:800; font-size:13px; color:var(--navy);">Evidence base</span></div>
+          <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:14px; font-size:12px;">
+            <div><div style="color:var(--grey); font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;">Sources</div><b style="color:var(--navy);">89 documents</b></div>
+            <div><div style="color:var(--grey); font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;">Study types</div><b style="color:var(--navy);">62 RCT · 9 review</b></div>
+            <div><div style="color:var(--grey); font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;">Geography</div><b style="color:var(--navy);">UK, US, EU +12</b></div>
+          </div>
+        </div>
+
+        <h2 style="font-family:var(--display); font-weight:700; font-size:18px; color:var(--navy); margin:0 0 8px;">Synthesis</h2>
+        <p style="font-size:14px; line-height:1.65; color:var(--ink); margin:0 0 12px;">Tax-credit schemes raise business R&amp;D, but additionality varies sharply by firm size. The effect is consistently positive for SMEs across five randomised studies <span class="cite">[1,2]</span>, and weaker among large incumbents where deadweight loss is higher <span class="cite">[4]</span>. The most credible UK estimate puts additionality at roughly £0.32 of additional R&amp;D per £1 of forgone revenue <span class="cite">[3]</span>.</p>
+        <p style="font-size:14px; line-height:1.65; color:var(--ink); margin:0 0 18px;">Evidence on the long-run growth effect is contested: IFS 2024 estimates a +0.3% GDP uplift <span class="cite">[3]</span>, while OBR 2026 judges the productivity channel uncertain in the medium term <span class="cite">[5]</span>. The synthesis presents both as a range.</p>
+
+        <h2 style="font-family:var(--display); font-weight:700; font-size:18px; color:var(--navy); margin:0 0 6px;">Key findings</h2>
+        <div style="margin-bottom:18px;">
+          <div class="ev-finding"><span class="ev-finding__bar"><span class="ev-grade">Strong</span><span class="ev-strength">5 RCTs, consistent</span></span><span style="font-size:13.5px;">SME additionality is consistently positive across 5 RCTs <span class="cite">[1,2]</span>.</span></div>
+          <div class="ev-finding"><span class="ev-finding__bar"><span class="ev-grade">Moderate</span><span class="ev-strength">mixed results</span></span><span style="font-size:13.5px;">Large-firm effects are mixed; deadweight is the key risk <span class="cite">[4]</span>.</span></div>
+          <div class="ev-finding"><span class="ev-finding__bar"><span class="ev-grade">Contested</span><span class="ev-strength">sources disagree</span></span><span style="font-size:13.5px;">Long-run GDP effect is contested between IFS and OBR <span class="cite">[3,5]</span>.</span></div>
+        </div>
+
+        <h2 style="font-family:var(--display); font-weight:700; font-size:18px; color:var(--navy); margin:0 0 8px;">Gaps &amp; conflicts</h2>
+        <p style="font-size:14px; line-height:1.65; color:var(--ink); margin:0 0 22px;">Little UK evidence on effects beyond five years. The IFS / OBR disagreement on the medium-term productivity channel is the main unresolved conflict and is flagged for the analyst to weigh.</p>
+
+        <h2 style="font-family:var(--display); font-weight:700; font-size:18px; color:var(--navy); margin:0 0 8px;">References</h2>
+        <ol class="refs">
+          <li><span class="n">1</span><span>Becker &amp; Hall (2022) — <i>Tax credits and SME R&amp;D investment</i> · RCT</span></li>
+          <li><span class="n">2</span><span>Dechezleprêtre et al. (2023) — <i>Do tax incentives increase firm innovation?</i> · RCT</span></li>
+          <li><span class="n">3</span><span>IFS (2024) — <i>R&amp;D tax reliefs briefing</i> · Review</span></li>
+          <li><span class="n">4</span><span>OECD (2023) — <i>Income-based tax incentives for R&amp;D</i> · Cross-country panel</span></li>
+          <li><span class="n">5</span><span>OBR (2026) — <i>Fiscal risks &amp; sustainability</i> · Government analysis</span></li>
+        </ol>
+        </div>
+      </article>
+      <button class="btn" style="position:absolute; left:22px; bottom:18px; box-shadow:0 8px 22px rgba(15,41,74,.28);">✦ Ask Policy Atlas</button>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============ 05b · SUMMARY — PROGRESSIVE DETAIL ============ -->
+<section class="frame">
+  <div class="frame__cap"><span class="frame__no">05b</span><h2 class="frame__title">Summary — progressive detail</h2></div>
+  <p class="frame__desc">One mechanic, repeated: every section ends with the same bare <b>▾ Detail</b> row (no prose descriptors, no counts). Collapsed, the page is the claim — that's the director's read. Expanded, it's the <b>workings</b>, never more claims: <i>Synthesis → how it was weighted, what was set aside, why; a finding → its contributing studies, counter-evidence, the grade rationale.</i> Aggregate rating badges are deferred, so expanded detail explains what is stronger, thinner, contested, or set aside without presenting an artefact-level rating. Collapsed = the answer, expanded = the audit trail. <b>Expand all</b> is the whole "analyst mode"; one level down only, deeper hands off to the Evidence table or Library.</p>
+  <div class="screen">
+    <nav class="nav">
+      <div class="nav__brand">
+        <div class="nav__logo">Policy <b>Atlas</b></div>
+        <div class="nav__crumb"><span class="sep">/</span><span class="nav__proj">SR26 — DSIT growth bid</span><span class="sep">/</span>
+          <span class="nav__switch" tabindex="0">Evidence Base <span class="car">▾</span>
+            <span class="switchmenu"><a class="sm-ws">◇ Back to Workspace</a><span class="sm-sep"></span><a class="on"><span class="ico">📖</span> Evidence Base</a></span>
+          </span>
+        </div>
+      </div>
+      <div class="nav__right"><button class="btn--ghost btn">＋ Invite</button><span class="avatar" style="width:26px;height:26px;font-size:9px;">GB</span><button class="btn">Open comments</button><button class="iconbtn" title="Artefact actions — versions">⋯</button><span class="avatar" title="Account &amp; settings">AK</span></div>
+    </nav>
+    <div style="position:relative; min-height:0;">
+      <article style="overflow:auto; padding:0;">
+        <div style="border-bottom:1px solid var(--line); background:var(--paper); position:sticky; top:0;">
+          <div style="max-width:880px; margin:0 auto; padding:0 40px; display:flex; gap:2px;">
+          <span class="ev-tab ev-tab--on">Summary</span>
+          <span class="ev-tab">Evidence table</span>
+          <span class="ev-tab">Decision log</span>
+          </div>
+        </div>
+        <div style="padding:28px 40px; max-width:880px; margin:0 auto;">
+        <div style="font-size:11.5px; color:var(--grey);">Produced by Policy Atlas</div>
+        <h1 style="font-family:var(--display); font-weight:800; font-size:26px; color:var(--navy); margin:8px 0 4px; letter-spacing:-.5px;">Evidence Base — R&amp;D tax-credit additionality</h1>
+        <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:18px;">
+          <div style="font-size:13px; color:var(--grey);">SR26 — DSIT growth bid · v1.0 · 9 Jun</div>
+          <a style="margin-left:auto; font-size:12px; font-weight:700; color:var(--blue); cursor:pointer;">Expand all detail ▾</a>
+        </div>
+
+        <div style="border:1px solid var(--line-2); background:var(--paper-2); padding:14px 16px; margin-bottom:6px;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;"><span style="font-weight:800; font-size:13px; color:var(--navy);">Evidence base</span></div>
+          <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:14px; font-size:12px;">
+            <div><div style="color:var(--grey); font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;">Sources</div><b style="color:var(--navy);">89 documents</b></div>
+            <div><div style="color:var(--grey); font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;">Study types</div><b style="color:var(--navy);">62 RCT · 9 review</b></div>
+            <div><div style="color:var(--grey); font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;">Geography</div><b style="color:var(--navy);">UK, US, EU +12</b></div>
+          </div>
+        </div>
+        <button style="display:block; background:none; border:none; padding:2px 0; margin:0 0 22px; font-size:11.5px; color:var(--grey); cursor:pointer; font-family:inherit;">▾ <b style="color:var(--navy);">Detail</b></button>
+
+        <h2 style="font-family:var(--display); font-weight:700; font-size:18px; color:var(--navy); margin:0 0 8px;">Synthesis</h2>
+        <p style="font-size:14px; line-height:1.65; color:var(--ink); margin:0 0 6px;">Tax-credit schemes raise business R&amp;D, but additionality varies sharply by firm size. The effect is consistently positive for SMEs across five randomised studies <span class="cite">[1,2]</span>, and weaker among large incumbents where deadweight loss is higher <span class="cite">[4]</span>. The most credible UK estimate puts additionality at roughly £0.32 of additional R&amp;D per £1 of forgone revenue <span class="cite">[3]</span>.</p>
+        <!-- expanded Synthesis layer — the workings, not more findings -->
+        <div style="border-left:2px solid var(--blue); background:var(--paper-2); margin:0 0 22px; padding:12px 16px;">
+          <div style="font-size:10px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--blue); margin-bottom:9px;">How this synthesis was built</div>
+          <div style="display:flex; flex-direction:column; gap:9px; font-size:12.5px; color:var(--ink); line-height:1.55;">
+            <div><b>Weighting</b> — randomised studies were weighted above observational ones; the £0.32 figure is IFS's central estimate, chosen over OECD's wider range <span class="cite">[4]</span> because it is UK-specific and post-2015.</div>
+            <div><b>Where studies disagreed</b> — three papers found null large-firm effects; these are reflected in "weaker", not dropped.</div>
+            <div><b>Set aside</b> — 12 pre-2013 studies excluded as pre-dating the current scheme design; one outlier (+£0.90) excluded as an industry-funded estimate.</div>
+            <div style="color:var(--grey);"><b style="color:var(--navy);">What is stronger or thinner:</b> stronger on SMEs; thinner on long-run and economy-wide effects.</div>
+          </div>
+          <button style="display:block; background:none; border:none; padding:9px 0 0; font-size:11.5px; color:var(--grey); cursor:pointer; font-family:inherit;">▴ Less</button>
+        </div>
+
+        <h2 style="font-family:var(--display); font-weight:700; font-size:18px; color:var(--navy); margin:0 0 6px;">Key findings</h2>
+        <div style="margin-bottom:18px;">
+          <div class="ev-finding" style="border-bottom:none;"><span class="ev-finding__bar"><span class="ev-grade">Strong</span><span class="ev-strength">5 RCTs, consistent</span></span><span style="font-size:13.5px;">SME additionality is consistently positive across 5 RCTs <span class="cite">[1,2]</span>.</span></div>
+          <!-- the expanded analyst layer — one level, in place -->
+          <div style="border-left:2px solid var(--blue); background:var(--paper-2); margin:0 0 12px; padding:12px 16px;">
+            <div style="font-size:10px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--blue); margin-bottom:8px;">How this was weighed</div>
+            <div style="display:flex; flex-direction:column; gap:6px; font-size:12.5px; color:var(--ink); line-height:1.5;">
+              <div>Becker &amp; Hall (2022) — +18% R&amp;D spend among treated SMEs · RCT, n=2,400 <span class="cite">[1]</span></div>
+              <div>Dechezleprêtre et al. (2023) — elasticity ≈2.6 at the size threshold · RCT <span class="cite">[2]</span></div>
+              <div style="color:var(--grey);">+ 3 further RCTs, consistent direction — <a style="font-weight:700; color:var(--blue); cursor:pointer;">see all 5 in the evidence table →</a></div>
+            </div>
+            <div style="font-size:12.5px; color:var(--ink); line-height:1.55; margin-top:10px;"><b>Set against:</b> the BEIS pilot (2025) suggests weaker additionality post-2022 — not yet peer-reviewed, so noted rather than weighed.</div>
+            <div style="font-size:12.5px; color:var(--grey); line-height:1.55; margin-top:6px;"><b style="color:var(--navy);">Why "Strong":</b> five randomised studies, consistent direction, comparable effect sizes.</div>
+            <button style="display:block; background:none; border:none; padding:8px 0 0; font-size:11.5px; color:var(--grey); cursor:pointer; font-family:inherit;">▴ Less</button>
+          </div>
+          <div class="ev-finding"><span class="ev-finding__bar"><span class="ev-grade">Moderate</span><span class="ev-strength">mixed results</span><button style="background:none; border:none; padding:2px 0 0; margin:0; font-size:11px; color:var(--grey); cursor:pointer; font-family:inherit; text-align:left; text-transform:none; letter-spacing:0;">▾ <b style="color:var(--navy);">Detail</b></button></span><span style="font-size:13.5px;">Large-firm effects are mixed; deadweight is the key risk <span class="cite">[4]</span>.</span></div>
+          <div class="ev-finding"><span class="ev-finding__bar"><span class="ev-grade">Contested</span><span class="ev-strength">sources disagree</span><button style="background:none; border:none; padding:2px 0 0; margin:0; font-size:11px; color:var(--grey); cursor:pointer; font-family:inherit; text-align:left; text-transform:none; letter-spacing:0;">▾ <b style="color:var(--navy);">Detail</b></button></span><span style="font-size:13.5px;">Long-run GDP effect is contested between IFS and OBR <span class="cite">[3,5]</span>.</span></div>
+        </div>
+
+        <h2 style="font-family:var(--display); font-weight:700; font-size:18px; color:var(--navy); margin:0 0 8px;">Gaps &amp; conflicts</h2>
+        <p style="font-size:14px; line-height:1.65; color:var(--ink); margin:0 0 6px;">Little UK evidence on effects beyond five years. The IFS / OBR disagreement on the medium-term productivity channel is the main unresolved conflict and is flagged for the analyst to weigh.</p>
+        <button style="display:block; background:none; border:none; padding:2px 0; margin:0 0 18px; font-size:11.5px; color:var(--grey); cursor:pointer; font-family:inherit;">▾ <b style="color:var(--navy);">Detail</b></button>
+
+        <div style="text-align:center; padding:4px 0 0; color:var(--grey); font-size:11.5px;">⌄ references as in 05</div>
+        </div>
+      </article>
+      <button class="btn" style="position:absolute; left:22px; bottom:18px; box-shadow:0 8px 22px rgba(15,41,74,.28);">✦ Ask Policy Atlas</button>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============ E4 · ARTEFACT · EVIDENCE TABLE (stub) ============ -->
+<section class="frame">
+  <div class="frame__cap"><span class="frame__no">06</span><h2 class="frame__title">Evidence Base artefact — Evidence table (stub)</h2></div>
+  <p class="frame__desc">Produced <b>first</b> during the build — it's ready before the summary. UX not designed yet — shown as a stub: columns, a few sample rows, and a "view all" affordance. Placeholder for the full sortable/filterable table.</p>
+  <div class="screen">
+    <nav class="nav">
+      <div class="nav__brand">
+        <div class="nav__logo">Policy <b>Atlas</b></div>
+        <div class="nav__crumb"><span class="sep">/</span><span class="nav__proj">SR26 — DSIT growth bid</span><span class="sep">/</span>
+          <span class="nav__switch" tabindex="0">Evidence Base <span class="car">▾</span>
+            <span class="switchmenu"><a class="sm-ws">◇ Back to Workspace</a><span class="sm-sep"></span><a class="on"><span class="ico">📖</span> Evidence Base</a></span>
+          </span>
+        </div>
+      </div>
+      <div class="nav__right"><button class="btn--ghost btn">＋ Invite</button><span class="avatar" style="width:26px;height:26px;font-size:9px;">GB</span><button class="btn">Open comments</button><button class="iconbtn" title="Artefact actions — versions">⋯</button><span class="avatar" title="Account &amp; settings">AK</span></div>
+    </nav>
+    <div style="flex:0 0 auto; display:flex; gap:2px; border-bottom:1px solid var(--line); padding:0 40px; background:var(--paper);">
+      <span class="ev-tab">Summary</span>
+      <span class="ev-tab ev-tab--on">Evidence table</span>
+      <span class="ev-tab">Decision log</span>
+    </div>
+    <div style="padding:24px 40px; overflow:auto; position:relative;">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+        <span style="font-size:13px; color:var(--grey);"><b style="color:var(--navy);">89 included</b> · 41 screened out <a style="font-weight:700; font-size:12px; cursor:pointer;">see exclusions →</a></span>
+        <span class="chip chip--soft">filter</span>
+        <span class="chip chip--soft">sort: strength</span>
+        <span style="margin-left:auto; font-size:11.5px; color:var(--grey); font-style:italic;">full table UX to be designed</span>
+      </div>
+      <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+        <tr style="text-align:left; color:var(--grey); border-bottom:2px solid var(--line);"><th style="padding:9px 10px; font-weight:700;">Source</th><th style="padding:9px 10px; font-weight:700;">Type</th><th style="padding:9px 10px; font-weight:700;">Finding</th><th style="padding:9px 10px; font-weight:700;">Strength</th></tr>
+        <tr style="border-bottom:1px solid var(--line);"><td style="padding:10px;">IFS R&amp;D briefing (2024)</td><td style="padding:10px; color:var(--grey);">Review</td><td style="padding:10px;">+£0.32 additional R&amp;D per £1 forgone</td><td style="padding:10px;"><span class="ev-grade">Strong</span></td></tr>
+        <tr style="border-bottom:1px solid var(--line);"><td style="padding:10px;">Becker &amp; Hall (2022)</td><td style="padding:10px; color:var(--grey);">RCT</td><td style="padding:10px;">SME additionality positive, p&lt;0.01</td><td style="padding:10px;"><span class="ev-grade">Very strong</span></td></tr>
+        <tr style="border-bottom:1px solid var(--line);"><td style="padding:10px;">OBR Fiscal Outlook (2026)</td><td style="padding:10px; color:var(--grey);">Govt</td><td style="padding:10px;">Medium-term productivity channel uncertain</td><td style="padding:10px;"><span class="ev-grade">Moderate</span></td></tr>
+        <tr style="border-bottom:1px solid var(--line); opacity:.5;"><td style="padding:10px;" colspan="4">⋯</td></tr>
+      </table>
+      <button class="btn" style="position:absolute; left:22px; bottom:18px; box-shadow:0 8px 22px rgba(15,41,74,.28);">✦ Ask Policy Atlas</button>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============ 04 · COMMENTS MODE ============ -->
+<section class="frame">
+  <div class="frame__cap"><span class="frame__no">07</span><h2 class="frame__title">Comments mode — reactions, not edits</h2></div>
+  <p class="frame__desc">A distinct review mode, announced in a single bar: the mode chip sits in the nav with the reviewers' avatars — no separate banner. The team reacts to the analysis — interesting, may be inaccurate, concern, question — to sharpen the analyst's thinking. No track-changes. <b>↻ Re-run with comments</b> (analyst-only) writes a decision-log entry and produces v1.1 — next frame.</p>
+  <div class="screen">
+    <nav class="nav"><div class="nav__brand"><div class="nav__logo">Policy <b>Atlas</b></div><div class="nav__crumb"><span class="sep">/</span><span class="nav__proj">SR26 — DSIT growth bid</span><span class="sep">/</span><span class="nav__switch" tabindex="0">Evidence Base <span class="car">▾</span><span class="switchmenu"><a class="sm-ws">◇ Back to Workspace</a><span class="sm-sep"></span><a class="on"><span class="ico">📖</span> Evidence Base</a></span></span><span class="chip" style="margin-left:10px; background:var(--navy); border-color:var(--navy); color:#fff;"><span style="width:7px; height:7px; border-radius:50%; background:var(--aqua);"></span>Comments mode</span></div></div><div class="nav__right"><span style="display:flex; align-items:center; margin-right:4px;"><span class="avatar" style="width:24px;height:24px;font-size:9px;">GB</span><span class="avatar" style="width:24px;height:24px;font-size:9px;background:var(--violet);color:var(--navy);margin-left:-6px;">NR</span><span class="avatar" style="width:24px;height:24px;font-size:9px;background:var(--orange);margin-left:-6px;">SR</span></span><button class="btn--ghost btn">Exit review</button><button class="btn" title="Available to the analyst who owns the artefact">↻ Re-run with comments</button><span class="avatar" title="Account &amp; settings">AK</span></div></nav>
+    <div style="padding:30px 40px; max-width:900px; margin:0 auto; position:relative;">
+      <h1 style="font-family:var(--display); font-weight:800; font-size:24px; color:var(--navy); margin:0 0 18px; letter-spacing:-.4px;">Evidence Base · Synthesis</h1>
+
+      <div style="border-left:3px solid var(--violet); background:#f7f5fe; padding:12px 16px; margin-bottom:14px;">
+        <p style="font-size:14px; line-height:1.6; color:var(--ink); margin:0;">Tax-credit additionality is consistently positive for SMEs across five RCTs, but weaker for large firms where deadweight is higher. The long-run GDP effect is contested — IFS 2024 estimates +0.3%, OBR 2026 judges it uncertain.</p>
+      </div>
+      <!-- comment threads -->
+      <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:28px;">
+        <div style="border:1px solid var(--line-2); padding:11px 14px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:5px;"><span class="avatar" style="width:22px;height:22px;font-size:9px;background:var(--violet);color:var(--navy);">NR</span><b style="font-size:12.5px; color:var(--navy);">Naomi R.</b><span style="font-size:11px; color:var(--grey);">HMT</span><span class="chip chip--soft" style="margin-left:auto;">may be inaccurate</span></div>
+          <p style="font-size:13px; color:var(--ink); margin:0 0 8px; line-height:1.5;">The IFS figure rests on 2013–22 data; the recent BEIS pilot suggests additionality may be lower. Worth folding that source into the evidence base.</p>
+          <div style="display:flex; gap:6px;"><button class="btn--ghost btn btn--sm">Reply</button><button class="btn--ghost btn btn--sm">Ask Policy Atlas to dig in</button></div>
+        </div>
+        <div style="border:1px solid var(--line-2); padding:11px 14px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:5px;"><span class="avatar" style="width:22px;height:22px;font-size:9px;background:var(--orange);">SR</span><b style="font-size:12.5px; color:var(--navy);">Shabeer R.</b><span style="font-size:11px; color:var(--grey);">Director</span><span class="chip chip--soft" style="margin-left:auto;">interesting</span></div>
+          <p style="font-size:13px; color:var(--ink); margin:0 0 8px; line-height:1.5;">The SME vs large-firm split is the key finding — worth foregrounding when this feeds the options work.</p>
+          <div style="display:flex; gap:6px;"><button class="btn--ghost btn btn--sm">Reply</button><button class="btn--ghost btn btn--sm">Ask Policy Atlas to dig in</button></div>
+        </div>
+      </div>
+
+      <div style="font-size:13px; color:var(--grey); padding:4px 0;">3 comments · 1 resolved</div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============ 08 · RE-RUN — v1.1 ============ -->
+<section class="frame">
+  <div class="frame__cap"><span class="frame__no">08</span><h2 class="frame__title">Re-run with comments — what changed (v1.1)</h2></div>
+  <p class="frame__desc">The loop closes — same artefact layout as 05. The <b>what changed</b> list sits above the updated summary as plain rows (no icon tiles), the revisions are highlighted inline in the document, and a one-line decision-log record closes it off. Share/export is deferred for V1, so there is no Share CTA here.</p>
+  <div class="screen">
+    <nav class="nav">
+      <div class="nav__brand">
+        <div class="nav__logo">Policy <b>Atlas</b></div>
+        <div class="nav__crumb"><span class="sep">/</span><span class="nav__proj">SR26 — DSIT growth bid</span><span class="sep">/</span>
+          <span class="nav__switch" tabindex="0">Evidence Base <span class="car">▾</span>
+            <span class="switchmenu"><a class="sm-ws">◇ Back to Workspace</a><span class="sm-sep"></span><a class="on"><span class="ico">📖</span> Evidence Base</a></span>
+          </span>
+        </div>
+      </div>
+      <div class="nav__right"><button class="btn--ghost btn">＋ Invite</button><span class="avatar" style="width:26px;height:26px;font-size:9px;">GB</span><button class="btn">Open comments</button><button class="iconbtn" title="Artefact actions — versions">⋯</button><span class="avatar" title="Account &amp; settings">AK</span></div>
+    </nav>
+    <div style="position:relative; min-height:0;">
+      <article style="overflow:auto; padding:0;">
+        <div style="border-bottom:1px solid var(--line); background:var(--paper); position:sticky; top:0;">
+          <div style="max-width:880px; margin:0 auto; padding:0 40px; display:flex; gap:2px;">
+          <span class="ev-tab ev-tab--on">Summary</span>
+          <span class="ev-tab">Evidence table</span>
+          <span class="ev-tab">Decision log</span>
+          </div>
+        </div>
+        <div style="padding:28px 40px; max-width:880px; margin:0 auto;">
+        <div style="display:flex; align-items:center; gap:9px; padding:8px 0 10px; border-bottom:1px solid var(--line); margin-bottom:18px;">
+          <span style="width:8px; height:8px; border-radius:50%; background:var(--blue); flex:0 0 8px;"></span>
+          <span style="font-size:12.5px; color:var(--navy);"><b>Re-run complete</b> — 3 review comments incorporated · <span style="background:var(--blue-tint); padding:0 4px;">changes highlighted</span> below</span>
+        </div>
+      <div style="font-size:11.5px; color:var(--grey);">Produced by Policy Atlas</div>
+      <h1 style="font-family:var(--display); font-weight:800; font-size:24px; color:var(--navy); margin:8px 0 4px; letter-spacing:-.5px;">Evidence Base — R&amp;D tax-credit additionality</h1>
+      <div style="font-size:13px; color:var(--grey); margin-bottom:20px;">SR26 — DSIT growth bid · <b style="color:var(--navy);">v1.1</b> · 9 Jun</div>
+
+      <div style="border:1px solid var(--line-2); background:var(--paper-2); padding:14px 16px; margin-bottom:22px;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;"><span style="font-weight:800; font-size:13px; color:var(--navy);">Evidence base</span></div>
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:14px; font-size:12px;">
+          <div><div style="color:var(--grey); font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;">Sources</div><b style="color:var(--navy);"><span style="background:var(--blue-tint);">90 documents</span></b></div>
+          <div><div style="color:var(--grey); font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;">Study types</div><b style="color:var(--navy);">62 RCT · 10 review</b></div>
+          <div><div style="color:var(--grey); font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;">Geography</div><b style="color:var(--navy);">UK, US, EU +12</b></div>
+        </div>
+      </div>
+
+      <div style="font-size:10.5px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:var(--grey); margin-bottom:8px;">What changed in this re-run</div>
+      <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:10px;">
+        <div style="border:1px solid var(--line-2); padding:10px 14px; font-size:13px; line-height:1.5; color:var(--ink);"><b>Source added</b> — BEIS R&amp;D tax relief pilot evaluation (2025) <span class="cite">[6]</span>, from Naomi's "may be inaccurate" comment.</div>
+        <div style="border:1px solid var(--line-2); padding:10px 14px; font-size:13px; line-height:1.5; color:var(--ink);"><b>Finding revised</b> — SME additionality <b>Strong → Moderate</b>: the BEIS pilot suggests lower additionality after 2022.</div>
+        <div style="border:1px solid var(--line-2); padding:10px 14px; font-size:13px; line-height:1.5; color:var(--ink);"><b>Synthesis re-ordered</b> — the SME vs large-firm split now leads, per Shabeer's comment.</div>
+      </div>
+      <div style="font-size:12px; color:var(--grey); margin:0 0 22px;">Logged automatically as <a style="font-weight:700; cursor:pointer;">decision-log entry 7 →</a></div>
+
+      <h2 style="font-family:var(--display); font-weight:700; font-size:18px; color:var(--navy); margin:0 0 8px;">Synthesis</h2>
+      <p style="font-size:14px; line-height:1.65; color:var(--ink); margin:0 0 16px;"><span style="background:var(--blue-tint);">The sharpest result is the SME / large-firm split:</span> additionality is consistently positive for SMEs <span class="cite">[1,2]</span>, but weaker among large incumbents where deadweight loss is higher <span class="cite">[4]</span>. <span style="background:var(--blue-tint);">The BEIS pilot evaluation suggests SME additionality may be lower after 2022 <span class="cite">[6]</span>;</span> the most credible UK estimate remains £0.32 of additional R&amp;D per £1 of forgone revenue <span class="cite">[3]</span>.</p>
+
+      <h2 style="font-family:var(--display); font-weight:700; font-size:18px; color:var(--navy); margin:0 0 6px;">Key findings</h2>
+      <div class="ev-finding"><span class="ev-finding__bar"><span class="ev-grade">Moderate</span><span class="ev-strength" style="background:var(--blue-tint);">revised · BEIS pilot</span></span><span style="font-size:13.5px;">SME additionality is positive, but possibly lower post-2022 <span class="cite">[1,2,6]</span>.</span></div>
+      <div class="ev-finding"><span class="ev-finding__bar"><span class="ev-grade">Moderate</span><span class="ev-strength">mixed results</span></span><span style="font-size:13.5px;">Large-firm effects are mixed; deadweight is the key risk <span class="cite">[4]</span>.</span></div>
+      <div style="text-align:center; padding:14px 0 0; color:var(--grey); font-size:11.5px;">⌄ full summary continues — gaps &amp; conflicts, references</div>
+        </div>
+      </article>
+      <button class="btn" style="position:absolute; left:22px; bottom:18px; box-shadow:0 8px 22px rgba(15,41,74,.28);">✦ Ask Policy Atlas</button>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============ 09 · RE-ENTRY — LIBRARY OPEN ============ -->
+<section class="frame">
+  <div class="frame__cap"><span class="frame__no">09</span><h2 class="frame__title">Re-entering the project — Library opens</h2></div>
+  <p class="frame__desc">The next morning. The user returns to their <b>per-user project copilot thread</b>; their own prior exchange is dimmed under a date divider. The catch-me-up is generated from shared project event history — uploads, comments, version changes and decision-log events — not by exposing collaborators' private transcripts. A suggested next step can start an Options Assessment planning conversation, but it is not a phantom draft. The Library panel opens automatically — sources up top, artefacts below. (On a new project it starts collapsed — frame 01.)</p>
+  <div class="screen">
+    <nav class="nav"><div class="nav__brand"><div class="nav__logo">Policy <b>Atlas</b></div><div class="nav__crumb"><span class="sep">/</span><span class="nav__proj">SR26 — DSIT growth bid</span><span class="sep">/</span><span class="nav__switch" tabindex="0">Workspace <span class="car">▾</span><span class="switchmenu"><a class="on">◇ Workspace</a><span class="sm-sep"></span><a><span class="ico">📖</span> Evidence Base</a></span></span></div></div><div class="nav__right"><button class="btn--ghost btn">＋ Invite</button><span class="avatar" title="Account &amp; settings">AK</span></div></nav>
+    <div style="display:grid; grid-template-columns:254px 1fr; min-height:540px;">
+      <aside style="border-right:1px solid var(--line); background:var(--paper); display:flex; flex-direction:column;">
+        <div class="pane-h">Library<span><button class="iconbtn" title="Collapse" style="font-size:13px; padding:0;">⟨</button></span></div>
+        <div style="flex:1; overflow:auto; padding:0 12px 10px; display:flex; flex-direction:column;">
+          <div style="display:flex; align-items:center; margin:2px 2px 6px;"><span style="font-size:10px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:var(--grey);">Sources</span><button class="iconbtn" title="Upload a source" style="font-size:15px; color:var(--blue); padding:0; margin-left:auto;">＋</button></div>
+          <div style="font-size:12px; color:var(--ink); padding:5px 6px; cursor:pointer;">IFS — R&amp;D tax reliefs briefing (2024)</div>
+          <div style="font-size:12px; color:var(--ink); padding:5px 6px; cursor:pointer;">Becker &amp; Hall (2022)</div>
+          <div style="font-size:12px; color:var(--ink); padding:5px 6px; cursor:pointer; display:flex; align-items:center; gap:6px;">BEIS pilot evaluation (2025) <span class="chip chip--blue" style="font-size:9.5px; padding:1px 6px;">new</span></div>
+          <div style="font-size:12px; color:var(--ink); padding:5px 6px; cursor:pointer;">OBR — Fiscal risks &amp; sustainability (2026)</div>
+          <div style="font-size:12px; color:var(--grey); padding:5px 6px; cursor:pointer;">+ 20 more…</div>
+          <div style="border-top:1px solid var(--line); margin-top:12px; padding-top:12px; font-size:10px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:var(--grey); margin-bottom:6px; padding-left:2px;">Artefacts</div>
+          <div style="border:1px solid var(--line-2); padding:8px 10px; cursor:pointer;">
+            <div style="display:flex; align-items:center; gap:7px;"><span style="font-size:12.5px; font-weight:700; color:var(--navy);"><span class="ico">📖</span> Evidence Base</span><span class="chip chip--blue" style="margin-left:auto; font-size:9.5px; padding:1px 6px;">v1.1</span></div>
+            <div style="font-size:10.5px; color:var(--grey); margin-top:3px;">updated yesterday · 3 comments folded in</div>
+          </div>
+        </div>
+      </aside>
+      <main style="display:flex; flex-direction:column; background:var(--paper-2);">
+        <div style="flex:1; padding:22px 30px; display:flex; flex-direction:column; gap:12px; justify-content:flex-end;">
+          <div style="display:flex; align-items:center; gap:10px;"><span style="flex:1; height:1px; background:var(--line);"></span><span style="font-size:10px; font-weight:800; color:var(--grey); text-transform:uppercase; letter-spacing:.07em;">Yesterday</span><span style="flex:1; height:1px; background:var(--line);"></span></div>
+          <div style="opacity:.55; align-self:flex-end; max-width:70%; background:var(--blue); color:#fff; padding:8px 11px; font-size:12.5px; clip-path:polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,0 100%);">I want the evidence on R&amp;D tax-credit additionality for the DSIT growth bid.</div>
+          <div style="opacity:.55; max-width:86%; font-size:12.5px; color:var(--navy); line-height:1.5;">I'll generate an <b>Evidence Base</b> from the curated library — deep-search signal: SMEs &amp; large firms, UK &amp; OECD, last 10 years, RCTs and reviews.</div>
+          <div style="opacity:.55; align-self:flex-end; max-width:70%; background:var(--blue); color:#fff; padding:8px 11px; font-size:12.5px; clip-path:polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,0 100%);">Also look into whether additionality differs for first-time vs repeat claimants.</div>
+          <div style="opacity:.55; max-width:86%; font-size:12.5px; color:var(--navy); line-height:1.5;">Folded in — plan agreed, building now. One check-in: the long-run growth evidence is thin on economy-wide spillovers — widen, or keep it firm-level?</div>
+          <div style="opacity:.55; align-self:flex-end; max-width:70%; background:var(--blue); color:#fff; padding:8px 11px; font-size:12.5px; clip-path:polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,0 100%);">Keep it firm-level — but note the spillover gap.</div>
+          <div style="opacity:.55; max-width:86%; font-size:12.5px; color:var(--navy); line-height:1.5;">Done — noted as a gap. The evidence base is ready; it's open for the team to review.</div>
+          <div style="display:flex; align-items:center; gap:10px; margin-top:4px;"><span style="flex:1; height:1px; background:var(--line);"></span><span style="font-size:10px; font-weight:800; color:var(--grey); text-transform:uppercase; letter-spacing:.07em;">Today</span><span style="flex:1; height:1px; background:var(--line);"></span></div>
+          <div style="max-width:88%; font-size:13.5px; color:var(--navy); line-height:1.55;">Welcome back. While you were away: Naomi uploaded the <b>BEIS pilot evaluation</b>, the team left <b>3 comments</b>, and the Evidence Base was re-run to <b>v1.1</b> — the SME finding is now <i>Moderate</i>. With the evidence settled, a natural next step would be an <b>Options Assessment</b> built on it.</div>
+          <div style="display:flex; flex-wrap:wrap; gap:8px;">
+            <button class="btn btn--sm">See what changed</button>
+            <button class="btn--sec btn btn--sm" style="border:1px solid var(--line-2); --cut:7px;">Open Evidence Base v1.1</button>
+            <button class="btn--sec btn btn--sm" style="border:1px solid var(--line-2); --cut:7px;">＋ Start Options Assessment</button>
+          </div>
+        </div>
+        <div style="padding:14px 20px; background:var(--paper-2);"><div style="display:flex; align-items:center; gap:10px; border:1px solid var(--line-2); background:#fff; padding:8px 8px 8px 14px;"><button class="iconbtn" title="Add a file — goes to your Library" style="font-size:17px; padding:0; color:var(--blue);">＋</button><span style="flex:1; font-size:13px; color:var(--grey);">Reply, ask, or start a new analysis…</span><span style="width:30px; height:30px; background:var(--blue); color:#fff; display:grid; place-items:center; clip-path:polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,0 100%);">→</span></div></div>
+      </main>
+    </div>
+  </div>
+</section>
+
+
+</main>
+
+</body>
+</html>

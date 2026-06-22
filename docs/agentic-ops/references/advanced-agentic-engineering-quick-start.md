@@ -42,7 +42,7 @@ For quick start purposes, reduce that to:
 prepare repo
 -> write spec
 -> create first task contract
--> implement one small slice
+-> implement one reviewable slice
 -> capture evidence
 -> review by risk
 -> merge or revise
@@ -108,6 +108,20 @@ Inside Claude Code, useful first commands are:
 
 Use `/init` only as a temporary bootstrap. Do not blindly commit the generated `CLAUDE.md` or `AGENTS.md`; delete discoverable codebase-tour content and keep only landmines, commands, approval gates and pointers.
 
+Claude Code steering rule of thumb:
+
+| Need | Prefer |
+|---|---|
+| Always-relevant repo facts | Root `CLAUDE.md`, kept short and owned |
+| Directory-specific conventions | Subdirectory `CLAUDE.md` or path-scoped rules |
+| Cross-cutting path/file constraints | `.claude/rules/` with `paths:` |
+| Repeatable procedures | `.claude/skills/` |
+| Noisy or isolated side tasks | `.claude/agents/` subagents |
+| Absolute prohibitions | Permissions, managed settings, hooks or CI |
+| Major response-mode changes | Built-in output styles first; custom styles rarely |
+
+Avoid custom output styles for normal engineering workflow. A custom output style can change Claude Code's default software-engineering behaviour, so prefer skills, rules, hooks or appended prompts for most workflow changes.
+
 ### 1.3 Install Cursor CLI if you use Cursor
 
 Cursor is optional but useful for people who prefer IDE-native planning, visual review, agent worktrees, or Cursor’s models.
@@ -140,9 +154,9 @@ agent mcp list
 agent update
 ```
 
-### 1.4 Install GitHub Spec Kit
+### 1.4 Optional: install GitHub Spec Kit
 
-Use Spec Kit as the front-end for spec-driven development: constitution, specify, plan, tasks and consistency analysis.
+Use Spec Kit when you want standardised spec artefacts: constitution, specify, plan, tasks and consistency analysis. It is useful for greenfield work, larger features and cross-agent handoff, but it is not mandatory if Claude Code, Cursor or repo-specific skills already produce accepted specs, contracts, checks and verification notes.
 
 Install from the official GitHub repository, not from similarly named PyPI packages.
 
@@ -222,7 +236,7 @@ mkdir my-project
 cd my-project
 git init
 mkdir -p docs/{specs,plans,contracts,rubrics,verification,adr,knowledge,agentic-ops}
-mkdir -p .claude/{skills,agents,hooks}
+mkdir -p .claude/{skills,agents,hooks,rules}
 mkdir -p .cursor/{rules,plans}
 touch AGENTS.md CLAUDE.md docs/deferred.md
 ```
@@ -250,6 +264,23 @@ verify: test typecheck lint build
 
 Replace the placeholder commands as soon as the stack is chosen. The first goal is not feature breadth; it is that an agent can run, test and verify the repo from a clean checkout.
 
+### 2.1.1 Ignore private agent working state
+
+For open-source repositories, commit only public-safe durable artefacts. Add private working state and raw evidence to `.gitignore`:
+
+```gitignore
+.agent/
+.agent-private/
+docs/work/
+*.har
+*.trace
+*.log
+.env
+.env.*
+```
+
+Keep exploit notes, private threat analysis, credentials, incident material, raw logs, HAR files, screenshots and recordings out of public history.
+
 ### 2.2 Add the shared agent protocol
 
 Put shared, tool-neutral instructions in `AGENTS.md`:
@@ -262,9 +293,9 @@ Put shared, tool-neutral instructions in `AGENTS.md`:
 - Use `docs/specs/` for product and system intent.
 - Use `docs/contracts/` for task scope.
 - Use `docs/rubrics/` for completion criteria when risk is medium or high.
-- Record verification evidence in `docs/verification/` or in the PR.
+- Record public-safe verification evidence in `docs/verification/` or in the PR.
 - Do not change schema, auth, dependencies, CI, production config or public interfaces without approval.
-- Never edit generated files or secrets.
+- Never edit generated files, secrets or private agent working state.
 - Touch only what the task requires.
 ```
 
@@ -272,7 +303,7 @@ Keep `AGENTS.md` short. Do not include a directory tour the agent can discover b
 
 ### 2.3 Add the Claude adapter
 
-Put Claude-specific guidance in `CLAUDE.md`:
+Put Claude-specific guidance in `CLAUDE.md`. Keep the root file short, owned and reviewed like code:
 
 ```markdown
 # Claude Code adapter
@@ -289,6 +320,22 @@ Use:
 
 Do not duplicate long shared instructions here. Point to the shared docs instead.
 ```
+
+### 2.3.1 Add path-scoped Claude rules when needed
+
+Create `.claude/rules/` files for specific constraints that should load only for matching files:
+
+```markdown
+---
+paths:
+  - "src/api/**"
+  - "**/*.handler.ts"
+---
+
+All API handlers must validate input before processing.
+```
+
+Do not put every rule in root `CLAUDE.md`. Unscoped rules and root instructions are always-loaded context.
 
 ### 2.4 Add the Cursor adapter
 
@@ -352,7 +399,7 @@ If the repo does not have those commands, create a task runner wrapper around th
 
 ```bash
 mkdir -p docs/{specs,plans,contracts,rubrics,verification,adr,knowledge,agentic-ops}
-mkdir -p .claude/{skills,agents,hooks}
+mkdir -p .claude/{skills,agents,hooks,rules}
 mkdir -p .cursor/{rules,plans}
 touch AGENTS.md CLAUDE.md docs/deferred.md
 ```
@@ -410,7 +457,7 @@ Only after this should you add skills, hooks, subagents or loops.
 
 ## 4. Run the first full task
 
-### 4.1 Choose a small vertical slice
+### 4.1 Choose a reviewable vertical slice
 
 Good first tasks:
 
@@ -500,7 +547,7 @@ Claude Code:
 After you approve the plan:
 
 ```text
-Implement docs/contracts/task-001.md. Keep the diff small. Run the acceptance checks and write verification evidence.
+Implement docs/contracts/task-001.md. Keep the remit reviewable. Run the acceptance checks and write public-safe verification evidence.
 ```
 
 For measurable tasks:
@@ -513,7 +560,7 @@ Cursor CLI:
 
 ```bash
 agent --plan "Plan docs/contracts/task-001.md without editing files"
-agent "Implement docs/contracts/task-001.md. Keep the diff small and produce verification evidence."
+agent "Implement docs/contracts/task-001.md. Keep the remit reviewable and produce public-safe verification evidence."
 ```
 
 For an isolated experiment:
@@ -545,6 +592,10 @@ Create `docs/verification/task-001.md`:
 ## Intent and assumptions
 
 ## Known unverified items
+
+## Public safety
+
+Are logs, screenshots, traces, prompts and links safe to publish?
 
 ## Deferred work
 ```
@@ -617,7 +668,11 @@ Use one small commit per task contract. Avoid “AI changes” mega-commits.
 
 ## 5. Add skills, hooks and subagents only after v0.1 works
 
-### 5.1 First skills to add
+### 5.1 Skill vs subagent rule
+
+Use a skill when the procedure should happen in the main thread and the human may want to steer each step. Use a subagent when the task is isolated, noisy, parallel or should return only a summary, such as dependency audit, log analysis, deep search or security sweep.
+
+### 5.2 First skills to add
 
 Start with:
 
@@ -637,7 +692,7 @@ A good skill is a workflow, not an essay. It should include:
 - anti-rationalisation table;
 - stop/escalation conditions.
 
-### 5.2 First hooks to add
+### 5.3 First hooks to add
 
 Start with enforcement hooks that prevent obvious failures:
 
@@ -653,7 +708,7 @@ Hook principle:
 silent on success, verbose on failure
 ```
 
-### 5.3 First subagents to add
+### 5.4 First subagents to add
 
 Start with only two or three:
 
@@ -729,7 +784,7 @@ First workflow
 [ ] product/system spec drafted
 [ ] first task contract written
 [ ] acceptance checks defined
-[ ] implementation done in small slice
+[ ] implementation done in a reviewable slice
 [ ] verification evidence captured
 [ ] AI review completed where useful
 [ ] human review completed
@@ -740,12 +795,12 @@ First workflow
 
 | Failure | Fix |
 |---|---|
-| Agent makes a huge diff | Split task contract; require one small commit per task |
+| Agent makes a huge diff | Split or checkpoint the remit; require evidence per checkpoint |
 | Agent claims done without proof | Require `docs/verification/<task>.md` or PR evidence |
 | Agent edits generated files | Add protected path rule and hook |
 | Agent weakens tests | Review test diffs first; add rubric blocker |
 | Agent chooses wrong tool command | Add command to Makefile and AGENTS.md |
-| Context files become bloated | Delete discoverable facts; move procedures into skills |
+| Context files become bloated | Delete discoverable facts; move procedures into skills, path-scoped rules or subdirectory guidance |
 | Claude and Cursor disagree | Move shared truth into AGENTS.md/docs; keep adapters thin |
 | Parallel agents collide | Use worktrees and partition by module/test/file |
 | Repeated manual rescue | Reverse-spec the fix into a test, hook, skill, OKF note or contract template |

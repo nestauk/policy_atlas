@@ -28,9 +28,10 @@ The stable workflow is:
 ```text
 thin context
 -> spec
--> task contract
--> rubric
--> scratchpad
+-> reviewable remit
+-> task contract when useful
+-> rubric when useful
+-> scratchpad if useful
 -> skill-driven execution
 -> independent verification
 -> adversarial review
@@ -83,6 +84,8 @@ Match harness weight to task risk and uncertainty.
 | 5 | Scheduled loops and automations | Stable recurring work | Manual version is still unreliable |
 
 Use the lowest level that gives enough confidence.
+
+The durable rule is reviewable remit. Small slices are the onboarding default, not the ambition ceiling. Larger remits are acceptable when the harness turns them into checkpoints, executable checks, evidence, verifier output, budgets and human approval gates.
 
 ## 3. Repo operating system
 
@@ -162,6 +165,23 @@ Never copy the same long instruction into both.
 
 Always-loaded context should be small. The more you put into every prompt, the more you dilute attention, increase cost and risk stale instructions.
 
+### 4.0 Claude Code instruction placement
+
+Before writing an instruction, decide when it should load, whether it must survive compaction, how much authority it needs and whether it should be deterministic.
+
+| Instruction type | Preferred location |
+|---|---|
+| Always-relevant repo facts, canonical commands and landmines | Root `CLAUDE.md`, kept short and owned |
+| Directory or team-specific conventions | Subdirectory `CLAUDE.md` or path-scoped rules |
+| Cross-cutting file/path constraints | `.claude/rules/` with `paths:` frontmatter |
+| Reusable procedures such as release, review or deploy workflows | `.claude/skills/` |
+| Noisy, isolated or parallel side tasks | `.claude/agents/` subagents |
+| Deterministic enforcement | Hooks, permissions, managed settings, CI or protected branches |
+| Major role or response-mode changes | Built-in output styles first; custom output styles rarely |
+| Temporary invocation-specific preferences | Appended system prompt or one-off prompt |
+
+Do not ask where to put an instruction first. Ask what cost, scope, compaction behaviour and authority it needs.
+
 ### 4.1 `AGENTS.md` as protocol and landmine list
 
 `AGENTS.md` should not be a codebase tour. Agents can inspect files and directories. Use it for non-discoverable operational truth.
@@ -204,7 +224,7 @@ Minimal `AGENTS.md`:
 
 ### 4.2 `CLAUDE.md` as Claude adapter
 
-Keep `CLAUDE.md` short. Point to `AGENTS.md` and shared docs rather than duplicating them.
+Keep root `CLAUDE.md` short. Treat it as a Claude adapter, not as a policy warehouse. Give it an owner, review changes to it like code, and aim to keep it under about 200 lines. Point to `AGENTS.md` and shared docs rather than duplicating them.
 
 ```markdown
 # Claude Code adapter
@@ -218,10 +238,28 @@ Use:
 - `/security-review` for auth, data, secrets, dependencies, MCP, CI or production config.
 
 Prefer skills for reusable workflows.
-Prefer hooks for rules that must be enforced.
+Prefer path-scoped rules for file-specific constraints.
+Prefer subdirectory `CLAUDE.md` files for directory/team conventions.
+Prefer hooks, permissions and managed settings for rules that must be enforced.
 ```
 
-### 4.3 Cursor rules as scoped adapters
+### 4.3 Claude Code rules
+
+Use `.claude/rules/` for specific constraints or conventions. Prefer path-scoped rules when an instruction applies only to some files.
+
+```markdown
+---
+paths:
+  - "src/api/**"
+  - "**/*.handler.ts"
+---
+
+All API handlers must validate input before processing.
+```
+
+An unscoped rule behaves like always-loaded context. Do not make every rule global.
+
+### 4.4 Cursor rules as scoped adapters
 
 Use `.cursor/rules/` for Cursor-native behaviour, especially file-pattern-specific guidance.
 
@@ -252,7 +290,7 @@ globs: ["backend/**/*.ts"]
 - Prefer existing error-handling patterns.
 ```
 
-### 4.4 OKF-style durable knowledge
+### 4.5 OKF-style durable knowledge
 
 Use `docs/knowledge/` for durable, verified domain and repo knowledge. Do not use it as a diary.
 
@@ -276,6 +314,39 @@ Memory update rule:
 ```text
 Only durable, verified learning goes into long-term memory.
 ```
+
+### 4.6 Public and private artefact boundary
+
+For open-source repositories, split durable public evidence from private working state.
+
+Public-safe durable artefacts:
+
+```text
+AGENTS.md
+CLAUDE.md
+SECURITY.md
+sanitized specs
+sanitized task contracts
+ADRs
+public-safe verification summaries
+```
+
+Private or ignored working state:
+
+```text
+.agent/
+.agent-private/
+docs/work/
+private advisories
+raw logs
+HAR files
+traces
+screenshots or recordings with sensitive data
+exploit notes
+incident details
+```
+
+Do not commit raw agent memory, private threat analysis, credentials, production details or exploit paths to a public repository.
 
 Use the progression:
 
@@ -312,15 +383,17 @@ A previous implementation treated `prc` as major units and produced 100x oversta
 
 Specs are not bureaucracy. They are the shared intent that keeps agents from guessing. But specs should be just detailed enough. Too little context produces hallucination. Too much context creates drift and cost.
 
-### 5.1 Spec Kit as the specification front-end
+### 5.1 Spec artefacts and optional Spec Kit
 
-GitHub Spec Kit is useful for the front half of the workflow:
+Use a spec artefact as the front-end for meaningful work. Spec Kit is one good implementation, but the durable output is the artefact: spec, plan, contract, rubric/eval, verification note and decision record.
+
+Spec Kit can structure:
 
 ```text
 constitution -> specify -> clarify -> checklist -> plan -> tasks -> analyze
 ```
 
-Use it to generate and maintain specs, plans and task breakdowns. Do not let it replace verification, security review, simplification review or human sign-off.
+Do not treat Spec Kit as required infrastructure for every task. Claude Code plans, Cursor plans and repo-specific skills can be enough when they produce accepted specs, contracts, checks and verification notes. Do not let any spec tool replace verification, security review, simplification review or human sign-off.
 
 Recommended greenfield flow:
 
@@ -411,7 +484,37 @@ Use the index as always-available context. Load full sections only when needed.
 
 The task contract tells the worker what to build. The rubric tells the verifier when it is done. The scratchpad carries temporary working state. The verification note records evidence.
 
-### 6.1 Task contract template
+### 6.1 Agent-negotiated contracts
+
+For larger or ambiguous remits, the human does not need to manually decompose every task.
+
+Human owns:
+
+```text
+objective
+risk tier
+non-goals
+trust boundaries
+acceptance bar
+approval gates
+public/private publication boundary
+```
+
+The agent may propose:
+
+```text
+implementation checkpoints
+likely files and seams
+acceptance checks
+verification plan
+model route
+risks and stop conditions
+public-safety notes
+```
+
+A verifier or human should approve the proposed contract before implementation begins. Do not over-specify implementation details early. Specify intent, constraints, interfaces and success criteria; let the implementation plan emerge, then check it before coding.
+
+### 6.2 Task contract template
 
 ```markdown
 # Task contract: <task name>
@@ -442,7 +545,7 @@ Exact tests, commands, screenshots, fixtures or manual checks.
 
 ## Implementation rules
 
-Prefer existing patterns. Keep the diff small. Do not introduce abstractions unless needed.
+Prefer existing patterns. Keep the remit reviewable. Do not introduce abstractions unless needed.
 
 ## Review focus
 
@@ -450,10 +553,10 @@ Correctness, missed requirements, security, data integrity, scope creep and unne
 
 ## Deliverable
 
-Small diff, updated tests, verification evidence and deferred notes.
+Reviewable diff or checkpointed changes, updated tests, verification evidence, public-safety notes and deferred notes.
 ```
 
-### 6.2 Rubric template
+### 6.3 Rubric template
 
 ```markdown
 # Rubric: <task name>
@@ -475,12 +578,12 @@ The task is complete only if:
 13. The verifier lists any unverified criteria.
 ```
 
-### 6.3 Scratchpad template
+### 6.4 Scratchpad template
 
 Use a per-task scratchpad for temporary state.
 
 ```text
-docs/work/task-042/
+.agent/work/task-042/
   scratchpad.md
   verification.md
 ```
@@ -505,9 +608,9 @@ docs/work/task-042/
 ## Next step
 ```
 
-Scratchpads are not permanent memory. At the end, distil durable information into OKF, ADRs, skills, hooks or rules.
+Scratchpads are not permanent memory. In open-source repositories, default them to ignored `.agent/` state rather than committed docs. At the end, distil public-safe durable information into OKF, ADRs, skills, hooks or rules.
 
-### 6.4 Verification note template
+### 6.5 Verification note template
 
 ```markdown
 # Verification: <task name>
@@ -546,6 +649,10 @@ Brief summary of changed files and why.
 ## Known unverified items
 
 Anything not checked.
+
+## Public safety
+
+For public repositories, are artefacts, logs, screenshots, traces, prompts and links safe to publish?
 
 ## Deferred work
 
@@ -747,6 +854,10 @@ network calls
 dependency changes
 MCP changes
 deployment changes
+LLM prompt/template changes
+untrusted input entering prompts or tools
+agent-accessible connectors or secrets
+retrieval over untrusted documents
 ```
 
 ### 8.7 Simplification review
@@ -804,13 +915,21 @@ Where should the human reviewer spend attention?
 ## Known gaps
 
 What remains unverified, deferred or intentionally out of scope?
+
+## Public safety
+
+For public repositories, are logs, screenshots, traces, prompts and links safe to publish?
 ```
 
 ## 9. Skills
 
 A skill is not a long essay. A useful skill is a workflow with checkpoints and exit criteria. Skills encode repeatable senior-engineer behaviour that agents otherwise skip.
 
-### 9.1 Skill quality checklist
+### 9.1 Skill vs subagent
+
+Use a skill when the procedure should happen in the main thread and the human may want to see and steer each step. Use a subagent when a side task is isolated, noisy, parallel or should return only a summary, such as deep search, log analysis, dependency audit or security sweep. Skills load procedure into the main session; subagents run in a separate context and return a summary.
+
+### 9.2 Skill quality checklist
 
 A skill is acceptable only if it has:
 
@@ -826,7 +945,7 @@ escalation or stop conditions
 references loaded only when needed
 ```
 
-### 9.2 Anti-rationalisation table
+### 9.3 Anti-rationalisation table
 
 Agents can rationalise skipping process. Pre-write the rebuttal.
 
@@ -842,7 +961,7 @@ Agents can rationalise skipping process. Pre-write the rebuttal.
 | The implementation seems obvious | Surface assumptions before editing. |
 ```
 
-### 9.3 Custom skills to create
+### 9.4 Custom skills to create
 
 Create skills only after a workflow repeats or fails.
 
@@ -859,7 +978,7 @@ browser-verification
 security-review
 ```
 
-### 9.4 Portable skill source
+### 9.5 Portable skill source
 
 Keep a tool-agnostic source version, then package for Claude and Cursor as needed.
 
@@ -901,6 +1020,8 @@ Examples:
 | WorktreeCreate/Remove | Set up or clean isolated environments |
 
 Do not put everything into hooks. Use hooks for deterministic rules, not fuzzy preferences.
+
+Do not rely on `CLAUDE.md`, `AGENTS.md` or rules for absolute prohibitions. If an action must not happen, enforce it with permissions, managed settings, hooks, protected branches, CI, policy or review gates.
 
 ## 11. Tools and adapters
 
@@ -947,6 +1068,16 @@ Useful command map:
 | `/context` | Inspect context usage |
 | `/compact` | Compress current session |
 | `/clear` | Fresh session for a new task |
+
+#### Output styles and appended prompts
+
+Avoid custom output styles for normal engineering workflow. Built-in output styles are safer for common mode changes. If a custom output style is required, preserve Claude Code's coding, security and verification habits. Prefer skills, rules, hooks or appended prompts for most workflow changes.
+
+Use appended system prompts for temporary invocation-specific preferences. Do not use them as a substitute for repo-owned guidance, skills, hooks or managed settings.
+
+#### Managed settings
+
+Use managed settings for organisation-wide controls that developers should not override: model allowlists, permissions, blocked tools, protected commands, central security rules and subagent model defaults.
 
 Use `/goal` only with measurable conditions:
 
@@ -1086,6 +1217,24 @@ produce useful logs
 exercise a browser path where relevant
 ```
 
+### 13.1 Agent-legible runtime
+
+For advanced product work, the agent should be able to inspect the running system, not just the source code.
+
+Prefer:
+
+```text
+per-worktree app instances
+seed data and test accounts
+browser automation for UI paths
+screenshots or video for visual behaviour
+logs, metrics and traces in local/dev environments
+queryable observability for services
+reproducible startup, reset and teardown commands
+```
+
+For UI, integration and production-behaviour bugs, runtime evidence is stronger than static code inspection.
+
 Create `docs/agentic-ops/environment.md`:
 
 ```markdown
@@ -1132,7 +1281,7 @@ Rules:
 
 ```text
 Use worktrees for parallel code changes.
-Use subagents for noisy research and review.
+Use subagents for noisy research, log analysis, dependency audit, deep search and review.
 Use /fork or conversation branches for reasoning alternatives.
 Do not let parallelism outrun human review bandwidth.
 ```
@@ -1280,6 +1429,24 @@ stop if CI is red for unrelated reasons
 stop if the same failure repeats twice
 ```
 
+### 15.6 Hard gates and rolling gates
+
+Hard gates must not be bypassed or deferred: auth, permissions, tenant boundaries, PII, secrets, payments, schema and migrations, data deletion, production configuration, public APIs, security controls and CI checks that protect correctness or safety.
+
+Soft gates may become rolling follow-up work only in a mature harness: flaky non-critical tests with known ownership, formatting or low-risk hygiene, non-blocking documentation drift or minor quality-score improvements. A soft gate may be deferred only when the failure is visible, owned, low-blast-radius, rollback is straightforward, hard gates are green and the loop has a budget and stop condition.
+
+### 15.7 Autonomy maturity ladder
+
+| Level | Policy |
+|---|---|
+| A: Adoption | Human reviews and merges every meaningful PR. |
+| B: Assisted | Agent review triages; human reviews evidence, risk areas and intent. |
+| C: Bounded autonomy | Agent can open PRs, fix CI, respond to review and update evidence; human approves merge. |
+| D: Mature internal loop | Agent may auto-merge Tier 0/1 low-blast-radius changes only with hard gates, state logs, rollback, ownership and sampling. |
+| E: High-risk systems | Human approval remains mandatory regardless of agent capability. |
+
+Never graduate autonomy by tool capability alone. Graduate only after measured evidence: low defect rate, reliable setup, hard gates, rollback, review sampling and clear ownership.
+
 ## 16. Harness engineering
 
 Harness engineering is the discipline of improving the scaffolding around the model.
@@ -1379,6 +1546,18 @@ Which new model behaviours need new guardrails?
 Which MCP/tool descriptions are too broad?
 ```
 
+### 16.3 Harness expiry A/B test
+
+After major model or tool upgrades, compare representative tasks across:
+
+```text
+solo agent + normal checks
+agent + verifier
+full planner/generator/evaluator harness
+```
+
+Track completion rate, defects caught, human review time, runtime, cost, unverified claims and rework after merge. Remove any harness component, context reset, sprint loop, reviewer pass, rubric or model escalation that no longer improves outcomes enough to justify its cost.
+
 ## 17. Downgrade paths
 
 If the agentic loop fails repeatedly, downgrade deliberately.
@@ -1470,11 +1649,19 @@ number of context/session resets
 agent failures by category
 manual rescue frequency
 agentic-ops backlog age
+cost per accepted PR
+cost per verified fix
+cost per useful reviewer finding
+cost per abandoned agent run
+review queue size from agent-generated PRs
+number of PRs returned for missing evidence
+human review minutes per risk tier
+strong-model calls by phase
 ```
 
 ## 19. Quick decision rules
 
-### Is this task small?
+### Is this task obvious and low-risk?
 
 ```text
 direct edit
@@ -1535,14 +1722,13 @@ partition
 Install or trial deliberately:
 
 ```text
-GitHub Spec Kit for spec/plan/tasks
-Claude Code Setup for repo diagnostics
 Claude Code as terminal-native harness
 Cursor as IDE-native cockpit
-Codex or equivalent for adversarial review
-Ponytail or /simplify for anti-bloat review
-Addy Osmani-style skills for lifecycle discipline
-fable-mode only for long/staged tasks where useful
+Spec Kit or equivalent only where spec artefact scaffolding is useful
+Codex or equivalent briefly for adversarial review
+Ponytail, /simplify or a simplification skill after correctness
+Repo-specific skills for repeated lifecycle discipline
+Hooks, rules and managed settings for deterministic guardrails
 ```
 
 Do not make the workflow depend on everyone installing every tool on day one.
@@ -1552,10 +1738,10 @@ Do not make the workflow depend on everyone installing every tool on day one.
 For a team:
 
 ```text
-1. Start with the playbook: small tasks, evidence, risk-tiered review.
+1. Start with the playbook: reviewable remits, evidence, risk-tiered review.
 2. Add PR contract and minimal AGENTS.md.
 3. Add standard commands and CI parity.
-4. Add Spec Kit for feature planning.
+4. Add Spec Kit or equivalent spec artefacts for feature planning where useful.
 5. Add AI first-pass review.
 6. Add skills for repeated workflows.
 7. Add hooks for repeated failures.

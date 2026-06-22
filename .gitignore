@@ -1,0 +1,12 @@
+.agent/
+docs/work/
+docs/verification/private/
+docs/verification/raw/
+*.har
+*.trace.zip
+*.webm
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store

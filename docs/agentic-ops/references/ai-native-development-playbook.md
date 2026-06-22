@@ -18,7 +18,7 @@ The core workflow is simple:
 
 ```text
 clear intent
-→ small scoped work
+→ reviewable remit
 → executable evidence
 → risk-based review
 → human accountability
@@ -33,9 +33,9 @@ Use the lightest workflow that gives enough confidence for the risk of the chang
 
 AI agents are fast implementation partners. They can draft code, run tests, explain errors, propose plans and review diffs. They do not own the system. A human must still decide what should be built, whether the result is correct, and whether it is safe to merge.
 
-### 1.2 Keep work small enough to review
+### 1.2 Keep work scoped enough to verify
 
-The best AI-generated change is a small, coherent change that a human can understand. Large ambiguous tasks create large ambiguous diffs. Prefer small slices, focused prompts and clear acceptance checks.
+The best AI-generated change is coherent, bounded and verifiable. For onboarding and everyday work, prefer small slices. In mature harnesses, agents may take a larger remit when the work is partitioned into reviewable checkpoints, executable checks, evidence and clear human approval gates. The control is acceptance evidence and blast radius, not task size alone.
 
 ### 1.3 Evidence beats confidence
 
@@ -49,13 +49,19 @@ Do not review a typo fix like a payment flow. Do not review a payment flow like 
 
 Agents may not remove tests, skip checks, lower coverage thresholds, weaken CI, change security controls, or broaden permissions just to get green output. CI, tests, lint and security checks are walls, not suggestions.
 
+Do not rely on prose instructions for absolute prohibitions. If something must not happen, enforce it with permissions, hooks, protected branches, CI, managed settings or review gates.
+
 ### 1.6 Keep always-loaded context tiny
 
-`AGENTS.md`, `CLAUDE.md` and Cursor rules should not be codebase tours. Agents can inspect the repo. Always-loaded files should contain only non-obvious landmines, approval gates, canonical commands and pointers to the right artefacts.
+`AGENTS.md`, root `CLAUDE.md` and always-applied Cursor rules should not be codebase tours. Agents can inspect the repo. Always-loaded files should contain only non-obvious landmines, approval gates, canonical commands and pointers to the right artefacts. Put procedures in skills, path-specific constraints in scoped rules or subdirectory guidance, and deterministic guardrails in hooks or permissions.
 
 ### 1.7 Improve the system only when failure teaches you something
 
 Do not add rules, hooks, skills or process because they sound impressive. Add them when a real failure repeats, when a serious failure exposes a missing guardrail, or when a recurring workflow is worth standardising.
+
+### 1.8 Treat public repos as disclosure surfaces
+
+Most durable repo artefacts in open-source projects are public evidence, not private agent memory. Commit only public-safe guidance, specs, contracts, ADRs and verification summaries. Keep raw scratchpads, exploit notes, private threat analysis, credentials, logs, traces, screenshots, HAR files and incident details in ignored or private locations.
 
 ## 2. Risk-tiered workflow
 
@@ -77,7 +83,7 @@ Use this for most AI-assisted development.
 
 1. **Decide the risk tier.** Identify whether the task is low-risk, medium-risk or high-risk before asking the agent to edit.
 2. **Plan briefly.** For non-trivial work, ask the agent to inspect first and produce a short plan before coding.
-3. **Keep the task small.** One task should produce one coherent diff that can be reviewed.
+3. **Keep the remit reviewable.** One task should produce a coherent diff or a clear series of checkpoints that can be verified and integrated.
 4. **Provide relevant context only.** Point to the specific files, spec, issue or examples the agent needs. Do not dump everything.
 5. **Let the agent implement.** Prefer existing patterns. Avoid broad refactors unless they are the task.
 6. **Run checks.** At minimum, run the narrowest relevant tests and any standard lint/type/build commands for the touched area.
@@ -119,6 +125,10 @@ Where should the human reviewer spend attention?
 ## Known gaps
 
 What remains unverified, deferred or intentionally out of scope?
+
+## Public safety
+
+For public repositories, are logs, screenshots, traces, prompts and links safe to publish?
 ```
 
 If you cannot fill this in, the work is not ready for review.
@@ -224,6 +234,10 @@ Let automation and AI reviewers handle first-pass lint, obvious mistakes and rou
 
 A second model or reviewer agent can catch real issues. Treat its output as information, not approval. For high-risk work, use heterogeneous review: for example, a general correctness reviewer plus a security-focused reviewer.
 
+### 7.4 Review intake bar
+
+Do not ask a human to be the first verification layer. Return the PR to the agent or author if it lacks clear intent, risk tier, check output, evidence, public-safety review or known gaps. Large or evidence-poor PRs should be split, checkpointed or sent back for evidence before human review.
+
 ## 8. Minimal repo setup
 
 A repo does not need a huge AI configuration to be AI-native. Start with the smallest useful setup.
@@ -298,7 +312,7 @@ Use tools according to the job, not tribal preference.
 |---|---|---|
 | Claude Code | Terminal-native execution, planning, hooks, subagents, skills, security review, goal loops | Excellent for advanced users and deeper automation |
 | Cursor | IDE-native planning, editing, navigation, visual review, plans and rules | Excellent for day-to-day development and people who prefer editor workflows |
-| GitHub Spec Kit | Spec → plan → tasks workflow | Useful for starting features and keeping specs explicit |
+| GitHub Spec Kit | Optional spec artefact scaffolding | Useful for larger features, greenfield work and cross-agent handoff; not required for every task |
 | Addy Osmani-style skills | Reusable senior-engineer workflows | Use after workflows repeat; do not load everything by default |
 | Codex or second-model review | Independent/adversarial review | Use for meaningful or risky diffs |
 | Ponytail or simplification review | Anti-bloat review after correctness | Run after tests and correctness are established |
@@ -326,7 +340,7 @@ Start with behaviour, not tooling.
 
 ### Phase 1: shared habits
 
-- Keep AI-generated changes small.
+- Keep AI-generated changes reviewable and evidenced.
 - Require proof it works.
 - Use the PR contract.
 - Review test changes first.
@@ -341,7 +355,7 @@ Start with behaviour, not tooling.
 
 ### Phase 3: shared tooling
 
-- Introduce Spec Kit for spec/plan/tasks where useful.
+- Introduce Spec Kit or another spec artefact workflow where useful.
 - Add Claude Code or Cursor conventions.
 - Add AI first-pass review.
 - Add a small set of reusable skills.
@@ -355,7 +369,7 @@ Start with behaviour, not tooling.
 
 Before asking an agent to code:
 
-- Is the task small enough to review?
+- Is the remit bounded, reviewable and verifiable?
 - Is the risk tier clear?
 - Does the agent have the relevant context, and only the relevant context?
 - Are out-of-scope areas explicit?
@@ -380,7 +394,7 @@ Before merging:
 
 ## 14. The playbook in one sentence
 
-Use AI agents to move faster, but make every change small, evidenced, risk-tiered and owned by a human.
+Use AI agents to move faster, but make every change reviewable, evidenced, risk-tiered and owned by a human.
 
 ## Sources and further reading
 
