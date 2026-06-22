@@ -1,6 +1,5 @@
 # Policy Atlas v3 — Backend Architecture & Design
 
-**Owner:** Shabeer Rauf (Principal AI Engineer)
 **Status:** Living document — built up section by section, mostly via working sessions.
 **Companions:** the v3 UX principles + synthesis.
 

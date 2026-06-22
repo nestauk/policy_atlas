@@ -235,7 +235,7 @@ Start with the plugin defaults. Do not install every community plugin. Treat plu
 mkdir my-project
 cd my-project
 git init
-mkdir -p docs/{specs,plans,contracts,rubrics,verification,adr,knowledge,agentic-ops}
+mkdir -p docs/{specs,plans,tasks,adr,knowledge,agentic-ops}
 mkdir -p .claude/{skills,agents,hooks,rules}
 mkdir -p .cursor/{rules,plans}
 touch AGENTS.md CLAUDE.md docs/deferred.md
@@ -291,9 +291,9 @@ Put shared, tool-neutral instructions in `AGENTS.md`:
 - Use the commands in the `Makefile`.
 - For non-trivial work, plan before editing.
 - Use `docs/specs/` for product and system intent.
-- Use `docs/contracts/` for task scope.
-- Use `docs/rubrics/` for completion criteria when risk is medium or high.
-- Record public-safe verification evidence in `docs/verification/` or in the PR.
+- Use `docs/tasks/<task-id>/` for per-task artefacts: `contract.md` (scope), `rubric.md`
+  (completion criteria, when risk is medium or high), `verification.md` (public-safe evidence, or in the PR).
+  Templates live in `docs/tasks/_templates/`.
 - Do not change schema, auth, dependencies, CI, production config or public interfaces without approval.
 - Never edit generated files, secrets or private agent working state.
 - Touch only what the task requires.
@@ -349,7 +349,7 @@ alwaysApply: true
 
 - Follow `AGENTS.md`.
 - Use `.cursor/plans/` for Cursor-native working plans.
-- Promote accepted plans that matter into `docs/plans/` or `docs/contracts/`.
+- Promote accepted plans that matter into `docs/plans/` or a task contract under `docs/tasks/<task-id>/`.
 - Keep changes scoped to the task.
 - Produce verification evidence before review.
 ```
@@ -377,7 +377,7 @@ Run the front-end workflow:
 /speckit.analyze
 ```
 
-Then promote important tasks into `docs/contracts/` and `docs/rubrics/`.
+Then promote important tasks into `docs/tasks/<task-id>/` (a `contract.md`, plus `rubric.md` for medium/high-risk work).
 
 ## 3. Add the workflow to an existing repo
 
@@ -398,7 +398,7 @@ If the repo does not have those commands, create a task runner wrapper around th
 ### 3.2 Create the minimal files
 
 ```bash
-mkdir -p docs/{specs,plans,contracts,rubrics,verification,adr,knowledge,agentic-ops}
+mkdir -p docs/{specs,plans,tasks,adr,knowledge,agentic-ops}
 mkdir -p .claude/{skills,agents,hooks,rules}
 mkdir -p .cursor/{rules,plans}
 touch AGENTS.md CLAUDE.md docs/deferred.md
@@ -477,10 +477,10 @@ Bad first tasks:
 
 ### 4.2 Write a task contract
 
-Create `docs/contracts/task-001.md`:
+Create `docs/tasks/001-example-slice/contract.md`:
 
 ```markdown
-# Task contract: task-001
+# Task contract: 001-example-slice
 
 ## Goal
 
@@ -519,14 +519,14 @@ For low-risk tasks, this can be five lines. For high-risk tasks, make it explici
 
 ### 4.3 Optional: write a rubric
 
-Create `docs/rubrics/task-001.md` for medium/high-risk work:
+Create `docs/tasks/001-example-slice/rubric.md` for medium/high-risk work:
 
 ```markdown
-# Rubric: task-001
+# Rubric: 001-example-slice
 
 The task is complete only if:
 
-1. The implementation satisfies `docs/contracts/task-001.md`.
+1. The implementation satisfies `docs/tasks/001-example-slice/contract.md`.
 2. The specified checks pass.
 3. No public interface changed without approval.
 4. No new dependency was added without approval.
@@ -541,40 +541,40 @@ The task is complete only if:
 Claude Code:
 
 ```text
-/plan Implement docs/contracts/task-001.md. Do not edit yet. Identify files, tests and risks.
+/plan Implement docs/tasks/001-example-slice/contract.md. Do not edit yet. Identify files, tests and risks.
 ```
 
 After you approve the plan:
 
 ```text
-Implement docs/contracts/task-001.md. Keep the remit reviewable. Run the acceptance checks and write public-safe verification evidence.
+Implement docs/tasks/001-example-slice/contract.md. Keep the remit reviewable. Run the acceptance checks and write public-safe verification evidence.
 ```
 
 For measurable tasks:
 
 ```text
-/goal All criteria in docs/rubrics/task-001.md are satisfied. Run and report make test, make typecheck, make lint and make build. Stop after 8 turns if incomplete and list blockers.
+/goal All criteria in docs/tasks/001-example-slice/rubric.md are satisfied. Run and report make test, make typecheck, make lint and make build. Stop after 8 turns if incomplete and list blockers.
 ```
 
 Cursor CLI:
 
 ```bash
-agent --plan "Plan docs/contracts/task-001.md without editing files"
-agent "Implement docs/contracts/task-001.md. Keep the remit reviewable and produce public-safe verification evidence."
+agent --plan "Plan docs/tasks/001-example-slice/contract.md without editing files"
+agent "Implement docs/tasks/001-example-slice/contract.md. Keep the remit reviewable and produce public-safe verification evidence."
 ```
 
 For an isolated experiment:
 
 ```bash
-agent --worktree "Implement docs/contracts/task-001.md in an isolated worktree and report evidence"
+agent --worktree "Implement docs/tasks/001-example-slice/contract.md in an isolated worktree and report evidence"
 ```
 
 ### 4.5 Capture verification evidence
 
-Create `docs/verification/task-001.md`:
+Create `docs/tasks/001-example-slice/verification.md`:
 
 ```markdown
-# Verification: task-001
+# Verification: 001-example-slice
 
 ## Commands run
 
@@ -661,7 +661,7 @@ No PR should ask reviewers to reconstruct intent from the diff alone.
 git status
 git diff --stat
 git add <files>
-git commit -m "task-001: <short description>"
+git commit -m "001-example-slice: <short description>"
 ```
 
 Use one small commit per task contract. Avoid “AI changes” mega-commits.
@@ -773,9 +773,8 @@ Repo scaffold
 [ ] CLAUDE.md Claude adapter
 [ ] .cursor/rules/core.mdc if Cursor is used
 [ ] docs/specs/
-[ ] docs/contracts/
-[ ] docs/rubrics/
-[ ] docs/verification/
+[ ] docs/tasks/
+[ ] docs/tasks/_templates/ (contract.md, rubric.md, verification.md)
 [ ] docs/adr/
 [ ] docs/deferred.md
 [ ] docs/agentic-ops/readiness.md
@@ -796,7 +795,7 @@ First workflow
 | Failure | Fix |
 |---|---|
 | Agent makes a huge diff | Split or checkpoint the remit; require evidence per checkpoint |
-| Agent claims done without proof | Require `docs/verification/<task>.md` or PR evidence |
+| Agent claims done without proof | Require `docs/tasks/<task-id>/verification.md` or PR evidence |
 | Agent edits generated files | Add protected path rule and hook |
 | Agent weakens tests | Review test diffs first; add rubric blocker |
 | Agent chooses wrong tool command | Add command to Makefile and AGENTS.md |

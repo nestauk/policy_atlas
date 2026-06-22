@@ -18,11 +18,11 @@ Resolve conflicts in this order:
 1. `Policy_Atlas_v3_Backend_Architecture.md` — canonical backend model, orchestration, trust/provenance, versions, collaboration, event log, and deferred seams.
 2. `Policy_Atlas_v3_Backend_briefing.md` — concise product boundary and shared mental model.
 3. `Policy_Atlas_v3_Evidence_Base_Capability_design.md` — canonical Evidence Base capability behaviour.
-4. `policy_atlas_v3_0_evidence_base.html` — static UX reference for the v3.0 Evidence Base journey.
-5. `nesta-brand-tokens.md` and `hifi.css` — design references for visual language and token cues.
-6. This handoff — repo-safe constraints for spec/rubric/task-contract agents.
+4. This handoff — repo-safe constraints and the **locked product decisions** (§7), which **override the wireframe and visual assets below** on the points they cover.
+5. `policy_atlas_v3_0_evidence_base.html` — static UX reference for the v3.0 Evidence Base journey.
+6. `nesta-brand-tokens.md` and `hifi.css` — design references for visual language and token cues.
 
-When there is any tension, prefer the backend architecture and Evidence Base capability design over visual shorthand in the wireframe.
+When there is any tension, prefer the backend architecture and Evidence Base capability design over visual shorthand in the wireframe; this handoff's locked product decisions (§7) override the wireframe and visual assets below.
 
 ## 3. Packet contents and repo role
 

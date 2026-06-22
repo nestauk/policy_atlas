@@ -3,9 +3,9 @@
 - Use the commands in the `Makefile`.
 - For non-trivial work, plan before editing.
 - Use `docs/specs/` for product and system intent.
-- Use `docs/contracts/` for task scope.
-- Use `docs/rubrics/` for completion criteria when risk is medium or high.
-- Record verification evidence in `docs/verification/` or in the PR.
+- Use `docs/tasks/<task-id>/` for per-task artefacts: `contract.md` (scope), `rubric.md`
+  (completion criteria, when risk is medium or high), `verification.md` (evidence, or in the PR).
+  `<task-id>` is `NNN-slug` (zero-padded, e.g. `001-example-slice`). Templates live in `docs/tasks/_templates/`.
 - Do not change schema, auth, dependencies, CI, production config or public interfaces without approval.
 - Never edit generated files or secrets.
 - Touch only what the task requires.

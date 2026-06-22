@@ -105,9 +105,11 @@ repo/
       system.md
       index.md
     plans/
-    contracts/
-    rubrics/
-    verification/
+    tasks/
+      _templates/
+        contract.md
+        rubric.md
+        verification.md
     work/
     knowledge/
       index.md
@@ -150,7 +152,7 @@ Use one shared repo operating system and thin adapters for each tool.
 | Shared agent protocol | `AGENTS.md` |
 | Claude Code adapter | `CLAUDE.md`, `.claude/skills/`, `.claude/agents/`, hooks, plugins |
 | Cursor adapter | `.cursor/rules/`, `.cursor/plans/`, `.cursor/mcp.json`, `.cursor/permissions.json` |
-| Durable source of truth | `docs/specs/`, `docs/contracts/`, `docs/rubrics/`, `docs/verification/`, `docs/adr/`, `docs/knowledge/` |
+| Durable source of truth | `docs/specs/`, `docs/tasks/`, `docs/adr/`, `docs/knowledge/` |
 | Executable truth | `Makefile`, scripts, tests, CI |
 
 Rule:
@@ -215,8 +217,8 @@ Minimal `AGENTS.md`:
 - Use `make test`, `make typecheck`, `make lint`, `make build`.
 - Do not change schema, auth, dependencies, CI or public interfaces without approval.
 - Never edit generated files.
-- Use `docs/contracts/` for task scope.
-- Use `docs/rubrics/` for completion criteria when present.
+- Use `docs/tasks/<task-id>/` for per-task artefacts: `contract.md` (scope), `rubric.md`
+  (completion criteria, when present).
 - Provide evidence before claiming completion.
 - Touch only what the task requires.
 - If requirements conflict, stop and ask.
@@ -563,7 +565,7 @@ Reviewable diff or checkpointed changes, updated tests, verification evidence, p
 
 The task is complete only if:
 
-1. The implementation satisfies `docs/contracts/<task>.md`.
+1. The implementation satisfies `contract.md` (in `docs/tasks/<task-id>/`).
 2. The specified tests pass.
 3. Typecheck passes.
 4. Lint passes.
@@ -583,7 +585,7 @@ The task is complete only if:
 Use a per-task scratchpad for temporary state.
 
 ```text
-.agent/work/task-042/
+.agent/work/042-<slug>/
   scratchpad.md
   verification.md
 ```
@@ -1082,7 +1084,7 @@ Use managed settings for organisation-wide controls that developers should not o
 Use `/goal` only with measurable conditions:
 
 ```text
-/goal All criteria in docs/rubrics/task-042-rubric.md are satisfied, the worker has run and pasted results for make test, make typecheck and make lint, no public interfaces changed, and the final response lists unverified criteria. Stop after 12 turns if not complete.
+/goal All criteria in docs/tasks/042-<slug>/rubric.md are satisfied, the worker has run and pasted results for make test, make typecheck and make lint, no public interfaces changed, and the final response lists unverified criteria. Stop after 12 turns if not complete.
 ```
 
 ### 11.2 Cursor
@@ -1104,7 +1106,7 @@ Recommended usage:
 
 ```text
 Use Plan Mode for non-trivial work.
-Save durable plans into docs/plans/ or docs/contracts/.
+Save durable plans into docs/plans/ or a task contract under docs/tasks/<task-id>/.
 Use .cursor/rules/ for scoped project rules.
 Use AGENTS.md as shared protocol.
 Use Agent Review as first-pass review, not final approval.

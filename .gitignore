@@ -1,5 +1,6 @@
 .agent/
 docs/work/
+docs/specs/sources/evidence-base-ux/fonts/
 docs/verification/private/
 docs/verification/raw/
 *.har

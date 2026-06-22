@@ -179,7 +179,7 @@ Common evidence:
 - API examples or conformance cases for interfaces;
 - a short explanation of anything not verified.
 
-For Tier 2+ work, include a verification note in the PR or in `docs/verification/`:
+For Tier 2+ work, include a verification note in the PR or in `docs/tasks/<task-id>/verification.md`:
 
 ```markdown
 # Verification: <task>
