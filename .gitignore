@@ -1,4 +1,5 @@
 .agent/
+.vscode/
 docs/work/
 docs/specs/sources/evidence-base-ux/fonts/
 docs/verification/private/
@@ -10,4 +11,16 @@ docs/verification/raw/
 .env
 .env.*
 !.env.example
+.envrc
 .DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+dist/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/

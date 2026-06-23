@@ -126,6 +126,13 @@ begins, establish a small public command surface for agents and CI — likely th
 scripts and/or a Makefile wrapper. Expected commands: setup, dev, test, typecheck, lint,
 build, verify. Generate the concrete surface once the scaffold is in place.
 
+## Code style
+
+Google-style docstrings (`Args:`/`Returns:`/`Raises:`) for public modules, classes and
+functions, kept concise; trivial helpers and test functions need none. This is the binding
+convention in [../../AGENTS.md](../../AGENTS.md) — repeated here only as a pointer. When the lint
+surface firms up, enforce it via ruff's `pydocstyle` `google` convention rather than by review.
+
 ## Accessibility
 
 User-facing implementation should target WCAG 2.2 AA unless explicitly scoped otherwise.

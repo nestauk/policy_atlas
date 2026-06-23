@@ -1,23 +1,30 @@
-# Pre-implementation stubs. Targets fail on purpose so `make verify` is red,
-# not falsely green, until wired to real tooling.
-# Stack: Postgres/Aurora, LangGraph, OpenAI->Bedrock, Langfuse (uv + pytest + ruff + mypy).
-# To wire a target: replace its body with the real command shown in the comment.
-
 .PHONY: setup test typecheck lint build verify
 
-setup:        # -> uv sync
-	@echo "make setup: not yet wired (uv sync)" >&2; exit 1
+setup:
+	uv sync
+	docker compose up -d db
+	@echo "Waiting for Postgres to be healthy..."
+	@until docker compose exec db pg_isready -U policy_atlas -q; do sleep 1; done
+	@echo "DB ready."
+	uv run alembic upgrade head
 
-test:         # -> uv run pytest
-	@echo "make test: not yet wired (uv run pytest)" >&2; exit 1
+test:
+	uv run pytest
 
-typecheck:    # -> uv run mypy .
-	@echo "make typecheck: not yet wired (uv run mypy .)" >&2; exit 1
+typecheck:
+	uv run mypy src tests
 
-lint:         # -> uv run ruff check .
-	@echo "make lint: not yet wired (uv run ruff check .)" >&2; exit 1
+lint:
+	uv run ruff check src tests
 
-build:        # -> packaging/build step
-	@echo "make build: not yet wired" >&2; exit 1
+build:
+	uv build
 
-verify: test typecheck lint build
+verify:
+	@if ! docker compose exec db pg_isready -U policy_atlas -q 2>/dev/null; then \
+		echo "ERROR: Postgres is not running. Run 'make setup' first." >&2; exit 1; \
+	fi
+	$(MAKE) test
+	$(MAKE) typecheck
+	$(MAKE) lint
+	$(MAKE) build

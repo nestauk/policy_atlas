@@ -2,6 +2,8 @@
 
 - Use the commands in the `Makefile`.
 - For non-trivial work, plan before editing.
+- Write Google-style docstrings (`Args:`/`Returns:`/`Raises:` sections) for public modules,
+  classes and functions; keep them concise. Trivial helpers and test functions need none.
 - Use `docs/specs/` for product and system intent.
 - Use `docs/tasks/<task-id>/` for per-task artefacts: `contract.md` (scope), `rubric.md`
   (completion criteria, when risk is medium or high), `verification.md` (evidence, or in the PR).
