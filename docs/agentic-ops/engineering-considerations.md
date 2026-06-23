@@ -27,7 +27,7 @@ Likely frontend and tooling defaults (confirm before creating files or installin
 - pnpm.
 - uv.
 - Explicit schema validation at API, tool and event boundaries.
-- Structured JSON logs in deployed environments.
+- **structlog** for structured logging throughout the application — **mandatory from the first scaffold slice onward**. Configure for structured JSON output in deployed environments and developer-friendly console output locally. Do not use stdlib logging or ad-hoc print statements; all application log calls go through structlog.
 - CloudWatch for AWS runtime logs, metrics and alerts.
 - GitHub Actions for CI once implementation begins.
 - AWS-oriented deployment (not Heroku-first).

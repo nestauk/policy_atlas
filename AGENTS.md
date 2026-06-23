@@ -11,6 +11,9 @@
 - Touch only what the task requires.
 
 # Current phase
-Pre-implementation specification preparation.
+Implementation — task `001-walking-skeleton` (approved 2026-06-23).
 
-Do not build the application yet. Read the canonical source documents, propose the initial specification artefacts, and stop for human review.
+Specification preparation is complete. The first slice is greenlit. Build per
+`docs/tasks/001-walking-skeleton/plan.md` and `contract.md`, governed by
+`docs/adr/0001-walking-skeleton-foundations.md`. Stay within the contract's scope and stop
+conditions; all other capabilities and seams remain deferred (`docs/deferred.md`).
