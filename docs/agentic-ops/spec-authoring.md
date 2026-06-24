@@ -1,16 +1,18 @@
-# Spec-prep guidance (current phase)
+# Spec-authoring disciplines
 
-The current phase is **pre-implementation specification preparation**, not application build.
-This file is the playbook for distilling the canonical sources into specs, contracts and
-capability specs. It governs *how* spec-prep work is done; it is not itself a contract.
+Originally the playbook for the pre-implementation spec-prep phase — **that phase is complete; we are
+in implementation.** It stays the reference for **how to write or refine a spec** whenever that
+happens, including the [task-cycle](../../.claude/skills/task-cycle/SKILL.md)'s *Spec refinement*
+flow-back. It governs *how* spec work is done; it is not itself a contract.
 
 ## What we are doing
 
 Turning the canonical sources in [../specs/sources/](../specs/sources/) into a small set of
 **distilled, consumable specs** — system contracts + the Evidence Base capability spec — that
 implementation task contracts can later reference. **Distil, don't duplicate**: a spec is a
-declarative, status-tagged compression that points back to its source section. On any conflict,
-**the source wins and the spec is corrected** — never the reverse.
+declarative, status-tagged compression that points back to its source section. During distillation,
+on any conflict **the source won and the spec was corrected**. *Post spec-prep this is superseded:*
+sources are frozen and specs + ADRs are canonical — see [ADR 0002](../adr/0002-spec-governance.md).
 
 ## Canonical source & conflict-resolution order
 

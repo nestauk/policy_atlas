@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(.env)",
+      "Edit(.env)",
+      "Write(.env)",
+      "Read(.env.local)",
+      "Edit(.env.local)",
+      "Write(.env.local)",
+      "Edit(uv.lock)",
+      "Write(uv.lock)",
+      "Edit(dist/**)",
+      "Write(dist/**)"
+    ]
+  }
+}
