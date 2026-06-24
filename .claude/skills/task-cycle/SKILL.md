@@ -72,8 +72,10 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
 ## Workflow (Tier 2+; lower tiers skip marked steps)
 
 1. **Contract** — copy [_templates/contract.md](../../../docs/tasks/_templates/contract.md) →
-   `docs/tasks/NNN-slug/contract.md`. Read the specs it depends on *in depth*, not headings — if a
-   spec looks wrong or incomplete, refine it first (see **Spec refinement** below).
+   `docs/tasks/NNN-slug/contract.md`. If the *ask itself* is underspecified (unclear why / for whom /
+   what "done" means), clarify with the user first (`agent-skills:interview-me`) — don't write a
+   contract on guesses. Read the specs it depends on *in depth*, not headings — if a spec looks wrong
+   or incomplete, refine it first (see **Spec refinement** below).
    🛑 **Human approves the contract before planning** (Tier 2+).
 2. **Rubric** — copy [_templates/rubric.md](../../../docs/tasks/_templates/rubric.md). Tier 2+ only.
 3. **Plan** — `/plan` (read-only). Save accepted plan to `docs/tasks/NNN-slug/plan.md`.
@@ -103,8 +105,11 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
      `agent-skills:code-reviewer` subagent — different model families), not two of the same.
    - `/simplify` (or `ponytail`) — last, cleanup only.
    - Record what each review caught in `verification.md` (§ Review findings).
-8. **PR** — open with the [PR template](../../../.github/pull_request_template.md); link
-   verification.md rather than re-pasting evidence. Branch `task/NNN-slug` → `dev`.
+8. **PR** — the agent **drafts the full PR description** from the task artifacts, in the shape of the
+   [PR template](../../../.github/pull_request_template.md): What/why from the contract, proof from
+   (and linked to) verification.md, risk tier, AI role, review focus, known gaps, and the
+   public-safety + reviews-run checklists. Open it `task/NNN-slug` → `dev` **on your go**
+   (`gh pr create --base dev --body-file …`). You review the draft — you don't transcribe it.
 9. 🛑 **Human review + merge.**
 10. **Update knowledge** (after merge):
     - new seams → [docs/deferred.md](../../../docs/deferred.md);
@@ -196,5 +201,6 @@ already in a committed artifact; `/compact` when valuable state is in-flight and
 **Commits.** Each phase boundary ends with a commit on the `task/NNN-slug` branch — that's what turns
 the artifact into a real handoff for the next conversation. The agent prepares and runs the commit
 **on your go** (it's a defined step, not automatic): it **asks first**, never commits the default
-branch, and never commits a red `make verify`. **commit ≠ push** — push, PR and merge stay human
-(steps 8–9). `agent-skills:git-workflow-and-versioning` helps with message/branch hygiene.
+branch, and never commits a red `make verify`. **commit ≠ push** — pushing and merging stay human; the agent **drafts** the PR and opens it on your
+go (step 8), but you own review + merge (step 9). `agent-skills:git-workflow-and-versioning` helps
+with message/branch hygiene.

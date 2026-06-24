@@ -57,8 +57,9 @@ re-deriving the project's intent or boundaries each time.
 ## Enforcement layer
 
 **Mostly advisory.** Most boundaries in AGENTS.md (no hand-editing generated files, hard gates need
-approval) are guidance the agent is asked to follow — with **no hooks, no protected-branch rules,
-no CI gates** behind them. The hard mechanisms: `.claude/settings.json` **denies** reading/writing
+approval) are guidance the agent is asked to follow — with **no hooks and no CI status checks**
+behind them. The hard mechanisms: a **protected `dev` branch** on GitHub (PR required to merge,
+force-push blocked, deletion restricted); `.claude/settings.json` **denies** reading/writing
 `.env`/secrets and editing generated artifacts (`uv.lock`, `dist/`); `settings.local.json` holds the
 command allowlist. Note **egress here means *runtime* egress** — the deployed product reaching
 search backends or model providers with project data (a per-slice approval gate, see
@@ -83,10 +84,13 @@ gated. See Known gaps.
 
 - **Thin enforcement.** `.env`/secrets and generated artifacts are now denied via
   `.claude/settings.json`; everything else (no unapproved hard-gate change, the runtime-egress gate)
-  is still doc-only. No PreToolUse/Stop hooks or protected-branch rules yet.
+  is still doc-only — no PreToolUse/Stop hooks. (`dev` is now a protected branch — PR required,
+  force-push/deletion blocked — but no CI status check gates merges yet.)
 - **Empty stub:** `failure-log.md` — earn it on the first real failure, don't pre-fill.
 - **No `metrics.md`** — add when there's enough task volume to measure (~5+ merged tasks). Harness
   decisions/deferrals are tracked in [backlog.md](backlog.md).
 - **OKF bundle is young** — `docs/knowledge/` seeded with four verified concepts (task-001); grow it
   at the after-merge cadence, not speculatively.
-- **No CI** (GitHub Actions deferred) and **no protected `dev` branch** — merge gate is human trust.
+- **No CI status checks** (GitHub Actions deferred) — `dev` is protected (PR required,
+  force-push/deletion blocked), but no automated check (e.g. `make verify`) gates merges yet; the
+  merge gate is human review.

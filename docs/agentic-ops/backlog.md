@@ -44,6 +44,16 @@ its **trigger to act** — don't pre-build, earn it. Baseline audit 2026-06-24 a
   `:interview-me` / `:api-and-interface-design` / `:doubt-driven-development` → `:documentation-and-adrs`),
   and AGENTS.md. The "source wins" rule is unchanged — it governs *distillation fidelity*, not design finality.
 
+- **Spec Kit not adopted** (2026-06-24) — `.specify/` machinery + the speckit skills were removed; we
+  use the bespoke `docs/specs` + `docs/tasks` + task-cycle flow, a **tailored superset** of Spec Kit
+  (status markers, OKF bundles, public/private boundary, model route, ADR governance, risk tiering).
+  Adopting it now = a second overlapping spec system (YAGNI at one slice in). Its ideas are already
+  absorbed (constitution ≈ AGENTS.md; specify/plan/tasks ≈ contract/plan/rubric; clarify ≈
+  `agent-skills:interview-me`; analyze ≈ contract-verifier). **Revisit if:** the repo becomes
+  multi-tool / Cursor-heavy and contributors need the *workflow* (not just the docs) outside Claude
+  Code — overlaps the deferred `skills-source/` split — or the team grows enough that a known external
+  standard onboards faster than the bespoke flow.
+
 ## Spec governance — resolved ([ADR 0002](../adr/0002-spec-governance.md), 2026-06-24)
 
 `sources/` are **frozen** historical origin; `docs/specs/` + `docs/adr/` are **canonical and living**.
@@ -68,8 +78,9 @@ Spec refinement is now an explicit part of the [task-cycle](../../.claude/skills
   diff/no-op guard**, foreground and blocking (15-min timeout), and can block the turn. So it's for
   **unattended / loop runs**, not interactive dev (≈ one Codex job per exchange). **Keep it off**;
   use `/codex:review` as the explicit review-step call instead.
-- CI (GitHub Actions) + protected `dev` branch — deferred with the CI scope. When CI lands it must run
-  the **same `make verify`** so local and CI stay identical.
+- CI (GitHub Actions) — deferred with the CI scope. `dev` is now a **protected branch** (PR required,
+  force-push/deletion blocked; 2026-06-24); when CI lands, add it as a **required status check**
+  running the **same `make verify`** so local and CI stay identical.
 
 ## Aligned — no action
 
