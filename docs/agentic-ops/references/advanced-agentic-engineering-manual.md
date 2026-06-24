@@ -722,8 +722,9 @@ Goal: operability first, breadth later.
 10. Implement one contract at a time.
 11. Verify with evidence.
 12. Run verifier, adversarial review and simplification review as appropriate.
-13. Human review and merge.
-14. Update OKF, ADRs, deferred.md, rules, skills, hooks and agentic-ops backlog.
+13. With the code finalised by review, update OKF, ADRs and deferred.md in the PR.
+14. Human review and merge.
+15. After merge, update rules, skills, hooks and the agentic-ops backlog.
 ```
 
 Walking skeleton acceptance:
@@ -755,8 +756,8 @@ Goal: map first, change second.
 8. Implement narrowly.
 9. Verify with evidence.
 10. Run independent review.
-11. Human review and merge.
-12. Update durable knowledge only after verification.
+11. After review finalises the code, update durable knowledge (OKF, ADRs, deferred.md) in the PR.
+12. Human review and merge.
 ```
 
 ### 7.3 Bug workflow
@@ -1822,8 +1823,9 @@ For a team:
 10. Implement one contract at a time.
 11. Verify with evidence.
 12. Run verifier, adversarial review and simplification review as appropriate.
-13. Human review and merge.
-14. Update OKF, ADRs, deferred.md, rules, skills, hooks and agentic-ops backlog.
+13. With the code finalised by review, update OKF, ADRs and deferred.md in the PR.
+14. Human review and merge.
+15. After merge, update rules, skills, hooks and the agentic-ops backlog.
 ```
 
 ### In-progress repo
@@ -1839,8 +1841,8 @@ For a team:
 8. Implement narrowly.
 9. Verify with evidence.
 10. Run independent review.
-11. Human review and merge.
-12. Update durable knowledge only after verification.
+11. After review finalises the code, update durable knowledge (OKF, ADRs, deferred.md) in the PR.
+12. Human review and merge.
 ```
 
 ## 22. The mental model

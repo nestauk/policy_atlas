@@ -18,6 +18,14 @@ its **trigger to act** — don't pre-build, earn it. Baseline audit 2026-06-24 a
   + `/okf validate` boxes, PR reviews-run checklist, runtime-egress definition); **declared the
   required plugins in `.claude/settings.json`** (agent-skills/codex/ponytail) so teammates get them on
   opening the repo — no longer just installed in the user env.
+- **Knowledge/phase cadence** (review-driven): durable records (`docs/knowledge/`, `deferred.md`) are
+  authored **in the implementing PR after the review stack finalises the code** (task-cycle step 8) —
+  not at implement (a draft the review then rewrites), not in a stranded post-merge step. The
+  contract-verifier now checks `verification.md`/ADR claims against the as-built code (catches
+  "documented but not built" — e.g. the task-001 `CompileError` that never existed). `AGENTS.md`
+  **Current phase** now *leads* the next slice (step 1), not trails the finishing one (step 10 is now
+  "Close out": reconcile + cleanup). Updated `SKILL.md`, `harness.md`, `docs/knowledge/index.md`, and
+  the reference manual's workflow lists (§7, §21).
 
 ## Resolved
 
@@ -26,7 +34,8 @@ its **trigger to act** — don't pre-build, earn it. Baseline audit 2026-06-24 a
   `type`). The bundles differ by *editorial policy*, not format:
   - `docs/knowledge/` = verified durable knowledge about the built system + domain. **Open types**
     (OKF fixes no taxonomy); conventions, invariants and pitfalls are just the first ones, seeded
-    from task-001. Grow at the after-merge cadence — bar is verified · durable · not another lane's job.
+    from task-001. Grow **in the implementing PR** (after review, task-cycle step 8 — see the
+    "Knowledge/phase cadence" entry below) — bar is verified · durable · not another lane's job.
   - `docs/specs/` = intent (status-tagged 🟡/❓, not "verified"). Converted additively — frontmatter
     only; bodies, status markers and the conflict-resolution index untouched. `sources/` left as raw
     canonical sources, not concepts.

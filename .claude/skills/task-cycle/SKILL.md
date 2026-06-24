@@ -71,7 +71,11 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
 
 ## Workflow (Tier 2+; lower tiers skip marked steps)
 
-1. **Contract** — copy [_templates/contract.md](../../../docs/tasks/_templates/contract.md) →
+1. **Contract** — first, point the repo at this slice: set `AGENTS.md` **Current phase** to
+   `NNN-slug` (the slice you're *starting*). That pointer is repo orientation state, not a deliverable
+   of the previous slice — so it **leads the next slice here**, it does not trail the finishing one
+   (step 10); it ships in this slice's branch. Then copy
+   [_templates/contract.md](../../../docs/tasks/_templates/contract.md) →
    `docs/tasks/NNN-slug/contract.md`. If the *ask itself* is underspecified (unclear why / for whom /
    what "done" means), clarify with the user first (`agent-skills:interview-me`) — don't write a
    contract on guesses. Read the specs it depends on *in depth*, not headings — if a spec looks wrong
@@ -86,13 +90,17 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
    structlog only (no print/stdlib logging). Touch only what the contract requires. For logic and
    bug-fixes, drive with a failing test first (`agent-skills:test`). If building reveals the design is
    wrong, pause and flow it back (**Spec refinement**) — don't code around an outgrown spec. Land a
-   check before the next step.
+   check before the next step. (Durable records — `docs/knowledge/` learning and `docs/deferred.md`
+   seams — are authored **after** the review stack finalises the code, at step 8 — not here, so they
+   describe what actually shipped, not a draft the review then changes.)
 6. **Verify** — fill [verification.md](../../../docs/tasks/_templates/verification.md): `make verify`
    green, named-test results, the **exact** end-to-end command, diff summary, public-safety, gaps.
    If `make verify` is red, root-cause it (`agent-skills:debugging-and-error-recovery`) — don't guess.
 7. **Review stack** (after correctness — `make verify` green is the self-verify gate):
    - **Contract verifier** (Tier 2+) — a *fresh* reviewer checks the implementation against **every**
-     rubric item: satisfied? what evidence? what's unverified? Use `/codex:review` or an
+     rubric item: satisfied? what evidence? what's unverified? **And checks the claims in
+     `verification.md` and any ADR against the as-built code** — "documented but not built" is a
+     finding (e.g. a named exception that doesn't exist). Use `/codex:review` or an
      `agent-skills:code-reviewer` subagent — **not** the agent that wrote the code.
    - `/code-review` — always.
    - `/security-review` — always (data/provenance product; every PR gets a security skim). Tier 0 docs-only may skip.
@@ -105,17 +113,25 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
      `agent-skills:code-reviewer` subagent — different model families), not two of the same.
    - `/simplify` (or `ponytail`) — last, cleanup only.
    - Record what each review caught in `verification.md` (§ Review findings).
-8. **PR** — the agent **drafts the full PR description** from the task artifacts, in the shape of the
+8. **PR** — first, with the code now **finalised by the review stack**, author the slice's durable
+   records against it: new seams → [docs/deferred.md](../../../docs/deferred.md), verified durable
+   learning → `docs/knowledge/` (OKF, not a diary). Authoring them *after* review — not at implement —
+   is what keeps them honest: they describe the code that shipped, and ride in this PR for the human to
+   check, not a stranded post-merge step. Then the agent **drafts the full PR description** from the
+   task artifacts, in the shape of the
    [PR template](../../../.github/pull_request_template.md): What/why from the contract, proof from
    (and linked to) verification.md, risk tier, AI role, review focus, known gaps, and the
    public-safety + reviews-run checklists. Open it `task/NNN-slug` → `dev` **on your go**
    (`gh pr create --base dev --body-file …`). You review the draft — you don't transcribe it.
 9. 🛑 **Human review + merge.**
-10. **Update knowledge** (after merge):
-    - new seams → [docs/deferred.md](../../../docs/deferred.md);
-    - verified durable learning → `docs/knowledge/` (OKF), not a diary;
-    - ADR if a decision changed; update AGENTS.md **Current phase**;
+10. **Close out** (after merge) — knowledge + `deferred.md` (step 8) and any ADR (step 4) already
+    shipped *in the PR*, and `AGENTS.md` **Current phase** moves with the *next* slice (step 1), so
+    this step is just bookkeeping:
+    - **reconcile** — confirm what merged still matches the slice's `docs/knowledge/` + ADR claims;
+      fix if review changed the code after they were written;
     - delete any temporary scratchpad.
+    The slices chain — each opens by repointing Current phase (step 1) and closes here; the human
+    still steers every 🛑 (this is **not** an unattended loop — see *Scope boundaries*).
 
 ## Spec refinement (specs are living)
 
