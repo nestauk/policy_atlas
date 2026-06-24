@@ -24,12 +24,24 @@ def _alembic_cfg() -> AlembicConfig:
     return cfg
 
 
+DEV_DB_NAME = "policy_atlas"  # the dev database; tests must not run here (they commit)
+
+
 def _db_url() -> str:
     url = os.environ.get("DATABASE_URL")
     if not url:
         pytest.fail(
-            "DATABASE_URL is not set. Run 'make setup' to start Postgres, "
-            "then set DATABASE_URL=postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas"
+            "DATABASE_URL is not set. Run 'make setup', then 'make test' "
+            "(it targets the policy_atlas_test database)."
+        )
+    # Match is intentionally host-agnostic and name-based: block the dev DB name on any host.
+    # (A differently-named prod/Aurora DB is out of scope — make test never targets it.)
+    db_name = url.rstrip("/").rsplit("/", 1)[-1].split("?")[0].lower()
+    if db_name == DEV_DB_NAME:
+        pytest.fail(
+            f"Refusing to run tests against the dev database {DEV_DB_NAME!r} — tests commit and "
+            "would pollute it. Use 'make test' (targets policy_atlas_test), or point DATABASE_URL "
+            "at a disposable *_test database."
         )
     return url
 
