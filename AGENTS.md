@@ -15,9 +15,9 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `001-walking-skeleton` (approved 2026-06-23).
+Implementation — task `002-test-db-split` (PR #3, stacked on #1).
 
-Specification preparation is complete. The first slice is greenlit. Build per
-`docs/tasks/001-walking-skeleton/plan.md` and `contract.md`, governed by
-`docs/adr/0001-walking-skeleton-foundations.md`. Stay within the contract's scope and stop
-conditions; all other capabilities and seams remain deferred (`docs/deferred.md`).
+Task `001-walking-skeleton` is built and in review (PR #1). The active slice splits the test
+database from the dev DB on the same local container; build per
+`docs/tasks/002-test-db-split/contract.md`. Stay within the contract's scope and stop conditions;
+all other capabilities and seams remain deferred (`docs/deferred.md`).
