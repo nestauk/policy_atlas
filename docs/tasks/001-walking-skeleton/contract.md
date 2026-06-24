@@ -175,6 +175,8 @@ not null · `event_type` text · `occurred_at` timestamptz · `payload` jsonb. *
 (`occurred_at` is informative but not a sufficient order — ties and clock skew).
 **Minimum event types the manual thread must emit:** `run.started` · `plan.compiled` ·
 `component.started` · `component.completed` · `block.written` · `run.completed` (or `run.failed`).
+On the grounding-failure path the component emits `component.failed` (carrying the persisted
+`block_id`) in place of `component.completed`/`block.written`, then `run.failed`.
 
 ## Public / private boundary
 

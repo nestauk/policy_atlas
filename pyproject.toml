@@ -10,6 +10,7 @@ dependencies = [
     "psycopg[binary]>=3",
     "alembic>=1.14",
     "structlog>=24",
+    "python-dotenv>=1.2.2",
 ]
 
 [project.scripts]
@@ -49,5 +50,4 @@ dev = [
     "mypy>=1.10",
     "ruff>=0.4",
     "types-psycopg2",
-    "python-dotenv>=1.2.2",
 ]

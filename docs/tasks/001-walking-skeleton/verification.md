@@ -4,8 +4,8 @@
 
 | Command | Result | Notes |
 |---|---:|---|
-| `make test` | pass | 20/20 deterministic tests |
-| `make typecheck` | pass | mypy strict, 18 source files |
+| `make test` | pass | 26/26 deterministic tests |
+| `make typecheck` | pass | mypy strict, 19 source files |
 | `make lint` | pass | ruff check, 0 errors |
 | `make build` | pass | sdist + wheel in `dist/` |
 | `make verify` | pass | all four targets green |
@@ -15,7 +15,7 @@
 - **Deterministic tests** — all ran, all passed:
   - [x] schema validation — 7 tables, 3 constraints present via inspector
   - [x] event-log append / read-back — ordering by `(project_id, sequence)`, per-project isolation
-  - [x] plan → config compile + invalid-config-is-caught — `CompileError` raised, harness never runs
+  - [x] plan → config compile + invalid-config-is-caught — invalid plan rejected with pydantic `ValidationError` at construction; harness never runs
   - [x] content-hash stability — stable + whitespace-insensitive
   - [x] `produce-grounded-block` quote-presence **pass** — including boundary-spanning quote
   - [x] `produce-grounded-block` fabricated-quote **hard-fail** — `GroundingError` raised; annotation written with `verification_result="fail"`; not promoted to clean tier
@@ -58,9 +58,60 @@ The spine walked once; seams stubbed per ADR 0001 (signed off 2026-06-23):
 - `make build = uv build` (ADR §11).
 - Approval gates: deps ✅ schema ✅ command surface ✅ egress (none) ✅ inference seam ✅ frontend out ✅ CI out ✅.
 
+## Review findings
+
+Review stack run **2026-06-24** (retrospective — the build predated the codified `task-cycle`
+skill, which mandates this step). `make verify` re-run independently from a clean DB: **green** —
+26 tests, mypy 19 files, ruff clean, sdist+wheel built. Reviewers: a fresh-context
+`agent-skills:code-reviewer` (contract-verify + correctness), an `agent-skills:security-auditor`
+(data-integrity), and a heterogeneous **Codex** adversarial design pass (different model family) —
+none wrote the code.
+
+**Fixed in this pass (evidence accuracy + hygiene, non-gated):**
+- `CompileError` did not exist — it was named in this file, `plan.md`, the `plan.py` docstring and
+  two `docs/knowledge/` concepts, but the code rejects an invalid plan with pydantic
+  `ValidationError` at construction. Corrected the current-truth records (this file, knowledge
+  bundle, `plan.py`); `plan.md` left as the historical accepted plan (deviation noted here).
+- Test/file counts corrected: 24 tests (not 20), 19 mypy source files (not 18).
+- `plan.py` duplicate validator collapsed to one `_validate_refs` helper.
+- Two unreachable `conn.execute(text("SELECT 1"))` "flush" lines removed from `test_schema.py`
+  (the failing insert raises first — they never executed).
+- Stray `>>>>>>> dev` merge-conflict marker removed from `AGENTS.md` (introduced by the harness merge).
+
+**Confirmed sound (called out by reviewers):** composite-FK cross-project isolation
+(`event_log(run_id, project_id) → runs`, `annotation(block_id, unit_id) → addressable_unit`); zero
+runtime egress; no secrets/real-source committed; SQL fully parameterised; flag-don't-drop annotation
+written *before* the `GroundingError` raise; tests assert contract properties, not just code paths.
+
+**Actioned in the follow-up pass (gated changes, human-approved 2026-06-24):**
+- **Schema strengthening recorded** — ADR 0001 §5 now documents `runs` unique `(run_id, project_id)`
+  + the `event_log` composite FK as an accepted integrity strengthening beyond the contract's
+  single-column FK (no longer claims "exactly as in the contract").
+- **Flag-don't-drop now proven across a commit** — `test_fail_annotation_survives_commit` commits a
+  failed-grounding run, reopens a fresh connection, and asserts the `fail` annotation + `run.failed`
+  persist. Guards against a future re-raise past `engine.begin()` that the rolled-back tests miss.
+- **`component.failed` added to the contract's event taxonomy** (failure-path event carrying the
+  persisted `block_id`).
+- **`sequence = max+1` single-writer contract documented** at the `events.append` call site; the
+  concurrency-safe allocator stays a registered deferred seam.
+- **`python-dotenv` moved to runtime `dependencies`** (was dev-only while imported by
+  `alembic/env.py`); `uv.lock` regenerated.
+- **`block.version` now has a DB `server_default='1'`** (schema + initial migration); pinned by
+  `test_block_version_defaults_to_one`. DB recreated so the fresh migration applied.
+
+**Still open (registered seams — not for this slice):**
+- **`quote_present` joins chunks with `""`**, so a quote could match across a non-existent seam —
+  fine for the single synthetic source, a false-positive vector for real multi-chunk sources.
+  Address when real chunked retrieval lands.
+- **Design caveats (Codex)** — block-boundary commit modelled as an event not a real commit;
+  plan-as-data is a one-node graph; the `InferenceProvider` protocol is thin for eval-readiness.
+  Now recorded in ADR 0001 *Reviewer notes* so slice 2 inherits them.
+
 ## Known unverified items
 
-None. All rubric items checked.
+The `make verify` green state is re-confirmed. The grounding **failure** path is proven by tests
+(`test_grounding`, `test_harness`) but not by the documented smoke command, which runs the success
+path only. See *Review findings → Open* for items deferred to follow-up.
 
 ## Public safety
 

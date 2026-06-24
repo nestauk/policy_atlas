@@ -38,11 +38,18 @@ plane*. Each decision below is checked against them.
    originally-listed set — recorded here for sign-off.** *Rejected:* hand-written raw-SQL migrations
    — loses typed metadata and autogenerate for no benefit at seven tables.
 
-5. **The seven-table initial schema with its constraints and deferrals**, exactly as in the
+5. **The seven-table initial schema with its constraints and deferrals**, as in the
    contract's *Initial schema*: `event_log` unique `(project_id, sequence)`; `addressable_unit`
    unique `(block_id, unit_id)`; `annotation` composite FK `(block_id, unit_id) →
    addressable_unit`. Deferred (not pre-added): block/artefact summary columns, `same_content_as`,
    block-lineage key, any source/findings table. Honours *model only what behaves*.
+   - **Strengthening beyond the contract's shape (recorded retrospectively, review 2026-06-24):**
+     the contract specified `event_log.run_id` as a single-column FK to `runs`. The build instead
+     adds `runs` unique `(run_id, project_id)` and makes `event_log` FK on the composite
+     `(run_id, project_id) → runs(run_id, project_id)`, so a run from project B cannot be appended
+     into project A's audit log at the DB layer (proven by `test_cross_project_event_append_rejected`).
+     This is an integrity *strengthening*, not a new table or a relaxation, and is accepted as part
+     of this ADR. *Model only what behaves* still holds — the constraint changes behaviour.
 
 6. **Canonical event log: append-only, separate from LangGraph checkpoints, ordered by
    `(project_id, sequence)`.** `sequence` is assigned **app-side as `max(sequence)+1` per project**,
@@ -83,6 +90,26 @@ plane*. Each decision below is checked against them.
 - **Costs / risks accepted:** SQLAlchemy enters the dependency set (decision 4); append-only is
   app-enforced, not yet DB-enforced (decision 6); the harness is not resumable this slice
   (decision 8). Each is a named seam with an upgrade path, not a silent shortcut.
+
+## Reviewer notes (review stack, 2026-06-24)
+
+Recorded so slice 2 inherits the caveats, not just the code. None block this slice; all are the
+gap between the skeleton's shape and the spec's eventual target:
+
+- **"Block-boundary commit" is modelled as an event, not a real commit** (decision 8). The whole
+  thread runs in one outer transaction (`skeleton.py` `engine.begin()`); `block.written` is an
+  audit event, not a `COMMIT`. The flag-don't-drop guarantee therefore holds only because the
+  harness *swallows* `GroundingError` so the outer block exits cleanly — re-raising it past
+  `engine.begin()` would roll the fail annotation back. Pinned by `test_fail_annotation_survives_commit`.
+  Real per-block durability arrives with the deferred checkpointer.
+- **"Plan-as-data" is currently a one-node graph.** `Config` is a scalar `{component, source_ref}`
+  and the dispatch map is hardcoded `{"echo": "echo"}`. A second component or a multi-step plan
+  forces `Config` to grow an ordered component list / DAG — expected, but the seam isn't exercised.
+- **The `InferenceProvider` protocol (`complete(str) -> str`) is a stub injection point, not yet a
+  routing seam.** It carries no model id/version/usage/trace identity, which eval-readiness and the
+  OpenAI→Bedrock route will need. Widen it when the real provider lands (decision 7).
+- **`event_log` ordering assumes a single writer per project** (decision 6) — now documented at the
+  `events.append` call site; the concurrency-safe allocator stays a deferred seam.
 
 ## Rollback
 

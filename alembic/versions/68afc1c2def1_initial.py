@@ -47,7 +47,7 @@ def upgrade() -> None:
     op.create_table('block',
     sa.Column('block_id', sa.UUID(), nullable=False),
     sa.Column('artefact_id', sa.UUID(), nullable=False),
-    sa.Column('version', sa.Integer(), nullable=False),
+    sa.Column('version', sa.Integer(), server_default='1', nullable=False),
     sa.Column('content', sa.Text(), nullable=False),
     sa.Column('content_hash', sa.Text(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),

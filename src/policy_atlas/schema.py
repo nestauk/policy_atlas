@@ -42,7 +42,7 @@ block = Table(
     metadata,
     Column("block_id", UUID(as_uuid=True), primary_key=True),
     Column("artefact_id", UUID(as_uuid=True), ForeignKey("artefact.artefact_id"), nullable=False),
-    Column("version", Integer, nullable=False, default=1),
+    Column("version", Integer, nullable=False, server_default="1"),
     Column("content", Text, nullable=False),
     Column("content_hash", Text, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),

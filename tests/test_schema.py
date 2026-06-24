@@ -3,7 +3,7 @@
 import uuid
 
 import pytest
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, select
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
@@ -42,7 +42,6 @@ def test_event_log_unique_project_sequence(conn: Connection) -> None:
             event_id=uuid.uuid4(), run_id=rid, project_id=pid,
             sequence=1, event_type="duplicate", occurred_at=now(), payload={},
         ))
-        conn.execute(text("SELECT 1"))  # flush
 
 
 def test_addressable_unit_unique_block_unit_constraint_exists(conn: Connection) -> None:
@@ -56,6 +55,22 @@ def test_addressable_unit_unique_block_unit_constraint_exists(conn: Connection) 
         uc["name"] for uc in inspector.get_unique_constraints("addressable_unit")
     }
     assert "uq_addressable_unit_block_unit" in unique_names
+
+
+def test_block_version_defaults_to_one(conn: Connection) -> None:
+    """block.version has a DB server_default of 1 — an insert omitting it still gets 1."""
+    pid = uuid.uuid4()
+    aid = uuid.uuid4()
+    bid = uuid.uuid4()
+    conn.execute(project.insert().values(project_id=pid, created_at=now()))
+    conn.execute(artefact.insert().values(
+        artefact_id=aid, project_id=pid, title="t", created_at=now()
+    ))
+    conn.execute(block.insert().values(
+        block_id=bid, artefact_id=aid, content="c", content_hash="h", created_at=now(),
+    ))  # version intentionally omitted
+    version = conn.execute(select(block.c.version).where(block.c.block_id == bid)).scalar_one()
+    assert version == 1
 
 
 def test_annotation_composite_fk_rejects_mismatch(conn: Connection) -> None:
@@ -82,4 +97,3 @@ def test_annotation_composite_fk_rejects_mismatch(conn: Connection) -> None:
             payload={"source_ref": "x", "quote": "q", "verification_result": "pass"},
             created_at=now(),
         ))
-        conn.execute(text("SELECT 1"))

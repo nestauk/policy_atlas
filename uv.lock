@@ -744,6 +744,7 @@ dependencies = [
     { name = "langgraph" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
+    { name = "python-dotenv" },
     { name = "sqlalchemy" },
     { name = "structlog" },
 ]
@@ -752,7 +753,6 @@ dependencies = [
 dev = [
     { name = "mypy" },
     { name = "pytest" },
-    { name = "python-dotenv" },
     { name = "ruff" },
     { name = "types-psycopg2" },
 ]
@@ -763,6 +763,7 @@ requires-dist = [
     { name = "langgraph", specifier = ">=0.2" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3" },
     { name = "pydantic", specifier = ">=2" },
+    { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "sqlalchemy", specifier = ">=2" },
     { name = "structlog", specifier = ">=24" },
 ]
@@ -771,7 +772,6 @@ requires-dist = [
 dev = [
     { name = "mypy", specifier = ">=1.10" },
     { name = "pytest", specifier = ">=8" },
-    { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "ruff", specifier = ">=0.4" },
     { name = "types-psycopg2" },
 ]

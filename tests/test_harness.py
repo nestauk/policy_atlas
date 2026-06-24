@@ -4,14 +4,14 @@ import uuid
 
 import pytest
 from sqlalchemy import select
-from sqlalchemy.engine import Connection
+from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas import events
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.plan import Plan, compile
-from policy_atlas.schema import project, runs
-from tests.helpers import now, seed_project_and_run
+from policy_atlas.schema import annotation, artefact, block, project, runs
+from tests.helpers import delete_project_data, now, seed_project_and_run
 
 
 class _FabricatedProvider:
@@ -103,3 +103,53 @@ def test_event_log_six_types_in_order(conn: Connection) -> None:
     # Sequences are contiguous and ordered
     seqs = [e["sequence"] for e in log]
     assert seqs == list(range(1, len(seqs) + 1))
+
+
+def test_fail_annotation_survives_commit(engine: Engine) -> None:
+    """Flag-don't-drop must hold across a real COMMIT, not only inside a rolled-back txn.
+
+    Every other failure-path test reads back on the same connection the conftest fixture
+    rolls back, so none of them prove the fail annotation *persists*. A future refactor that
+    re-raised GroundingError past skeleton's `engine.begin()` would roll the annotation back,
+    and the whole suite would still pass. This test commits, reopens a fresh connection, and
+    asserts the failure evidence is durably there.
+    """
+    pid = uuid.uuid4()
+    rid = uuid.uuid4()
+    config = compile(Plan(component="echo", source_ref="syn-001"))
+    try:
+        with engine.begin() as conn:
+            conn.execute(project.insert().values(project_id=pid, created_at=now()))
+            conn.execute(runs.insert().values(
+                run_id=rid, project_id=pid, status="running", started_at=now()
+            ))
+            events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
+            events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
+            run_harness(
+                conn, config=config, project_id=pid, run_id=rid, provider=_FabricatedProvider()
+            )
+        # transaction has committed on block exit (harness swallows GroundingError → no rollback)
+
+        with engine.connect() as conn:
+            run_row = conn.execute(select(runs).where(runs.c.run_id == rid)).one()
+            assert run_row.status == "failed"
+
+            ann = conn.execute(
+                select(annotation).where(
+                    annotation.c.block_id.in_(
+                        select(block.c.block_id).where(
+                            block.c.artefact_id.in_(
+                                select(artefact.c.artefact_id).where(
+                                    artefact.c.project_id == pid
+                                )
+                            )
+                        )
+                    )
+                )
+            ).one()
+            assert ann.payload["verification_result"] == "fail"
+
+            assert events.read(conn, pid)[-1]["event_type"] == "run.failed"
+    finally:
+        with engine.begin() as conn:
+            delete_project_data(conn, pid)

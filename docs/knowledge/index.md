@@ -29,4 +29,4 @@ when a slice proves something durable. `/okf validate` and `/okf viz` are availa
 
 * [Event-log sequence is app-assigned under a single writer](event-log-sequence.md) - `(project_id, sequence)` ordering, append-only at the repo layer.
 * [Block content_hash is a normalised hash](block-content-hash.md) - whitespace-insensitive, excludes the (deferred) summary.
-* [Plan→config compile fails closed](plan-compile-fails-closed.md) - invalid config raises `CompileError`; the harness never runs on it.
+* [Plan→config compile fails closed](plan-compile-fails-closed.md) - an invalid plan is rejected with a pydantic `ValidationError` at construction; the harness never runs on it.

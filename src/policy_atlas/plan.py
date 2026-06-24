@@ -1,15 +1,31 @@
 """Plan → config compile.
 
 Plan is the human-readable object; Config is the machine execution spec compiled from it.
-An invalid Plan raises ValidationError at construction — never a silent run.
-CompileError is the declared exception for future compile-time failures (e.g. referencing an
-undeclared component at graph-build time).
+Both are pydantic models, so an unknown component or source_ref is rejected with a
+``ValidationError`` at construction — before the harness ever runs. There is no silent or
+partial run.
 """
 
 from pydantic import BaseModel, model_validator
 
 VALID_COMPONENTS = {"echo"}
 VALID_SOURCES = {"syn-001"}
+
+
+def _validate_refs(component: str, source_ref: str) -> None:
+    """Reject an unknown component or source reference.
+
+    Args:
+        component: Declared component name.
+        source_ref: Known source reference.
+
+    Raises:
+        ValueError: If ``component`` or ``source_ref`` is not declared.
+    """
+    if component not in VALID_COMPONENTS:
+        raise ValueError(f"Unknown component {component!r}. Valid: {VALID_COMPONENTS}")
+    if source_ref not in VALID_SOURCES:
+        raise ValueError(f"Unknown source_ref {source_ref!r}. Valid: {VALID_SOURCES}")
 
 
 class Plan(BaseModel):
@@ -20,19 +36,8 @@ class Plan(BaseModel):
 
     @model_validator(mode="after")
     def validate_fields(self) -> "Plan":
-        """Reject unknown component or source references.
-
-        Raises:
-            ValueError: If ``component`` or ``source_ref`` is not declared.
-        """
-        if self.component not in VALID_COMPONENTS:
-            raise ValueError(
-                f"Unknown component {self.component!r}. Valid: {VALID_COMPONENTS}"
-            )
-        if self.source_ref not in VALID_SOURCES:
-            raise ValueError(
-                f"Unknown source_ref {self.source_ref!r}. Valid: {VALID_SOURCES}"
-            )
+        """Reject unknown component or source references."""
+        _validate_refs(self.component, self.source_ref)
         return self
 
 
@@ -44,19 +49,8 @@ class Config(BaseModel):
 
     @model_validator(mode="after")
     def validate_fields(self) -> "Config":
-        """Reject unknown component or source references.
-
-        Raises:
-            ValueError: If ``component`` or ``source_ref`` is not declared.
-        """
-        if self.component not in VALID_COMPONENTS:
-            raise ValueError(
-                f"Unknown component {self.component!r}. Valid: {VALID_COMPONENTS}"
-            )
-        if self.source_ref not in VALID_SOURCES:
-            raise ValueError(
-                f"Unknown source_ref {self.source_ref!r}. Valid: {VALID_SOURCES}"
-            )
+        """Reject unknown component or source references."""
+        _validate_refs(self.component, self.source_ref)
         return self
 
 

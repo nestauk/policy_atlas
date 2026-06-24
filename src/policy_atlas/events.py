@@ -29,6 +29,11 @@ def append(
 ) -> uuid.UUID:
     """Append one event to a project's log and return its ID.
 
+    Assigns ``sequence = max+1`` per project. **Assumes a single writer per project**
+    (the v3.0 serial model, ADR 0001 §6): concurrent appenders would read the same max and
+    collide on the ``(project_id, sequence)`` unique constraint — a hard ``IntegrityError``,
+    never silent misordering. A concurrency-safe allocator is a registered deferred seam.
+
     Args:
         conn: Open database connection.
         project_id: Project the event belongs to; scopes the sequence counter.
