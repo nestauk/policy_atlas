@@ -1,8 +1,16 @@
+---
+type: Capability spec
+title: Evidence Base (EB)
+description: The declarative EB spec and §5 compile target — EB as an instance of the capability framework.
+tags: [capability, evidence-base, compile-target]
+timestamp: 2026-06-22
+---
+
 # Capability spec — Evidence Base (EB)
 
 **The declarative spec — the §5 compile target.** Distilled from
-[backend-evidence-base-build-spec.md](../../sources/backend/backend-evidence-base-build-spec.md), which is
-the canonical EB design and wins on any conflict. EB is an **instance** of the capability
+[backend-evidence-base-build-spec.md](../../sources/backend/backend-evidence-base-build-spec.md), now
+frozen origin; this spec + `docs/adr/` are canonical ([ADR 0002](../../../adr/0002-spec-governance.md)). EB is an **instance** of the capability
 framework: shared machinery (Tier-0 substrate, retrieval contract, findings layer +
 `intervention_outcome_finding`, grounding) is owned by the system contracts and only
 **referenced** here; this spec holds what is **specific to EB**.

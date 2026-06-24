@@ -2,17 +2,18 @@
 
 Evidence for one slice. Copy into `docs/tasks/<task-id>/`. No "done" without this (or the same in the PR).
 Keep it public-safe — no secrets, raw source text, credentials or unredacted traces.
+Fill at verify (step 6); add **Review findings** + **Rubric status** after the review stack (step 7).
 
 ## Commands run
 
 | Command | Result | Notes |
 |---|---:|---|
-| `make test` | pass/fail/stub | |
-| `make typecheck` | pass/fail/stub | |
-| `make lint` | pass/fail/stub | |
-| `make build` | pass/fail/stub | |
+| `make test` | pass / fail | |
+| `make typecheck` | pass / fail | |
+| `make lint` | pass / fail | |
+| `make build` | pass / fail | |
 
-`stub` = target still red pre-scaffold (expected); say what you ran instead.
+If a check is red, say whether it's expected for this slice, a known failure, or a blocker.
 
 ## Checks beyond the build
 
@@ -21,9 +22,28 @@ Keep it public-safe — no secrets, raw source text, credentials or unredacted t
 - **AI evals** (if any) — dataset, scorer, threshold, owner; visibility vs merge-blocking.
 - **Manual / browser / API** — what was exercised and observed.
 
+## End-to-end command
+
+The exact command run for the manual end-to-end thread (copy-paste, including any env).
+
 ## Diff summary
 
 What changed and why, in one short read. Don't make the reviewer reconstruct intent from the diff.
+
+## Review findings
+
+Added after the review stack (step 7) — what each review caught and how it was resolved:
+
+- **Contract verifier:**
+- **`/code-review`:**
+- **`/security-review`:**
+- **Adversarial review** (Tier 2+):
+- **`/simplify`:**
+- **`/okf validate`** (if specs/knowledge changed):
+
+## Rubric status
+
+Every rubric item checked, or explicitly listed as not-satisfied with reason.
 
 ## Intent & assumptions
 

@@ -292,9 +292,14 @@ globs: ["backend/**/*.ts"]
 - Prefer existing error-handling patterns.
 ```
 
-### 4.5 OKF-style durable knowledge
+### 4.5 OKF-style knowledge and intent bundles
 
-Use `docs/knowledge/` for durable, verified domain and repo knowledge. Do not use it as a diary.
+Durable repo artefacts that agents read and write are best kept as **OKF bundles** — directory trees of markdown "concept" files with YAML frontmatter (a `type:`, a status, cross-links). Two bundles earn their keep, and both use the same read/traverse model, status markers and `index.md`/`log.md`:
+
+- **`docs/specs/` — intent.** A status-tagged compression of *what we mean to build* (system contracts, capability specs, a conflict-resolution index). Living, not golden — see §5.
+- **`docs/knowledge/` — verified knowledge.** Durable, *verified* facts about the system and domain as built (conventions, invariants, pitfalls, runbooks). Not a diary.
+
+Use `docs/knowledge/` for durable, verified domain and repo knowledge.
 
 Good content:
 
@@ -381,9 +386,26 @@ Verified by `make test-unit TEST=orders_import_price_fields`.
 A previous implementation treated `prc` as major units and produced 100x overstatements.
 ```
 
+### 4.7 Conversation lifecycle across a task
+
+Because shared truth lives in files, a long task can — and should — split across several fresh conversations instead of one ever-growing thread. The decision rule:
+
+```text
+Start a fresh conversation when the state you need is already in a committed artefact.
+/compact when valuable state is in-flight and not yet written to a file.
+```
+
+- **Between phases, start fresh.** The committed artefact (contract, plan, verification note) is the handoff; re-reading it is lossless, whereas a compaction summary is lossy. Re-ground the new conversation by reading those artefacts, then continue.
+- **Within a long phase, `/compact`** rather than restart — it keeps the in-flight thread (e.g. a half-finished implementation) that no file holds yet.
+- **Review especially wants a fresh conversation.** The contract verifier or adversarial reviewer must not be the same chat that wrote the code — fresh context is the point.
+
+A commit at each phase boundary is what turns an artefact into a real handoff. State in files, not chat history, is what makes any of this safe to resume.
+
 ## 5. Specification and planning
 
 Specs are not bureaucracy. They are the shared intent that keeps agents from guessing. But specs should be just detailed enough. Too little context produces hallucination. Too much context creates drift and cost.
+
+Specs are **living intent, not golden**. They are usually *distilled* from heavier source documents, and they keep evolving as building reveals what the source got wrong. Treat the distilled spec as canonical and the source it came from as frozen origin, and evolve the spec deliberately — never silently obey a spec you have outgrown, and never silently drift from one. See §5.5 for the governance and flow-back rules.
 
 ### 5.1 Spec artefacts and optional Spec Kit
 
@@ -482,6 +504,22 @@ Large specs need an index so agents can load only relevant sections.
 
 Use the index as always-available context. Load full sections only when needed.
 
+### 5.5 Spec governance and flow-back
+
+Specs distilled from source documents need a durable rule for who wins as they evolve, so agents neither treat specs as immutable nor silently drift from them.
+
+- **Sources are frozen historical origin.** Once a spec is distilled from a source document, the source is a point-in-time snapshot — not updated going forward. It stays readable, and remains the reference for areas no spec covers yet.
+- **Specs + ADRs are canonical and living.** Where a spec covers a topic, the spec is authoritative — not the frozen source.
+- **"Source wins on conflict" is a distillation rule, not an authority rule.** It applies only while the spec is being derived (correct the spec toward the source). Once distilled, retire it: a spec that intentionally diverges from its source is an *evolution*, recorded by an ADR — not an error to correct back.
+- **Preserve decision-level status.** Every decision keeps its marker (settled / leaning / open / deferred seam). Do not flatten a tentative decision into a settled one.
+- **Model only what behaves.** No label, type or flag belongs in a spec unless it changes shipped behaviour.
+
+Because specs are living, refining them is part of the normal task cycle, not an exception. It fires at two points: when reading a spec *in depth* before a contract shows it is wrong, and when *building* reveals the design is wrong. Either way, **pause and flow the change back — do not code around an outgrown spec**:
+
+```text
+propose -> human decision -> update spec + status markers (+ an ADR if consequential) -> log -> resume
+```
+
 ## 6. Task contracts, rubrics and scratchpads
 
 The task contract tells the worker what to build. The rubric tells the verifier when it is done. The scratchpad carries temporary working state. The verification note records evidence.
@@ -515,6 +553,8 @@ public-safety notes
 ```
 
 A verifier or human should approve the proposed contract before implementation begins. Do not over-specify implementation details early. Specify intent, constraints, interfaces and success criteria; let the implementation plan emerge, then check it before coding.
+
+If the *ask itself* is underspecified — unclear why, for whom, or what "done" means — pin down intent with the human *before* writing the contract; an interview-style skill that asks one question at a time is the right tool here. A contract negotiated on guesses just launders ambiguity into scope.
 
 ### 6.2 Task contract template
 
@@ -888,6 +928,8 @@ Review test changes first. Block removed, skipped, weakened or rewritten tests u
 
 ### 8.9 PR contract
 
+The agent **drafts** this from the task artefacts — contract, verification note and diff — so the PR is a faithful rollup, not a fresh act of writing; the human reviews the draft rather than transcribing it. Drafting the PR is not merging it: opening, review and merge stay human.
+
 Every meaningful PR should include:
 
 ```markdown
@@ -980,6 +1022,8 @@ browser-verification
 security-review
 ```
 
+A repo can also consolidate the whole per-slice lifecycle — contract, rubric, plan, ADR, implement, verify, review, PR, knowledge update — into a single **tiered "task-cycle" skill** that *orchestrates* the others (and the installed plugins) rather than reimplementing them. The ceremony scales with the risk tier: Tier 0/1 slices skip most steps; Tier 3/4 run the full stack. The skill is the glue; the durable artefacts and gates are what actually enforce.
+
 ### 9.5 Portable skill source
 
 Keep a tool-agnostic source version, then package for Claude and Cursor as needed.
@@ -1070,6 +1114,8 @@ Useful command map:
 | `/context` | Inspect context usage |
 | `/compact` | Compress current session |
 | `/clear` | Fresh session for a new task |
+
+When a set of plugins is *core* to the workflow rather than a per-developer preference, declare them in `.claude/settings.json` (`enabledPlugins` + `extraKnownMarketplaces`) and commit it, so a teammate opening the repo gets them on checkout instead of installing by hand. Reserve per-developer installation for genuinely optional tools.
 
 #### Output styles and appended prompts
 
@@ -1199,6 +1245,13 @@ MCP server additions
 data deletion or migration
 public interface changes
 ```
+
+**Distinguish two kinds of network access — they are not the same gate.**
+
+- **Runtime / product egress** — the *running product* reaching external services (search backends, model providers, third-party APIs) carrying project or user data. This is a per-change approval gate, like schema or auth. "Network deny by default" is aimed here, and at untrusted code execution.
+- **Agent / dev-time egress** — the agent fetching docs, installing packages, pulling images, or talking to a review MCP server. This is expected and not gated; blocking it just makes the agent worse at its job.
+
+A blanket "no network" rule that catches the developer's own toolchain is miscalibrated. Gate the product's reach, not the workbench.
 
 ## 13. Agent environment readiness
 
@@ -1498,6 +1551,8 @@ What this harness still fails to prevent.
 ### 16.1 Harness ratchet
 
 Every repeated or serious failure should produce one harness change. Every harness change should be earned.
+
+Earn the *artefact*, too. Leave `failure-log.md` empty until the first real failure, and do not create `metrics.md` until there is enough task volume to measure (a handful of merged tasks). An empty-by-default file is the honest state, not a gap to fill — pre-filling it with speculative content is exactly the over-building the ratchet exists to prevent.
 
 Failure log template:
 

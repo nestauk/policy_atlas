@@ -1,11 +1,19 @@
+---
+type: Source
+title: Evidence Base UX assets
+description: UX asset inventory and repo-safety policy (e.g. font binaries removed from version control).
+tags: [source, ux, assets, policy]
+---
+
 # Evidence Base UX assets
 
 The Evidence Base wireframe is paired with:
 - `evidence-base-wireframes.html`
 - `nesta-brand-tokens.md`
 - `hifi.css`
+- `screenshots/` — 11 rendered wireframe states (PNG), design reference for later slices.
 
-These files are source context for spec/rubric/task-contract agents. They are not production frontend code and do not define backend contracts.
+These files are source context for spec/rubric/task-contract agents. They are not production frontend code and do not define backend contracts. The `screenshots/` are tracked: the repo is public and the project owner confirmed the branded UI is OK to disclose (2026-06-24).
 
 ## Fonts
 

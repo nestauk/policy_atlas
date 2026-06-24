@@ -6,10 +6,14 @@ a set of implementation rules** and decides nothing — the canonical contracts 
 [../specs/](../specs/), and the binding boundaries live in [../../AGENTS.md](../../AGENTS.md).
 Anything here is superseded by a real spec, a task contract, or a human decision.
 
-## Stack (direction confirmed; scaffold not yet created)
+## Stack (direction confirmed; walking skeleton landed a thin slice)
 
-The backend stack direction is confirmed. None of the following is wired up — no scaffold,
-no dependencies, no Makefile beyond placeholder echoes:
+The backend stack direction is confirmed. The `001-walking-skeleton` slice implemented a **thin,
+stubbed** slice of it ([ADR 0001](../adr/0001-walking-skeleton-foundations.md); `make verify` green):
+Postgres via Docker Compose (plain `postgres:16`, no pgvector), the LangGraph harness in-process, the
+inference **routing seam** behind a no-egress stub, the canonical `event_log` + a `runs` table, uv and
+structlog. Everything below beyond that thin slice is **direction or a deferred seam**
+([docs/deferred.md](../deferred.md)) — not yet built:
 
 - **Postgres / Aurora** as the canonical store, with **FTS + pgvector** for hybrid retrieval
   (cross-encoder rerank behind a profile seam; a dedicated retrieval service only if the

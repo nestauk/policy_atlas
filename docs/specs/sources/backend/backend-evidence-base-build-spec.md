@@ -1,3 +1,10 @@
+---
+type: Source
+title: "Evidence Base Capability: Design"
+description: Canonical Evidence Base capability behaviour; the doc the EB specs distil from (source #3).
+tags: [source, evidence-base, capability, canonical]
+---
+
 # Policy Atlas v3 — Evidence Base Capability: Design
 
 **Status:** Living design document — reasoned section by section via working sessions. The declarative capability spec (the §5 compile target) is distilled from this afterwards, in-repo.

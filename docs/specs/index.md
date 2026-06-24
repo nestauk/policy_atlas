@@ -1,13 +1,18 @@
+---
+okf_version: "0.1"
+---
+
 # Spec index
 
 This index routes implementation work to the relevant Policy Atlas v3.0 specs. It is
 always-loaded context: it tells an agent **what to read for a kind of task**, not what the
 architecture says. Load full sections on demand.
 
-## Canonical sources (read order & conflict-resolution order)
+## Frozen sources (historical origin) — [ADR 0002](../adr/0002-spec-governance.md)
 
-When two documents disagree, the lower number wins. (Ratified from the Evidence Base
-handoff §2.)
+These are the **frozen** documents the specs were distilled from — the original deliberation, **not
+updated** going forward. Consult them only for areas no spec covers yet (the routing table below).
+When two of them disagree on such an area, the lower number wins (ratified from the EB handoff §2).
 
 1. [backend-architecture-reference.md](sources/backend/backend-architecture-reference.md) — canonical backend model: data model, tools/execution, plan-as-object, steering, collaboration, observability, persistence, security, deferred seams.
 2. [backend-architecture-briefing.md](sources/backend/backend-architecture-briefing.md) — compressed shared mental model + commitments/deferred-seams appendix + glossary.
@@ -20,9 +25,10 @@ Backend architecture and EB capability design outrank all visual shorthand. On l
 
 ## Distilled specs in this repo
 
-These are **distillations** of the sources above — declarative, status-tagged, pointing
-back to source sections. They do not re-derive the architecture; on any conflict, the
-source wins and the spec is corrected.
+These are **distillations** of the sources above — declarative, status-tagged, pointing back to
+source sections. **These specs + `docs/adr/` are canonical and living** ([ADR 0002](../adr/0002-spec-governance.md));
+where a spec covers a topic it is authoritative, not the frozen source. They are refined as
+implementation lands — see the flow-back in [README](README).
 
 - [product.md](product.md) — product boundary and shared mental model.
 - System contracts (the cross-cutting framework every capability + the orchestrator honours):

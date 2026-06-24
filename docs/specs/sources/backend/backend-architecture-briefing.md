@@ -1,3 +1,10 @@
+---
+type: Source
+title: Backend Architecture Briefing
+description: Compressed shared mental model + commitments / deferred-seams appendix + glossary (source #2).
+tags: [source, backend, briefing]
+---
+
 # Policy Atlas v3 Backend Architecture Briefing
 
 Core message: Policy Atlas v3 is not a document generator. It is an AI-enabled policy analysis workspace for building an inspectable decision-support body: artefacts, evidence, provenance, comments, versions, dependencies and decision logs that humans use to brief, advise and write outside the tool.

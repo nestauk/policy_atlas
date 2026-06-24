@@ -1,3 +1,10 @@
+---
+type: Source
+title: Evidence Base UX — agent handoff
+description: Locked product decisions + repo-safe constraints; overrides visual shorthand on those points (source #4).
+tags: [source, ux, evidence-base, handoff]
+---
+
 # Policy Atlas v3.0 Evidence Base — agent handoff
 
 **Status:** repo-safe pre-spec context  
