@@ -35,6 +35,17 @@ Tier _N_ — _why_.
 Correctness · missed requirements · security · provenance integrity · scope creep · over-abstraction.
 <!-- Narrow to what this slice actually risks. -->
 
+## Reviews run
+
+Findings recorded in `verification.md`.
+
+- [ ] Contract verifier
+- [ ] `/code-review`
+- [ ] `/security-review`
+- [ ] Adversarial review (Tier 2+)
+- [ ] `/simplify`
+- [ ] `/okf validate` (if `docs/specs/` or `docs/knowledge/` changed)
+
 ## Known gaps & deferred seams
 
 <!-- What's intentionally unfinished. New seams → docs/deferred.md. -->
@@ -43,4 +54,4 @@ Correctness · missed requirements · security · provenance integrity · scope 
 
 - [ ] No secrets, credentials, or real/acquired source text in the diff or evidence.
 - [ ] Logs / traces / screenshots are public-safe.
-- [ ] No approval-gated change (schema · auth · **runtime egress** · deps · CI · prod config · public interface · scaffold) snuck in unapproved.
+- [ ] No approval-gated change (schema · auth · **runtime egress** · deps · CI · prod config · public interface · scaffold) snuck in unapproved. (*Runtime egress* = the running product reaching search/model providers with project data; agent/dev-time lookups, MCP and installs are fine.)

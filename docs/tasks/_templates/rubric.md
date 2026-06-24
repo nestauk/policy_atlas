@@ -12,3 +12,7 @@ Add slice-specific criteria (provenance, status markers, etc.) only where the co
 5. [ ] No tests deleted, skipped or weakened without written justification.
 6. [ ] Verification evidence recorded ([verification.md](verification.md) or PR).
 7. [ ] Known gaps and deferred seams listed (gap → [docs/deferred.md](../../deferred.md)).
+8. [ ] Required review stack ran for the risk tier (contract verifier · code/security review ·
+       adversarial where tiered · simplification), or skipped with written justification — findings
+       in [verification.md](verification.md).
+9. [ ] `/okf validate` ran if `docs/specs/` or `docs/knowledge/` changed.

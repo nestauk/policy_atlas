@@ -12,6 +12,12 @@ its **trigger to act** — don't pre-build, earn it. Baseline audit 2026-06-24 a
 - `task-cycle` skill now wires the **already-installed** plugins (`agent-skills`, `codex`, `ponytail`
   — the three the quick-start recommends) into its steps, and adds an explicit **contract-verifier**
   review step with heterogeneous reviewers at Tier 3+.
+- **Coherence pass** (external-review-driven): de-staled phase/status language (`spec-authoring`,
+  `engineering-considerations`, contract/verification templates); tightened templates to match the
+  task-cycle (plan-approval note, exact e2e command, **Review findings** section, rubric review-stack
+  + `/okf validate` boxes, PR reviews-run checklist, runtime-egress definition); **declared the
+  required plugins in `.claude/settings.json`** (agent-skills/codex/ponytail) so teammates get them on
+  opening the repo — no longer just installed in the user env.
 
 ## Resolved
 

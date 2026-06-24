@@ -102,6 +102,7 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
      At Tier 3+ aim for **two heterogeneous reviewers** (e.g. `/codex:adversarial-review` + an
      `agent-skills:code-reviewer` subagent — different model families), not two of the same.
    - `/simplify` (or `ponytail`) — last, cleanup only.
+   - Record what each review caught in `verification.md` (§ Review findings).
 8. **PR** — open with the [PR template](../../../.github/pull_request_template.md); link
    verification.md rather than re-pasting evidence. Branch `task/NNN-slug` → `dev`.
 9. 🛑 **Human review + merge.**

@@ -32,7 +32,9 @@ re-deriving the project's intent or boundaries each time.
 
 - **Command surface:** `Makefile` — `setup / test / typecheck / lint / build / verify`.
 - **Runtime:** uv (Python), Docker Compose (Postgres), alembic (migrations).
-- **Installed plugins** (the [task-cycle](../../.claude/skills/task-cycle/SKILL.md) says which phase uses what):
+- **Required plugins** — declared in `.claude/settings.json` (`enabledPlugins` + `extraKnownMarketplaces`)
+  so a teammate opening the repo gets them; core to the workflow, not optional. The
+  [task-cycle](../../.claude/skills/task-cycle/SKILL.md) says which phase uses what:
   - `agent-skills` — senior-engineer skills (incremental-implementation, test/TDD, debugging,
     source-driven-development, api-and-interface-design, documentation-and-adrs, security-and-hardening,
     doubt-driven-development, …) + the `agent-skills:code-reviewer` / `agent-skills:security-auditor` /

@@ -12,5 +12,21 @@
       "Edit(dist/**)",
       "Write(dist/**)"
     ]
+  },
+  "enabledPlugins": {
+    "agent-skills@addy-agent-skills": true,
+    "codex@openai-codex": true,
+    "ponytail@ponytail": true
+  },
+  "extraKnownMarketplaces": {
+    "addy-agent-skills": {
+      "source": { "source": "github", "repo": "addyosmani/agent-skills" }
+    },
+    "openai-codex": {
+      "source": { "source": "github", "repo": "openai/codex-plugin-cc" }
+    },
+    "ponytail": {
+      "source": { "source": "github", "repo": "DietrichGebert/ponytail" }
+    }
   }
 }
