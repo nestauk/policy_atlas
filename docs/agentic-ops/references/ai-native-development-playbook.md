@@ -63,6 +63,10 @@ Do not add rules, hooks, skills or process because they sound impressive. Add th
 
 Most durable repo artefacts in open-source projects are public evidence, not private agent memory. Commit only public-safe guidance, specs, contracts, ADRs and verification summaries. Keep raw scratchpads, exploit notes, private threat analysis, credentials, logs, traces, screenshots, HAR files and incident details in ignored or private locations.
 
+### 1.9 Treat specs as living intent, not golden
+
+Specs are the best current statement of what to build, not a contract carved in stone. They are usually distilled from heavier source material; once distilled, treat the spec (plus any ADRs) as canonical and the source as frozen origin. When building shows a spec is wrong, evolve it deliberately — propose the change, get a human decision, update the spec and record it — rather than silently obeying a spec you have outgrown or silently drifting from one.
+
 ## 2. Risk-tiered workflow
 
 Decide the risk tier before starting. The tier determines how much process is justified.
@@ -76,6 +80,8 @@ Decide the risk tier before starting. The tier determines how much process is ju
 | 4 | Data migration, deletion, production config, release process, broad architectural change | Human-approved plan, ADR or decision record, rollback plan, full review stack, senior sign-off |
 
 The tier is not about whether AI wrote the code. It is about the cost of being wrong.
+
+"Network calls" here means the **product** reaching external services with project or user data — that is the gate. The agent's own dev-time network use (installing packages, fetching docs, a review MCP server) is expected and not gated.
 
 ## 3. Default workflow for everyday work
 
@@ -133,6 +139,8 @@ For public repositories, are logs, screenshots, traces, prompts and links safe t
 
 If you cannot fill this in, the work is not ready for review.
 
+The agent can draft this contract from the change and its evidence; the human reviews the draft and owns the merge. Drafting the PR is not approving it.
+
 ## 5. Planning and task scoping
 
 For Tier 0 and many Tier 1 tasks, a sentence may be enough. For Tier 2+ work, use a lightweight task scope before implementation.
@@ -166,6 +174,8 @@ Correctness, data integrity, security, scope creep, maintainability, or UX.
 ```
 
 Use task scopes to prevent wrong-direction work. Do not use them to create ceremony for obvious edits.
+
+If the ask itself is unclear — why, for whom, or what "done" means — clarify intent with a human before scoping. Scoping on guesses just turns ambiguity into confidently-wrong work.
 
 ## 6. Verification evidence
 
@@ -332,7 +342,8 @@ Avoid these failure modes:
 - mixing unrelated refactors into feature work;
 - running many parallel agents before you can review their output;
 - automating a workflow before the manual version is stable;
-- treating an AI review as a merge decision.
+- treating an AI review as a merge decision;
+- relying on chat history as the source of truth — keep state in committed artefacts so work survives a fresh conversation.
 
 ## 12. Adoption path for a team
 

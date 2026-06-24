@@ -241,6 +241,8 @@ mkdir -p .cursor/{rules,plans}
 touch AGENTS.md CLAUDE.md docs/deferred.md
 ```
 
+`docs/specs/` (intent) and `docs/knowledge/` (verified knowledge) are both **OKF bundles** — markdown concept files with a `type:`, a status marker and cross-links. Treat specs as *living intent, not golden*: if building shows a spec is wrong, flow the change back (propose → human decision → update the spec + an ADR if consequential → log) rather than coding around it.
+
 Add a task runner immediately. Example `Makefile`:
 
 ```makefile
@@ -415,6 +417,8 @@ Populate only:
 
 Do not add a codebase overview unless the repo has no documentation and the overview is genuinely useful as a temporary bridge.
 
+Likewise, leave `docs/agentic-ops/failure-log.md` empty until the first real failure, and don't create a `metrics.md` until there's enough task volume to measure. Earn the artefact; an empty-by-default file is honest, not a gap.
+
 ### 3.3 Ask an agent for a read-only repo map
 
 Prompt Claude Code or Cursor:
@@ -451,7 +455,10 @@ Create `docs/agentic-ops/readiness.md`:
 - [ ] Schema/auth/dependency/CI approval gates are documented.
 - [ ] Secrets and production config are protected.
 - [ ] PR evidence expectations are clear.
+- [ ] Runtime/product egress (the running product calling external services with project data) is a recognised approval gate.
 ```
+
+Agent/dev-time network use — installing packages, fetching docs, review MCP servers — is expected and not gated; only the product's own outbound reach is.
 
 Only after this should you add skills, hooks, subagents or loops.
 
@@ -516,6 +523,8 @@ Correctness, missed requirements, security, data integrity, scope creep and unne
 ```
 
 For low-risk tasks, this can be five lines. For high-risk tasks, make it explicit.
+
+If the ask itself is underspecified — unclear why, for whom, or what "done" means — clarify with the human *before* writing the contract (an interview-style skill such as `agent-skills:interview-me` helps). Do not write a contract on guesses.
 
 ### 4.3 Optional: write a rubric
 
@@ -655,6 +664,8 @@ Add this to the PR description:
 
 No PR should ask reviewers to reconstruct intent from the diff alone.
 
+The agent can draft this whole section from the task artefacts — you review the draft, not transcribe it. Drafting the PR is not merging it: opening, review and merge stay human.
+
 ### 4.8 Commit as a checkpoint
 
 ```bash
@@ -665,6 +676,8 @@ git commit -m "001-example-slice: <short description>"
 ```
 
 Use one small commit per task contract. Avoid “AI changes” mega-commits.
+
+State lives in files, not chat history — so a long task can split across fresh conversations. Between phases, start a fresh conversation and re-ground from the committed artefacts (the commit is the handoff); `/compact` only mid-phase, when valuable state isn't in a file yet. Review especially wants a fresh conversation, so the reviewer isn't the chat that wrote the code.
 
 ## 5. Add skills, hooks and subagents only after v0.1 works
 
@@ -691,6 +704,8 @@ A good skill is a workflow, not an essay. It should include:
 - exit criteria;
 - anti-rationalisation table;
 - stop/escalation conditions.
+
+Some teams consolidate the whole per-slice lifecycle (contract → … → PR → knowledge update) into one **tiered "task-cycle" skill** that orchestrates the others; the ceremony scales with the risk tier, so low-risk slices skip most steps.
 
 ### 5.3 First hooks to add
 
