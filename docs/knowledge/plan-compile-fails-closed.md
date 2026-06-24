@@ -1,16 +1,17 @@
 ---
 type: Invariant
 title: Plan→config compile fails closed
-description: An invalid plan config raises CompileError before execution; the harness never runs on it — no silent or partial run.
+description: An invalid plan is rejected with a pydantic ValidationError at construction, before execution; the harness never runs on it — no silent or partial run.
 tags: [plan, compile, invariant, fail-closed]
 timestamp: 2026-06-24
 ---
 
 # Rule
 
-The plan is canonical; the machine config is compiled from it deterministically. A config that does
-not validate raises `CompileError` **before** execution — the LangGraph harness never starts on an
-invalid plan. There is no silent or partial run.
+The plan is canonical; the machine config is compiled from it deterministically. A plan that does
+not validate raises a pydantic `ValidationError` at construction — **before** execution — so the
+LangGraph harness never starts on an invalid plan ("robust by construction": `Config` likewise
+cannot be built with invalid values). There is no silent or partial run.
 
 # Why
 
@@ -28,4 +29,4 @@ invariant. Verified by the plan→config compile test (valid compiles; invalid i
 
 - [system/plan-as-object.md](../specs/system/plan-as-object.md) (robust compile by construction)
 - [001-walking-skeleton/contract.md](../tasks/001-walking-skeleton/contract.md) (plan → config compile)
-- [001-walking-skeleton/verification.md](../tasks/001-walking-skeleton/verification.md) (CompileError raised, harness never runs)
+- [001-walking-skeleton/verification.md](../tasks/001-walking-skeleton/verification.md) (invalid plan rejected at construction; harness never runs)

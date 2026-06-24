@@ -31,7 +31,7 @@ Likely frontend and tooling defaults (confirm before creating files or installin
 - pnpm.
 - uv.
 - Explicit schema validation at API, tool and event boundaries.
-- Structured JSON logs in deployed environments.
+- **structlog** for structured logging throughout the application — **mandatory from the first scaffold slice onward**. Configure for structured JSON output in deployed environments and developer-friendly console output locally. Do not use stdlib logging or ad-hoc print statements; all application log calls go through structlog.
 - CloudWatch for AWS runtime logs, metrics and alerts.
 - GitHub Actions for CI once implementation begins.
 - AWS-oriented deployment (not Heroku-first).
@@ -129,6 +129,13 @@ Do not create a final command surface until the app scaffold exists. When implem
 begins, establish a small public command surface for agents and CI — likely through package
 scripts and/or a Makefile wrapper. Expected commands: setup, dev, test, typecheck, lint,
 build, verify. Generate the concrete surface once the scaffold is in place.
+
+## Code style
+
+Google-style docstrings (`Args:`/`Returns:`/`Raises:`) for public modules, classes and
+functions, kept concise; trivial helpers and test functions need none. This is the binding
+convention in [../../AGENTS.md](../../AGENTS.md) — repeated here only as a pointer. When the lint
+surface firms up, enforce it via ruff's `pydocstyle` `google` convention rather than by review.
 
 ## Accessibility
 

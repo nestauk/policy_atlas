@@ -2,6 +2,8 @@
 
 - Use the commands in the `Makefile`.
 - For non-trivial work, plan before editing.
+- Write Google-style docstrings (`Args:`/`Returns:`/`Raises:` sections) for public modules,
+  classes and functions; keep them concise. Trivial helpers and test functions need none.
 - Use `docs/specs/` for product and system intent — **living intent, not golden**. If building shows
   a spec is wrong or improvable, flag it and flow the change back (`docs/specs/README`); don't
   silently obey it or silently deviate.
@@ -13,6 +15,9 @@
 - Touch only what the task requires.
 
 # Current phase
-Pre-implementation specification preparation.
+Implementation — task `001-walking-skeleton` (approved 2026-06-23).
 
-Do not build the application yet. Read the canonical source documents, propose the initial specification artefacts, and stop for human review.
+Specification preparation is complete. The first slice is greenlit. Build per
+`docs/tasks/001-walking-skeleton/plan.md` and `contract.md`, governed by
+`docs/adr/0001-walking-skeleton-foundations.md`. Stay within the contract's scope and stop
+conditions; all other capabilities and seams remain deferred (`docs/deferred.md`).
