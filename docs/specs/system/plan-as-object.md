@@ -1,7 +1,15 @@
+---
+type: System contract
+title: The plan as an object
+description: The plan object, plan→config compile, two-level/progressive planning, source/evidence policy and depth.
+tags: [system, plan, compile, planning]
+timestamp: 2026-06-22
+---
+
 # System contract — The plan as an object
 
 **Distils** [backend-architecture-reference.md](../sources/backend/backend-architecture-reference.md)
-§5. On any conflict the reference wins. Note: §5's *What a plan contains* is marked 🟡 (candidate) upstream — accepted as-is;
+§5. This spec + `docs/adr/` are canonical; the source is frozen origin ([ADR 0002](../../adr/0002-spec-governance.md)). Note: §5's *What a plan contains* is marked 🟡 (candidate) upstream — accepted as-is;
 may be refined as implementation lands.
 
 ## Plan vs config

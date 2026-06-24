@@ -1,14 +1,33 @@
-# Knowledge conventions
+# Knowledge bundle — how to contribute
 
-Knowledge files follow a lightweight OKF-style convention.
+This directory is an OKF bundle (`okf_version: "0.1"`). It holds **durable, verified knowledge** about
+Policy Atlas — how it's built, how it behaves, and the domain it works in. Conventions, invariants and
+pitfalls are where it started; the scope is open (see below).
 
-Non-index concept files must include YAML frontmatter with at least:
+- **To read it**, start at [index.md](index.md) — the navigational listing.
+- **What belongs here:** anything a slice has *proven* that's durable and isn't already another
+  lane's job. The test is the bar, not a fixed category list — **types are open**. Not design intent
+  (that's `docs/specs/`), not a copy of the specs (link them), not code (link it), not a scratchpad.
+- **When to add:** at the after-merge step of the [task cycle](../../.claude/skills/task-cycle/SKILL.md),
+  when a merged slice has verified something durable.
 
-type:
-title:
-description:
-tags:
+## Authoring a concept
 
-Use docs/knowledge/index.md for navigation.
+One concept per `.md` file. Every concept needs YAML frontmatter:
 
-Only durable, reviewed knowledge belongs here. Do not use this as a scratchpad or a copy of the architecture spec.
+```yaml
+---
+type: Convention            # REQUIRED — descriptive, your choice (Convention, Invariant, Runbook, Domain concept, Integration quirk, …); OKF fixes no taxonomy
+title: short display name   # recommended
+description: one-line summary used in the index   # recommended
+tags: [area, topic]         # recommended
+timestamp: 2026-06-24       # recommended — date of last meaningful change
+---
+```
+
+Then a structural body. Favour headings/lists/tables over prose. Cite the source of each claim under
+a `# Citations` heading (spec, ADR, code, or test), and link related concepts with markdown links.
+Add a line to [log.md](log.md) when you add or materially change a concept.
+
+`index.md` and `log.md` are reserved filenames (no `type` frontmatter). Run `/okf validate` after
+editing — every other `.md` in the tree must carry a non-empty `type`.

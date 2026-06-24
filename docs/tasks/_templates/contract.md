@@ -4,6 +4,9 @@ One implementation slice. Copy this `_templates/` set into `docs/tasks/<task-id>
 `<task-id>` is `NNN-slug` (zero-padded, e.g. `001-example-slice`).
 Keep it reviewable. Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in [docs/specs/](../../specs/index.md).
 
+> **Status:** drafted / approved. Contract approved (before planning): _date · who_ ·
+> Plan approved (before implementation): _date · who_ · ADR: _ref / none_.
+
 ## Goal
 
 What changes, in user or system terms. One slice — not a roadmap.
@@ -14,11 +17,12 @@ The concrete thing produced (PR + the artefact/behaviour it lands). What "shippe
 
 ## Read first
 
-Specs this slice depends on (route via [specs/index.md](../../specs/index.md)). Read the
-source section in depth, not the heading. EB slices usually touch:
+Specs this slice depends on (route via [specs/index.md](../../specs/index.md)). Read the source
+section in depth, not the heading. *Example* — EB slices commonly touch
 [EB capability](../../specs/capabilities/evidence-base/capability.md),
-[data-model](../../specs/system/data-model.md),
-[provenance-grounding](../../specs/system/provenance-grounding.md).
+[data-model](../../specs/system/data-model.md) and
+[provenance-grounding](../../specs/system/provenance-grounding.md); for a non-EB slice, replace this
+with the relevant capability/system specs.
 
 ## Scope / Out of scope
 
@@ -31,6 +35,9 @@ Interfaces, schema, deps, generated files, perf, compatibility.
 **Needs human approval before proceeding** (from AGENTS.md + the architecture):
 schema / data model · auth / tenancy · external egress (`search`, inference route) ·
 dependencies · CI · production config · public interfaces · frontend scaffold + package manager.
+
+*Egress* here = the **running product** reaching search/model providers with project data; agent/dev-time
+doc lookups, MCP and package installs are not gated.
 
 ## Public / private boundary
 
@@ -59,7 +66,8 @@ grow past this slice, or the turn/token budget is spent. Report the blocker; don
 
 - `make verify` (test · typecheck · lint · build) — green.
 - Deterministic vs AI eval: name which apply (schema/event-log/quote-presence are tests; judge
-  behaviour is an eval). Targets are stubbed red until the scaffold lands — say what you ran.
+  behaviour is an eval). If a check is red, say whether it's expected for this slice, a known repo
+  failure, or a blocker — don't call the slice done with an unexplained red check.
 - Manual / browser / API checks required.
 
 ## Verification evidence expected

@@ -1,3 +1,10 @@
+---
+type: Source
+title: Nesta brand tokens
+description: Visual language / token cues extracted from Nesta Visual Identity 2.0 + shared component library (source #6).
+tags: [source, ux, brand, tokens]
+---
+
 # Nesta brand tokens — for Policy Atlas hi-fi wireframe
 
 Extracted from *Nesta Visual Identity 2.0* + *Shared component library* (AFS).

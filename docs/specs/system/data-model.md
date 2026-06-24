@@ -1,8 +1,16 @@
+---
+type: System contract
+title: Core data model
+description: Entity hierarchy, blocks and addressable units, the annotation layer, findings, versioning and staleness.
+tags: [system, data-model, schema, annotations]
+timestamp: 2026-06-22
+---
+
 # System contract — Core data model
 
 **Distils** [backend-architecture-reference.md](../sources/backend/backend-architecture-reference.md) §3
-(+ the findings layer from §4). Decision-level status is preserved; on any conflict the
-reference wins and this contract is corrected.
+(+ the findings layer from §4). Decision-level status is preserved. This spec + `docs/adr/` are canonical; the source is frozen
+origin ([ADR 0002](../../adr/0002-spec-governance.md)).
 
 ## Entity hierarchy
 

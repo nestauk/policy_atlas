@@ -1,3 +1,11 @@
+---
+type: Capability spec
+title: Evidence Base — component skeleton
+description: The nine EB components — declared I/O, tool wiring, realisation and gating.
+tags: [capability, evidence-base, components]
+timestamp: 2026-06-22
+---
+
 # Evidence Base — component skeleton
 
 The nine components, their declared I/O, tool wiring, realisation and gating. Distilled from
