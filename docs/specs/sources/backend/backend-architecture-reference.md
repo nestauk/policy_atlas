@@ -1,3 +1,10 @@
+---
+type: Source
+title: Backend Architecture & Design (canonical reference)
+description: Canonical backend model — data model, tools/execution, plan-as-object, steering, collaboration, observability, persistence, security, deferred seams. Frozen historical origin — specs + ADRs are canonical (ADR 0002); read-order #1.
+tags: [source, backend, architecture, canonical]
+---
+
 # Policy Atlas v3 — Backend Architecture & Design
 
 **Status:** Living document — built up section by section, mostly via working sessions.

@@ -1,7 +1,15 @@
+---
+type: Product spec
+title: Product boundary & mental model
+description: What Policy Atlas v3 is and isn't — the evidence-led workspace, the decision-support body, and the boundary of the tool.
+tags: [product, mental-model, boundary]
+timestamp: 2026-06-22
+---
+
 # Product boundary & mental model
 
-Distilled from the architecture briefing §1–§3 and the EB handoff §5. The canonical
-statement is the briefing; this is the orienting gloss.
+Distilled from the architecture briefing §1–§3 and the EB handoff §5 (now frozen origin). This
+spec + `docs/adr/` are canonical ([ADR 0002](../adr/0002-spec-governance.md)); it remains an orienting gloss.
 
 ## What the product is
 

@@ -1,9 +1,18 @@
+---
+type: System contract
+title: Provenance & grounding
+description: The trust invariant — claims, citations, grounding tiers, produce-grounded-block/verify, gaps, patterns and summaries.
+tags: [system, provenance, grounding, citations, trust]
+timestamp: 2026-06-22
+---
+
 # System contract — Provenance & grounding (the trust invariant)
 
 **Distils** [backend-architecture-reference.md](../sources/backend/backend-architecture-reference.md)
 §3.3 and §4 (grounding mechanism + progressive disclosure). This is the system's most
 distinctive contract: the discipline that stops an ungrounded or mis-cited statement from
-masquerading as grounded evidence. On any conflict the reference wins.
+masquerading as grounded evidence. This spec + `docs/adr/` are canonical; the source is frozen
+origin ([ADR 0002](../../adr/0002-spec-governance.md)).
 
 ## The traceability rule
 

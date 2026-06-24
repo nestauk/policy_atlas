@@ -1,8 +1,16 @@
+---
+type: System contract
+title: Execution & orchestration
+description: Orchestrator and sub-agents, the tool registry + universal core, steering modes, the routing rule and durability.
+tags: [system, orchestration, execution, tools, steering, durability]
+timestamp: 2026-06-22
+---
+
 # System contract — Execution & orchestration
 
 **Distils** [backend-architecture-reference.md](../sources/backend/backend-architecture-reference.md)
-§4 (capabilities, tools, execution model) and §6 (steering & durability). On any conflict the
-reference wins.
+§4 (capabilities, tools, execution model) and §6 (steering & durability). This spec + `docs/adr/` are canonical; the source is frozen origin
+([ADR 0002](../../adr/0002-spec-governance.md)).
 
 ## Orchestrator + capability sub-agents
 

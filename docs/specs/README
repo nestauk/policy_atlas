@@ -1,0 +1,60 @@
+# Specs bundle — how to contribute
+
+This directory is an OKF *intent* bundle (`okf_version: "0.1"`). It holds the **distilled,
+status-tagged specifications** for Policy Atlas v3.0 — design *intent*, not verified facts (for those,
+see [../knowledge/](../knowledge/index.md)).
+
+- **To read it / route a task**, start at [index.md](index.md) — the conflict-resolution order, a
+  "what to read for a task" table, and the status legend.
+- **How specs are produced** — the disciplines (distil don't duplicate, preserve status, model only
+  what behaves, honest absence, read the source in depth): [../agentic-ops/spec-authoring.md](../agentic-ops/spec-authoring.md).
+- **Canonical order** ([ADR 0002](../adr/0002-spec-governance.md)): **specs + `docs/adr/` are
+  canonical and living**; the [sources/](sources/) they were distilled from are **frozen** historical
+  origin — consulted only for areas no spec covers yet, never updated.
+
+## Status — living, not golden
+
+These specs (and the `sources/` they distil — themselves "living documents") were reasoned
+deliberately but over a short window, **before** the tool was real. Treat them as the **current best
+design intent, not immutable truth.** Expect refinement as implementation lands.
+
+When building reveals a spec is wrong, incomplete, or improvable:
+
+- **Don't silently obey** a spec you have good reason to doubt, and **don't silently deviate** from it
+  in code. Both hide the disagreement.
+- **Flag it and flow the change back:** propose the change → get a human decision → update the
+  affected spec (and its source position) + status markers → record a design decision in `docs/adr/`
+  when it's consequential → add a line to [log.md](log.md). Then build.
+- The **status markers already license this** — a 🟡 leaning / ❓ open decision is an *invitation* to
+  revisit, not settled law. (Sources are frozen origin, not ongoing authority — change the **spec**,
+  not the source; a spec that intentionally diverges is an evolution recorded by ADR, not an error.)
+
+Tools for the refinement: `agent-skills:spec` (write/refine a spec), `agent-skills:idea-refine`
+(stress-test assumptions — diverge then converge), `agent-skills:interview-me` (pin down an ❓ open
+decision with the human), `agent-skills:api-and-interface-design` (seam/interface contracts),
+`agent-skills:doubt-driven-development` (adversarially test a decision) → then
+`agent-skills:documentation-and-adrs` to record it.
+
+## What belongs here
+
+Declarative, status-tagged compressions that point back to a source section. Preserve every
+decision's marker — settled · 🟡 leaning · ❓ open · ⏸ deferred. Don't flatten a 🟡/❓ into settled,
+and don't introduce a label/type/flag that doesn't change v3.0 behaviour (model only what behaves).
+
+## Authoring a concept
+
+One concept per `.md` file, with YAML frontmatter:
+
+```yaml
+---
+type: System contract       # REQUIRED — System contract | Capability spec | Product spec | Source
+title: short display name   # recommended
+description: one-line summary used in the index   # recommended
+tags: [system, ...]         # recommended
+timestamp: 2026-06-22       # recommended — date of last meaningful change
+---
+```
+
+Link related concepts and cite source sections in the body. `index.md` and `log.md` are reserved
+(no `type`); add a line to [log.md](log.md) on a material change. Run `/okf validate` after editing —
+every other `.md` in the tree (including under `sources/`) needs a non-empty `type`.
