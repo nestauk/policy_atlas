@@ -89,8 +89,8 @@ gated. See Known gaps.
 - **Empty stub:** `failure-log.md` — earn it on the first real failure, don't pre-fill.
 - **No `metrics.md`** — add when there's enough task volume to measure (~5+ merged tasks). Harness
   decisions/deferrals are tracked in [backlog.md](backlog.md).
-- **OKF bundle is young** — `docs/knowledge/` seeded with four verified concepts (task-001); grow it
-  at the after-merge cadence, not speculatively.
+- **OKF bundle is young** — `docs/knowledge/` seeded from task-001; grow it **in the implementing PR**
+  (after the review stack finalises the code, task-cycle step 8), not after merge and not speculatively.
 - **No CI status checks** (GitHub Actions deferred) — `dev` is protected (PR required,
   force-push/deletion blocked), but no automated check (e.g. `make verify`) gates merges yet; the
   merge gate is human review.

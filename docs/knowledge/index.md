@@ -17,8 +17,9 @@ assumptions too — add a new `##` section when a new kind arrives.
 This is **not** the spec layer. `docs/specs/` holds *intent* — design decisions, some still 🟡 leaning
 / ❓ open. This holds what has been *built and verified*. Don't copy specs here; link to them.
 
-Maintenance: add a concept at the after-merge step of the [task cycle](../../.claude/skills/task-cycle/SKILL.md)
-when a slice proves something durable. `/okf validate` and `/okf viz` are available for upkeep.
+Maintenance: add a concept **in the implementing PR** — after the review stack has finalised the code
+([task cycle](../../.claude/skills/task-cycle/SKILL.md) step 8), before merge — written against the
+code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are available for upkeep.
 
 ## Conventions
 
