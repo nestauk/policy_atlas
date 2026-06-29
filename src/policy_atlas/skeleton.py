@@ -2,8 +2,9 @@
 
 Smoke command: python -m policy_atlas.skeleton
 
-Creates a project + run, compiles a trivial plan, walks the spine, prints persisted IDs
-and the ordered event log. All gates approved; see ADR 0001 and contract.md.
+Creates a project + run, ingests the synthetic source, compiles a trivial plan,
+walks the spine, prints persisted IDs and the ordered event log.
+All gates approved; see ADR 0001 and contract.md.
 """
 
 import uuid
@@ -14,8 +15,10 @@ from sqlalchemy import text
 
 from policy_atlas import events
 from policy_atlas.db import get_engine
+from policy_atlas.fixtures import get_source
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
+from policy_atlas.ingest import ingest_upload
 from policy_atlas.logging import configure_logging
 from policy_atlas.plan import Plan, compile
 from policy_atlas.schema import project, runs
@@ -64,8 +67,20 @@ def main() -> None:
         )
         log.info("run.started", run_id=str(run_id))
 
+        # Ingest synthetic source into the project corpus
+        src = get_source("syn-001")
+        source_snapshot_id = ingest_upload(
+            conn,
+            project_id=project_id,
+            chunks=list(src.chunks),
+            source_locator="syn-001",
+            metadata={"synthetic": True},
+            text_basis="full_text",
+        )
+        log.info("source.ingested", source_snapshot_id=str(source_snapshot_id))
+
         # Compile plan
-        the_plan = Plan(component="echo", source_ref="syn-001")
+        the_plan = Plan(component="echo", source_snapshot_id=source_snapshot_id)
         config = compile(the_plan)
 
         events.append(
@@ -73,7 +88,10 @@ def main() -> None:
             project_id=project_id,
             run_id=run_id,
             event_type="plan.compiled",
-            payload={"component": config.component, "source_ref": config.source_ref},
+            payload={
+                "component": config.component,
+                "source_snapshot_id": str(config.source_snapshot_id),
+            },
         )
         log.info("plan.compiled", component=config.component)
 

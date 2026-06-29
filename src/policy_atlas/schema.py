@@ -1,6 +1,5 @@
-"""SQLAlchemy Core table metadata — seven tables, one alembic migration.
+"""SQLAlchemy Core table metadata — eleven tables, two alembic migrations.
 
-Schema is exactly as specified in the contract's *Initial schema*.
 No deferred columns (no block/artefact summary, no same_content_as, no lineage key).
 """
 
@@ -69,7 +68,7 @@ annotation = Table(
     Column("block_id", UUID(as_uuid=True), nullable=False),
     Column("unit_id", UUID(as_uuid=True), nullable=False),
     Column("annotation_type", Text, nullable=False),  # "citation" this slice
-    Column("payload", JSONB, nullable=False),          # {source_ref, quote, verification_result}
+    Column("payload", JSONB, nullable=False),          # {quote, verification_result}
     Column("created_at", DateTime(timezone=True), nullable=False),
     # Composite FK: (block_id, unit_id) → addressable_unit(block_id, unit_id)
     # so annotation.block_id can never disagree with its unit's block_id.
@@ -112,4 +111,70 @@ event_log = Table(
     ),
     # Ordering key: (project_id, sequence) — not occurred_at (ties/clock skew)
     UniqueConstraint("project_id", "sequence", name="uq_event_log_project_sequence"),
+)
+
+# --- Corpus / source model (task 003) ---
+
+source_snapshot = Table(
+    "source_snapshot",
+    metadata,
+    Column("source_snapshot_id", UUID(as_uuid=True), primary_key=True),
+    Column("content_hash", Text, nullable=False),
+    Column("text_basis", Text, nullable=False),    # "full_text" | "abstract_only"
+    Column("source_locator", Text, nullable=False),
+    Column("metadata", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    # No project_id — identity is content, not project.
+)
+
+project_source_snapshot = Table(
+    "project_source_snapshot",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column(
+        "source_snapshot_id",
+        UUID(as_uuid=True),
+        ForeignKey("source_snapshot.source_snapshot_id"),
+        nullable=False,
+    ),
+    Column("origin", Text, nullable=False),        # "uploaded" | "acquired"
+    Column("run_id", UUID(as_uuid=True), ForeignKey("runs.run_id"), nullable=True),
+    Column("ingested_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("project_id", "source_snapshot_id", name="uq_project_source_snapshot"),
+)
+
+chunk = Table(
+    "chunk",
+    metadata,
+    Column("chunk_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "source_snapshot_id",
+        UUID(as_uuid=True),
+        ForeignKey("source_snapshot.source_snapshot_id"),
+        nullable=False,
+    ),
+    Column("sequence", Integer, nullable=False),
+    Column("content", Text, nullable=False),
+    Column("content_hash", Text, nullable=False),
+    Column("locator", JSONB, nullable=False),
+    Column("segmentation_policy", Text, nullable=False),  # mandatory; "manual_v1" this slice
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("source_snapshot_id", "sequence", name="uq_chunk_snapshot_sequence"),
+)
+
+citation = Table(
+    "citation",
+    metadata,
+    Column("citation_id", UUID(as_uuid=True), primary_key=True),
+    Column(
+        "annotation_id",
+        UUID(as_uuid=True),
+        ForeignKey("annotation.annotation_id"),
+        nullable=False,
+    ),
+    Column("chunk_id", UUID(as_uuid=True), ForeignKey("chunk.chunk_id"), nullable=False),
+    Column("quote", Text, nullable=False),
+    Column("verification_result", Text, nullable=False),  # "pass" | "fail"
+    Column("created_at", DateTime(timezone=True), nullable=False),
 )

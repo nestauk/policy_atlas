@@ -49,6 +49,21 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 
 ## Data model / evidence
 
+- **`supersedes` edge on `source_snapshot`** — human-asserted pointer from a corrected re-upload
+  to its predecessor; deferred until the re-upload UX is scoped. The schema shape (content-addressed
+  snapshots without project_id) already supports it; no data migration needed.
+- **Content-hash dedup for acquired cross-project snapshots** — the schema shape supports sharing
+  (no `project_id` on `source_snapshot`), but the dedup lookup logic for the `acquire` path is a
+  follow-on slice.
+- **`search_coverage_record` table** — required to make honest absence claims ("we searched X and
+  found nothing relevant"); deferred to the `acquire` slice where it becomes load-bearing.
+- **LLM-as-judge grounding tier on `citation`** — `citation.verification_result` is set by the
+  deterministic verbatim quote-presence check only; the full grounding tier classification
+  (confident / uncertain / fabricated) is deferred to when a real inference provider lands.
+- **Boundary-spanning quote → `citation_chunk` join table** — when a verified quote spans two
+  chunks the current implementation assigns `citation.chunk_id` to the first matching chunk or falls
+  back to `chunk_ids[0]`; replace with a `citation_chunk` join table when a real provider lands.
+
 - **`Library`** (curated cross-project collection: per-user → team/org) and **`Connected`**
   (auth'd departmental-repository ingest) — the public/acquired dedup slice is *un*-deferred; the
   curated collection + access layers are not. **Source-class lifecycles** stay collapsed to

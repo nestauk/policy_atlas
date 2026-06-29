@@ -55,7 +55,7 @@ def _run_echo(state: HarnessState) -> HarnessState:
         ids = produce_grounded_block(
             conn,
             artefact_id=state["artefact_id"],
-            source_ref=config.source_ref,
+            source_snapshot_id=config.source_snapshot_id,
             provider=state["provider"],
         )
     except GroundingError as exc:

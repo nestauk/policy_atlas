@@ -13,8 +13,16 @@ from policy_atlas.grounding import (
     quote_present,
 )
 from policy_atlas.inference import StubEchoProvider
+from policy_atlas.ingest import ingest_upload
 from policy_atlas.schema import annotation, artefact, block, project
+from policy_atlas.schema import citation as citation_table
 from tests.helpers import now
+
+_CHUNKS = [
+    "Synthetic Policy Atlas test source. ",
+    "Evidence suggests that structured provenance tracking improves "
+    "audit trail quality in policy research systems.",
+]
 
 
 def _seed_artefact(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:
@@ -25,6 +33,18 @@ def _seed_artefact(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:
         artefact_id=aid, project_id=pid, title="t", created_at=now()
     ))
     return pid, aid
+
+
+def _seed_snapshot(conn: Connection, project_id: uuid.UUID) -> uuid.UUID:
+    """Seed the two-sentence synthetic source into the DB and return snapshot_id."""
+    return ingest_upload(
+        conn,
+        project_id=project_id,
+        chunks=_CHUNKS,
+        source_locator="syn-001",
+        metadata={"synthetic": True},
+        text_basis="full_text",
+    )
 
 
 def test_content_hash_stable() -> None:
@@ -49,28 +69,41 @@ def test_quote_absent() -> None:
 
 
 def test_produce_grounded_block_pass(conn: Connection) -> None:
-    _, aid = _seed_artefact(conn)
+    pid, aid = _seed_artefact(conn)
+    snapshot_id = _seed_snapshot(conn, pid)
     ids = produce_grounded_block(
-        conn, artefact_id=aid, source_ref="syn-001", provider=StubEchoProvider()
+        conn,
+        artefact_id=aid,
+        source_snapshot_id=snapshot_id,
+        provider=StubEchoProvider(),
     )
     assert "block_id" in ids
     assert "unit_id" in ids
     assert "annotation_id" in ids
+    assert "citation_id" in ids
 
-    # Verify annotation payload
+    # Annotation payload shape
     row = conn.execute(
         annotation.select().where(annotation.c.annotation_id == ids["annotation_id"])
     ).one()
     assert row.payload["verification_result"] == "pass"
-    assert row.payload["source_ref"] == "syn-001"
+    assert "source_ref" not in row.payload
+
+    # Citation row has non-null chunk_id FK
+    cit = conn.execute(
+        select(citation_table).where(citation_table.c.citation_id == ids["citation_id"])
+    ).one()
+    assert cit.chunk_id is not None
+    assert cit.verification_result == "pass"
 
 
 def test_produce_grounded_block_fabricated_quote_hard_fail(conn: Connection) -> None:
     """A provider returning a fabricated quote must raise GroundingError.
 
-    The annotation is still written with verification_result='fail' — flag, don't drop.
+    Annotation and citation are still written with verification_result='fail' — flag, don't drop.
     """
-    _, aid = _seed_artefact(conn)
+    pid, aid = _seed_artefact(conn)
+    snapshot_id = _seed_snapshot(conn, pid)
 
     class FabricatedProvider:
         def complete(self, prompt: str) -> str:  # noqa: ARG002
@@ -78,11 +111,13 @@ def test_produce_grounded_block_fabricated_quote_hard_fail(conn: Connection) -> 
 
     with pytest.raises(GroundingError):
         produce_grounded_block(
-            conn, artefact_id=aid, source_ref="syn-001", provider=FabricatedProvider()
+            conn,
+            artefact_id=aid,
+            source_snapshot_id=snapshot_id,
+            provider=FabricatedProvider(),
         )
 
-    # Annotation was written with fail result — never promoted to clean tier
-    # Scope to this test's artefact to avoid picking up rows from other runs.
+    # Annotation written with fail result
     row = conn.execute(
         annotation.select().where(
             annotation.c.block_id.in_(
@@ -92,3 +127,43 @@ def test_produce_grounded_block_fabricated_quote_hard_fail(conn: Connection) -> 
     ).one()
     assert row.payload["verification_result"] == "fail"
     assert row.annotation_type == "citation"
+
+    # Citation row also written with fail + chunk_id still set (flag-don't-drop)
+    cit = conn.execute(
+        select(citation_table).where(citation_table.c.annotation_id == row.annotation_id)
+    ).one()
+    assert cit.verification_result == "fail"
+    assert cit.chunk_id is not None
+
+
+def test_citation_annotation_fk_integrity(conn: Connection) -> None:
+    """Every annotation_type='citation' row must have a matching citation row."""
+    pid, aid = _seed_artefact(conn)
+    snapshot_id = _seed_snapshot(conn, pid)
+    produce_grounded_block(
+        conn,
+        artefact_id=aid,
+        source_snapshot_id=snapshot_id,
+        provider=StubEchoProvider(),
+    )
+
+    # All citation annotations for this artefact have a citation row
+    ann_ids = [
+        row.annotation_id
+        for row in conn.execute(
+            select(annotation.c.annotation_id).where(
+                annotation.c.block_id.in_(
+                    select(block.c.block_id).where(block.c.artefact_id == aid)
+                ),
+                annotation.c.annotation_type == "citation",
+            )
+        ).fetchall()
+    ]
+    assert ann_ids, "expected at least one citation annotation"
+
+    for ann_id in ann_ids:
+        cit = conn.execute(
+            select(citation_table).where(citation_table.c.annotation_id == ann_id)
+        ).one_or_none()
+        assert cit is not None, f"annotation {ann_id} has no matching citation row"
+        assert cit.chunk_id is not None
