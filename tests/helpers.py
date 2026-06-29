@@ -28,16 +28,40 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         block,
         event_log,
         project,
+        project_source_snapshot,
         runs,
+        source_snapshot,
+    )
+    from policy_atlas.schema import (
+        chunk as chunk_table,
+    )
+    from policy_atlas.schema import (
+        citation as citation_table,
     )
 
-    block_ids = select(block.c.block_id).where(
+    # Capture snapshot IDs associated with this project before any deletes
+    snapshot_ids = [
+        row[0] for row in conn.execute(
+            select(project_source_snapshot.c.source_snapshot_id)
+            .where(project_source_snapshot.c.project_id == project_id)
+        ).fetchall()
+    ]
+
+    block_ids_subq = select(block.c.block_id).where(
         block.c.artefact_id.in_(
             select(artefact.c.artefact_id).where(artefact.c.project_id == project_id)
         )
     )
-    conn.execute(delete(annotation).where(annotation.c.block_id.in_(block_ids)))
-    conn.execute(delete(addressable_unit).where(addressable_unit.c.block_id.in_(block_ids)))
+    annotation_ids_subq = select(annotation.c.annotation_id).where(
+        annotation.c.block_id.in_(block_ids_subq)
+    )
+
+    # citation → annotation → addressable_unit → block (then event_log, artefact, runs)
+    conn.execute(delete(citation_table).where(
+        citation_table.c.annotation_id.in_(annotation_ids_subq)
+    ))
+    conn.execute(delete(annotation).where(annotation.c.block_id.in_(block_ids_subq)))
+    conn.execute(delete(addressable_unit).where(addressable_unit.c.block_id.in_(block_ids_subq)))
     conn.execute(delete(event_log).where(event_log.c.project_id == project_id))
     conn.execute(
         delete(block).where(
@@ -48,6 +72,16 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
     )
     conn.execute(delete(artefact).where(artefact.c.project_id == project_id))
     conn.execute(delete(runs).where(runs.c.project_id == project_id))
+    conn.execute(delete(project_source_snapshot).where(
+        project_source_snapshot.c.project_id == project_id
+    ))
+    if snapshot_ids:
+        conn.execute(delete(chunk_table).where(
+            chunk_table.c.source_snapshot_id.in_(snapshot_ids)
+        ))
+        conn.execute(delete(source_snapshot).where(
+            source_snapshot.c.source_snapshot_id.in_(snapshot_ids)
+        ))
     conn.execute(delete(project).where(project.c.project_id == project_id))
 
 

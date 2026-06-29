@@ -15,9 +15,10 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `002-test-db-split` (PR #3, stacked on #1).
+Implementation — task `003-source-snapshot`.
 
-Task `001-walking-skeleton` is built and in review (PR #1). The active slice splits the test
-database from the dev DB on the same local container; build per
-`docs/tasks/002-test-db-split/contract.md`. Stay within the contract's scope and stop conditions;
-all other capabilities and seams remain deferred (`docs/deferred.md`).
+Tasks `001-walking-skeleton` and `002-test-db-split` are complete (merged). The active slice adds
+the corpus/source model (three new tables + migration) and wires `produce_grounded_block` to real
+DB-persisted chunks; build per `docs/tasks/003-source-snapshot/contract.md`. Stay within the
+contract's scope and stop conditions; all other capabilities and seams remain deferred
+(`docs/deferred.md`).

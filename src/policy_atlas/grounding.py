@@ -13,11 +13,13 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.fixtures import get_source
 from policy_atlas.inference import InferenceProvider
 from policy_atlas.schema import addressable_unit, annotation, block
+from policy_atlas.schema import chunk as chunk_table
+from policy_atlas.schema import citation as citation_table
 
 
 class GroundingError(Exception):
@@ -41,8 +43,6 @@ def _normalize(text: str) -> str:
 
 def content_hash(content: str) -> str:
     """Return the SHA-256 hex digest of normalised content.
-
-    Summary is trivially excluded (not a column this slice).
 
     Args:
         content: Text to hash.
@@ -72,7 +72,7 @@ def produce_grounded_block(
     conn: Connection,
     *,
     artefact_id: uuid.UUID,
-    source_ref: str,
+    source_snapshot_id: uuid.UUID,
     provider: InferenceProvider,
 ) -> dict[str, Any]:
     """Synthesise → cite → verify → write one block, unit and citation annotation.
@@ -80,31 +80,42 @@ def produce_grounded_block(
     Args:
         conn: Open database connection; all writes occur within its transaction.
         artefact_id: Artefact the new block belongs to.
-        source_ref: Synthetic source to ground against.
+        source_snapshot_id: DB-persisted source snapshot to ground against.
         provider: Inference provider supplying the synthesised text.
 
     Returns:
-        Persisted IDs: ``block_id``, ``unit_id`` and ``annotation_id``.
+        Persisted IDs: ``block_id``, ``unit_id``, ``annotation_id``, ``citation_id``.
 
     Raises:
+        ValueError: If no chunks are found for ``source_snapshot_id``.
         GroundingError: If the quote is not present in the source chunks. The
             failing block is still persisted and its annotation records
             ``verification_result="fail"``.
     """
-    source = get_source(source_ref)
+    rows = conn.execute(
+        select(chunk_table.c.chunk_id, chunk_table.c.content)
+        .where(chunk_table.c.source_snapshot_id == source_snapshot_id)
+        .order_by(chunk_table.c.sequence)
+    ).fetchall()
+
+    if not rows:
+        raise ValueError(f"No chunks found for source_snapshot_id={source_snapshot_id!r}")
+
+    chunk_texts: tuple[str, ...] = tuple(r.content for r in rows)
 
     # Synthesise (stub — calls the inference seam, zero egress)
-    synthesised = provider.complete(f"synthesise from {source_ref}")
+    synthesised = provider.complete(f"synthesise from source_snapshot_id={source_snapshot_id}")
 
     # Cite: the verbatim quote is the synthesised text itself (stub co-emits claim + citation)
     quote = synthesised
 
     # Verify: deterministic quote-presence check
-    present = quote_present(quote, source.chunks)
+    present = quote_present(quote, chunk_texts)
 
     block_id = uuid.uuid4()
     unit_id = uuid.uuid4()
     annotation_id = uuid.uuid4()
+    citation_id = uuid.uuid4()
     now = datetime.now(UTC)
 
     # Write block
@@ -139,20 +150,41 @@ def produce_grounded_block(
             block_id=block_id,
             unit_id=unit_id,
             annotation_type="citation",
-            payload={
-                "source_ref": source_ref,
-                "quote": quote,
-                "verification_result": verification_result,
-            },
+            payload={"quote": quote, "verification_result": verification_result},
+            created_at=now,
+        )
+    )
+
+    # Find the chunk whose content contains the normalised quote; fall back to first chunk.
+    # ponytail: boundary-spanning quote uses first-chunk fallback; replace with citation_chunk
+    # join table when real provider lands (see docs/deferred.md and contract §Boundary-spanning).
+    norm_quote = _normalize(quote)
+    citing_chunk_id = next(
+        (r.chunk_id for r in rows if norm_quote in _normalize(r.content)),
+        rows[0].chunk_id,
+    )
+
+    conn.execute(
+        citation_table.insert().values(
+            citation_id=citation_id,
+            annotation_id=annotation_id,
+            chunk_id=citing_chunk_id,
+            quote=quote,
+            verification_result=verification_result,
             created_at=now,
         )
     )
 
     if not present:
         raise GroundingError(
-            f"Quote-presence verification failed for source_ref={source_ref!r}. "
-            "Fabricated quote recorded on annotation; not promoted to a clean tier.",
+            f"Quote-presence verification failed for source_snapshot_id={source_snapshot_id!r}. "
+            "Fabricated quote recorded on annotation and citation; not promoted to a clean tier.",
             block_id=block_id,
         )
 
-    return {"block_id": block_id, "unit_id": unit_id, "annotation_id": annotation_id}
+    return {
+        "block_id": block_id,
+        "unit_id": unit_id,
+        "annotation_id": annotation_id,
+        "citation_id": citation_id,
+    }

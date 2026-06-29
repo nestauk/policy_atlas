@@ -23,26 +23,29 @@ Authoritative boundaries: [AGENTS.md](../../../AGENTS.md). Full rationale:
 This skill drives capabilities that are **already installed** (the `agent-skills`, `codex` and
 `ponytail` plugins the quick-start recommends) — it does not reimplement them:
 
-- **Plan / break down:** `/plan`, `agent-skills:plan`
+- **Plan / break down:** `/plan`, `agent-skills:plan` (`agent-skills:planning-and-task-breakdown`)
 - **Refine a spec** (specs are living intent, not golden — see `docs/specs/README`):
   `agent-skills:idea-refine` / `agent-skills:spec` / `agent-skills:interview-me` (pin down ❓ opens),
   recorded via `agent-skills:documentation-and-adrs`.
 - **Implement:** `agent-skills:incremental-implementation`; ground framework code (LangGraph,
   SQLAlchemy, pydantic, alembic) in official docs with `agent-skills:source-driven-development`;
   design seams/interfaces with `agent-skills:api-and-interface-design`; logic & bug-fixes via
-  `agent-skills:test` (TDD — failing test first).
+  `agent-skills:test-driven-development` (TDD — failing test first; invoke as `/test`).
 - **Debug a red `make verify`:** `agent-skills:debugging-and-error-recovery` (root-cause, not guess);
   escalate a stubborn/substantial fix to `codex:rescue` — Codex, write-capable: a *doer*, not a reviewer.
 - **ADR:** `agent-skills:documentation-and-adrs`.
 - **Review** (all read-only critique, no fixes):
   - `/code-review` (Claude) and `/codex:review` (Codex native pass) — find **defects/bugs** in the diff.
+  - `agent-skills:review` (`agent-skills:code-review-and-quality`) — five-axis inline review
+    (correctness · readability · architecture · security · performance); lighter-weight alternative
+    when the full `/code-review` workflow isn't warranted.
   - `/codex:adversarial-review` — challenge the **approach/design/assumptions** (takes focus text);
     `agent-skills:doubt-driven-development` applies the same fresh-context skepticism to key decisions.
   - `/security-review` + `agent-skills:security-and-hardening` (untrusted input — prompt injection,
     retrieval poisoning, tenant boundaries), plus the `agent-skills:code-reviewer` /
-    `agent-skills:security-auditor` subagents (installed `agent-skills` plugin, not `.claude/agents/`
-    — dispatch via Claude or view under `/agents`).
-- **Simplify:** `ponytail-review` (over-engineering pass — what to cut), then `/simplify`; `ponytail` mode throughout.
+    `agent-skills:security-auditor` / `agent-skills:test-engineer` subagents (installed `agent-skills`
+    plugin, not `.claude/agents/` — dispatch via Claude or view under `/agents`).
+- **Simplify:** `ponytail-review` (over-engineering pass — what to cut), then `/code-simplify` (`agent-skills:code-simplification`); `ponytail` mode throughout.
 - **Situational** (not every cycle): `agent-skills:deprecation-and-migration` (schema/API migrations),
   `agent-skills:observability-and-instrumentation` (adding logging/metrics/tracing),
   `agent-skills:git-workflow-and-versioning` (branch/commit hygiene). Frontend / CI / deploy / perf
@@ -88,7 +91,7 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
    `docs/adr/NNNN-slug.md`, status Accepted with sign-off date (`agent-skills:documentation-and-adrs`).
 5. **Implement** — one contract at a time, incrementally (`agent-skills:incremental-implementation`).
    structlog only (no print/stdlib logging). Touch only what the contract requires. For logic and
-   bug-fixes, drive with a failing test first (`agent-skills:test`). If building reveals the design is
+   bug-fixes, drive with a failing test first (`agent-skills:test-driven-development`). If building reveals the design is
    wrong, pause and flow it back (**Spec refinement**) — don't code around an outgrown spec. Land a
    check before the next step. (Durable records — `docs/knowledge/` learning and `docs/deferred.md`
    seams — are authored **after** the review stack finalises the code, at step 8 — not here, so they
@@ -107,11 +110,12 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
    - **OKF bundle check** — if the task touched `docs/specs/` or `docs/knowledge/`, run `/okf validate`.
      Every non-reserved `.md` in a bundle tree is a concept and needs a non-empty `type` (a new doc
      dropped in without frontmatter breaks conformance).
-   - Adversarial review — challenge the approach with `/codex:adversarial-review`; plus the
-     `agent-skills:code-reviewer` subagent, Tier 2+; add `agent-skills:security-auditor` at Tier 3+.
-     At Tier 3+ aim for **two heterogeneous reviewers** (e.g. `/codex:adversarial-review` + an
-     `agent-skills:code-reviewer` subagent — different model families), not two of the same.
-   - `/simplify` (or `ponytail`) — last, cleanup only.
+   - Adversarial review — challenge the approach with `/codex:adversarial-review`; or the
+     `agent-skills:code-reviewer` subagent, Tier 2+; add `agent-skills:security-auditor` at Tier 3+;
+     `agent-skills:test-engineer` for coverage gaps. At Tier 3+ aim for **two heterogeneous reviewers**
+     (e.g. `/codex:adversarial-review` + an `agent-skills:code-reviewer` subagent — different model
+     families), not two of the same.
+   - `/code-simplify` (or `ponytail`) — last, cleanup only.
    - Record what each review caught in `verification.md` (§ Review findings).
 8. **PR** — first, with the code now **finalised by the review stack**, author the slice's durable
    records against it: new seams → [docs/deferred.md](../../../docs/deferred.md), verified durable

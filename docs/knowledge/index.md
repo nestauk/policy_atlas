@@ -31,3 +31,5 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [Event-log sequence is app-assigned under a single writer](event-log-sequence.md) - `(project_id, sequence)` ordering, append-only at the repo layer.
 * [Block content_hash is a normalised hash](block-content-hash.md) - whitespace-insensitive, excludes the (deferred) summary.
 * [Plan→config compile fails closed](plan-compile-fails-closed.md) - an invalid plan is rejected with a pydantic `ValidationError` at construction; the harness never runs on it.
+* [Upload ingest creates a new snapshot per call](upload-no-dedup.md) - no content-hash dedup for uploaded sources; each re-upload is a distinct snapshot; dedup for acquired sources is follow-on.
+* [Citation row written before GroundingError — fail evidence survives](citation-flag-dont-drop.md) - flag-don't-drop is guaranteed within the harness; direct callers outside the harness must catch GroundingError before their transaction boundary.
