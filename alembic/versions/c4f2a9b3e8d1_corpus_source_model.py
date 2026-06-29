@@ -30,7 +30,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('source_snapshot_id'),
     )
     op.create_table('project_source_snapshot',
-        sa.Column('id', sa.UUID(), nullable=False),
+        sa.Column('project_source_snapshot_id', sa.UUID(), nullable=False),
         sa.Column('project_id', sa.UUID(), nullable=False),
         sa.Column('source_snapshot_id', sa.UUID(), nullable=False),
         sa.Column('origin', sa.Text(), nullable=False),
@@ -39,7 +39,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(['project_id'], ['project.project_id'], ),
         sa.ForeignKeyConstraint(['run_id'], ['runs.run_id'], ),
         sa.ForeignKeyConstraint(['source_snapshot_id'], ['source_snapshot.source_snapshot_id'], ),
-        sa.PrimaryKeyConstraint('id'),
+        sa.PrimaryKeyConstraint('project_source_snapshot_id'),
         sa.UniqueConstraint('project_id', 'source_snapshot_id', name='uq_project_source_snapshot'),
     )
     op.create_table('chunk',

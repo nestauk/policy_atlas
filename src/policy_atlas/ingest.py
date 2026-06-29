@@ -67,7 +67,7 @@ def ingest_upload(
 
     conn.execute(
         project_source_snapshot.insert().values(
-            id=uuid.uuid4(),
+            project_source_snapshot_id=uuid.uuid4(),
             project_id=project_id,
             source_snapshot_id=snapshot_id,
             origin="uploaded",

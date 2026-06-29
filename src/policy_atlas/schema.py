@@ -130,7 +130,7 @@ source_snapshot = Table(
 project_source_snapshot = Table(
     "project_source_snapshot",
     metadata,
-    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("project_source_snapshot_id", UUID(as_uuid=True), primary_key=True),
     Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
     Column(
         "source_snapshot_id",

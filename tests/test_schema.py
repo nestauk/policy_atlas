@@ -194,11 +194,11 @@ def test_project_source_snapshot_unique_constraint(conn: Connection) -> None:
     sid, _ = _seed_snapshot(conn)
     conn.execute(project.insert().values(project_id=pid, created_at=now()))
     conn.execute(project_source_snapshot.insert().values(
-        id=uuid.uuid4(), project_id=pid, source_snapshot_id=sid,
+        project_source_snapshot_id=uuid.uuid4(), project_id=pid, source_snapshot_id=sid,
         origin="uploaded", run_id=None, ingested_at=now(),
     ))
     with pytest.raises(Exception, match="uq_project_source_snapshot"):
         conn.execute(project_source_snapshot.insert().values(
-            id=uuid.uuid4(), project_id=pid, source_snapshot_id=sid,
+            project_source_snapshot_id=uuid.uuid4(), project_id=pid, source_snapshot_id=sid,
             origin="uploaded", run_id=None, ingested_at=now(),
         ))
