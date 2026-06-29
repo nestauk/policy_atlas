@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.fixtures import get_source
 from policy_atlas.grounding import (
     GroundingError,
     content_hash,
@@ -18,11 +19,7 @@ from policy_atlas.schema import annotation, artefact, block, project
 from policy_atlas.schema import citation as citation_table
 from tests.helpers import now
 
-_CHUNKS = [
-    "Synthetic Policy Atlas test source. ",
-    "Evidence suggests that structured provenance tracking improves "
-    "audit trail quality in policy research systems.",
-]
+_CHUNKS = list(get_source("syn-001").chunks)
 
 
 def _seed_artefact(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:

@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas import events
+from policy_atlas.fixtures import get_source
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.ingest import ingest_upload
@@ -14,11 +15,7 @@ from policy_atlas.plan import Plan, compile
 from policy_atlas.schema import annotation, artefact, block, project, runs
 from tests.helpers import delete_project_data, now, seed_project_and_run
 
-_CHUNKS = [
-    "Synthetic Policy Atlas test source. ",
-    "Evidence suggests that structured provenance tracking improves "
-    "audit trail quality in policy research systems.",
-]
+_CHUNKS = list(get_source("syn-001").chunks)
 
 
 class _FabricatedProvider:
