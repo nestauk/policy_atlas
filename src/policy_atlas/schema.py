@@ -1,14 +1,17 @@
-"""SQLAlchemy Core table metadata — eleven tables, two alembic migrations.
+"""SQLAlchemy Core table metadata — thirteen tables, three alembic migrations.
 
 No deferred columns (no block/artefact summary, no same_content_as, no lineage key).
 """
 
 from sqlalchemy import (
     BigInteger,
+    CheckConstraint,
     Column,
     DateTime,
+    Float,
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     Integer,
     MetaData,
     Table,
@@ -142,6 +145,8 @@ project_source_snapshot = Table(
     Column("run_id", UUID(as_uuid=True), ForeignKey("runs.run_id"), nullable=True),
     Column("ingested_at", DateTime(timezone=True), nullable=False),
     UniqueConstraint("project_id", "source_snapshot_id", name="uq_project_source_snapshot"),
+    # Composite unique target for source_screening_result FK
+    UniqueConstraint("project_source_snapshot_id", "project_id", name="uq_pss_id_project"),
 )
 
 chunk = Table(
@@ -177,4 +182,75 @@ citation = Table(
     Column("quote", Text, nullable=False),
     Column("verification_result", Text, nullable=False),  # "pass" | "fail"
     Column("created_at", DateTime(timezone=True), nullable=False),
+)
+
+# --- Screening model (task 004) ---
+
+screening_scope = Table(
+    "screening_scope",
+    metadata,
+    Column("screening_scope_id", UUID(as_uuid=True), primary_key=True),
+    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("intent", Text, nullable=False),
+    Column("context", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    # Composite unique target for source_screening_result FK
+    UniqueConstraint("screening_scope_id", "project_id", name="uq_screening_scope_id_project"),
+)
+
+source_screening_result = Table(
+    "source_screening_result",
+    metadata,
+    Column("source_screening_result_id", UUID(as_uuid=True), primary_key=True),
+    Column("screening_scope_id", UUID(as_uuid=True), nullable=False),
+    Column("project_source_snapshot_id", UUID(as_uuid=True), nullable=False),
+    Column("project_id", UUID(as_uuid=True), nullable=False),
+    Column("screened_by_run_id", UUID(as_uuid=True), nullable=False),
+    Column("status", Text, nullable=False),
+    Column("screen_basis", Text, nullable=True),
+    Column("screen_decision_confidence", Float, nullable=True),
+    Column("screened_at", DateTime(timezone=True), nullable=False),
+    # Cross-project FK guards: all three parents must share the same project_id
+    ForeignKeyConstraint(
+        ["screening_scope_id", "project_id"],
+        ["screening_scope.screening_scope_id", "screening_scope.project_id"],
+        name="fk_ssr_scope_project",
+    ),
+    ForeignKeyConstraint(
+        ["project_source_snapshot_id", "project_id"],
+        [
+            "project_source_snapshot.project_source_snapshot_id",
+            "project_source_snapshot.project_id",
+        ],
+        name="fk_ssr_pss_project",
+    ),
+    ForeignKeyConstraint(
+        ["screened_by_run_id", "project_id"],
+        ["runs.run_id", "runs.project_id"],
+        name="fk_ssr_run_project",
+    ),
+    UniqueConstraint(
+        "screening_scope_id", "project_source_snapshot_id",
+        name="uq_ssr_scope_source",
+    ),
+    CheckConstraint("status IN ('relevant', 'not_relevant', 'failed')", name="ck_ssr_status"),
+    CheckConstraint(
+        "screen_basis IS NULL OR screen_basis IN ('title_abstract', 'title_only')",
+        name="ck_ssr_basis",
+    ),
+    CheckConstraint(
+        "screen_decision_confidence IS NULL"
+        " OR (screen_decision_confidence >= 0.0 AND screen_decision_confidence <= 1.0)",
+        name="ck_ssr_confidence_range",
+    ),
+    CheckConstraint(
+        "status = 'failed'"
+        " OR (screen_basis IS NOT NULL AND screen_decision_confidence IS NOT NULL)",
+        name="ck_ssr_non_null_when_decided",
+    ),
+    CheckConstraint(
+        "status != 'failed' OR (screen_basis IS NULL AND screen_decision_confidence IS NULL)",
+        name="ck_ssr_null_when_failed",
+    ),
+    Index("ix_ssr_scope_status", "screening_scope_id", "status"),
 )

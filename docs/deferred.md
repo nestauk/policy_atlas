@@ -43,6 +43,16 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   `saturated` is not a v3.0 `search_coverage_record` stop value.
 - **Budget cap + lazy vectorisation** for very large relevant sets; the **tiered content peek**
   for poor-metadata grey lit at screen.
+- **LLM-based screen tool** — `_stub_screen` is the deterministic stub; the real tool (LLM call
+  with title/abstract → relevant/not_relevant/failed decision) is the deferred seam.
+  `ScreenContext`, `ScreenResult`, and `source_screening_result` are durable and ready.
+- **Thin-base re-search trigger** — `screen_decision_confidence` is stored; the trigger that
+  re-runs `search` when confident-relevant count is below threshold hits the runtime-egress hard
+  gate. Deferred until the search backend lands.
+- **Re-screening** — a second result row for the same `(screening_scope_id, project_source_snapshot_id)`
+  pair is prevented by `uq_ssr_scope_source`; follow-on seam when re-screening is wanted.
+- **`screen_failed` recovery loop** — `status='failed'` rows are representable; no retry logic
+  built. Deferred until a real inference provider makes failure transient.
 - **Graph-structured synthesis** — query-time multi-hop / community / contradiction-location over
   the findings graph (run-local → project-scoped persistent → graph datastore), gated on an
   entity-resolution-quality bar; **never** an ingestion-time global / cross-project KG.

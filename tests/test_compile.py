@@ -32,3 +32,21 @@ def test_invalid_config_direct_construction_raises() -> None:
     """Config cannot be hand-built with bad values and sneak into the harness."""
     with pytest.raises(ValidationError):
         Config(component="bad-component", source_snapshot_id=uuid.uuid4())
+
+
+def test_echo_requires_source_snapshot_id() -> None:
+    with pytest.raises(ValidationError):
+        Plan(component="echo")
+
+
+def test_screen_requires_screening_scope_id() -> None:
+    with pytest.raises(ValidationError):
+        Plan(component="screen")
+
+
+def test_screen_valid_with_scope_id() -> None:
+    scope_id = uuid.uuid4()
+    plan = Plan(component="screen", screening_scope_id=scope_id)
+    config = compile(plan)
+    assert config.component == "screen"
+    assert config.screening_scope_id == scope_id

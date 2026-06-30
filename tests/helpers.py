@@ -30,6 +30,8 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         project,
         project_source_snapshot,
         runs,
+        screening_scope,
+        source_screening_result,
         source_snapshot,
     )
     from policy_atlas.schema import (
@@ -62,6 +64,10 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
     ))
     conn.execute(delete(annotation).where(annotation.c.block_id.in_(block_ids_subq)))
     conn.execute(delete(addressable_unit).where(addressable_unit.c.block_id.in_(block_ids_subq)))
+    # source_screening_result before runs, project_source_snapshot, and screening_scope
+    conn.execute(delete(source_screening_result).where(
+        source_screening_result.c.project_id == project_id
+    ))
     conn.execute(delete(event_log).where(event_log.c.project_id == project_id))
     conn.execute(
         delete(block).where(
@@ -82,6 +88,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         conn.execute(delete(source_snapshot).where(
             source_snapshot.c.source_snapshot_id.in_(snapshot_ids)
         ))
+    conn.execute(delete(screening_scope).where(screening_scope.c.project_id == project_id))
     conn.execute(delete(project).where(project.c.project_id == project_id))
 
 
