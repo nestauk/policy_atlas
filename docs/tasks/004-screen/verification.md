@@ -79,14 +79,32 @@ DB + event log.
 
 ## Review findings
 
-*(To be filled after the review stack runs — contract verifier · /code-review · /security-review ·
-adversarial review)*
+- **Contract verifier:** PASS WITH NOTES. All 23 rubric items satisfied. One gap found:
+  `test_screen_context_from_jsonb` tested the caller-supplied value instead of the DB load path —
+  fixed: test now goes through `run_harness` and reads back `dict(row.context)`.
 
-- **Contract verifier:**
-- **`/code-review`:**
-- **`/security-review`:**
-- **Adversarial review:**
-- **`/simplify`:**
+- **`/code-review`:** 9 findings raised; all confirmed to be false positives against plan.md/contract.md
+  pseudocode rather than the implementation (compile() forwarding, edge map, screened_at, etc.).
+  One real finding: AGENTS.md had stale column/table names from pre-design — fixed.
+
+- **`/security-review`:** No findings. All SQL parameterised; no PII/secrets logged; cross-project
+  isolation enforced at DB layer; no new attack surface introduced.
+
+- **Adversarial review:** Two actionable findings:
+  1. `screen.py:37` — `.strip()` on abstract (whitespace-only → `title_only`) diverged from contract
+     wording "non-empty". Contract updated to say "non-blank"; code behaviour confirmed correct.
+  2. `screen_sources` N+1 query — fixed: single JOIN replaces per-row metadata SELECT.
+  Noted (deferred): Plan/Config duplicate validators; `component.started` ordering asymmetry in
+  scope-not-found path; `provider` arg unused by screen component.
+
+- **`/simplify`:** Six fixes applied:
+  - `plan.py` — `_ValidatedRunSpec` base class eliminates copy-pasted validator
+  - `harness.py` — bare `assert` → `if/raise` for mypy narrowing + runtime reliability
+  - `harness.py _run_screen` — `component.started` moved before scope lookup (consistent with echo)
+  - `screen.py` — `counts["screened"] = len(rows)` before loop
+  - `test_screen.py _ssr_insert` — raw SQL string → `insert().values(**defaults)` (13 lines → 1)
+  - `skeleton.py` — read-back moved inside first `engine.begin()` block; second connection removed
+
 - **`/okf validate`:** n/a — no docs/specs/ or docs/knowledge/ changes this slice
 
 ## Rubric status
@@ -98,7 +116,7 @@ adversarial review)*
 5. ✓ No tests deleted, skipped, or weakened
 6. ✓ Verification evidence in this file
 7. ✓ Deferred seams recorded in docs/deferred.md
-8. *(To be checked after review stack)*
+8. ✓ Review stack ran — contract verifier · `/code-review` · `/security-review` · adversarial review · `/simplify`; all findings addressed or explicitly deferred
 9. ✓ `/okf validate` not required (no spec/knowledge changes)
 10. ✓ `len(metadata.tables) == 13` — test_screen_table_count
 11. ✓ Migration roundtrip clean (see above)

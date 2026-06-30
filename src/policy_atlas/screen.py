@@ -58,21 +58,19 @@ def screen_sources(
         select(
             project_source_snapshot.c.project_source_snapshot_id,
             project_source_snapshot.c.source_snapshot_id,
-        ).where(project_source_snapshot.c.project_id == project_id)
+            source_snapshot.c.metadata,
+        )
+        .join(source_snapshot,
+              project_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id)
+        .where(project_source_snapshot.c.project_id == project_id)
     ).fetchall()
 
     counts: dict[str, int] = {
-        "screened": 0, "relevant": 0, "not_relevant": 0,
+        "screened": len(rows), "relevant": 0, "not_relevant": 0,
         "failed": 0, "title_abstract": 0, "title_only": 0,
     }
 
-    for pss_id, snap_id in rows:
-        snap_meta = conn.execute(
-            select(source_snapshot.c.metadata).where(
-                source_snapshot.c.source_snapshot_id == snap_id
-            )
-        ).scalar_one()
-
+    for pss_id, snap_id, snap_meta in rows:
         result = _stub_screen(snap_meta)
 
         conn.execute(
@@ -104,7 +102,6 @@ def screen_sources(
             },
         )
 
-        counts["screened"] += 1
         counts[result.status] += 1
         if result.basis is not None:
             counts[result.basis] += 1

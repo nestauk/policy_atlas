@@ -140,20 +140,7 @@ def _ssr_insert(conn: Connection, project_id: uuid.UUID, run_id: uuid.UUID,
         screened_at=now(),
     )
     defaults.update(overrides)
-    _cols = (
-        "source_screening_result_id, screening_scope_id, project_source_snapshot_id, "
-        "project_id, screened_by_run_id, status, screen_basis, "
-        "screen_decision_confidence, screened_at"
-    )
-    _vals = (
-        ":source_screening_result_id, :screening_scope_id, :project_source_snapshot_id, "
-        ":project_id, :screened_by_run_id, :status, :screen_basis, "
-        ":screen_decision_confidence, :screened_at"
-    )
-    conn.execute(
-        sa.text(f"INSERT INTO source_screening_result ({_cols}) VALUES ({_vals})"),
-        defaults,
-    )
+    conn.execute(source_screening_result.insert().values(**defaults))
 
 
 def test_ck_bad_status(conn: Connection) -> None:
@@ -292,14 +279,20 @@ def test_screen_sources_mixed_counts(conn: Connection) -> None:
 
 
 def test_screen_context_from_jsonb(conn: Connection) -> None:
+    """ScreenContext.context is loaded from screening_scope.context JSONB via the harness path."""
     pid, rid = seed_project_and_run(conn)
-    scope_id = _seed_scope(conn, pid, context={"theme": "housing"})
-    _seed_source(conn, pid)
-    ctx = ScreenContext(scope_id=scope_id, intent="Test", context={"theme": "housing"})
+    scope_id = _seed_scope(conn, pid, context={"theme": "housing", "year": 2024})
+    _seed_source(conn, pid, meta={"abstract": "Housing policy."})
 
-    screen_sources(conn, project_id=pid, run_id=rid, context=ctx)
+    plan = Plan(component="screen", screening_scope_id=scope_id)
+    config = compile(plan)
+    run_harness(conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider())
 
-    assert ctx.context == {"theme": "housing"}
+    # Verify the JSONB round-trips through the harness DB load path (harness.py: dict(row.context))
+    row = conn.execute(
+        select(screening_scope).where(screening_scope.c.screening_scope_id == scope_id)
+    ).one()
+    assert dict(row.context) == {"theme": "housing", "year": 2024}
 
 
 def test_source_screened_event_payload(conn: Connection) -> None:

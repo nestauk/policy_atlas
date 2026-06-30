@@ -52,7 +52,8 @@ def _run_echo(state: HarnessState) -> HarnessState:
     )
     log.info("component.started", component=config.component)
 
-    assert config.source_snapshot_id is not None, "echo component requires source_snapshot_id"
+    if config.source_snapshot_id is None:
+        raise RuntimeError("echo component requires source_snapshot_id")
     try:
         ids = produce_grounded_block(
             conn,
@@ -98,6 +99,13 @@ def _run_screen(state: HarnessState) -> HarnessState:
     run_id = state["run_id"]
     config = state["config"]
 
+    events.append(
+        conn, project_id=project_id, run_id=run_id,
+        event_type="component.started",
+        payload={"component": config.component},
+    )
+    log.info("component.started", component=config.component)
+
     row = conn.execute(
         select(screening_scope).where(
             screening_scope.c.screening_scope_id == config.screening_scope_id
@@ -117,13 +125,6 @@ def _run_screen(state: HarnessState) -> HarnessState:
         intent=row.intent,
         context=dict(row.context),
     )
-
-    events.append(
-        conn, project_id=project_id, run_id=run_id,
-        event_type="component.started",
-        payload={"component": config.component},
-    )
-    log.info("component.started", component=config.component)
 
     counts = screen_sources(conn, project_id=project_id, run_id=run_id, context=ctx)
 

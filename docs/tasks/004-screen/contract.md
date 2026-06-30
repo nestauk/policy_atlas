@@ -152,7 +152,7 @@ class ScreenResult:
 
 `_stub_screen(metadata: dict) -> ScreenResult` — deterministic, zero egress:
 - `metadata.get("_stub_failed")` → `ScreenResult(status="failed", basis=None, decision_confidence=None)`
-- else: `basis = "title_abstract"` if abstract non-empty, else `"title_only"` (fail-open)
+- else: `basis = "title_abstract"` if abstract non-blank (non-empty after stripping whitespace), else `"title_only"` (fail-open; whitespace-only abstract treated same as absent)
 - `metadata.get("_stub_not_relevant")` → `ScreenResult(status="not_relevant", basis=basis, decision_confidence=0.95)`
 - else → `ScreenResult(status="relevant", basis=basis, decision_confidence=0.9 if title_abstract else 0.7)`
 

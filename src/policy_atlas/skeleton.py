@@ -112,8 +112,6 @@ def main() -> None:
             provider=StubEchoProvider(),
         )
 
-    # Read back screening results and event log
-    with engine.connect() as conn:
         results = conn.execute(
             select(
                 source_screening_result.c.status,

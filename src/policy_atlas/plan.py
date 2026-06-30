@@ -16,38 +16,27 @@ COMPONENT_REGISTRY: dict[str, dict[str, list[str]]] = {
 VALID_COMPONENTS = set(COMPONENT_REGISTRY.keys())
 
 
-class Plan(BaseModel):
+class _ValidatedRunSpec(BaseModel):
+    component: str
+    source_snapshot_id: uuid.UUID | None = None
+    screening_scope_id: uuid.UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_fields(self) -> "_ValidatedRunSpec":
+        if self.component not in VALID_COMPONENTS:
+            raise ValueError(f"Unknown component {self.component!r}. Valid: {VALID_COMPONENTS}")
+        for field in COMPONENT_REGISTRY[self.component]["requires"]:
+            if getattr(self, field) is None:
+                raise ValueError(f"{field} is required for component {self.component!r}")
+        return self
+
+
+class Plan(_ValidatedRunSpec):
     """Human-readable plan for one harness run."""
 
-    component: str
-    source_snapshot_id: uuid.UUID | None = None
-    screening_scope_id: uuid.UUID | None = None
 
-    @model_validator(mode="after")
-    def validate_fields(self) -> "Plan":
-        if self.component not in VALID_COMPONENTS:
-            raise ValueError(f"Unknown component {self.component!r}. Valid: {VALID_COMPONENTS}")
-        for field in COMPONENT_REGISTRY[self.component]["requires"]:
-            if getattr(self, field) is None:
-                raise ValueError(f"{field} is required for component {self.component!r}")
-        return self
-
-
-class Config(BaseModel):
+class Config(_ValidatedRunSpec):
     """Machine-level execution spec compiled from a Plan."""
-
-    component: str
-    source_snapshot_id: uuid.UUID | None = None
-    screening_scope_id: uuid.UUID | None = None
-
-    @model_validator(mode="after")
-    def validate_fields(self) -> "Config":
-        if self.component not in VALID_COMPONENTS:
-            raise ValueError(f"Unknown component {self.component!r}. Valid: {VALID_COMPONENTS}")
-        for field in COMPONENT_REGISTRY[self.component]["requires"]:
-            if getattr(self, field) is None:
-                raise ValueError(f"{field} is required for component {self.component!r}")
-        return self
 
 
 def compile(plan: Plan) -> Config:  # noqa: A001
