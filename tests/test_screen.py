@@ -68,7 +68,7 @@ def _seed_scope(
 # --- Schema / structure ---
 
 def test_screen_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 13
+    assert len(metadata.tables) == 14
 
 
 def test_pss_has_composite_unique(conn: Connection) -> None:

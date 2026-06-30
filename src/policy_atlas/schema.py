@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — thirteen tables, three alembic migrations.
+"""SQLAlchemy Core table metadata — fourteen tables, four alembic migrations.
 
 No deferred columns (no block/artefact summary, no same_content_as, no lineage key).
 """
@@ -253,4 +253,61 @@ source_screening_result = Table(
         name="ck_ssr_null_when_failed",
     ),
     Index("ix_ssr_scope_status", "screening_scope_id", "status"),
+)
+
+# --- Classification model (task 005) ---
+
+source_classification_result = Table(
+    "source_classification_result",
+    metadata,
+    Column("source_classification_result_id", UUID(as_uuid=True), primary_key=True),
+    Column("screening_scope_id", UUID(as_uuid=True), nullable=False),
+    Column("project_source_snapshot_id", UUID(as_uuid=True), nullable=False),
+    Column("project_id", UUID(as_uuid=True), nullable=False),
+    Column("classified_by_run_id", UUID(as_uuid=True), nullable=False),
+    Column("primary_evidence_type", Text, nullable=False),
+    Column("open_tags", JSONB, nullable=False),
+    Column("classified_at", DateTime(timezone=True), nullable=False),
+    # Cross-project FK guards: all three parents must share the same project_id
+    ForeignKeyConstraint(
+        ["screening_scope_id", "project_id"],
+        ["screening_scope.screening_scope_id", "screening_scope.project_id"],
+        name="fk_scr_scope_project",
+    ),
+    ForeignKeyConstraint(
+        ["project_source_snapshot_id", "project_id"],
+        [
+            "project_source_snapshot.project_source_snapshot_id",
+            "project_source_snapshot.project_id",
+        ],
+        name="fk_scr_pss_project",
+    ),
+    ForeignKeyConstraint(
+        ["classified_by_run_id", "project_id"],
+        ["runs.run_id", "runs.project_id"],
+        name="fk_scr_run_project",
+    ),
+    UniqueConstraint(
+        "screening_scope_id", "project_source_snapshot_id",
+        name="uq_scr_scope_source",
+    ),
+    CheckConstraint(
+        "jsonb_typeof(open_tags) = 'array'",
+        name="ck_scr_open_tags_array",
+    ),
+    CheckConstraint(
+        "primary_evidence_type IN ("
+        " 'Systematic Review and Meta-Analysis',"
+        " 'RCTs and Quasi-Experimental Studies',"
+        " 'Observational Research Studies',"
+        " 'Modelling & Simulation',"
+        " 'Policy Syntheses & Guidance Documents',"
+        " 'Qualitative & Contextual Evidence',"
+        " 'Expert Opinion and Commentary',"
+        " 'Other (Non-evidence documents)',"
+        " 'Unknown / Insufficient information'"
+        ")",
+        name="ck_scr_primary_evidence_type",
+    ),
+    Index("ix_scr_scope_type", "screening_scope_id", "primary_evidence_type"),
 )

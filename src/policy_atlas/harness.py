@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
 from policy_atlas import events
+from policy_atlas.classify import ClassifyContext, classify_sources
 from policy_atlas.grounding import GroundingError, produce_grounded_block
 from policy_atlas.inference import InferenceProvider
 from policy_atlas.plan import Config
@@ -137,6 +138,50 @@ def _run_screen(state: HarnessState) -> HarnessState:
     return state
 
 
+def _run_classify(state: HarnessState) -> HarnessState:
+    conn = state["conn"]
+    project_id = state["project_id"]
+    run_id = state["run_id"]
+    config = state["config"]
+
+    events.append(
+        conn, project_id=project_id, run_id=run_id,
+        event_type="component.started",
+        payload={"component": config.component},
+    )
+    log.info("component.started", component=config.component)
+
+    row = conn.execute(
+        select(screening_scope).where(
+            screening_scope.c.screening_scope_id == config.screening_scope_id
+        )
+    ).one_or_none()
+    if row is None:
+        err = f"screening_scope {config.screening_scope_id!r} not found"
+        events.append(
+            conn, project_id=project_id, run_id=run_id,
+            event_type="component.failed",
+            payload={"component": config.component, "error": err},
+        )
+        return {**state, "error": err}
+
+    ctx = ClassifyContext(
+        scope_id=row.screening_scope_id,
+        intent=row.intent,
+        context=dict(row.context),
+    )
+
+    counts = classify_sources(conn, project_id=project_id, run_id=run_id, context=ctx)
+
+    events.append(
+        conn, project_id=project_id, run_id=run_id,
+        event_type="component.completed",
+        payload={"component": config.component, **counts},
+    )
+    log.info("component.completed", component=config.component, **counts)
+    return state
+
+
 def _dispatch(state: HarnessState) -> str:
     return state["config"].component
 
@@ -183,12 +228,16 @@ def build_graph() -> Any:
     g.add_node("dispatch", lambda s: s)           # entry — routes by component name
     g.add_node("echo", _run_echo)
     g.add_node("screen", _run_screen)
+    g.add_node("classify", _run_classify)
     g.add_node("finish", _finish)
 
     g.set_entry_point("dispatch")
-    g.add_conditional_edges("dispatch", _dispatch, {"echo": "echo", "screen": "screen"})
+    g.add_conditional_edges(
+        "dispatch", _dispatch, {"echo": "echo", "screen": "screen", "classify": "classify"}
+    )
     g.add_edge("echo", "finish")
     g.add_edge("screen", "finish")
+    g.add_edge("classify", "finish")
     g.add_edge("finish", END)
     return g.compile()
 

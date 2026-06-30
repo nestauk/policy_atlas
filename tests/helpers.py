@@ -31,6 +31,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         project_source_snapshot,
         runs,
         screening_scope,
+        source_classification_result,
         source_screening_result,
         source_snapshot,
     )
@@ -64,7 +65,10 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
     ))
     conn.execute(delete(annotation).where(annotation.c.block_id.in_(block_ids_subq)))
     conn.execute(delete(addressable_unit).where(addressable_unit.c.block_id.in_(block_ids_subq)))
-    # source_screening_result before runs, project_source_snapshot, and screening_scope
+    # source_classification_result before source_screening_result (FK-safe order)
+    conn.execute(delete(source_classification_result).where(
+        source_classification_result.c.project_id == project_id
+    ))
     conn.execute(delete(source_screening_result).where(
         source_screening_result.c.project_id == project_id
     ))

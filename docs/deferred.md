@@ -36,7 +36,18 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   full-text methods/risk-of-bias on the selected subset) + modifier-tag-driven rubric dimensions
   (appraise component 4).
 - **Grey-lit category granularity** — splitting v2's coarse Policy-Guidance / Expert-Opinion
-  primary types (classify component 3; needs policy-team input).
+  primary types (classify component 3; needs policy-team input). `source_classification_result`
+  and `primary_evidence_type` check constraint are durable; column split is additive when ready.
+- **LLM-based classify tool** — `_stub_classify` is the deterministic stub; the real tool (LLM
+  call → one of the 9 closed `primary_evidence_type` values) is the deferred seam.
+  `ClassifyContext`, `ClassifyResult`, and `source_classification_result` are durable and ready.
+- **`open_tags` population** — the column exists and the `ck_scr_open_tags_array` constraint
+  enforces the array type; the LLM classify tool will populate it. Stub always returns `[]`.
+- **Open tag namespace consolidation / dedup / type management** — follow-on once the LLM tool
+  populates `open_tags` and the tag space emerges from real data.
+- **`Unknown / Insufficient information` resolution** — sources landing `Unknown` are kept-and-eligible;
+  full-text re-classification is a deferred seam mirroring the appraisal path.
+- **`appraise` and all subsequent EB components** — subsequent slices.
 - **`implementation_context_finding`** — the second reusable finding schema (mechanisms, barriers,
   implementation conditions); cross-schema linkage is reference-mediated via `group`.
 - **Saturation-based search stopping** (iterating retrieval↔screen until no new relevant docs);
