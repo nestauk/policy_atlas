@@ -15,10 +15,11 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `003-source-snapshot`.
+Implementation — task `004-screen`.
 
-Tasks `001-walking-skeleton` and `002-test-db-split` are complete (merged). The active slice adds
-the corpus/source model (three new tables + migration) and wires `produce_grounded_block` to real
-DB-persisted chunks; build per `docs/tasks/003-source-snapshot/contract.md`. Stay within the
-contract's scope and stop conditions; all other capabilities and seams remain deferred
-(`docs/deferred.md`).
+Tasks `001-walking-skeleton`, `002-test-db-split`, and `003-source-snapshot` are complete (merged).
+The active slice adds the `screen` component: per-document relevance filtering over the uploaded
+corpus, persisting results in a separate `source_screening_result` table (columns: `status`,
+`screen_basis`, `screen_decision_confidence`) scoped by `screening_scope`.
+Build per `docs/tasks/004-screen/contract.md`. Stay within the contract's scope and stop conditions;
+all other capabilities and seams remain deferred (`docs/deferred.md`).

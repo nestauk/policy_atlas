@@ -2,8 +2,8 @@
 
 Smoke command: python -m policy_atlas.skeleton
 
-Creates a project + run, ingests the synthetic source, compiles a trivial plan,
-walks the spine, prints persisted IDs and the ordered event log.
+Creates a project + run, ingests a synthetic source, creates a screening scope,
+compiles a screen plan, walks the spine, prints screening results and the event log.
 All gates approved; see ADR 0001 and contract.md.
 """
 
@@ -11,17 +11,16 @@ import uuid
 from datetime import UTC, datetime
 
 import structlog
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from policy_atlas import events
 from policy_atlas.db import get_engine
 from policy_atlas.fixtures import get_source
 from policy_atlas.harness import run_harness
-from policy_atlas.inference import StubEchoProvider
 from policy_atlas.ingest import ingest_upload
 from policy_atlas.logging import configure_logging
 from policy_atlas.plan import Plan, compile
-from policy_atlas.schema import project, runs
+from policy_atlas.schema import project, runs, screening_scope, source_screening_result
 
 log = structlog.get_logger()
 
@@ -46,6 +45,31 @@ def main() -> None:
         )
         log.info("project.created", project_id=str(project_id))
 
+        # Ingest synthetic source into the project corpus
+        src = get_source("syn-001")
+        ingest_upload(
+            conn,
+            project_id=project_id,
+            chunks=list(src.chunks),
+            source_locator="syn-001",
+            metadata={"synthetic": True, "abstract": "A synthetic policy document."},
+            text_basis="full_text",
+        )
+        log.info("source.ingested")
+
+        # Create screening scope
+        scope_id = uuid.uuid4()
+        conn.execute(
+            screening_scope.insert().values(
+                screening_scope_id=scope_id,
+                project_id=project_id,
+                intent="What policies address housing affordability?",
+                context={"theme": "housing"},
+                created_at=datetime.now(UTC),
+            )
+        )
+        log.info("screening_scope.created", scope_id=str(scope_id))
+
         # Create run
         run_id = uuid.uuid4()
         conn.execute(
@@ -57,30 +81,13 @@ def main() -> None:
             )
         )
 
-        # Emit run.started
         events.append(
-            conn,
-            project_id=project_id,
-            run_id=run_id,
-            event_type="run.started",
-            payload={},
+            conn, project_id=project_id, run_id=run_id, event_type="run.started", payload={}
         )
         log.info("run.started", run_id=str(run_id))
 
-        # Ingest synthetic source into the project corpus
-        src = get_source("syn-001")
-        source_snapshot_id = ingest_upload(
-            conn,
-            project_id=project_id,
-            chunks=list(src.chunks),
-            source_locator="syn-001",
-            metadata={"synthetic": True},
-            text_basis="full_text",
-        )
-        log.info("source.ingested", source_snapshot_id=str(source_snapshot_id))
-
-        # Compile plan
-        the_plan = Plan(component="echo", source_snapshot_id=source_snapshot_id)
+        # Compile screen plan
+        the_plan = Plan(component="screen", screening_scope_id=scope_id)
         config = compile(the_plan)
 
         events.append(
@@ -90,13 +97,14 @@ def main() -> None:
             event_type="plan.compiled",
             payload={
                 "component": config.component,
-                "source_snapshot_id": str(config.source_snapshot_id),
+                "screening_scope_id": str(config.screening_scope_id),
             },
         )
         log.info("plan.compiled", component=config.component)
 
-        # Run harness
-        ids = run_harness(
+        # Run harness (screen component; provider unused but required by signature)
+        from policy_atlas.inference import StubEchoProvider
+        run_harness(
             conn,
             config=config,
             project_id=project_id,
@@ -104,12 +112,18 @@ def main() -> None:
             provider=StubEchoProvider(),
         )
 
-    # Read back and print
-    with engine.connect() as conn:
+        results = conn.execute(
+            select(
+                source_screening_result.c.status,
+                source_screening_result.c.screen_basis,
+                source_screening_result.c.screen_decision_confidence,
+            ).where(source_screening_result.c.project_id == project_id)
+        ).fetchall()
         log_entries = events.read(conn, project_id)
 
-    for key, val in ids.items():
-        log.info("persisted_id", field=key, value=str(val))
+    for row in results:
+        log.info("screening_result", status=row.status, basis=row.screen_basis,
+                 confidence=row.screen_decision_confidence)
 
     for entry in log_entries:
         log.info("event_log_entry", sequence=entry["sequence"], event_type=entry["event_type"])

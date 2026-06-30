@@ -26,12 +26,13 @@ from policy_atlas.schema import (
 from tests.helpers import now
 
 
-def test_all_eleven_tables_exist(conn: Connection) -> None:
+def test_all_thirteen_tables_exist(conn: Connection) -> None:
     inspector = inspect(conn)
     tables = set(inspector.get_table_names())
     expected = {
         "project", "artefact", "block", "addressable_unit", "annotation", "runs", "event_log",
         "source_snapshot", "project_source_snapshot", "chunk", "citation",
+        "screening_scope", "source_screening_result",
     }
     assert expected <= tables
 

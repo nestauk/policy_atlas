@@ -18,7 +18,8 @@ from policy_atlas import events
 from policy_atlas.grounding import GroundingError, produce_grounded_block
 from policy_atlas.inference import InferenceProvider
 from policy_atlas.plan import Config
-from policy_atlas.schema import artefact, runs
+from policy_atlas.schema import artefact, runs, screening_scope
+from policy_atlas.screen import ScreenContext, screen_sources
 
 log = structlog.get_logger()
 
@@ -51,6 +52,8 @@ def _run_echo(state: HarnessState) -> HarnessState:
     )
     log.info("component.started", component=config.component)
 
+    if config.source_snapshot_id is None:
+        raise RuntimeError("echo component requires source_snapshot_id")
     try:
         ids = produce_grounded_block(
             conn,
@@ -88,6 +91,50 @@ def _run_echo(state: HarnessState) -> HarnessState:
     )
     log.info("block.written", block_id=str(ids["block_id"]))
     return {**state, "block_ids": ids}
+
+
+def _run_screen(state: HarnessState) -> HarnessState:
+    conn = state["conn"]
+    project_id = state["project_id"]
+    run_id = state["run_id"]
+    config = state["config"]
+
+    events.append(
+        conn, project_id=project_id, run_id=run_id,
+        event_type="component.started",
+        payload={"component": config.component},
+    )
+    log.info("component.started", component=config.component)
+
+    row = conn.execute(
+        select(screening_scope).where(
+            screening_scope.c.screening_scope_id == config.screening_scope_id
+        )
+    ).one_or_none()
+    if row is None:
+        err = f"screening_scope {config.screening_scope_id!r} not found"
+        events.append(
+            conn, project_id=project_id, run_id=run_id,
+            event_type="component.failed",
+            payload={"component": config.component, "error": err},
+        )
+        return {**state, "error": err}
+
+    ctx = ScreenContext(
+        scope_id=row.screening_scope_id,
+        intent=row.intent,
+        context=dict(row.context),
+    )
+
+    counts = screen_sources(conn, project_id=project_id, run_id=run_id, context=ctx)
+
+    events.append(
+        conn, project_id=project_id, run_id=run_id,
+        event_type="component.completed",
+        payload={"component": config.component, **counts},
+    )
+    log.info("component.completed", component=config.component, **counts)
+    return state
 
 
 def _dispatch(state: HarnessState) -> str:
@@ -135,11 +182,13 @@ def build_graph() -> Any:
     g: StateGraph[HarnessState] = StateGraph(HarnessState)
     g.add_node("dispatch", lambda s: s)           # entry — routes by component name
     g.add_node("echo", _run_echo)
+    g.add_node("screen", _run_screen)
     g.add_node("finish", _finish)
 
     g.set_entry_point("dispatch")
-    g.add_conditional_edges("dispatch", _dispatch, {"echo": "echo"})
+    g.add_conditional_edges("dispatch", _dispatch, {"echo": "echo", "screen": "screen"})
     g.add_edge("echo", "finish")
+    g.add_edge("screen", "finish")
     g.add_edge("finish", END)
     return g.compile()
 
