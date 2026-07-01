@@ -8,11 +8,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from sqlalchemy import select
+import structlog
+from sqlalchemy import exists, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas import events
 from policy_atlas.schema import project_source_snapshot, source_screening_result, source_snapshot
+
+log = structlog.get_logger()
 
 
 @dataclass
@@ -63,6 +66,13 @@ def screen_sources(
         .join(source_snapshot,
               project_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id)
         .where(project_source_snapshot.c.project_id == project_id)
+        .where(
+            ~exists().where(
+                (source_screening_result.c.screening_scope_id == context.scope_id)
+                & (source_screening_result.c.project_source_snapshot_id
+                   == project_source_snapshot.c.project_source_snapshot_id)
+            )
+        )
     ).fetchall()
 
     counts: dict[str, int] = {
@@ -71,7 +81,18 @@ def screen_sources(
     }
 
     for pss_id, snap_id, snap_meta in rows:
-        result = _stub_screen(snap_meta)
+        try:
+            result = _stub_screen(snap_meta)
+        except Exception as exc:
+            log.warning(
+                "screen.doc_failed",
+                project_id=str(project_id),
+                run_id=str(run_id),
+                screening_scope_id=str(context.scope_id),
+                project_source_snapshot_id=str(pss_id),
+                error=str(exc),
+            )
+            result = ScreenResult(status="failed", basis=None, decision_confidence=None)
 
         conn.execute(
             source_screening_result.insert().values(

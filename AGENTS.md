@@ -15,11 +15,11 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `004-screen`.
+Implementation — task `005-classify`.
 
-Tasks `001-walking-skeleton`, `002-test-db-split`, and `003-source-snapshot` are complete (merged).
-The active slice adds the `screen` component: per-document relevance filtering over the uploaded
-corpus, persisting results in a separate `source_screening_result` table (columns: `status`,
-`screen_basis`, `screen_decision_confidence`) scoped by `screening_scope`.
-Build per `docs/tasks/004-screen/contract.md`. Stay within the contract's scope and stop conditions;
+Tasks `001-walking-skeleton`, `002-test-db-split`, `003-source-snapshot`, and `004-screen` are
+complete (merged). The active slice adds the `classify` component: per-document evidence-type
+classification on the screened-in set, persisting results in `source_classification_result`
+(columns: `primary_evidence_type`, `open_tags`) scoped by `screening_scope`.
+Build per `docs/tasks/005-classify/contract.md`. Stay within the contract's scope and stop conditions;
 all other capabilities and seams remain deferred (`docs/deferred.md`).

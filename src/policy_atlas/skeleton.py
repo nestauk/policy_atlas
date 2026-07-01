@@ -20,7 +20,13 @@ from policy_atlas.harness import run_harness
 from policy_atlas.ingest import ingest_upload
 from policy_atlas.logging import configure_logging
 from policy_atlas.plan import Plan, compile
-from policy_atlas.schema import project, runs, screening_scope, source_screening_result
+from policy_atlas.schema import (
+    project,
+    runs,
+    screening_scope,
+    source_classification_result,
+    source_screening_result,
+)
 
 log = structlog.get_logger()
 
@@ -112,18 +118,66 @@ def main() -> None:
             provider=StubEchoProvider(),
         )
 
-        results = conn.execute(
+        screening_results = conn.execute(
             select(
                 source_screening_result.c.status,
                 source_screening_result.c.screen_basis,
                 source_screening_result.c.screen_decision_confidence,
             ).where(source_screening_result.c.project_id == project_id)
         ).fetchall()
+
+        # Run classify: create a second run, then execute the classify plan
+        classify_run_id = uuid.uuid4()
+        conn.execute(
+            runs.insert().values(
+                run_id=classify_run_id,
+                project_id=project_id,
+                status="running",
+                started_at=datetime.now(UTC),
+            )
+        )
+        events.append(
+            conn, project_id=project_id, run_id=classify_run_id,
+            event_type="run.started", payload={},
+        )
+        log.info("run.started", run_id=str(classify_run_id))
+
+        classify_plan = Plan(component="classify", screening_scope_id=scope_id)
+        classify_config = compile(classify_plan)
+        events.append(
+            conn,
+            project_id=project_id,
+            run_id=classify_run_id,
+            event_type="plan.compiled",
+            payload={
+                "component": classify_config.component,
+                "screening_scope_id": str(classify_config.screening_scope_id),
+            },
+        )
+
+        run_harness(
+            conn,
+            config=classify_config,
+            project_id=project_id,
+            run_id=classify_run_id,
+            provider=StubEchoProvider(),
+        )
+
+        classify_results = conn.execute(
+            select(
+                source_classification_result.c.primary_evidence_type,
+                source_classification_result.c.open_tags,
+            ).where(source_classification_result.c.project_id == project_id)
+        ).fetchall()
         log_entries = events.read(conn, project_id)
 
-    for row in results:
+    for row in screening_results:
         log.info("screening_result", status=row.status, basis=row.screen_basis,
                  confidence=row.screen_decision_confidence)
+
+    for row in classify_results:
+        log.info("classification_result", evidence_type=row.primary_evidence_type,
+                 open_tags=row.open_tags)
 
     for entry in log_entries:
         log.info("event_log_entry", sequence=entry["sequence"], event_type=entry["event_type"])

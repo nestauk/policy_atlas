@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import delete, select
 from sqlalchemy.engine import Connection
@@ -31,6 +32,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         project_source_snapshot,
         runs,
         screening_scope,
+        source_classification_result,
         source_screening_result,
         source_snapshot,
     )
@@ -64,7 +66,10 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
     ))
     conn.execute(delete(annotation).where(annotation.c.block_id.in_(block_ids_subq)))
     conn.execute(delete(addressable_unit).where(addressable_unit.c.block_id.in_(block_ids_subq)))
-    # source_screening_result before runs, project_source_snapshot, and screening_scope
+    # source_classification_result before source_screening_result (FK-safe order)
+    conn.execute(delete(source_classification_result).where(
+        source_classification_result.c.project_id == project_id
+    ))
     conn.execute(delete(source_screening_result).where(
         source_screening_result.c.project_id == project_id
     ))
@@ -90,6 +95,50 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         ))
     conn.execute(delete(screening_scope).where(screening_scope.c.project_id == project_id))
     conn.execute(delete(project).where(project.c.project_id == project_id))
+
+
+def seed_source(
+    conn: Connection, project_id: uuid.UUID, meta: dict[str, Any] | None = None
+) -> tuple[uuid.UUID, uuid.UUID]:
+    """Insert source_snapshot + project_source_snapshot; return (source_snapshot_id, pss_id)."""
+    from policy_atlas.schema import project_source_snapshot, source_snapshot
+
+    snap_id = uuid.uuid4()
+    pss_id = uuid.uuid4()
+    conn.execute(source_snapshot.insert().values(
+        source_snapshot_id=snap_id,
+        content_hash=str(uuid.uuid4()),
+        text_basis="full_text",
+        source_locator="test.pdf",
+        metadata=meta or {},
+        created_at=now(),
+    ))
+    conn.execute(project_source_snapshot.insert().values(
+        project_source_snapshot_id=pss_id,
+        project_id=project_id,
+        source_snapshot_id=snap_id,
+        origin="uploaded",
+        run_id=None,
+        ingested_at=now(),
+    ))
+    return snap_id, pss_id
+
+
+def seed_scope(
+    conn: Connection, project_id: uuid.UUID, context: dict[str, Any] | None = None
+) -> uuid.UUID:
+    """Insert a screening_scope; return scope_id."""
+    from policy_atlas.schema import screening_scope
+
+    scope_id = uuid.uuid4()
+    conn.execute(screening_scope.insert().values(
+        screening_scope_id=scope_id,
+        project_id=project_id,
+        intent="Test intent",
+        context=context or {},
+        created_at=now(),
+    ))
+    return scope_id
 
 
 def seed_project_and_run(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:

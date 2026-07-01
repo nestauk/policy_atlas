@@ -10,8 +10,9 @@ import uuid
 from pydantic import BaseModel, model_validator
 
 COMPONENT_REGISTRY: dict[str, dict[str, list[str]]] = {
-    "echo":   {"requires": ["source_snapshot_id"]},
-    "screen": {"requires": ["screening_scope_id"]},
+    "echo":     {"requires": ["source_snapshot_id"]},
+    "screen":   {"requires": ["screening_scope_id"]},
+    "classify": {"requires": ["screening_scope_id"]},
 }
 VALID_COMPONENTS = set(COMPONENT_REGISTRY.keys())
 
