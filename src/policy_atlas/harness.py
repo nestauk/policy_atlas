@@ -6,6 +6,7 @@ Block-boundary commit is modelled as one event (component.completed + block.writ
 """
 
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, TypedDict
 
@@ -32,7 +33,7 @@ class HarnessState(TypedDict):
     conn: Connection
     project_id: uuid.UUID
     run_id: uuid.UUID
-    artefact_id: uuid.UUID
+    artefact_id: uuid.UUID | None  # set by _run_echo only; None for screen/classify
     provider: InferenceProvider
     block_ids: dict[str, Any]
     error: str | None
@@ -53,12 +54,22 @@ def _run_echo(state: HarnessState) -> HarnessState:
     )
     log.info("component.started", component=config.component)
 
+    artefact_id = uuid.uuid4()
+    conn.execute(
+        artefact.insert().values(
+            artefact_id=artefact_id,
+            project_id=project_id,
+            title="Walking-skeleton output",
+            created_at=datetime.now(UTC),
+        )
+    )
+
     if config.source_snapshot_id is None:
         raise RuntimeError("echo component requires source_snapshot_id")
     try:
         ids = produce_grounded_block(
             conn,
-            artefact_id=state["artefact_id"],
+            artefact_id=artefact_id,
             source_snapshot_id=config.source_snapshot_id,
             provider=state["provider"],
         )
@@ -74,7 +85,7 @@ def _run_echo(state: HarnessState) -> HarnessState:
             event_type="component.failed",
             payload=fail_payload,
         )
-        return {**state, "error": str(exc)}
+        return {**state, "artefact_id": artefact_id, "error": str(exc)}
 
     events.append(
         conn,
@@ -91,95 +102,76 @@ def _run_echo(state: HarnessState) -> HarnessState:
         payload={"block_id": str(ids["block_id"])},
     )
     log.info("block.written", block_id=str(ids["block_id"]))
-    return {**state, "block_ids": ids}
+    return {**state, "artefact_id": artefact_id, "block_ids": ids}
+
+
+def _run_scope_component(
+    state: HarnessState,
+    context_cls: type,
+    sources_fn: Callable[..., dict[str, Any]],
+) -> HarnessState:
+    """Shared implementation for screen and classify harness nodes."""
+    conn = state["conn"]
+    project_id = state["project_id"]
+    run_id = state["run_id"]
+    config = state["config"]
+
+    events.append(
+        conn, project_id=project_id, run_id=run_id,
+        event_type="component.started",
+        payload={"component": config.component},
+    )
+    log.info("component.started", component=config.component)
+
+    row = conn.execute(
+        select(screening_scope)
+        .where(screening_scope.c.screening_scope_id == config.screening_scope_id)
+        .where(screening_scope.c.project_id == project_id)
+    ).one_or_none()
+    if row is None:
+        err = (
+            f"screening_scope {config.screening_scope_id!r} "
+            f"not found for project {project_id!r}"
+        )
+        events.append(
+            conn, project_id=project_id, run_id=run_id,
+            event_type="component.failed",
+            payload={"component": config.component, "error": err},
+        )
+        return {**state, "error": err}
+
+    ctx = context_cls(
+        scope_id=row.screening_scope_id,
+        intent=row.intent,
+        context=dict(row.context),
+    )
+
+    try:
+        counts = sources_fn(conn, project_id=project_id, run_id=run_id, context=ctx)
+    except Exception as exc:
+        err = str(exc)
+        events.append(
+            conn, project_id=project_id, run_id=run_id,
+            event_type="component.failed",
+            payload={"component": config.component, "error": err},
+        )
+        return {**state, "error": err}
+
+    events.append(
+        conn, project_id=project_id, run_id=run_id,
+        event_type="component.completed",
+        payload={"component": config.component, **counts},
+    )
+    log.info("component.completed", component=config.component, **counts)
+    return state
 
 
 def _run_screen(state: HarnessState) -> HarnessState:
-    conn = state["conn"]
-    project_id = state["project_id"]
-    run_id = state["run_id"]
-    config = state["config"]
-
-    events.append(
-        conn, project_id=project_id, run_id=run_id,
-        event_type="component.started",
-        payload={"component": config.component},
-    )
-    log.info("component.started", component=config.component)
-
-    row = conn.execute(
-        select(screening_scope).where(
-            screening_scope.c.screening_scope_id == config.screening_scope_id
-        )
-    ).one_or_none()
-    if row is None:
-        err = f"screening_scope {config.screening_scope_id!r} not found"
-        events.append(
-            conn, project_id=project_id, run_id=run_id,
-            event_type="component.failed",
-            payload={"component": config.component, "error": err},
-        )
-        return {**state, "error": err}
-
-    ctx = ScreenContext(
-        scope_id=row.screening_scope_id,
-        intent=row.intent,
-        context=dict(row.context),
-    )
-
-    counts = screen_sources(conn, project_id=project_id, run_id=run_id, context=ctx)
-
-    events.append(
-        conn, project_id=project_id, run_id=run_id,
-        event_type="component.completed",
-        payload={"component": config.component, **counts},
-    )
-    log.info("component.completed", component=config.component, **counts)
-    return state
+    return _run_scope_component(state, ScreenContext, screen_sources)
 
 
 def _run_classify(state: HarnessState) -> HarnessState:
-    conn = state["conn"]
-    project_id = state["project_id"]
-    run_id = state["run_id"]
-    config = state["config"]
-
-    events.append(
-        conn, project_id=project_id, run_id=run_id,
-        event_type="component.started",
-        payload={"component": config.component},
-    )
-    log.info("component.started", component=config.component)
-
-    row = conn.execute(
-        select(screening_scope).where(
-            screening_scope.c.screening_scope_id == config.screening_scope_id
-        )
-    ).one_or_none()
-    if row is None:
-        err = f"screening_scope {config.screening_scope_id!r} not found"
-        events.append(
-            conn, project_id=project_id, run_id=run_id,
-            event_type="component.failed",
-            payload={"component": config.component, "error": err},
-        )
-        return {**state, "error": err}
-
-    ctx = ClassifyContext(
-        scope_id=row.screening_scope_id,
-        intent=row.intent,
-        context=dict(row.context),
-    )
-
-    counts = classify_sources(conn, project_id=project_id, run_id=run_id, context=ctx)
-
-    events.append(
-        conn, project_id=project_id, run_id=run_id,
-        event_type="component.completed",
-        payload={"component": config.component, **counts},
-    )
-    log.info("component.completed", component=config.component, **counts)
-    return state
+    return _run_scope_component(state, ClassifyContext, classify_sources)
 
 
 def _dispatch(state: HarnessState) -> str:
@@ -260,8 +252,8 @@ def run_harness(
         provider: Inference provider used by the grounding leg.
 
     Returns:
-        Persisted IDs (``artefact_id`` plus any block IDs); only ``artefact_id``
-        if the run failed before a block was written.
+        Persisted IDs; ``artefact_id`` is None for non-echo components that do
+        not write artefacts.
 
     Raises:
         ValueError: If ``run_id`` is unknown or belongs to another project.
@@ -277,30 +269,19 @@ def run_harness(
             f"run_id {run_id!r} belongs to project {stored_pid!r}, not {project_id!r}"
         )
 
-    # Create artefact record
-    artefact_id = uuid.uuid4()
-    conn.execute(
-        artefact.insert().values(
-            artefact_id=artefact_id,
-            project_id=project_id,
-            title="Walking-skeleton output",
-            created_at=datetime.now(UTC),
-        )
-    )
-
     graph = build_graph()
     initial: HarnessState = {
         "config": config,
         "conn": conn,
         "project_id": project_id,
         "run_id": run_id,
-        "artefact_id": artefact_id,
+        "artefact_id": None,
         "provider": provider,
         "block_ids": {},
         "error": None,
     }
     final: HarnessState = graph.invoke(initial)
     return {
-        "artefact_id": artefact_id,
+        "artefact_id": final.get("artefact_id"),
         **final.get("block_ids", {}),
     }

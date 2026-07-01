@@ -140,7 +140,7 @@ def main() -> None:
             conn, project_id=project_id, run_id=classify_run_id,
             event_type="run.started", payload={},
         )
-        log.info("classify_run.started", run_id=str(classify_run_id))
+        log.info("run.started", run_id=str(classify_run_id))
 
         classify_plan = Plan(component="classify", screening_scope_id=scope_id)
         classify_config = compile(classify_plan)

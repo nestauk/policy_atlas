@@ -8,16 +8,21 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, select
+import structlog
+from sqlalchemy import exists, func, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas import events
 from policy_atlas.schema import (
+    EVIDENCE_TYPES,
     project_source_snapshot,
     source_classification_result,
     source_screening_result,
     source_snapshot,
 )
+
+log = structlog.get_logger()
+_UNKNOWN_EVIDENCE_TYPE = EVIDENCE_TYPES[-1]
 
 
 @dataclass
@@ -33,25 +38,26 @@ class ClassifyResult:
     open_tags: list[str] = field(default_factory=list)
 
 
+# Maps metadata sentinel keys to evidence types; first matching sentinel wins.
+# Values are taken from EVIDENCE_TYPES (the authoritative list in schema.py).
+_STUB_MAP: tuple[tuple[str, str], ...] = (
+    ("_stub_non_evidence",      "Other (Non-evidence documents)"),
+    ("_stub_systematic_review", "Systematic Review and Meta-Analysis"),
+    ("_stub_rct",               "RCTs and Quasi-Experimental Studies"),
+    ("_stub_observational",     "Observational Research Studies"),
+    ("_stub_modelling",         "Modelling & Simulation"),
+    ("_stub_policy_guidance",   "Policy Syntheses & Guidance Documents"),
+    ("_stub_qualitative",       "Qualitative & Contextual Evidence"),
+    ("_stub_expert_opinion",    "Expert Opinion and Commentary"),
+)
+
+
 def _stub_classify(metadata: dict[str, Any]) -> ClassifyResult:
     """Deterministic, zero-egress stub. Uses metadata sentinel keys for test control."""
-    if metadata.get("_stub_non_evidence"):
-        return ClassifyResult("Other (Non-evidence documents)")
-    if metadata.get("_stub_systematic_review"):
-        return ClassifyResult("Systematic Review and Meta-Analysis")
-    if metadata.get("_stub_rct"):
-        return ClassifyResult("RCTs and Quasi-Experimental Studies")
-    if metadata.get("_stub_observational"):
-        return ClassifyResult("Observational Research Studies")
-    if metadata.get("_stub_modelling"):
-        return ClassifyResult("Modelling & Simulation")
-    if metadata.get("_stub_policy_guidance"):
-        return ClassifyResult("Policy Syntheses & Guidance Documents")
-    if metadata.get("_stub_qualitative"):
-        return ClassifyResult("Qualitative & Contextual Evidence")
-    if metadata.get("_stub_expert_opinion"):
-        return ClassifyResult("Expert Opinion and Commentary")
-    return ClassifyResult("Unknown / Insufficient information")
+    for sentinel, evidence_type in _STUB_MAP:
+        if metadata.get(sentinel):
+            return ClassifyResult(evidence_type)
+    return ClassifyResult(_UNKNOWN_EVIDENCE_TYPE)
 
 
 def classify_sources(
@@ -88,6 +94,13 @@ def classify_sources(
         .where(source_screening_result.c.screening_scope_id == context.scope_id)
         .where(source_screening_result.c.status == "relevant")
         .where(project_source_snapshot.c.project_id == project_id)
+        .where(
+            ~exists().where(
+                (source_classification_result.c.screening_scope_id == context.scope_id)
+                & (source_classification_result.c.project_source_snapshot_id
+                   == project_source_snapshot.c.project_source_snapshot_id)
+            )
+        )
     ).fetchall()
 
     skipped = conn.execute(
@@ -98,10 +111,33 @@ def classify_sources(
         .where(source_screening_result.c.project_id == project_id)
     ).scalar_one()
 
+    # Every relevant row is either in relevant_rows (to classify now) or already classified
+    # from a prior call on this scope (idempotency skip) — no join needed, unlike relevant_rows,
+    # since this count doesn't need source_snapshot.metadata.
+    total_relevant = conn.execute(
+        select(func.count())
+        .select_from(source_screening_result)
+        .where(source_screening_result.c.screening_scope_id == context.scope_id)
+        .where(source_screening_result.c.status == "relevant")
+        .where(source_screening_result.c.project_id == project_id)
+    ).scalar_one()
+    already_classified = total_relevant - len(relevant_rows)
+
     by_type: dict[str, int] = {}
 
     for pss_id, snap_id, snap_meta in relevant_rows:
-        result = _stub_classify(snap_meta)
+        try:
+            result = _stub_classify(snap_meta)
+        except Exception as exc:
+            log.warning(
+                "classify.doc_failed",
+                project_id=str(project_id),
+                run_id=str(run_id),
+                screening_scope_id=str(context.scope_id),
+                project_source_snapshot_id=str(pss_id),
+                error=str(exc),
+            )
+            result = ClassifyResult(_UNKNOWN_EVIDENCE_TYPE)
 
         conn.execute(
             source_classification_result.insert().values(
@@ -132,4 +168,9 @@ def classify_sources(
 
         by_type[result.primary_evidence_type] = by_type.get(result.primary_evidence_type, 0) + 1
 
-    return {"classified": len(relevant_rows), "by_type": by_type, "skipped": skipped}
+    return {
+        "classified": len(relevant_rows),
+        "by_type": by_type,
+        "skipped": skipped,
+        "already_classified": already_classified,
+    }

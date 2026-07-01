@@ -257,6 +257,19 @@ source_screening_result = Table(
 
 # --- Classification model (task 005) ---
 
+EVIDENCE_TYPES: tuple[str, ...] = (
+    "Systematic Review and Meta-Analysis",
+    "RCTs and Quasi-Experimental Studies",
+    "Observational Research Studies",
+    "Modelling & Simulation",
+    "Policy Syntheses & Guidance Documents",
+    "Qualitative & Contextual Evidence",
+    "Expert Opinion and Commentary",
+    "Other (Non-evidence documents)",
+    "Unknown / Insufficient information",
+)
+_EVIDENCE_TYPES_SQL_LIST = ", ".join(f"'{t}'" for t in EVIDENCE_TYPES)
+
 source_classification_result = Table(
     "source_classification_result",
     metadata,
@@ -295,18 +308,10 @@ source_classification_result = Table(
         "jsonb_typeof(open_tags) = 'array'",
         name="ck_scr_open_tags_array",
     ),
+    # Safe only because EVIDENCE_TYPES is a fixed, developer-controlled tuple (no user input,
+    # no apostrophe-escaping) — never build a CHECK constraint this way from runtime data.
     CheckConstraint(
-        "primary_evidence_type IN ("
-        " 'Systematic Review and Meta-Analysis',"
-        " 'RCTs and Quasi-Experimental Studies',"
-        " 'Observational Research Studies',"
-        " 'Modelling & Simulation',"
-        " 'Policy Syntheses & Guidance Documents',"
-        " 'Qualitative & Contextual Evidence',"
-        " 'Expert Opinion and Commentary',"
-        " 'Other (Non-evidence documents)',"
-        " 'Unknown / Insufficient information'"
-        ")",
+        f"primary_evidence_type IN ({_EVIDENCE_TYPES_SQL_LIST})",
         name="ck_scr_primary_evidence_type",
     ),
     Index("ix_scr_scope_type", "screening_scope_id", "primary_evidence_type"),

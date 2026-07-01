@@ -15,55 +15,12 @@ from policy_atlas.inference import StubEchoProvider
 from policy_atlas.plan import Plan, compile
 from policy_atlas.schema import (
     metadata,
-    project_source_snapshot,
     runs,
     screening_scope,
     source_screening_result,
-    source_snapshot,
 )
 from policy_atlas.screen import ScreenContext, _stub_screen, screen_sources
-from tests.helpers import now, seed_project_and_run
-
-# --- helpers ---
-
-def _seed_source(
-    conn: Connection, project_id: uuid.UUID, meta: dict[str, Any] | None = None
-) -> tuple[uuid.UUID, uuid.UUID]:
-    """Insert source_snapshot + project_source_snapshot; return (source_snapshot_id, pss_id)."""
-    snap_id = uuid.uuid4()
-    pss_id = uuid.uuid4()
-    conn.execute(source_snapshot.insert().values(
-        source_snapshot_id=snap_id,
-        content_hash=str(uuid.uuid4()),
-        text_basis="full_text",
-        source_locator="test.pdf",
-        metadata=meta or {},
-        created_at=now(),
-    ))
-    conn.execute(project_source_snapshot.insert().values(
-        project_source_snapshot_id=pss_id,
-        project_id=project_id,
-        source_snapshot_id=snap_id,
-        origin="uploaded",
-        run_id=None,
-        ingested_at=now(),
-    ))
-    return snap_id, pss_id
-
-
-def _seed_scope(
-    conn: Connection, project_id: uuid.UUID, context: dict[str, Any] | None = None
-) -> uuid.UUID:
-    scope_id = uuid.uuid4()
-    conn.execute(screening_scope.insert().values(
-        screening_scope_id=scope_id,
-        project_id=project_id,
-        intent="Test intent",
-        context=context or {},
-        created_at=now(),
-    ))
-    return scope_id
-
+from tests.helpers import now, seed_project_and_run, seed_scope, seed_source
 
 # --- Schema / structure ---
 
@@ -145,8 +102,8 @@ def _ssr_insert(conn: Connection, project_id: uuid.UUID, run_id: uuid.UUID,
 
 def test_ck_bad_status(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
-    scope_id = _seed_scope(conn, pid)
-    _, pss_id = _seed_source(conn, pid)
+    scope_id = seed_scope(conn, pid)
+    _, pss_id = seed_source(conn, pid)
     with pytest.raises(IntegrityError):
         _ssr_insert(conn, pid, rid, scope_id, pss_id, status="unknown_status")
     conn.rollback()
@@ -155,8 +112,8 @@ def test_ck_bad_status(conn: Connection) -> None:
 
 def test_ck_bad_basis(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
-    scope_id = _seed_scope(conn, pid)
-    _, pss_id = _seed_source(conn, pid)
+    scope_id = seed_scope(conn, pid)
+    _, pss_id = seed_source(conn, pid)
     with pytest.raises(IntegrityError):
         _ssr_insert(conn, pid, rid, scope_id, pss_id, screen_basis="full_text")
     conn.rollback()
@@ -165,8 +122,8 @@ def test_ck_bad_basis(conn: Connection) -> None:
 
 def test_ck_confidence_out_of_range(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
-    scope_id = _seed_scope(conn, pid)
-    _, pss_id = _seed_source(conn, pid)
+    scope_id = seed_scope(conn, pid)
+    _, pss_id = seed_source(conn, pid)
     with pytest.raises(IntegrityError):
         _ssr_insert(conn, pid, rid, scope_id, pss_id, screen_decision_confidence=1.5)
     conn.rollback()
@@ -175,8 +132,8 @@ def test_ck_confidence_out_of_range(conn: Connection) -> None:
 
 def test_ck_failed_with_non_null_basis(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
-    scope_id = _seed_scope(conn, pid)
-    _, pss_id = _seed_source(conn, pid)
+    scope_id = seed_scope(conn, pid)
+    _, pss_id = seed_source(conn, pid)
     with pytest.raises(IntegrityError):
         _ssr_insert(conn, pid, rid, scope_id, pss_id,
                     status="failed", screen_basis="title_only", screen_decision_confidence=None)
@@ -186,8 +143,8 @@ def test_ck_failed_with_non_null_basis(conn: Connection) -> None:
 
 def test_ck_relevant_with_null_confidence(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
-    scope_id = _seed_scope(conn, pid)
-    _, pss_id = _seed_source(conn, pid)
+    scope_id = seed_scope(conn, pid)
+    _, pss_id = seed_source(conn, pid)
     with pytest.raises(IntegrityError):
         _ssr_insert(
             conn, pid, rid, scope_id, pss_id,
@@ -201,8 +158,8 @@ def test_ck_relevant_with_null_confidence(conn: Connection) -> None:
 
 def test_screen_sources_relevant_with_abstract(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
-    scope_id = _seed_scope(conn, pid)
-    _seed_source(conn, pid, meta={"abstract": "Some policy text."})
+    scope_id = seed_scope(conn, pid)
+    seed_source(conn, pid, meta={"abstract": "Some policy text."})
     ctx = ScreenContext(scope_id=scope_id, intent="Test", context={})
 
     screen_sources(conn, project_id=pid, run_id=rid, context=ctx)
@@ -217,8 +174,8 @@ def test_screen_sources_relevant_with_abstract(conn: Connection) -> None:
 
 def test_screen_sources_fail_open(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
-    scope_id = _seed_scope(conn, pid)
-    _seed_source(conn, pid, meta={})
+    scope_id = seed_scope(conn, pid)
+    seed_source(conn, pid, meta={})
     ctx = ScreenContext(scope_id=scope_id, intent="Test", context={})
 
     screen_sources(conn, project_id=pid, run_id=rid, context=ctx)
@@ -232,8 +189,8 @@ def test_screen_sources_fail_open(conn: Connection) -> None:
 
 def test_screen_sources_not_relevant(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
-    scope_id = _seed_scope(conn, pid)
-    _seed_source(conn, pid, meta={"_stub_not_relevant": True, "abstract": "X"})
+    scope_id = seed_scope(conn, pid)
+    seed_source(conn, pid, meta={"_stub_not_relevant": True, "abstract": "X"})
     ctx = ScreenContext(scope_id=scope_id, intent="Test", context={})
 
     screen_sources(conn, project_id=pid, run_id=rid, context=ctx)
@@ -246,8 +203,8 @@ def test_screen_sources_not_relevant(conn: Connection) -> None:
 
 def test_screen_sources_failed(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
-    scope_id = _seed_scope(conn, pid)
-    _seed_source(conn, pid, meta={"_stub_failed": True})
+    scope_id = seed_scope(conn, pid)
+    seed_source(conn, pid, meta={"_stub_failed": True})
     ctx = ScreenContext(scope_id=scope_id, intent="Test", context={})
 
     screen_sources(conn, project_id=pid, run_id=rid, context=ctx)
@@ -262,10 +219,10 @@ def test_screen_sources_failed(conn: Connection) -> None:
 
 def test_screen_sources_mixed_counts(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
-    scope_id = _seed_scope(conn, pid)
-    _seed_source(conn, pid, meta={"abstract": "X"})            # relevant, title_abstract
-    _seed_source(conn, pid, meta={"_stub_not_relevant": True, "abstract": "X"})  # not_relevant
-    _seed_source(conn, pid, meta={"_stub_failed": True})        # failed
+    scope_id = seed_scope(conn, pid)
+    seed_source(conn, pid, meta={"abstract": "X"})            # relevant, title_abstract
+    seed_source(conn, pid, meta={"_stub_not_relevant": True, "abstract": "X"})  # not_relevant
+    seed_source(conn, pid, meta={"_stub_failed": True})        # failed
     ctx = ScreenContext(scope_id=scope_id, intent="Test", context={})
 
     counts = screen_sources(conn, project_id=pid, run_id=rid, context=ctx)
@@ -278,11 +235,62 @@ def test_screen_sources_mixed_counts(conn: Connection) -> None:
     assert counts["title_only"] == 0
 
 
+def test_screen_sources_idempotent_rerun(conn: Connection) -> None:
+    """Re-running screen_sources for the same project does not raise or duplicate rows."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    seed_source(conn, pid, meta={"abstract": "Some text."})
+    ctx = ScreenContext(scope_id=scope_id, intent="Test", context={})
+
+    first = screen_sources(conn, project_id=pid, run_id=rid, context=ctx)
+    assert first["screened"] == 1
+
+    second = screen_sources(conn, project_id=pid, run_id=rid, context=ctx)
+    assert second["screened"] == 0
+
+    rows = conn.execute(
+        select(source_screening_result).where(source_screening_result.c.project_id == pid)
+    ).fetchall()
+    assert len(rows) == 1
+
+
+def test_screen_sources_doc_exception_isolated(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One document's screening exception lands as status='failed'; other docs still process."""
+    import policy_atlas.screen as screen_mod
+
+    original = screen_mod._stub_screen
+
+    def flaky(meta: dict[str, Any]) -> Any:
+        if meta.get("_boom"):
+            raise RuntimeError("simulated per-doc failure")
+        return original(meta)
+
+    monkeypatch.setattr(screen_mod, "_stub_screen", flaky)
+
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    seed_source(conn, pid, meta={"_boom": True})
+    seed_source(conn, pid, meta={"abstract": "Fine doc."})
+    ctx = ScreenContext(scope_id=scope_id, intent="Test", context={})
+
+    counts = screen_sources(conn, project_id=pid, run_id=rid, context=ctx)
+
+    assert counts["screened"] == 2
+    assert counts["failed"] == 1
+    assert counts["relevant"] == 1
+    rows = conn.execute(
+        select(source_screening_result).where(source_screening_result.c.project_id == pid)
+    ).fetchall()
+    assert {r.status for r in rows} == {"failed", "relevant"}
+
+
 def test_screen_context_from_jsonb(conn: Connection) -> None:
     """ScreenContext.context is loaded from screening_scope.context JSONB via the harness path."""
     pid, rid = seed_project_and_run(conn)
-    scope_id = _seed_scope(conn, pid, context={"theme": "housing", "year": 2024})
-    _seed_source(conn, pid, meta={"abstract": "Housing policy."})
+    scope_id = seed_scope(conn, pid, context={"theme": "housing", "year": 2024})
+    seed_source(conn, pid, meta={"abstract": "Housing policy."})
 
     plan = Plan(component="screen", screening_scope_id=scope_id)
     config = compile(plan)
@@ -297,8 +305,8 @@ def test_screen_context_from_jsonb(conn: Connection) -> None:
 
 def test_source_screened_event_payload(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
-    scope_id = _seed_scope(conn, pid)
-    snap_id, pss_id = _seed_source(conn, pid, meta={"abstract": "Policy doc."})
+    scope_id = seed_scope(conn, pid)
+    snap_id, pss_id = seed_source(conn, pid, meta={"abstract": "Policy doc."})
     ctx = ScreenContext(scope_id=scope_id, intent="Test", context={})
 
     screen_sources(conn, project_id=pid, run_id=rid, context=ctx)
@@ -317,8 +325,8 @@ def test_source_screened_event_payload(conn: Connection) -> None:
 
 def test_unique_constraint_scope_source(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
-    scope_id = _seed_scope(conn, pid)
-    _, pss_id = _seed_source(conn, pid, meta={"abstract": "X"})
+    scope_id = seed_scope(conn, pid)
+    _, pss_id = seed_source(conn, pid, meta={"abstract": "X"})
     ctx = ScreenContext(scope_id=scope_id, intent="Test", context={})
 
     screen_sources(conn, project_id=pid, run_id=rid, context=ctx)
@@ -333,8 +341,8 @@ def test_cross_project_fk_rejected(conn: Connection) -> None:
     pid_a, rid_a = seed_project_and_run(conn)
     pid_b, _ = seed_project_and_run(conn)
 
-    scope_id = _seed_scope(conn, pid_a)
-    _, pss_id_b = _seed_source(conn, pid_b)
+    scope_id = seed_scope(conn, pid_a)
+    _, pss_id_b = seed_source(conn, pid_b)
 
     # scope belongs to project A, pss belongs to project B → FK violation
     _cross_cols = (
@@ -363,9 +371,9 @@ def test_cross_project_fk_rejected(conn: Connection) -> None:
 
 def test_harness_screen_component(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
-    scope_id = _seed_scope(conn, pid)
-    _seed_source(conn, pid, meta={"abstract": "Housing policy."})
-    _seed_source(conn, pid, meta={})
+    scope_id = seed_scope(conn, pid)
+    seed_source(conn, pid, meta={"abstract": "Housing policy."})
+    seed_source(conn, pid, meta={})
 
     plan = Plan(component="screen", screening_scope_id=scope_id)
     config = compile(plan)
