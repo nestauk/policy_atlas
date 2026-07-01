@@ -50,7 +50,9 @@ project_source_snapshot_id        UUID         NOT NULL
 project_id                        UUID         NOT NULL   -- denormalized; cross-project guard
 classified_by_run_id              UUID         NOT NULL
 primary_evidence_type             TEXT         NOT NULL
-open_tags                         JSONB        NOT NULL   DEFAULT '[]'
+open_tags                         JSONB        NOT NULL   -- classify_sources always supplies '[]';
+                                                           -- no DB-level server_default (no other
+                                                           -- writer path exists for this column)
 classified_at                     TIMESTAMPTZ  NOT NULL
 ```
 
