@@ -78,7 +78,8 @@ two more agent files, and the `agent-skills` subagents already cover the named r
     `/codex:rescue`; job lifecycle `/codex:status` · `/codex:result` · `/codex:cancel`; `/codex:setup`
     (readiness + an optional **stop-time review gate**).
   - `ponytail` — anti-over-engineering: `ponytail` mode, `/ponytail-review` (diff), `/ponytail-audit` (repo).
-- **Built-in commands:** `/plan`, `/code-review`, `/security-review`, `/verify`, `/simplify`, `/okf`.
+- **Built-in commands:** `/plan`, `/goal` (see Verification layer), `/code-review`,
+  `/security-review`, `/verify`, `/simplify`, `/okf`.
 - **Permissions:** `.claude/settings.json` deny rules + `.claude/settings.local.json` allowlist.
 
 ## Execution layer
@@ -104,6 +105,12 @@ gated. See Known gaps.
 ## Verification layer
 
 - `make verify` (test / typecheck / lint / build) — the green bar.
+- `/goal` — goal-conditioned runs for the **implement ↔ verify inner loop only**, and only when the
+  stop condition is objective (`make verify` green, a named test passing — CLAUDE.md's "only when
+  completion is measurable"). Its independent checker model grades completion, so the maker doesn't
+  grade its own homework. Session-scoped, attended; **not** for judgment-call phases
+  (contract/plan/review — those end at a 🛑), and scheduling/unattended runs stay behind the
+  `loops/` earn-it bar ([backlog.md](backlog.md)).
 - `verification.md` per task — commands run, exact end-to-end command, evidence, public-safety, gaps.
 - `rubric.md` — completion checklist; done only if every box holds.
 - Review stack: `/code-review` + `/security-review` (every PR) -> adversarial subagent review

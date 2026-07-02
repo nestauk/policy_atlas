@@ -38,9 +38,16 @@ its **trigger to act** — don't pre-build, earn it. Baseline audit 2026-06-24 a
   error ledger** — matches AGENTS.md-as-smell-ledger + `failure-log.md`'s earn-it policy; when a
   failure teaches a rule, the rule lands as one AGENTS.md line. Ng's three-loop cadence (agentic
   minutes / developer hours / external days) → keep `make verify` fast; the human product-decision
-  loop is already the 🛑 gates. **Provenance warning:** the viral "Karpathy CLAUDE.md" (4 rules,
-  and the "ten rules + self-check protocol" expansion) is community-derived, not Karpathy's —
-  don't import it on authority.
+  loop is already the 🛑 gates. **Provenance note (corrected 2026-07-02):** the viral 4-rule
+  "Karpathy CLAUDE.md" is Forrest Chang's distillation of Karpathy's January-2026 X post, not
+  Karpathy's own file; the "ten rules + self-check protocol" expansion is *attributed* to Karpathy
+  (who joined Anthropic's pre-training team ~June 2026) but unconfirmed — he hasn't commented.
+  Evaluate on merits, not authority — and on merits its six additions are already installed here:
+  reproduce-first verification ≈ `agent-skills:test-driven-development`; debugging sequence ≈
+  `agent-skills:debugging-and-error-recovery`; dependency discipline ≈ the deps hard gate + the
+  ponytail ladder; named failure modes (Kitchen Sink · Wrong Abstraction · Optimistic Path ·
+  Runaway Refactor) ≈ ponytail + "touch only what the task requires"; machine-verifiable "done" ≈
+  rubric.md. Nothing to import.
 
 ## Done (2026-06-24)
 
@@ -121,6 +128,20 @@ Spec refinement is now an explicit part of the [task-cycle](../../.claude/skills
   verification subagents ("the worker does not grade its own homework") — raises the payoff, and
   every component is already installed here. The earn-it bar stands unchanged; the first candidate
   loop is whichever task-cycle phase gets run manually ~3× with a stable shape.)*
+  Adoption bar, refined from the loop-engineering roadmap (Deviatkin/0xCodez 14-step, 2026-06 —
+  which itself endorses restraint): pass the **4-condition test** first (task repeats ≥ weekly ·
+  an automated verifier can reject bad output · budget absorbs retry waste · agent has
+  senior-engineer tooling); build in order **manual run reliable → skill → loop → schedule**;
+  judge by **cost per accepted change** (accepted-rate < 50% = the loop is losing); hard stops
+  (budget/iterations) + human gate before anything irreversible; never on judgment-call work.
+  Distinguish from `/goal`: session-scoped goal-conditioned runs against an objective stop
+  condition are in-bounds **today** (harness.md § Verification layer) — it's the *scheduling*
+  (unattended cadence) that stays behind this bar. Loop-specific risks when the bar is met:
+  Ralph-Wiggum early-exit (soft completion tokens — the gate must be a test/build, not an
+  opinion), goal drift on long runs (reread the standing spec each cycle), comprehension debt
+  (read the diffs; spot-check that the gate still catches what it claims), and the security tax
+  (audit community skills before install — measured audits found credential-leaking skills;
+  re-audit loop permissions periodically).
 - Portable `skills-source/` split — only when Cursor (or another tool) actually needs to *run* a
   skill; today `.cursor/rules/core.mdc` just defers to AGENTS.md.
 - Enforcement hooks beyond the deny rules (e.g. a verification-evidence Stop hook) — high
