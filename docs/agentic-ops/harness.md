@@ -42,6 +42,12 @@ two more agent files, and the `agent-skills` subagents already cover the named r
 - **Escalate on quality, not price.** If a cheaper model's output misses the bar, redo it with a
   smarter one — don't hand-polish weak output. For anything that ships: capability first, cost as
   tie-breaker.
+- **Prompt-bearing work is lead-only.** Policy Atlas is an AI tool: the product's prompts, judge
+  rubrics and eval criteria are its highest-leverage surface (the contract template already flags
+  prompt-bearing changes; [engineering-considerations.md](engineering-considerations.md) requires
+  strongest-model review for prompt changes). Authoring or editing them is done by the most
+  intelligent model available — the lead itself, never delegated down, even when the surrounding
+  implementation is.
 - Taste-bearing surfaces (user-facing copy, interface/API shape) stay with the lead or Opus, never
   the mechanical lane.
 
