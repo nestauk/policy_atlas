@@ -12,9 +12,38 @@ re-deriving the project's intent or boundaries each time.
 
 ## Model assumptions
 
-- Primary: Claude Code (Opus-class) in the IDE and CLI.
+- Primary: Claude Code in the IDE and CLI — **Fable 5, effort `high`**, as the lead. `high` is the
+  default on purpose: `max` burns budget for little gain on routine work; raise effort per
+  subagent-call for the hardest verify/judge steps instead of globally.
 - Secondary: Cursor (`.cursor/rules/core.mdc` -> "Follow AGENTS.md"). No Cursor-specific skills yet.
 - Skills are written tool-agnostic in prose; only `.claude/skills/` is packaged so far.
+
+### Agent-side model routing
+
+*Agent-side* means the models doing the development. Distinct from the product's **inference
+route** ([engineering-considerations.md](engineering-considerations.md)) — that stays behind the
+routing seam and its runtime-egress gate; nothing here touches it.
+
+The lead plans, decomposes, judges and synthesizes; volume work is delegated so the lead's budget
+goes on judgment, not typing. Route subagents **per call** with the Agent/Workflow `model` +
+`effort` params — no pinned custom agents in `.claude/agents/` (a routing default in a doc beats
+two more agent files, and the `agent-skills` subagents already cover the named review roles).
+
+| Work | Route |
+|---|---|
+| Orchestration, architecture, hard debugging, synthesis, final judgment | Fable 5 (the lead itself) |
+| Deep-reasoning offload: long independent analysis, root-cause hunts | Opus subagent (`model: opus`) |
+| Mechanical volume: boilerplate, sweeps, broad codebase search | Sonnet subagent (`model: sonnet`); `Explore` agents for search |
+| Heterogeneous peer (different model family): native review, adversarial review, rescue/doer | Codex — `/codex:review` · `/codex:adversarial-review` · `codex:rescue` |
+
+- **High-stakes decisions** (Tier 3+, real design forks): two *independent* takes — e.g. an Opus
+  subagent and Codex on the same brief, neither shown the other's answer — then the lead
+  synthesizes. The review stack's two-heterogeneous-reviewers rule, applied upstream at design time.
+- **Escalate on quality, not price.** If a cheaper model's output misses the bar, redo it with a
+  smarter one — don't hand-polish weak output. For anything that ships: capability first, cost as
+  tie-breaker.
+- Taste-bearing surfaces (user-facing copy, interface/API shape) stay with the lead or Opus, never
+  the mechanical lane.
 
 ## Context layer
 

@@ -10,6 +10,11 @@
 - Use `docs/tasks/<task-id>/` for per-task artefacts: `contract.md` (scope), `rubric.md`
   (completion criteria, when risk is medium or high), `verification.md` (evidence, or in the PR).
   `<task-id>` is `NNN-slug` (zero-padded, e.g. `001-example-slice`). Templates live in `docs/tasks/_templates/`.
+- Agent-side model routing: the lead (Fable 5) plans, judges, synthesizes; delegate volume — Opus
+  subagents for deep-reasoning offload, Sonnet for mechanical sweeps and search, Codex for the
+  heterogeneous peer (review/rescue). Details: `docs/agentic-ops/harness.md` § Agent-side model routing.
+- Deterministic work (date math, parsing, counting, format conversion) runs as a script or command,
+  not in latent space — if the same question twice must give the same answer, compute it.
 - Do not change schema, auth, dependencies, CI, production config or public interfaces without approval.
 - Never edit generated files or secrets.
 - Touch only what the task requires.

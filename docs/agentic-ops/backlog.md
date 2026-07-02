@@ -4,6 +4,44 @@ Harness improvements and decisions, per the manual's maintenance cadence. Each d
 its **trigger to act** — don't pre-build, earn it. Baseline audit 2026-06-24 against the four docs in
 [references/](references/) (manual, quick-start, AI-native playbook, OKF).
 
+## Done (2026-07-02) — Fable 5 rebaseline
+
+- **Agent-side model routing for Fable 5** — `harness.md` § Model assumptions updated (was
+  "Opus-class"): Fable 5 effort-`high` lead + a per-call subagent routing table (Opus =
+  deep-reasoning offload, Sonnet = mechanical volume, Codex = heterogeneous peer), plus the
+  high-stakes rule (two independent takes, lead synthesizes) and escalate-on-quality. One-bullet
+  digest in AGENTS.md. **No pinned `.claude/agents/` files** (the "deep-reasoner"/"fast-worker"
+  pattern circulating on X) — the Agent/Workflow `model` param does the same per call with zero
+  files; revisit only if per-call routing proves unreliable in practice.
+- **`fable-mode` skill removed** — legacy stopgap that imposed Fable-like staging discipline on
+  Opus while Fable was unavailable; superseded by Fable itself (user call, 2026-07-02).
+- **mattpocock/skills evaluated → not adopted** (~154k-star skills collection, active). Core skills
+  (`diagnosing-bugs`, `code-review`, `tdd`) are substantive, but nearly everything overlaps
+  installed machinery (tdd / code-review / debugging / grill-me ≈ `agent-skills` equivalents +
+  task-cycle; `to-prd`/`to-issues`/`triage` ≈ contract/plan; its setup skill wants to own
+  issue-tracker config — a second process layer). Same reasoning as the Spec Kit rejection. Its
+  installer (`npx skills add mattpocock/skills`) copies skills *individually*, so later adoption
+  can be per-skill. Ideas noted, not installed: a project **glossary** concept in `docs/knowledge/`
+  (adopt when vocabulary drift first bites); `diagnosing-bugs`' "no red-capable reproduction
+  command → no hypothesising" gate (fold into the debug step if debugging discipline slips).
+- **jbarbier/CLAUDE.md mined; not adopted** — ~500-line personal operating manual; roughly a third
+  is redundant with current Claude Code defaults; confirms the keep-CLAUDE.md-thin stance.
+  Absorbed: the **deterministic-work rule** (one AGENTS.md line). Deferred: its two-lane test
+  split — *gate tests* (deterministic, free, <2s, every commit) vs *periodic evals* (paid LLM
+  calls, before ship + nightly) — adopt when real inference lands behind the routing seam
+  (stub-only today; pairs with the eval-readiness persistence property).
+- **2026 guidance scan** (Cherny · Karpathy · Ng, verified sources) — the harness already embodies
+  the load-bearing recommendations: verification loops as the top lever (`make verify` +
+  `verification.md` + review stack), file-based state, subagents to protect lead context, human
+  gates scaled by tier (Karpathy's leash-as-autonomy-slider; his verified 2026 line: "LLMs automate
+  what you can verify"). Calibration notes: Cherny now frames CLAUDE.md as an **append-only earned
+  error ledger** — matches AGENTS.md-as-smell-ledger + `failure-log.md`'s earn-it policy; when a
+  failure teaches a rule, the rule lands as one AGENTS.md line. Ng's three-loop cadence (agentic
+  minutes / developer hours / external days) → keep `make verify` fast; the human product-decision
+  loop is already the 🛑 gates. **Provenance warning:** the viral "Karpathy CLAUDE.md" (4 rules,
+  and the "ten rules + self-check protocol" expansion) is community-derived, not Karpathy's —
+  don't import it on authority.
+
 ## Done (2026-06-24)
 
 - PR template ([.github/pull_request_template.md](../../.github/pull_request_template.md)),
@@ -78,6 +116,11 @@ Spec refinement is now an explicit part of the [task-cycle](../../.claude/skills
   there are ~5+ merged tasks to measure.
 - `loops/` + any automation — only after a workflow has run manually ~3×, is stable, and has a state
   file + checkable rubric + explicit gates + budget (quick-start skill-readiness bar). Never Tier 3/4.
+  *(2026-07 note: the "loop engineering" wave — Cherny: "my job is to write loops"; Osmani's five
+  components: scheduled automations, worktree isolation, skills, MCP, separate ideation vs
+  verification subagents ("the worker does not grade its own homework") — raises the payoff, and
+  every component is already installed here. The earn-it bar stands unchanged; the first candidate
+  loop is whichever task-cycle phase gets run manually ~3× with a stable shape.)*
 - Portable `skills-source/` split — only when Cursor (or another tool) actually needs to *run* a
   skill; today `.cursor/rules/core.mdc` just defers to AGENTS.md.
 - Enforcement hooks beyond the deny rules (e.g. a verification-evidence Stop hook) — high
