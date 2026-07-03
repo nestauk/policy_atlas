@@ -39,7 +39,19 @@ and the lead-only rules below (you can't pin a "don't delegate" — those stay p
 | Orchestration, architecture, hard debugging, synthesis, final judgment | Fable 5 (the lead itself) |
 | Deep-reasoning offload: long independent analysis, root-cause hunts | [`deep-reasoner`](../../.claude/agents/deep-reasoner.md) (pinned Opus) |
 | Mechanical volume: boilerplate, sweeps, broad codebase search | [`fast-worker`](../../.claude/agents/fast-worker.md) (pinned Sonnet); `Explore` agents for search |
+| Scoped implementation from a precise brief, when Claude budget is the constraint | Codex as doer (`codex:rescue` / `codex exec`) — then the **other family reviews** (see below) |
+| Review fan-out: contract verification, adversarial passes | [`contract-verifier`](../../.claude/agents/contract-verifier.md) (pinned Opus) · `agent-skills` reviewer subagents · Codex — **not the lead**; the lead adjudicates findings |
 | Heterogeneous peer (different model family): native review, adversarial review, rescue/doer | Codex — `/codex:review` · `/codex:adversarial-review` · `codex:rescue` |
+
+**Review lane economics.** The review stack is where lead-model usage spikes: each pass re-reads
+the same diff, and that reading is systematic work, not frontier judgment. So: reviewers run on
+pinned Opus (`contract-verifier`), plugin reviewer subagents, and Codex — the lead's job in step 7
+is to *adjudicate* findings and decide fixes, not to generate the reviews. Run review in a fresh,
+short conversation (task-cycle context strategy) so the diff is the only context being re-paid;
+pass an effort level to `/code-review` (`medium` at Tier ≤2 — fewer, high-confidence findings;
+`high` at Tier 3+). **Family-flip rule:** whichever family implemented, the other family anchors
+review — Claude implements → Codex reviews; Codex implements → Claude reviews. Maker ≠ checker
+holds across model families in both directions.
 
 - **High-stakes decisions** (Tier 3+, real design forks): two *independent* takes — e.g. an Opus
   subagent and Codex on the same brief, neither shown the other's answer — then the lead
@@ -94,7 +106,8 @@ and the lead-only rules below (you can't pin a "don't delegate" — those stay p
 - **Built-in commands:** `/plan`, `/goal` (see Verification layer), `/code-review`,
   `/security-review`, `/verify`, `/simplify`, `/okf`.
 - **Local subagents:** `.claude/agents/` — `deep-reasoner` (pinned Opus) · `fast-worker` (pinned
-  Sonnet). The structural half of § Agent-side model routing.
+  Sonnet) · `contract-verifier` (pinned Opus, read-only). The structural half of § Agent-side
+  model routing.
 - **Permissions:** `.claude/settings.json` deny rules + `.claude/settings.local.json` allowlist.
 
 ## Execution layer

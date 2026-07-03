@@ -19,6 +19,17 @@ its **trigger to act** — don't pre-build, earn it. Baseline audit 2026-06-24 a
   advisory by design: the **lead** model/effort (user-held, deliberately not pinned in
   `settings.json` — a hard pin breaks on model unavailability and teammate access) and the
   lead-only / don't-delegate rules (protocol in AGENTS.md; no mechanism pins a negative).
+- **Review-lane economics + Codex-as-implementer** (2026-07-02, user-driven: lead-model usage was
+  spiking in the review phase). Root cause: the step-7 stack (contract-verifier · `/code-review` ·
+  `/security-review` · adversarial pass) re-reads the same diff several times on the session model
+  — systematic reading, not frontier judgment. Fixes: `contract-verifier` added to
+  `.claude/agents/` (pinned Opus, read-only, encodes the step-7 role); harness.md review-lane rule
+  — reviewers run pinned/heterogeneous, the lead only adjudicates; review in a fresh conversation;
+  `/code-review` effort tiered (`medium` ≤ Tier 2, `high` Tier 3+). Codex promoted from
+  debug-rescue-only to an **implementation lane** for precise, machine-verifiable briefs when
+  Claude budget is the constraint — guarded by the **family-flip rule** (whichever family
+  implements, the other anchors review), which preserves cross-family maker ≠ checker in both
+  directions. Prompt-bearing and taste work stay lead-only regardless of lane.
 - **Cursor Fable-orchestrator pattern reviewed** (X, 2026-07) — routing already matches (Fable
   plans/judges, cheap workers execute); absorbed the **delegation-brief shape** into harness.md
   (one concern · scoped context · self-checkable done · decision-shaped report · rewrite-and-respawn

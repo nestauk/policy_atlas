@@ -30,7 +30,9 @@ This skill drives capabilities that are **already installed** (the `agent-skills
 - **Implement:** `agent-skills:incremental-implementation`; ground framework code (LangGraph,
   SQLAlchemy, pydantic, alembic) in official docs with `agent-skills:source-driven-development`;
   design seams/interfaces with `agent-skills:api-and-interface-design`; logic & bug-fixes via
-  `agent-skills:test-driven-development` (TDD — failing test first; invoke as `/test`).
+  `agent-skills:test-driven-development` (TDD — failing test first; invoke as `/test`). A precise,
+  machine-verifiable brief can go to Codex as doer (`codex:rescue`) when Claude budget is the
+  constraint — then Claude anchors the review (family-flip; see harness.md § Agent-side model routing).
 - **Debug a red `make verify`:** `agent-skills:debugging-and-error-recovery` (root-cause, not guess);
   escalate a stubborn/substantial fix to `codex:rescue` — Codex, write-capable: a *doer*, not a reviewer.
 - **ADR:** `agent-skills:documentation-and-adrs`.
@@ -99,11 +101,16 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
 6. **Verify** — fill [verification.md](../../../docs/tasks/_templates/verification.md): `make verify`
    green, named-test results, the **exact** end-to-end command, diff summary, public-safety, gaps.
    If `make verify` is red, root-cause it (`agent-skills:debugging-and-error-recovery`) — don't guess.
-7. **Review stack** (after correctness — `make verify` green is the self-verify gate):
+7. **Review stack** (after correctness — `make verify` green is the self-verify gate). Reviews run
+   on pinned/heterogeneous reviewers, **not the lead** — the lead adjudicates findings and decides
+   fixes (harness.md § review lane economics). Run review in a fresh conversation; pass an effort
+   level to `/code-review` (`medium` at Tier ≤2, `high` at Tier 3+). Whichever model family
+   implemented, the other anchors review:
    - **Contract verifier** (Tier 2+) — a *fresh* reviewer checks the implementation against **every**
      rubric item: satisfied? what evidence? what's unverified? **And checks the claims in
      `verification.md` and any ADR against the as-built code** — "documented but not built" is a
-     finding (e.g. a named exception that doesn't exist). Use `/codex:review` or an
+     finding (e.g. a named exception that doesn't exist). Use the `contract-verifier` agent
+     (`.claude/agents/`, pinned Opus, read-only), `/codex:review`, or an
      `agent-skills:code-reviewer` subagent — **not** the agent that wrote the code.
    - `/code-review` — always.
    - `/security-review` — always (data/provenance product; every PR gets a security skim). Tier 0 docs-only may skip.
