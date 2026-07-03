@@ -50,6 +50,18 @@ were the harness's own triggers firing without follow-through. Changes:
   id 18078053) via `gh api`, existing rules preserved. Local/CI parity is by construction (both go
   through the Makefile; okf-validate rides along). First live run: this branch's PR — if the
   runner environment bites, fix the workflow, not the Makefile.
+- **2026-06/07 harness-discourse scan** (`/last30days`: 101 items — Reddit/HN/YouTube/GitHub; raw
+  in `~/Documents/Last30Days/`): the field converged on positions the harness already holds —
+  harness-over-model as the durable investment (harness-induced benchmark variance reported ~7.8x
+  model-induced; the Fable pull/restore made containment the month's headline lesson), fresh
+  verifiers over self-eval (now an Anthropic engineering hard rule), loop gates that can say no,
+  file-based state, subagent context firewalls, OKF adoption spreading. Absorbed: conversation-B
+  **baseline check** (`make verify` before building — Anthropic's session-boot validation phase);
+  Anthropic's long-running harness named as the **loops reference architecture** (see Deferred).
+  Re-tested and standing: the metrics deferral against the "benchmark your harness, don't trust
+  vibes" challenge (ponytail#65) — the right instrument is the manual's §16.3 expiry A/B test at
+  model-change time, not per-slice bookkeeping at n=5; and the over-harnessing caution
+  (rajitkhanna) is the containment corollary's existing trim rule.
 - **Fable 5 prompting guidance reviewed** (platform.claude.com "Prompting Claude Fable 5",
   user-driven): the harness already embodies most of it — evidence-grounded progress claims
   (verification.md + contract-verifier), fresh-context verifiers over self-critique, memory as
@@ -225,7 +237,12 @@ Spec refinement is now an explicit part of the [task-cycle](../../.claude/skills
   which itself endorses restraint): pass the **4-condition test** first (task repeats ≥ weekly ·
   an automated verifier can reject bad output · budget absorbs retry waste · agent has
   senior-engineer tooling); build in order **manual run reliable → skill → loop → schedule**;
-  judge by **cost per accepted change** (accepted-rate < 50% = the loop is losing); hard stops
+  judge by **cost per accepted change** (accepted-rate < 50% = the loop is losing).
+  Reference architecture when the bar is met: Anthropic's long-running-agent harness
+  (anthropic.com/engineering, 2026-06) — initializer agent · immutable task list with per-item
+  pass flags · session boot = read progress file + git log, validate the baseline, then one item
+  per session · closure = commit + progress note; its state file is the `claude-progress.txt`
+  shape this entry's "state file" requirement means. Hard stops
   (budget/iterations) + human gate before anything irreversible; never on judgment-call work.
   Distinguish from `/goal`: session-scoped goal-conditioned runs against an objective stop
   condition are in-bounds **today** (harness.md § Verification layer) — it's the *scheduling*

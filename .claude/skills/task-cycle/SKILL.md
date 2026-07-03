@@ -246,7 +246,9 @@ already in a committed artifact; `/compact` when valuable state is in-flight and
 - **Within a long phase: `/compact`**, not a fresh start — it keeps the in-flight thread that isn't in
   a file yet (e.g. a big implementation mid-way). `verify` stays with `implement` (you iterate between them).
 - Open each fresh conversation by re-grounding (`agent-skills:context-engineering` helps): read the
-  task's `contract.md` / `plan.md` and the specs they cite, then continue the cycle.
+  task's `contract.md` / `plan.md` and the specs they cite, then continue the cycle. A **build**
+  conversation (B) additionally confirms the baseline before implementing: run `make verify` first —
+  don't build on a red base you'll later misattribute to your own changes.
 
 **Commits.** Each phase boundary ends with a commit on the `task/NNN-slug` branch — that's what turns
 the artifact into a real handoff for the next conversation. The agent prepares and runs the commit
