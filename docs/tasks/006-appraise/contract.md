@@ -305,8 +305,11 @@ full-text resolution seam). One line + a `log.md` entry.
 - `delete_project_data` removes `source_appraisal_result` rows; no rows remain after deletion.
 
 Updates to existing tests:
-- `test_schema.py` — table count 14 → 15.
-- `test_compile.py` — `"appraise"` is a valid component; unknown component still rejected.
+- `tests/test_screen.py` and `tests/test_classify.py` — table-count assertions 14 → 15
+  (the active count assertions live in those files, not `test_schema.py` — plan-review
+  finding, 2026-07-03).
+- `test_compile.py` — `"appraise"` valid with a scope id; `Plan(component="appraise")`
+  without `screening_scope_id` rejected; unknown component still rejected.
 
 ### Out of scope
 
