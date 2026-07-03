@@ -10,9 +10,15 @@ its **trigger to act** — don't pre-build, earn it. Baseline audit 2026-06-24 a
   "Opus-class"): Fable 5 effort-`high` lead + a per-call subagent routing table (Opus =
   deep-reasoning offload, Sonnet = mechanical volume, Codex = heterogeneous peer), plus the
   high-stakes rule (two independent takes, lead synthesizes) and escalate-on-quality. One-bullet
-  digest in AGENTS.md. **No pinned `.claude/agents/` files** (the "deep-reasoner"/"fast-worker"
-  pattern circulating on X) — the Agent/Workflow `model` param does the same per call with zero
-  files; revisit only if per-call routing proves unreliable in practice.
+  digest in AGENTS.md. Delegate tiers are **pinned agent definitions** —
+  `.claude/agents/deep-reasoner.md` (Opus) and `fast-worker.md` (Sonnet) — so the model choice is
+  structural (frontmatter + description-driven selection), not a table someone must remember at
+  delegation time; the Agent/Workflow `model` param is the per-call override. *(Corrects a
+  same-day earlier call that skipped the agent files as "zero files beats two" — that made routing
+  advisory-only and left subagent model choice to memory; user called it, 2026-07-02.)* Still
+  advisory by design: the **lead** model/effort (user-held, deliberately not pinned in
+  `settings.json` — a hard pin breaks on model unavailability and teammate access) and the
+  lead-only / don't-delegate rules (protocol in AGENTS.md; no mechanism pins a negative).
 - **Cursor Fable-orchestrator pattern reviewed** (X, 2026-07) — routing already matches (Fable
   plans/judges, cheap workers execute); absorbed the **delegation-brief shape** into harness.md
   (one concern · scoped context · self-checkable done · decision-shaped report · rewrite-and-respawn

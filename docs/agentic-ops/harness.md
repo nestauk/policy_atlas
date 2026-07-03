@@ -25,15 +25,20 @@ route** ([engineering-considerations.md](engineering-considerations.md)) — tha
 routing seam and its runtime-egress gate; nothing here touches it.
 
 The lead plans, decomposes, judges and synthesizes; volume work is delegated so the lead's budget
-goes on judgment, not typing. Route subagents **per call** with the Agent/Workflow `model` +
-`effort` params — no pinned custom agents in `.claude/agents/` (a routing default in a doc beats
-two more agent files, and the `agent-skills` subagents already cover the named review roles).
+goes on judgment, not typing. The routing is **structural, not advisory**: the delegate tiers are
+pinned agent definitions in [`.claude/agents/`](../../.claude/agents/) (model in frontmatter,
+description-driven selection), so the model choice rides with the agent type instead of relying on
+whoever delegates to remember a table. The Agent/Workflow `model` + `effort` params remain the
+per-call override; the `agent-skills` subagents cover the named review roles. The two knobs this
+does **not** control: the *lead* model/effort (user-held — `/model` / `/effort`; deliberately not
+pinned in `settings.json`, since a hard pin breaks on model unavailability and teammate access),
+and the lead-only rules below (you can't pin a "don't delegate" — those stay protocol, in AGENTS.md).
 
 | Work | Route |
 |---|---|
 | Orchestration, architecture, hard debugging, synthesis, final judgment | Fable 5 (the lead itself) |
-| Deep-reasoning offload: long independent analysis, root-cause hunts | Opus subagent (`model: opus`) |
-| Mechanical volume: boilerplate, sweeps, broad codebase search | Sonnet subagent (`model: sonnet`); `Explore` agents for search |
+| Deep-reasoning offload: long independent analysis, root-cause hunts | [`deep-reasoner`](../../.claude/agents/deep-reasoner.md) (pinned Opus) |
+| Mechanical volume: boilerplate, sweeps, broad codebase search | [`fast-worker`](../../.claude/agents/fast-worker.md) (pinned Sonnet); `Explore` agents for search |
 | Heterogeneous peer (different model family): native review, adversarial review, rescue/doer | Codex — `/codex:review` · `/codex:adversarial-review` · `codex:rescue` |
 
 - **High-stakes decisions** (Tier 3+, real design forks): two *independent* takes — e.g. an Opus
@@ -88,6 +93,8 @@ two more agent files, and the `agent-skills` subagents already cover the named r
   - `ponytail` — anti-over-engineering: `ponytail` mode, `/ponytail-review` (diff), `/ponytail-audit` (repo).
 - **Built-in commands:** `/plan`, `/goal` (see Verification layer), `/code-review`,
   `/security-review`, `/verify`, `/simplify`, `/okf`.
+- **Local subagents:** `.claude/agents/` — `deep-reasoner` (pinned Opus) · `fast-worker` (pinned
+  Sonnet). The structural half of § Agent-side model routing.
 - **Permissions:** `.claude/settings.json` deny rules + `.claude/settings.local.json` allowlist.
 
 ## Execution layer
