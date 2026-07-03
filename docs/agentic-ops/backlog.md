@@ -21,6 +21,14 @@ were the harness's own triggers firing without follow-through. Changes:
   satisfied; engineering-considerations.md command-surface language (the Makefile exists).
   Structural fix alongside: task-cycle step 10 close-out now re-checks point-in-time claims in
   `docs/agentic-ops/`.
+- **Design-phase adversarial review installed** (user-driven): Tier 3+ standard, Tier 2 on
+  demand — the other family attacks the drafted contract+plan before the plan 🛑 (task-cycle
+  step 3; harness.md § review lane). Fixes an asymmetry: implementation had heterogeneous review,
+  the plan had only the human gate — and design is the cheapest place to catch wrong-direction
+  work. The lack-of-context objection resolves by design: artifacts must already be
+  self-sufficient handoffs (conversation B depends on it), so a review that fails for lack of
+  context is itself a finding; settled/ADR'd decisions are scoped as context, not targets, so it
+  can't relitigate what the human already decided. First live run: task 006's design phase.
 - Noted, no action: CI as required status check is the next earned enforcement candidate
   (user decision pending); AGENTS.md Current phase repoints at task-006 step 1, per design.
 

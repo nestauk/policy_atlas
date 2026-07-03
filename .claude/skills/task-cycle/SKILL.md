@@ -42,7 +42,9 @@ This skill drives capabilities that are **already installed** (the `agent-skills
     (correctness · readability · architecture · security · performance); lighter-weight alternative
     when the full `/code-review` workflow isn't warranted.
   - `/codex:adversarial-review` — challenge the **approach/design/assumptions** (takes focus text);
-    `agent-skills:doubt-driven-development` applies the same fresh-context skepticism to key decisions.
+    fires twice in the cycle: at plan time (step 3, Tier 3+) against `contract.md` + `plan.md`, and
+    in the step-7 stack against the diff. `agent-skills:doubt-driven-development` applies the same
+    fresh-context skepticism to key decisions.
   - `/security-review` + `agent-skills:security-and-hardening` (untrusted input — prompt injection,
     retrieval poisoning, tenant boundaries), plus the `agent-skills:code-reviewer` /
     `agent-skills:security-auditor` / `agent-skills:test-engineer` subagents (installed `agent-skills`
@@ -64,7 +66,7 @@ change to skip approval.
 | 0 | docs/comment typo | Implement → focused check → PR |
 | 1 | small isolated code | Implement → tests → `/code-review` + `/security-review` → PR |
 | 2 | feature slice, integration | Contract → rubric → plan → implement → verify → review → PR |
-| 3 | auth, PII, schema, runtime egress | + `agent-skills:security-auditor` audit + adversarial review + human deep review |
+| 3 | auth, PII, schema, runtime egress | + `agent-skills:security-auditor` audit + adversarial review (design, step 3 + code, step 7) + human deep review |
 | 4 | scaffold, migration, prod config, public API | + human-approved plan + ADR + rollback plan |
 
 A change touching a **hard gate** (schema · auth · **runtime egress** · deps · CI · prod
@@ -88,7 +90,17 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
    🛑 **Human approves the contract before planning** (Tier 2+).
 2. **Rubric** — copy [_templates/rubric.md](../../../docs/tasks/_templates/rubric.md). Tier 2+ only.
 3. **Plan** — `/plan` (read-only). Save accepted plan to `docs/tasks/NNN-slug/plan.md`.
-   🛑 **Human confirms the plan** (Tier 2+).
+   **Design-phase adversarial review** (Tier 3+ standard; Tier 2 on demand — a loose contract, a
+   surprising plan, or reliance on a 🟡/❓ spec area): before the 🛑, the other family attacks the
+   drafted design — `/codex:adversarial-review` on `contract.md` + `plan.md`. The brief names the
+   reading list (contract, plan, the specs they cite, AGENTS.md, `docs/deferred.md`) and scopes
+   the targets: settled/ADR'd decisions are *context, not targets* (challenge only on
+   contradiction); aim at 🟡/❓ items, plan↔spec fit, unstated assumptions, missed requirements,
+   simpler alternatives. If it can't critique from the files alone, the artifacts aren't the
+   self-sufficient handoff conversation B needs — fix that first. (Distinct from the high-stakes
+   two-independent-takes rule, which generates alternatives *before* the design call; this attacks
+   the chosen plan *after* drafting.)
+   🛑 **Human confirms the plan** (Tier 2+) — the lead adjudicates any adversarial findings into it.
 4. **ADR** — only if a design decision is made or changed (Tier 3–4 by default).
    `docs/adr/NNNN-slug.md`, status Accepted with sign-off date (`agent-skills:documentation-and-adrs`).
 5. **Implement** — one contract at a time, incrementally (`agent-skills:incremental-implementation`).

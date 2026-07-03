@@ -56,6 +56,12 @@ holds across model families in both directions.
 - **High-stakes decisions** (Tier 3+, real design forks): two *independent* takes — e.g. an Opus
   subagent and Codex on the same brief, neither shown the other's answer — then the lead
   synthesizes. The review stack's two-heterogeneous-reviewers rule, applied upstream at design time.
+- **Design-phase adversarial review** (Tier 3+ standard; Tier 2 on demand): before the plan 🛑, the
+  other family attacks the drafted `contract.md` + `plan.md` from the committed artifacts alone —
+  settled/ADR'd decisions are context, not targets. Complements the rule above: that generates
+  alternatives *before* the design call; this attacks the chosen plan *after* drafting. A review
+  that fails for lack of context is itself a finding — the artifacts aren't a self-sufficient
+  handoff. Details: task-cycle step 3.
 - **Escalate on quality, not price.** If a cheaper model's output misses the bar, redo it with a
   smarter one — don't hand-polish weak output. For anything that ships: capability first, cost as
   tie-breaker.
