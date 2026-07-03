@@ -1,4 +1,4 @@
-.PHONY: setup test typecheck lint build verify
+.PHONY: setup test typecheck lint build verify okf-validate
 
 # Tests run against a dedicated database on the same local container, so committing
 # tests can't pollute the dev DB. Override for a different host/DB.
@@ -28,10 +28,14 @@ lint:
 build:
 	uv build
 
+okf-validate:
+	uv run python scripts/okf_validate.py
+
 verify:
 	@if ! docker compose exec db pg_isready -U policy_atlas -q 2>/dev/null; then \
 		echo "ERROR: Postgres is not running. Run 'make setup' first." >&2; exit 1; \
 	fi
+	$(MAKE) okf-validate
 	$(MAKE) test
 	$(MAKE) typecheck
 	$(MAKE) lint

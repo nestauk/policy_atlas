@@ -49,7 +49,8 @@ This skill drives capabilities that are **already installed** (the `agent-skills
     retrieval poisoning, tenant boundaries), plus the `agent-skills:code-reviewer` /
     `agent-skills:security-auditor` / `agent-skills:test-engineer` subagents (installed `agent-skills`
     plugin, not `.claude/agents/` — dispatch via Claude or view under `/agents`).
-- **Simplify:** `ponytail-review` (over-engineering pass — what to cut), then `/code-simplify` (`agent-skills:code-simplification`); `ponytail` mode throughout.
+- **Simplify:** `ponytail-review` (over-engineering pass — what to cut), then `/simplify`
+  (built-in; applies the cleanups); `ponytail` mode throughout.
 - **Situational** (not every cycle): `agent-skills:deprecation-and-migration` (schema/API migrations),
   `agent-skills:observability-and-instrumentation` (adding logging/metrics/tracing),
   `agent-skills:git-workflow-and-versioning` (branch/commit hygiene). Frontend / CI / deploy / perf
@@ -107,11 +108,15 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
    structlog only (no print/stdlib logging). Touch only what the contract requires. For logic and
    bug-fixes, drive with a failing test first (`agent-skills:test-driven-development`). If building reveals the design is
    wrong, pause and flow it back (**Spec refinement**) — don't code around an outgrown spec. Land a
-   check before the next step. (Durable records — `docs/knowledge/` learning and `docs/deferred.md`
+   check before the next step. When the stop condition is objective (`make verify` green, a named
+   test), `/goal` may drive the implement ↔ verify inner loop (scope: harness.md § Verification
+   layer); judgment-call phases never — they end at a 🛑. (Durable records — `docs/knowledge/` learning and `docs/deferred.md`
    seams — are authored **after** the review stack finalises the code, at step 8 — not here, so they
    describe what actually shipped, not a draft the review then changes.)
 6. **Verify** — fill [verification.md](../../../docs/tasks/_templates/verification.md): `make verify`
    green, named-test results, the **exact** end-to-end command, diff summary, public-safety, gaps.
+   Drive the affected flow end-to-end with `/verify` (exercises real behaviour, not just tests) —
+   the flow it drove supplies the exact end-to-end command.
    If `make verify` is red, root-cause it (`agent-skills:debugging-and-error-recovery`) — don't guess.
 7. **Review stack** (after correctness — `make verify` green is the self-verify gate). Reviews run
    on pinned/heterogeneous reviewers, **not the lead** — the lead adjudicates findings and decides
@@ -129,15 +134,16 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
      `agent-skills:code-reviewer` subagent — **not** the agent that wrote the code.
    - `/code-review` — always.
    - `/security-review` — always (data/provenance product; every PR gets a security skim). Tier 0 docs-only may skip.
-   - **OKF bundle check** — if the task touched `docs/specs/` or `docs/knowledge/`, run `/okf validate`.
-     Every non-reserved `.md` in a bundle tree is a concept and needs a non-empty `type` (a new doc
-     dropped in without frontmatter breaks conformance).
+   - **OKF bundle check** — mechanical: `make okf-validate` (runs inside `make verify`) enforces
+     conformance — every non-reserved `.md` in a bundle tree is a concept and needs parseable
+     frontmatter with a non-empty `type`; `docs/specs/sources/` is exempt (raw frozen sources, not
+     concepts). The `/okf` skill (user-env) remains the authoring/navigation aid, not the gate.
    - Adversarial review — challenge the approach with `/codex:adversarial-review`; or the
      `agent-skills:code-reviewer` subagent, Tier 2+; add `agent-skills:security-auditor` at Tier 3+;
      `agent-skills:test-engineer` for coverage gaps. At Tier 3+ aim for **two heterogeneous reviewers**
      (e.g. `/codex:adversarial-review` + an `agent-skills:code-reviewer` subagent — different model
      families), not two of the same.
-   - `/code-simplify` (or `ponytail`) — last, cleanup only.
+   - `/simplify` — last, cleanup only (after `ponytail-review`'s what-to-cut pass).
    - Record what each review caught in `verification.md` (§ Review findings).
 8. **PR** — first, with the code now **finalised by the review stack**, author the slice's durable
    records against it: new seams → [docs/deferred.md](../../../docs/deferred.md), verified durable

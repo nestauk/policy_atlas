@@ -44,7 +44,6 @@ Findings recorded in `verification.md`.
 - [ ] `/security-review`
 - [ ] Adversarial review (Tier 2+)
 - [ ] `/simplify`
-- [ ] `/okf validate` (if `docs/specs/` or `docs/knowledge/` changed)
 
 ## Known gaps & deferred seams
 

@@ -96,7 +96,9 @@ holds across model families in both directions.
 
 ## Tool layer
 
-- **Command surface:** `Makefile` — `setup / test / typecheck / lint / build / verify`.
+- **Command surface:** `Makefile` — `setup / test / typecheck / lint / build / verify /
+  okf-validate` (okf-validate runs inside verify: OKF bundle conformance via
+  `scripts/okf_validate.py`, stdlib-only).
 - **Runtime:** uv (Python), Docker Compose (Postgres), alembic (migrations).
 - **Required plugins** — declared in `.claude/settings.json` (`enabledPlugins` + `extraKnownMarketplaces`)
   so a teammate opening the repo gets them; core to the workflow, not optional. The
@@ -110,7 +112,9 @@ holds across model families in both directions.
     (readiness + an optional **stop-time review gate**).
   - `ponytail` — anti-over-engineering: `ponytail` mode, `/ponytail-review` (diff), `/ponytail-audit` (repo).
 - **Built-in commands:** `/plan`, `/goal` (see Verification layer), `/code-review`,
-  `/security-review`, `/verify`, `/simplify`, `/okf`.
+  `/security-review`, `/verify`, `/simplify`. The `/okf` skill is **user-env** (authoring/nav
+  aid) — the conformance *gate* is `make okf-validate`, a repo script, so it doesn't depend on a
+  personal skill being installed.
 - **Local subagents:** `.claude/agents/` — `deep-reasoner` (pinned Opus) · `fast-worker` (pinned
   Sonnet) · `contract-verifier` (pinned Opus, read-only). The structural half of § Agent-side
   model routing.
@@ -138,7 +142,7 @@ gated. See Known gaps.
 
 ## Verification layer
 
-- `make verify` (test / typecheck / lint / build) — the green bar.
+- `make verify` (okf-validate / test / typecheck / lint / build) — the green bar.
 - `/goal` — goal-conditioned runs for the **implement ↔ verify inner loop only**, and only when the
   stop condition is objective (`make verify` green, a named test passing — CLAUDE.md's "only when
   completion is measurable"). Its independent checker model grades completion, so the maker doesn't

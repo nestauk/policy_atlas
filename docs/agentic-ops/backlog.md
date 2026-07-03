@@ -29,6 +29,20 @@ were the harness's own triggers firing without follow-through. Changes:
   self-sufficient handoffs (conversation B depends on it), so a review that fails for lack of
   context is itself a finding; settled/ADR'd decisions are scoped as context, not targets, so it
   can't relitigate what the human already decided. First live run: task 006's design phase.
+- **Skills-wiring review** (user-driven): every installed plugin command, knowledge skill,
+  subagent and built-in cross-referenced against the cycle — no dangling references; the
+  frontend/CI/deploy/perf deferrals are correct. Fixes: **OKF gate de-personalised** — `/okf
+  validate` depended on a user-env skill teammates don't get; the gate is now `make okf-validate`
+  (`scripts/okf_validate.py`, stdlib-only, runs inside `make verify` — deterministic-work rule;
+  becomes a free CI check when CI lands; the `/okf` skill stays as authoring/nav aid). The now
+  redundant `/okf validate` boxes were dropped from the rubric + PR templates (`make verify`
+  covers them). **`/verify` wired into step 6** (drives the affected flow end-to-end; supplies
+  the exact e2e command). **Simplification standardised on `/simplify`** — the cycle said
+  `/code-simplify` while harness.md and the PR template said `/simplify`; one canonical now.
+  **`/goal` pointer added at step 5** (was defined in harness.md but absent where the
+  implement↔verify loop lives). **`/ponytail-audit` given a cadence** (see Deferred). Left
+  unwired on purpose: `agent-skills:build` (knowledge-skill counterpart already wired),
+  GitHub `/review` (human owns step 9), user-env research/viz skills.
 - Noted, no action: CI as required status check is the next earned enforcement candidate
   (user decision pending); AGENTS.md Current phase repoints at task-006 step 1, per design.
 
@@ -200,6 +214,8 @@ Spec refinement is now an explicit part of the [task-cycle](../../.claude/skills
   (read the diffs; spot-check that the gate still catches what it claims), and the security tax
   (audit community skills before install — measured audits found credential-leaking skills;
   re-audit loop permissions periodically).
+- `/ponytail-audit` (repo-wide over-engineering audit) — run at milestones, ~every 5 merged
+  slices; the per-slice `ponytail-review` is already in the cycle. First run due around task 010.
 - Portable `skills-source/` split — only when Cursor (or another tool) actually needs to *run* a
   skill; today `.cursor/rules/core.mdc` just defers to AGENTS.md.
 - Enforcement hooks beyond the deny rules (e.g. a verification-evidence Stop hook) — high
