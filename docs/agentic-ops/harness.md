@@ -50,6 +50,14 @@ two more agent files, and the `agent-skills` subagents already cover the named r
   implementation is.
 - Taste-bearing surfaces (user-facing copy, interface/API shape) stay with the lead or Opus, never
   the mechanical lane.
+- **Delegation briefs** (any surface): one concern; enough context that the worker doesn't
+  re-explore the repo; a definition of done the worker can check itself; a short report shaped for
+  the orchestrator's next decision. Workers execute the brief — they don't invent the plan; run
+  independent briefs in parallel. If a result is off, rewrite the brief and re-spawn rather than
+  silently patching over it (unless trivial). If you can't name the subtasks, don't delegate —
+  when judgment *is* the work (a hard design call, a bug needing one coherent thread), stay one agent.
+- On the Cursor surface (secondary), the same split holds: Fable plans, coordinates and judges;
+  Composer-class workers execute the scoped subtasks.
 
 ## Context layer
 

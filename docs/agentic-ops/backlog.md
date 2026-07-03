@@ -13,6 +13,13 @@ its **trigger to act** — don't pre-build, earn it. Baseline audit 2026-06-24 a
   digest in AGENTS.md. **No pinned `.claude/agents/` files** (the "deep-reasoner"/"fast-worker"
   pattern circulating on X) — the Agent/Workflow `model` param does the same per call with zero
   files; revisit only if per-call routing proves unreliable in practice.
+- **Cursor Fable-orchestrator pattern reviewed** (X, 2026-07) — routing already matches (Fable
+  plans/judges, cheap workers execute); absorbed the **delegation-brief shape** into harness.md
+  (one concern · scoped context · self-checkable done · decision-shaped report · rewrite-and-respawn
+  on a miss · don't delegate when judgment is the work) and a one-line Composer mapping for the
+  Cursor surface. Model *rotation* noted as practice, not doc: occasionally run a real slice's
+  subtask through another frontier model so "what good looks like" stays calibrated by work, not
+  benchmarks — the Codex peer lane already does this de facto every review.
 - **`fable-mode` skill removed** — legacy stopgap that imposed Fable-like staging discipline on
   Opus while Fable was unavailable; superseded by Fable itself (user call, 2026-07-02).
 - **mattpocock/skills evaluated → not adopted** (~154k-star skills collection, active). Core skills
