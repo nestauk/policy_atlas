@@ -1,7 +1,8 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–002 — backend only). Update it when the setup changes, not before.
+stands (tasks 001–005 — backend only; setup unchanged since 002). Update it when the setup
+changes, not before.
 
 ## Prerequisites
 

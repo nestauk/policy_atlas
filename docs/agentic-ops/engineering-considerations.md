@@ -125,10 +125,10 @@ Open decisions to resolve before sensitive tracing:
 
 ## Local development and CI
 
-Do not create a final command surface until the app scaffold exists. When implementation
-begins, establish a small public command surface for agents and CI — likely through package
-scripts and/or a Makefile wrapper. Expected commands: setup, dev, test, typecheck, lint,
-build, verify. Generate the concrete surface once the scaffold is in place.
+The backend command surface exists (task 001): `Makefile` — setup / test / typecheck / lint /
+build / verify (see [harness.md](harness.md) § Tool layer). Extend it — don't fork a second
+surface — when the frontend scaffold lands (a `dev` target is still expected then). CI, when
+approved, must run the same `make verify` (see [environment.md](environment.md) § CI parity).
 
 ## Code style
 

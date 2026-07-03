@@ -104,7 +104,10 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
 7. **Review stack** (after correctness — `make verify` green is the self-verify gate). Reviews run
    on pinned/heterogeneous reviewers, **not the lead** — the lead adjudicates findings and decides
    fixes (harness.md § review lane economics). Run review in a fresh conversation; pass an effort
-   level to `/code-review` (`medium` at Tier ≤2, `high` at Tier 3+). Whichever model family
+   level to `/code-review` (`medium` at Tier ≤2, `high` at Tier 3+). A finding must anchor to a
+   file that **ships**: fenced code blocks in `docs/tasks/**` (contract/plan pseudocode) are not
+   implementation — confirm a flagged line exists in an executable file before raising it
+   (failure-log, 2026-06-30). Whichever model family
    implemented, the other anchors review:
    - **Contract verifier** (Tier 2+) — a *fresh* reviewer checks the implementation against **every**
      rubric item: satisfied? what evidence? what's unverified? **And checks the claims in
@@ -139,7 +142,9 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
     shipped *in the PR*, and `AGENTS.md` **Current phase** moves with the *next* slice (step 1), so
     this step is just bookkeeping:
     - **reconcile** — confirm what merged still matches the slice's `docs/knowledge/` + ADR claims;
-      fix if review changed the code after they were written;
+      fix if review changed the code after they were written; re-check point-in-time claims in
+      `docs/agentic-ops/` (`environment.md` header, `readiness.md` boxes) if the slice changed
+      what they assert;
     - delete any temporary scratchpad.
     The slices chain — each opens by repointing Current phase (step 1) and closes here; the human
     still steers every 🛑 (this is **not** an unattended loop — see *Scope boundaries*).

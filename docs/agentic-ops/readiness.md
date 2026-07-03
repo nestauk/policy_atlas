@@ -1,7 +1,7 @@
 # Pre-implementation readiness
 
 Checklist for the transition from spec preparation into implementation. Items marked `[x]`
-are done as of the spec-prep phase (2026-06-22); `[ ]` items are open gates.
+are done (spec-prep 2026-06-22; refreshed 2026-07-03); `[ ]` items are open gates.
 
 ## Source packet
 
@@ -20,8 +20,10 @@ are done as of the spec-prep phase (2026-06-22); `[ ]` items are open gates.
 - [x] Deferred seams registered in `docs/deferred.md`; v3.0 scope is clean.
 - [x] Open/provisional decisions marked 🟡 / ❓ throughout; none silently flattened.
 - [ ] Tool/component I/O contracts — draft when the first implementation task lands.
-- [ ] Task-contract map for first implementation slices.
-- [ ] Verification plan for first implementation slices.
+- [x] Task-contract map for first implementation slices — superseded by the running task sequence
+  (`docs/tasks/001`–`005` merged; the next slice is named in AGENTS.md **Current phase**).
+- [x] Verification plan for first implementation slices — per-task `verification.md` from
+  `docs/tasks/_templates/`, gated by the task-cycle review stack.
 
 ## Engineering decisions before scaffold
 
@@ -29,8 +31,8 @@ are done as of the spec-prep phase (2026-06-22); `[ ]` items are open gates.
   OpenAI API → Bedrock routing, Langfuse.
 - [ ] Frontend scaffold and package manager committed (likely Next.js + pnpm; confirm before
   creating any files or installing dependencies).
-- [ ] Local command surface defined (package scripts and/or Makefile wrapper — after scaffold
-  exists; see `engineering-considerations.md`).
+- [x] Local command surface defined — `Makefile`: setup / test / typecheck / lint / build / verify
+  (task 001; backend). Extend, don't fork, when the frontend scaffold lands.
 - [ ] Prompt-management approach confirmed (repo-first governance, Langfuse as runtime
   registry; open decisions listed in `engineering-considerations.md`).
 - [ ] Langfuse trace-redaction policy confirmed.

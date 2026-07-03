@@ -4,6 +4,26 @@ Harness improvements and decisions, per the manual's maintenance cadence. Each d
 its **trigger to act** — don't pre-build, earn it. Baseline audit 2026-06-24 against the four docs in
 [references/](references/) (manual, quick-start, AI-native playbook, OKF).
 
+## Done (2026-07-03) — harness review follow-through
+
+Full review of harness + skills + references + backlog (user-driven). Verdict: sound; the gaps
+were the harness's own triggers firing without follow-through. Changes:
+
+- **Ratchet closed on the 2026-06-30 failure** — the `/code-review`-on-pseudocode false-positive
+  fix is now installed as a task-cycle step-7 rule: a finding must anchor to a file that ships;
+  fenced blocks in `docs/tasks/**` are pseudocode. Chose the reviewer-instruction form over the
+  failure-log's path-filter suggestion — an include-list silently drops new paths from review as
+  the codebase grows (user call).
+- **metrics.md trigger acknowledged and re-aimed** — fired at 5 merged tasks, consciously
+  deferred with a new trigger (see Deferred).
+- **De-stale sweep** — harness.md known-gaps (failure log is live, no longer an "empty stub");
+  environment.md header (001–002 → 001–005); readiness.md boxes that concrete artifacts had
+  satisfied; engineering-considerations.md command-surface language (the Makefile exists).
+  Structural fix alongside: task-cycle step 10 close-out now re-checks point-in-time claims in
+  `docs/agentic-ops/`.
+- Noted, no action: CI as required status check is the next earned enforcement candidate
+  (user decision pending); AGENTS.md Current phase repoints at task-006 step 1, per design.
+
 ## Done (2026-07-02) — Fable 5 rebaseline
 
 - **Agent-side model routing for Fable 5** — `harness.md` § Model assumptions updated (was
@@ -142,9 +162,15 @@ Spec refinement is now an explicit part of the [task-cycle](../../.claude/skills
 
 ## Deferred — earn it first (aligned with the manual's "improve the system only when failure teaches you")
 
-- `failure-log.md` — fill on the **first real harness failure**, not before.
-- `metrics.md` — start tracking (time-to-green, rework rate, review findings/task, diff size) once
-  there are ~5+ merged tasks to measure.
+- `failure-log.md` — **live since 2026-06-30** (first entry: `/code-review` pseudocode
+  false-positives; its fix installed 2026-07-03). The bar continues per entry: each new failure
+  lands one harness change, or is explicitly accepted as a one-off.
+- `metrics.md` — **trigger fired at 5 merged tasks (2026-07-03) and consciously deferred**:
+  per-slice manual fill adds friction with no current question to answer, and every candidate
+  metric (time-to-green, rework rate, review findings/task, diff size) is reconstructible from
+  git/GitHub history, so deferring loses nothing. New trigger: the first harness decision that
+  actually needs numbers (the likely one: a loop's cost-per-accepted-change judgment) — then
+  **backfill by script**, don't hand-fill per slice.
 - `loops/` + any automation — only after a workflow has run manually ~3×, is stable, and has a state
   file + checkable rubric + explicit gates + budget (quick-start skill-readiness bar). Never Tier 3/4.
   *(2026-07 note: the "loop engineering" wave — Cherny: "my job is to write loops"; Osmani's five

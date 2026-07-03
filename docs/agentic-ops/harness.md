@@ -156,8 +156,9 @@ gated. See Known gaps.
   `.claude/settings.json`; everything else (no unapproved hard-gate change, the runtime-egress gate)
   is still doc-only — no PreToolUse/Stop hooks. (`dev` is now a protected branch — PR required,
   force-push/deletion blocked — but no CI status check gates merges yet.)
-- **Empty stub:** `failure-log.md` — earn it on the first real failure, don't pre-fill.
-- **No `metrics.md`** — add when there's enough task volume to measure (~5+ merged tasks). Harness
+- **No `metrics.md`** — the ~5-merged-tasks trigger fired 2026-07 and was consciously deferred:
+  no current harness question needs numbers, and the candidate metrics are reconstructible from
+  git/GitHub history (backfill by script when one does — see [backlog.md](backlog.md)). Harness
   decisions/deferrals are tracked in [backlog.md](backlog.md).
 - **OKF bundle is young** — `docs/knowledge/` seeded from task-001; grow it **in the implementing PR**
   (after the review stack finalises the code, task-cycle step 8), not after merge and not speculatively.
