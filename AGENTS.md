@@ -22,11 +22,12 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `005-classify`.
+Implementation — task `006-appraise`.
 
-Tasks `001-walking-skeleton`, `002-test-db-split`, `003-source-snapshot`, and `004-screen` are
-complete (merged). The active slice adds the `classify` component: per-document evidence-type
-classification on the screened-in set, persisting results in `source_classification_result`
-(columns: `primary_evidence_type`, `open_tags`) scoped by `screening_scope`.
-Build per `docs/tasks/005-classify/contract.md`. Stay within the contract's scope and stop conditions;
+Tasks `001-walking-skeleton`, `002-test-db-split`, `003-source-snapshot`, `004-screen`, and
+`005-classify` are complete (merged). The active slice adds the `appraise` component: per-document
+evidence-hierarchy score (1–5, v2-ordering default rubric) over the classified set — deterministic
+by design, no LLM; Non-evidence/Unknown skipped-and-counted — persisting results in
+`source_appraisal_result` (columns: `quality_score`, `rubric_version`) scoped by `screening_scope`.
+Build per `docs/tasks/006-appraise/contract.md`. Stay within the contract's scope and stop conditions;
 all other capabilities and seams remain deferred (`docs/deferred.md`).

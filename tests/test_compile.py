@@ -63,3 +63,16 @@ def test_classify_valid_with_scope_id() -> None:
     config = compile(plan)
     assert config.component == "classify"
     assert config.screening_scope_id == scope_id
+
+
+def test_appraise_requires_screening_scope_id() -> None:
+    with pytest.raises(ValidationError):
+        Plan(component="appraise")
+
+
+def test_appraise_valid_with_scope_id() -> None:
+    scope_id = uuid.uuid4()
+    plan = Plan(component="appraise", screening_scope_id=scope_id)
+    config = compile(plan)
+    assert config.component == "appraise"
+    assert config.screening_scope_id == scope_id

@@ -25,3 +25,40 @@ instruction to skip `.md` files or to confirm each finding is in an executable f
 **Adopted (2026-07-03):** the reviewer-instruction form, installed in task-cycle step 7 — a finding
 must anchor to a file that ships; fenced blocks in `docs/tasks/**` are pseudocode. The path-filter
 form was rejected: an include-list silently drops new paths from review as the codebase grows.
+
+---
+
+## 2026-07-03 — Step-7 review stack token bloat: `/code-review` high-effort workflow burned 552K tokens for one low-severity finding
+
+**Task:** 006-appraise
+
+**What happened:** The Tier-3 review stack ran six lanes totalling ≈850K subagent tokens against a
+~430-line implementation diff. The `/code-review` workflow at `high` effort alone consumed **552K
+tokens across 16 agents** — 65% of the stack — and contributed exactly one confirmed finding the
+other lanes missed (a low-severity `StopIteration` in the demo script). Its other ten findings were
+rejected as contract-pinned or duplicated lanes costing a fraction as much: Codex adversarial found
+"no defects" for **17K**, the contract verifier did the deepest unique work (rubric-item audit,
+independent re-verify, a wrong count caught) for **86K**. Two lanes fully overlapped: `/security-review`
+(71K) and the `security-auditor` subagent (48K) both ran and both came back clean.
+
+**Root cause:** Two compounding process choices, not a tooling bug. (1) The task-cycle mandated
+`/code-review` at `high` for Tier 3+ without knowing that `high` dispatches the workflow-backed
+fan-out (one finder per angle + an independent verifier per candidate location) — an order of
+magnitude costlier than a single reviewer, priced for "thoroughly audit this", not for a routine
+slice review. (2) The stack listed `/security-review` *and* a Tier-3 security-auditor pass as
+separate mandatory lanes, so the same diff got two full security reads.
+
+**Fix (adopted 2026-07-03, installed in task-cycle step 7 + harness.md review-lane economics):**
+- `/code-review` runs at **`medium`** by default at every tier. The high-effort workflow is
+  reserved for explicit user opt-in (large/hard-gate-dense diffs where the user accepts the cost).
+- **One security lane, not two:** Tier 3+ runs the `security-auditor` subagent; Tier ≤2 runs
+  `/security-review`; never both on the same diff.
+- **One Claude defect pass, not two** (tightened same day, on user challenge): `/code-review
+  medium` *is* the Claude half of the Tier-3 heterogeneous pair — the pair's value is family
+  diversity (Codex vs Claude), not reviewer count. Running a five-axis `code-reviewer` subagent
+  *and* `/code-review` on the same diff is two same-family reads; on 006 the second read's
+  marginal yield was an unused logger and one test-coverage gap.
+- Tier-3 baseline stack = **three lanes**: contract-verifier · one security lane · the
+  heterogeneous pair (Codex adversarial brief + `/code-review medium` as the Claude half).
+- Budget guardrail: a routine feature-slice review should land **≤250K subagent tokens**; if the
+  planned stack exceeds it, cut overlap before launching, and say so at the 🛑.

@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
 from policy_atlas import events
+from policy_atlas.appraise import AppraiseContext, appraise_sources
 from policy_atlas.classify import ClassifyContext, classify_sources
 from policy_atlas.grounding import GroundingError, produce_grounded_block
 from policy_atlas.inference import InferenceProvider
@@ -33,7 +34,7 @@ class HarnessState(TypedDict):
     conn: Connection
     project_id: uuid.UUID
     run_id: uuid.UUID
-    artefact_id: uuid.UUID | None  # set by _run_echo only; None for screen/classify
+    artefact_id: uuid.UUID | None  # set by _run_echo only; None for scope components
     provider: InferenceProvider
     block_ids: dict[str, Any]
     error: str | None
@@ -110,7 +111,7 @@ def _run_scope_component(
     context_cls: type,
     sources_fn: Callable[..., dict[str, Any]],
 ) -> HarnessState:
-    """Shared implementation for screen and classify harness nodes."""
+    """Shared implementation for the scope-driven harness nodes (screen/classify/appraise)."""
     conn = state["conn"]
     project_id = state["project_id"]
     run_id = state["run_id"]
@@ -174,6 +175,10 @@ def _run_classify(state: HarnessState) -> HarnessState:
     return _run_scope_component(state, ClassifyContext, classify_sources)
 
 
+def _run_appraise(state: HarnessState) -> HarnessState:
+    return _run_scope_component(state, AppraiseContext, appraise_sources)
+
+
 def _dispatch(state: HarnessState) -> str:
     return state["config"].component
 
@@ -221,15 +226,19 @@ def build_graph() -> Any:
     g.add_node("echo", _run_echo)
     g.add_node("screen", _run_screen)
     g.add_node("classify", _run_classify)
+    g.add_node("appraise", _run_appraise)
     g.add_node("finish", _finish)
 
     g.set_entry_point("dispatch")
     g.add_conditional_edges(
-        "dispatch", _dispatch, {"echo": "echo", "screen": "screen", "classify": "classify"}
+        "dispatch",
+        _dispatch,
+        {"echo": "echo", "screen": "screen", "classify": "classify", "appraise": "appraise"},
     )
     g.add_edge("echo", "finish")
     g.add_edge("screen", "finish")
     g.add_edge("classify", "finish")
+    g.add_edge("appraise", "finish")
     g.add_edge("finish", END)
     return g.compile()
 

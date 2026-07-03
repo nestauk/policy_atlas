@@ -58,9 +58,14 @@ and the lead-only rules below (you can't pin a "don't delegate" — those stay p
 the same diff, and that reading is systematic work, not frontier judgment. So: reviewers run on
 pinned Opus (`contract-verifier`), plugin reviewer subagents, and Codex — the lead's job in step 7
 is to *adjudicate* findings and decide fixes, not to generate the reviews. Run review in a fresh,
-short conversation (task-cycle context strategy) so the diff is the only context being re-paid;
-pass an effort level to `/code-review` (`medium` at Tier ≤2 — fewer, high-confidence findings;
-`high` at Tier 3+). **Family-flip rule:** whichever family implemented, the other family anchors
+short conversation (task-cycle context strategy) so the diff is the only context being re-paid.
+`/code-review` runs at `medium` at **every** tier — `high` dispatches a workflow fan-out an order
+of magnitude costlier (measured on 006-appraise: 552K tokens / 16 agents vs ~80K for a single
+reviewer, for one extra low-severity finding) and is user-opt-in only. One security lane per diff
+and one Claude defect pass per diff, never two of either — `/code-review medium` *is* the Claude
+half of the Tier-3 heterogeneous pair (the pair buys family diversity, not reviewer count). A
+routine slice review lands ≤250K subagent tokens (failure-log, 2026-07-03).
+**Family-flip rule:** whichever family implemented, the other family anchors
 review — Claude implements → Codex reviews; Codex implements → Claude reviews. Maker ≠ checker
 holds across model families in both directions. (If a Fable safety classifier declines a benign
 security pass, the fallback is this lane itself — the reviewers are already pinned Opus/Codex.)

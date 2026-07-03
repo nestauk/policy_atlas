@@ -20,42 +20,18 @@ from policy_atlas.schema import (
     source_classification_result,
     source_screening_result,
 )
-from tests.helpers import now, seed_project_and_run, seed_scope, seed_source
-
-# --- helpers ---
-
-def _seed_screening_result(
-    conn: Connection,
-    project_id: uuid.UUID,
-    run_id: uuid.UUID,
-    scope_id: uuid.UUID,
-    pss_id: uuid.UUID,
-    status: str = "relevant",
-) -> None:
-    """Insert a source_screening_result row."""
-    if status == "failed":
-        basis = None
-        confidence = None
-    else:
-        basis = "title_abstract"
-        confidence = 0.9 if status == "relevant" else 0.95
-    conn.execute(source_screening_result.insert().values(
-        source_screening_result_id=uuid.uuid4(),
-        screening_scope_id=scope_id,
-        project_source_snapshot_id=pss_id,
-        project_id=project_id,
-        screened_by_run_id=run_id,
-        status=status,
-        screen_basis=basis,
-        screen_decision_confidence=confidence,
-        screened_at=now(),
-    ))
-
+from tests.helpers import (
+    now,
+    seed_project_and_run,
+    seed_scope,
+    seed_screening_result,
+    seed_source,
+)
 
 # --- Schema ---
 
 def test_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 14
+    assert len(metadata.tables) == 15
 
 
 # --- Stub logic (pure Python, no DB) ---
@@ -90,7 +66,7 @@ def test_classify_sources_round_trip(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
     _, pss_id = seed_source(conn, pid)
-    _seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant")
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant")
 
     ctx = ClassifyContext(scope_id=scope_id, intent="Test", context={})
     classify_sources(conn, project_id=pid, run_id=rid, context=ctx)
@@ -110,7 +86,7 @@ def test_classify_sources_non_evidence_persists(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
     _, pss_id = seed_source(conn, pid, meta={"_stub_non_evidence": True})
-    _seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant")
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant")
 
     ctx = ClassifyContext(scope_id=scope_id, intent="Test", context={})
     classify_sources(conn, project_id=pid, run_id=rid, context=ctx)
@@ -128,8 +104,8 @@ def test_classify_sources_skips_not_relevant(conn: Connection) -> None:
     scope_id = seed_scope(conn, pid)
     _, pss_relevant = seed_source(conn, pid)
     _, pss_not_relevant = seed_source(conn, pid)
-    _seed_screening_result(conn, pid, rid, scope_id, pss_relevant, status="relevant")
-    _seed_screening_result(conn, pid, rid, scope_id, pss_not_relevant, status="not_relevant")
+    seed_screening_result(conn, pid, rid, scope_id, pss_relevant, status="relevant")
+    seed_screening_result(conn, pid, rid, scope_id, pss_not_relevant, status="not_relevant")
 
     ctx = ClassifyContext(scope_id=scope_id, intent="Test", context={})
     counts = classify_sources(conn, project_id=pid, run_id=rid, context=ctx)
@@ -174,8 +150,8 @@ def test_classify_count_invariant(conn: Connection) -> None:
     _, p1 = seed_source(conn, pid)
     _, p2 = seed_source(conn, pid)
     _, p3 = seed_source(conn, pid)
-    _seed_screening_result(conn, pid, rid, scope_id, p1, status="relevant")
-    _seed_screening_result(conn, pid, rid, scope_id, p2, status="not_relevant")
+    seed_screening_result(conn, pid, rid, scope_id, p1, status="relevant")
+    seed_screening_result(conn, pid, rid, scope_id, p2, status="not_relevant")
     conn.execute(source_screening_result.insert().values(
         source_screening_result_id=uuid.uuid4(),
         screening_scope_id=scope_id,
@@ -199,7 +175,7 @@ def test_classify_sources_idempotent_rerun(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
     _, pss_id = seed_source(conn, pid)
-    _seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant")
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant")
 
     ctx = ClassifyContext(scope_id=scope_id, intent="Test", context={})
     first = classify_sources(conn, project_id=pid, run_id=rid, context=ctx)
@@ -223,7 +199,7 @@ def test_classified_by_run_id(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
     _, pss_id = seed_source(conn, pid)
-    _seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant")
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant")
 
     ctx = ClassifyContext(scope_id=scope_id, intent="Test", context={})
     classify_sources(conn, project_id=pid, run_id=rid, context=ctx)
@@ -283,7 +259,7 @@ def test_uq_scope_source_duplicate(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
     _, pss_id = seed_source(conn, pid)
-    _seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant")
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant")
 
     ctx = ClassifyContext(scope_id=scope_id, intent="Test", context={})
     classify_sources(conn, project_id=pid, run_id=rid, context=ctx)
@@ -349,8 +325,8 @@ def test_classify_sources_doc_exception_isolated(
     scope_id = seed_scope(conn, pid)
     _, pss_boom = seed_source(conn, pid, meta={"_boom": True})
     _, pss_fine = seed_source(conn, pid, meta={"_stub_rct": True})
-    _seed_screening_result(conn, pid, rid, scope_id, pss_boom, status="relevant")
-    _seed_screening_result(conn, pid, rid, scope_id, pss_fine, status="relevant")
+    seed_screening_result(conn, pid, rid, scope_id, pss_boom, status="relevant")
+    seed_screening_result(conn, pid, rid, scope_id, pss_fine, status="relevant")
 
     ctx = ClassifyContext(scope_id=scope_id, intent="Test", context={})
     counts = classify_sources(conn, project_id=pid, run_id=rid, context=ctx)
@@ -418,7 +394,7 @@ def test_source_classified_event_payload(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
     snap_id, pss_id = seed_source(conn, pid)
-    _seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant")
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant")
 
     ctx = ClassifyContext(scope_id=scope_id, intent="Test", context={})
     classify_sources(conn, project_id=pid, run_id=rid, context=ctx)
@@ -440,7 +416,7 @@ def test_delete_project_data_removes_classification(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
     _, pss_id = seed_source(conn, pid)
-    _seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant")
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant")
 
     ctx = ClassifyContext(scope_id=scope_id, intent="Test", context={})
     classify_sources(conn, project_id=pid, run_id=rid, context=ctx)

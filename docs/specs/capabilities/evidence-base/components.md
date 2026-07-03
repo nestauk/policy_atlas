@@ -79,7 +79,10 @@ Cheap classification on the screened-in set, **per-document fan-out**; distinct 
 Cheap **document-level** quality tier, **per-document fan-out**, applying a **steerable,
 default-first rubric** (document type + typed dimensions → quality tier — **not** a fixed global
 hierarchy; the **rubric version travels with each appraisal**). **v3.0 = a single light pass**
-from metadata + title/abstract, document-type-based, over all screened-in. Deferred seams (see
+from metadata + title/abstract, document-type-based, over all screened-in — coverage
+clarification (task 006): the pass scores classified **evidence** types; Non-evidence and
+Unknown are skipped-and-counted (Unknown re-enters via the deferred full-text resolution
+seam). Deferred seams (see
 [../../system/provenance-grounding.md](../../system/provenance-grounding.md)): ⏸ the full
 full-text pass (methods quality / risk-of-bias, gated to the selected subset; two-stage with the
 light tier) + modifier-tag-driven dimensions; ⏸ relative-to-feasible tier; the cross-document

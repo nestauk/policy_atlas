@@ -1,5 +1,12 @@
 # Knowledge update log
 
+## 2026-07-03
+* **Creation**: Added
+  [rubric-domain-defines-appraisability](rubric-domain-defines-appraisability.md) — a scoring
+  mapping's domain defines eligibility (absence = skip-and-count); counting buckets have two
+  lifetimes (inserted-this-call vs recomputed-from-state); int dict keys become strings in
+  JSONB payloads (task 006).
+
 ## 2026-07-01
 * **Creation**: Added [per-doc-fanout-idempotent](per-doc-fanout-idempotent.md) — the
   `WHERE NOT EXISTS` guard that makes per-document fan-out functions safe to re-run (task 005).
