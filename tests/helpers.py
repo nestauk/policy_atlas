@@ -146,6 +146,36 @@ def seed_scope(
     return scope_id
 
 
+def seed_screening_result(
+    conn: Connection,
+    project_id: uuid.UUID,
+    run_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    pss_id: uuid.UUID,
+    status: str = "relevant",
+) -> None:
+    """Insert a source_screening_result row."""
+    from policy_atlas.schema import source_screening_result
+
+    if status == "failed":
+        basis = None
+        confidence = None
+    else:
+        basis = "title_abstract"
+        confidence = 0.9 if status == "relevant" else 0.95
+    conn.execute(source_screening_result.insert().values(
+        source_screening_result_id=uuid.uuid4(),
+        screening_scope_id=scope_id,
+        project_source_snapshot_id=pss_id,
+        project_id=project_id,
+        screened_by_run_id=run_id,
+        status=status,
+        screen_basis=basis,
+        screen_decision_confidence=confidence,
+        screened_at=now(),
+    ))
+
+
 def seed_project_and_run(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:
     """Insert a project + running run; return (project_id, run_id)."""
     from policy_atlas.schema import project, runs

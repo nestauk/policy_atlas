@@ -27,32 +27,16 @@ from policy_atlas.schema import (
     runs,
     source_appraisal_result,
     source_classification_result,
-    source_screening_result,
 )
-from tests.helpers import now, seed_project_and_run, seed_scope, seed_source
+from tests.helpers import (
+    now,
+    seed_project_and_run,
+    seed_scope,
+    seed_screening_result,
+    seed_source,
+)
 
 # --- helpers ---
-
-def _seed_screening_result(
-    conn: Connection,
-    project_id: uuid.UUID,
-    run_id: uuid.UUID,
-    scope_id: uuid.UUID,
-    pss_id: uuid.UUID,
-) -> None:
-    """Insert a relevant source_screening_result row."""
-    conn.execute(source_screening_result.insert().values(
-        source_screening_result_id=uuid.uuid4(),
-        screening_scope_id=scope_id,
-        project_source_snapshot_id=pss_id,
-        project_id=project_id,
-        screened_by_run_id=run_id,
-        status="relevant",
-        screen_basis="title_abstract",
-        screen_decision_confidence=0.9,
-        screened_at=now(),
-    ))
-
 
 def _seed_classified(
     conn: Connection,
@@ -133,7 +117,7 @@ def test_appraise_sources_round_trip_via_classify(conn: Connection) -> None:
     pss_by_score = {}
     for sentinel, score in sentinels.items():
         _, pss_id = seed_source(conn, pid, meta={sentinel: True})
-        _seed_screening_result(conn, pid, rid, scope_id, pss_id)
+        seed_screening_result(conn, pid, rid, scope_id, pss_id)
         pss_by_score[pss_id] = score
     classify_sources(
         conn, project_id=pid, run_id=rid,
@@ -179,7 +163,7 @@ def test_unclassified_counted_not_appraised(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
     _, pss_id = seed_source(conn, pid)
-    _seed_screening_result(conn, pid, rid, scope_id, pss_id)
+    seed_screening_result(conn, pid, rid, scope_id, pss_id)
 
     counts = appraise_sources(conn, project_id=pid, run_id=rid, context=_ctx(scope_id))
 
@@ -213,6 +197,9 @@ def test_mixed_rerun_skip_counts_stable_and_invariant_holds(conn: Connection) ->
     _seed_classified(conn, pid, rid, scope_id, "Other (Non-evidence documents)")
     _seed_classified(conn, pid, rid, scope_id, "Unknown / Insufficient information")
     classification_rows = 3
+    # A relevant-but-unclassified row: recomputed per call, like the skip counts
+    _, pss_unclassified = seed_source(conn, pid)
+    seed_screening_result(conn, pid, rid, scope_id, pss_unclassified)
 
     for expected_appraised, expected_already in [(1, 0), (0, 1)]:
         counts = appraise_sources(conn, project_id=pid, run_id=rid, context=_ctx(scope_id))
@@ -220,6 +207,7 @@ def test_mixed_rerun_skip_counts_stable_and_invariant_holds(conn: Connection) ->
         assert counts["already_appraised"] == expected_already
         assert counts["skipped_non_evidence"] == 1
         assert counts["skipped_unknown"] == 1
+        assert counts["unclassified"] == 1
         assert (
             counts["appraised"] + counts["already_appraised"]
             + counts["skipped_non_evidence"] + counts["skipped_unknown"]
@@ -341,8 +329,8 @@ def test_harness_appraise_component(conn: Connection) -> None:
     scope_id = seed_scope(conn, pid)
     _, pss_sr = seed_source(conn, pid, meta={"_stub_systematic_review": True})
     _, pss_non_ev = seed_source(conn, pid, meta={"_stub_non_evidence": True})
-    _seed_screening_result(conn, pid, rid_screen, scope_id, pss_sr)
-    _seed_screening_result(conn, pid, rid_screen, scope_id, pss_non_ev)
+    seed_screening_result(conn, pid, rid_screen, scope_id, pss_sr)
+    seed_screening_result(conn, pid, rid_screen, scope_id, pss_non_ev)
     classify_sources(
         conn, project_id=pid, run_id=rid_screen,
         context=ClassifyContext(scope_id=scope_id, intent="Test", context={}),

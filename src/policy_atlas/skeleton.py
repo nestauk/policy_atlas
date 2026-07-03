@@ -13,11 +13,13 @@ from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import select, text
+from sqlalchemy.engine import Connection
 
 from policy_atlas import events
 from policy_atlas.db import get_engine
 from policy_atlas.fixtures import get_source
 from policy_atlas.harness import run_harness
+from policy_atlas.inference import StubEchoProvider
 from policy_atlas.ingest import ingest_upload
 from policy_atlas.logging import configure_logging
 from policy_atlas.plan import Plan, compile
@@ -31,6 +33,43 @@ from policy_atlas.schema import (
 )
 
 log = structlog.get_logger()
+
+
+def _run_component(
+    conn: Connection, project_id: uuid.UUID, scope_id: uuid.UUID, component: str
+) -> None:
+    """Create a run, compile and record the plan, and execute one scope component."""
+    run_id = uuid.uuid4()
+    conn.execute(
+        runs.insert().values(
+            run_id=run_id,
+            project_id=project_id,
+            status="running",
+            started_at=datetime.now(UTC),
+        )
+    )
+    events.append(
+        conn, project_id=project_id, run_id=run_id, event_type="run.started", payload={}
+    )
+    log.info("run.started", run_id=str(run_id), component=component)
+
+    config = compile(Plan(component=component, screening_scope_id=scope_id))
+    events.append(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        event_type="plan.compiled",
+        payload={
+            "component": config.component,
+            "screening_scope_id": str(config.screening_scope_id),
+        },
+    )
+    log.info("plan.compiled", component=config.component)
+
+    # provider unused by scope components but required by the harness signature
+    run_harness(
+        conn, config=config, project_id=project_id, run_id=run_id, provider=StubEchoProvider()
+    )
 
 
 def main() -> None:
@@ -83,47 +122,8 @@ def main() -> None:
         )
         log.info("screening_scope.created", scope_id=str(scope_id))
 
-        # Create run
-        run_id = uuid.uuid4()
-        conn.execute(
-            runs.insert().values(
-                run_id=run_id,
-                project_id=project_id,
-                status="running",
-                started_at=datetime.now(UTC),
-            )
-        )
-
-        events.append(
-            conn, project_id=project_id, run_id=run_id, event_type="run.started", payload={}
-        )
-        log.info("run.started", run_id=str(run_id))
-
-        # Compile screen plan
-        the_plan = Plan(component="screen", screening_scope_id=scope_id)
-        config = compile(the_plan)
-
-        events.append(
-            conn,
-            project_id=project_id,
-            run_id=run_id,
-            event_type="plan.compiled",
-            payload={
-                "component": config.component,
-                "screening_scope_id": str(config.screening_scope_id),
-            },
-        )
-        log.info("plan.compiled", component=config.component)
-
-        # Run harness (screen component; provider unused but required by signature)
-        from policy_atlas.inference import StubEchoProvider
-        run_harness(
-            conn,
-            config=config,
-            project_id=project_id,
-            run_id=run_id,
-            provider=StubEchoProvider(),
-        )
+        # Walk the chain: three runs over the same scope
+        _run_component(conn, project_id, scope_id, "screen")
 
         screening_results = conn.execute(
             select(
@@ -133,42 +133,7 @@ def main() -> None:
             ).where(source_screening_result.c.project_id == project_id)
         ).fetchall()
 
-        # Run classify: create a second run, then execute the classify plan
-        classify_run_id = uuid.uuid4()
-        conn.execute(
-            runs.insert().values(
-                run_id=classify_run_id,
-                project_id=project_id,
-                status="running",
-                started_at=datetime.now(UTC),
-            )
-        )
-        events.append(
-            conn, project_id=project_id, run_id=classify_run_id,
-            event_type="run.started", payload={},
-        )
-        log.info("run.started", run_id=str(classify_run_id))
-
-        classify_plan = Plan(component="classify", screening_scope_id=scope_id)
-        classify_config = compile(classify_plan)
-        events.append(
-            conn,
-            project_id=project_id,
-            run_id=classify_run_id,
-            event_type="plan.compiled",
-            payload={
-                "component": classify_config.component,
-                "screening_scope_id": str(classify_config.screening_scope_id),
-            },
-        )
-
-        run_harness(
-            conn,
-            config=classify_config,
-            project_id=project_id,
-            run_id=classify_run_id,
-            provider=StubEchoProvider(),
-        )
+        _run_component(conn, project_id, scope_id, "classify")
 
         classify_results = conn.execute(
             select(
@@ -177,42 +142,7 @@ def main() -> None:
             ).where(source_classification_result.c.project_id == project_id)
         ).fetchall()
 
-        # Run appraise: third run over the same scope
-        appraise_run_id = uuid.uuid4()
-        conn.execute(
-            runs.insert().values(
-                run_id=appraise_run_id,
-                project_id=project_id,
-                status="running",
-                started_at=datetime.now(UTC),
-            )
-        )
-        events.append(
-            conn, project_id=project_id, run_id=appraise_run_id,
-            event_type="run.started", payload={},
-        )
-        log.info("run.started", run_id=str(appraise_run_id))
-
-        appraise_plan = Plan(component="appraise", screening_scope_id=scope_id)
-        appraise_config = compile(appraise_plan)
-        events.append(
-            conn,
-            project_id=project_id,
-            run_id=appraise_run_id,
-            event_type="plan.compiled",
-            payload={
-                "component": appraise_config.component,
-                "screening_scope_id": str(appraise_config.screening_scope_id),
-            },
-        )
-
-        run_harness(
-            conn,
-            config=appraise_config,
-            project_id=project_id,
-            run_id=appraise_run_id,
-            provider=StubEchoProvider(),
-        )
+        _run_component(conn, project_id, scope_id, "appraise")
 
         appraise_results = conn.execute(
             select(
@@ -236,11 +166,20 @@ def main() -> None:
 
     # Surface the skip counts so both the scored and skipped paths are visible
     appraise_counts = next(
-        e["payload"] for e in log_entries
-        if e["event_type"] == "component.completed"
-        and e["payload"].get("component") == "appraise"
+        (
+            e["payload"] for e in log_entries
+            if e["event_type"] == "component.completed"
+            and e["payload"].get("component") == "appraise"
+        ),
+        None,
     )
-    log.info("appraise_counts", **{k: v for k, v in appraise_counts.items() if k != "component"})
+    if appraise_counts is None:
+        # appraise emitted component.failed — fall through to the event log below
+        log.warning("appraise_counts.missing")
+    else:
+        log.info(
+            "appraise_counts", **{k: v for k, v in appraise_counts.items() if k != "component"}
+        )
 
     for entry in log_entries:
         log.info("event_log_entry", sequence=entry["sequence"], event_type=entry["event_type"])

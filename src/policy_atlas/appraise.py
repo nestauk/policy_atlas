@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-import structlog
 from sqlalchemy import exists, func, select
 from sqlalchemy.engine import Connection
 
@@ -22,8 +21,6 @@ from policy_atlas.schema import (
     source_classification_result,
     source_screening_result,
 )
-
-log = structlog.get_logger()
 
 DEFAULT_RUBRIC_VERSION = "v2-hierarchy-v1"
 
@@ -155,6 +152,7 @@ def appraise_sources(
         .where(
             ~exists().where(
                 (source_classification_result.c.screening_scope_id == context.scope_id)
+                & (source_classification_result.c.project_id == project_id)
                 & (source_classification_result.c.project_source_snapshot_id
                    == source_screening_result.c.project_source_snapshot_id)
             )
@@ -180,6 +178,7 @@ def appraise_sources(
         .where(
             ~exists().where(
                 (source_appraisal_result.c.screening_scope_id == context.scope_id)
+                & (source_appraisal_result.c.project_id == project_id)
                 & (source_appraisal_result.c.project_source_snapshot_id
                    == project_source_snapshot.c.project_source_snapshot_id)
             )
