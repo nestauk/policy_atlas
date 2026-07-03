@@ -50,6 +50,21 @@ were the harness's own triggers firing without follow-through. Changes:
   id 18078053) via `gh api`, existing rules preserved. Local/CI parity is by construction (both go
   through the Makefile; okf-validate rides along). First live run: this branch's PR — if the
   runner environment bites, fix the workflow, not the Makefile.
+- **Fable 5 prompting guidance reviewed** (platform.claude.com "Prompting Claude Fable 5",
+  user-driven): the harness already embodies most of it — evidence-grounded progress claims
+  (verification.md + contract-verifier), fresh-context verifiers over self-critique, memory as
+  files (`docs/knowledge/`), effort tiering, parallel delegation briefs; reasoning-echo audit
+  clean (grep over `.claude/`, docs, templates — no hits, so no `reasoning_extraction` refusal
+  risk). Absorbed into harness.md: delegation briefs carry **intent** (why / who-for); prefer
+  **long-lived subagents** across related subtasks over re-spawning; **remit sizing** moves to
+  the top of the difficulty range (control = evidence + gates, not slice smallness); declined
+  benign security passes fall back to the Opus/Codex review lane; and the **containment rule** —
+  model-specific tuning lives in § Model assumptions + agent frontmatter only, skills prescribe
+  process/gates not model behaviour, and any lead-model change (arrival *or* removal — the
+  guard against over-biasing to Fable) triggers the manual's §16.2 harness-expiry review.
+  Consciously skipped: `send_to_user` tool and context-budget reassurance (raw-API harness
+  concerns — Claude Code handles both) and client-timeout restructuring (unattended pipelines;
+  this cycle is human-gated at every 🛑).
 - Noted, no action: AGENTS.md Current phase repoints at task-006 step 1, per design.
 
 ## Done (2026-07-02) — Fable 5 rebaseline

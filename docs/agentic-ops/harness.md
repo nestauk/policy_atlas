@@ -12,9 +12,20 @@ re-deriving the project's intent or boundaries each time.
 
 ## Model assumptions
 
+**Containment rule:** model-generation-specific tuning lives in this section and the pinned
+agents' frontmatter **only** — skills, AGENTS.md and templates stay model-neutral, so a model swap
+is a one-section edit plus three frontmatter lines, not a harness rewrite. On any lead-model
+change (arrival *or* removal), run the manual's §16.2 harness-expiry review. Corollary: skills
+prescribe *process and gates* (tiers, artifacts, 🛑s — model-independent), not model behaviour —
+how-to-think prescription tuned to one generation degrades the next (2026-07 Fable guidance), and
+it's the first thing the expiry review should trim.
+
 - Primary: Claude Code in the IDE and CLI — **Fable 5, effort `high`**, as the lead. `high` is the
   default on purpose: `max` burns budget for little gain on routine work; raise effort per
   subagent-call for the hardest verify/judge steps instead of globally.
+- **Remit sizing:** current-generation leads support contracts at the top of the difficulty
+  range — the control is evidence + gates (tiers, verification.md, CI's `make verify`), not slice
+  smallness (manual §2: small slices are the onboarding default, not the ambition ceiling).
 - Secondary: Cursor (`.cursor/rules/core.mdc` -> "Follow AGENTS.md"). No Cursor-specific skills yet.
 - Skills are written tool-agnostic in prose; only `.claude/skills/` is packaged so far.
 
@@ -51,7 +62,8 @@ short conversation (task-cycle context strategy) so the diff is the only context
 pass an effort level to `/code-review` (`medium` at Tier ≤2 — fewer, high-confidence findings;
 `high` at Tier 3+). **Family-flip rule:** whichever family implemented, the other family anchors
 review — Claude implements → Codex reviews; Codex implements → Claude reviews. Maker ≠ checker
-holds across model families in both directions.
+holds across model families in both directions. (If a Fable safety classifier declines a benign
+security pass, the fallback is this lane itself — the reviewers are already pinned Opus/Codex.)
 
 - **High-stakes decisions** (Tier 3+, real design forks): two *independent* takes — e.g. an Opus
   subagent and Codex on the same brief, neither shown the other's answer — then the lead
@@ -73,10 +85,14 @@ holds across model families in both directions.
   implementation is.
 - Taste-bearing surfaces (user-facing copy, interface/API shape) stay with the lead or Opus, never
   the mechanical lane.
-- **Delegation briefs** (any surface): one concern; enough context that the worker doesn't
-  re-explore the repo; a definition of done the worker can check itself; a short report shaped for
-  the orchestrator's next decision. Workers execute the brief — they don't invent the plan; run
-  independent briefs in parallel. If a result is off, rewrite the brief and re-spawn rather than
+- **Delegation briefs** (any surface): one concern; the **intent** (why, and who it's for — not
+  just the ask; workers connect the task to the right information instead of guessing at it);
+  enough context that the worker doesn't re-explore the repo; a definition of done the worker can
+  check itself; a short report shaped for the orchestrator's next decision. Workers execute the
+  brief — they don't invent the plan; run independent briefs in parallel, and where the tooling
+  supports continuing a subagent, prefer one long-lived worker across related subtasks over
+  re-spawning (context carries, cache reads are cheaper, no bottleneck on the slowest fresh
+  start). If a result is off, rewrite the brief and re-spawn rather than
   silently patching over it (unless trivial). If you can't name the subtasks, don't delegate —
   when judgment *is* the work (a hard design call, a bug needing one coherent thread), stay one agent.
 - On the Cursor surface (secondary), the same split holds: Fable plans, coordinates and judges;
