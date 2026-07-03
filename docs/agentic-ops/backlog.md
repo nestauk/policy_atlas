@@ -43,8 +43,14 @@ were the harness's own triggers firing without follow-through. Changes:
   implement↔verify loop lives). **`/ponytail-audit` given a cadence** (see Deferred). Left
   unwired on purpose: `agent-skills:build` (knowledge-skill counterpart already wired),
   GitHub `/review` (human owns step 9), user-env research/viz skills.
-- Noted, no action: CI as required status check is the next earned enforcement candidate
-  (user decision pending); AGENTS.md Current phase repoints at task-006 step 1, per design.
+- **CI landed** (user-approved same day — CI is a hard gate, and the earned-enforcement case had
+  5 merged slices + a stable command surface behind it): `.github/workflows/verify.yml` runs the
+  identical `make setup` + `make verify` (compose Postgres) on every PR and on `dev` pushes;
+  `verify` added as a **required status check** to the `dev` ruleset ("Minimal Ruleset",
+  id 18078053) via `gh api`, existing rules preserved. Local/CI parity is by construction (both go
+  through the Makefile; okf-validate rides along). First live run: this branch's PR — if the
+  runner environment bites, fix the workflow, not the Makefile.
+- Noted, no action: AGENTS.md Current phase repoints at task-006 step 1, per design.
 
 ## Done (2026-07-02) — Fable 5 rebaseline
 
@@ -225,9 +231,6 @@ Spec refinement is now an explicit part of the [task-cycle](../../.claude/skills
   diff/no-op guard**, foreground and blocking (15-min timeout), and can block the turn. So it's for
   **unattended / loop runs**, not interactive dev (≈ one Codex job per exchange). **Keep it off**;
   use `/codex:review` as the explicit review-step call instead.
-- CI (GitHub Actions) — deferred with the CI scope. `dev` is now a **protected branch** (PR required,
-  force-push/deletion blocked; 2026-06-24); when CI lands, add it as a **required status check**
-  running the **same `make verify`** so local and CI stay identical.
 
 ## Aligned — no action
 

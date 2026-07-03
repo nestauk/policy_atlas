@@ -33,7 +33,8 @@ Likely frontend and tooling defaults (confirm before creating files or installin
 - Explicit schema validation at API, tool and event boundaries.
 - **structlog** for structured logging throughout the application — **mandatory from the first scaffold slice onward**. Configure for structured JSON output in deployed environments and developer-friendly console output locally. Do not use stdlib logging or ad-hoc print statements; all application log calls go through structlog.
 - CloudWatch for AWS runtime logs, metrics and alerts.
-- GitHub Actions for CI once implementation begins.
+- GitHub Actions for CI — landed 2026-07-03 (`verify` required check; see
+  [environment.md](environment.md) § CI parity).
 - AWS-oriented deployment (not Heroku-first).
 
 ## Approval gates (from AGENTS.md + the architecture)

@@ -131,9 +131,11 @@ holds across model families in both directions.
 ## Enforcement layer
 
 **Mostly advisory.** Most boundaries in AGENTS.md (no hand-editing generated files, hard gates need
-approval) are guidance the agent is asked to follow — with **no hooks and no CI status checks**
-behind them. The hard mechanisms: a **protected `dev` branch** on GitHub (PR required to merge,
-force-push blocked, deletion restricted); `.claude/settings.json` **denies** reading/writing
+approval) are guidance the agent is asked to follow — with **no hooks** behind them. The hard
+mechanisms: a **protected `dev` branch** on GitHub (PR required to merge, force-push blocked,
+deletion restricted); **CI** ([.github/workflows/verify.yml](../../.github/workflows/verify.yml),
+2026-07-03) running the identical `make verify` on every PR, wired into the `dev` ruleset as a
+**required status check**; `.claude/settings.json` **denies** reading/writing
 `.env`/secrets and editing generated artifacts (`uv.lock`, `dist/`); `settings.local.json` holds the
 command allowlist. Note **egress here means *runtime* egress** — the deployed product reaching
 search backends or model providers with project data (a per-slice approval gate, see
@@ -162,16 +164,13 @@ gated. See Known gaps.
 
 ## Known harness gaps
 
-- **Thin enforcement.** `.env`/secrets and generated artifacts are now denied via
-  `.claude/settings.json`; everything else (no unapproved hard-gate change, the runtime-egress gate)
-  is still doc-only — no PreToolUse/Stop hooks. (`dev` is now a protected branch — PR required,
-  force-push/deletion blocked — but no CI status check gates merges yet.)
+- **Thin enforcement.** `.env`/secrets and generated artifacts are denied via
+  `.claude/settings.json`; `dev` is protected and CI's `make verify` is a required merge check
+  (2026-07-03). What remains doc-only: the no-unapproved-hard-gate-change rule and the
+  runtime-egress gate — no PreToolUse/Stop hooks.
 - **No `metrics.md`** — the ~5-merged-tasks trigger fired 2026-07 and was consciously deferred:
   no current harness question needs numbers, and the candidate metrics are reconstructible from
   git/GitHub history (backfill by script when one does — see [backlog.md](backlog.md)). Harness
   decisions/deferrals are tracked in [backlog.md](backlog.md).
 - **OKF bundle is young** — `docs/knowledge/` seeded from task-001; grow it **in the implementing PR**
   (after the review stack finalises the code, task-cycle step 8), not after merge and not speculatively.
-- **No CI status checks** (GitHub Actions deferred) — `dev` is protected (PR required,
-  force-push/deletion blocked), but no automated check (e.g. `make verify`) gates merges yet; the
-  merge gate is human review.
