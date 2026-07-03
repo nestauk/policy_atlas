@@ -34,7 +34,32 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   strength Y") and divided-evidence *direction* verdict (synthesise component 9).
 - **Relative-to-feasible appraisal tier** + the **full two-stage appraisal pass** (richer
   full-text methods/risk-of-bias on the selected subset) + modifier-tag-driven rubric dimensions
-  (appraise component 4).
+  (appraise component 4). Typed dimensions (`dimensions` column/bag) arrive with that second
+  pass — nothing populates or reads them in v3.0, so no half-built column shipped (task 006).
+- **Steerable / plan-carried appraisal rubric** — the orchestrator compiles a provisional
+  evidence hierarchy into the plan; the user inspects/adjusts before the run. v3.0 is
+  default-rubric-only (`DEFAULT_RUBRIC` in `appraise.py`), with provenance carried by
+  `rubric_version` (`v2-hierarchy-v1`) on every row and event — the seam a plan-carried rubric
+  plugs into. Validation that a stored `rubric_version` names a rubric that actually exists
+  belongs to this seam too (review note, task 006).
+- **Re-appraisal under a new rubric version** — `uq_sar_scope_source` deliberately blocks a
+  second appraisal per `(scope, source)`; the re-run seam relaxes it to
+  `(scope, source, rubric_version)`. That slice must also revisit the counting semantics:
+  `already_appraised` counts all appraisal rows for the scope, so if re-classification ever
+  changes a source's evidence type after it was appraised, a rerun double-counts it (one
+  appraisal row + one skip bucket for the same classification row) and the counting invariant
+  breaks (adversarial-review finding, task 006).
+- **v2's small-sample penalty** — v2 applied −1 to causal studies with sample size < 100.
+  Needs sample size, which v3.0's acquire-stage metadata doesn't carry; deferred with the
+  richer full-text appraisal pass, not silently dropped (contract decision 3, task 006).
+- **`source_appraisal_result` → `source_classification_result` FK — deliberately absent, not
+  just deferred** (mirrors the classify→screen entry below). A composite FK onto
+  classification's `(screening_scope_id, project_source_snapshot_id)` unique key would
+  DB-enforce "only classified rows are appraised", but both result tables' unique constraints
+  are slated to gain re-run/rubric-version columns, which the FK would hard-block. The
+  invariant lives in the read path (`appraise_sources` selects *from*
+  `source_classification_result`) and is covered by the round-trip tests; rationale also at
+  the table definition in `schema.py` (task 006, contract-adjudicated).
 - **Grey-lit category granularity** — splitting v2's coarse Policy-Guidance / Expert-Opinion
   primary types (classify component 3; needs policy-team input). `source_classification_result`
   and `primary_evidence_type` check constraint are durable; column split is additive when ready.
@@ -61,7 +86,8 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   slice — needs its own spec refinement (`docs/specs/capabilities/evidence-base/components.md`
   currently describes classify as running on "the screened-in set" unconditionally) before any
   component is built against it.
-- **`appraise` and all subsequent EB components** — subsequent slices.
+- **Full-text ingestion and `characterise`+ EB components** — subsequent slices (screen,
+  classify and appraise landed: tasks 004–006).
 - **`implementation_context_finding`** — the second reusable finding schema (mechanisms, barriers,
   implementation conditions); cross-schema linkage is reference-mediated via `group`.
 - **Saturation-based search stopping** (iterating retrieval↔screen until no new relevant docs);
