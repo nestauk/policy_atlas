@@ -101,6 +101,8 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
    self-sufficient handoff conversation B needs — fix that first. (Distinct from the high-stakes
    two-independent-takes rule, which generates alternatives *before* the design call; this attacks
    the chosen plan *after* drafting.)
+   For a real design fork, an **Artifact** laying the options out side by side (trade-offs,
+   diagrams) beats prose in chat as the decision surface.
    🛑 **Human confirms the plan** (Tier 2+) — the lead adjudicates any adversarial findings into it.
 4. **ADR** — only if a design decision is made or changed (Tier 3–4 by default).
    `docs/adr/NNNN-slug.md`, status Accepted with sign-off date (`agent-skills:documentation-and-adrs`).
@@ -155,7 +157,9 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
    (and linked to) verification.md, risk tier, AI role, review focus, known gaps, and the
    public-safety + reviews-run checklists. Open it `task/NNN-slug` → `dev` **on your go**
    (`gh pr create --base dev --body-file …`). You review the draft — you don't transcribe it.
-9. 🛑 **Human review + merge.**
+9. 🛑 **Human review + merge.** For a large diff, offer a **PR-overview Artifact** (what changed
+   and why, tables/diagrams) as a reading aid for this pass — it supplements the diff, never
+   replaces reviewing it.
 10. **Close out** (after merge) — knowledge + `deferred.md` (step 8) and any ADR (step 4) already
     shipped *in the PR*, and `AGENTS.md` **Current phase** moves with the *next* slice (step 1), so
     this step is just bookkeeping:

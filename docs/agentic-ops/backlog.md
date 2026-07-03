@@ -57,7 +57,9 @@ were the harness's own triggers firing without follow-through. Changes:
   verifiers over self-eval (now an Anthropic engineering hard rule), loop gates that can say no,
   file-based state, subagent context firewalls, OKF adoption spreading. Absorbed: conversation-B
   **baseline check** (`make verify` before building — Anthropic's session-boot validation phase);
-  Anthropic's long-running harness named as the **loops reference architecture** (see Deferred).
+  Anthropic's long-running harness named as the **loops reference architecture** (see Deferred);
+  the **Cherny artifact practice** (X, 2026-07) at steps 3 and 9 — an options Artifact as the
+  design-fork decision surface, a PR-overview Artifact as a human-review reading aid.
   Re-tested and standing: the metrics deferral against the "benchmark your harness, don't trust
   vibes" challenge (ponytail#65) — the right instrument is the manual's §16.3 expiry A/B test at
   model-change time, not per-slice bookkeeping at n=5; and the over-harnessing caution
