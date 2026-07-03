@@ -3,10 +3,11 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** contract approved — planning pending.  
+> **Status:** implementing.  
 > Contract approved (before planning): 2026-07-03 · Shabeer Rauf (design decisions 1–4 + rubric
 > mapping + SCORE_LABELS set confirmed in review).  
-> Plan approved (before implementation): _date · who_  
+> Plan approved (before implementation): 2026-07-03 · Shabeer Rauf ("run task 006
+> implementation" after plan-phase adversarial review adjudicated).  
 > ADR: none.
 
 ## Goal

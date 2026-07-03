@@ -55,7 +55,7 @@ def _seed_screening_result(
 # --- Schema ---
 
 def test_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 14
+    assert len(metadata.tables) == 15
 
 
 # --- Stub logic (pure Python, no DB) ---

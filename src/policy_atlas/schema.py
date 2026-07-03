@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — fourteen tables, four alembic migrations.
+"""SQLAlchemy Core table metadata — fifteen tables, five alembic migrations.
 
 No deferred columns (no block/artefact summary, no same_content_as, no lineage key).
 """
@@ -14,6 +14,7 @@ from sqlalchemy import (
     Index,
     Integer,
     MetaData,
+    SmallInteger,
     Table,
     Text,
     UniqueConstraint,
@@ -315,4 +316,48 @@ source_classification_result = Table(
         name="ck_scr_primary_evidence_type",
     ),
     Index("ix_scr_scope_type", "screening_scope_id", "primary_evidence_type"),
+)
+
+# --- Appraisal model (task 006) ---
+
+source_appraisal_result = Table(
+    "source_appraisal_result",
+    metadata,
+    Column("source_appraisal_result_id", UUID(as_uuid=True), primary_key=True),
+    Column("screening_scope_id", UUID(as_uuid=True), nullable=False),
+    Column("project_source_snapshot_id", UUID(as_uuid=True), nullable=False),
+    Column("project_id", UUID(as_uuid=True), nullable=False),
+    Column("appraised_by_run_id", UUID(as_uuid=True), nullable=False),
+    Column("quality_score", SmallInteger, nullable=False),  # 1..5, 5 = strongest (v2 rating)
+    Column("rubric_version", Text, nullable=False),  # provenance travels with each appraisal
+    Column("appraised_at", DateTime(timezone=True), nullable=False),
+    # Cross-project FK guards: all three parents must share the same project_id.
+    # Deliberately no FK to source_classification_result — the "only classified rows are
+    # appraised" invariant lives in the read path (appraise_sources selects from it);
+    # a FK would harden the schema against the recorded re-run relaxation seams
+    # (see docs/deferred.md).
+    ForeignKeyConstraint(
+        ["screening_scope_id", "project_id"],
+        ["screening_scope.screening_scope_id", "screening_scope.project_id"],
+        name="fk_sar_scope_project",
+    ),
+    ForeignKeyConstraint(
+        ["project_source_snapshot_id", "project_id"],
+        [
+            "project_source_snapshot.project_source_snapshot_id",
+            "project_source_snapshot.project_id",
+        ],
+        name="fk_sar_pss_project",
+    ),
+    ForeignKeyConstraint(
+        ["appraised_by_run_id", "project_id"],
+        ["runs.run_id", "runs.project_id"],
+        name="fk_sar_run_project",
+    ),
+    UniqueConstraint(
+        "screening_scope_id", "project_source_snapshot_id",
+        name="uq_sar_scope_source",
+    ),
+    CheckConstraint("quality_score BETWEEN 1 AND 5", name="ck_sar_quality_score"),
+    Index("ix_sar_scope_score", "screening_scope_id", "quality_score"),
 )

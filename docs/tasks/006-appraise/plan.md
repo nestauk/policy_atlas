@@ -1,6 +1,7 @@
 # Implementation Plan: 006-appraise
 
-> **Status:** drafted — pending plan-phase adversarial review + human confirmation.
+> **Status:** confirmed — 2026-07-03 · Shabeer Rauf (plan-phase adversarial review adjudicated;
+> go given via "run task 006 implementation").
 > Contract: [contract.md](contract.md) (approved 2026-07-03 · Shabeer Rauf).
 
 ## Overview
