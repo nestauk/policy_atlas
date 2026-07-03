@@ -1,0 +1,21 @@
+# CI runs the identical local gate: make setup + make verify (compose Postgres).
+# Local and CI stay in step by construction — both go through the Makefile
+# (environment.md § CI parity). Job name "verify" is the required status check
+# on dev (ruleset "Minimal Ruleset").
+name: verify
+
+on:
+  pull_request:
+  push:
+    branches: [dev]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: cp .env.example .env
+      - run: make setup
+      - run: make verify

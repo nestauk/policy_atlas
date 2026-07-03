@@ -4,6 +4,152 @@ Harness improvements and decisions, per the manual's maintenance cadence. Each d
 its **trigger to act** — don't pre-build, earn it. Baseline audit 2026-06-24 against the four docs in
 [references/](references/) (manual, quick-start, AI-native playbook, OKF).
 
+## Done (2026-07-03) — harness review follow-through
+
+Full review of harness + skills + references + backlog (user-driven). Verdict: sound; the gaps
+were the harness's own triggers firing without follow-through. Changes:
+
+- **Ratchet closed on the 2026-06-30 failure** — the `/code-review`-on-pseudocode false-positive
+  fix is now installed as a task-cycle step-7 rule: a finding must anchor to a file that ships;
+  fenced blocks in `docs/tasks/**` are pseudocode. Chose the reviewer-instruction form over the
+  failure-log's path-filter suggestion — an include-list silently drops new paths from review as
+  the codebase grows (user call).
+- **metrics.md trigger acknowledged and re-aimed** — fired at 5 merged tasks, consciously
+  deferred with a new trigger (see Deferred).
+- **De-stale sweep** — harness.md known-gaps (failure log is live, no longer an "empty stub");
+  environment.md header (001–002 → 001–005); readiness.md boxes that concrete artifacts had
+  satisfied; engineering-considerations.md command-surface language (the Makefile exists).
+  Structural fix alongside: task-cycle step 10 close-out now re-checks point-in-time claims in
+  `docs/agentic-ops/`.
+- **Design-phase adversarial review installed** (user-driven): Tier 3+ standard, Tier 2 on
+  demand — the other family attacks the drafted contract+plan before the plan 🛑 (task-cycle
+  step 3; harness.md § review lane). Fixes an asymmetry: implementation had heterogeneous review,
+  the plan had only the human gate — and design is the cheapest place to catch wrong-direction
+  work. The lack-of-context objection resolves by design: artifacts must already be
+  self-sufficient handoffs (conversation B depends on it), so a review that fails for lack of
+  context is itself a finding; settled/ADR'd decisions are scoped as context, not targets, so it
+  can't relitigate what the human already decided. First live run: task 006's design phase.
+- **Skills-wiring review** (user-driven): every installed plugin command, knowledge skill,
+  subagent and built-in cross-referenced against the cycle — no dangling references; the
+  frontend/CI/deploy/perf deferrals are correct. Fixes: **OKF gate de-personalised** — `/okf
+  validate` depended on a user-env skill teammates don't get; the gate is now `make okf-validate`
+  (`scripts/okf_validate.py`, stdlib-only, runs inside `make verify` — deterministic-work rule;
+  becomes a free CI check when CI lands; the `/okf` skill stays as authoring/nav aid). The now
+  redundant `/okf validate` boxes were dropped from the rubric + PR templates (`make verify`
+  covers them). **`/verify` wired into step 6** (drives the affected flow end-to-end; supplies
+  the exact e2e command). **Simplification standardised on `/simplify`** — the cycle said
+  `/code-simplify` while harness.md and the PR template said `/simplify`; one canonical now.
+  **`/goal` pointer added at step 5** (was defined in harness.md but absent where the
+  implement↔verify loop lives). **`/ponytail-audit` given a cadence** (see Deferred). Left
+  unwired on purpose: `agent-skills:build` (knowledge-skill counterpart already wired),
+  GitHub `/review` (human owns step 9), user-env research/viz skills.
+- **CI landed** (user-approved same day — CI is a hard gate, and the earned-enforcement case had
+  5 merged slices + a stable command surface behind it): `.github/workflows/verify.yml` runs the
+  identical `make setup` + `make verify` (compose Postgres) on every PR and on `dev` pushes;
+  `verify` added as a **required status check** to the `dev` ruleset ("Minimal Ruleset",
+  id 18078053) via `gh api`, existing rules preserved. Local/CI parity is by construction (both go
+  through the Makefile; okf-validate rides along). First live run: this branch's PR — if the
+  runner environment bites, fix the workflow, not the Makefile.
+- **2026-06/07 harness-discourse scan** (`/last30days`: 101 items — Reddit/HN/YouTube/GitHub; raw
+  in `~/Documents/Last30Days/`): the field converged on positions the harness already holds —
+  harness-over-model as the durable investment (harness-induced benchmark variance reported ~7.8x
+  model-induced; the Fable pull/restore made containment the month's headline lesson), fresh
+  verifiers over self-eval (now an Anthropic engineering hard rule), loop gates that can say no,
+  file-based state, subagent context firewalls, OKF adoption spreading. Absorbed: conversation-B
+  **baseline check** (`make verify` before building — Anthropic's session-boot validation phase);
+  Anthropic's long-running harness named as the **loops reference architecture** (see Deferred);
+  the **Cherny artifact practice** (X, 2026-07) at steps 3 and 9 — an options Artifact as the
+  design-fork decision surface, a PR-overview Artifact as a human-review reading aid.
+  Re-tested and standing: the metrics deferral against the "benchmark your harness, don't trust
+  vibes" challenge (ponytail#65) — the right instrument is the manual's §16.3 expiry A/B test at
+  model-change time, not per-slice bookkeeping at n=5; and the over-harnessing caution
+  (rajitkhanna) is the containment corollary's existing trim rule.
+- **Fable 5 prompting guidance reviewed** (platform.claude.com "Prompting Claude Fable 5",
+  user-driven): the harness already embodies most of it — evidence-grounded progress claims
+  (verification.md + contract-verifier), fresh-context verifiers over self-critique, memory as
+  files (`docs/knowledge/`), effort tiering, parallel delegation briefs; reasoning-echo audit
+  clean (grep over `.claude/`, docs, templates — no hits, so no `reasoning_extraction` refusal
+  risk). Absorbed into harness.md: delegation briefs carry **intent** (why / who-for); prefer
+  **long-lived subagents** across related subtasks over re-spawning; **remit sizing** moves to
+  the top of the difficulty range (control = evidence + gates, not slice smallness); declined
+  benign security passes fall back to the Opus/Codex review lane; and the **containment rule** —
+  model-specific tuning lives in § Model assumptions + agent frontmatter only, skills prescribe
+  process/gates not model behaviour, and any lead-model change (arrival *or* removal — the
+  guard against over-biasing to Fable) triggers the manual's §16.2 harness-expiry review.
+  Consciously skipped: `send_to_user` tool and context-budget reassurance (raw-API harness
+  concerns — Claude Code handles both) and client-timeout restructuring (unattended pipelines;
+  this cycle is human-gated at every 🛑).
+- Noted, no action: AGENTS.md Current phase repoints at task-006 step 1, per design.
+
+## Done (2026-07-02) — Fable 5 rebaseline
+
+- **Agent-side model routing for Fable 5** — `harness.md` § Model assumptions updated (was
+  "Opus-class"): Fable 5 effort-`high` lead + a per-call subagent routing table (Opus =
+  deep-reasoning offload, Sonnet = mechanical volume, Codex = heterogeneous peer), plus the
+  high-stakes rule (two independent takes, lead synthesizes) and escalate-on-quality. One-bullet
+  digest in AGENTS.md. Delegate tiers are **pinned agent definitions** —
+  `.claude/agents/deep-reasoner.md` (Opus) and `fast-worker.md` (Sonnet) — so the model choice is
+  structural (frontmatter + description-driven selection), not a table someone must remember at
+  delegation time; the Agent/Workflow `model` param is the per-call override. *(Corrects a
+  same-day earlier call that skipped the agent files as "zero files beats two" — that made routing
+  advisory-only and left subagent model choice to memory; user called it, 2026-07-02.)* Still
+  advisory by design: the **lead** model/effort (user-held, deliberately not pinned in
+  `settings.json` — a hard pin breaks on model unavailability and teammate access) and the
+  lead-only / don't-delegate rules (protocol in AGENTS.md; no mechanism pins a negative).
+- **Review-lane economics + Codex-as-implementer** (2026-07-02, user-driven: lead-model usage was
+  spiking in the review phase). Root cause: the step-7 stack (contract-verifier · `/code-review` ·
+  `/security-review` · adversarial pass) re-reads the same diff several times on the session model
+  — systematic reading, not frontier judgment. Fixes: `contract-verifier` added to
+  `.claude/agents/` (pinned Opus, read-only, encodes the step-7 role); harness.md review-lane rule
+  — reviewers run pinned/heterogeneous, the lead only adjudicates; review in a fresh conversation;
+  `/code-review` effort tiered (`medium` ≤ Tier 2, `high` Tier 3+). Codex promoted from
+  debug-rescue-only to an **implementation lane** for precise, machine-verifiable briefs when
+  Claude budget is the constraint — guarded by the **family-flip rule** (whichever family
+  implements, the other anchors review), which preserves cross-family maker ≠ checker in both
+  directions. Prompt-bearing and taste work stay lead-only regardless of lane.
+- **Cursor Fable-orchestrator pattern reviewed** (X, 2026-07) — routing already matches (Fable
+  plans/judges, cheap workers execute); absorbed the **delegation-brief shape** into harness.md
+  (one concern · scoped context · self-checkable done · decision-shaped report · rewrite-and-respawn
+  on a miss · don't delegate when judgment is the work) and a one-line Composer mapping for the
+  Cursor surface. Model *rotation* noted as practice, not doc: occasionally run a real slice's
+  subtask through another frontier model so "what good looks like" stays calibrated by work, not
+  benchmarks — the Codex peer lane already does this de facto every review.
+- **`fable-mode` skill removed** — legacy stopgap that imposed Fable-like staging discipline on
+  Opus while Fable was unavailable; superseded by Fable itself (user call, 2026-07-02).
+- **mattpocock/skills evaluated → not adopted** (~154k-star skills collection, active). Core skills
+  (`diagnosing-bugs`, `code-review`, `tdd`) are substantive, but nearly everything overlaps
+  installed machinery (tdd / code-review / debugging / grill-me ≈ `agent-skills` equivalents +
+  task-cycle; `to-prd`/`to-issues`/`triage` ≈ contract/plan; its setup skill wants to own
+  issue-tracker config — a second process layer). Same reasoning as the Spec Kit rejection. Its
+  installer (`npx skills add mattpocock/skills`) copies skills *individually*, so later adoption
+  can be per-skill. Ideas noted, not installed: a project **glossary** concept in `docs/knowledge/`
+  (adopt when vocabulary drift first bites); `diagnosing-bugs`' "no red-capable reproduction
+  command → no hypothesising" gate (fold into the debug step if debugging discipline slips).
+- **jbarbier/CLAUDE.md mined; not adopted** — ~500-line personal operating manual; roughly a third
+  is redundant with current Claude Code defaults; confirms the keep-CLAUDE.md-thin stance.
+  Absorbed: the **deterministic-work rule** (one AGENTS.md line). Deferred: its two-lane test
+  split — *gate tests* (deterministic, free, <2s, every commit) vs *periodic evals* (paid LLM
+  calls, before ship + nightly) — adopt when real inference lands behind the routing seam
+  (stub-only today; pairs with the eval-readiness persistence property).
+- **2026 guidance scan** (Cherny · Karpathy · Ng, verified sources) — the harness already embodies
+  the load-bearing recommendations: verification loops as the top lever (`make verify` +
+  `verification.md` + review stack), file-based state, subagents to protect lead context, human
+  gates scaled by tier (Karpathy's leash-as-autonomy-slider; his verified 2026 line: "LLMs automate
+  what you can verify"). Calibration notes: Cherny now frames CLAUDE.md as an **append-only earned
+  error ledger** — matches AGENTS.md-as-smell-ledger + `failure-log.md`'s earn-it policy; when a
+  failure teaches a rule, the rule lands as one AGENTS.md line. Ng's three-loop cadence (agentic
+  minutes / developer hours / external days) → keep `make verify` fast; the human product-decision
+  loop is already the 🛑 gates. **Provenance note (corrected 2026-07-02):** the viral 4-rule
+  "Karpathy CLAUDE.md" is Forrest Chang's distillation of Karpathy's January-2026 X post, not
+  Karpathy's own file; the "ten rules + self-check protocol" expansion is *attributed* to Karpathy
+  (who joined Anthropic's pre-training team ~June 2026) but unconfirmed — he hasn't commented.
+  Evaluate on merits, not authority — and on merits its six additions are already installed here:
+  reproduce-first verification ≈ `agent-skills:test-driven-development`; debugging sequence ≈
+  `agent-skills:debugging-and-error-recovery`; dependency discipline ≈ the deps hard gate + the
+  ponytail ladder; named failure modes (Kitchen Sink · Wrong Abstraction · Optimistic Path ·
+  Runaway Refactor) ≈ ponytail + "touch only what the task requires"; machine-verifiable "done" ≈
+  rubric.md. Nothing to import.
+
 ## Done (2026-06-24)
 
 - PR template ([.github/pull_request_template.md](../../.github/pull_request_template.md)),
@@ -73,11 +219,43 @@ Spec refinement is now an explicit part of the [task-cycle](../../.claude/skills
 
 ## Deferred — earn it first (aligned with the manual's "improve the system only when failure teaches you")
 
-- `failure-log.md` — fill on the **first real harness failure**, not before.
-- `metrics.md` — start tracking (time-to-green, rework rate, review findings/task, diff size) once
-  there are ~5+ merged tasks to measure.
+- `failure-log.md` — **live since 2026-06-30** (first entry: `/code-review` pseudocode
+  false-positives; its fix installed 2026-07-03). The bar continues per entry: each new failure
+  lands one harness change, or is explicitly accepted as a one-off.
+- `metrics.md` — **trigger fired at 5 merged tasks (2026-07-03) and consciously deferred**:
+  per-slice manual fill adds friction with no current question to answer, and every candidate
+  metric (time-to-green, rework rate, review findings/task, diff size) is reconstructible from
+  git/GitHub history, so deferring loses nothing. New trigger: the first harness decision that
+  actually needs numbers (the likely one: a loop's cost-per-accepted-change judgment) — then
+  **backfill by script**, don't hand-fill per slice.
 - `loops/` + any automation — only after a workflow has run manually ~3×, is stable, and has a state
   file + checkable rubric + explicit gates + budget (quick-start skill-readiness bar). Never Tier 3/4.
+  *(2026-07 note: the "loop engineering" wave — Cherny: "my job is to write loops"; Osmani's five
+  components: scheduled automations, worktree isolation, skills, MCP, separate ideation vs
+  verification subagents ("the worker does not grade its own homework") — raises the payoff, and
+  every component is already installed here. The earn-it bar stands unchanged; the first candidate
+  loop is whichever task-cycle phase gets run manually ~3× with a stable shape.)*
+  Adoption bar, refined from the loop-engineering roadmap (Deviatkin/0xCodez 14-step, 2026-06 —
+  which itself endorses restraint): pass the **4-condition test** first (task repeats ≥ weekly ·
+  an automated verifier can reject bad output · budget absorbs retry waste · agent has
+  senior-engineer tooling); build in order **manual run reliable → skill → loop → schedule**;
+  judge by **cost per accepted change** (accepted-rate < 50% = the loop is losing).
+  Reference architecture when the bar is met: Anthropic's long-running-agent harness
+  (anthropic.com/engineering, 2026-06) — initializer agent · immutable task list with per-item
+  pass flags · session boot = read progress file + git log, validate the baseline, then one item
+  per session · closure = commit + progress note; its state file is the `claude-progress.txt`
+  shape this entry's "state file" requirement means. Hard stops
+  (budget/iterations) + human gate before anything irreversible; never on judgment-call work.
+  Distinguish from `/goal`: session-scoped goal-conditioned runs against an objective stop
+  condition are in-bounds **today** (harness.md § Verification layer) — it's the *scheduling*
+  (unattended cadence) that stays behind this bar. Loop-specific risks when the bar is met:
+  Ralph-Wiggum early-exit (soft completion tokens — the gate must be a test/build, not an
+  opinion), goal drift on long runs (reread the standing spec each cycle), comprehension debt
+  (read the diffs; spot-check that the gate still catches what it claims), and the security tax
+  (audit community skills before install — measured audits found credential-leaking skills;
+  re-audit loop permissions periodically).
+- `/ponytail-audit` (repo-wide over-engineering audit) — run at milestones, ~every 5 merged
+  slices; the per-slice `ponytail-review` is already in the cycle. First run due around task 010.
 - Portable `skills-source/` split — only when Cursor (or another tool) actually needs to *run* a
   skill; today `.cursor/rules/core.mdc` just defers to AGENTS.md.
 - Enforcement hooks beyond the deny rules (e.g. a verification-evidence Stop hook) — high
@@ -87,9 +265,6 @@ Spec refinement is now an explicit part of the [task-cycle](../../.claude/skills
   diff/no-op guard**, foreground and blocking (15-min timeout), and can block the turn. So it's for
   **unattended / loop runs**, not interactive dev (≈ one Codex job per exchange). **Keep it off**;
   use `/codex:review` as the explicit review-step call instead.
-- CI (GitHub Actions) — deferred with the CI scope. `dev` is now a **protected branch** (PR required,
-  force-push/deletion blocked; 2026-06-24); when CI lands, add it as a **required status check**
-  running the **same `make verify`** so local and CI stay identical.
 
 ## Aligned — no action
 

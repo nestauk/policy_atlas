@@ -30,7 +30,9 @@ This skill drives capabilities that are **already installed** (the `agent-skills
 - **Implement:** `agent-skills:incremental-implementation`; ground framework code (LangGraph,
   SQLAlchemy, pydantic, alembic) in official docs with `agent-skills:source-driven-development`;
   design seams/interfaces with `agent-skills:api-and-interface-design`; logic & bug-fixes via
-  `agent-skills:test-driven-development` (TDD — failing test first; invoke as `/test`).
+  `agent-skills:test-driven-development` (TDD — failing test first; invoke as `/test`). A precise,
+  machine-verifiable brief can go to Codex as doer (`codex:rescue`) when Claude budget is the
+  constraint — then Claude anchors the review (family-flip; see harness.md § Agent-side model routing).
 - **Debug a red `make verify`:** `agent-skills:debugging-and-error-recovery` (root-cause, not guess);
   escalate a stubborn/substantial fix to `codex:rescue` — Codex, write-capable: a *doer*, not a reviewer.
 - **ADR:** `agent-skills:documentation-and-adrs`.
@@ -40,12 +42,15 @@ This skill drives capabilities that are **already installed** (the `agent-skills
     (correctness · readability · architecture · security · performance); lighter-weight alternative
     when the full `/code-review` workflow isn't warranted.
   - `/codex:adversarial-review` — challenge the **approach/design/assumptions** (takes focus text);
-    `agent-skills:doubt-driven-development` applies the same fresh-context skepticism to key decisions.
+    fires twice in the cycle: at plan time (step 3, Tier 3+) against `contract.md` + `plan.md`, and
+    in the step-7 stack against the diff. `agent-skills:doubt-driven-development` applies the same
+    fresh-context skepticism to key decisions.
   - `/security-review` + `agent-skills:security-and-hardening` (untrusted input — prompt injection,
     retrieval poisoning, tenant boundaries), plus the `agent-skills:code-reviewer` /
     `agent-skills:security-auditor` / `agent-skills:test-engineer` subagents (installed `agent-skills`
     plugin, not `.claude/agents/` — dispatch via Claude or view under `/agents`).
-- **Simplify:** `ponytail-review` (over-engineering pass — what to cut), then `/code-simplify` (`agent-skills:code-simplification`); `ponytail` mode throughout.
+- **Simplify:** `ponytail-review` (over-engineering pass — what to cut), then `/simplify`
+  (built-in; applies the cleanups); `ponytail` mode throughout.
 - **Situational** (not every cycle): `agent-skills:deprecation-and-migration` (schema/API migrations),
   `agent-skills:observability-and-instrumentation` (adding logging/metrics/tracing),
   `agent-skills:git-workflow-and-versioning` (branch/commit hygiene). Frontend / CI / deploy / perf
@@ -62,7 +67,7 @@ change to skip approval.
 | 0 | docs/comment typo | Implement → focused check → PR |
 | 1 | small isolated code | Implement → tests → `/code-review` + `/security-review` → PR |
 | 2 | feature slice, integration | Contract → rubric → plan → implement → verify → review → PR |
-| 3 | auth, PII, schema, runtime egress | + `agent-skills:security-auditor` audit + adversarial review + human deep review |
+| 3 | auth, PII, schema, runtime egress | + `agent-skills:security-auditor` audit + adversarial review (design, step 3 + code, step 7) + human deep review |
 | 4 | scaffold, migration, prod config, public API | + human-approved plan + ADR + rollback plan |
 
 A change touching a **hard gate** (schema · auth · **runtime egress** · deps · CI · prod
@@ -86,36 +91,61 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
    🛑 **Human approves the contract before planning** (Tier 2+).
 2. **Rubric** — copy [_templates/rubric.md](../../../docs/tasks/_templates/rubric.md). Tier 2+ only.
 3. **Plan** — `/plan` (read-only). Save accepted plan to `docs/tasks/NNN-slug/plan.md`.
-   🛑 **Human confirms the plan** (Tier 2+).
+   **Design-phase adversarial review** (Tier 3+ standard; Tier 2 on demand — a loose contract, a
+   surprising plan, or reliance on a 🟡/❓ spec area): before the 🛑, the other family attacks the
+   drafted design — `/codex:adversarial-review` on `contract.md` + `plan.md`. The brief names the
+   reading list (contract, plan, the specs they cite, AGENTS.md, `docs/deferred.md`) and scopes
+   the targets: settled/ADR'd decisions are *context, not targets* (challenge only on
+   contradiction); aim at 🟡/❓ items, plan↔spec fit, unstated assumptions, missed requirements,
+   simpler alternatives. If it can't critique from the files alone, the artifacts aren't the
+   self-sufficient handoff conversation B needs — fix that first. (Distinct from the high-stakes
+   two-independent-takes rule, which generates alternatives *before* the design call; this attacks
+   the chosen plan *after* drafting.)
+   For a real design fork, an **Artifact** laying the options out side by side (trade-offs,
+   diagrams) beats prose in chat as the decision surface.
+   🛑 **Human confirms the plan** (Tier 2+) — the lead adjudicates any adversarial findings into it.
 4. **ADR** — only if a design decision is made or changed (Tier 3–4 by default).
    `docs/adr/NNNN-slug.md`, status Accepted with sign-off date (`agent-skills:documentation-and-adrs`).
 5. **Implement** — one contract at a time, incrementally (`agent-skills:incremental-implementation`).
    structlog only (no print/stdlib logging). Touch only what the contract requires. For logic and
    bug-fixes, drive with a failing test first (`agent-skills:test-driven-development`). If building reveals the design is
    wrong, pause and flow it back (**Spec refinement**) — don't code around an outgrown spec. Land a
-   check before the next step. (Durable records — `docs/knowledge/` learning and `docs/deferred.md`
+   check before the next step. When the stop condition is objective (`make verify` green, a named
+   test), `/goal` may drive the implement ↔ verify inner loop (scope: harness.md § Verification
+   layer); judgment-call phases never — they end at a 🛑. (Durable records — `docs/knowledge/` learning and `docs/deferred.md`
    seams — are authored **after** the review stack finalises the code, at step 8 — not here, so they
    describe what actually shipped, not a draft the review then changes.)
 6. **Verify** — fill [verification.md](../../../docs/tasks/_templates/verification.md): `make verify`
    green, named-test results, the **exact** end-to-end command, diff summary, public-safety, gaps.
+   Drive the affected flow end-to-end with `/verify` (exercises real behaviour, not just tests) —
+   the flow it drove supplies the exact end-to-end command.
    If `make verify` is red, root-cause it (`agent-skills:debugging-and-error-recovery`) — don't guess.
-7. **Review stack** (after correctness — `make verify` green is the self-verify gate):
+7. **Review stack** (after correctness — `make verify` green is the self-verify gate). Reviews run
+   on pinned/heterogeneous reviewers, **not the lead** — the lead adjudicates findings and decides
+   fixes (harness.md § review lane economics). Run review in a fresh conversation; pass an effort
+   level to `/code-review` (`medium` at Tier ≤2, `high` at Tier 3+). A finding must anchor to a
+   file that **ships**: fenced code blocks in `docs/tasks/**` (contract/plan pseudocode) are not
+   implementation — confirm a flagged line exists in an executable file before raising it
+   (failure-log, 2026-06-30). Whichever model family
+   implemented, the other anchors review:
    - **Contract verifier** (Tier 2+) — a *fresh* reviewer checks the implementation against **every**
      rubric item: satisfied? what evidence? what's unverified? **And checks the claims in
      `verification.md` and any ADR against the as-built code** — "documented but not built" is a
-     finding (e.g. a named exception that doesn't exist). Use `/codex:review` or an
+     finding (e.g. a named exception that doesn't exist). Use the `contract-verifier` agent
+     (`.claude/agents/`, pinned Opus, read-only), `/codex:review`, or an
      `agent-skills:code-reviewer` subagent — **not** the agent that wrote the code.
    - `/code-review` — always.
    - `/security-review` — always (data/provenance product; every PR gets a security skim). Tier 0 docs-only may skip.
-   - **OKF bundle check** — if the task touched `docs/specs/` or `docs/knowledge/`, run `/okf validate`.
-     Every non-reserved `.md` in a bundle tree is a concept and needs a non-empty `type` (a new doc
-     dropped in without frontmatter breaks conformance).
+   - **OKF bundle check** — mechanical: `make okf-validate` (runs inside `make verify`) enforces
+     conformance — every non-reserved `.md` in a bundle tree is a concept and needs parseable
+     frontmatter with a non-empty `type`; `docs/specs/sources/` is exempt (raw frozen sources, not
+     concepts). The `/okf` skill (user-env) remains the authoring/navigation aid, not the gate.
    - Adversarial review — challenge the approach with `/codex:adversarial-review`; or the
      `agent-skills:code-reviewer` subagent, Tier 2+; add `agent-skills:security-auditor` at Tier 3+;
      `agent-skills:test-engineer` for coverage gaps. At Tier 3+ aim for **two heterogeneous reviewers**
      (e.g. `/codex:adversarial-review` + an `agent-skills:code-reviewer` subagent — different model
      families), not two of the same.
-   - `/code-simplify` (or `ponytail`) — last, cleanup only.
+   - `/simplify` — last, cleanup only (after `ponytail-review`'s what-to-cut pass).
    - Record what each review caught in `verification.md` (§ Review findings).
 8. **PR** — first, with the code now **finalised by the review stack**, author the slice's durable
    records against it: new seams → [docs/deferred.md](../../../docs/deferred.md), verified durable
@@ -127,12 +157,16 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
    (and linked to) verification.md, risk tier, AI role, review focus, known gaps, and the
    public-safety + reviews-run checklists. Open it `task/NNN-slug` → `dev` **on your go**
    (`gh pr create --base dev --body-file …`). You review the draft — you don't transcribe it.
-9. 🛑 **Human review + merge.**
+9. 🛑 **Human review + merge.** For a large diff, offer a **PR-overview Artifact** (what changed
+   and why, tables/diagrams) as a reading aid for this pass — it supplements the diff, never
+   replaces reviewing it.
 10. **Close out** (after merge) — knowledge + `deferred.md` (step 8) and any ADR (step 4) already
     shipped *in the PR*, and `AGENTS.md` **Current phase** moves with the *next* slice (step 1), so
     this step is just bookkeeping:
     - **reconcile** — confirm what merged still matches the slice's `docs/knowledge/` + ADR claims;
-      fix if review changed the code after they were written;
+      fix if review changed the code after they were written; re-check point-in-time claims in
+      `docs/agentic-ops/` (`environment.md` header, `readiness.md` boxes) if the slice changed
+      what they assert;
     - delete any temporary scratchpad.
     The slices chain — each opens by repointing Current phase (step 1) and closes here; the human
     still steers every 🛑 (this is **not** an unattended loop — see *Scope boundaries*).
@@ -216,7 +250,9 @@ already in a committed artifact; `/compact` when valuable state is in-flight and
 - **Within a long phase: `/compact`**, not a fresh start — it keeps the in-flight thread that isn't in
   a file yet (e.g. a big implementation mid-way). `verify` stays with `implement` (you iterate between them).
 - Open each fresh conversation by re-grounding (`agent-skills:context-engineering` helps): read the
-  task's `contract.md` / `plan.md` and the specs they cite, then continue the cycle.
+  task's `contract.md` / `plan.md` and the specs they cite, then continue the cycle. A **build**
+  conversation (B) additionally confirms the baseline before implementing: run `make verify` first —
+  don't build on a red base you'll later misattribute to your own changes.
 
 **Commits.** Each phase boundary ends with a commit on the `task/NNN-slug` branch — that's what turns
 the artifact into a real handoff for the next conversation. The agent prepares and runs the commit

@@ -15,4 +15,3 @@ Add slice-specific criteria (provenance, status markers, etc.) only where the co
 8. [ ] Required review stack ran for the risk tier (contract verifier · code/security review ·
        adversarial where tiered · simplification), or skipped with written justification — findings
        in [verification.md](verification.md).
-9. [ ] `/okf validate` ran if `docs/specs/` or `docs/knowledge/` changed.

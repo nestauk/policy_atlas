@@ -21,3 +21,7 @@ with code-like syntax as real implementation.
 **Fix:** Pass an explicit path filter when invoking the workflow so only executable files enter
 the diff: `git diff @{upstream}...HEAD -- src/ tests/ alembic/`. Alternatively, add a reviewer
 instruction to skip `.md` files or to confirm each finding is in an executable file before raising it.
+
+**Adopted (2026-07-03):** the reviewer-instruction form, installed in task-cycle step 7 — a finding
+must anchor to a file that ships; fenced blocks in `docs/tasks/**` are pseudocode. The path-filter
+form was rejected: an include-list silently drops new paths from review as the codebase grows.

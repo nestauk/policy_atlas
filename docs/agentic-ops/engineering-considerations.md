@@ -33,7 +33,8 @@ Likely frontend and tooling defaults (confirm before creating files or installin
 - Explicit schema validation at API, tool and event boundaries.
 - **structlog** for structured logging throughout the application — **mandatory from the first scaffold slice onward**. Configure for structured JSON output in deployed environments and developer-friendly console output locally. Do not use stdlib logging or ad-hoc print statements; all application log calls go through structlog.
 - CloudWatch for AWS runtime logs, metrics and alerts.
-- GitHub Actions for CI once implementation begins.
+- GitHub Actions for CI — landed 2026-07-03 (`verify` required check; see
+  [environment.md](environment.md) § CI parity).
 - AWS-oriented deployment (not Heroku-first).
 
 ## Approval gates (from AGENTS.md + the architecture)
@@ -125,10 +126,10 @@ Open decisions to resolve before sensitive tracing:
 
 ## Local development and CI
 
-Do not create a final command surface until the app scaffold exists. When implementation
-begins, establish a small public command surface for agents and CI — likely through package
-scripts and/or a Makefile wrapper. Expected commands: setup, dev, test, typecheck, lint,
-build, verify. Generate the concrete surface once the scaffold is in place.
+The backend command surface exists (task 001): `Makefile` — setup / test / typecheck / lint /
+build / verify (see [harness.md](harness.md) § Tool layer). Extend it — don't fork a second
+surface — when the frontend scaffold lands (a `dev` target is still expected then). CI, when
+approved, must run the same `make verify` (see [environment.md](environment.md) § CI parity).
 
 ## Code style
 

@@ -1,7 +1,8 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–002 — backend only). Update it when the setup changes, not before.
+stands (tasks 001–005 — backend only; setup unchanged since 002). Update it when the setup
+changes, not before.
 
 ## Prerequisites
 
@@ -68,8 +69,10 @@ N/A — backend only; no frontend scaffold yet (deferred). Revisit when the Next
 
 ## CI parity
 
-No CI yet (GitHub Actions deferred). Local `make verify` is the only gate. When CI lands it must run
-the **same `make verify`** against an ephemeral Postgres so local and CI stay identical.
+CI ([.github/workflows/verify.yml](../../.github/workflows/verify.yml), 2026-07-03) runs the
+**same `make setup` + `make verify`** against an ephemeral compose Postgres, and is a required
+status check for merging to `dev`. Local and CI stay identical by construction — both go through
+the Makefile; if they ever diverge, that's a bug in the workflow, not a fact to document.
 
 ## Known environment quirks
 
