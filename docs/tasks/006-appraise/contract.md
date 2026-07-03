@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** implementing.  
+> **Status:** review complete; PR open ([#9](https://github.com/nestauk/policy_atlas/pull/9), 2026-07-03) — awaiting human review + merge.  
 > Contract approved (before planning): 2026-07-03 · Shabeer Rauf (design decisions 1–4 + rubric
 > mapping + SCORE_LABELS set confirmed in review).  
 > Plan approved (before implementation): 2026-07-03 · Shabeer Rauf ("run task 006

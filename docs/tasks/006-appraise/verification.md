@@ -182,14 +182,15 @@ lane, ≤250K target).
 
 ## Rubric status
 
-Boxes 1–15 and 18 hold post-review (contract verifier PASS on all, re-checked green after the
-review-driven fixes; box 6's test count corrected). Box 17 (this review stack) — done, findings
-above. Box 16 (deferred.md seams) — due at step 8 against this now-review-finalised code:
-steerable/plan-carried rubric; `uq_sar_scope_source` relaxation for re-appraisal (note the
-`already_appraised`-vs-reclassification counting interaction flagged by `/code-review`); typed
-dimensions with the full-text second pass; v2's small-sample −1 penalty; appraisal→classification
-FK deliberately absent (mirror the classify→screen entry); plus the stale "appraise — subsequent
-slices" line to update.
+All 18 boxes hold. Boxes 1–15 and 18 post-review (contract verifier PASS on all, re-checked
+green after the review-driven fixes; box 6's test count corrected). Box 17 (this review stack)
+— done, findings above. Box 16 (deferred.md seams) — landed at step 8 against the
+review-finalised code, in this PR: steerable/plan-carried rubric; `uq_sar_scope_source`
+relaxation for re-appraisal (with the `already_appraised`-vs-reclassification counting
+interaction flagged by `/code-review`); typed dimensions with the full-text second pass; v2's
+small-sample −1 penalty; appraisal→classification FK deliberately absent; stale "appraise —
+subsequent slices" line updated. Knowledge:
+`docs/knowledge/rubric-domain-defines-appraisability.md` + index/log.
 
 ## Intent & assumptions
 
