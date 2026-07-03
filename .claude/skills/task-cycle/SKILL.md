@@ -113,6 +113,11 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
 2. **Rubric** — copy [_templates/rubric.md](../../../docs/tasks/_templates/rubric.md). Tier 2+ only.
    (Drafted alongside the contract so the step-1 human review and adversarial pass see both.)
 3. **Plan** — `/plan` (read-only). Save accepted plan to `docs/tasks/NNN-slug/plan.md`.
+   For a pattern-following slice, the previous slice's `plan.md` is the template — mirror it
+   against the as-built code (not its own claims; plans drift, code doesn't). Reach for
+   `agent-skills:planning-and-task-breakdown` only when the slice has no precedent shape
+   (first slice of a new kind: frontend, LLM tool, migration) and the decomposition itself is
+   the hard part.
    **Plan-phase adversarial review** (Tier 3+ standard; Tier 2 on demand — a loose contract, a
    surprising plan, or reliance on a 🟡/❓ spec area): before the 🛑, the other family attacks the
    drafted plan — a **read-only** brief via `codex-rescue` on `plan.md`, with the approved (and
