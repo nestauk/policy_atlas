@@ -149,8 +149,15 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
    If `make verify` is red, root-cause it (`agent-skills:debugging-and-error-recovery`) — don't guess.
 7. **Review stack** (after correctness — `make verify` green is the self-verify gate). Reviews run
    on pinned/heterogeneous reviewers, **not the lead** — the lead adjudicates findings and decides
-   fixes (harness.md § review lane economics). Run review in a fresh conversation; pass an effort
-   level to `/code-review` (`medium` at Tier ≤2, `high` at Tier 3+). A finding must anchor to a
+   fixes (harness.md § review lane economics). Run review in a fresh conversation. **Token economy
+   (failure-log, 2026-07-03):** a routine slice review lands **≤250K subagent tokens**; the Tier-3
+   baseline is **three lanes** — contract-verifier · one security lane · the heterogeneous pair
+   (Codex adversarial + `/code-review` at **`medium`** as the Claude half) — no duplicate lanes,
+   and in particular **no second Claude defect pass**: two same-family reads of one diff add
+   ~nothing (006 adjudication). `/code-review high` dispatches a workflow fan-out an order of
+   magnitude costlier than `medium` (measured on 006: 552K tokens / 16 agents for one extra
+   low-severity finding); reserve `high` for explicit user opt-in on large or hard-gate-dense
+   diffs. A finding must anchor to a
    file that **ships**: fenced code blocks in `docs/tasks/**` (contract/plan pseudocode) are not
    implementation — confirm a flagged line exists in an executable file before raising it
    (failure-log, 2026-06-30). Whichever model family
@@ -163,17 +170,25 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
      `agent-skills:code-reviewer` subagent — **not** the agent that wrote the code. (Not
      `/codex:review` — the native diff pass takes no custom instructions, so it can't carry the
      rubric/verification checklist.)
-   - `/code-review` — always.
-   - `/security-review` — always (data/provenance product; every PR gets a security skim). Tier 0 docs-only may skip.
+   - `/code-review` — always, at `medium` (see token economy above; `high` is user-opt-in only).
+     This **is** the Claude half of the Tier-3 heterogeneous pair — do not also run an
+     `agent-skills:code-reviewer` subagent on the same diff (same family, same target, near-zero
+     marginal findings; failure-log, 2026-07-03).
+   - **One security lane** — always (data/provenance product; every PR gets a security skim;
+     Tier 0 docs-only may skip): `agent-skills:security-auditor` subagent at Tier 3+,
+     `/security-review` at Tier ≤2 — **never both on the same diff** (they fully overlapped on
+     006; failure-log, 2026-07-03).
    - **OKF bundle check** — mechanical: `make okf-validate` (runs inside `make verify`) enforces
      conformance — every non-reserved `.md` in a bundle tree is a concept and needs parseable
      frontmatter with a non-empty `type`; `docs/specs/sources/` is exempt (raw frozen sources, not
      concepts). The `/okf` skill (user-env) remains the authoring/navigation aid, not the gate.
-   - Adversarial review — challenge the approach with `/codex:adversarial-review`; or the
-     `agent-skills:code-reviewer` subagent, Tier 2+; add `agent-skills:security-auditor` at Tier 3+;
-     `agent-skills:test-engineer` for coverage gaps. At Tier 3+ aim for **two heterogeneous reviewers**
-     (e.g. `/codex:adversarial-review` + an `agent-skills:code-reviewer` subagent — different model
-     families), not two of the same.
+   - Adversarial review — challenge the approach with `/codex:adversarial-review` (or a read-only
+     `codex-rescue` brief); Tier 2+. At Tier 3+ the **two heterogeneous reviewers** are this Codex
+     pass plus the `/code-review medium` pass above (different model families) — the pair is about
+     family diversity, not reviewer count; a five-axis `agent-skills:code-reviewer` subagent is an
+     *alternative* Claude half, never an addition. The security lane above already covers Tier 3
+     security depth; add `agent-skills:test-engineer` only when a coverage gap is suspected, not
+     by default.
    - `/simplify` — last, cleanup only (after `ponytail-review`'s what-to-cut pass).
    - Record what each review caught in `verification.md` (§ Review findings).
 8. **PR** — first, with the code now **finalised by the review stack**, author the slice's durable
