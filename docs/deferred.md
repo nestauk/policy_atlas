@@ -188,9 +188,12 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 
 ## Full-text ingestion (task 008 seams)
 
-- **Live `DocumentFetcher`** — the seam is built (protocol + `run_harness(document_fetcher=…)`);
-  wiring live HTTP is **runtime egress**, its own gated slice. Requirements carried from the
-  008 contract + review stack (pre-registered so they aren't rediscovered in production):
+- **Live `DocumentFetcher`** — **confirmed in-scope for v3.0** (user, 2026-07-05: the product
+  cannot function as intended without live fetching), so this entry is *sequencing*, not
+  scoping-out — unlike most of this file. The seam is built (protocol +
+  `run_harness(document_fetcher=…)`); wiring live HTTP is **runtime egress**, its own gated
+  slice. Requirements carried from the 008 contract + review stack (pre-registered so they
+  aren't rediscovered in production):
   explicit timeouts, redirect handling with an explicit protocol policy (SSRF posture for
   provider-supplied URLs), politeness + per-host rate limiting, retry/backoff, content-type
   sniffing (a PDF served as `application/octet-stream` must not fall through to the plain-text
