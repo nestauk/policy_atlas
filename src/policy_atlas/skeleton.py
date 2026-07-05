@@ -3,8 +3,8 @@
 Smoke command: python -m policy_atlas.skeleton
 
 Creates a project + run, ingests a synthetic source, creates a screening scope,
-then walks screen → classify → appraise over the same scope and prints the
-results and the event log.
+then walks screen → classify → appraise → ingest_full_text over the same scope
+and prints the results and the event log.
 All gates approved; see ADR 0001 and contract.md.
 """
 
@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.engine import Connection
 
 from policy_atlas import events
@@ -27,10 +27,12 @@ from policy_atlas.plan import Plan, compile
 from policy_atlas.schema import (
     evidence_scope,
     project,
+    project_source_snapshot,
     runs,
     source_appraisal_result,
     source_classification_result,
     source_screening_result,
+    source_snapshot,
 )
 
 log = structlog.get_logger()
@@ -88,6 +90,36 @@ def _run_component(
     run_harness(
         conn, config=config, project_id=project_id, run_id=run_id, provider=StubEchoProvider()
     )
+
+
+def _text_basis_distribution(conn: Connection, project_id: uuid.UUID) -> dict[str, int]:
+    """Effective text basis per corpus document: the full-text snapshot's when attached,
+    else the envelope's.
+    """
+    full_text_snap = source_snapshot.alias("full_text_snap")
+    effective_basis = func.coalesce(full_text_snap.c.text_basis, source_snapshot.c.text_basis)
+    rows = conn.execute(
+        select(effective_basis.label("text_basis"))
+        .select_from(
+            project_source_snapshot
+            .join(
+                source_snapshot,
+                project_source_snapshot.c.source_snapshot_id
+                == source_snapshot.c.source_snapshot_id,
+            )
+            .join(
+                full_text_snap,
+                project_source_snapshot.c.full_text_snapshot_id
+                == full_text_snap.c.source_snapshot_id,
+                isouter=True,
+            )
+        )
+        .where(project_source_snapshot.c.project_id == project_id)
+    ).fetchall()
+    distribution: dict[str, int] = {}
+    for row in rows:
+        distribution[row.text_basis] = distribution.get(row.text_basis, 0) + 1
+    return distribution
 
 
 def main() -> None:
@@ -171,6 +203,19 @@ def main() -> None:
                 source_appraisal_result.c.rubric_version,
             ).where(source_appraisal_result.c.project_id == project_id)
         ).fetchall()
+
+        log.info(
+            "text_basis_distribution_before",
+            **_text_basis_distribution(conn, project_id),
+        )
+
+        _run_component(conn, project_id, scope_id, "ingest_full_text")
+
+        log.info(
+            "text_basis_distribution_after",
+            **_text_basis_distribution(conn, project_id),
+        )
+
         log_entries = events.read(conn, project_id)
 
     # Per-backend acquire counts — makes the authentic-shapes path visible
@@ -198,6 +243,7 @@ def main() -> None:
 
     # Surface the skip counts so both the scored and skipped paths are visible
     _log_component_counts(log_entries, "appraise")
+    _log_component_counts(log_entries, "ingest_full_text")
 
     for entry in log_entries:
         log.info("event_log_entry", sequence=entry["sequence"], event_type=entry["event_type"])

@@ -15,6 +15,7 @@ COMPONENT_REGISTRY: dict[str, dict[str, list[str]]] = {
     "screen":   {"requires": ["evidence_scope_id"]},
     "classify": {"requires": ["evidence_scope_id"]},
     "appraise": {"requires": ["evidence_scope_id"]},
+    "ingest_full_text": {"requires": ["evidence_scope_id"]},
 }
 VALID_COMPONENTS = set(COMPONENT_REGISTRY.keys())
 
