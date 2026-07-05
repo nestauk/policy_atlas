@@ -10,6 +10,11 @@ specs in [docs/specs/](../../specs/index.md).
 > attachment · real openly-licensed fixtures across Nesta's three mission domains ·
 > docling/time-budget/GPU + paywall-detection + chunk-volume-bias seams · AGPL-3.0
 > licence · all three gated changes + spec clarification + fixture-policy amendment).  
+> Adversarial findings adjudicated: 2026-07-05 (9 findings: 2 blockers + 6 majors + 1
+> minor — 7 adopted, 1 adopted-in-part, 1 resolved by explicit supersession; see
+> § Contract-stage adversarial review). The schema gate grew by one named CHECK and one
+> failure reason within the approved columns — flagged for the human at re-read, judged
+> minor (enforces already-approved semantics; no new column/table).  
 > Rev 2 changes at user direction: parser selection researched properly (parse quality is
 > foundational for a RAG tool — no default libraries); **truncation abolished** (full text
 > or honest failure, never silent partial); ingestion is a **bounded parallel fan-out**,
@@ -165,10 +170,13 @@ and the chunks written here are permanent.
    uploads, whose text arrived with them — the column describes the *fetch pipeline*, text
    availability stays `source_snapshot.text_basis`) · `ingested` · `fetch_failed` ·
    `parse_failed` — with a named CHECK, a second CHECK tying `ingested` ⟺
-   `full_text_snapshot_id IS NOT NULL`, and `full_text_error` carrying a **closed,
-   machine-readable reason**: `paywall` · `not_found` · `too_large` · `timeout` ·
-   `corrupt` · `no_text_layer` (scanned/image-only — distinct, because OCR is a deferred
-   seam, not a silent hole) · `thin_text` · `empty`. Attempt-level detail (each URL tried,
+   `full_text_snapshot_id IS NOT NULL`, a **third CHECK tying failure statuses ⟺
+   `full_text_error` non-null** (adversarial finding 2 — "never silent" enforced by the
+   schema, not just code), and `full_text_error` carrying a **closed, machine-readable
+   reason**: `no_url` (no candidate URL resolvable — adversarial finding 1: a durable
+   state, not just a run-summary count) · `paywall` · `not_found` · `too_large` ·
+   `timeout` · `corrupt` · `no_text_layer` (scanned/image-only — distinct, because OCR
+   is a deferred seam, not a silent hole) · `thin_text` · `empty`. Attempt-level detail (each URL tried,
    per-attempt errors) goes to structured logs — telemetry plane per spec — and the
    `component.completed` payload carries the run-record summary counts by status and
    reason. Queryable per-document outcome + run summary; nothing swallowed.
@@ -180,7 +188,14 @@ and the chunks written here are permanent.
    fetch+parse succeeds; every failure is logged per attempt. **Landing-page scraping with
    PDF-link discovery and the DOI-URL fallback are live-seam work** — deferred, recorded
    (v2's meta-refresh follow and PDF-link discovery are the port-forward pattern there).
-   A document with no candidate URL at all is `skipped_no_url` (visible, counted). Uploads
+   A document with no candidate URL at all is `fetch_failed`/`no_url` — persisted on the
+   link like every other failure, so "never tried" (`not_attempted`) and "tried,
+   impossible" stay distinguishable (adversarial finding 1). **OpenAlex precedence note
+   (adversarial finding 4, resolved by explicit supersession):** v2/deferred.md recorded
+   `primary_location → best_oa_location → open_access.oa_url`; this contract deliberately
+   puts `best_oa_location.pdf_url` first — it is OpenAlex's own computed best open copy,
+   the highest-probability fetchable PDF — and the build updates the deferred.md line to
+   match. Uploads
    are never fetched (their text arrived with them).
 5. **Parser selection: PyMuPDF4LLM for PDF, trafilatura for HTML — quality within a
    stated wall-clock budget (user decision, 2026-07-05: a ~100-document run should
@@ -246,15 +261,28 @@ and the chunks written here are permanent.
    (`trafilatura_para_v1` / `plain_para_v1`): paragraph chunks, `{paragraph}` locators.
    One parse, one segmentation per snapshot (spec); token-budgeted re-chunking belongs to
    the embed seam. Content hash over the joined chunk text (same convention as
-   `ingest_upload`); `source_locator` = the URL actually fetched; `fetched_from`, content
-   type and parse profile recorded in snapshot metadata. A **thin-text guard** (parsed
+   `ingest_upload`); `source_locator` = the URL actually fetched; **required full-text
+   snapshot metadata** (adversarial findings 3 + 8): `parse_profile`,
+   `segmentation_policy` (snapshot-level twin of the per-chunk column — one segmentation
+   per snapshot, pinned where readers look first), `fetched_from`,
+   `envelope_source_snapshot_id` and `ingested_by_run_id` (the governance breadcrumbs —
+   the spec's identity triple reaches the full-text snapshot through
+   link → run → `search.executed`, and these make the chain explicit and test-assertable
+   rather than implicit), and the fetched content type. A **thin-text guard** (parsed
    text below a minimum, threshold a plan detail) → `parse_failed`/`thin_text` — the
    direct fix for v2 reporting thin DOI-landing stubs as `ok` full text.
 8. **Ingestion is a bounded parallel fan-out (user direction, 2026-07-05).** v2 parsed
    serially (its throughput bottleneck at ~200 documents) and its concurrency settings
    were dead config (defined, never wired). Here: per-document ingestion (fetch → parse →
-   segment) is a **pure function** with no DB access, executed over a **bounded process
-   pool** (CPU-bound parsing + genuinely cancellable timeouts, per decision 6); DB writes
+   segment) is a **pure function** with no DB access; the **fetch stays in the parent**
+   (fetcher injection never crosses the process boundary — adversarial finding 7: spawn
+   start methods require picklable worker arguments, so workers receive only primitives:
+   document bytes, content type, caps) and **parse + segment run in per-document worker
+   processes that are genuinely terminable** (adversarial finding 6:
+   `ProcessPoolExecutor.cancel()` cannot kill a running task — the mechanism must
+   actually terminate the worker on timeout and survive it, e.g. per-document
+   `multiprocessing.Process` with `terminate()`; exact shape a plan detail, the
+   terminate-and-survive property test-enforced); DB writes
    happen in the parent in **deterministic eligible-set order** as results complete, so
    the persisted outcome is independent of completion order and worker count
    (test-enforced: workers=1 and workers=4 produce identical DB state). Worker count is a
@@ -282,10 +310,13 @@ and the chunks written here are permanent.
    - **Provenance manifest, licence-guarded:** `fulltext_manifest.json` maps each
      acquire-fixture URL → outcome (`ok` + file · `403` · `404` · oversize · no-text-layer)
      and, for every committed document, records **title, real source URL, publisher,
-     licence, and retrieval date**. A test asserts every committed document carries a
-     licence from the allowlist (own-org · CC BY family) — the successor to 007's leak
-     guard (fetch-keying URLs stay `example.org`; the *documents* are real and their
-     provenance is the safety property).
+     an explicit licence (SPDX-like where possible), and retrieval date**. Ownership is
+     not a licence (adversarial finding 9): Nesta documents record their *stated* licence
+     when one exists, else an explicit `permission` entry naming the authorisation (org
+     + who + date) — the allowlist is CC-BY-family licences or a recorded permission,
+     never bare "own-org". A test asserts every committed document carries one of the
+     two — the successor to 007's leak guard (fetch-keying URLs stay `example.org`; the
+     *documents* are real and their provenance is the safety property).
    - **Failure cases** need no real paywalled content: manifest entries simulate 403/404/
      oversize; the `no_text_layer` case uses an image-only PDF derived dev-time from one
      of the licensed documents (provenance recorded).
@@ -303,8 +334,10 @@ and the chunks written here are permanent.
 10. **Idempotency and re-runs.** Re-running the component skips `ingested` links
     (`already_ingested`, counted) and **retries** failed ones (statuses overwrite —
     deterministic against fixtures; live-world transience is why failed is retryable;
-    v2 had no retry anywhere). Counting invariant, test-enforced:
-    `eligible == ingested + already_ingested + fetch_failed + parse_failed + skipped_no_url`.
+    v2 had no retry anywhere; retrying `no_url` is harmless — no URL again → same state).
+    Counting invariant, test-enforced:
+    `eligible == ingested + already_ingested + fetch_failed + parse_failed`
+    (`no_url` counts inside `fetch_failed`; the summary also reports counts by reason).
     Return shape mirrors acquire: counts by status and failure reason, no per-document
     lists.
 11. **Multi-PDF Overton documents: primary `pdf_url` only in v3.0.** Every Overton fixture
@@ -380,11 +413,14 @@ CheckConstraint(full_text_status IN ('not_attempted','ingested','fetch_failed','
                 name="ck_pss_full_text_status")
 CheckConstraint((full_text_status = 'ingested') = (full_text_snapshot_id IS NOT NULL),
                 name="ck_pss_full_text_consistent")
+CheckConstraint((full_text_status IN ('fetch_failed','parse_failed')) = (full_text_error IS NOT NULL),
+                name="ck_pss_full_text_error_presence")
 ```
 
-`full_text_error` values (closed vocabulary, enforced in code + tests, not a CHECK — the
-reason list may grow at the live seam without a migration): `paywall` · `not_found` ·
-`too_large` · `timeout` · `corrupt` · `no_text_layer` · `thin_text` · `empty`.
+`full_text_error` values (closed vocabulary, enforced in code + tests, not enumerated in
+a CHECK — the reason list may grow at the live seam without a migration; *presence* is
+CHECK-enforced above): `no_url` · `paywall` · `not_found` · `too_large` · `timeout` ·
+`corrupt` · `no_text_layer` · `thin_text` · `empty`.
 Downgrade drops the columns. No data migration (existing rows take the default).
 
 ### Python
@@ -439,10 +475,12 @@ HTML report page, paywall 403, dead link 404, oversize (simulated), image-only P
 and untouched non-screened-in records.
 
 **`test_ingest_full_text.py`** — new file, covering:
-- Migration roundtrip; table count still 16; both named CHECKs reject invalid rows
-  (bad status; `ingested` without snapshot id; snapshot id with non-`ingested` status).
+- Migration roundtrip; table count still 16; all three named CHECKs reject invalid rows
+  (bad status; `ingested` without snapshot id; snapshot id with non-`ingested` status;
+  failure status with null error; non-failure status with an error set).
 - URL resolution order per backend (OpenAlex four-step precedence; Overton two-step);
-  no-URL record → `skipped_no_url`.
+  no-URL record → `fetch_failed`/`no_url` persisted on the link (distinguishable from
+  `not_attempted` by query).
 - Cascade: first candidate fails, second succeeds — attempts logged, outcome `ingested`.
 - PDF parse (PyMuPDF4LLM): multi-page report → heading-bounded chunks under
   `pymupdf4llm_struct_v1` with page + heading-path locators, tables intact as chunks,
@@ -458,8 +496,12 @@ and untouched non-screened-in records.
 - HTML parse (trafilatura): main content extracted, nav/boilerplate absent (assert a
   known boilerplate string from the fixture page is not in any chunk).
 - Success semantics: new snapshot `text_basis="full_text"`, own content hash over joined
-  chunks, `source_locator` = fetched URL, parse profile + `fetched_from` in metadata;
-  envelope snapshot byte-identical before/after (immutability).
+  chunks, `source_locator` = fetched URL, required metadata complete (`parse_profile`,
+  `segmentation_policy`, `fetched_from`, `envelope_source_snapshot_id`,
+  `ingested_by_run_id`, content type); envelope snapshot byte-identical before/after
+  (immutability).
+- Governance chain: from a full-text snapshot, the run's `search.executed` events are
+  reachable (metadata breadcrumbs → link → `run_id` → event log) — asserted end-to-end.
 - Fan-out determinism: workers=1 vs workers=4 → identical DB state (snapshots, hashes,
   chunk sequences, statuses).
 - Eligibility: only the scope's screened-in acquired links; `not_relevant`,
@@ -470,8 +512,13 @@ and untouched non-screened-in records.
   reason; **no** per-document event types emitted (asserted).
 - Harness round-trip: `Plan(component="ingest_full_text")` → statuses + snapshots in DB.
 - Zero-egress guard: extend 007's import test to `ingest_full_text.py`; recorder script
-  outside the package import graph (the parsers are model-free local code — no network
-  path exists beyond the import test).
+  outside the package import graph; **socket-deny test** (adversarial finding 5, adopted
+  in part): a full `ingest_full_text_sources` run over the fixtures with socket creation
+  blocked (e.g. a guard fixture failing any `socket.socket` call) completes green — the
+  zero-egress claim proven at runtime, not only by import inspection. (The finding's
+  "reject non-fixture fetchers" half is **not** adopted: the injection point is the
+  deliberate seam, test doubles are legitimate fetchers, and live wiring stays gated
+  organisationally.)
 - Licence guard: every committed document's manifest entry carries an allowlisted licence
   (own-org · CC BY family) + source URL + retrieval date; fetch-keying URLs all
   `example.org`; `_meta` present.
@@ -514,12 +561,47 @@ rejected without.
   the LLM/live seams.
 - `characterise`+ and everything downstream of appraise — subsequent slices.
 
+### Contract-stage adversarial review — findings & adjudication (Codex, 2026-07-05)
+
+Nine findings; none challenged the human-settled decisions; no over-engineering finding.
+Adjudicated by the lead:
+1. `skipped_no_url` counted but not persisted (blocker): **adopted** — collapsed into
+   `fetch_failed`/`no_url`; durable, distinguishable from `not_attempted`; invariant
+   simplified to four buckets with per-reason summary counts.
+2. Failure reasons not schema-tied (blocker): **adopted** — third named CHECK
+   (`ck_pss_full_text_error_presence`): failure status ⟺ `full_text_error` non-null.
+3. Governance-identity leg implicit under link-level attachment: **adopted** —
+   `envelope_source_snapshot_id` + `ingested_by_run_id` required in full-text snapshot
+   metadata; chain to `search.executed` events test-asserted end-to-end.
+4. OpenAlex URL precedence contradicts the 007/deferred record: **resolved by explicit
+   supersession** — `best_oa_location` first (OpenAlex's own computed best open copy);
+   deferred.md updated by this slice.
+5. Zero-egress guard weaker than the dependency surface: **adopted in part** —
+   socket-deny runtime test added; rejecting non-fixture fetchers not adopted (the
+   injection point is the deliberate seam).
+6. Process-pool timeout can't cancel a running task: **adopted** — terminate-and-survive
+   requirement named (per-document terminable worker; `ProcessPoolExecutor.cancel()`
+   limitation on the record); mechanism a plan detail, property test-enforced.
+7. Injected fetchers/doubles may not be picklable under spawn: **adopted** — fetch stays
+   in the parent; workers receive primitives only (bytes, content type, caps); fetcher
+   injection never crosses the process boundary.
+8. Snapshot-level segmentation identity omissible: **adopted** — `segmentation_policy`
+   added to required full-text snapshot metadata, test-asserted.
+9. "Own-org" treated as a licence (minor): **adopted** — manifest requires an explicit
+   licence (SPDX-like) or a recorded permission entry (org + who + date); bare ownership
+   never passes the guard.
+
+Gate-scope note for the human: findings 1 + 2 grow the approved schema item by one CHECK
+and one reason value within the same three columns — judged minor (they enforce the
+approved semantics), flagged here rather than silently folded.
+
 ## Constraints & approval gates
 
 **Three gated changes (approval needed at this gate):**
 
-1. **Schema** — three columns + two named CHECKs + one FK on `project_source_snapshot`;
-   one Alembic migration.
+1. **Schema** — three columns + three named CHECKs + one FK on `project_source_snapshot`;
+   one Alembic migration. (The third CHECK — failure status ⟺ reason present — was added
+   at adversarial adjudication, finding 2; same columns, enforces approved semantics.)
 2. **Dependencies:** `pymupdf4llm` (brings `pymupdf` — the compiled MuPDF engine,
    AGPL-3.0, licence-compatible with the project since rev 3; no ML stack, no model
    weights) and `trafilatura` (light: lxml-based, Apache-2.0). Both parse offline by

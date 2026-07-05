@@ -29,9 +29,10 @@ progress, not done.
        with it) · multi-PDF Overton assembly · injection-screening posture extended to
        fetched full text · cross-project full-text snapshot reuse.
 8. [ ] Every eligible link lands in exactly one counted bucket
-       (`eligible == ingested + already_ingested + fetch_failed + parse_failed +
-       skipped_no_url`) — invariant test-enforced; failure is queryable per document
-       (`full_text_status` + closed-vocabulary `full_text_error`), never only logged.
+       (`eligible == ingested + already_ingested + fetch_failed + parse_failed`, with
+       per-reason counts incl. `no_url` in the summary) — invariant test-enforced;
+       failure is queryable per document (`full_text_status` + closed-vocabulary
+       `full_text_error`, presence CHECK-enforced), never only logged.
 9. [ ] **No truncation path exists**: a stored `full_text` snapshot is the whole parsed
        document; over-cap and over-time fail loudly (`too_large`, `timeout`); the
        long-report fixture ingests to its final section (test-enforced).
@@ -41,9 +42,11 @@ progress, not done.
         named and versioned on every full-text snapshot.
 11. [ ] Ingestion fan-out is real and deterministic: workers=1 vs workers=4 produce
         identical DB state (test-enforced); the worker parameter is wired, not dead config.
-12. [ ] Every committed fixture document carries an allowlisted licence (own-org · CC BY
-        family) with source URL, publisher and retrieval date in the manifest —
-        licence-guard test-enforced; no paywalled or all-rights-reserved content committed.
+12. [ ] Every committed fixture document carries an explicit licence (CC BY family,
+        SPDX-like) **or** a recorded permission entry (org + who + date) — bare
+        organisational ownership never passes — with source URL, publisher and retrieval
+        date in the manifest; licence-guard test-enforced; no paywalled or
+        all-rights-reserved content committed.
 13. [ ] Required review stack ran for Tier 3 (contract verifier · `/code-review` medium ·
         one security lane · adversarial review) or skipped with written justification —
         findings in [verification.md](verification.md).
