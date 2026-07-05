@@ -1,0 +1,2009 @@
+{
+ "_meta": {
+  "backend": "overton",
+  "mode": "semantic squery",
+  "recorder_query": "housing affordability policy",
+  "recorded_at": "2026-07-05",
+  "record_count": 12,
+  "sanitizer_version": "v1",
+  "sanitized": "real structure/nesting/nullability, fabricated values; DOIs 10.99999/*, URLs example.org (leak guard, test-enforced)",
+  "quirk_coverage": [
+   "DOI in keyed_other_identifiers.doi list (recorded)",
+   "no-DOI record (common case) (recorded)",
+   "empty-string snippet with populated llm_document_description (recorded)",
+   "neither snippet nor llm_document_description (patched: v2-confirmed/live-observed shape)",
+   "string-shaped authors (patched: v2-confirmed/live-observed shape)",
+   "list-shaped authors (recorded)",
+   "string-shaped topics (patched: v2-confirmed/live-observed shape)",
+   "list-shaped topics (recorded)",
+   "government publisher (recorded)",
+   "IGO publisher (recorded)",
+   "translated title (recorded)",
+   "multi-PDF grouped document (patched: v2-confirmed/live-observed shape)"
+  ]
+ },
+ "records": [
+  {
+   "policy_document_id": "sanitizedorg1bcd6b-9a9e73d38cfdde74d7dee8c1c06189f2",
+   "pdf_document_id": "sanitizedorg1bcd6b-9a9e73d38cfdde74d7dee8c1c06189f2-7fff55963ce680cbba6c99f01213b8a7",
+   "grouped_pdf_ids_in_result_count": 2,
+   "grouped_pdf_ids_in_result": [
+    "sanitizedorg1bcd6b-9a9e73d38cfdde74d7dee8c1c06189f2-7fff55963ce680cbba6c99f01213b8a7",
+    "sanitizedorg25456e-2466c05fd15cc803c87e45d940de2834-ab8e79ef8f43b4f2d0808ff4ee56598f-c020543910b9504b8093ca1fd5d2c827"
+   ],
+   "es_score": null,
+   "overton_url": "https://example.org/063e1c70bd50",
+   "overton_url_with_context": "https://example.org/063e1c70bd50",
+   "title": "Saffron zephyr harbor cedar prairie sonnet",
+   "translated_title": "",
+   "source": {
+    "source_id": "sanitizedorg1bcd6b",
+    "title": "Quartz glacier cobalt",
+    "country": "IGO",
+    "state": "",
+    "type": "igo",
+    "subtype": "",
+    "sector": "Public Sector",
+    "organisation_type": "IGO",
+    "function": [
+     "International Body",
+     "IGO Department or Agency",
+     "Monitoring or Regulatory Body",
+     "Policy Centre",
+     "Research Centre"
+    ],
+    "region": [
+     "International Organizations",
+     "Non-OECD members"
+    ],
+    "is_aggregator": "f"
+   },
+   "citation_count": 5,
+   "citation_count_including_self": 13,
+   "authors": "Casey Fablewood",
+   "authors_are_organizations": true,
+   "snippet": "Cobalt lantern vertex velvet pewter mosaic pigment juniper saffron mosaic pigment tundra",
+   "llm_document_theme": "Marble orchid willow",
+   "llm_document_description": "Cedar cobalt cedar pewter sable prairie quartz marble zephyr saffron juniper velvet",
+   "published_on": "2024-10-07",
+   "added_on": "2024-10-29",
+   "document_url": "https://doi.org/10.99999/cf91b048b2",
+   "pdf_url": "n/a",
+   "thumbnail": "https://example.org/bcafa9765f7a",
+   "thumbnail_path": "cache_image/pdf_thumbnails/sanitized/a887737b645bdec1.png",
+   "topics": "Affordable housing",
+   "dont_show_pdf": "true",
+   "classifications": [
+    "economy, business and finance",
+    "economy, business and finance>economy>macro economics",
+    "economy, business and finance>economy",
+    "science and technology",
+    "economy, business and finance>economy>macro economics>mortgage",
+    "environment"
+   ],
+   "source_tags": [],
+   "overton_policy_document_series": "Working paper",
+   "other_identifiers": [
+    "10.99999/6800781e75"
+   ],
+   "keyed_other_identifiers": {
+    "doi": [
+     "10.99999/6800781e75"
+    ]
+   },
+   "languages": [
+    "eng"
+   ],
+   "sdgcategories": [
+    "SDG 11: Sustainable Cities and Communities",
+    "SDG Target 11.1",
+    "SDG Target 11.6"
+   ],
+   "cofog_divisions": [
+    "5: Environmental Protection",
+    "5.3: Pollution Abatement",
+    "6: Housing and Community Amenities",
+    "6.1: Housing Development"
+   ],
+   "cites": {
+    "scholarly": [
+     {
+      "doi": "10.99999/33345ecb51",
+      "title": "Marble vertex orchid",
+      "publisher": "Quartz glacier cobalt"
+     },
+     {
+      "doi": "10.99999/ab7b1f8c70",
+      "title": "Vertex lantern timber cobalt meadow",
+      "journal": "Ember harbor zephyr saffron sable marble",
+      "publisher": "Quartz glacier cobalt"
+     },
+     {
+      "doi": "10.99999/2486bd65f1",
+      "title": "Meadow delta cedar",
+      "publisher": "Quartz glacier cobalt"
+     },
+     {
+      "doi": "10.99999/963b98a73b",
+      "title": null,
+      "publisher": null
+     },
+     {
+      "doi": "10.99999/315b1cf21a",
+      "title": "Sable harbor orchid",
+      "publisher": "Quartz glacier cobalt"
+     },
+     {
+      "doi": "10.99999/466ad50300",
+      "title": "Mosaic sonnet zephyr sonnet meadow orchid",
+      "journal": "Pewter ember prairie",
+      "publisher": "Quartz glacier cobalt"
+     },
+     {
+      "doi": "10.99999/5301f02fac",
+      "title": "Cobalt quartz delta lantern sable velvet tapestry tapestry",
+      "publisher": "Marble sonnet cobalt"
+     },
+     {
+      "doi": "10.99999/af39f2cc03",
+      "title": "Velvet sable willow ember quartz",
+      "publisher": "Quartz glacier cobalt"
+     },
+     {
+      "doi": "10.99999/cda74cb157",
+      "title": "Ember vertex marble glacier harbor willow",
+      "journal": "Pigment ember delta juniper",
+      "publisher": "Harbor harbor harbor harbor prairie juniper sable"
+     },
+     {
+      "doi": "10.99999/e55d83554c",
+      "title": "Onyx ember timber onyx tapestry saffron willow",
+      "journal": "Tundra vertex mosaic tundra onyx",
+      "publisher": "Harbor harbor harbor harbor prairie juniper sable"
+     }
+    ],
+    "policy": [
+     {
+      "overton_id": "sanitizedorg1bcd6b-9e12bfead85b52ed84aee4ad7272c0ab",
+      "title": "Marble vertex orchid",
+      "policy_source_id": "sanitizedorg1bcd6b",
+      "dois": [
+       "10.99999/33345ecb51"
+      ]
+     },
+     {
+      "overton_id": "sanitizedorg1bcd6b-37b8c645148c23f81864e80ab20261b1",
+      "title": "Vertex lantern timber cobalt meadow",
+      "policy_source_id": "sanitizedorg1bcd6b",
+      "dois": [
+       "10.99999/ab7b1f8c70"
+      ]
+     },
+     {
+      "overton_id": "sanitizedorg1bcd6b-f8eced1e0f7bf3c13907f999a2482a57",
+      "title": "Pigment juniper pewter cedar quartz glacier orchid pigment glacier sable",
+      "policy_source_id": "sanitizedorg1bcd6b",
+      "dois": [
+       "10.99999/2486bd65f1"
+      ]
+     },
+     {
+      "overton_id": "sanitizedorg1bcd6b-85e9d7b419a06f0832b60817e9e20f43",
+      "title": "Meadow saffron ember",
+      "policy_source_id": "sanitizedorg1bcd6b",
+      "dois": [
+       "10.99999/963b98a73b"
+      ]
+     },
+     {
+      "overton_id": "sanitizedorg1bcd6b-3f49d4bc65d6f54d646e3fc9ed7158e7",
+      "title": "Sable harbor orchid",
+      "policy_source_id": "sanitizedorg1bcd6b",
+      "dois": [
+       "10.99999/315b1cf21a"
+      ]
+     },
+     {
+      "overton_id": "sanitizedorg1bcd6b-5b604ef25bc091c3ede66f64712a24a9",
+      "title": "Mosaic sonnet zephyr sonnet meadow orchid",
+      "policy_source_id": "sanitizedorg1bcd6b",
+      "dois": [
+       "10.99999/466ad50300"
+      ]
+     },
+     {
+      "overton_id": "sanitizedorg1bcd6b-a82b8b1e406203d56d7308c52f6b531c",
+      "title": "Cobalt quartz delta lantern sable velvet tapestry tapestry",
+      "policy_source_id": "sanitizedorg1bcd6b",
+      "dois": [
+       "10.99999/5301f02fac"
+      ]
+     },
+     {
+      "overton_id": "sanitizedorg1bcd6b-0e1fcf663b7aefef31f0215c97491c12",
+      "title": "Velvet sable willow ember quartz",
+      "policy_source_id": "sanitizedorg1bcd6b",
+      "dois": [
+       "10.99999/af39f2cc03"
+      ]
+     },
+     {
+      "overton_id": "sanitizedorg1bcd6b-4aeaa68836acbb500e0f6bc24c6d6bce",
+      "title": "Ember vertex marble glacier harbor willow",
+      "policy_source_id": "sanitizedorg1bcd6b",
+      "dois": [
+       "10.99999/cda74cb157"
+      ]
+     },
+     {
+      "overton_id": "sanitizedorg1bcd6b-d76d45a2ba4cb150e407cff982ce4ab8",
+      "title": "Onyx ember timber onyx tapestry saffron willow",
+      "policy_source_id": "sanitizedorg1bcd6b",
+      "dois": [
+       "10.99999/e55d83554c"
+      ]
+     }
+    ],
+    "news": [],
+    "people": []
+   },
+   "highlights": []
+  },
+  {
+   "policy_document_id": "sanitizedorg4865c8-87f76d506c1dffc7209ea4b578a699d5",
+   "pdf_document_id": "sanitizedorg4865c8-87f76d506c1dffc7209ea4b578a699d5-87f76d506c1dffc7209ea4b578a699d5",
+   "grouped_pdf_ids_in_result_count": 1,
+   "grouped_pdf_ids_in_result": [
+    "sanitizedorg4865c8-87f76d506c1dffc7209ea4b578a699d5-87f76d506c1dffc7209ea4b578a699d5"
+   ],
+   "es_score": null,
+   "overton_url": "https://example.org/1a89450039a4",
+   "overton_url_with_context": "https://example.org/1a89450039a4",
+   "title": "Velvet zephyr glacier harbor saffron vertex willow",
+   "translated_title": "",
+   "source": {
+    "source_id": "sanitizedorg4865c8",
+    "title": "Cobalt ember meadow",
+    "country": "USA",
+    "state": "",
+    "type": "think tank",
+    "subtype": "",
+    "sector": "Third Sector",
+    "organisation_type": "Think Tank",
+    "function": [
+     "Research Centre",
+     "Policy Centre"
+    ],
+    "region": [
+     "North America",
+     "G7",
+     "G20",
+     "Very high human development",
+     "OECD members"
+    ],
+    "is_aggregator": "f"
+   },
+   "citation_count": 1,
+   "citation_count_including_self": 1,
+   "authors": [
+    "Drew Mockford"
+   ],
+   "authors_are_organizations": true,
+   "snippet": "",
+   "llm_document_theme": "Tundra willow cobalt",
+   "llm_document_description": "",
+   "published_on": "2026-03-18",
+   "added_on": "2026-04-09",
+   "document_url": "https://example.org/7af181a9eb31",
+   "pdf_url": "https://example.org/7af181a9eb31",
+   "thumbnail": "https://example.org/3a63d316bd35",
+   "thumbnail_path": "cache_image/pdf_thumbnails/sanitized/9d072a6aa250ccd5.png",
+   "topics": [
+    "Poverty",
+    "Section 8 (housing)",
+    "Affordable housing",
+    "Owner-occupancy",
+    "Subsidy",
+    "Policy",
+    "Zoning",
+    "Tax",
+    "Economy",
+    "Income",
+    "Real estate economics",
+    "Politics",
+    "Housing",
+    "Living wage",
+    "Demand"
+   ],
+   "dont_show_pdf": "false",
+   "classifications": [
+    "economy, business and finance",
+    "economy, business and finance>economic sector",
+    "economy, business and finance>economic sector>construction and property",
+    "economy, business and finance>economic sector>financial and business service",
+    "science and technology",
+    "science and technology>social sciences",
+    "economy, business and finance>economic sector>construction and property>real estate",
+    "economy, business and finance>economy",
+    "science and technology>social sciences>economics",
+    "economy, business and finance>economic sector>financial and business service>personal income"
+   ],
+   "source_tags": [],
+   "overton_policy_document_series": "Publication",
+   "other_identifiers": [],
+   "keyed_other_identifiers": [],
+   "languages": [
+    "eng"
+   ],
+   "sdgcategories": [
+    "SDG 11: Sustainable Cities and Communities",
+    "SDG Target 11.1"
+   ],
+   "cofog_divisions": [
+    "6: Housing and Community Amenities",
+    "6.1: Housing Development"
+   ],
+   "cites": {
+    "scholarly": [],
+    "policy": [],
+    "news": [],
+    "people": []
+   },
+   "highlights": []
+  },
+  {
+   "policy_document_id": "sanitizedorgde99b7-9c84aaebbe0981407797c51dae3e9f95",
+   "pdf_document_id": "sanitizedorgde99b7-9c84aaebbe0981407797c51dae3e9f95-9c84aaebbe0981407797c51dae3e9f95",
+   "grouped_pdf_ids_in_result_count": 1,
+   "grouped_pdf_ids_in_result": [
+    "sanitizedorgde99b7-9c84aaebbe0981407797c51dae3e9f95-9c84aaebbe0981407797c51dae3e9f95"
+   ],
+   "es_score": null,
+   "overton_url": "https://example.org/91fdb6390274",
+   "overton_url_with_context": "https://example.org/91fdb6390274",
+   "title": "Vertex velvet pewter onyx pewter harbor",
+   "translated_title": "",
+   "source": {
+    "source_id": "sanitizedorgde99b7",
+    "title": "Quartz cobalt prairie ember juniper",
+    "country": "UK",
+    "state": "",
+    "type": "government",
+    "subtype": null,
+    "sector": "Public Sector",
+    "organisation_type": "Legislative Body",
+    "function": [
+     "National Body",
+     "Parliament, Senate or Congress",
+     "Committee"
+    ],
+    "region": [
+     "Europe",
+     "G7",
+     "G20",
+     "Very high human development",
+     "OECD members"
+    ],
+    "is_aggregator": "f"
+   },
+   "citation_count": 0,
+   "citation_count_including_self": 0,
+   "authors": [
+    "Drew Sampleton"
+   ],
+   "authors_are_organizations": true,
+   "snippet": "",
+   "llm_document_theme": "Onyx juniper cedar lantern",
+   "llm_document_description": "Saffron glacier tundra orchid willow saffron tundra lantern zephyr cedar orchid timber",
+   "published_on": "2025-10-22",
+   "added_on": "2025-10-22",
+   "document_url": "https://example.org/ef2da3f38189",
+   "pdf_url": "https://example.org/ef2da3f38189",
+   "thumbnail": "https://example.org/849c7deebc79",
+   "thumbnail_path": "cache_image/pdf_thumbnails/sanitized/1aa16fa034a77255.png",
+   "topics": [
+    "Cost of living",
+    "Mortgage",
+    "Loan-to-value ratio",
+    "Right to Buy",
+    "Affordable housing",
+    "Economy",
+    "Finance",
+    "Real estate economics",
+    "Renting",
+    "Help to Buy",
+    "Market (economics)",
+    "Leasehold estate",
+    "Stamp duty in the United Kingdom"
+   ],
+   "dont_show_pdf": "false",
+   "classifications": [
+    "economy, business and finance",
+    "economy, business and finance>economic sector",
+    "economy, business and finance>economic sector>construction and property",
+    "economy, business and finance>economy>macro economics",
+    "economy, business and finance>market and exchange",
+    "economy, business and finance>market and exchange>loan market",
+    "economy, business and finance>economy>macro economics>mortgage",
+    "economy, business and finance>economy",
+    "economy, business and finance>economic sector>construction and property>real estate",
+    "economy, business and finance>market and exchange>loan market>loans"
+   ],
+   "source_tags": [
+    "Cobalt meadow sonnet lantern cobalt",
+    "Mosaic vertex onyx tapestry vertex orchid"
+   ],
+   "overton_policy_document_series": "Publication",
+   "other_identifiers": [],
+   "keyed_other_identifiers": [],
+   "languages": [
+    "eng"
+   ],
+   "sdgcategories": [
+    "SDG 11: Sustainable Cities and Communities",
+    "SDG Target 11.1"
+   ],
+   "cofog_divisions": [
+    "6: Housing and Community Amenities",
+    "6.1: Housing Development"
+   ],
+   "cites": {
+    "scholarly": [
+     {
+      "doi": "10.99999/f4ad379e55",
+      "title": "Pigment orchid glacier willow pewter timber pigment cobalt timber glacier quill willow",
+      "journal": "Marble tundra cedar tapestry",
+      "publisher": "Quartz ember cedar"
+     }
+    ],
+    "policy": [
+     {
+      "overton_id": "sanitizedorgc1fe5d-3a1b9e2a6960da3a0bab93f48dcc1a5e",
+      "title": "Cedar willow sable willow sable pigment sonnet",
+      "policy_source_id": "sanitizedorgc1fe5d",
+      "dois": []
+     },
+     {
+      "overton_id": "sanitizedorg025e58-5f3876e47697fc8b1ad4de95cf05f1f6",
+      "title": "Tundra cedar willow delta sable sonnet timber marble zephyr",
+      "policy_source_id": "sanitizedorg025e58",
+      "dois": []
+     }
+    ],
+    "news": [],
+    "people": []
+   },
+   "highlights": []
+  },
+  {
+   "policy_document_id": "sanitizedorgf49937-f18086f777c8acbad55bb7f2230c557d",
+   "pdf_document_id": "sanitizedorgf49937-f18086f777c8acbad55bb7f2230c557d-f18086f777c8acbad55bb7f2230c557d",
+   "grouped_pdf_ids_in_result_count": 1,
+   "grouped_pdf_ids_in_result": [
+    "sanitizedorgf49937-f18086f777c8acbad55bb7f2230c557d-f18086f777c8acbad55bb7f2230c557d"
+   ],
+   "es_score": null,
+   "overton_url": "https://example.org/861564811544",
+   "overton_url_with_context": "https://example.org/861564811544",
+   "title": "Sonnet saffron mosaic cedar",
+   "translated_title": "Quill mosaic marble saffron mosaic sable pigment",
+   "source": {
+    "source_id": "sanitizedorgf49937",
+    "title": "Onyx delta quartz",
+    "country": "Netherlands",
+    "state": "",
+    "type": "government",
+    "subtype": "",
+    "sector": "Public Sector",
+    "organisation_type": "Legislative Body",
+    "function": [
+     "National Body",
+     "Parliament, Senate or Congress"
+    ],
+    "region": [
+     "Europe",
+     "Very high human development",
+     "OECD members",
+     "EU27",
+     "EEA"
+    ],
+    "is_aggregator": "f"
+   },
+   "citation_count": 0,
+   "citation_count_including_self": 0,
+   "authors": [
+    "Robin Sampleton"
+   ],
+   "authors_are_organizations": true,
+   "snippet": "",
+   "llm_document_theme": "Sonnet orchid tundra saffron mosaic ember pewter timber sable meadow",
+   "llm_document_description": "Quill prairie marble juniper tapestry cedar marble onyx prairie sonnet juniper ember",
+   "published_on": "2025-06-26",
+   "added_on": "2025-09-13",
+   "document_url": "https://example.org/63c7141e1da9.pdf",
+   "pdf_url": "https://example.org/63c7141e1da9.pdf",
+   "thumbnail": "https://example.org/4db55c59a596",
+   "thumbnail_path": "cache_image/pdf_thumbnails/sanitized/9cc31586defd6b8e.png",
+   "topics": [
+    "Dwelling",
+    "Law",
+    "Legal writing",
+    "Justice",
+    "Netherlands",
+    "Government of the Netherlands",
+    "Jargon",
+    "Legal concepts",
+    "Legal communication",
+    "Dutch legislation",
+    "Statutory law"
+   ],
+   "dont_show_pdf": "false",
+   "classifications": [
+    "crime, law and justice",
+    "environment",
+    "politics",
+    "politics>government",
+    "crime, law and justice>law",
+    "politics>government>parliament",
+    "environment>environmental politics"
+   ],
+   "source_tags": [],
+   "overton_policy_document_series": "Publication",
+   "other_identifiers": [],
+   "keyed_other_identifiers": [],
+   "languages": [
+    "dut"
+   ],
+   "sdgcategories": [
+    "SDG 11: Sustainable Cities and Communities",
+    "SDG Target 11.1"
+   ],
+   "cofog_divisions": [
+    "6: Housing and Community Amenities",
+    "6.1: Housing Development"
+   ],
+   "cites": {
+    "scholarly": [],
+    "policy": [],
+    "news": [],
+    "people": []
+   },
+   "highlights": []
+  },
+  {
+   "policy_document_id": "sanitizedorg93a3df-7e7e75d9cd6f5b53a0803edca29f531a",
+   "pdf_document_id": "sanitizedorg93a3df-7e7e75d9cd6f5b53a0803edca29f531a-21e3c6fa20576ac8e9db8e7804b54a1f",
+   "grouped_pdf_ids_in_result_count": 1,
+   "grouped_pdf_ids_in_result": [
+    "sanitizedorg93a3df-7e7e75d9cd6f5b53a0803edca29f531a-21e3c6fa20576ac8e9db8e7804b54a1f"
+   ],
+   "es_score": null,
+   "overton_url": "https://example.org/1b751dfe167a",
+   "overton_url_with_context": "https://example.org/1b751dfe167a",
+   "title": "Velvet pigment pigment timber willow juniper",
+   "translated_title": "",
+   "source": {
+    "source_id": "sanitizedorg93a3df",
+    "title": "Ember quartz willow",
+    "country": "USA",
+    "state": "",
+    "type": "think tank",
+    "subtype": null,
+    "sector": "Third Sector",
+    "organisation_type": "Think Tank",
+    "function": [
+     "Research Centre",
+     "Policy Centre"
+    ],
+    "region": [
+     "North America",
+     "G7",
+     "G20",
+     "Very high human development",
+     "OECD members"
+    ],
+    "is_aggregator": "f"
+   },
+   "citation_count": 0,
+   "citation_count_including_self": 0,
+   "authors": [
+    "Casey Stubbs"
+   ],
+   "authors_are_organizations": true,
+   "snippet": "Sonnet harbor orchid saffron glacier quartz quartz zephyr pewter lantern timber tundra",
+   "llm_document_theme": "Ember sonnet orchid ember",
+   "llm_document_description": "Glacier sable lantern delta cedar sonnet vertex saffron sonnet quartz juniper vertex",
+   "published_on": "2026-02-12",
+   "added_on": "2026-03-26",
+   "document_url": "https://example.org/e1209ba1a2a6",
+   "pdf_url": "https://example.org/0e75c7f28b57",
+   "thumbnail": "https://example.org/e96cd73dd856",
+   "thumbnail_path": "cache_image/pdf_thumbnails/sanitized/7d29eefc1c537c9c.png",
+   "topics": [
+    "Price",
+    "Subsidy",
+    "Economy",
+    "Macroeconomics",
+    "Economics",
+    "Political economy",
+    "Inflation",
+    "Economies",
+    "Politics",
+    "Public policy"
+   ],
+   "dont_show_pdf": "false",
+   "classifications": [
+    "science and technology",
+    "economy, business and finance",
+    "science and technology>social sciences",
+    "prices",
+    "politics>government",
+    "economy, business and finance>economy",
+    "politics",
+    "science and technology>social sciences>economics"
+   ],
+   "source_tags": [],
+   "overton_policy_document_series": "Publication",
+   "other_identifiers": [],
+   "keyed_other_identifiers": [],
+   "languages": [
+    "eng"
+   ],
+   "sdgcategories": [
+    "SDG 11: Sustainable Cities and Communities",
+    "SDG Target 11.1"
+   ],
+   "cofog_divisions": [
+    "4: Economic Affairs",
+    "4.1: General Economic, Commercial, and Labour Affairs",
+    "6: Housing and Community Amenities",
+    "6.1: Housing Development"
+   ],
+   "cites": {
+    "scholarly": [],
+    "policy": [
+     {
+      "overton_id": "sanitizedorgfb4a6e-61e0f3d0f39c3d9add7b4bf16f177603",
+      "title": "Zephyr sable marble meadow saffron harbor zephyr ember pigment",
+      "policy_source_id": "sanitizedorgfb4a6e",
+      "dois": []
+     }
+    ],
+    "news": [],
+    "people": []
+   },
+   "highlights": []
+  },
+  {
+   "policy_document_id": "sanitizedorg23396d-80ffb71f4011d31866fe5e4032586a8c",
+   "pdf_document_id": "sanitizedorg23396d-80ffb71f4011d31866fe5e4032586a8c-4592e49d75583762493daad9cf8178fb",
+   "grouped_pdf_ids_in_result_count": 1,
+   "grouped_pdf_ids_in_result": [
+    "sanitizedorg23396d-80ffb71f4011d31866fe5e4032586a8c-4592e49d75583762493daad9cf8178fb"
+   ],
+   "es_score": null,
+   "overton_url": "https://example.org/a48760cc7161",
+   "overton_url_with_context": "https://example.org/a48760cc7161",
+   "title": "Timber tapestry sonnet pewter tapestry saffron quill",
+   "translated_title": "",
+   "source": {
+    "source_id": "sanitizedorg23396d",
+    "title": "Timber meadow ember vertex ember",
+    "country": "Germany",
+    "state": "",
+    "type": "think tank",
+    "subtype": "",
+    "sector": "Third Sector",
+    "organisation_type": "Think Tank",
+    "function": [
+     "Research Centre",
+     "Policy Centre"
+    ],
+    "region": [
+     "Europe",
+     "G7",
+     "G20",
+     "Very high human development",
+     "OECD members",
+     "EU27",
+     "EEA"
+    ],
+    "is_aggregator": "f"
+   },
+   "citation_count": 0,
+   "citation_count_including_self": 0,
+   "authors": [
+    "Sam Fablewood"
+   ],
+   "authors_are_organizations": true,
+   "snippet": "Saffron delta pewter velvet orchid cedar pewter saffron cedar cobalt pewter prairie",
+   "llm_document_theme": "Ember pigment meadow vertex",
+   "llm_document_description": "Zephyr tapestry quill zephyr glacier quartz quartz marble meadow onyx meadow saffron",
+   "published_on": "2025-11-20",
+   "added_on": "2025-12-03",
+   "document_url": "https://example.org/7a1dc062abde",
+   "pdf_url": "https://example.org/0f7f4a9baf7b.pdf",
+   "thumbnail": "https://example.org/c16c832b6d31",
+   "thumbnail_path": "cache_image/pdf_thumbnails/sanitized/2831a843332f1537.png",
+   "topics": [
+    "Gini coefficient",
+    "Household income in the United States",
+    "Economic inequality",
+    "Macroeconomics",
+    "Gross domestic product",
+    "Affordable housing",
+    "Poverty",
+    "Income",
+    "Income distribution",
+    "Regression analysis",
+    "Consumption (economics)",
+    "Public housing",
+    "Economics",
+    "Homeownership in the United States",
+    "Housing inequality",
+    "Median",
+    "Statistics",
+    "Unemployment",
+    "Inflation",
+    "Labour economics",
+    "Policy",
+    "Economy",
+    "National accounts",
+    "Subsidy",
+    "Fixed effects model",
+    "Linear regression",
+    "Correlation",
+    "Economic growth",
+    "Econometrics",
+    "Household",
+    "Rent regulation",
+    "Demography",
+    "Sampling (statistics)",
+    "Dependent and independent variables",
+    "Minimum wage",
+    "Employment",
+    "Mixture model",
+    "Globalization"
+   ],
+   "dont_show_pdf": "false",
+   "classifications": [
+    "economy, business and finance",
+    "labour",
+    "science and technology>social sciences",
+    "economy, business and finance>economy",
+    "labour>unemployment",
+    "science and technology>mathematics",
+    "science and technology>social sciences>economics",
+    "science and technology"
+   ],
+   "source_tags": [],
+   "overton_policy_document_series": "Working paper",
+   "other_identifiers": [],
+   "keyed_other_identifiers": [],
+   "languages": [
+    "eng"
+   ],
+   "sdgcategories": [
+    "SDG 11: Sustainable Cities and Communities",
+    "SDG Target 11.1"
+   ],
+   "cofog_divisions": [
+    "6: Housing and Community Amenities",
+    "6.1: Housing Development",
+    "10: Social Protection",
+    "10.6: Housing"
+   ],
+   "cites": {
+    "scholarly": [
+     {
+      "doi": "10.99999/08060803e0",
+      "title": "Saffron marble harbor zephyr prairie glacier saffron lantern marble zephyr onyx delta",
+      "journal": "Velvet timber pewter mosaic",
+      "publisher": "Vertex tapestry willow prairie"
+     },
+     {
+      "doi": "10.99999/06e3b9022c",
+      "title": "Saffron timber ember saffron zephyr quartz vertex cobalt",
+      "journal": "Willow mosaic sable vertex mosaic",
+      "publisher": "Timber tundra zephyr"
+     },
+     {
+      "doi": "10.99999/7dc41601f0",
+      "title": "Sable mosaic timber pewter pewter vertex cedar mosaic saffron pigment",
+      "journal": "Mosaic lantern saffron tapestry onyx harbor glacier",
+      "publisher": "Juniper ember sonnet"
+     },
+     {
+      "doi": "10.99999/a03881abbf",
+      "title": "Saffron vertex sonnet pigment glacier cedar tapestry sonnet zephyr saffron onyx tundra",
+      "journal": "Orchid juniper cedar tapestry sable",
+      "publisher": "Vertex onyx mosaic"
+     },
+     {
+      "doi": "10.99999/3a1802ee56",
+      "title": "Velvet pewter saffron orchid saffron juniper zephyr saffron meadow timber vertex sonnet",
+      "journal": "Mosaic lantern ember",
+      "publisher": "Vertex tapestry willow prairie"
+     },
+     {
+      "doi": "10.99999/6a61ac6d0c",
+      "title": "Harbor quill quartz pewter sable",
+      "journal": "Quill tapestry tapestry",
+      "publisher": "Meadow velvet harbor pigment"
+     },
+     {
+      "doi": "10.99999/4a8cb7bb27",
+      "title": "Pewter cedar velvet cedar mosaic velvet lantern cedar pigment juniper",
+      "journal": "Orchid juniper cedar tapestry sable",
+      "publisher": "Vertex onyx mosaic"
+     },
+     {
+      "doi": "10.99999/405920821e",
+      "title": "Meadow mosaic mosaic glacier juniper saffron",
+      "journal": "Mosaic sonnet glacier",
+      "publisher": "Meadow velvet harbor pigment"
+     },
+     {
+      "doi": "10.99999/d4ed8136de",
+      "title": "Harbor quill harbor willow quartz mosaic vertex velvet cedar mosaic quartz",
+      "journal": "Juniper glacier onyx",
+      "publisher": "Timber tundra zephyr"
+     },
+     {
+      "doi": "10.99999/10d4632b0a",
+      "title": "Marble cedar juniper onyx quartz orchid sable delta quartz zephyr velvet",
+      "journal": "Tundra harbor timber delta",
+      "publisher": "Timber tundra zephyr"
+     },
+     {
+      "doi": "10.99999/f68812c0d1",
+      "title": "Marble ember saffron ember tundra quartz sonnet",
+      "journal": "Tundra tapestry sable",
+      "publisher": "Juniper ember sonnet"
+     },
+     {
+      "doi": "10.99999/09110ce2c7",
+      "title": "Pigment zephyr cobalt quill harbor meadow willow",
+      "journal": "Prairie zephyr meadow tapestry",
+      "publisher": "Zephyr tapestry marble tundra"
+     },
+     {
+      "doi": "10.99999/032feb0748",
+      "title": "Meadow vertex zephyr orchid vertex ember vertex lantern lantern marble willow tapestry",
+      "journal": "Meadow prairie sonnet",
+      "publisher": "Timber tundra zephyr"
+     },
+     {
+      "doi": "10.99999/b2a5065c13",
+      "title": "Delta mosaic cobalt juniper glacier marble sable meadow tapestry velvet marble",
+      "journal": "Quill pigment cedar",
+      "publisher": "Timber tapestry quartz willow tundra quartz"
+     },
+     {
+      "doi": "10.99999/5596e0ccb4",
+      "title": "Lantern zephyr prairie pigment vertex orchid",
+      "journal": "Orchid glacier meadow juniper",
+      "publisher": "Quartz ember cedar"
+     },
+     {
+      "doi": "10.99999/0900c164e3",
+      "title": "Velvet quartz quartz pewter juniper harbor pewter pigment meadow willow sonnet",
+      "journal": "Ember cobalt pewter mosaic onyx",
+      "publisher": "Vertex onyx mosaic"
+     },
+     {
+      "doi": "10.99999/d20f68cbed",
+      "title": "Saffron juniper meadow pigment cobalt orchid saffron delta saffron onyx",
+      "journal": "Saffron juniper zephyr",
+      "publisher": "Timber tundra zephyr"
+     },
+     {
+      "doi": "10.99999/4cf84d7d4c",
+      "title": "Quill meadow willow saffron lantern quartz sable timber meadow cedar mosaic cedar",
+      "journal": "Pigment harbor glacier",
+      "publisher": "Vertex onyx mosaic"
+     },
+     {
+      "doi": "10.99999/2e0f2d37a9",
+      "title": "Lantern tundra mosaic sable willow orchid pewter",
+      "journal": "Lantern lantern timber sonnet sonnet",
+      "publisher": "Quartz ember cedar"
+     },
+     {
+      "doi": "10.99999/a98d2aa093",
+      "title": "Delta juniper sable vertex meadow delta zephyr",
+      "journal": "Mosaic mosaic quartz",
+      "publisher": "Vertex onyx mosaic"
+     },
+     {
+      "doi": "10.99999/8b50afc01b",
+      "title": "Quill lantern marble marble glacier tapestry orchid mosaic harbor velvet",
+      "journal": "Pigment harbor glacier",
+      "publisher": "Vertex onyx mosaic"
+     },
+     {
+      "doi": "10.99999/cc5736627a",
+      "title": "Lantern delta quartz prairie tapestry velvet saffron ember onyx marble prairie tapestry",
+      "journal": "Pigment harbor glacier",
+      "publisher": "Vertex onyx mosaic"
+     },
+     {
+      "doi": "10.99999/44ded1c99b",
+      "title": "Vertex quill timber marble pigment juniper",
+      "journal": "Orchid orchid ember ember juniper",
+      "publisher": "Quartz harbor meadow marble lantern vertex pewter"
+     },
+     {
+      "doi": "10.99999/9331ab3780",
+      "title": "Vertex sonnet harbor mosaic willow cedar tundra harbor",
+      "journal": "Quill tapestry tapestry",
+      "publisher": "Timber tundra zephyr"
+     },
+     {
+      "doi": "10.99999/dce9ddc677",
+      "title": "Tapestry willow tapestry lantern sable pewter delta lantern",
+      "journal": "Tundra meadow onyx",
+      "publisher": "Timber tundra zephyr"
+     },
+     {
+      "doi": "10.99999/8e5c6e73b1",
+      "title": "Pewter tapestry sonnet mosaic quartz pigment cobalt velvet cedar ember ember timber",
+      "journal": "Lantern lantern vertex pigment cobalt",
+      "publisher": "Willow cedar harbor"
+     },
+     {
+      "doi": "10.99999/414665588b",
+      "title": "Tapestry tapestry quill vertex sonnet timber tapestry willow zephyr ember",
+      "journal": "Lantern sable onyx prairie",
+      "publisher": "Quartz ember cedar"
+     },
+     {
+      "doi": "10.99999/2c0f2651e2",
+      "title": "Juniper pewter harbor pewter meadow meadow onyx cobalt",
+      "journal": "Tapestry willow saffron",
+      "publisher": "Timber tapestry quartz willow tundra quartz"
+     },
+     {
+      "doi": "10.99999/5c926cfbc4",
+      "title": "Ember sable harbor",
+      "journal": "Prairie glacier cedar vertex vertex cedar",
+      "publisher": "Vertex onyx mosaic"
+     },
+     {
+      "doi": "10.99999/87c895f8e8",
+      "title": "Sonnet cobalt quill harbor saffron",
+      "journal": "Velvet cedar pewter",
+      "publisher": "Timber tapestry quartz willow tundra quartz"
+     },
+     {
+      "doi": "10.99999/2b6ffea187",
+      "title": "Mosaic vertex pewter vertex tundra glacier saffron saffron marble willow quill cobalt",
+      "journal": "Zephyr cobalt tundra pigment",
+      "publisher": "Quartz ember cedar"
+     },
+     {
+      "doi": "10.99999/4c80e6f9f8",
+      "title": "Orchid cobalt lantern quill timber velvet quill sable orchid marble saffron",
+      "journal": "Mosaic mosaic quartz",
+      "publisher": "Vertex onyx mosaic"
+     },
+     {
+      "doi": "10.99999/ee3eab8fee",
+      "title": "Pewter prairie tundra timber glacier sonnet cobalt cobalt sonnet lantern sable tundra",
+      "journal": "Saffron lantern zephyr",
+      "publisher": "Timber tapestry quartz willow tundra quartz"
+     },
+     {
+      "doi": "10.99999/c5af5dbc6d",
+      "title": "Prairie pigment orchid harbor mosaic velvet vertex glacier marble",
+      "journal": "Timber pewter saffron timber lantern",
+      "publisher": "Timber tundra zephyr"
+     },
+     {
+      "doi": "10.99999/381e3285f5",
+      "title": "Pewter quill orchid cobalt cobalt meadow velvet quartz timber onyx saffron cobalt",
+      "journal": "Quartz mosaic pewter",
+      "publisher": "Quartz ember cedar"
+     },
+     {
+      "doi": "10.99999/27aade319e",
+      "title": "Marble quartz mosaic saffron cedar orchid pigment tundra quartz sable glacier",
+      "journal": "Orchid glacier meadow juniper",
+      "publisher": "Quartz ember cedar"
+     },
+     {
+      "doi": "10.99999/47222bfb46",
+      "title": "Delta velvet sable meadow saffron quartz sable pewter cobalt",
+      "journal": "Mosaic mosaic quartz",
+      "publisher": "Vertex onyx mosaic"
+     },
+     {
+      "doi": "10.99999/f70362221d",
+      "title": "Tundra lantern quill tapestry ember quartz ember lantern",
+      "journal": "Tapestry marble meadow mosaic",
+      "publisher": "Vertex onyx mosaic"
+     },
+     {
+      "doi": "10.99999/ed91ec11ea",
+      "title": "Juniper saffron meadow tundra saffron saffron quartz timber sable sonnet",
+      "journal": "Mosaic mosaic quartz",
+      "publisher": "Vertex onyx mosaic"
+     },
+     {
+      "doi": "10.99999/3abb7fc73a",
+      "title": "Quill meadow meadow pigment vertex pewter vertex sable sable quill sable pigment",
+      "journal": "Pewter willow quartz",
+      "publisher": "Timber tundra zephyr"
+     },
+     {
+      "doi": "10.99999/cc655e3b88",
+      "title": "Juniper harbor tapestry sable lantern willow marble cedar cedar meadow sable willow",
+      "journal": "Quill orchid tapestry",
+      "publisher": "Quartz ember cedar"
+     },
+     {
+      "doi": "10.99999/b03ff5b743",
+      "title": "Velvet sable sonnet lantern tundra mosaic pewter velvet velvet tapestry",
+      "journal": "Onyx velvet prairie",
+      "publisher": "Quartz ember cedar"
+     },
+     {
+      "doi": "10.99999/0a55e3fb0c",
+      "title": "Quill cedar prairie ember quill pigment cedar ember glacier orchid delta pigment",
+      "journal": "Marble harbor orchid",
+      "publisher": "Quartz ember cedar"
+     },
+     {
+      "doi": "10.99999/a3089d8368",
+      "title": "Sonnet glacier sable willow vertex mosaic",
+      "journal": "Quill orchid tapestry",
+      "publisher": "Quartz ember cedar"
+     },
+     {
+      "doi": "10.99999/7da49d958b",
+      "title": "Tundra marble sonnet sable mosaic pigment quill",
+      "journal": "Willow mosaic sable vertex mosaic",
+      "publisher": "Timber tundra zephyr"
+     },
+     {
+      "doi": "10.99999/4385ae7715",
+      "title": "Delta orchid quill sable velvet willow quill quartz saffron harbor saffron",
+      "journal": "Cedar prairie quartz",
+      "publisher": "Tapestry prairie pigment harbor"
+     },
+     {
+      "doi": "10.99999/323b04d9af",
+      "title": "Timber onyx tundra sonnet zephyr tapestry",
+      "journal": "Cedar cedar pigment sable",
+      "publisher": "Quartz ember cedar"
+     },
+     {
+      "doi": "10.99999/5716a4c7e8",
+      "title": "Zephyr cedar vertex quill sable delta willow sonnet ember",
+      "journal": "Willow mosaic sable vertex mosaic",
+      "publisher": "Timber tundra zephyr"
+     },
+     {
+      "doi": "10.99999/94739f3bd6",
+      "title": "Lantern tapestry timber cedar",
+      "journal": "Glacier meadow lantern juniper",
+      "publisher": "Timber tundra zephyr"
+     },
+     {
+      "doi": "10.99999/b9fc1660ea",
+      "title": "Vertex harbor glacier tapestry cobalt orchid delta ember",
+      "journal": "Mosaic mosaic quartz",
+      "publisher": "Vertex onyx mosaic"
+     },
+     {
+      "doi": "10.99999/d7e52b4e8c",
+      "title": "Sable lantern saffron quill orchid juniper ember pewter",
+      "journal": "Sable pewter delta",
+      "publisher": "Vertex onyx mosaic"
+     },
+     {
+      "doi": "10.99999/34db25d216",
+      "title": "Saffron zephyr cobalt orchid mosaic meadow cedar",
+      "journal": "Glacier juniper harbor",
+      "publisher": "Timber tundra zephyr"
+     },
+     {
+      "doi": "10.99999/8942db7519",
+      "title": "Tapestry onyx glacier delta harbor glacier cobalt glacier vertex zephyr delta saffron",
+      "journal": "Pigment harbor glacier",
+      "publisher": "Vertex onyx mosaic"
+     },
+     {
+      "doi": "10.99999/c26c32dc6d",
+      "title": "Ember cedar quartz vertex cobalt delta willow",
+      "journal": "Marble meadow timber harbor quill",
+      "publisher": "Meadow velvet harbor pigment"
+     },
+     {
+      "doi": "10.99999/7c7d13dcb3",
+      "title": "Zephyr mosaic timber juniper lantern timber pewter timber",
+      "journal": "Tapestry delta sonnet tapestry quill",
+      "publisher": "Marble willow timber"
+     },
+     {
+      "doi": "10.99999/3dcb888bc2",
+      "title": "Timber saffron juniper cedar orchid cobalt vertex cedar",
+      "journal": "Onyx pigment ember",
+      "publisher": "Cobalt cedar juniper glacier"
+     },
+     {
+      "doi": "10.99999/712bb674a3",
+      "title": "Meadow vertex harbor velvet ember saffron zephyr tundra meadow saffron quill onyx",
+      "journal": "Pigment harbor glacier",
+      "publisher": "Vertex onyx mosaic"
+     },
+     {
+      "doi": "10.99999/97e12e31b3",
+      "title": "Quill marble lantern zephyr cedar willow juniper marble glacier",
+      "journal": "Saffron lantern orchid",
+      "publisher": "Vertex lantern tundra"
+     },
+     {
+      "doi": "10.99999/98e6645a0e",
+      "title": "Prairie prairie marble saffron onyx sable prairie tapestry saffron cedar onyx delta",
+      "journal": "Mosaic delta orchid sonnet sable",
+      "publisher": "Juniper ember sonnet"
+     },
+     {
+      "doi": "10.99999/a794a10844",
+      "title": "Zephyr saffron timber meadow cedar ember delta cobalt pigment",
+      "journal": "Orchid pigment sonnet saffron harbor",
+      "publisher": "Sable cedar orchid"
+     },
+     {
+      "doi": "10.99999/e1aed7a473",
+      "title": "Juniper vertex onyx harbor pigment pigment",
+      "journal": "Ember saffron velvet",
+      "publisher": "Juniper ember sonnet"
+     },
+     {
+      "doi": "10.99999/b9e113afa4",
+      "title": "Onyx meadow orchid pewter mosaic willow juniper willow glacier ember marble willow",
+      "journal": "Willow mosaic sable vertex mosaic",
+      "publisher": "Timber tundra zephyr"
+     },
+     {
+      "doi": "10.99999/51847f8d44",
+      "title": "Vertex tundra zephyr orchid quill prairie tapestry velvet tapestry cobalt",
+      "journal": "Willow mosaic sable vertex mosaic",
+      "publisher": "Timber tundra zephyr"
+     },
+     {
+      "doi": "10.99999/7e1bea081a",
+      "title": "Pigment meadow sonnet tundra velvet mosaic sable lantern meadow",
+      "journal": "Juniper quill delta mosaic",
+      "publisher": "Vertex onyx mosaic"
+     },
+     {
+      "doi": "10.99999/29a196292e",
+      "title": "Pewter zephyr timber vertex timber orchid",
+      "journal": "Prairie juniper zephyr",
+      "publisher": "Juniper ember sonnet"
+     },
+     {
+      "doi": "10.99999/154be0a899",
+      "title": "Tundra juniper prairie delta orchid sable harbor orchid sonnet sonnet quartz juniper",
+      "journal": "Lantern sable onyx prairie",
+      "publisher": "Quartz ember cedar"
+     },
+     {
+      "doi": "10.99999/b318704e78",
+      "title": "Onyx velvet sonnet sable pigment ember quartz willow mosaic timber pewter",
+      "journal": "Timber sonnet mosaic",
+      "publisher": "Quartz ember cedar"
+     },
+     {
+      "doi": "10.99999/89f8d5e128",
+      "title": "Tapestry harbor mosaic harbor pigment sonnet marble",
+      "journal": "Pewter ember pigment pewter meadow tundra tundra",
+      "publisher": "Onyx sonnet quartz"
+     },
+     {
+      "doi": "10.99999/9ba674e85a",
+      "title": "Quill juniper ember ember pewter vertex vertex cedar delta",
+      "journal": "Delta quill juniper tundra",
+      "publisher": "Timber tundra zephyr"
+     },
+     {
+      "doi": "10.99999/2a056ed892",
+      "title": "Tundra timber sonnet sonnet juniper",
+      "journal": "Orchid ember meadow quill juniper",
+      "publisher": "Vertex tapestry willow prairie"
+     },
+     {
+      "doi": "10.99999/10f9e1b5c7",
+      "title": "Mosaic lantern cobalt pigment saffron sonnet willow harbor",
+      "journal": "Timber tundra quill cedar",
+      "publisher": "Meadow velvet harbor pigment"
+     },
+     {
+      "doi": "10.99999/d30a816f33",
+      "title": "Pewter glacier cedar timber tundra glacier zephyr zephyr meadow pigment juniper zephyr",
+      "journal": "Pewter prairie sable sonnet vertex",
+      "publisher": "Vertex onyx mosaic"
+     }
+    ],
+    "policy": [
+     {
+      "overton_id": "sanitizedorg23396d-df2df623bd76444001d307d977a57846",
+      "title": "Quartz willow zephyr sable sable saffron onyx velvet pewter quartz saffron quill",
+      "policy_source_id": "sanitizedorg23396d",
+      "dois": []
+     },
+     {
+      "overton_id": "sanitizedorgb18e14-489821f937eedb29acbd39b60bc2fbbe",
+      "title": "Timber saffron juniper cedar orchid cobalt vertex cedar",
+      "policy_source_id": "sanitizedorgb18e14",
+      "dois": [
+       "10.99999/3dcb888bc2"
+      ]
+     }
+    ],
+    "news": [],
+    "people": [
+     {
+      "person": "Sam Sampleton",
+      "affiliation": "Timber cedar pewter",
+      "snippet": "Timber saffron meadow tundra mosaic tapestry lantern quill pewter glacier quartz prairie"
+     },
+     {
+      "person": "Alex Fablewood",
+      "affiliation": "Timber cedar pewter",
+      "snippet": "Pewter zephyr tapestry zephyr juniper harbor vertex pewter meadow pewter mosaic cobalt"
+     },
+     {
+      "person": "Alex Fablewood",
+      "affiliation": "Timber cedar pewter",
+      "snippet": "Pewter zephyr tapestry zephyr juniper harbor vertex pewter meadow pewter mosaic cobalt"
+     }
+    ]
+   },
+   "highlights": []
+  },
+  {
+   "policy_document_id": "sanitizedorgdb1d68-a9a6f9fc7405a1a0b77ee5f98915485e",
+   "pdf_document_id": "sanitizedorgdb1d68-a9a6f9fc7405a1a0b77ee5f98915485e-a9a6f9fc7405a1a0b77ee5f98915485e",
+   "grouped_pdf_ids_in_result_count": 1,
+   "grouped_pdf_ids_in_result": [
+    "sanitizedorgdb1d68-a9a6f9fc7405a1a0b77ee5f98915485e-a9a6f9fc7405a1a0b77ee5f98915485e"
+   ],
+   "es_score": null,
+   "overton_url": "https://example.org/5bb0ea26cd3d",
+   "overton_url_with_context": "https://example.org/5bb0ea26cd3d",
+   "title": "Mosaic juniper tapestry",
+   "translated_title": "",
+   "source": {
+    "source_id": "sanitizedorgdb1d68",
+    "title": "Mosaic lantern willow",
+    "country": "USA",
+    "state": "",
+    "type": "think tank",
+    "subtype": "",
+    "sector": "Third Sector",
+    "organisation_type": "Think Tank",
+    "function": [
+     "Research Centre",
+     "Policy Centre"
+    ],
+    "region": [
+     "North America",
+     "G7",
+     "G20",
+     "Very high human development",
+     "OECD members"
+    ],
+    "is_aggregator": "f"
+   },
+   "citation_count": 0,
+   "citation_count_including_self": 0,
+   "authors": [
+    "Drew Mockford"
+   ],
+   "authors_are_organizations": true,
+   "snippet": "Orchid quartz pigment delta lantern delta onyx zephyr prairie juniper pewter harbor",
+   "llm_document_theme": "Glacier sonnet sonnet lantern onyx mosaic",
+   "llm_document_description": "Glacier sable cobalt mosaic quartz zephyr tapestry meadow vertex delta willow juniper",
+   "published_on": "2025-11-17",
+   "added_on": "2025-11-19",
+   "document_url": "https://example.org/42ad8806fb1f",
+   "pdf_url": "https://example.org/42ad8806fb1f",
+   "thumbnail": "https://example.org/6de9e9a6190a",
+   "thumbnail_path": "cache_image/pdf_thumbnails/sanitized/f7b9d90afaed77bf.jpg",
+   "topics": [
+    "Cost of living",
+    "Rent regulation",
+    "Subsidy",
+    "Tax",
+    "Economics",
+    "Landlord",
+    "Price",
+    "Price controls",
+    "Renting",
+    "Poverty",
+    "Policy",
+    "Economy",
+    "Income",
+    "Redistribution of income and wealth",
+    "Apartment",
+    "Textbook",
+    "Minimum wage",
+    "Public utility",
+    "Investment",
+    "Labour economics"
+   ],
+   "dont_show_pdf": "false",
+   "classifications": [
+    "economy, business and finance",
+    "economy, business and finance>economy>macro economics",
+    "science and technology",
+    "science and technology>social sciences",
+    "politics>government",
+    "economy, business and finance>economy",
+    "politics",
+    "science and technology>social sciences>economics",
+    "economy, business and finance>economy>macro economics>tariff"
+   ],
+   "source_tags": [],
+   "overton_policy_document_series": "Blog post",
+   "other_identifiers": [],
+   "keyed_other_identifiers": [],
+   "languages": [
+    "eng"
+   ],
+   "sdgcategories": [
+    "SDG 11: Sustainable Cities and Communities",
+    "SDG Target 11.1"
+   ],
+   "cofog_divisions": [
+    "6: Housing and Community Amenities",
+    "6.1: Housing Development"
+   ],
+   "cites": {
+    "scholarly": [],
+    "policy": [],
+    "news": [
+     {
+      "reference_string": "Delta juniper quartz saffron pigment",
+      "matched_news_url": "https://example.org/2b7a298bff7b",
+      "matched_news_outlet": "Harbor prairie willow"
+     },
+     {
+      "reference_string": "Marble cedar juniper marble prairie",
+      "matched_news_url": "https://example.org/6988fa0ab8f4",
+      "matched_news_outlet": "Delta pigment meadow pigment"
+     }
+    ],
+    "people": [
+     {
+      "person": "Robin Placeholder",
+      "affiliation": "Mosaic lantern willow",
+      "snippet": "Tundra mosaic sable onyx juniper delta delta cobalt pigment sonnet mosaic prairie"
+     }
+    ]
+   },
+   "highlights": []
+  },
+  {
+   "policy_document_id": "sanitizedorg5644d9-72681ca7d0f78da51e464687e8295a7f",
+   "pdf_document_id": "sanitizedorg5644d9-72681ca7d0f78da51e464687e8295a7f-20a9e6229a75fd41e52ff1eb0bd0a064",
+   "grouped_pdf_ids_in_result_count": 1,
+   "grouped_pdf_ids_in_result": [
+    "sanitizedorg5644d9-72681ca7d0f78da51e464687e8295a7f-20a9e6229a75fd41e52ff1eb0bd0a064"
+   ],
+   "es_score": null,
+   "overton_url": "https://example.org/101bf16d37f6",
+   "overton_url_with_context": "https://example.org/101bf16d37f6",
+   "title": "Pigment glacier quartz glacier pewter",
+   "translated_title": "",
+   "source": {
+    "source_id": "sanitizedorg5644d9",
+    "title": "Mosaic marble onyx velvet harbor",
+    "country": "Canada",
+    "state": "",
+    "type": "think tank",
+    "subtype": null,
+    "sector": "Third Sector",
+    "organisation_type": "Think Tank",
+    "function": [
+     "Research Centre",
+     "Policy Centre"
+    ],
+    "region": [
+     "North America",
+     "G7",
+     "G20",
+     "Very high human development",
+     "OECD members"
+    ],
+    "is_aggregator": "f"
+   },
+   "citation_count": 1,
+   "citation_count_including_self": 1,
+   "authors": [
+    "Casey Sampleton"
+   ],
+   "authors_are_organizations": true,
+   "snippet": "",
+   "llm_document_theme": "Meadow lantern sable glacier velvet tundra",
+   "llm_document_description": "Saffron willow quill sonnet quartz orchid timber timber pigment willow willow juniper",
+   "published_on": "2025-04-16",
+   "added_on": "2025-05-15",
+   "document_url": "https://example.org/9088148a5445",
+   "pdf_url": "https://example.org/0914a0ee980b.pdf",
+   "thumbnail": "https://example.org/fea77fa14b38",
+   "thumbnail_path": "cache_image/pdf_thumbnails/sanitized/c538dab9c28d0f35.png",
+   "topics": [
+    "Cost of living",
+    "Affordable housing",
+    "Wendell Cox",
+    "Affordable housing in Canada",
+    "Economy",
+    "Urban sprawl",
+    "Politics",
+    "Urbanization"
+   ],
+   "dont_show_pdf": "false",
+   "classifications": [
+    "economy, business and finance",
+    "economy, business and finance>economic sector",
+    "economy, business and finance>economic sector>construction and property",
+    "science and technology",
+    "science and technology>social sciences>economics",
+    "science and technology>social sciences",
+    "economy, business and finance>economic sector>construction and property>real estate",
+    "education"
+   ],
+   "source_tags": [],
+   "overton_policy_document_series": "Publication",
+   "other_identifiers": [],
+   "keyed_other_identifiers": [],
+   "languages": [
+    "eng"
+   ],
+   "sdgcategories": [
+    "SDG 11: Sustainable Cities and Communities",
+    "SDG Target 11.1"
+   ],
+   "cofog_divisions": [
+    "6: Housing and Community Amenities",
+    "6.1: Housing Development"
+   ],
+   "cites": {
+    "scholarly": [
+     {
+      "doi": "10.99999/6b3b296623",
+      "title": "Timber delta lantern cobalt",
+      "publisher": "Zephyr harbor sonnet"
+     },
+     {
+      "doi": "10.99999/8a9b55425f",
+      "title": "Delta tundra tapestry glacier juniper saffron timber prairie cedar prairie timber onyx",
+      "journal": "Mosaic zephyr timber marble",
+      "publisher": "Lantern ember sable cobalt"
+     },
+     {
+      "doi": "10.99999/7b8c96c6e8",
+      "title": "Cedar glacier onyx harbor willow pigment",
+      "publisher": "Quartz glacier cobalt"
+     },
+     {
+      "doi": "10.99999/0a77278e72",
+      "title": "Delta quill glacier juniper ember",
+      "publisher": "Quill willow vertex delta saffron"
+     },
+     {
+      "doi": "10.99999/1ef33ede4b",
+      "title": "Willow vertex marble lantern sonnet sonnet prairie sable ember pigment cobalt vertex",
+      "journal": "Ember pewter timber cobalt meadow",
+      "publisher": "Vertex lantern tundra"
+     }
+    ],
+    "policy": [
+     {
+      "overton_id": "sanitizedorgd26020-d381d906d1fa46a3146e007a9ad4601c",
+      "title": "Juniper tundra willow",
+      "policy_source_id": "sanitizedorgd26020",
+      "dois": []
+     },
+     {
+      "overton_id": "sanitizedorg1bcd6b-32c09966e89c19ea4ff6005eedc81f75",
+      "title": "Cedar glacier onyx harbor willow pigment",
+      "policy_source_id": "sanitizedorg1bcd6b",
+      "dois": [
+       "10.99999/7b8c96c6e8"
+      ]
+     },
+     {
+      "overton_id": "sanitizedorg1f149d-e800c75366ea70f1cfe6b7fbc5dd2dd6",
+      "title": "Delta quill glacier juniper ember",
+      "policy_source_id": "sanitizedorg1f149d",
+      "dois": [
+       "10.99999/0a77278e72"
+      ]
+     },
+     {
+      "overton_id": "sanitizedorg5644d9-1677de6ab9cefe0bec1fc05b6f5b4b2c",
+      "title": "Quartz vertex ember meadow sonnet saffron marble sable velvet",
+      "policy_source_id": "sanitizedorg5644d9",
+      "dois": []
+     }
+    ],
+    "news": [
+     {
+      "reference_string": "Tapestry glacier quill orchid harbor",
+      "matched_news_url": "https://example.org/f108afbb55f3",
+      "matched_news_outlet": "Tundra mosaic pewter delta"
+     },
+     {
+      "reference_string": "Quill orchid quartz juniper lantern",
+      "matched_news_url": "https://example.org/a0244879e009",
+      "matched_news_outlet": "Tundra mosaic pewter delta"
+     }
+    ],
+    "people": [
+     {
+      "person": "Robin Sampleton",
+      "affiliation": "Ember quill juniper",
+      "snippet": "Delta delta willow pigment quill cedar sonnet quartz onyx delta quartz onyx"
+     },
+     {
+      "person": "Drew Fixture",
+      "affiliation": "Cobalt ember meadow",
+      "snippet": "Ember quartz prairie pewter harbor onyx velvet ember ember mosaic lantern tundra"
+     },
+     {
+      "person": "Jordan Placeholder",
+      "affiliation": "Cedar delta mosaic delta sable",
+      "snippet": "Willow orchid vertex pewter onyx zephyr pigment meadow pewter orchid lantern willow"
+     },
+     {
+      "person": "Jordan Placeholder",
+      "affiliation": "Cobalt tundra mosaic cobalt pigment meadow cedar",
+      "snippet": "Meadow mosaic mosaic juniper quartz quill juniper quartz pewter vertex juniper pigment"
+     },
+     {
+      "person": "Casey Sampleton",
+      "affiliation": "Cobalt tundra mosaic cobalt pigment meadow cedar",
+      "snippet": "Meadow mosaic mosaic juniper quartz quill juniper quartz pewter vertex juniper pigment"
+     },
+     {
+      "person": "Jamie Fablewood",
+      "affiliation": "Cobalt tundra mosaic cobalt pigment meadow cedar",
+      "snippet": "Juniper delta vertex harbor meadow lantern velvet ember lantern zephyr cedar tundra"
+     }
+    ]
+   },
+   "highlights": []
+  },
+  {
+   "policy_document_id": "sanitizedorgdb2f6f-9ded4c56dd2afe0c3d981c68f316a253",
+   "pdf_document_id": "sanitizedorgdb2f6f-9ded4c56dd2afe0c3d981c68f316a253-9ded4c56dd2afe0c3d981c68f316a253",
+   "grouped_pdf_ids_in_result_count": 1,
+   "grouped_pdf_ids_in_result": [
+    "sanitizedorgdb2f6f-9ded4c56dd2afe0c3d981c68f316a253-9ded4c56dd2afe0c3d981c68f316a253"
+   ],
+   "es_score": null,
+   "overton_url": "https://example.org/a9a9815c2957",
+   "overton_url_with_context": "https://example.org/a9a9815c2957",
+   "title": "Onyx glacier marble velvet prairie",
+   "translated_title": "",
+   "source": {
+    "source_id": "sanitizedorgdb2f6f",
+    "title": "Ember juniper juniper cobalt",
+    "country": "Australia",
+    "state": "Western Australia",
+    "type": "government",
+    "subtype": "",
+    "sector": "Public Sector",
+    "organisation_type": "Government",
+    "function": [
+     "Regional or State Level Body",
+     "Mixed Roles",
+     "Public Service"
+    ],
+    "region": [
+     "Oceania",
+     "G20",
+     "Very high human development",
+     "OECD members",
+     "APAC"
+    ],
+    "is_aggregator": "f"
+   },
+   "citation_count": 0,
+   "citation_count_including_self": 0,
+   "authors": [
+    "Jamie Mockford"
+   ],
+   "authors_are_organizations": true,
+   "snippet": "",
+   "llm_document_theme": "Timber willow pigment",
+   "llm_document_description": "Velvet marble harbor zephyr tundra meadow orchid lantern sable juniper sonnet vertex",
+   "published_on": "2025-03-04",
+   "added_on": "2025-10-10",
+   "document_url": "https://example.org/fcb0d6954f74",
+   "pdf_url": "https://example.org/fcb0d6954f74",
+   "thumbnail": "https://example.org/b1104ffb7e9b",
+   "thumbnail_path": "cache_image/pdf_thumbnails/sanitized/b935d7d8b3f2a944.png",
+   "topics": [
+    "Cost of living",
+    "Leasehold estate",
+    "Lease",
+    "Bankruptcy",
+    "Pension",
+    "Debt",
+    "Social security in Australia",
+    "Income",
+    "Tax",
+    "Salary",
+    "Heating, ventilation, and air conditioning",
+    "United States Department of Veterans Affairs",
+    "Superannuation in Australia",
+    "Renting",
+    "Severance package",
+    "Discounting",
+    "Centrelink",
+    "Disability",
+    "Debt collection",
+    "Employment",
+    "Travel visa",
+    "Employee benefits",
+    "Pension fund",
+    "Pet",
+    "Child support",
+    "Self-employment",
+    "Parental leave",
+    "Australian nationality law",
+    "Affordable housing",
+    "Mortgage",
+    "Trust (law)",
+    "Finance",
+    "Loan"
+   ],
+   "dont_show_pdf": "false",
+   "classifications": [
+    "economy, business and finance",
+    "economy, business and finance>economy",
+    "economy, business and finance>economy>macro economics",
+    "labour>retirement",
+    "labour>retirement>pension",
+    "labour>unemployment>unemployment benefits",
+    "labour",
+    "labour>unemployment",
+    "economy, business and finance>economy>macro economics>credit and debt"
+   ],
+   "source_tags": [],
+   "overton_policy_document_series": "Publication",
+   "other_identifiers": [],
+   "keyed_other_identifiers": [],
+   "languages": [
+    "eng"
+   ],
+   "sdgcategories": [
+    "SDG 11: Sustainable Cities and Communities",
+    "SDG Target 11.1"
+   ],
+   "cofog_divisions": [
+    "6: Housing and Community Amenities",
+    "6.1: Housing Development",
+    "10: Social Protection",
+    "10.6: Housing"
+   ],
+   "cites": {
+    "scholarly": [],
+    "policy": [],
+    "news": [],
+    "people": []
+   },
+   "highlights": []
+  },
+  {
+   "policy_document_id": "sanitizedorgfb4a6e-15acd6e31818235c42f3d8daf6e1ea48",
+   "pdf_document_id": "sanitizedorgfb4a6e-15acd6e31818235c42f3d8daf6e1ea48-15acd6e31818235c42f3d8daf6e1ea48",
+   "grouped_pdf_ids_in_result_count": 1,
+   "grouped_pdf_ids_in_result": [
+    "sanitizedorgfb4a6e-15acd6e31818235c42f3d8daf6e1ea48-15acd6e31818235c42f3d8daf6e1ea48"
+   ],
+   "es_score": null,
+   "overton_url": "https://example.org/6ff8975fb028",
+   "overton_url_with_context": "https://example.org/6ff8975fb028",
+   "title": "Quartz cedar delta harbor marble marble tapestry orchid timber mosaic vertex zephyr",
+   "translated_title": "",
+   "source": {
+    "source_id": "sanitizedorgfb4a6e",
+    "title": "Orchid sable prairie",
+    "country": "USA",
+    "state": "",
+    "type": "think tank",
+    "subtype": null,
+    "sector": "Third Sector",
+    "organisation_type": "Think Tank",
+    "function": [
+     "Research Centre",
+     "Policy Centre"
+    ],
+    "region": [
+     "North America",
+     "G7",
+     "G20",
+     "Very high human development",
+     "OECD members"
+    ],
+    "is_aggregator": "f"
+   },
+   "citation_count": 0,
+   "citation_count_including_self": 0,
+   "authors": [
+    "Casey Mockford"
+   ],
+   "authors_are_organizations": true,
+   "snippet": "",
+   "llm_document_theme": "Onyx timber vertex velvet",
+   "llm_document_description": "Pigment mosaic saffron pigment velvet cobalt velvet onyx marble pewter pewter meadow",
+   "published_on": "2025-02-11",
+   "added_on": "2025-07-08",
+   "document_url": "https://example.org/2717858d3fb6",
+   "pdf_url": "https://example.org/2717858d3fb6",
+   "thumbnail": "https://example.org/3a63d316bd35",
+   "thumbnail_path": "cache_image/pdf_thumbnails/sanitized/9d072a6aa250ccd5.png",
+   "topics": [],
+   "dont_show_pdf": "false",
+   "classifications": [
+    "economy, business and finance",
+    "economy, business and finance>economic sector",
+    "science and technology>technology and engineering",
+    "economy, business and finance>economic sector>computing and information technology",
+    "economy, business and finance>economic sector>computing and information technology>software",
+    "science and technology",
+    "science and technology>technology and engineering>IT/computer sciences"
+   ],
+   "source_tags": [],
+   "overton_policy_document_series": "Publication",
+   "other_identifiers": [],
+   "keyed_other_identifiers": [],
+   "languages": [
+    "eng"
+   ],
+   "sdgcategories": [
+    "SDG 11: Sustainable Cities and Communities",
+    "SDG Target 11.1"
+   ],
+   "cofog_divisions": [
+    "6: Housing and Community Amenities",
+    "6.1: Housing Development"
+   ],
+   "cites": {
+    "scholarly": [],
+    "policy": [],
+    "news": [
+     {
+      "reference_string": "Pewter harbor onyx pewter tapestry",
+      "matched_news_url": "https://example.org/1fd3921e6cc5",
+      "matched_news_outlet": "Mosaic onyx lantern"
+     }
+    ],
+    "people": []
+   },
+   "highlights": []
+  },
+  {
+   "policy_document_id": "sanitizedorga9aa9d-c186ae531fb481b0cc4fb0dd6669476e",
+   "pdf_document_id": "sanitizedorga9aa9d-c186ae531fb481b0cc4fb0dd6669476e-c186ae531fb481b0cc4fb0dd6669476e",
+   "grouped_pdf_ids_in_result_count": 1,
+   "grouped_pdf_ids_in_result": [
+    "sanitizedorga9aa9d-c186ae531fb481b0cc4fb0dd6669476e-c186ae531fb481b0cc4fb0dd6669476e"
+   ],
+   "es_score": null,
+   "overton_url": "https://example.org/909994b8f7f1",
+   "overton_url_with_context": "https://example.org/909994b8f7f1",
+   "title": "Sonnet mosaic quill",
+   "translated_title": "",
+   "source": {
+    "source_id": "sanitizedorga9aa9d",
+    "title": "Cobalt tundra onyx",
+    "country": "Australia",
+    "state": "New South Wales",
+    "type": "government",
+    "subtype": "city",
+    "sector": "Public Sector",
+    "organisation_type": "Government",
+    "function": [
+     "Municipal Body",
+     "Public Service"
+    ],
+    "region": [
+     "Oceania",
+     "G20",
+     "Very high human development",
+     "OECD members",
+     "APAC"
+    ],
+    "is_aggregator": "f"
+   },
+   "citation_count": 0,
+   "citation_count_including_self": 0,
+   "authors": [
+    "Morgan Fablewood"
+   ],
+   "authors_are_organizations": true,
+   "snippet": "",
+   "llm_document_theme": "Willow prairie quartz",
+   "llm_document_description": "Glacier cedar mosaic ember lantern ember orchid velvet meadow tapestry cedar meadow",
+   "published_on": "2024-12-24",
+   "added_on": "2025-09-13",
+   "document_url": "https://example.org/04fc90d2b999.pdf",
+   "pdf_url": "https://example.org/04fc90d2b999.pdf",
+   "thumbnail": "https://example.org/847cbd64f8dd",
+   "thumbnail_path": "cache_image/pdf_thumbnails/sanitized/0aad15641192888b.png",
+   "topics": [
+    "Affordable housing",
+    "Income",
+    "Zoning",
+    "Environmental planning",
+    "Policy",
+    "Poverty",
+    "Landcom (New South Wales)",
+    "Economy",
+    "Politics",
+    "Household",
+    "Strategic planning",
+    "Housing",
+    "Dapto, New South Wales"
+   ],
+   "dont_show_pdf": "false",
+   "classifications": [
+    "economy, business and finance",
+    "economy, business and finance>business information",
+    "economy, business and finance>business information>business finance",
+    "economy, business and finance>economic sector",
+    "economy, business and finance>economic sector>financial and business service",
+    "science and technology>social sciences",
+    "science and technology>social sciences>economics",
+    "economy, business and finance>economic sector>financial and business service>personal income",
+    "science and technology",
+    "economy, business and finance>economy",
+    "economy, business and finance>business information>business finance>earnings",
+    "politics"
+   ],
+   "source_tags": [],
+   "overton_policy_document_series": "Publication",
+   "other_identifiers": [],
+   "keyed_other_identifiers": [],
+   "languages": [
+    "eng"
+   ],
+   "sdgcategories": [
+    "SDG 11: Sustainable Cities and Communities",
+    "SDG Target 11.1"
+   ],
+   "cofog_divisions": [
+    "6: Housing and Community Amenities",
+    "6.1: Housing Development",
+    "10: Social Protection",
+    "10.6: Housing"
+   ],
+   "cites": {
+    "scholarly": [],
+    "policy": [],
+    "news": [],
+    "people": []
+   },
+   "highlights": []
+  },
+  {
+   "policy_document_id": "sanitizedorgdf2d12-42aba8211480495ee10e4ab8faa88047",
+   "pdf_document_id": "sanitizedorgdf2d12-42aba8211480495ee10e4ab8faa88047-72696707560bbe8f067863bf69490894",
+   "grouped_pdf_ids_in_result_count": 1,
+   "grouped_pdf_ids_in_result": [
+    "sanitizedorgdf2d12-42aba8211480495ee10e4ab8faa88047-72696707560bbe8f067863bf69490894"
+   ],
+   "es_score": null,
+   "overton_url": "https://example.org/127fa25d2e08",
+   "overton_url_with_context": "https://example.org/127fa25d2e08",
+   "title": "Quill lantern saffron orchid orchid quill saffron glacier cedar cobalt velvet zephyr",
+   "translated_title": "",
+   "source": {
+    "source_id": "sanitizedorgdf2d12",
+    "title": "Quill harbor tundra",
+    "country": "Canada",
+    "state": "",
+    "type": "government",
+    "subtype": "",
+    "sector": "Public Sector",
+    "organisation_type": "Government",
+    "function": [
+     "National Body",
+     "Mixed Roles",
+     "Public Service"
+    ],
+    "region": [
+     "North America",
+     "G7",
+     "G20",
+     "Very high human development",
+     "OECD members"
+    ],
+    "is_aggregator": "f"
+   },
+   "citation_count": 0,
+   "citation_count_including_self": 0,
+   "authors": [
+    "Jordan Mockford"
+   ],
+   "authors_are_organizations": true,
+   "snippet": "Zephyr mosaic cedar juniper mosaic",
+   "llm_document_theme": "Tundra harbor glacier prairie quartz juniper juniper",
+   "llm_document_description": "Quill harbor ember lantern sonnet timber onyx cedar juniper onyx pigment quill",
+   "published_on": "2024-12-12",
+   "added_on": "2026-05-27",
+   "document_url": "https://example.org/051e008a0329",
+   "pdf_url": "https://example.org/1938908cc6b7.pdf",
+   "thumbnail": "https://example.org/17ccd61b030e",
+   "thumbnail_path": "cache_image/pdf_thumbnails/sanitized/094f512036fc0b4b.png",
+   "topics": [
+    "Cost of living",
+    "Affordable housing in Canada",
+    "Tax",
+    "Mortgage",
+    "Tax expenditure",
+    "Affordable housing",
+    "Canada Mortgage and Housing Corporation",
+    "Gross domestic product",
+    "Value-added tax",
+    "Interest",
+    "Parliamentary Budget Officer",
+    "Expense",
+    "Economy",
+    "Finance",
+    "Housing Benefit",
+    "Household",
+    "Capital gain",
+    "Renting",
+    "Canada",
+    "National Health Service",
+    "Poverty",
+    "Interest rate"
+   ],
+   "dont_show_pdf": "false",
+   "classifications": [
+    "economy, business and finance",
+    "economy, business and finance>economic sector",
+    "economy, business and finance>economic sector>financial and business service",
+    "economy, business and finance>economy>macro economics",
+    "science and technology",
+    "science and technology>social sciences",
+    "economy, business and finance>economy",
+    "economy, business and finance>economy>macro economics>mortgage",
+    "economy, business and finance>economic sector>financial and business service>personal income",
+    "science and technology>social sciences>economics"
+   ],
+   "source_tags": [],
+   "overton_policy_document_series": "Publication",
+   "other_identifiers": [],
+   "keyed_other_identifiers": [],
+   "languages": [
+    "eng"
+   ],
+   "sdgcategories": [
+    "SDG 11: Sustainable Cities and Communities",
+    "SDG Target 11.1"
+   ],
+   "cofog_divisions": [
+    "6: Housing and Community Amenities",
+    "6.1: Housing Development"
+   ],
+   "cites": {
+    "scholarly": [],
+    "policy": [],
+    "news": [],
+    "people": []
+   },
+   "highlights": []
+  }
+ ]
+}
