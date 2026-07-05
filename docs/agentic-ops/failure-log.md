@@ -217,11 +217,20 @@ medium's cost scales with diff size × angle count, and each finder pays the ful
 independently. Diff hygiene removed the *data* bulk but 008's legitimate code+test+docs
 diff was still ~4.8K lines.
 
-**Fix (proposed for the next slice's review):** for review diffs over ~3K lines, scope
-each finder angle to the files its lens actually needs (correctness angles → src;
-conventions → whole diff; cleanup angles → src+tests) and/or drop from 8 angles to the
-3 correctness + 1 cleanup core; alternatively write the pathspec'd diff to a file once
-and hand finders the path with instructions to read only their assigned hunks. Keep the
-three main lanes unchanged — they were on-budget and each earned unique findings
-(timeout-mislabel bug: /code-review only; unmet rubric item: contract-verifier only;
-worker-egress gap: security only).
+**Fix (adopted 2026-07-05 retro, installed in task-cycle-review SKILL.md § token
+economy/per-angle scoping + harness.md § review lane economics):** two changes. (1)
+**Per-angle diff scoping at any diff size** — each `/code-review` finder angle gets a
+lens-matched pathspec (correctness → `src`/`alembic`/config; cleanup → `src`+`tests`;
+conventions → rule files + changed-file list) instead of one shared whole-diff command;
+all eight angles kept (the empty removed-behaviour/cross-file results are the clean-bill
+evidence, and the one confirmed bug came from line-by-line). (2) **Budget re-denominated
+by model class** — the target was always a cost proxy, and a flat token ceiling priced
+cheap fast-worker finder tokens like pinned-Opus lane tokens, misreading this run as a
+3× blowout: now ≤250K reasoning-class + ≤500K fast-worker. The three main lanes stay
+unchanged — on budget, each earned a unique finding (timeout-mislabel bug: /code-review
+only; unmet rubric item: contract-verifier only; worker-egress gap: security only). A
+slice-size cap was considered and **rejected** (user, 2026-07-05): big slices are fine —
+sized to the model's orchestration capability — and the scoping/budget changes are what
+keep their reviews affordable. Also installed: step-8-scheduled rubric items are named
+in the contract-verifier brief (pending-with-contradiction-check, not MAJOR-unmet —
+same retro).
