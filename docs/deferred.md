@@ -1,8 +1,24 @@
 # Deferred seams
 
-Recorded, not built in v3.0 — seams left open per "build light, leave seams." Each is a real
+Recorded, not built *yet* — seams left open per "build light, leave seams." Each is a real
 architectural decision to defer, not an omission. Sources: architecture reference §§3–11
 (Appendix A; Appendix B), briefing Appendix A, EB build spec, EB handoff §7. Grouped by area.
+
+**Two kinds of entry live here — don't conflate them** (user clarification, 2026-07-05):
+
+1. **Sequenced v3.0 capabilities** — required for v3.0 to function as intended, waiting only
+   on their approval gates (runtime egress · LLM/inference). The specs are explicit that
+   **v3.0 has live egress** (briefing §Security: inference calls via the configured route,
+   first pass OpenAI → target Bedrock; search queries to configured evidence backends —
+   "accepted as a documented v3.0 risk because external evidence gathering is core to the
+   product", arch-ref §3.3). "Zero runtime egress" in task docs is a *build-stage discipline*
+   (each slice introducing product egress needs explicit approval — harness.md), never a v3.0
+   scope statement. In this class: **live `SearchBackend`s** · **live `DocumentFetcher`** ·
+   the **LLM screen / classify tools** · the **LLM grounding tier** · **vectorisation at the
+   first vector reader** — the product cannot search, fetch, ingest, vectorise or reason
+   without them.
+2. **Deferred beyond v3.0** — everything else below: doors deliberately left open (other
+   capabilities, branch parallelism, per-item egress controls, private deployments, …).
 
 ## Capabilities
 
@@ -120,9 +136,10 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 
 ## Search / acquisition (task 007 seams)
 
-- **Live `SearchBackend` implementations** (OpenAlex, Overton) — the seam is built and both
-  envelope mappings run against authentic recorded structure; wiring live HTTP is **runtime
-  egress**, its own gated slice. Requirements carried from the v2 integration review (task 007
+- **Live `SearchBackend` implementations** (OpenAlex, Overton) — **confirmed in-scope for
+  v3.0** (user, 2026-07-05; header class 1 — the product cannot function without live
+  search). The seam is built and both envelope mappings run against authentic recorded
+  structure; wiring live HTTP is **runtime egress**, its own gated slice. Requirements carried from the v2 integration review (task 007
   contract): explicit request timeouts everywhere (v2's OpenAlex path could hang unbounded);
   a real Overton rate limiter (max 1 call/s, 429 + key-block on abuse — v2 had none); the
   OpenAlex query sanitizer (commas inside quoted phrases break queries) applied on the

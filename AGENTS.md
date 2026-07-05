@@ -27,8 +27,9 @@ Implementation — task `008-full-text`.
 Tasks `001-walking-skeleton` through `007-acquire` are complete (merged). The active slice
 adds **full-text ingestion** — the post-screen Tier-0 step: for a scope's screened-in
 acquired sources, resolve candidate URLs from the provider fields task 007 retained, fetch
-through a `DocumentFetcher` seam (v3.0: fixture replay of committed real, openly-licensed
-documents — zero runtime egress; the live fetcher stays behind the egress gate), parse
+through a `DocumentFetcher` seam (current build: fixture replay of committed real,
+openly-licensed documents — zero runtime egress until the live-fetcher slice opens that
+gate; live fetching is v3.0-required, per deferred.md), parse
 structure-aware (PDF via `pymupdf4llm` — meets the couple-of-minutes-per-run wall-clock
 target; docling ML-layout escalation and time-budget-aware parser selection are recorded
 seams; HTML via `trafilatura`), segment under named versioned policies with

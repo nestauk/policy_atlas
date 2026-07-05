@@ -2,8 +2,10 @@
 
 For every screened-in acquired source of a scope, resolve candidate URLs from the
 provider fields task 007 retained, fetch through the ``DocumentFetcher`` seam
-(v3.0: fixture replay of committed real, openly-licensed documents — zero runtime
-egress), parse structure-aware (PDF via pymupdf4llm, HTML via trafilatura), segment
+(current build: fixture replay of committed real, openly-licensed documents — zero
+runtime egress until the live-fetcher slice opens that gate; live fetching is
+v3.0-required, see docs/deferred.md), parse structure-aware (PDF via pymupdf4llm,
+HTML via trafilatura), segment
 under named versioned policies, and attach the resulting immutable ``full_text``
 snapshot to the corpus document via ``project_source_snapshot.full_text_snapshot_id``
 (ADR 0003).
