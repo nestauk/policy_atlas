@@ -3,8 +3,21 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted, rev 4.1 — rev 4 accepted by user 2026-07-06 ("seems fine");
-> awaiting final contract sign-off with the 4.1 amendment.
+> **Status:** drafted, rev 5 — rev 4 accepted by user 2026-07-06 ("seems fine");
+> awaiting final sign-off with the 4.1 + 5 amendments. Contract-stage adversarial
+> review launched against rev 4.1 (in flight); findings will be adjudicated onto
+> this rev.
+> Rev 5 (user steer, 2026-07-06 — "the whole point of characterise is understanding
+> the corpus landscape; why not use the provider tags here?"): provider-topic tag
+> materialisation pulled **in-slice**. `source_tag` gains **`asserted_by`** (assertion
+> provenance; unique key includes it); acquire materialises provider topical
+> assertions as tags (OpenAlex topics/SDGs; Overton
+> topics/classifications/sdgcategories/`llm_document_theme`) with provider /
+> provider-LLM / own-capability provenance classes distinguishable; coverage
+> aggregates the tag layer grouped by `(tag_type, asserted_by)` instead of parsing
+> backend JSONB twice. Spec flow-back (user as author): data-model's "nothing hangs
+> off a tag" clarified to govern the tag *label* — the assignment row carries
+> provenance, like every other assertion in the system.
 > Rev 4.1 (user steer, 2026-07-06): provider-asserted topical signals (OpenAlex
 > topics/SDGs; Overton topics/classifications/`llm_document_theme` — retained in 007
 > for exactly this component) join the **coverage pass** as deterministic,
@@ -330,15 +343,14 @@ artefact/block/annotation machinery exists but nothing here writes to it (decisi
    Non-evidence vs Unknown, honest about stub-classification reality) · quality tier ×
    `rubric_version` · `screen_basis` + confidence bands · year · language · backend ·
    publisher/geography where the envelope carries it (Overton `source` fields, retained
-   in 007 *for this component*) · **provider-asserted topical distributions (rev 4.1,
-   user steer 2026-07-06)**: OpenAlex `primary_topic`/`topics`/SDGs and Overton
-   `topics`/`classifications`/`sdgcategories`/`llm_document_theme`, aggregated
-   deterministically from retained `provider_fields` and **explicitly labelled
-   provider-asserted** — a third party's topical judgment (algorithm- or
-   provider-LLM-assigned), shown distinct from our own grouping in the landscape
-   summary; the 007 never-mix posture extended to the landscape. These provider
-   signals do **not** write tags and do **not** enter the grouping prompts in v3.0
-   (recorded seams — see Out of scope). The spec's fuller list (study geography, population)
+   in 007 *for this component*) · **topical distributions over the tag layer (rev 4.1,
+   reshaped by rev 5)**: coverage aggregates `source_tag` grouped by
+   `(tag_type, asserted_by)` — one uniform, spec-sanctioned surface
+   (provenance-grounding rung 1 is "counts/distributions over Tier-0 columns/tags")
+   instead of two backend-specific JSONB parses. Provider-asserted, provider-LLM and
+   our own topical assertions appear as **separate, labelled distributions** in the
+   landscape — the 007 never-mix posture rendered structurally. Provider signals still
+   do **not** enter the grouping prompts in v3.0 (recorded seam — see Out of scope). The spec's fuller list (study geography, population)
    lives in text, not Tier-0 metadata — not fabricated; recorded as arriving with
    extraction. Distributions are computed by deterministic SQL/python (the lookup
    discipline: re-running the query *is* the verification), each carrying `base:
@@ -346,14 +358,33 @@ artefact/block/annotation machinery exists but nothing here writes to it (decisi
    being below any bar. **Dual-view coverage is a recorded seam**: no source/evidence
    policy object exists in v3.0 (verified), so the spec's "when the user has supplied a
    policy" condition never fires; single overall view ships.
-10. **Tag layer lands minimally: `source_tag`.** Item × tag × type
-    (`project_source_snapshot_id` FK, `tag`, `tag_type` — CHECK: `topic_theme` for now,
-    additive later — `created_by_run_id`, `created_at`; unique `(pss, tag_type, tag)`).
-    Written by characterise (the spec's rule: tags are created by capabilities that read
-    documents, never by the orchestrator); insert-if-absent so re-runs accrete without
-    duplicating; namespace consolidation stays the recorded orchestrator seam. classify's
-    `open_tags` JSONB column is untouched — migrating it into this table is part of the
-    LLM-classify seam, not this slice.
+10. **Tag layer lands with assertion provenance: `source_tag` + `asserted_by`
+    (rev 5, user steer 2026-07-06).** Item × tag × type × asserter
+    (`project_source_snapshot_id` FK, `tag`, `tag_type` — CHECK: `topic_theme` for
+    now, additive later — **`asserted_by`**, `created_by_run_id`, `created_at`; unique
+    `(pss, tag_type, tag, asserted_by)`). Two writers in this slice:
+    - **Provider materialisation at acquire** — provider topical assertions
+      (OpenAlex `primary_topic`/`topics`/SDG names; Overton `topics` /
+      `classifications` / `sdgcategories` / `llm_document_theme`) are normalised into
+      tag rows when the envelope lands, `asserted_by` naming the source. The
+      vocabulary must keep three provenance classes distinguishable (plan detail pins
+      exact values): provider-curated/algorithmic (e.g. `openalex`, `overton`),
+      **provider-LLM** (e.g. `overton_llm` — the 007 never-mix posture, now enforced
+      by provenance rather than by exclusion), and our own capabilities.
+      Uploads carry no provider tags — honest absence. Raw `provider_fields` JSONB
+      stays retained unchanged (tags are a normalised view, not a replacement).
+    - **Characterise's themes** — `asserted_by="characterise"` + the run id.
+    Insert-if-absent on the full key so re-runs accrete without duplicating; the same
+    document may carry the same topic from two asserters — **two rows, and that
+    corroboration is signal, not duplication**. Namespace consolidation stays the
+    recorded orchestrator seam. classify's `open_tags` JSONB column is untouched —
+    migrating it into this table is part of the LLM-classify seam, not this slice.
+    **Spec flow-back (rev 5, user as spec author):** data-model.md's "nothing hangs
+    off a tag" is clarified, not repealed — it governs the tag *label* (no per-tag
+    entity, lifecycle, status or owner); the tag *assignment* row carries provenance
+    (`asserted_by`, run), consistent with every other assertion in the system
+    (rubric versions on appraisals, prompt versions on groupings). One clarifying
+    passage + `log.md` entry ride this contract.
 11. **Failure semantics: the interpretive half refuses to fake it (rev 3).** If the
     grouping call fails (provider outage, repair exhausted, validation still
     violated), characterise **fails loudly with honest counts** — no placeholder
@@ -468,8 +499,9 @@ characterisation_result  characterisation_id PK · evidence_scope_id FK · run_i
 
 source_tag               source_tag_id PK · project_source_snapshot_id FK · tag TEXT
                          · tag_type TEXT CHECK (tag_type IN ('topic_theme'))
-                         · created_by_run_id FK→runs (nullable) · created_at
-                         UNIQUE (project_source_snapshot_id, tag_type, tag)
+                         · asserted_by TEXT · created_by_run_id FK→runs (nullable)
+                         · created_at
+                         UNIQUE (project_source_snapshot_id, tag_type, tag, asserted_by)
 ```
 
 Downgrade drops the tables. No existing table changes. `tests/helpers.py`
@@ -488,6 +520,9 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
   helpers · deterministic stub grouper.
 - **`ingest.py` / `acquire.py` / `ingest_full_text.py`** — call `embed_pending_chunks`
   after their chunk writes (counts folded into their `component.completed` payloads).
+- **`acquire.py`** additionally materialises provider topical assertions into
+  `source_tag` when writing each envelope (deterministic normalisation per backend
+  mapper; `asserted_by` per provenance class; insert-if-absent — decision 10).
 - **`plan.py`** — `"characterise": {"requires": ["evidence_scope_id"]}`.
 - **`harness.py`** — `_run_characterise`; `embedding_backend: EmbeddingBackend | None =
   None` on `run_harness` (defaults to `StubEmbeddingBackend()` — no default egress);
@@ -528,9 +563,15 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
   injection-shaped fixture abstract ("ignore instructions and…") flows through as
   data — the output schema cannot express anything but themes + assignments, and
   validation passes/fails on structure alone.
-- Labels/tags: theme names persist as `source_tag` rows for members (unclustered docs
-  get no topic tag — no false labels); re-run accretes without duplicates; created
-  only by characterise (nothing else writes tags).
+- Labels/tags: theme names persist as `source_tag` rows for members with
+  `asserted_by="characterise"` (unclustered docs get no theme tag — no false labels);
+  re-run accretes without duplicates. Provider materialisation: each backend's fixture
+  records yield the expected tag rows with the right `asserted_by` class
+  (provider-LLM distinguishable from provider-curated — `llm_document_theme` never
+  lands under a curated or own-capability asserter); uploads get none; same topic from
+  two asserters = two rows; raw `provider_fields` unchanged; only acquire and
+  characterise write tags. Coverage aggregates by `(tag_type, asserted_by)` and the
+  landscape summary keeps the provenance classes visually separate.
 - Failure semantics: grouping failure → honest failure with coverage still reported in
   the payload (decision 11); counting invariants hold.
 - Landscape summary payload: structure asserted (coverage + themes with sizes + flags
@@ -572,15 +613,11 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
   corpus-size-independent. The `group` component inherits v2's theming lessons
   (four-facet decomposition; the two-stage validated shape) — recorded in deferred.md
   by this slice.
-- **Provider-topic tag materialisation** (rev 4.1) — surfacing provider-asserted
-  topics (incl. Overton `llm_document_theme`) as `source_tag` rows under a **distinct
-  tag type** (e.g. `provider_topic` — the type carries provenance, since nothing else
-  hangs off a tag; **never** written into `topic_theme`, per the 007 never-mix
-  posture). Trigger: when scoping/retrieval reads tags. Until then coverage aggregates
-  them from `provider_fields` directly (decision 9).
 - **Provider-signal prompt enrichment** — feeding provider topics/themes into the
   grouping prompts as per-doc hints; real bias risk (provider taxonomies vs
   intent-anchored themes) → enters via the grouping-quality eval seam, not by default.
+  (Provider-topic *tag materialisation* was a rev-4.1 seam, pulled in-slice by rev 5
+  with `asserted_by` provenance — decision 10.)
 - **Tag namespace consolidation / `open_tags` migration** (decisions 5, 10).
 - **`select` and everything deeper** — subsequent slices.
 
@@ -606,7 +643,9 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
    egress-free (stub embedder + stub grouper); live is opt-in by explicit wiring +
    environment key.
 
-Plus two spec flow-backs approved with this contract: the components §5
+Plus three spec flow-backs approved with this contract: the data-model tag-layer
+clarification (rev 5, decision 10: "nothing hangs off a tag" governs the label; the
+assignment row carries `asserted_by` provenance), the components §5
 content-vs-artefact clarification (decision 7), and the §5 thematic-mechanism update
 (decision 4: v3.0 groups via a bounded two-stage LLM procedure — discover, then
 batched assignment — over titles/abstracts; embedding-based clustering and

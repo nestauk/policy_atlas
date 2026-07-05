@@ -30,12 +30,16 @@ in progress, not done.
        (approved exception).
 8. [ ] Spec flow-backs landed: components §5 content-vs-artefact clarification + the
        thematic-mechanism update (LLM grouping at small scale; vectorisation-with-gate
-       exception) + `log.md` entries, as approved with the contract.
+       exception) + the data-model tag-layer clarification (assertion provenance;
+       "nothing hangs off a tag" = the label) + `log.md` entries, as approved with the
+       contract.
 9. [ ] Honesty properties hold in the shipped behaviour: pattern grades never conflated
        (coverage = fact + base; themes = soft, run-local, provenance-stamped with
-       prompt version + model id); no placeholder theme, silent drop, or partial
-       grouping representable; `unclustered` counted; flag-not-block throughout;
-       re-runs idempotent with honest counts; the key appears in no captured output.
+       prompt version + model id); tag provenance classes distinguishable (provider /
+       provider-LLM / own — `llm_document_theme` never masquerades as curated or
+       ours); no placeholder theme, silent drop, or partial grouping representable;
+       `unclustered` counted; flag-not-block throughout; re-runs idempotent with
+       honest counts; the key appears in no captured output.
 10. [ ] ADR 0005 (embed + generation seams / first product egress / injection posture)
         written and Accepted; the grouping prompt pair is lead-authored and
         co-versioned (`characterise_grouping_v1`).

@@ -41,7 +41,12 @@ fixed theme list (batched concurrent cheap-model calls), schema-constrained thro
 honest counted `unclustered` bucket, a call budget known before the run
 (`1 + ceil(n/batch) + repairs`), no placeholder themes or silent drops representable
 (v2's theming defects structurally closed). Groupings are run-local,
-never canonical; theme names persist as typed topic/theme tags. The **injection posture
+never canonical; theme names persist as typed topic/theme tags. The **tag layer lands
+with assertion provenance** (`source_tag.asserted_by`): acquire materialises provider
+topical assertions (OpenAlex topics/SDGs; Overton topics/classifications/LLM themes) as
+provenance-classed tags, and coverage aggregates the tag layer by
+`(tag_type, asserted_by)` — provider, provider-LLM and own-capability assertions never
+mix. The **injection posture
 comes due here** (first slice where third-party corpus text enters an LLM prompt —
 id-keyed data records, constrained schema, no tools). Durable output = a run-scoped
 characterisation row + `source_tag` rows + a structured **landscape summary** in the
