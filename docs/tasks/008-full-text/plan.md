@@ -1,6 +1,8 @@
 # Implementation Plan: 008-full-text
 
-> **Status:** drafted — pending plan-phase adversarial review + human confirmation.
+> **Status:** confirmed — 2026-07-05 · Shabeer Rauf (plan-phase adversarial review
+> adjudicated, 10/10 findings adopted; go given via "Plan confirmed — commit the
+> artifacts. I'll start the build in a new chat").
 > Contract: [contract.md](contract.md) (approved 2026-07-05 · Shabeer Rauf; three gated
 > changes + spec clarification + fixture-policy amendment signed off; contract-stage
 > adversarial findings adjudicated 2026-07-05, 9/9).

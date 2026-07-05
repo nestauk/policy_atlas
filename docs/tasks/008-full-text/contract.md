@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** approved — adversarial review.  
+> **Status:** approved — build ready (plan confirmed).  
 > Contract approved (before planning): 2026-07-05 · Shabeer Rauf (rev 5 + seam notes;
 > user-settled at this gate: PyMuPDF4LLM-only parser under the ~2-min wall-clock target ·
 > no-truncation-ever ratified after cost/quality challenge · link-level snapshot
@@ -32,7 +32,7 @@ specs in [docs/specs/](../../specs/index.md).
 > stated time horizon picks the parser — tight → fast, long → ML layout). The
 > parse-profile-per-snapshot design is the hook both seams plug into (decision 5).  
 > Contract approved (before planning): _date · who_ ·
-> Plan approved (before implementation): _date · who_ · ADR: expected for the
+> Plan approved (before implementation): 2026-07-05 · Shabeer Rauf · ADR: expected for the
 > snapshot-identity decision (decision 2) and the parser selection (decision 5) if
 > approved — both shape every future component.
 
