@@ -56,17 +56,24 @@ and the lead-only rules below (you can't pin a "don't delegate" — those stay p
 
 **Routing is decided at plan time, not implement time** (failure-log, 2026-07-05): the plan
 marks each task with its executor (`lead` / `fast-worker` / `deep-reasoner` / `codex`), reviewed
-at the plan gate. The decision ladder (2026-07-05, user call — "Claude budget is always the
-constraint" is a default, not a condition): can't write a self-checkable brief → lead;
-prompt/taste/seam/adjudication → lead; judgment-bearing execution → **Codex** (~Opus tier,
+at the plan gate. **The default executor is a delegate; every `lead` mark carries a one-line
+justification the plan gate reviews** (failure-log, 2026-07-05 — the 008 plan over-assigned to
+the lead and the burden must sit on keeping work, not on delegating it). The decision ladder
+(2026-07-05, user call — "Claude budget is always the constraint" is a default, not a
+condition): can't write a self-checkable brief → lead; prompt-bearing work, taste-bearing
+surfaces, adjudication, and seam *design* (signatures, semantics, the brief itself) → lead —
+but the *implementation* of a lead-designed seam against a machine-verifiable done is delegable
+like any other execution ("seam-bearing" describes the design decision, not the typing);
+judgment-bearing execution → **Codex** (~Opus tier,
 different budget, family-flip review built in — needs a machine-verifiable brief because rescue
 is async, no mid-task steering); mechanical transcription of an exact spec → fast-worker (Codex
 would overpay and the async round-trip is slower); analysis-not-code → deep-reasoner (NB
 deep-reasoner and fast-worker also spend Claude budget — Codex offload helps most exactly where
 Opus-tier work would otherwise run). Mid-build, the lead always has full context loaded and every task looks
 cheapest inline — 007's ~450-line test file went to the lead that way despite a
-fast-worker-shaped contract test list. Counter-rule: one-command mechanical edits (`sed`-able
-sweeps) stay inline, and if you can't write the brief, it isn't delegable.
+fast-worker-shaped contract test list; mid-build, the lead catching itself editing product code
+directly is the smell — write a brief instead. Counter-rule: one-command mechanical edits
+(`sed`-able sweeps) stay inline, and if you can't write the brief, it isn't delegable.
 
 **Review lane economics.** The review stack is where lead-model usage spikes: each pass re-reads
 the same diff, and that reading is systematic work, not frontier judgment. So: reviewers run on

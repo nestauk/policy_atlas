@@ -165,3 +165,63 @@ invocation note now states that `codex-rescue` returns a job id, never findings,
 agent retrieves results itself via the plugin runtime — `codex-companion.mjs status|result
 <job-id>` (poll `status` in a background shell, then `result`); the slash commands remain the
 user-typed equivalents. Dispatch briefs need no change; the retrieval leg is now agent-executable.
+
+---
+
+## 2026-07-05 — Plan-time executor marks over-assigned implementation to the lead
+
+**Task:** 008-full-text (build phase)
+
+**What happened:** The plan's executor column routed the schema/migration, the core
+`ingest_full_text.py` module, the concurrency/egress test cases, the spec flow-back and
+`verification.md` to `lead` — only the wiring and bulk-test transcription went to
+`fast-worker`, one task to Codex. The build followed the marks faithfully, so the lead
+(an orchestrator-class model) spent most of its budget typing implementation. The user
+flagged it at the build retro: Fable should orchestrate — brief, adjudicate, review
+delegated output — and do little direct implementation.
+
+**Root cause:** Two gaps in the routing ladder, not a failure to follow it. (1) The
+"seam-bearing product code → lead" rung conflates *designing* a seam (signatures,
+semantics, failure vocabulary — genuinely lead work) with *typing its implementation*
+(delegable against `make verify` + named tests, like any judgment-bearing execution).
+(2) No burden inversion: with `lead` as an unremarkable default, plan-time
+path-of-least-resistance keeps work in-house, and nothing at the plan gate pushes back.
+
+**Fix (adopted 2026-07-05, installed in harness.md § Agent-side model routing +
+task-cycle-design step 3):** the default executor is a delegate; every `lead` mark
+carries a one-line justification the plan gate reviews. The ladder rung now reads
+"seam *design* → lead; implementation of a lead-designed seam → delegable". Mid-build
+smell added: the lead catching itself editing product code directly means a brief
+should have been written. (The post-goal amendments in the same session already ran
+this way — investigation, wiring, and root-cause all delegated — and delegate briefs
+with "report verbatim, no workarounds" acceptance clauses surfaced a real upstream
+parser bug the lead would likely have papered over inline.)
+
+---
+
+## 2026-07-05 — Review-stack token target blown 3× by finder fan-out on a large diff
+
+**Task:** 008-full-text (review phase)
+
+**What happened:** The Tier-3 stack ran within its lane shape (contract-verifier ·
+security-auditor · Codex adversarial · `/code-review` medium — no duplicate lanes) and
+with the 007 diff hygiene applied (bulk fixtures + lockfile pathspec-excluded), yet spent
+≈760K subagent tokens against the ≤250K slice target. Breakdown: the 8 `/code-review`
+medium finder angles ≈500K (each angle independently re-read the ~4.8K-line review diff
+plus surrounding files), contract-verifier ≈118K, security ≈56K, verifiers ≈70K, Codex
+≈20K. The economy rules bounded lane *count* but nothing bounded per-lane reading on a
+diff this size.
+
+**Root cause:** The ≤250K target was calibrated on smaller slices; `/code-review`
+medium's cost scales with diff size × angle count, and each finder pays the full diff
+independently. Diff hygiene removed the *data* bulk but 008's legitimate code+test+docs
+diff was still ~4.8K lines.
+
+**Fix (proposed for the next slice's review):** for review diffs over ~3K lines, scope
+each finder angle to the files its lens actually needs (correctness angles → src;
+conventions → whole diff; cleanup angles → src+tests) and/or drop from 8 angles to the
+3 correctness + 1 cleanup core; alternatively write the pathspec'd diff to a file once
+and hand finders the path with instructions to read only their assigned hunks. Keep the
+three main lanes unchanged — they were on-budget and each earned unique findings
+(timeout-mislabel bug: /code-review only; unmet rubric item: contract-verifier only;
+worker-egress gap: security only).

@@ -1,6 +1,11 @@
 # Spec update log
 
 ## 2026-07-05
+* **Update**: [EB components §4](capabilities/evidence-base/components.md) — clarified v3.0
+  Tier-0 ingestion scope: fetch → parse → segment; vectorisation deferred to the slice where
+  vectors are first read, with the eager-and-uniform discipline restated (not weakened) for
+  when the embed seam lands. Approved with the task 008 contract per the spec-refinement flow
+  (decision 1).
 * **Update**: [EB components §1](capabilities/evidence-base/components.md) — clarified v3.0
   acquire-time snapshotting: acquire snapshots the metadata envelope as text-in-hand
   (`text_basis="abstract_only"`); full-text fetch + Tier-0 ingestion remain post-screen.

@@ -28,6 +28,12 @@ from policy_atlas.appraise import AppraiseContext, appraise_sources
 from policy_atlas.classify import ClassifyContext, classify_sources
 from policy_atlas.grounding import GroundingError, produce_grounded_block
 from policy_atlas.inference import InferenceProvider
+from policy_atlas.ingest_full_text import (
+    DocumentFetcher,
+    FixtureFetcher,
+    IngestFullTextContext,
+    ingest_full_text_sources,
+)
 from policy_atlas.plan import Config
 from policy_atlas.schema import artefact, evidence_scope, runs
 from policy_atlas.screen import ScreenContext, screen_sources
@@ -45,6 +51,7 @@ class HarnessState(TypedDict):
     artefact_id: uuid.UUID | None  # set by _run_echo only; None for scope components
     provider: InferenceProvider
     search_backends: list[SearchBackend]
+    document_fetcher: DocumentFetcher
     block_ids: dict[str, Any]
     error: str | None
 
@@ -193,6 +200,11 @@ def _run_appraise(state: HarnessState) -> HarnessState:
     return _run_scope_component(state, AppraiseContext, appraise_sources)
 
 
+def _run_ingest_full_text(state: HarnessState) -> HarnessState:
+    sources_fn = functools.partial(ingest_full_text_sources, fetcher=state["document_fetcher"])
+    return _run_scope_component(state, IngestFullTextContext, sources_fn)
+
+
 def _dispatch(state: HarnessState) -> str:
     return state["config"].component
 
@@ -242,6 +254,7 @@ def build_graph() -> Any:
     g.add_node("screen", _run_screen)
     g.add_node("classify", _run_classify)
     g.add_node("appraise", _run_appraise)
+    g.add_node("ingest_full_text", _run_ingest_full_text)
     g.add_node("finish", _finish)
 
     g.set_entry_point("dispatch")
@@ -254,6 +267,7 @@ def build_graph() -> Any:
             "screen": "screen",
             "classify": "classify",
             "appraise": "appraise",
+            "ingest_full_text": "ingest_full_text",
         },
     )
     g.add_edge("echo", "finish")
@@ -261,6 +275,7 @@ def build_graph() -> Any:
     g.add_edge("screen", "finish")
     g.add_edge("classify", "finish")
     g.add_edge("appraise", "finish")
+    g.add_edge("ingest_full_text", "finish")
     g.add_edge("finish", END)
     return g.compile()
 
@@ -273,6 +288,7 @@ def run_harness(
     run_id: uuid.UUID,
     provider: InferenceProvider,
     search_backends: list[SearchBackend] | None = None,
+    document_fetcher: DocumentFetcher | None = None,
 ) -> dict[str, Any]:
     """Run the compiled harness graph for one run, persisting its output.
 
@@ -285,6 +301,9 @@ def run_harness(
         search_backends: Backends for the acquire component, searched in list
             order; defaults to the fixture pair (OpenAlex, Overton) — the same
             injection pattern as ``provider``.
+        document_fetcher: Fetcher for the ingest_full_text component; defaults
+            to ``FixtureFetcher()`` — the same injection pattern as
+            ``search_backends`` (approved gated change 3, task 008).
 
     Returns:
         Persisted IDs; ``artefact_id`` is None for non-echo components that do
@@ -316,6 +335,9 @@ def run_harness(
             search_backends
             if search_backends is not None
             else [OpenAlexFixtureBackend(), OvertonFixtureBackend()]
+        ),
+        "document_fetcher": (
+            document_fetcher if document_fetcher is not None else FixtureFetcher()
         ),
         "block_ids": {},
         "error": None,

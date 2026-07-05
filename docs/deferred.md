@@ -1,8 +1,24 @@
 # Deferred seams
 
-Recorded, not built in v3.0 — seams left open per "build light, leave seams." Each is a real
+Recorded, not built *yet* — seams left open per "build light, leave seams." Each is a real
 architectural decision to defer, not an omission. Sources: architecture reference §§3–11
 (Appendix A; Appendix B), briefing Appendix A, EB build spec, EB handoff §7. Grouped by area.
+
+**Two kinds of entry live here — don't conflate them** (user clarification, 2026-07-05):
+
+1. **Sequenced v3.0 capabilities** — required for v3.0 to function as intended, waiting only
+   on their approval gates (runtime egress · LLM/inference). The specs are explicit that
+   **v3.0 has live egress** (briefing §Security: inference calls via the configured route,
+   first pass OpenAI → target Bedrock; search queries to configured evidence backends —
+   "accepted as a documented v3.0 risk because external evidence gathering is core to the
+   product", arch-ref §3.3). "Zero runtime egress" in task docs is a *build-stage discipline*
+   (each slice introducing product egress needs explicit approval — harness.md), never a v3.0
+   scope statement. In this class: **live `SearchBackend`s** · **live `DocumentFetcher`** ·
+   the **LLM screen / classify tools** · the **LLM grounding tier** · **vectorisation at the
+   first vector reader** — the product cannot search, fetch, ingest, vectorise or reason
+   without them.
+2. **Deferred beyond v3.0** — everything else below: doors deliberately left open (other
+   capabilities, branch parallelism, per-item egress controls, private deployments, …).
 
 ## Capabilities
 
@@ -86,17 +102,17 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   slice — needs its own spec refinement (`docs/specs/capabilities/evidence-base/components.md`
   currently describes classify as running on "the screened-in set" unconditionally) before any
   component is built against it.
-- **Full-text ingestion and `characterise`+ EB components** — subsequent slices (screen,
-  classify, appraise and acquire landed: tasks 004–007). **Slice 008 (full-text) inputs
-  retained for it** (task 007): OpenAlex URL/OA block (`primary_location`, `best_oa_location`,
-  `open_access`) and Overton `document_url`/`pdf_url` + `grouped_pdf_ids_in_result` (multi-PDF
-  documents are real) live in each acquired snapshot's `metadata.provider_fields`. Carry v2's
-  patterns: OA-location precedence (`primary_location` → `best_oa_location` →
-  `open_access.oa_url`), fetch cascade (pdf_url → landing-page scrape with PDF-link discovery →
-  DOI URL), parse caps (50 MB / 50 pages / 100K chars), and a failure manifest — plus its
-  fragilities to avoid (fetch errors swallowed at debug level; thin DOI-landing text still
-  reported `ok`). Full-text snapshot identity (new snapshot vs attach-to-existing under
-  immutability) is 008's own design fork, deliberately not foreclosed by 007.
+- **`characterise`+ EB components** — subsequent slices (screen, classify, appraise, acquire
+  and full-text ingestion landed: tasks 004–008). The task-007 note that retained provider URL
+  fields "for slice 008" is discharged: 008 consumed them with an **updated precedence** —
+  OpenAlex `best_oa_location.pdf_url` → `primary_location.pdf_url` → `open_access.oa_url` →
+  `primary_location.landing_page_url` (contract-stage adversarial finding 4 superseded v2's
+  `primary_location`-first order); Overton `pdf_url` → `document_url`. v2's **parse caps were
+  not carried** — truncation is abolished (full text or honest failure; `too_large`/`timeout`
+  fail loudly, contract decision 6) — and v2's fragilities (fetch errors swallowed at debug
+  level; thin landing-page text reported `ok`) are structurally closed (reason-coded
+  `full_text_status`/`full_text_error`, thin-text guard). Snapshot identity resolved as a
+  **new immutable `full_text` snapshot linked at the project-source link** (ADR 0003).
 - **`implementation_context_finding`** — the second reusable finding schema (mechanisms, barriers,
   implementation conditions); cross-schema linkage is reference-mediated via `group`.
 - **Saturation-based search stopping** (iterating retrieval↔screen until no new relevant docs);
@@ -120,9 +136,10 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 
 ## Search / acquisition (task 007 seams)
 
-- **Live `SearchBackend` implementations** (OpenAlex, Overton) — the seam is built and both
-  envelope mappings run against authentic recorded structure; wiring live HTTP is **runtime
-  egress**, its own gated slice. Requirements carried from the v2 integration review (task 007
+- **Live `SearchBackend` implementations** (OpenAlex, Overton) — **confirmed in-scope for
+  v3.0** (user, 2026-07-05; header class 1 — the product cannot function without live
+  search). The seam is built and both envelope mappings run against authentic recorded
+  structure; wiring live HTTP is **runtime egress**, its own gated slice. Requirements carried from the v2 integration review (task 007
   contract): explicit request timeouts everywhere (v2's OpenAlex path could hang unbounded);
   a real Overton rate limiter (max 1 call/s, 429 + key-block on abuse — v2 had none); the
   OpenAlex query sanitizer (commas inside quoted phrases break queries) applied on the
@@ -185,6 +202,87 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   retained-but-unread — becomes a visible flag in the deferred appraisal second pass
   (flag-not-block); the small-sample-penalty deferral is now evidence-backed (neither API ships
   sample size).
+
+## Full-text ingestion (task 008 seams)
+
+- **Live `DocumentFetcher`** — **confirmed in-scope for v3.0** (user, 2026-07-05: the product
+  cannot function as intended without live fetching), so this entry is *sequencing*, not
+  scoping-out — unlike most of this file. The seam is built (protocol +
+  `run_harness(document_fetcher=…)`); wiring live HTTP is **runtime egress**, its own gated
+  slice. Requirements carried from the 008 contract + review stack (pre-registered so they
+  aren't rediscovered in production):
+  explicit timeouts, redirect handling with an explicit protocol policy (SSRF posture for
+  provider-supplied URLs), politeness + per-host rate limiting, retry/backoff, content-type
+  sniffing (a PDF served as `application/octet-stream` must not fall through to the plain-text
+  parser — magic bytes, not headers) and charset handling (v3.0 decodes HTML as UTF-8-replace;
+  honour the declared charset or pass bytes to trafilatura), landing-page scrape + PDF-link
+  discovery, DOI-URL fallback, a **paywall-detection signal ladder** (v3.0 maps only HTTP
+  401/403) with an OA-status cross-check, per-link exception isolation (a fetcher raise must
+  become a reason-coded outcome, not a component failure — fail-loud is correct fixture-world,
+  wrong live), bounded in-flight buffering / streaming (parent-side bodies are unbounded per
+  cascade round today; fine at 24 fixture docs, an OOM risk live) and concurrent fetching
+  (v3.0 fetches serially in the parent — fine for fixture replay, sum-of-latencies live), and
+  a worker-side / OS-level egress guard in the test suite (the socket-deny test now covers
+  parent + workers; an `unshare -n`-style CI guard is the stronger durable control). A
+  `pip-audit`-style dependency check belongs in CI now that binary parsing deps (pymupdf,
+  lxml) are in the tree — CI config is its own gate. **Fixture-corpus relocation** (user
+  decision, 2026-07-05): the ~24 MB committed corpus ships inside the package only because
+  replay *is* the v3.0 product behaviour; when the live fetcher takes over as default, move
+  the documents out of `src/policy_atlas/data/fulltext/` (to `tests/` or a pinned-hash
+  release asset) so the wheel slims — the corpus itself stays in the repo as the
+  deterministic test substrate. Growth is capped meanwhile by a test-enforced ≤30 MB budget
+  (`test_licence_guard`); raising the cap means consciously choosing the corpus strategy.
+- **Concurrent-run write guard** — eligibility selection takes no row locks and final writes
+  are unconditional, so two simultaneous ingest runs over **one scope** could interleave
+  (mirrors 007's concurrent-run dedup note; Codex adversarial finding, task 008). Scoped
+  precisely (user question, 2026-07-05): the load-bearing invariant is **at most one active
+  run per project**, not a single-process deployment. Everything the pipeline components
+  mutate is project-scoped (eligibility filters on `project_id`; updates hit
+  `project_source_snapshot`; result-table unique constraints are per-scope; the event-log
+  sequence is `(project_id, sequence)`), so a **multi-user web app with users on different
+  projects is already safe** — the spec's "single active writer" is a per-project property.
+  The hazard is two writers on the *same* project (double-submit, retry racing the original,
+  two queue workers claiming one run). **Pre-registered requirement for the web-app /
+  durable-execution slice:** enforce one-active-run-per-project at run dispatch (Postgres
+  advisory lock on project id, or a partial unique index allowing one `running` run per
+  project) — or add row-level guards (`SELECT … FOR UPDATE` / status-guarded `UPDATE … WHERE`)
+  in the components.
+- **ML-layout parse escalation (docling)** — the quality tier for documents where pymupdf4llm's
+  font-size heading heuristic fails. Observed at 008's /verify: four heading-light academic
+  PDFs (Nature Comms ×2, Frontiers ASHP, PLOS) collapse into 2–3 very large chunks — content
+  complete and locators honest, but exactly the heuristic-vs-ML gap this seam exists for; gate
+  escalation on parse-quality evals. Sizing note: docling on CPU misses the couple-of-minutes
+  wall-clock target (~5–20 min fanned out per ~100 docs) — GPU (AWS) sizing is part of this
+  seam. The **pymupdf-layout tier is licence-blocked** for distribution: PolyForm
+  Noncommercial / Artifex commercial — a further restriction AGPL-3.0 §7 cannot carry
+  (investigated 2026-07-05; offline operation proven, so it slots in here if commercial
+  licensing is ever bought). The determinism source-patch
+  (`_install_deterministic_column_boxes`) deliberately no-ops if upstream's source changes —
+  the fan-out determinism test is the backstop, the pin floor is `>=0.3.4`, and an upstream
+  bug report is filed as follow-up.
+- **Time-budget-aware parser selection** — the user's stated time horizon picks the parser
+  (tight → pymupdf4llm, long → ML layout); `parse_profile`-per-snapshot (ADR 0004) is the hook.
+- **Chunk-volume bias controls at the retrieve seam** — full-text documents contribute tens of
+  chunks vs one abstract chunk; per-document caps / MMR / document-grain grouping when
+  retrieval lands. Token-budgeted re-chunking at the embed seam subdivides the oversized
+  heading-light sections above regardless.
+- **OCR for `no_text_layer` documents** — scanned-only PDFs are reason-coded and kept, never
+  parsed; an OCR tier (with its own honesty label) is the follow-on. Text-layer detection is
+  Unicode-aware (`\w`), so non-Latin scripts don't false-positive into this bucket.
+- **Vectorisation at the first vector reader** — eager-and-uniform discipline restated in EB
+  components §4 (008 spec clarification): embed at ingest *when the first vector consumer
+  lands*, with token-budgeted chunk sizing decided there.
+- **Multi-PDF Overton assembly** — `grouped_pdf_ids_in_result` is retained; v3.0 ingests the
+  primary `pdf_url` only.
+- **Injection-screening posture extended to fetched full text** — same posture as acquired
+  abstracts (007 entry above): full-text chunks are third-party content-of-record; nothing in
+  v3.0 interprets them; enforcement lands with the LLM seams that read them.
+- **Cross-project full-text snapshot reuse** — same shape as the acquired-envelope dedup entry
+  (Data model section): `source_snapshot` is project-free, so reuse is additive. Note: today
+  concurrent ingest of one document in two projects merely duplicates snapshots (wasteful, not
+  corrupting); the reuse seam turns that into the system's first genuinely **cross**-project
+  write race (two projects deduping onto one snapshot) — that slice inherits the concurrency
+  design, alongside the per-project run guard above.
 
 ## Data model / evidence
 

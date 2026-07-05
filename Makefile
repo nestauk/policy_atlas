@@ -1,4 +1,4 @@
-.PHONY: setup test typecheck lint build verify okf-validate
+.PHONY: setup test test-fast typecheck lint build verify okf-validate
 
 # Tests run against a dedicated database on the same local container, so committing
 # tests can't pollute the dev DB. Override for a different host/DB.
@@ -18,6 +18,11 @@ setup:
 
 test:
 	DATABASE_URL="$(TEST_DATABASE_URL)" uv run pytest
+
+# Inner-loop convenience: everything except the ingest integration tests (~11 real
+# document-ingest runs, minutes). Full `make test` / `make verify` remain the gate.
+test-fast:
+	DATABASE_URL="$(TEST_DATABASE_URL)" uv run pytest --ignore=tests/test_ingest_full_text.py
 
 typecheck:
 	uv run mypy src tests

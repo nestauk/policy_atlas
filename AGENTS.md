@@ -22,18 +22,24 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `007-acquire`.
+Implementation — task `008-full-text`.
 
-Tasks `001-walking-skeleton`, `002-test-db-split`, `003-source-snapshot`, `004-screen`,
-`005-classify`, and `006-appraise` are complete (merged). The active slice adds the `acquire`
-component (EB front edge): metadata-only acquisition through the `search` seam — a
-`SearchBackend` protocol with **fixture-backed OpenAlex and Overton backends** (academic +
-grey literature, the two v3.0 backends the spec names) replaying sanitized fixtures derived
-from dev-time-recorded real responses — authentic structure, fabricated values (zero runtime
-egress; live HTTP backends stay behind the egress gate). Acquired
-results ingest as text-in-hand snapshots (`origin="acquired"`, `text_basis="abstract_only"`),
-every search call emits a per-backend `search.executed` governance event, and each acquire run
-writes a `search_coverage_record` row. Two approved schema gates ride this slice: the
-`screening_scope` → `evidence_scope` rename and the new `search_coverage_record` table. Build
-per `docs/tasks/007-acquire/contract.md`. Stay within the contract's scope and stop conditions;
+Tasks `001-walking-skeleton` through `007-acquire` are complete (merged). The active slice
+adds **full-text ingestion** — the post-screen Tier-0 step: for a scope's screened-in
+acquired sources, resolve candidate URLs from the provider fields task 007 retained, fetch
+through a `DocumentFetcher` seam (current build: fixture replay of committed real,
+openly-licensed documents — zero runtime egress until the live-fetcher slice opens that
+gate; live fetching is v3.0-required, per deferred.md), parse
+structure-aware (PDF via `pymupdf4llm` — meets the couple-of-minutes-per-run wall-clock
+target; docling ML-layout escalation and time-budget-aware parser selection are recorded
+seams; HTML via `trafilatura`), segment under named versioned policies with
+page/heading-path chunk locators, and
+attach the resulting immutable `full_text` snapshot to the corpus document via
+`project_source_snapshot.full_text_snapshot_id`. **Never truncate** — full text or an
+honest, reason-coded failure; a failed source stays on the text in hand with a queryable
+`full_text_status`. Ingestion fans out per document over a bounded process pool with
+deterministic results. Vectorisation is deferred to the slice where vectors are first read.
+Three gated changes ride this slice (schema columns · `pymupdf4llm` + `trafilatura`
+dependencies · `run_harness` `document_fetcher` parameter). Build per
+`docs/tasks/008-full-text/contract.md`. Stay within the contract's scope and stop conditions;
 all other capabilities and seams remain deferred (`docs/deferred.md`).

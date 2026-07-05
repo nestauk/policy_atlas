@@ -2,6 +2,10 @@
 
 ## 2026-07-05
 * **Creation**: Added
+  [fulltext-chunk-hash-determinism](fulltext-chunk-hash-determinism.md) — same bytes must hash
+  the same in every process; pymupdf4llm 0.3.4's id()-keyed cache breaks it, source-patched at
+  import with the fan-out determinism test as backstop (task 008).
+* **Creation**: Added
   [sanitized-fixtures-audit-against-raw](sanitized-fixtures-audit-against-raw.md) — verify
   recorder sanitization by substring-auditing raw vs committed fixture (list items inherit the
   list's key; rare fields like grant IDs slip key lists; use a neutral fake lexicon) (task 007).

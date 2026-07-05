@@ -99,7 +99,11 @@ it is snapshotted/ingested on the text in hand (abstract + metadata), carrying a
 **`text_basis`** (`full_text` | `abstract_only`) so grounding and coverage see which a finding
 rests on. Full-text fetch is egress but mechanical execution of the governed `search` (telemetry
 plane + run-record summary, *not* a per-document audit event). Vectorisation is **eager and
-uniform** (lazy/on-demand rejected — biases retrieval toward what was vectorised early). ⏸
+uniform** (lazy/on-demand rejected — biases retrieval toward what was vectorised early). In v3.0
+Tier-0 ingestion lands as fetch → parse → segment; **vectorisation is deferred to the slice where
+vectors are first read** (nothing in v3.0 reads an embedding), and when the embed seam lands it
+vectorises eagerly and uniformly over all ingested snapshots — the discipline is kept, not
+weakened (task 008, decision 1). ⏸
 budget cap + lazy vectorisation for very large relevant sets is a possible later refinement.
 
 ## 5 — characterise (shallow terminus)

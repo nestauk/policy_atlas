@@ -45,13 +45,21 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         citation as citation_table,
     )
 
-    # Capture snapshot IDs associated with this project before any deletes
-    snapshot_ids = [
-        row[0] for row in conn.execute(
-            select(project_source_snapshot.c.source_snapshot_id)
-            .where(project_source_snapshot.c.project_id == project_id)
-        ).fetchall()
-    ]
+    # Capture snapshot IDs associated with this project before any deletes.
+    # Union of envelope + full-text snapshot ids (plan-review finding 5:
+    # full-text snapshots are project-less rows reachable only through the
+    # link; capturing only the envelope id orphans them).
+    snapshot_ids_set: set[uuid.UUID] = set()
+    for env_id, ft_id in conn.execute(
+        select(
+            project_source_snapshot.c.source_snapshot_id,
+            project_source_snapshot.c.full_text_snapshot_id,
+        ).where(project_source_snapshot.c.project_id == project_id)
+    ).fetchall():
+        snapshot_ids_set.add(env_id)
+        if ft_id is not None:
+            snapshot_ids_set.add(ft_id)
+    snapshot_ids = list(snapshot_ids_set)
 
     block_ids_subq = select(block.c.block_id).where(
         block.c.artefact_id.in_(
