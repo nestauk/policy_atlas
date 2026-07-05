@@ -1,0 +1,85 @@
+---
+name: task-cycle-build
+description: >
+  Task-cycle phase B (steps 5–6): implement an approved Policy Atlas contract/plan and
+  produce verification evidence. Trigger when starting implementation of a contracted
+  slice ("implement task NNN", "start the build", a fresh conversation opening on an
+  approved plan). Runs in its own conversation (B); scope a /goal to "through step 6"
+  only — never let it span the review phase. Tier rules, hard gates and conversation
+  map live in the task-cycle spine — read it first.
+---
+
+# Task cycle — build phase (steps 5–6)
+
+Prerequisite: [task-cycle spine](../task-cycle/SKILL.md). Re-ground first: read
+`docs/tasks/NNN-slug/contract.md` + `plan.md` and the specs they cite, then run
+`make verify` — **never build on a red base** you'll later misattribute to your own
+changes. An optional `/goal` for this phase is "through step 6: verification.md complete,
+`make verify` green, phases committed" — one goal per phase, never spanning review.
+
+## Tools this phase orchestrates
+
+- **Implement:** `agent-skills:incremental-implementation`; ground framework code
+  (LangGraph, SQLAlchemy, pydantic, alembic) in official docs with
+  `agent-skills:source-driven-development`; seams/interfaces with
+  `agent-skills:api-and-interface-design`; logic & bug-fixes via
+  `agent-skills:test-driven-development` (failing test first; invoke as `/test`).
+- **Delegate volume per the plan's executor marks** (decided at plan time — see
+  harness.md § Agent-side model routing for the tiers and the delegation-brief shape):
+  `fast-worker` for mechanical volume and test scaffolding from a precise list;
+  `deep-reasoner` for reasoning offload; Codex as doer (`codex:rescue`) for a precise,
+  machine-verifiable brief when Claude budget is the constraint — then Claude anchors the
+  review (family-flip). The lead reviews delegated output before it lands; if it misses
+  the bar, rewrite the brief or escalate the model — don't hand-polish weak output.
+- **Debug a red `make verify`:** `agent-skills:debugging-and-error-recovery` (root-cause,
+  not guess); escalate a stubborn/substantial fix to `codex:rescue` — write-capable, a
+  *doer*, not a reviewer.
+- **Situational:** `agent-skills:deprecation-and-migration` (schema/API migrations),
+  `agent-skills:observability-and-instrumentation` (logging/metrics/tracing),
+  `agent-skills:git-workflow-and-versioning` (branch/commit hygiene).
+
+## Step 5 — Implement
+
+One contract at a time, incrementally. structlog only (no print/stdlib logging in package
+code). Touch only what the contract requires. Land a check before the next sub-phase; each
+plan checkpoint ends with a commit on `task/NNN-slug` (green `make verify` only).
+
+**When building reveals a design problem**, size it before reacting:
+- **Blocking / material** (the contract or a spec is wrong enough to change the design):
+  pause and flow it back — task-cycle-design § Spec refinement (propose → 🛑 human →
+  update spec + log → resume). Don't code around an outgrown spec.
+- **Minor, resolvable within the contract's own vocabulary** (e.g. the contract offers
+  "None/absent" and one of the two makes its stated intent true): resolve it, add a test,
+  and **flag it explicitly in `verification.md`'s diff summary** — visible deviation, not
+  silent drift, and not a full stop (precedent: 007's None-vs-absent envelope persistence).
+
+Durable records (`docs/knowledge/`, `docs/deferred.md`, agentic-ops claims) are authored
+**after** the review stack finalises the code — at step 8, not here — so they describe
+what actually shipped.
+
+## Step 6 — Verify
+
+Fill `docs/tasks/_templates/verification.md` → `docs/tasks/NNN-slug/verification.md`:
+`make verify` table, named-test results, the **exact** end-to-end command, diff summary
+(flagging any minor deviations per above), public-safety, gaps.
+
+Drive the affected flow end-to-end with `/verify` (exercises real behaviour, not just
+tests) — the flow it drove supplies the exact end-to-end command. If `make verify` is red,
+root-cause it — don't guess. When the stop condition is objective (`make verify` green, a
+named test), a `/goal` may drive the implement ↔ verify inner loop; judgment-call phases
+never — they end at a 🛑.
+
+**Fixture/recording slices only:** if the slice derives committed fixtures from real
+recorded data, the sanitizer's output is verified by **substring-auditing the raw
+recording against the committed fixture** (no identifying raw string survives), not by
+reviewing the sanitizer's key list — see
+`docs/knowledge/sanitized-fixtures-audit-against-raw.md`; put the audit in the contract's
+acceptance checks at design time when you know the slice records.
+
+## Phase exit
+
+`make verify` fully green · end-to-end flow driven and recorded · `verification.md`
+complete · all plan checkpoints committed. **Stop — do not run the review stack here.**
+Review runs in a fresh conversation with
+[`task-cycle-review`](../task-cycle-review/SKILL.md): the adjudicator of findings must not
+be the conversation that wrote the code (failure-log, 2026-07-05).

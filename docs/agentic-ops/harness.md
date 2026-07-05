@@ -54,11 +54,21 @@ and the lead-only rules below (you can't pin a "don't delegate" — those stay p
 | Review fan-out: contract verification, adversarial passes | [`contract-verifier`](../../.claude/agents/contract-verifier.md) (pinned Opus) · `agent-skills` reviewer subagents · Codex — **not the lead**; the lead adjudicates findings |
 | Heterogeneous peer (different model family): native review, adversarial review, rescue/doer | Codex — `/codex:review` · `/codex:adversarial-review` · `codex:rescue` |
 
+**Routing is decided at plan time, not implement time** (failure-log, 2026-07-05): the plan
+marks each task with its executor (`lead` / `fast-worker` / `deep-reasoner` / `codex`), reviewed
+at the plan gate. Mid-build, the lead always has full context loaded and every task looks
+cheapest inline — 007's ~450-line test file went to the lead that way despite a
+fast-worker-shaped contract test list. Counter-rule: one-command mechanical edits (`sed`-able
+sweeps) stay inline, and if you can't write the brief, it isn't delegable.
+
 **Review lane economics.** The review stack is where lead-model usage spikes: each pass re-reads
 the same diff, and that reading is systematic work, not frontier judgment. So: reviewers run on
 pinned Opus (`contract-verifier`), plugin reviewer subagents, and Codex — the lead's job in step 7
-is to *adjudicate* findings and decide fixes, not to generate the reviews. Run review in a fresh,
-short conversation (task-cycle context strategy) so the diff is the only context being re-paid.
+is to *adjudicate* findings and decide fixes, not to generate the reviews. Review runs in a fresh
+conversation — fresh reviewer lanes are not enough; the **adjudicator must not be the author**
+(failure-log, 2026-07-05) — so the diff is the only context being re-paid. Exclude generated/bulk
+data files from the review diff by pathspec (e.g. `:!src/policy_atlas/data/*.json`) — data files
+get their own audit lane; on 007 they alone doubled the review spend.
 `/code-review` runs at `medium` at **every** tier — `high` dispatches a workflow fan-out an order
 of magnitude costlier (measured on 006-appraise: 552K tokens / 16 agents vs ~80K for a single
 reviewer, for one extra low-severity finding) and is user-opt-in only. One security lane per diff
@@ -166,16 +176,19 @@ gated. See Known gaps.
 ## Verification layer
 
 - `make verify` (okf-validate / test / typecheck / lint / build) — the green bar.
-- `/goal` — goal-conditioned runs for the **implement ↔ verify inner loop only**, and only when the
-  stop condition is objective (`make verify` green, a named test passing — CLAUDE.md's "only when
-  completion is measurable"). Its independent checker model grades completion, so the maker doesn't
-  grade its own homework. Session-scoped, attended; **not** for judgment-call phases
-  (contract/plan/review — those end at a 🛑), and scheduling/unattended runs stay behind the
-  `loops/` earn-it bar ([backlog.md](backlog.md)).
+- `/goal` — goal-conditioned runs, only when the stop condition is objective (`make verify`
+  green, a named test passing — CLAUDE.md's "only when completion is measurable"). Its independent
+  checker model grades completion, so the maker doesn't grade its own homework. **Scope: one goal
+  per task-cycle phase, never spanning phases** — a goal covering build *and* review forces
+  same-chat review and makes the author the adjudicator (failure-log, 2026-07-05); goal #1 = build
+  "through step 6", fresh conversation + goal #2 = the review stack. Session-scoped, attended;
+  **not** for judgment-call phases (contract/plan — those end at a 🛑), and scheduling/unattended
+  runs stay behind the `loops/` earn-it bar ([backlog.md](backlog.md)).
 - `verification.md` per task — commands run, exact end-to-end command, evidence, public-safety, gaps.
 - `rubric.md` — completion checklist; done only if every box holds.
-- Review stack: `/code-review` + `/security-review` (every PR) -> adversarial subagent review
-  (`security-auditor` at Tier 3+) -> `/simplify`.
+- Review stack (detail: `task-cycle-review` skill): contract-verifier -> `/code-review` medium ->
+  one security lane (`security-auditor` at Tier 3+, `/security-review` at Tier <=2) -> Codex
+  adversarial -> `/simplify`. Fresh conversation; data files excluded from the diff by pathspec.
 
 ## Observability
 
