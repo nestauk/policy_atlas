@@ -74,6 +74,10 @@ EXPECTED_BY_REASON = {
     "corrupt": 1,
 }
 
+CorpusFixture = tuple[
+    uuid.UUID, uuid.UUID, uuid.UUID, dict[str, Any], list[dict[str, Any]]
+]
+
 
 def seed_corpus(conn: Connection) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
     """Acquire + screen the committed fixtures; return (project_id, run_id, scope_id)."""
@@ -91,6 +95,65 @@ def seed_corpus(conn: Connection) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
     return project_id, run_id, scope_id
 
 
+def _seed_acquired_link(
+    conn: Connection, project_id: uuid.UUID, run_id: uuid.UUID, meta: dict[str, Any]
+) -> tuple[uuid.UUID, uuid.UUID]:
+    """Insert a bare acquired-origin envelope snapshot + link (no chunk — unneeded by ingest).
+
+    Returns (source_snapshot_id, project_source_snapshot_id).
+    """
+    snap_id = uuid.uuid4()
+    pss_id = uuid.uuid4()
+    conn.execute(source_snapshot.insert().values(
+        source_snapshot_id=snap_id,
+        content_hash=str(uuid.uuid4()),
+        text_basis="abstract_only",
+        source_locator="https://example.org/synthetic",
+        metadata=meta,
+        created_at=now(),
+    ))
+    conn.execute(project_source_snapshot.insert().values(
+        project_source_snapshot_id=pss_id,
+        project_id=project_id,
+        source_snapshot_id=snap_id,
+        origin="acquired",
+        run_id=run_id,
+        ingested_at=now(),
+    ))
+    return snap_id, pss_id
+
+
+def seed_small_corpus(conn: Connection) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
+    """Four hand-seeded links (PDF ok · HTML ok · 404 · thin) — for property tests
+    that don't need the full 24-document corpus. Expected outcome: 4 eligible →
+    2 ingested, 1 fetch_failed/not_found, 1 parse_failed/thin_text.
+    """
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    for meta in (
+        {"backend": "overton", "provider_fields": {"pdf_url": "https://example.org/42ad8806fb1f"}},
+        {
+            "backend": "openalex",
+            "provider_fields": {
+                "primary_location": {"landing_page_url": "https://doi.org/10.99999/cacf1b906a"}
+            },
+        },
+        {
+            "backend": "overton",
+            "provider_fields": {"pdf_url": "https://example.org/04fc90d2b999.pdf"},
+        },
+        {
+            "backend": "openalex",
+            "provider_fields": {
+                "primary_location": {"landing_page_url": "https://doi.org/10.99999/050131ae0e"}
+            },
+        },
+    ):
+        _, pss_id = _seed_acquired_link(conn, project_id, run_id, meta)
+        seed_screening_result(conn, project_id, run_id, scope_id, pss_id, status="relevant")
+    return project_id, run_id, scope_id
+
+
 def run_ingest(
     conn: Connection,
     project_id: uuid.UUID,
@@ -101,6 +164,11 @@ def run_ingest(
     """Run ingest_full_text_sources over the fixture fetcher with test-friendly defaults."""
     kwargs.setdefault("fetcher", FixtureFetcher())
     kwargs.setdefault("max_workers", 4)
+    # Generous test-only headroom: outcome-distribution assertions must not flip on
+    # machine load (4 concurrent parses + whatever else the host runs). Timeout
+    # *semantics* are covered by the dedicated timeout test; the product default
+    # stays PARSE_TIMEOUT_SECONDS in src.
+    kwargs.setdefault("parse_timeout", 300.0)
     return ingest_full_text_sources(
         conn,
         project_id=project_id,
@@ -166,14 +234,21 @@ def _corpus_state(conn: Connection, project_id: uuid.UUID) -> list[tuple[Any, ..
 # --- Fan-out determinism, timeout termination, zero egress (lead-authored) ---
 
 
-def test_fanout_determinism_workers_1_vs_4(conn: Connection) -> None:
-    """workers=1 and workers=4 produce identical DB state (decision 8)."""
-    p1, r1, s1 = seed_corpus(conn)
-    summary1 = run_ingest(conn, p1, r1, s1, max_workers=1)
+def test_fanout_determinism_workers_1_vs_4(
+    ingested_corpus: CorpusFixture, engine: Engine, conn: Connection
+) -> None:
+    """workers=1 and workers=4 produce identical DB state (decision 8).
+
+    Rides the module fixture (already run at workers=1) as one leg instead of
+    paying for a second full 24-document run; only the workers=4 leg is fresh.
+    """
+    fixture_project, _, _, fixture_summary, _ = ingested_corpus
     p4, r4, s4 = seed_corpus(conn)
     summary4 = run_ingest(conn, p4, r4, s4, max_workers=4)
-    assert summary1 == summary4
-    assert _corpus_state(conn, p1) == _corpus_state(conn, p4)
+    assert fixture_summary == summary4
+    with engine.connect() as conn_a:
+        state_a = _corpus_state(conn_a, fixture_project)
+    assert state_a == _corpus_state(conn, p4)
 
 
 def _slow_parse(body: bytes, content_type: str, thin_min: int) -> dict[str, Any]:
@@ -184,10 +259,15 @@ def _slow_parse(body: bytes, content_type: str, thin_min: int) -> dict[str, Any]
 
 def test_parse_timeout_terminates_worker_and_run_completes(conn: Connection) -> None:
     """A hung parse is genuinely terminated (finding 6): the run finishes with
-    parse_failed/timeout well inside the double's sleep, leaving no live worker."""
+    parse_failed/timeout well inside the double's sleep, leaving no live worker.
+
+    The suite runs serially, so the bound is tight (45s): a leaked worker set stuck
+    in the double's 60s sleep would instead take several hundred seconds (one full
+    sleep per remaining candidate, serialized).
+    """
     import multiprocessing
 
-    project_id, run_id, scope_id = seed_corpus(conn)
+    project_id, run_id, scope_id = seed_small_corpus(conn)
     start = time.monotonic()
     summary = run_ingest(
         conn, project_id, run_id, scope_id,
@@ -211,14 +291,18 @@ def test_parse_timeout_terminates_worker_and_run_completes(conn: Connection) -> 
 
 
 def test_zero_egress_socket_deny(conn: Connection, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A full fixture ingest with socket creation blocked completes green
+    """A fixture ingest with socket creation blocked completes green
     (adversarial finding 5) — the zero-egress claim proven at runtime.
 
     Scoped, not autouse: the suite's own Postgres connection runs over a socket,
     so the guard patches socket.socket only around the ingest call, after the DB
     connection is established (plan-review finding 2).
+
+    Deliberately narrowed to a 4-doc fixture subset (both parser paths, real
+    committed files, full fetch→parse→write) — the full-breadth ingest runs
+    unguarded in the module fixture; narrowing noted in verification.md.
     """
-    project_id, run_id, scope_id = seed_corpus(conn)
+    project_id, run_id, scope_id = seed_small_corpus(conn)
 
     def _deny(*args: Any, **kwargs: Any) -> Any:
         raise AssertionError("socket creation attempted during fixture ingest")
@@ -226,9 +310,9 @@ def test_zero_egress_socket_deny(conn: Connection, monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(socket, "socket", _deny)
     summary = run_ingest(conn, project_id, run_id, scope_id)
     monkeypatch.undo()
-    assert summary["ingested"] == EXPECTED_INGESTED
-    assert summary["fetch_failed"] == EXPECTED_FETCH_FAILED
-    assert summary["parse_failed"] == EXPECTED_PARSE_FAILED
+    assert summary["ingested"] == 2
+    assert summary["fetch_failed"] == 1
+    assert summary["parse_failed"] == 1
 
 
 def test_recorder_script_not_imported_by_package() -> None:
@@ -285,12 +369,28 @@ _KNOWN_INGEST_RUN_EVENT_TYPES = {
     "component.started", "component.completed", "run.completed", "run.failed",
 }
 
-CorpusFixture = tuple[uuid.UUID, uuid.UUID, uuid.UUID, dict[str, Any]]
-
 
 def _norm_ws(text: str) -> str:
     """Collapse whitespace so PDF line-wraps don't break a literal-sentence check."""
     return " ".join(text.split())
+
+
+def _envelope_snapshots(conn: Connection, project_id: uuid.UUID) -> list[dict[str, Any]]:
+    """Envelope source_snapshot rows for a project's links, as plain dicts."""
+    return [
+        dict(r._mapping)
+        for r in conn.execute(
+            select(source_snapshot)
+            .select_from(
+                project_source_snapshot.join(
+                    source_snapshot,
+                    project_source_snapshot.c.source_snapshot_id
+                    == source_snapshot.c.source_snapshot_id,
+                )
+            )
+            .where(project_source_snapshot.c.project_id == project_id)
+        ).fetchall()
+    ]
 
 
 @pytest.fixture(scope="module")
@@ -300,12 +400,18 @@ def ingested_corpus(engine: Engine) -> Generator[CorpusFixture, None, None]:
     Real PDF/HTML parses cost ~15-20s; every read-only test below rides this single
     run instead of paying for its own (mutating tests use the rollback-safe function-
     scoped ``conn`` fixture and seed their own corpus).
+
+    Runs at ``max_workers=1``: this doubles as the workers=1 leg of the fan-out
+    determinism comparison in ``test_fanout_determinism_workers_1_vs_4``, which
+    seeds its own fresh workers=4 corpus and compares against this one instead of
+    paying for two full 24-document runs.
     """
     with engine.connect() as c:
         project_id, run_id, scope_id = seed_corpus(c)
-        summary = run_ingest(c, project_id, run_id, scope_id)
+        envelope_snapshots = _envelope_snapshots(c, project_id)
+        summary = run_ingest(c, project_id, run_id, scope_id, max_workers=1)
         c.commit()
-    yield project_id, run_id, scope_id, summary
+    yield project_id, run_id, scope_id, summary, envelope_snapshots
     with engine.connect() as c:
         delete_project_data(c, project_id)
         c.commit()
@@ -359,36 +465,8 @@ def _full_text_snapshot_count(conn: Connection, project_id: uuid.UUID) -> int:
     ).scalar_one()
 
 
-def _seed_acquired_link(
-    conn: Connection, project_id: uuid.UUID, run_id: uuid.UUID, meta: dict[str, Any]
-) -> tuple[uuid.UUID, uuid.UUID]:
-    """Insert a bare acquired-origin envelope snapshot + link (no chunk — unneeded by ingest).
-
-    Returns (source_snapshot_id, project_source_snapshot_id).
-    """
-    snap_id = uuid.uuid4()
-    pss_id = uuid.uuid4()
-    conn.execute(source_snapshot.insert().values(
-        source_snapshot_id=snap_id,
-        content_hash=str(uuid.uuid4()),
-        text_basis="abstract_only",
-        source_locator="https://example.org/synthetic",
-        metadata=meta,
-        created_at=now(),
-    ))
-    conn.execute(project_source_snapshot.insert().values(
-        project_source_snapshot_id=pss_id,
-        project_id=project_id,
-        source_snapshot_id=snap_id,
-        origin="acquired",
-        run_id=run_id,
-        ingested_at=now(),
-    ))
-    return snap_id, pss_id
-
-
 def test_outcome_distribution(ingested_corpus: CorpusFixture) -> None:
-    _, _, _, summary = ingested_corpus
+    _, _, _, summary, _ = ingested_corpus
     assert summary["eligible"] == EXPECTED_ELIGIBLE
     assert summary["ingested"] == EXPECTED_INGESTED
     assert summary["already_ingested"] == 0
@@ -440,7 +518,7 @@ def test_per_link_statuses(
     error: str | None,
     fetched_from: str | None,
 ) -> None:
-    project_id, _, _, _ = ingested_corpus
+    project_id, _, _, _, _ = ingested_corpus
     with engine.connect() as conn:
         row = _by_backend_record_id(conn, project_id, record_id)
     assert row.full_text_status == status
@@ -451,7 +529,7 @@ def test_per_link_statuses(
 
 
 def test_pdf_structure_chunks(ingested_corpus: CorpusFixture, engine: Engine) -> None:
-    project_id, _, _, _ = ingested_corpus
+    project_id, _, _, _, _ = ingested_corpus
     with engine.connect() as conn:
         row = _by_backend_record_id(conn, project_id, "https://example.org/5f2286252e57")
         assert row.full_text_status == "ingested"
@@ -486,7 +564,7 @@ def test_pdf_structure_chunks(ingested_corpus: CorpusFixture, engine: Engine) ->
 
 
 def test_no_truncation_long_report(ingested_corpus: CorpusFixture, engine: Engine) -> None:
-    project_id, _, _, _ = ingested_corpus
+    project_id, _, _, _, _ = ingested_corpus
     with engine.connect() as conn:
         row = _by_backend_record_id(
             conn, project_id, "sanitizedorgf49937-f18086f777c8acbad55bb7f2230c557d"
@@ -505,7 +583,7 @@ def test_no_truncation_long_report(ingested_corpus: CorpusFixture, engine: Engin
 
 
 def test_html_main_content(ingested_corpus: CorpusFixture, engine: Engine) -> None:
-    project_id, _, _, _ = ingested_corpus
+    project_id, _, _, _, _ = ingested_corpus
     with engine.connect() as conn:
         row = _by_backend_record_id(conn, project_id, "https://example.org/325a3b216a30")
         assert row.full_text_status == "ingested"
@@ -528,7 +606,7 @@ def test_html_main_content(ingested_corpus: CorpusFixture, engine: Engine) -> No
 
 
 def test_success_metadata_complete(ingested_corpus: CorpusFixture, engine: Engine) -> None:
-    project_id, _, _, _ = ingested_corpus
+    project_id, _, _, _, _ = ingested_corpus
     with engine.connect() as conn:
         ft_ids = [
             row.full_text_snapshot_id
@@ -560,39 +638,25 @@ def test_success_metadata_complete(ingested_corpus: CorpusFixture, engine: Engin
             assert snap.content_hash == content_hash("".join(c.content for c in chunk_rows))
 
 
-def test_envelope_immutability(conn: Connection) -> None:
-    project_id, run_id, scope_id = seed_corpus(conn)
-
-    def _envelopes() -> dict[uuid.UUID, dict[str, Any]]:
-        return {
-            r.source_snapshot_id: dict(r._mapping)
-            for r in conn.execute(
-                select(source_snapshot)
-                .select_from(
-                    project_source_snapshot.join(
-                        source_snapshot,
-                        project_source_snapshot.c.source_snapshot_id
-                        == source_snapshot.c.source_snapshot_id,
-                    )
-                )
-                .where(project_source_snapshot.c.project_id == project_id)
-            ).fetchall()
-        }
-
-    before = _envelopes()
-    run_ingest(conn, project_id, run_id, scope_id)
-    after = _envelopes()
-    assert before == after
-    for snap_id, row in after.items():
-        assert row["text_basis"] == "abstract_only"
-        chunk_row = conn.execute(
-            select(chunk_table.c.content).where(chunk_table.c.source_snapshot_id == snap_id)
-        ).one()
-        assert row["content_hash"] == content_hash(chunk_row.content)
+def test_envelope_immutability(ingested_corpus: CorpusFixture, engine: Engine) -> None:
+    project_id, _, _, _, before = ingested_corpus
+    with engine.connect() as conn:
+        after = _envelope_snapshots(conn, project_id)
+        assert (
+            sorted(before, key=lambda r: r["source_snapshot_id"])
+            == sorted(after, key=lambda r: r["source_snapshot_id"])
+        )
+        for row in after:
+            assert row["text_basis"] == "abstract_only"
+            chunk_row = conn.execute(
+                select(chunk_table.c.content)
+                .where(chunk_table.c.source_snapshot_id == row["source_snapshot_id"])
+            ).one()
+            assert row["content_hash"] == content_hash(chunk_row.content)
 
 
 def test_governance_chain(ingested_corpus: CorpusFixture, engine: Engine) -> None:
-    project_id, run_id, _, _ = ingested_corpus
+    project_id, run_id, _, _, _ = ingested_corpus
     with engine.connect() as conn:
         ingested_rows = [
             r for r in _link_rows(conn, project_id) if r.full_text_status == "ingested"
@@ -706,7 +770,8 @@ def test_url_resolution_order() -> None:
 
 
 def test_no_url_persisted(conn: Connection) -> None:
-    project_id, run_id, scope_id = seed_corpus(conn)
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
     _, no_url_pss = _seed_acquired_link(
         conn, project_id, run_id, {"backend": "openalex", "provider_fields": {}}
     )
@@ -737,7 +802,8 @@ def test_no_url_persisted(conn: Connection) -> None:
 
 
 def test_eligibility_boundaries(conn: Connection) -> None:
-    project_id, run_id, scope_id = seed_corpus(conn)
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
 
     _, uploaded_pss = seed_source(conn, project_id)  # origin="uploaded"
     seed_screening_result(conn, project_id, run_id, scope_id, uploaded_pss, status="relevant")
@@ -773,18 +839,27 @@ def test_eligibility_boundaries(conn: Connection) -> None:
 
 
 def test_idempotency_and_retry(conn: Connection) -> None:
-    project_id, run_id, scope_id = seed_corpus(conn)
+    project_id, run_id, scope_id = seed_small_corpus(conn)
     first = run_ingest(conn, project_id, run_id, scope_id)
-    assert first["ingested"] == EXPECTED_INGESTED
+    assert first["ingested"] == 2
+    assert first["fetch_failed"] == 1
+    assert first["parse_failed"] == 1
+    assert first["by_reason"] == {"not_found": 1, "thin_text": 1}
+    assert (
+        first["eligible"]
+        == first["ingested"] + first["already_ingested"]
+        + first["fetch_failed"] + first["parse_failed"]
+    )
     n_ft_before = _full_text_snapshot_count(conn, project_id)
 
     run_id_2 = seed_run(conn, project_id)
     second = run_ingest(conn, project_id, run_id_2, scope_id)
 
-    assert second["already_ingested"] == EXPECTED_INGESTED
+    assert second["already_ingested"] == 2
     assert second["ingested"] == 0
-    assert second["fetch_failed"] == EXPECTED_FETCH_FAILED
-    assert second["parse_failed"] == EXPECTED_PARSE_FAILED
+    assert second["fetch_failed"] == 1
+    assert second["parse_failed"] == 1
+    assert second["by_reason"] == {"not_found": 1, "thin_text": 1}
     assert (
         second["eligible"]
         == second["ingested"] + second["already_ingested"]
@@ -795,7 +870,7 @@ def test_idempotency_and_retry(conn: Connection) -> None:
 
 
 def test_harness_roundtrip_and_events(conn: Connection) -> None:
-    project_id, run_id, scope_id = seed_corpus(conn)
+    project_id, run_id, scope_id = seed_small_corpus(conn)
     ingest_run_id = seed_run(conn, project_id)
     config = compile(Plan(component="ingest_full_text", evidence_scope_id=scope_id))
     run_harness(
@@ -814,16 +889,16 @@ def test_harness_roundtrip_and_events(conn: Connection) -> None:
     completed = [e["payload"] for e in run_events if e["event_type"] == "component.completed"]
     assert len(completed) == 1
     assert completed[0]["component"] == "ingest_full_text"
-    assert completed[0]["eligible"] == EXPECTED_ELIGIBLE
-    assert completed[0]["ingested"] == EXPECTED_INGESTED
-    assert completed[0]["fetch_failed"] == EXPECTED_FETCH_FAILED
-    assert completed[0]["parse_failed"] == EXPECTED_PARSE_FAILED
-    assert completed[0]["by_reason"] == EXPECTED_BY_REASON
+    assert completed[0]["eligible"] == 4
+    assert completed[0]["ingested"] == 2
+    assert completed[0]["fetch_failed"] == 1
+    assert completed[0]["parse_failed"] == 1
+    assert completed[0]["by_reason"] == {"not_found": 1, "thin_text": 1}
 
     started = [e for e in run_events if e["event_type"] == "component.started"]
     assert len(started) == 1
 
-    assert _full_text_snapshot_count(conn, project_id) >= 1
+    assert _full_text_snapshot_count(conn, project_id) == 2
 
 
 def test_delete_project_data_with_fulltext(conn: Connection) -> None:
@@ -871,7 +946,7 @@ def test_delete_project_data_with_fulltext(conn: Connection) -> None:
 
 
 def test_downstream_unchanged(conn: Connection) -> None:
-    project_id, run_id, scope_id = seed_corpus(conn)
+    project_id, run_id, scope_id = seed_small_corpus(conn)
     classify_sources(
         conn, project_id=project_id, run_id=run_id,
         context=ClassifyContext(scope_id=scope_id, intent="test", context={}),

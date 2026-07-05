@@ -7,7 +7,7 @@ findings** + **Rubric status** to be added by the review stack (step 7).
 
 | Command | Result | Notes |
 |---|---:|---|
-| `make test` | pass | 205 passed (169 pre-slice + 36 in `test_ingest_full_text.py`); suite ~9 min — the ingest tests run ~10 real-document ingests (fetch-replay + spawned parse workers, no mocking) |
+| `make test` | pass | 205 passed (169 pre-slice + 36 in `test_ingest_full_text.py`); ~2:36 after the post-build slimming (unmocked real-document ingests throughout); `make test-fast` (~5 s) skips the ingest integration file for the inner loop |
 | `make typecheck` | pass | mypy strict, 31 source files |
 | `make lint` | pass | ruff |
 | `make build` | pass | sdist + wheel |
@@ -95,8 +95,9 @@ all passed. Recorded in `_meta` (recorder v1, pymupdf4llm 0.3.4, trafilatura 2.1
 
 233-page World Bank PDF, in-process `parse_and_segment` on CPU (Apple Silicon, pinned
 `pymupdf4llm` 0.3.4): **wall-clock 27.2 s, peak RSS 132 MB**, parsed whole (max locator
-page 233, 63 chunks, 505,730 chars). No memory pathology; comfortably inside the 60 s
-per-document timeout. The full 24-document skeleton ingest (4 workers) completes in
+page 233, 63 chunks, 505,730 chars). No memory pathology; comfortably inside the
+per-document timeout (raised 60 s → 120 s at user direction, 2026-07-05 — generous for
+200+-page reports given the fan-out absorbs the tail). The full 24-document skeleton ingest (4 workers) completes in
 **~51 s** — consistent with the contract's couple-of-minutes wall-clock target for a
 ~100-document run.
 
@@ -149,8 +150,16 @@ decarbonisation · food environment/obesity).
 - **Dependencies (gated change 2):** `pymupdf4llm` + `trafilatura`. **Flagged deviation
   (minor, within the approved gate):** `pymupdf4llm` is pinned `>=0.0.27,<1` — the 1.x
   line released after contract approval hard-depends on `pymupdf-layout`/`onnxruntime`,
-  i.e. exactly the ML stack the approved gate excludes ("no ML stack, no model weights");
-  0.3.4 keeps that tier an optional extra. The ML tier remains the recorded docling seam.
+  the ML stack the approved gate excludes. **Upgrade investigated at user request
+  (2026-07-05, measured spike) and found blocked:** `pymupdf-layout` is licensed PolyForm
+  Noncommercial / Artifex commercial (PyPI metadata + wheel COPYING) — a further
+  restriction AGPL-3.0 §7 cannot carry, so a distributed AGPL application cannot cleanly
+  depend on it; additionally the 233-page fixture parses in 84 s under 1.28 (breaches the
+  60 s per-document timeout; 3.1× slower than 0.3.4) and the `page_chunks` API changes
+  (`metadata["page"]` → `"page_number"`; `use_ocr=True` default that silently activates
+  if an OCR backend ever appears in the image). Weights are wheel-bundled and offline
+  operation was proven, so if Artifex commercial licensing is ever bought, the layout
+  tier slots into the recorded ML-escalation seam alongside docling — recorded there.
 - **`ingest_full_text.py`:** DocumentFetcher seam + FixtureFetcher (lazy manifest);
   four-rung/two-rung URL cascade with sentinel normalization; pymupdf4llm structured
   markdown → heading-bounded sections + intact tables with `{pages, heading_path}`
@@ -170,6 +179,22 @@ decarbonisation · food environment/obesity).
   clarification + log.md entry.
 - Eligible-set predicate uses the as-built `source_screening_result.status = 'relevant'`
   (plan finding 1).
+- **Post-build amendment — determinism defect found and fixed (2026-07-05):** the
+  fan-out determinism test flaked (~1-in-9 per parse of the 233-page fixture): identical
+  bytes produced different chunk output across worker processes. Root-caused (measured,
+  serial — not a parallelism artefact): pymupdf4llm 0.3.4 memoizes a
+  block-in-background-rect lookup keyed on `id()` (`helpers/multi_column.py`); freed
+  `Rect` addresses are reused mid-loop, so the cache returns a stale neighbour's answer,
+  and the collision pattern follows per-process allocation addresses (ASLR).
+  `PYTHONHASHSEED` was tested and disproven as a fix (it salts str/bytes, not `id()`).
+  Fix: `_install_deterministic_column_boxes()` in `ingest_full_text.py` rebuilds that one
+  function with a value-keyed cache — proven byte-identical across 32/32 fresh
+  interpreters (vs 23/24 unpatched), no measurable cost (233-page parse 28.1 s vs
+  27.2 s), guarded to no-op if upstream changes (the determinism test is the backstop).
+  Upstream bug report to pymupdf4llm is a step-8 follow-up.
+- **Post-build amendment — `PARSE_TIMEOUT_SECONDS` 60 → 120 s** (user decision,
+  2026-07-05): two minutes is acceptable for a 200+-page document given the fan-out
+  absorbs the tail.
 
 ## Intent & assumptions
 
@@ -195,12 +220,27 @@ decarbonisation · food environment/obesity).
   oversized sections regardless.
 - Live-fetch behaviours (redirects, politeness, paywall *detection*) are the live-seam's,
   not exercised here by design.
-- Suite wall-clock grew from ~4 s to ~9 min (real parses, ~11 full ingest runs — each an
-  unmocked 24-document fetch-replay + spawned-worker parse). Accepted for Tier-3 evidence
-  quality. Candidate remedies if it bites, both needing their own approval: `pytest-xdist`
-  (`-n auto`; the tests are parallel-safe — rollback transactions or unique project ids),
-  or a subset filter on `ingest_full_text_sources` (public-interface change). Not slipped
-  into this slice.
+- Suite wall-clock (post-build slimming, user-directed 2026-07-05): 8:16 → **~2:36**
+  serial, twice back-to-back green. `pytest-xdist` was trialled first and **rolled back**
+  (user decision): CPU oversubscription between xdist workers and the component's own
+  parse pools caused outcome flips, and the complexity (advisory-locked migrations, tuned
+  pool budgets) wasn't worth it. Slimming instead: property tests (socket-deny, harness
+  round-trip, idempotency/retry, timeout termination, downstream-unchanged) run over a
+  hand-seeded 4-document corpus (both parser paths, real committed fixture files) rather
+  than the full 24; the `no_url`/eligibility tests seed synthetic rows only; the module
+  fixture runs at workers=1 and doubles as the determinism comparison's workers=1 leg, so
+  the fan-out test adds a single fresh workers=4 full-corpus run. Full-breadth coverage
+  is preserved where breadth is the claim: the shared module fixture (all read-only
+  assertions incl. the no-truncation proof) and the determinism comparison. **Flagged
+  narrowing:** the contract words the socket-deny test as "a full run over the fixtures";
+  it now runs the same guarded fetch→parse→write path over the 4-doc subset — the
+  runtime-egress property is unchanged; the full-breadth ingest still runs (unguarded) in
+  the module fixture. Tests pass `parse_timeout=300` (test-only headroom) so outcome
+  assertions can't flip under host load; timeout *semantics* have their own dedicated
+  test and the product default is 120 s. `make test-fast` (~5 s) covers everything except
+  the ingest integration file for the inner dev loop; `make test`/`make verify` remain
+  the gate. Remaining deeper remedy if suite time ever bites: a subset filter on
+  `ingest_full_text_sources` (public-interface change, its own gate).
 
 ## Public safety
 

@@ -52,8 +52,42 @@ from policy_atlas.schema import (
 
 log = structlog.get_logger()
 
+
+def _install_deterministic_column_boxes() -> None:
+    """Make pymupdf4llm's column layout process-stable (determinism, decision 8).
+
+    pymupdf4llm 0.3.4 caches a "which background rect contains this block" lookup
+    keyed on id(bb) (helpers/multi_column.py). Rect objects are freed and their
+    addresses reused mid-loop, so the cache can return a stale neighbour's index;
+    the collision pattern follows allocation addresses (ASLR) and so varies per
+    process, making emitted markdown — and thus chunk content_hash — differ between
+    identical parses (~1-in-9 on the 233-page fixture). PYTHONHASHSEED cannot help
+    (it salts str/bytes hashing, not id()). We rebuild column_boxes with that one
+    cache key changed to a value key; output is otherwise byte-identical. If a
+    future pymupdf4llm changes the source, this no-ops — the fan-out determinism
+    test is the backstop that would catch a regression.
+    """
+    import inspect
+
+    import pymupdf4llm.helpers.multi_column as _mc  # type: ignore[import-untyped]
+    import pymupdf4llm.helpers.pymupdf_rag as _rag  # type: ignore[import-untyped]  # imports column_boxes by name
+
+    old = 'cache_key = f"{id(bb)}_{id(bboxes)}"'
+    new = "cache_key = (tuple(bb), id(bboxes))"
+    src = inspect.getsource(_mc.column_boxes)
+    if old not in src:  # fixed upstream / source moved — no-op
+        return
+    namespace = dict(_mc.__dict__)
+    exec(compile(src.replace(old, new), _mc.__file__, "exec"), namespace)  # noqa: S102
+    _mc.column_boxes = namespace["column_boxes"]
+    _rag.column_boxes = namespace["column_boxes"]
+
+
+_install_deterministic_column_boxes()
+
 FETCH_BYTE_CAP = 100 * 1024 * 1024  # generous guard, never a scissor (decision 6)
-PARSE_TIMEOUT_SECONDS = 60.0  # hard per-document parse timeout; worker is terminated
+PARSE_TIMEOUT_SECONDS = 120.0  # hard per-document parse timeout; worker is terminated
+# (120s: user-set 2026-07-05 — generous for a 200+-page report; fan-out absorbs the tail)
 THIN_TEXT_MIN_CHARS = 200  # below this, parsed text is a failure, never "ok" (decision 7)
 DEFAULT_MAX_WORKERS = 4
 
