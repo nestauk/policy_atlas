@@ -193,7 +193,10 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
    - Record what each review caught in `verification.md` (§ Review findings).
 8. **PR** — first, with the code now **finalised by the review stack**, author the slice's durable
    records against it: new seams → [docs/deferred.md](../../../docs/deferred.md), verified durable
-   learning → `docs/knowledge/` (OKF, not a diary). Authoring them *after* review — not at implement —
+   learning → `docs/knowledge/` (OKF, not a diary), **and any point-in-time claims the slice
+   changes in `docs/agentic-ops/`** (`environment.md` header, `readiness.md` task-sequence line —
+   write them as of this PR merged; they become true at merge, same logic as the records above).
+   Authoring them *after* review — not at implement —
    is what keeps them honest: they describe the code that shipped, and ride in this PR for the human to
    check, not a stranded post-merge step. Then the agent **drafts the full PR description** from the
    task artifacts, in the shape of the
@@ -204,14 +207,15 @@ codex for adversarial review), `uv`/Docker installs — is **not** gated and is 
 9. 🛑 **Human review + merge.** For a large diff, offer a **PR-overview Artifact** (what changed
    and why, tables/diagrams) as a reading aid for this pass — it supplements the diff, never
    replaces reviewing it.
-10. **Close out** (after merge) — knowledge + `deferred.md` (step 8) and any ADR (step 4) already
-    shipped *in the PR*, and `AGENTS.md` **Current phase** moves with the *next* slice (step 1), so
-    this step is just bookkeeping:
-    - **reconcile** — confirm what merged still matches the slice's `docs/knowledge/` + ADR claims;
-      fix if review changed the code after they were written; re-check point-in-time claims in
-      `docs/agentic-ops/` (`environment.md` header, `readiness.md` boxes) if the slice changed
-      what they assert;
-    - delete any temporary scratchpad.
+10. **Close out** (after merge) — knowledge + `deferred.md` + agentic-ops point-in-time claims
+    (step 8) and any ADR (step 4) already shipped *in the PR*, and `AGENTS.md` **Current phase**
+    moves with the *next* slice (step 1), so this step is **verify-and-clean only — it commits
+    nothing and opens no PR** (2026-07-03, user decision, after 006's two-line close-out PR):
+    - **reconcile (read-only)** — confirm what merged still matches the slice's `docs/knowledge/`
+      + ADR claims and the `docs/agentic-ops/` point-in-time claims. A discrepancy is a step-8
+      miss: note it and fold the fix into the **next slice's branch** (like the Current-phase
+      pointer) — never a standalone close-out PR;
+    - delete any temporary scratchpad; confirm merge and delete the local task branch.
     The slices chain — each opens by repointing Current phase (step 1) and closes here; the human
     still steers every 🛑 (this is **not** an unattended loop — see *Scope boundaries*).
 
