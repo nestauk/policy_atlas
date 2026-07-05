@@ -67,15 +67,23 @@ against the **as-built code** (not its own claims; plans drift, code doesn't).
 **Executor routing is a plan-time decision** (failure-log, 2026-07-05). Mark each plan
 task with its executor — `lead` · `fast-worker` · `deep-reasoner` · `codex` — per
 harness.md § Agent-side model routing, so the plan reviewer and the human gate see the
-routing before the build starts. Rules of thumb:
-- Test scaffolding from a precise contract test list, mechanical sweeps from an exact
-  spec, boilerplate → `fast-worker`.
+routing before the build starts. The ladder (full version in harness.md):
+- Can't write the brief (one concern, its intent, a self-checkable definition of done)?
+  Not delegable — `lead`.
 - Seam-bearing product code, prompt-bearing work, taste-bearing surfaces, adjudication →
-  `lead`.
+  `lead`, regardless of budget.
+- **Judgment-bearing execution** (nontrivial logic, multi-file coherence, unfamiliar
+  APIs) with a machine-verifiable done → `codex` — the **default doer** for complex
+  subtasks: ~Opus-tier capability on the non-Claude budget, and the family-flip review
+  comes built in. (Async fire-and-forget: if the task would need mid-course steering,
+  it fails the brief test — keep it with the lead.)
+- Mechanical transcription of an exact spec (test scaffolding from a precise contract
+  list, sweeps, boilerplate) → `fast-worker` — Codex overpays here and the async
+  round-trip is slower.
 - One-command mechanical edits (`sed`-able renames, count bumps) → `lead` **inline** —
   delegation costs more than it saves there.
-- If you can't write the brief (one concern, its intent, a self-checkable definition of
-  done), it isn't delegable — keep it with the lead.
+- Analysis-not-code → `deep-reasoner`; Codex takes the second seat in
+  two-independent-takes.
 Re-deciding routing mid-build is the rationalisation the plan column exists to prevent.
 
 **Plan-phase adversarial review** (Tier 3+ standard; Tier 2 on demand — a loose contract,

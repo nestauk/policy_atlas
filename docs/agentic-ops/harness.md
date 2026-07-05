@@ -50,13 +50,20 @@ and the lead-only rules below (you can't pin a "don't delegate" — those stay p
 | Orchestration, architecture, hard debugging, synthesis, final judgment | Fable 5 (the lead itself) |
 | Deep-reasoning offload: long independent analysis, root-cause hunts | [`deep-reasoner`](../../.claude/agents/deep-reasoner.md) (pinned Opus) |
 | Mechanical volume: boilerplate, sweeps, broad codebase search | [`fast-worker`](../../.claude/agents/fast-worker.md) (pinned Sonnet); `Explore` agents for search |
-| Scoped implementation from a precise brief, when Claude budget is the constraint | Codex as doer (`codex:rescue` / `codex exec`) — then the **other family reviews** (see below) |
+| Judgment-bearing scoped implementation (nontrivial logic, multi-file coherence, unfamiliar APIs) from a precise, **machine-verifiable** brief | **Codex as the default doer** (`codex:rescue` / `codex exec`) — ~Opus-tier capability on the non-bottleneck budget; the **other family reviews** (family-flip). Precondition is the brief, not the budget: rescue is async fire-and-forget, so "done" must be self-checkable (`make verify`, named tests) |
 | Review fan-out: contract verification, adversarial passes | [`contract-verifier`](../../.claude/agents/contract-verifier.md) (pinned Opus) · `agent-skills` reviewer subagents · Codex — **not the lead**; the lead adjudicates findings |
 | Heterogeneous peer (different model family): native review, adversarial review, rescue/doer | Codex — `/codex:review` · `/codex:adversarial-review` · `codex:rescue` |
 
 **Routing is decided at plan time, not implement time** (failure-log, 2026-07-05): the plan
 marks each task with its executor (`lead` / `fast-worker` / `deep-reasoner` / `codex`), reviewed
-at the plan gate. Mid-build, the lead always has full context loaded and every task looks
+at the plan gate. The decision ladder (2026-07-05, user call — "Claude budget is always the
+constraint" is a default, not a condition): can't write a self-checkable brief → lead;
+prompt/taste/seam/adjudication → lead; judgment-bearing execution → **Codex** (~Opus tier,
+different budget, family-flip review built in — needs a machine-verifiable brief because rescue
+is async, no mid-task steering); mechanical transcription of an exact spec → fast-worker (Codex
+would overpay and the async round-trip is slower); analysis-not-code → deep-reasoner (NB
+deep-reasoner and fast-worker also spend Claude budget — Codex offload helps most exactly where
+Opus-tier work would otherwise run). Mid-build, the lead always has full context loaded and every task looks
 cheapest inline — 007's ~450-line test file went to the lead that way despite a
 fast-worker-shaped contract test list. Counter-rule: one-command mechanical edits (`sed`-able
 sweeps) stay inline, and if you can't write the brief, it isn't delegable.
