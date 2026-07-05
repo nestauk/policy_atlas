@@ -11,6 +11,7 @@ from pydantic import BaseModel, model_validator
 
 COMPONENT_REGISTRY: dict[str, dict[str, list[str]]] = {
     "echo":     {"requires": ["source_snapshot_id"]},
+    "acquire":  {"requires": ["evidence_scope_id"]},
     "screen":   {"requires": ["evidence_scope_id"]},
     "classify": {"requires": ["evidence_scope_id"]},
     "appraise": {"requires": ["evidence_scope_id"]},

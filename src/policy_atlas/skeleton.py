@@ -122,7 +122,10 @@ def main() -> None:
         )
         log.info("evidence_scope.created", scope_id=str(scope_id))
 
-        # Walk the chain: three runs over the same scope
+        # Walk the chain: four runs over the same scope. Acquire runs first —
+        # both fixture backends over the mixed corpus (this upload + acquired sets).
+        _run_component(conn, project_id, scope_id, "acquire")
+
         _run_component(conn, project_id, scope_id, "screen")
 
         screening_results = conn.execute(
@@ -151,6 +154,30 @@ def main() -> None:
             ).where(source_appraisal_result.c.project_id == project_id)
         ).fetchall()
         log_entries = events.read(conn, project_id)
+
+    # Per-backend acquire counts — makes the authentic-shapes path visible
+    acquire_counts = next(
+        (
+            e["payload"] for e in log_entries
+            if e["event_type"] == "component.completed"
+            and e["payload"].get("component") == "acquire"
+        ),
+        None,
+    )
+    if acquire_counts is None:
+        log.warning("acquire_counts.missing")
+    else:
+        log.info(
+            "acquire_counts", **{k: v for k, v in acquire_counts.items() if k != "component"}
+        )
+
+    # Screen-basis distribution: missing abstracts/snippets flow the title_only
+    # fail-open path — visible here, per contract.
+    basis_distribution: dict[str, int] = {}
+    for row in screening_results:
+        if row.screen_basis is not None:
+            basis_distribution[row.screen_basis] = basis_distribution.get(row.screen_basis, 0) + 1
+    log.info("screen_basis_distribution", **basis_distribution)
 
     for row in screening_results:
         log.info("screening_result", status=row.status, basis=row.screen_basis,

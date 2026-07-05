@@ -32,6 +32,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         project,
         project_source_snapshot,
         runs,
+        search_coverage_record,
         source_appraisal_result,
         source_classification_result,
         source_screening_result,
@@ -78,6 +79,9 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
     conn.execute(delete(source_screening_result).where(
         source_screening_result.c.project_id == project_id
     ))
+    conn.execute(delete(search_coverage_record).where(
+        search_coverage_record.c.project_id == project_id
+    ))
     conn.execute(delete(event_log).where(event_log.c.project_id == project_id))
     conn.execute(
         delete(block).where(
@@ -87,10 +91,12 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         )
     )
     conn.execute(delete(artefact).where(artefact.c.project_id == project_id))
-    conn.execute(delete(runs).where(runs.c.project_id == project_id))
+    # project_source_snapshot before runs: acquired links carry run_id (FK to runs);
+    # upload links carry run_id=NULL, which is why the old runs-first order never bit.
     conn.execute(delete(project_source_snapshot).where(
         project_source_snapshot.c.project_id == project_id
     ))
+    conn.execute(delete(runs).where(runs.c.project_id == project_id))
     if snapshot_ids:
         conn.execute(delete(chunk_table).where(
             chunk_table.c.source_snapshot_id.in_(snapshot_ids)

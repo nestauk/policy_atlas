@@ -16,6 +16,13 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
 from policy_atlas import events
+from policy_atlas.acquire import (
+    AcquireContext,
+    OpenAlexFixtureBackend,
+    OvertonFixtureBackend,
+    SearchBackend,
+    acquire_sources,
+)
 from policy_atlas.appraise import AppraiseContext, appraise_sources
 from policy_atlas.classify import ClassifyContext, classify_sources
 from policy_atlas.grounding import GroundingError, produce_grounded_block
@@ -36,6 +43,7 @@ class HarnessState(TypedDict):
     run_id: uuid.UUID
     artefact_id: uuid.UUID | None  # set by _run_echo only; None for scope components
     provider: InferenceProvider
+    search_backends: list[SearchBackend]
     block_ids: dict[str, Any]
     error: str | None
 
@@ -167,6 +175,19 @@ def _run_scope_component(
     return state
 
 
+def _run_acquire(state: HarnessState) -> HarnessState:
+    backends = state["search_backends"]
+
+    def sources_fn(
+        conn: Connection, *, project_id: uuid.UUID, run_id: uuid.UUID, context: AcquireContext
+    ) -> dict[str, Any]:
+        return acquire_sources(
+            conn, project_id=project_id, run_id=run_id, context=context, backends=backends
+        )
+
+    return _run_scope_component(state, AcquireContext, sources_fn)
+
+
 def _run_screen(state: HarnessState) -> HarnessState:
     return _run_scope_component(state, ScreenContext, screen_sources)
 
@@ -224,6 +245,7 @@ def build_graph() -> Any:
     g: StateGraph[HarnessState] = StateGraph(HarnessState)
     g.add_node("dispatch", lambda s: s)           # entry — routes by component name
     g.add_node("echo", _run_echo)
+    g.add_node("acquire", _run_acquire)
     g.add_node("screen", _run_screen)
     g.add_node("classify", _run_classify)
     g.add_node("appraise", _run_appraise)
@@ -233,9 +255,16 @@ def build_graph() -> Any:
     g.add_conditional_edges(
         "dispatch",
         _dispatch,
-        {"echo": "echo", "screen": "screen", "classify": "classify", "appraise": "appraise"},
+        {
+            "echo": "echo",
+            "acquire": "acquire",
+            "screen": "screen",
+            "classify": "classify",
+            "appraise": "appraise",
+        },
     )
     g.add_edge("echo", "finish")
+    g.add_edge("acquire", "finish")
     g.add_edge("screen", "finish")
     g.add_edge("classify", "finish")
     g.add_edge("appraise", "finish")
@@ -250,6 +279,7 @@ def run_harness(
     project_id: uuid.UUID,
     run_id: uuid.UUID,
     provider: InferenceProvider,
+    search_backends: list[SearchBackend] | None = None,
 ) -> dict[str, Any]:
     """Run the compiled harness graph for one run, persisting its output.
 
@@ -259,6 +289,9 @@ def run_harness(
         project_id: Owning project; must match the run's stored project.
         run_id: Pre-created run row to execute.
         provider: Inference provider used by the grounding leg.
+        search_backends: Backends for the acquire component, searched in list
+            order; defaults to the fixture pair (OpenAlex, Overton) — the same
+            injection pattern as ``provider``.
 
     Returns:
         Persisted IDs; ``artefact_id`` is None for non-echo components that do
@@ -286,6 +319,11 @@ def run_harness(
         "run_id": run_id,
         "artefact_id": None,
         "provider": provider,
+        "search_backends": (
+            search_backends
+            if search_backends is not None
+            else [OpenAlexFixtureBackend(), OvertonFixtureBackend()]
+        ),
         "block_ids": {},
         "error": None,
     }
