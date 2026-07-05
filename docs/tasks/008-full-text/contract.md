@@ -595,7 +595,12 @@ inference provider, no runtime network I/O.
   licence-guard pass.
 - Public-safety confirmation (openly-licensed documents only; no credentials).
 - Deferred seams recorded in `docs/deferred.md` (live fetcher with its requirement list ·
-  OCR for `no_text_layer` documents · vectorisation-at-first-reader with the
+  **chunk-volume bias at the retrieve seam** (user flag, 2026-07-05: long documents
+  contribute proportionally many more chunks, so naive top-k over chunks over-represents
+  them — the retrieval slice must carry document-diversity controls: per-document caps /
+  MMR / document-grain grouping; the ingestion-side "fix", length normalisation by
+  truncation, is rejected — decision 6) · OCR for `no_text_layer` documents ·
+  vectorisation-at-first-reader with the
   eager-uniform discipline · multi-PDF assembly · injection screening extended to full
   text · cross-project full-text reuse).
 - Diff summary (binary fixture files excluded from review diffs per the 007 retro).

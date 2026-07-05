@@ -22,7 +22,9 @@ progress, not done.
 7. [ ] Known gaps and deferred seams listed in [docs/deferred.md](../../deferred.md):
        live `DocumentFetcher` (timeouts, redirects, politeness + per-host rate limiting,
        content-type sniffing, landing-page scrape + PDF-link discovery, DOI-URL fallback,
-       retry/backoff) · OCR for `no_text_layer` documents · vectorisation at the first
+       retry/backoff) · chunk-volume bias controls at the retrieve seam (per-document
+       caps / MMR / document-grain grouping) · OCR for `no_text_layer` documents ·
+       vectorisation at the first
        vector reader (eager-and-uniform discipline restated; token-budgeted chunk sizing
        with it) · multi-PDF Overton assembly · injection-screening posture extended to
        fetched full text · cross-project full-text snapshot reuse.
