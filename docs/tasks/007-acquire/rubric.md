@@ -45,10 +45,14 @@ Slice-specific criteria (from the contract):
        (`Unknown`) → appraise (`skipped_unknown`).
 10. [ ] Every `search` call emits one `search.executed` governance event **per backend**
         (fixture backends included), payload as contracted, trust class declared.
-11. [ ] Exactly one `search_coverage_record` per acquire run, its `backends` array spanning
-        both backends; deterministic verdict rule (`inadequate` on empty/error, else
-        `adequate`; origin `model`); `saturated` not an accepted `stop_condition`; check
-        constraints + cross-project FKs test-covered.
+11. [ ] Exactly one `search_coverage_record` per acquire run — **including error runs**,
+        its `backends` array spanning both backends; deterministic verdict rule per
+        decision 8 (any backend error → `inadequate`; zero usable records → `inadequate`;
+        empty-but-successful backend ≠ inadequate), all four cases test-covered; backend
+        errors are isolated (healthy backend's results kept, `component.completed`
+        emitted, per-backend `status`/`error` reported); origin `model`; `saturated` not
+        an accepted `stop_condition`; all five named check constraints + cross-project
+        FKs test-covered.
 12. [ ] Acquired snapshots: `origin="acquired"`, `run_id` set, `text_basis="abstract_only"`,
         one chunk of the text in hand, `segmentation_policy="metadata_envelope_v1"`,
         content hash over the chunk text — immutability preserved (no snapshot updated);
@@ -58,9 +62,13 @@ Slice-specific criteria (from the contract):
         plan-finalized list).
 13. [ ] Rerun-stable counting: `acquired + already_acquired + skipped_unusable ==
         results_returned` holds per backend and in total, on first and second runs; second
-        run acquires nothing and duplicates no snapshots.
-14. [ ] Cross-backend DOI dedup test-covered: same DOI via both backends → one snapshot,
-        deterministic winner (fixed backend order).
+        run acquires nothing and duplicates no snapshots; **cross-project isolation**
+        test-covered (project B acquiring the same fixtures still gets its own links;
+        project A untouched).
+14. [ ] All three identity guards test-covered separately: `backend_record_id` re-run ·
+        normalized DOI across backends (prefixed/bare, mixed case — deterministic winner
+        by fixed backend order) · content hash; `source_locator` set per the contracted
+        mapping.
 15. [ ] OpenAlex abstract-inverted-index reconstruction test-covered against a structurally
         real inverted index (multi-position tokens), plus the empty/missing case.
 16. [ ] Rename complete: no stale `screening_scope` / `screening_scope_id` reference in
@@ -68,6 +76,11 @@ Slice-specific criteria (from the contract):
         `evidence_scope`.
 17. [ ] Spec flow-back landed: components.md §1 one-line clarification + spec bundle `log.md`
         entry (approved with the contract).
-18. [ ] Fixture provenance documented per backend (recorder query, date, record count, quirk
-        coverage); **both committed fixtures sanitized** (shape-faithful, no real
-        third-party records — user decision 2026-07-05); raw recordings gitignored.
+18. [ ] Fixture provenance documented per backend via each file's `_meta` block (recorder
+        query, date, record count, quirk coverage, sanitizer version); **both committed
+        fixtures sanitized** (shape-faithful, no real third-party records — user decision
+        2026-07-05); raw recordings gitignored; the deterministic leak guard passes
+        (`10.99999/` DOI prefix, `example.org` URLs, test-enforced).
+19. [ ] Approved gated change 3 in place as contracted: `run_harness` optional
+        `search_backends` parameter with the fixture-pair default — no other public
+        interface touched.

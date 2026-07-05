@@ -3,11 +3,15 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** approved — contract-stage adversarial review next, then planning.  
+> **Status:** approved (rev 7) → adversarial review adjudicated (rev 8) — **one item
+> reopened for approval: gated change 3** (`run_harness` optional `search_backends`
+> parameter, finding 7). Planning starts on that sign-off.  
 > Contract approved (before planning): 2026-07-05 · Shabeer Rauf (rev 7; shaped across
 > review rounds: both backends + trust-class names + `evidence_scope` rename + sanitized
 > fixtures for both + `abstract_source` provenance + retained-provider-fields tier +
-> Arm-B R&D direction as seam context — all user-settled at this gate).  
+> Arm-B R&D direction as seam context — all user-settled at this gate).
+> Adversarial findings adjudicated: 2026-07-05 (10 findings, all adopted/resolved — see
+> § Contract-stage adversarial review).  
 > Contract approved (before planning): _date · who_ ·
 > Plan approved (before implementation): _date · who_ · ADR: none expected
 > (the fixture-backed-backends and rename decisions are contract-recorded; promote to an ADR
@@ -157,6 +161,11 @@ time against live docs):
      envelope in hand, **not full text**"; it names the grounding-basis *class*, not the
      chunk's composition (the chunk always includes the title; the spec's two values
      distinguish fetched-full-text from everything short of it).
+   - **`source_locator`** (NOT NULL on `source_snapshot`; part of the spec's identity
+     triple *content hash + search-governance event + locator*): the document's own
+     address — OpenAlex: the work's canonical `id` URL; Overton: `document_url`, falling
+     back to `overton_url` when empty. The governance-event leg of the triple is the
+     run's `search.executed` events (reachable via `project_source_snapshot.run_id`).
    - The finer provenance the coarse axis can't carry goes in the envelope metadata as
      **`abstract_source`**: `"publisher_abstract"` (OpenAlex, reconstructed) · `"snippet"`
      (Overton excerpt) · `"llm_description"` (**Overton's `llm_document_description` is
@@ -234,21 +243,32 @@ time against live docs):
    for, not a constraint on. Stop condition recorded as `breadth_truncated` (each backend
    returns a bounded page); `re_searched_still_thin` belongs to the thin-base re-search
    seam; `error` when any backend fails.
-7. **Idempotency and cross-backend dedup are project-scoped.** A result is skipped as
-   `already_acquired` when (a) its envelope content hash already has a `source_snapshot`
-   linked to this project — exact-duplicate guard, covers reruns — or (b) it carries a DOI
-   that another snapshot in this project already carries (DOI is the only cheap
-   cross-backend identity). Grounded expectation: Overton policy documents rarely carry a
-   DOI of their own (their DOIs are outgoing scholarly references), so the DOI guard mainly
-   catches duplicate *scholarly* records (e.g. a report indexed by both providers, or
-   future backends); the rule is kept because it is cheap and its absence would silently
+7. **Idempotency and cross-backend dedup are project-scoped, on three identity guards.**
+   A result is skipped as `already_acquired` when the project already has a snapshot with
+   (a) the same **`backend_record_id`** (exact re-run guard — robust even if the mapping's
+   chunk composition ever changes), (b) the same **normalized DOI** (cross-backend
+   identity), or (c) the same **content hash** (exact text duplicate). **DOI
+   normalization:** lowercase bare form — strip a `https://doi.org/` (or `http://`,
+   `dx.doi.org`) prefix, trim, lowercase — stored in the envelope `doi` key; **dedup
+   lookups query the persisted envelope** (`source_snapshot.metadata`: `->>'doi'`,
+   `->>'backend_record_id'`) joined through `project_source_snapshot` for the project.
+   Grounded expectation: Overton policy documents rarely carry a DOI of their own (their
+   DOIs are outgoing scholarly references), so the DOI guard mainly catches duplicate
+   *scholarly* records; it is kept because it is cheap and its absence would silently
    double-process exactly the overlap cases that do occur. Backend ordering is fixed
-   (OpenAlex then Overton) so dedup outcomes are deterministic. **Cross-project snapshot
-   reuse** (the shared content-addressed substrate) stays deferred as recorded; fuzzy
-   near-dup matching (title similarity) is a recorded seam, not built.
+   (OpenAlex then Overton) so dedup outcomes are deterministic. Dedup is **scoped to the
+   project's own snapshots** — another project acquiring the same records still acquires
+   its own links (test-covered). **Cross-project snapshot reuse** (the shared
+   content-addressed substrate) stays deferred as recorded; fuzzy near-dup matching
+   (title similarity) is a recorded seam, not built.
 8. **One `search_coverage_record` per acquire run**, spanning both backends (the `backends`
-   array is the search-space boundary), adequacy decided by a deterministic v3.0 rule: any
-   backend `error` or zero total results → `inadequate`; otherwise `adequate`;
+   array is the search-space boundary), adequacy decided by a deterministic v3.0 rule —
+   fail-closed on both failure modes: **any backend errored** → `inadequate` (that part of
+   the search space wasn't searched), or **zero usable records across the run**
+   (`acquired + already_acquired == 0`, i.e. nothing screenable came back — a page of
+   title-less records counts for nothing) → `inadequate`; otherwise `adequate`. An
+   **empty-but-successful** backend alongside a productive one is honest coverage
+   ("searched, nothing matched"), not inadequacy;
    `verdict_origin = "model"`. **What `verdict_origin` means:** the spec requires the
    adequacy verdict to carry *who made the call* — `"model"` = the system's own judgment
    (v3.0: this deterministic rule standing in for it), `"human"` = a person confirmed or
@@ -405,10 +425,12 @@ ForeignKeyConstraint(["acquired_by_run_id", "project_id"],
     ["runs.run_id", "runs.project_id"],
     name="fk_scov_run_project")
 UniqueConstraint("acquired_by_run_id", name="uq_scov_run")   # one record per acquire run
-CheckConstraint(stop_condition IN ('breadth_truncated', 're_searched_still_thin', 'error'))
-CheckConstraint(adequacy_verdict IN ('adequate', 'inadequate'))
-CheckConstraint(verdict_origin IN ('model', 'human'))
-CheckConstraint(jsonb_typeof(backends) = 'array')
+CheckConstraint(stop_condition IN ('breadth_truncated', 're_searched_still_thin', 'error'),
+                name="ck_scov_stop_condition")
+CheckConstraint(adequacy_verdict IN ('adequate', 'inadequate'), name="ck_scov_verdict")
+CheckConstraint(verdict_origin IN ('model', 'human'), name="ck_scov_verdict_origin")
+CheckConstraint(jsonb_typeof(backends) = 'array', name="ck_scov_backends_array")
+CheckConstraint(jsonb_typeof(scope_filters) = 'object', name="ck_scov_filters_object")
 ```
 
 `saturated` is deliberately **not** a valid `stop_condition` (spec: saturation-based stopping
@@ -428,6 +450,7 @@ class AcquireContext:
 class SearchBackend(Protocol):
     name: str
     trust_class: str
+    mode: str  # "fixture" | "live" — carried into events + coverage record
     def search(self, query: str) -> list[dict[str, Any]]:
         """Return raw provider records for the query."""
 
@@ -446,16 +469,25 @@ screenable; skip is visible, never silent.
 
 `acquire_sources(conn, *, project_id, run_id, context: AcquireContext,
 backends: list[SearchBackend]) -> dict`:
-1. Per backend, in list order: `backend.search(context.intent)` — one call each — and emit
-   one **`search.executed`** event: `{backend, trust_class, mode, query, filters,
-   result_count, evidence_scope_id}`.
-2. Per usable result: build envelope + chunk text; if its content hash — or its DOI, when
-   present — already has a snapshot linked to this project → count `already_acquired`; else
-   create `source_snapshot` (+ its one chunk) and `project_source_snapshot`
-   (`origin="acquired"`, `run_id=run_id`) and emit one **`source.acquired`** event:
-   `{source_snapshot_id, project_source_snapshot_id, evidence_scope_id, backend,
-   backend_record_id}`.
-3. Write the run's `search_coverage_record` (decision 8).
+1. Per backend, in list order: `backend.search(context.intent)` — one call each,
+   **error-isolated**: a raising backend is caught inside `acquire_sources` (mirroring v2's
+   per-task isolation), contributes zero results, and never aborts the other backend or the
+   run. Emit one **`search.executed`** event per attempted call:
+   `{backend, trust_class, mode, query, filters, status: "ok" | "error",
+   result_count, error, evidence_scope_id}` (`result_count: 0` and an `error` string on
+   failure; `error` null on success).
+2. Per usable result: build envelope + chunk text; skip as `already_acquired` when the
+   project already has a snapshot matching **any** identity guard — same
+   `backend_record_id` (exact re-run), same normalized DOI (cross-backend), or same
+   content hash (exact text duplicate); else create `source_snapshot` (+ its one chunk)
+   and `project_source_snapshot` (`origin="acquired"`, `run_id=run_id`) and emit one
+   **`source.acquired`** event: `{source_snapshot_id, project_source_snapshot_id,
+   evidence_scope_id, backend, backend_record_id}`.
+3. Write the run's `search_coverage_record` (decision 8) — **always**, including when
+   backends errored (`stop_condition="error"`, `adequacy_verdict="inadequate"`). The
+   component **completes** with honest counts on backend failure — partial results are
+   kept and the failure is visible in events + coverage record + return value;
+   `component.failed` stays reserved for infrastructure errors (e.g. the DB write itself).
 4. Return:
 
 ```
@@ -463,8 +495,8 @@ backends: list[SearchBackend]) -> dict`:
  "already_acquired": m,
  "skipped_unusable": s,
  "results_returned": r,          # total across backends; invariant: n + m + s == r
- "by_backend": {"openalex": {"results_returned": …, "acquired": …,
-                             "already_acquired": …, "skipped_unusable": …},
+ "by_backend": {"openalex": {"status": "ok", "error": None, "results_returned": …,
+                             "acquired": …, "already_acquired": …, "skipped_unusable": …},
                 "overton":  {…}},
  "stop_condition": "breadth_truncated",
  "adequacy_verdict": "adequate",
@@ -484,9 +516,14 @@ honouring the **1 call/second** rate limit), OpenAlex via the keyword
 `title_and_abstract.search` filter form — into a **gitignored** raw path, then a
 sanitizer derives the committed fixture — **real field names, structure, nesting,
 nullability patterns and shape quirks; fabricated values** (fabricated tokens in a
-structurally real `abstract_inverted_index`, fabricated titles/orgs/DOIs with realistic
-formats). Each committed file's header documents the recorder query, record date and quirk
-coverage. Keys via environment only: `OVERTON_API_KEY` (required by its recorder),
+structurally real `abstract_inverted_index`, fabricated titles/orgs with realistic
+formats). **Fixture file format** (JSON has no comment header — adversarial finding 10):
+a top-level object `{"_meta": {...}, "records": [...]}` where `_meta` carries recorder
+query, record date, backend, mode, sanitizer version, and quirk-coverage list.
+**Deterministic leak guard, test-enforced:** all fabricated DOIs use the reserved fake
+prefix `10.99999/`, all fabricated URLs use `example.org` domains — a test asserts every
+DOI/URL in the committed fixtures matches those markers, so a real record can't slip in
+unnoticed. Keys via environment only: `OVERTON_API_KEY` (required by its recorder),
 `OPENALEX_API_KEY` (optional — OpenAlex works keyless). CI and tests never touch the network.
 
 **Fixture policy (user decision, 2026-07-05): sanitized for both backends.** The repo is
@@ -500,10 +537,13 @@ never committed and never read by package code.
 `COMPONENT_REGISTRY`; field rename per decision 10. No new `Plan`/`Config` fields.
 
 **`harness.py`** — add `_run_acquire` node (mirror `_run_classify`): load scope, build
-`AcquireContext`, emit `component.started`, call `acquire_sources` with
-`[OpenAlexFixtureBackend(), OvertonFixtureBackend()]` (the backend list is an injection
-point exactly like `provider`; plan decides whether it rides `run_harness`'s signature or a
-default), emit `component.completed` with the return counts. Wire into conditional edges.
+`AcquireContext`, emit `component.started`, call `acquire_sources`, emit
+`component.completed` with the return counts. Wire into conditional edges. **Backend
+injection (settled, adversarial finding 7):** `run_harness` gains one optional keyword
+parameter, `search_backends: list[SearchBackend] | None = None`, defaulting to
+`[OpenAlexFixtureBackend(), OvertonFixtureBackend()]` — the exact pattern `provider`
+already established for the inference seam. This is a public-interface addition and is
+listed as gated change 3 below.
 
 **`skeleton.py`** — create scope → **acquire** (both backends) → screen → classify → appraise
 over the mixed corpus (existing synthetic upload + acquired fixtures); log the acquired
@@ -543,10 +583,27 @@ FK-safe order; rename sweep.
 - `search.executed` events: one per backend per call, payload keys/values as specified.
 - `source.acquired` events: one per newly acquired snapshot; none for skipped/deduped.
 - Coverage record: one row per run; `backends` array carries both backend entries with trust
-  classes; verdict rule (`adequate` on results; `inadequate` on an empty/erroring backend —
-  use a throwaway in-test backend for the error path); `verdict_origin == "model"`; check
-  constraints reject invalid values (`IntegrityError`); cross-project FK rejected;
-  `uq_scov_run` rejects a second record for the same run.
+  classes; verdict rule per decision 8, all four cases — both backends ok with usable
+  results → `adequate`; one backend **errored** (throwaway raising in-test backend) →
+  `inadequate` + `stop_condition="error"` + the run still completes with the healthy
+  backend's results; one backend **empty-but-successful** beside a productive one →
+  `adequate`; zero usable records across the run (e.g. only title-less results) →
+  `inadequate`. `verdict_origin == "model"`; check constraints (all five, by name) reject
+  invalid values (`IntegrityError`); cross-project FK rejected; `uq_scov_run` rejects a
+  second record for the same run.
+- Backend error isolation: the raising backend's `search.executed` event has
+  `status="error"`, `result_count=0`, an `error` string; the healthy backend's results
+  still ingest; `component.completed` (not `component.failed`) is emitted; `by_backend`
+  carries per-backend `status`/`error`.
+- Identity guards, each separately: same `backend_record_id` re-run → skipped; same
+  normalized DOI across backends (incl. `https://doi.org/`-prefixed vs bare, mixed case) →
+  skipped; same content hash → skipped. `source_locator` set per mapping (OpenAlex `id`
+  URL; Overton `document_url`, `overton_url` fallback).
+- Cross-project dedup isolation: project B acquiring the same fixtures after project A
+  still acquires its own `project_source_snapshot` links (dedup never consults project A's
+  rows); project A's data unchanged.
+- Fixture leak guard: every DOI in committed fixtures has the `10.99999/` fake prefix,
+  every URL is on `example.org`; `_meta` block present with recorder query/date/quirks.
 - Downstream flow: acquired sources screen (missing-abstract fixtures → `title_only` basis,
   confidence 0.7; abstract-bearing → `title_abstract`), classify to `Unknown`, and are
   `skipped_unknown` at appraise — full-chain test over both fixture corpora.
@@ -585,15 +642,46 @@ Updates to existing tests:
 - `characterise` and everything downstream of appraise — subsequent slices.
 - Vectorisation/embeddings, retrieval changes — untouched.
 
+### Contract-stage adversarial review — findings & adjudication (Codex, 2026-07-05)
+
+Ten findings; none challenged the human-settled decisions. Adjudicated by the lead:
+1. Backend error path undefined (blocker): **adopted** — per-backend error isolation,
+   `search.executed` gains `status`/`error`, coverage record always written, component
+   completes with honest counts (`component.failed` reserved for infrastructure errors).
+2. `mode` absent from the protocol: **adopted** — `mode` attribute on `SearchBackend`.
+3. `source_locator` unspecified / identity triple incomplete: **adopted** — locator
+   mapping defined (OpenAlex `id` URL; Overton `document_url` → `overton_url`);
+   `backend_record_id` added as the third dedup guard.
+4. DOI normalization + lookup path unspecified: **adopted** — lowercase bare form,
+   `metadata->>'doi'` lookup.
+5. Adequacy ignored usable-record count: **adopted** — zero usable
+   (`acquired + already_acquired == 0`) → `inadequate`.
+6. Aggregate-vs-per-backend emptiness ambiguity: **resolved** — backend *error* →
+   inadequate; empty-but-successful backend ≠ inadequate; aggregate zero usable →
+   inadequate. Contract, tests and rubric aligned.
+7. Backend injection vs interface-change constraint: **adopted** — settled as an optional
+   `run_harness` keyword parameter (fixture pair default, `provider` precedent), listed
+   as gated change 3, **pending explicit human approval** (public-interface gate).
+8. Unnamed check constraints + missing `scope_filters` type check: **adopted** — five
+   named constraints incl. `ck_scov_filters_object`.
+9. Cross-project dedup isolation untested: **adopted** — explicit isolation test added.
+10. JSON "header" impossible + no sanitizer leak check: **adopted** — `_meta`/`records`
+    fixture format + deterministic leak guard (fake-DOI prefix `10.99999/`,
+    `example.org` URLs, test-enforced).
+
 ## Constraints & approval gates
 
-**Two gated changes:**
+**Three gated changes:**
 
 1. **Schema (rename)** — `screening_scope` → `evidence_scope` + column/constraint renames
    across the result tables; one Alembic migration. Also touches the public interface
    (`Plan`/`Config` field name, event payload keys going forward) — approved together.
 2. **Schema (new table)** — `search_coverage_record` with composite FKs and check
    constraints; one Alembic migration.
+3. **Public interface** — `run_harness` gains one optional keyword parameter
+   `search_backends: list[SearchBackend] | None = None` (fixture pair as default; mirrors
+   the existing `provider` parameter). *Added at adversarial adjudication (finding 7) —
+   pending explicit human approval at the re-approval note below.*
 
 Plus one spec clarification (components.md §1 acquire-time snapshotting line) — approved with
 this contract per the spec-refinement flow.
