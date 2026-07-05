@@ -52,7 +52,12 @@ This skill drives capabilities that are **already installed** (the `agent-skills
     routes through the `codex-rescue` agent instead — same Codex runtime, and it auto-applies the
     plugin's GPT-5.4 prompt-shaping. ⚠️ rescue defaults to **write-capable** (`--write`): every
     review/verification brief sent through it must state **read-only / critique-only** explicitly.
-    Background Codex jobs are tracked with `/codex:status` / `/codex:result` (user-typed).
+    ⚠️ `codex-rescue` is **async fire-and-forget**: its final message is a job id, never the
+    findings, and it refuses follow-up polling (fixed single-forward contract). The agent
+    retrieves results itself by running the plugin runtime —
+    `node "$CODEX_PLUGIN_ROOT/scripts/codex-companion.mjs" status|result <job-id>` (plugin cache
+    dir; poll `status` in a background shell, then `result`) — `/codex:status` / `/codex:result`
+    are the user-typed equivalents (failure-log, 2026-07-05).
     `agent-skills:doubt-driven-development` applies the same fresh-context skepticism to key
     decisions.
   - `/security-review` + `agent-skills:security-and-hardening` (untrusted input — prompt injection,
