@@ -30,13 +30,17 @@ runtime-egress gate on both fronts** (user-confirmed): **embeddings** (an
 `EmbeddingBackend` protocol; live OpenAI `text-embedding-3-small`; eager-and-uniform
 chunk-grain vectorisation at ingest, landed ahead of its first reader as an approved
 exception — chunk vectors are certain retrieval/synthesis substrate) and **generation**
-(the repo's first product prompt: `characterise_grouping_v1`, lead-authored, versioned).
+(the repo's first product prompts: the `characterise_grouping_v1` discovery+assignment
+pair, lead-authored, co-versioned).
 Characterise itself: deterministic **coverage distributions over Tier-0 columns**
 (metadata-grounded patterns, base = the scope's screened-in set, flag-not-block) and
-**thematic grouping via one bounded LLM call** — discover + assign over titles/abstracts,
-schema-constrained output, **code-enforced exhaustive assignment** with one bounded
-repair call, an honest counted `unclustered` bucket, no placeholder themes or silent
-drops representable (v2's theming defects structurally closed). Groupings are run-local,
+**thematic grouping via a bounded two-stage LLM procedure** — discover themes (one
+judgment-model call over all titles/abstracts), then assign each document against the
+fixed theme list (batched concurrent cheap-model calls), schema-constrained throughout,
+**code-enforced per-batch exhaustive assignment** with targeted per-batch repair, an
+honest counted `unclustered` bucket, a call budget known before the run
+(`1 + ceil(n/batch) + repairs`), no placeholder themes or silent drops representable
+(v2's theming defects structurally closed). Groupings are run-local,
 never canonical; theme names persist as typed topic/theme tags. The **injection posture
 comes due here** (first slice where third-party corpus text enters an LLM prompt —
 id-keyed data records, constrained schema, no tools). Durable output = a run-scoped

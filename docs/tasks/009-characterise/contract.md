@@ -3,7 +3,17 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted, rev 3 — awaiting contract approval.
+> **Status:** drafted, rev 4 — awaiting contract approval.
+> Rev 4 (user question, 2026-07-06): the rev-3 single grouping call split into the
+> **two-stage shape from the start** — discover (one judgment-model call, whole
+> corpus) → assign (batched cheap-model calls, concurrent, against the fixed theme
+> list) — after the user asked whether deferring the split bought anything. It
+> didn't: assignment-vs-fixed-list is the easier task (equal-or-better quality at
+> 20–200 docs), batches kill long-output degradation, repair becomes per-batch and
+> targeted, latency is a wash with right-sized models per stage, and the
+> large-corpus seam shrinks to discovery-sampling only. Also rev 4: BERTopic
+> rejection wording corrected — the operative reason is the gate-excluded dependency
+> stack (torch via sentence-transformers, umap/numba), not framework-ness per se.
 > Rev 2 (user challenge, 2026-07-05): rev 1's numpy k-means judged subpar-by-default
 > for a heterogeneous policy corpus; replaced with HDBSCAN + honest noise bucket +
 > c-TF-IDF labels (scikit-learn) after a state-of-the-art sweep (last30days) and a v2
@@ -40,11 +50,12 @@ Add **characterise** — the EB shallow terminus (component 5). After the cheap 
 passes and full-text ingestion, characterise produces the **evidence landscape content**
 for a scope: (a) **deterministic coverage distributions** over Tier-0 columns — the
 hardest pattern grade, exactly reproducible, resting on the **screened base**,
-flag-not-block — and (b) **topic-level thematic shape**: an LLM proposes the scope's
-themes and assigns every screened-in document to one (or explicitly to none), from
-titles + abstracts, in **one bounded call** — honest about being the **softest grade**
-(an interpretive shape, not a count — recomputable, never a deterministic fact, which
-is exactly the epistemic class an LLM grouping belongs to).
+flag-not-block — and (b) **topic-level thematic shape**: an LLM discovers the scope's
+themes from all titles + abstracts (one call), then assigns every screened-in document
+against that fixed theme list (batched concurrent calls; a document may land
+explicitly in none) — a **bounded, known-in-advance call budget**, honest about being
+the **softest grade** (an interpretive shape, not a count — recomputable, never a
+deterministic fact, which is exactly the epistemic class an LLM grouping belongs to).
 
 By user decision this is the slice that **opens the runtime-egress gate on both
 fronts**: **embeddings** (OpenAI `text-embedding-3-small` behind an `EmbeddingBackend`
@@ -74,11 +85,12 @@ A PR on `task/009-characterise` → `dev` that:
   Alembic migration (gated change 1; table count 16 → 19).
 - Wires the embed pass into every ingestion path (upload ingest, acquire envelope
   snapshots, full-text ingest) and as an ensure-step at characterise start.
-- Ships `characterise.py`: deterministic Tier-0 coverage distributions; the one-call
-  LLM grouping (lead-authored versioned prompt, schema-constrained output,
-  code-enforced exhaustive assignment, bounded repair, honest `unclustered` bucket);
-  a deterministic stub grouper for the suite; tag persistence; the run-scoped
-  characterisation row; the structured landscape summary returned into
+- Ships `characterise.py`: deterministic Tier-0 coverage distributions; the two-stage
+  LLM grouping — discover (one call) → assign (batched, concurrent, fixed theme list)
+  — with lead-authored co-versioned prompts, schema-constrained outputs, code-enforced
+  per-batch exhaustive assignment, targeted per-batch repair, and an honest
+  `unclustered` bucket; a deterministic stub grouper for the suite; tag persistence;
+  the run-scoped characterisation row; the structured landscape summary returned into
   `component.completed`.
 - Ships the live OpenAI inference path for structured generation behind the existing
   `provider` seam (stub remains the default; gated change 4).
@@ -188,57 +200,62 @@ artefact/block/annotation machinery exists but nothing here writes to it (decisi
    reader (the Tier-0 retrieval contract commits to it there); keying by profile means
    that migration is additive. Profile-keyed rows also mean a future model/route change re-embeds under a
    new profile without touching history.
-4. **Thematic grouping: one bounded LLM call — discover + assign together, code-owned
-   validation and repair (rev 3; user-confirmed generation gate).** Rev 2's HDBSCAN
-   fell to the corpus-size check (density estimation is degenerate-by-default at
-   10s-of-docs scopes); agglomerative survives technically but needs per-corpus
-   threshold tuning and yields term-soup labels — the "hack needing constant tweaking"
-   the user rejected. The LLM route aligns best with human topic judgment
-   (TopicGPT-class evidence) and fits the spec's own epistemics for clusters
-   (interpretive, recomputable, never a deterministic fact). Design — every v2
-   operational defect structurally closed:
-   - **One structured call** (the happy path): all screened-in documents' `(id, title,
-     abstract)` — ~30K tokens at 100 docs, no context cliff below several hundred —
-     with the scope's intent; output constrained by JSON schema to a **theme set**
-     (name + one-line description, count bounded, e.g. 3–12) plus an **exhaustive
-     assignment** list of `(doc_id, theme | "unclustered")`. Discovery and assignment
-     in one pass is reliable at this scale; TopicGPT separates them for corpus sizes
-     we don't have (recorded at the large-corpus seam).
-   - **Validation is code, not model trust:** schema conformance is provider-enforced
-     (strict structured outputs); **exhaustiveness is not schema-expressible**, so
-     code asserts every input id assigned exactly once, no invented ids, theme count
-     in bounds. On violation: **one bounded repair call** re-asking only the residue
-     (assign the missing/invalid docs against the now-fixed theme list — cheaper and
-     more reliable than regenerating everything). Still failing → the component fails
-     honestly (decision 11); never silent drops, never a placeholder theme (v2's
-     "General Theme" collapse is unrepresentable — a degenerate outcome is a flagged
-     failure state, not fake success).
+4. **Thematic grouping: two-stage LLM — discover, then batched parallel assignment —
+   code-owned validation and repair (rev 4; TopicGPT's shape at every corpus size).**
+   Rev 2's HDBSCAN fell to the corpus-size check (density estimation is
+   degenerate-by-default at 10s-of-docs scopes); agglomerative survives technically
+   but needs per-corpus threshold tuning and yields term-soup labels — the "hack
+   needing constant tweaking" the user rejected. The LLM route aligns best with human
+   topic judgment (TopicGPT-class evidence) and fits the spec's own epistemics for
+   clusters (interpretive, recomputable, never a deterministic fact). Rev 4 (user
+   question, 2026-07-06) splits the rev-3 single call into the two-stage shape from
+   the start — no drawback at 20–200 docs, several concrete wins (§ research
+   grounding, rev 4 note). Design — every v2 operational defect structurally closed:
+   - **Stage 1 — discover** (one call, judgment-heavy model): all screened-in
+     documents' `(id, title, abstract)` — ~30K tokens at 100 docs — with the scope's
+     intent; output schema-constrained to a **theme set** (name + one-line
+     description, count bounded, e.g. 3–12). Discovery always sees the whole corpus;
+     a sampling step at very large n is the only remaining scale seam.
+   - **Stage 2 — assign** (batched, cheap classification model, batches run
+     concurrently): each batch of ~25–50 docs is assigned against the **fixed theme
+     list** from stage 1; output schema-constrained to `(doc_id, theme |
+     "unclustered")` per doc. Assignment against a fixed list is an easier task than
+     joint discovery+assignment, and bounded batch outputs avoid long-structured-
+     output degradation — quality is equal or better at our sizes, and the same
+     design runs unchanged at 2,000 docs. Total calls: `1 + ceil(n/batch) + repairs`
+     — bounded and known before the run starts (the budget guard's input).
+   - **Validation is code, not model trust — per batch:** schema conformance is
+     provider-enforced (strict structured outputs); **exhaustiveness is not
+     schema-expressible**, so code asserts every batch id assigned exactly once, no
+     invented ids. A violating batch gets **one repair call re-asking only that
+     batch's residue** — small, targeted, against the fixed theme list. Still
+     failing → the component fails honestly (decision 11); never silent drops, never
+     a placeholder theme (v2's "General Theme" collapse is unrepresentable — a
+     degenerate outcome is a flagged failure state, not fake success).
    - **`unclustered` is a first-class, counted outcome** — the model may decline to
      force-fit a document; those docs stay fully eligible downstream and form their
      own stratum when `select` lands. Counting invariant:
      `screened_in == grouped + unclustered` (+ honest failure states).
-   - **No LangChain, no workflow framework:** this is a plain procedure against the
-     existing inference seam — build prompt, one call, validate, one repair, done.
-     v2's LangChain workflow shape is where its defects lived (dead critique stage,
-     O(N) mapping fan-out, silent drops); the valuable part was the prompt discipline,
-     which moves into the prompt itself (below). The component-level orchestration
-     framework in this repo is already the LangGraph harness.
+   - **No new orchestration dependency:** both stages are plain procedure code
+     against the existing inference seam — the OpenAI SDK covers structured calls
+     natively, and the concurrency is a bounded `gather` over assignment batches.
+     (v2's LangChain constructs were thin wrappers over exactly this; its defects —
+     dead critique stage, batch-size-1 mapping, silent drops between stages — were
+     design flaws the validation-and-repair loop closes, not framework properties.)
    - **Grouping is run-local** (persisted only in this run's `characterisation_result`
      row — resume checkpoint, recomputable, superseded by the next run; never a
      canonical corpus fact, per capability.md). Re-runs may group differently — the
-     spec's softest grade says exactly this; the run records prompt version, model id
-     and settings so any grouping is attributable.
+     spec's softest grade says exactly this; the run records prompt version, model
+     ids and settings so any grouping is attributable.
    - **Test seam:** a deterministic **stub grouper** (the `_stub_screen`/`_stub_classify`
-     pattern — e.g. groups by a metadata key) keeps `make verify` egress-free and
-     exercises all downstream machinery (validation, tags, row, summary, events);
-     the live path is manual evidence. **Large-corpus seam recorded:** past several
-     hundred docs, two-stage TopicGPT-style (discover on a sample, batched assignment)
-     or embedding-based clustering — the hybrid inverts at scale; chunk embeddings
-     (decision 1) are already in place for it.
-5. **The grouping prompt is the repo's first product prompt — prompt-bearing,
-   lead-authored, versioned (rev 3).** Named + versioned (`characterise_grouping_v1`),
-   recorded on the characterisation row and in the event payload (the appraisal
-   `rubric_version` discipline applied to prompts). It carries v2's genuinely good
+     pattern — stub discover + stub assign) keeps `make verify` egress-free and
+     exercises all downstream machinery (batching, validation, repair routing, tags,
+     row, summary, events); the live path is manual evidence.
+5. **The grouping prompts are the repo's first product prompts — prompt-bearing,
+   lead-authored, versioned (rev 3; rev 4: a co-versioned pair).** The discovery and
+   assignment prompts version together as `characterise_grouping_v1`, recorded on the
+   characterisation row and in the event payload (the appraisal `rubric_version`
+   discipline applied to prompts). It carries v2's genuinely good
    prompt discipline where it belongs: **intent-anchored** (themes must serve the
    scope's stated intent), **MECE-oriented** (collectively exhaustive is *enforced in
    code*, not prompt-hoped; mutually exclusive and meaningful granularity are prompt
@@ -258,8 +275,9 @@ artefact/block/annotation machinery exists but nothing here writes to it (decisi
    committed — `.env` is already gitignored; asserted absent from all captured output);
    explicit request timeouts; bounded retry/backoff on transient failures; batch size
    capped; **per-run budget guards on both paths** (max chunks per embed pass; the
-   grouping call is one-plus-one-repair by construction — over any cap → stop with
-   honest counts and a loud log, never a silent partial that looks complete). What
+   grouping budget is `1 + ceil(n/batch) + per-batch repairs` by construction, known
+   before the run starts — over any cap → stop with honest counts and a loud log,
+   never a silent partial that looks complete). What
    leaves the machine is corpus text (chunk text on the embed path; titles + abstracts
    on the grouping path) to the configured provider — the documented, spec-accepted
    v3.0 inference-route posture. **Injection posture (user-confirmed): this is the
@@ -394,13 +412,29 @@ not "LLM grouping" but its **operational shape** — O(N) mapping calls, a conte
 with no guard, silent drops, a dead critique stage, MECE promised but unenforced. At
 v3.0 scope sizes (10s–100s docs) one bounded structured call with code-enforced
 validation + one repair call closes every one of those defects while keeping the
-quality edge TopicGPT-class evidence documents. Discover+assign stay in a single call
-because splitting them (v2/TopicGPT-style) buys robustness only at corpus sizes past
-several hundred documents — recorded as the large-corpus seam. **No LangChain**: the
-valuable v2 residue is prompt discipline (moved into the versioned prompt) and the
-facet decomposition (moved to the `group` seam); the workflow framework itself is where
-v2's dead code and silent drops lived, and this repo's component orchestration is
-already the LangGraph harness.
+quality edge TopicGPT-class evidence documents. **No LangChain**: the
+valuable v2 residue is prompt discipline (moved into the versioned prompts) and the
+facet decomposition (moved to the `group` seam); v2's defects were design flaws in its
+workflow (dead critique, batch-size-1 mapping, silent drops), and the SDK covers
+structured calls natively — a second framework would be a dependency for what plain
+code does.
+
+**Rev 4 adjudication (2026-07-06) — the split comes forward:** rev 3 kept discover +
+assign in one call and deferred the TopicGPT-style split to a large-corpus seam; the
+user asked what deferring actually bought. Answer on inspection: nothing. Assignment
+against a fixed theme list is the *easier* task per decision than joint
+discovery+assignment (each batch attends to ~50 docs × ~10 themes instead of tracking
+hundreds of assignments in one output), so quality at 20–200 docs is equal or better;
+batched outputs remove the long-structured-output degradation risk; the rev-3 repair
+call *was already* an assignment-stage call, so the split makes the primary path and
+the repair path the same mechanism (simpler, not more complex); latency is a wash —
+assignment batches run concurrently on a cheap classification model
+(discovery-model-call + one parallel batch wave ≈ the single big call, tens of seconds
+either way, in a pipeline whose ingest step runs minutes); and cost likely *drops*
+(the long output moves from the judgment model to a nano-class model — v2's one right
+instinct, kept). The remaining scale seam shrinks to discovery-sampling at very large
+n. v2's actual error was never the split — it was batch size 1 (O(N) calls), no
+validation, and silent drops between stages.
 
 ### Schema
 
@@ -461,15 +495,18 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
   (screened-in vs not-relevant vs failed vs unscreened) present; every distribution
   carries its base label; flag-not-block (below-bar/Unknown rows counted, never dropped).
 - Grouping (stub grouper drives the suite; live behaviour is manual evidence + eval
-  seam): validation enforces exhaustive assignment — a grouper double returning a
-  missing doc, an invented id, a duplicate assignment, or an out-of-bounds theme count
-  triggers the **repair path** (asserted: repair called with only the residue, against
-  the fixed theme list); repair still invalid → honest `component.failed`, no partial
-  grouping persisted, no placeholder theme (asserted unrepresentable); `unclustered`
-  is a counted first-class outcome and the invariant covers it
-  (`screened_in == grouped + unclustered`); assignments land only in the
-  characterisation row (no canonical cluster state anywhere); prompt version + model
-  id recorded on the row and event payload.
+  seam): batching is deterministic (id-ordered, stated batch size); per-batch
+  validation enforces exhaustive assignment — an assignment double returning a missing
+  doc, an invented id, or a duplicate triggers the **repair path for that batch only**
+  (asserted: repair called with just the residue, against the fixed theme list; other
+  batches untouched); out-of-bounds theme count from discovery → repair or honest
+  failure; repair still invalid → honest `component.failed`, no partial grouping
+  persisted, no placeholder theme (asserted unrepresentable); `unclustered` is a
+  counted first-class outcome and the invariant covers it
+  (`screened_in == grouped + unclustered`); the call budget matches
+  `1 + ceil(n/batch) + repairs` (asserted against a counting double); assignments land
+  only in the characterisation row (no canonical cluster state anywhere); prompt
+  version + model ids recorded on the row and event payload.
 - Prompt hygiene: document content enters the prompt as id-keyed data records under
   the data/instructions separation (asserted structurally on the built prompt); an
   injection-shaped fixture abstract ("ignore instructions and…") flows through as
@@ -512,11 +549,13 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
 - **Bedrock embedding route** — the seam swap; recorded with the routing-seam note.
 - **Exact-token budgeting (tiktoken-class) and semantic re-chunking** — recorded at the
   embed seam; v3.0 windowing is a char-budget heuristic (decision 2).
-- **Large-corpus grouping** — two-stage TopicGPT-style (discover on a sample, batched
-  assignment) or embedding-based clustering (HDBSCAN/agglomerative over the chunk
-  vectors this slice lands) past several hundred docs; grouping-quality evals
-  (decision 4). The `group` component inherits v2's theming lessons (four-facet
-  decomposition; the bounded-call shape) — recorded in deferred.md by this slice.
+- **Very-large-corpus grouping** — discovery-sampling (stage 1 over a stratified
+  sample when the whole corpus no longer fits one call) and/or embedding-based
+  clustering (HDBSCAN/agglomerative over the chunk vectors this slice lands);
+  grouping-quality evals (decision 4). Assignment already scales — batches are
+  corpus-size-independent. The `group` component inherits v2's theming lessons
+  (four-facet decomposition; the two-stage validated shape) — recorded in deferred.md
+  by this slice.
 - **Tag namespace consolidation / `open_tags` migration** (decisions 5, 10).
 - **`select` and everything deeper** — subsequent slices.
 
@@ -544,14 +583,18 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
 
 Plus two spec flow-backs approved with this contract: the components §5
 content-vs-artefact clarification (decision 7), and the §5 thematic-mechanism update
-(decision 4: v3.0 groups via one bounded LLM call over titles/abstracts at small corpus
-scale; embedding-based clustering is the recorded large-corpus path; chunk vectorisation
-lands with the egress gate ahead of its first reader — approved exception to the 008
+(decision 4: v3.0 groups via a bounded two-stage LLM procedure — discover, then
+batched assignment — over titles/abstracts; embedding-based clustering and
+discovery-sampling are the recorded very-large-corpus paths; chunk vectorisation lands
+with the egress gate ahead of its first reader — approved exception to the 008
 deferral line).
 
-**Explicitly not crossed:** no agent-loop / multi-call generation (one call + one
-repair, schema-bound), no auth/tenancy change, no CI change, no pgvector/extension, no
-artefact/block writes, no changes to existing tables, no LangChain or new framework.
+**Explicitly not crossed:** no agent-loop generation (a fixed two-stage procedure with
+a known call budget — `1 + ceil(n/batch) + per-batch repairs` — schema-bound
+throughout), no auth/tenancy change, no CI change, no pgvector/extension, no
+artefact/block writes, no changes to existing tables, no new orchestration dependency
+(the SDK covers structured calls; LangChain would add a dependency for what plain code
+does).
 
 ## Public / private boundary
 
@@ -571,12 +614,14 @@ artefact/block writes, no changes to existing tables, no LangChain or new framew
 
 **Embeddings**: OpenAI `text-embedding-3-small` under the approved-controls posture
 (→ Bedrock behind the `EmbeddingBackend` seam when the route lands); the embedding
-profile string is the model-version provenance on every row. **Generation**: one
-structured chat call per characterise run (gpt-5-mini-class; exact model pinned at the
-plan gate) behind the existing `provider` seam (→ Bedrock at the same route swap).
-**Prompt-bearing surface: `characterise_grouping_v1`** (decision 5) — lead-authored,
-versioned, recorded on the characterisation row and event payload; the only prompt in
-the slice.
+profile string is the model-version provenance on every row. **Generation, two
+right-sized models** (exact pins at the plan gate; both behind the existing `provider`
+seam, → Bedrock at the same route swap): **discovery** on a judgment-capable model
+(gpt-5-mini-class — one call per run) and **assignment** on a cheap classification
+model (gpt-5-nano-class — `ceil(n/batch)` concurrent calls per run; v2's one right
+instinct, kept). **Prompt-bearing surface: the `characterise_grouping_v1` prompt pair**
+(discovery + assignment, co-versioned; decision 5) — lead-authored, recorded on the
+characterisation row and event payload; the only prompts in the slice.
 
 ## Disciplines binding this slice
 
@@ -597,8 +642,9 @@ the slice.
   validation logic: same input, same output, test-enforced. The live grouping is
   interpretive by design (softest grade); its provenance (prompt version, model id)
   makes every grouping attributable. Neither live path is inside `make verify`.
-- **Exactly one prompt-bearing surface** — `characterise_grouping_v1`, lead-authored,
-  versioned; no other generation call exists in the slice (decision 5).
+- **Exactly one prompt-bearing surface** — the `characterise_grouping_v1` prompt pair
+  (discovery + assignment, co-versioned), lead-authored; no other generation exists in
+  the slice (decision 5).
 - **Never silent, never fake** — no placeholder themes, no silent drops, no partial
   grouping presented as complete (decisions 4, 11 — v2's failure modes made
   unrepresentable).
@@ -612,10 +658,10 @@ the slice.
   only).
 - The one-artefact shape is threatened mid-build (something needs blocks/artefact writes
   after all) — halt, don't improvise composition.
-- The one-call grouping proves inadequate *for the machinery to function* on the live
-  manual check (e.g. validation + repair cannot converge on the fixture corpus — not
-  merely imperfect themes, which is the eval seam) — halt and re-open decision 4 with
-  evidence; don't quietly grow a multi-call workflow.
+- The two-stage grouping proves inadequate *for the machinery to function* on the live
+  manual check (e.g. per-batch validation + repair cannot converge on the fixture
+  corpus — not merely imperfect themes, which is the eval seam) — halt and re-open
+  decision 4 with evidence; don't quietly grow extra stages or an agent loop.
 - The grouping prompt needs capabilities beyond themes+assignments (tool use, free
   text, multi-turn) — that's a different design; halt.
 - Scope would grow past the contract (other LLM seams, retrieval, composition, policy
