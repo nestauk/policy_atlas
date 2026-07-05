@@ -32,7 +32,7 @@ def test_all_fourteen_tables_exist(conn: Connection) -> None:
     expected = {
         "project", "artefact", "block", "addressable_unit", "annotation", "runs", "event_log",
         "source_snapshot", "project_source_snapshot", "chunk", "citation",
-        "screening_scope", "source_screening_result", "source_classification_result",
+        "evidence_scope", "source_screening_result", "source_classification_result",
     }
     assert expected <= tables
 

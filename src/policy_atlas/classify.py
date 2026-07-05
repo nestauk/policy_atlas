@@ -91,12 +91,12 @@ def classify_sources(
             source_snapshot,
             project_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
         )
-        .where(source_screening_result.c.screening_scope_id == context.scope_id)
+        .where(source_screening_result.c.evidence_scope_id == context.scope_id)
         .where(source_screening_result.c.status == "relevant")
         .where(project_source_snapshot.c.project_id == project_id)
         .where(
             ~exists().where(
-                (source_classification_result.c.screening_scope_id == context.scope_id)
+                (source_classification_result.c.evidence_scope_id == context.scope_id)
                 & (source_classification_result.c.project_source_snapshot_id
                    == project_source_snapshot.c.project_source_snapshot_id)
             )
@@ -106,7 +106,7 @@ def classify_sources(
     skipped = conn.execute(
         select(func.count())
         .select_from(source_screening_result)
-        .where(source_screening_result.c.screening_scope_id == context.scope_id)
+        .where(source_screening_result.c.evidence_scope_id == context.scope_id)
         .where(source_screening_result.c.status.in_(["not_relevant", "failed"]))
         .where(source_screening_result.c.project_id == project_id)
     ).scalar_one()
@@ -117,7 +117,7 @@ def classify_sources(
     total_relevant = conn.execute(
         select(func.count())
         .select_from(source_screening_result)
-        .where(source_screening_result.c.screening_scope_id == context.scope_id)
+        .where(source_screening_result.c.evidence_scope_id == context.scope_id)
         .where(source_screening_result.c.status == "relevant")
         .where(source_screening_result.c.project_id == project_id)
     ).scalar_one()
@@ -133,7 +133,7 @@ def classify_sources(
                 "classify.doc_failed",
                 project_id=str(project_id),
                 run_id=str(run_id),
-                screening_scope_id=str(context.scope_id),
+                evidence_scope_id=str(context.scope_id),
                 project_source_snapshot_id=str(pss_id),
                 error=str(exc),
             )
@@ -142,7 +142,7 @@ def classify_sources(
         conn.execute(
             source_classification_result.insert().values(
                 source_classification_result_id=uuid.uuid4(),
-                screening_scope_id=context.scope_id,
+                evidence_scope_id=context.scope_id,
                 project_source_snapshot_id=pss_id,
                 project_id=project_id,
                 classified_by_run_id=run_id,
@@ -160,7 +160,7 @@ def classify_sources(
             payload={
                 "source_snapshot_id": str(snap_id),
                 "project_source_snapshot_id": str(pss_id),
-                "screening_scope_id": str(context.scope_id),
+                "evidence_scope_id": str(context.scope_id),
                 "primary_evidence_type": result.primary_evidence_type,
                 "open_tags": result.open_tags,
             },

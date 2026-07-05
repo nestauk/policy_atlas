@@ -43,6 +43,8 @@ uploaded corpus — at this point **metadata only** (title, abstract, metadata),
 Bounded by configured backends / trust classes (the acquisition constraint). Breadth is
 **intent-derived**, not fixed. **Full-text fetch + Tier-0 ingestion does not happen here** — it
 is gated by `screen`. Ingestion is *not* a tool; this component's verb is `search`.
+In v3.0 acquire snapshots the metadata envelope itself as text-in-hand
+(`text_basis="abstract_only"`); full-text fetch + Tier-0 ingestion remain post-screen.
 
 ## 2 — screen
 

@@ -1,5 +1,11 @@
 # Spec update log
 
+## 2026-07-05
+* **Update**: [EB components §1](capabilities/evidence-base/components.md) — clarified v3.0
+  acquire-time snapshotting: acquire snapshots the metadata envelope as text-in-hand
+  (`text_basis="abstract_only"`); full-text fetch + Tier-0 ingestion remain post-screen.
+  Approved with the task 007 contract per the spec-refinement flow.
+
 ## 2026-07-03
 * **Update**: [EB components §4](capabilities/evidence-base/components.md) — clarified v3.0
   appraisal coverage: the light pass scores classified evidence types; Non-evidence and Unknown

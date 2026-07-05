@@ -24,3 +24,8 @@ dist/
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
+# Internal R&D material — referenced by task contracts but not published (public repo)
+docs/research-and-development/
+
+# Task 007: raw dev-time API recordings — never committed
+scripts/recordings/

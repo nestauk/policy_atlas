@@ -10,6 +10,7 @@ All gates approved; see ADR 0001 and contract.md.
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 from sqlalchemy import select, text
@@ -24,15 +25,32 @@ from policy_atlas.ingest import ingest_upload
 from policy_atlas.logging import configure_logging
 from policy_atlas.plan import Plan, compile
 from policy_atlas.schema import (
+    evidence_scope,
     project,
     runs,
-    screening_scope,
     source_appraisal_result,
     source_classification_result,
     source_screening_result,
 )
 
 log = structlog.get_logger()
+
+
+def _log_component_counts(log_entries: list[dict[str, Any]], component: str) -> None:
+    """Surface a component's completed-event counts (or note the missing event)."""
+    counts = next(
+        (
+            e["payload"] for e in log_entries
+            if e["event_type"] == "component.completed"
+            and e["payload"].get("component") == component
+        ),
+        None,
+    )
+    if counts is None:
+        # the component emitted component.failed — the event log below shows it
+        log.warning(f"{component}_counts.missing")
+    else:
+        log.info(f"{component}_counts", **{k: v for k, v in counts.items() if k != "component"})
 
 
 def _run_component(
@@ -53,7 +71,7 @@ def _run_component(
     )
     log.info("run.started", run_id=str(run_id), component=component)
 
-    config = compile(Plan(component=component, screening_scope_id=scope_id))
+    config = compile(Plan(component=component, evidence_scope_id=scope_id))
     events.append(
         conn,
         project_id=project_id,
@@ -61,7 +79,7 @@ def _run_component(
         event_type="plan.compiled",
         payload={
             "component": config.component,
-            "screening_scope_id": str(config.screening_scope_id),
+            "evidence_scope_id": str(config.evidence_scope_id),
         },
     )
     log.info("plan.compiled", component=config.component)
@@ -112,17 +130,20 @@ def main() -> None:
         # Create screening scope
         scope_id = uuid.uuid4()
         conn.execute(
-            screening_scope.insert().values(
-                screening_scope_id=scope_id,
+            evidence_scope.insert().values(
+                evidence_scope_id=scope_id,
                 project_id=project_id,
                 intent="What policies address housing affordability?",
                 context={"theme": "housing"},
                 created_at=datetime.now(UTC),
             )
         )
-        log.info("screening_scope.created", scope_id=str(scope_id))
+        log.info("evidence_scope.created", scope_id=str(scope_id))
 
-        # Walk the chain: three runs over the same scope
+        # Walk the chain: four runs over the same scope. Acquire runs first —
+        # both fixture backends over the mixed corpus (this upload + acquired sets).
+        _run_component(conn, project_id, scope_id, "acquire")
+
         _run_component(conn, project_id, scope_id, "screen")
 
         screening_results = conn.execute(
@@ -152,6 +173,17 @@ def main() -> None:
         ).fetchall()
         log_entries = events.read(conn, project_id)
 
+    # Per-backend acquire counts — makes the authentic-shapes path visible
+    _log_component_counts(log_entries, "acquire")
+
+    # Screen-basis distribution: missing abstracts/snippets flow the title_only
+    # fail-open path — visible here, per contract.
+    basis_distribution: dict[str, int] = {}
+    for row in screening_results:
+        if row.screen_basis is not None:
+            basis_distribution[row.screen_basis] = basis_distribution.get(row.screen_basis, 0) + 1
+    log.info("screen_basis_distribution", **basis_distribution)
+
     for row in screening_results:
         log.info("screening_result", status=row.status, basis=row.screen_basis,
                  confidence=row.screen_decision_confidence)
@@ -165,21 +197,7 @@ def main() -> None:
                  rubric_version=row.rubric_version)
 
     # Surface the skip counts so both the scored and skipped paths are visible
-    appraise_counts = next(
-        (
-            e["payload"] for e in log_entries
-            if e["event_type"] == "component.completed"
-            and e["payload"].get("component") == "appraise"
-        ),
-        None,
-    )
-    if appraise_counts is None:
-        # appraise emitted component.failed — fall through to the event log below
-        log.warning("appraise_counts.missing")
-    else:
-        log.info(
-            "appraise_counts", **{k: v for k, v in appraise_counts.items() if k != "component"}
-        )
+    _log_component_counts(log_entries, "appraise")
 
     for entry in log_entries:
         log.info("event_log_entry", sequence=entry["sequence"], event_type=entry["event_type"])

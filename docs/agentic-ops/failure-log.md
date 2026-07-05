@@ -62,3 +62,31 @@ separate mandatory lanes, so the same diff got two full security reads.
   heterogeneous pair (Codex adversarial brief + `/code-review medium` as the Claude half).
 - Budget guardrail: a routine feature-slice review should land **≤250K subagent tokens**; if the
   planned stack exceeds it, cut overlap before launching, and say so at the 🛑.
+
+---
+
+## 2026-07-05 — `codex-rescue` dispatch treated as synchronous; findings retrieval dead-ended in an autonomous session
+
+**Task:** 007-acquire (contract-stage adversarial review)
+
+**What happened:** The lead dispatched the contract-stage adversarial review through the
+`codex-rescue` agent (correct route for a document-shaped brief) expecting the findings report in
+the agent's final message. The agent instead returned only a background job id. A follow-up
+SendMessage asking it to poll and return results was refused — the agent's contract is a fixed
+single forward-to-Codex, and it does not poll, fetch results, or accept remit expansion mid-task.
+Two wasted hops (~30K subagent tokens) before the lead recovered by invoking the plugin runtime
+directly.
+
+**Root cause:** Two-part process gap, not a tooling bug. (1) The rescue lane is async
+fire-and-forget by design; the task-cycle SKILL.md documented the dispatch but its only retrieval
+note — "background Codex jobs are tracked with `/codex:status` / `/codex:result` (user-typed)" —
+assumes a human mid-loop. In an autonomous/background session no one types those commands, so the
+documented loop dead-ends exactly where the review runs (fresh conversation, agent-driven).
+(2) The lead didn't connect "user-typed" to "the agent's report will not contain findings" at
+dispatch time.
+
+**Fix (adopted 2026-07-05, installed in task-cycle step-1/3/7 tool notes):** the SKILL.md
+invocation note now states that `codex-rescue` returns a job id, never findings, and that the
+agent retrieves results itself via the plugin runtime — `codex-companion.mjs status|result
+<job-id>` (poll `status` in a background shell, then `result`); the slash commands remain the
+user-typed equivalents. Dispatch briefs need no change; the retrieval leg is now agent-executable.

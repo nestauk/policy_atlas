@@ -26,6 +26,10 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [structlog is the only logger](logging-structlog.md) - all log calls go through structlog; no print / stdlib logging.
 * [Tests run against the dev DB in a rolled-back transaction](testing-database.md) - no separate test database; point `DATABASE_URL` somewhere disposable.
 
+## Testing rules
+
+* [Audit sanitized fixtures against the raw recording](sanitized-fixtures-audit-against-raw.md) - key-based sanitizers miss list-inherited keys and rare fields; substring-audit raw vs fixture, with a neutral fake lexicon.
+
 ## Invariants (verified)
 
 * [Event-log sequence is app-assigned under a single writer](event-log-sequence.md) - `(project_id, sequence)` ordering, append-only at the repo layer.

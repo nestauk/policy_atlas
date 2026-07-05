@@ -1,27 +1,27 @@
 ---
 type: Invariant
 title: Harness scope lookups must filter by project_id, not just by ID
-description: A harness node that loads a scope-like row (e.g. screening_scope) by its own ID must also filter by the run's project_id, or a scope belonging to another project is silently accepted.
+description: A harness node that loads a scope-like row (e.g. evidence_scope) by its own ID must also filter by the run's project_id, or a scope belonging to another project is silently accepted.
 tags: [harness, cross-project, security, invariant]
 timestamp: 2026-07-01
 ---
 
 # Rule
 
-Any harness node that looks up a row by an ID carried on `Config` (e.g. `screening_scope_id`)
+Any harness node that looks up a row by an ID carried on `Config` (e.g. `evidence_scope_id`)
 must filter that lookup by `project_id` as well as the ID:
 
 ```python
-select(screening_scope)
-    .where(screening_scope.c.screening_scope_id == config.screening_scope_id)
-    .where(screening_scope.c.project_id == project_id)   # required, not optional
+select(evidence_scope)
+    .where(evidence_scope.c.evidence_scope_id == config.evidence_scope_id)
+    .where(evidence_scope.c.project_id == project_id)   # required, not optional
 ```
 
 An ID-only lookup finds the row regardless of which project it belongs to.
 
 # Why
 
-`Config.screening_scope_id` is caller-supplied. If it references a scope from a different
+`Config.evidence_scope_id` is caller-supplied. If it references a scope from a different
 project, an ID-only lookup succeeds, constructs a context from another project's data, and the
 downstream fan-out function's own `project_id` filters happen to return zero rows — so the run
 silently "succeeds" with `classified=0`/`screened=0` instead of failing loudly. The database-level

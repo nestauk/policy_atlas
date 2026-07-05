@@ -11,9 +11,10 @@ from pydantic import BaseModel, model_validator
 
 COMPONENT_REGISTRY: dict[str, dict[str, list[str]]] = {
     "echo":     {"requires": ["source_snapshot_id"]},
-    "screen":   {"requires": ["screening_scope_id"]},
-    "classify": {"requires": ["screening_scope_id"]},
-    "appraise": {"requires": ["screening_scope_id"]},
+    "acquire":  {"requires": ["evidence_scope_id"]},
+    "screen":   {"requires": ["evidence_scope_id"]},
+    "classify": {"requires": ["evidence_scope_id"]},
+    "appraise": {"requires": ["evidence_scope_id"]},
 }
 VALID_COMPONENTS = set(COMPONENT_REGISTRY.keys())
 
@@ -21,7 +22,7 @@ VALID_COMPONENTS = set(COMPONENT_REGISTRY.keys())
 class _ValidatedRunSpec(BaseModel):
     component: str
     source_snapshot_id: uuid.UUID | None = None
-    screening_scope_id: uuid.UUID | None = None
+    evidence_scope_id: uuid.UUID | None = None
 
     @model_validator(mode="after")
     def validate_fields(self) -> "_ValidatedRunSpec":
@@ -46,5 +47,5 @@ def compile(plan: Plan) -> Config:  # noqa: A001
     return Config(
         component=plan.component,
         source_snapshot_id=plan.source_snapshot_id,
-        screening_scope_id=plan.screening_scope_id,
+        evidence_scope_id=plan.evidence_scope_id,
     )

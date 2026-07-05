@@ -54,7 +54,7 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   richer full-text appraisal pass, not silently dropped (contract decision 3, task 006).
 - **`source_appraisal_result` → `source_classification_result` FK — deliberately absent, not
   just deferred** (mirrors the classify→screen entry below). A composite FK onto
-  classification's `(screening_scope_id, project_source_snapshot_id)` unique key would
+  classification's `(evidence_scope_id, project_source_snapshot_id)` unique key would
   DB-enforce "only classified rows are appraised", but both result tables' unique constraints
   are slated to gain re-run/rubric-version columns, which the FK would hard-block. The
   invariant lives in the read path (`appraise_sources` selects *from*
@@ -87,7 +87,16 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   currently describes classify as running on "the screened-in set" unconditionally) before any
   component is built against it.
 - **Full-text ingestion and `characterise`+ EB components** — subsequent slices (screen,
-  classify and appraise landed: tasks 004–006).
+  classify, appraise and acquire landed: tasks 004–007). **Slice 008 (full-text) inputs
+  retained for it** (task 007): OpenAlex URL/OA block (`primary_location`, `best_oa_location`,
+  `open_access`) and Overton `document_url`/`pdf_url` + `grouped_pdf_ids_in_result` (multi-PDF
+  documents are real) live in each acquired snapshot's `metadata.provider_fields`. Carry v2's
+  patterns: OA-location precedence (`primary_location` → `best_oa_location` →
+  `open_access.oa_url`), fetch cascade (pdf_url → landing-page scrape with PDF-link discovery →
+  DOI URL), parse caps (50 MB / 50 pages / 100K chars), and a failure manifest — plus its
+  fragilities to avoid (fetch errors swallowed at debug level; thin DOI-landing text still
+  reported `ok`). Full-text snapshot identity (new snapshot vs attach-to-existing under
+  immutability) is 008's own design fork, deliberately not foreclosed by 007.
 - **`implementation_context_finding`** — the second reusable finding schema (mechanisms, barriers,
   implementation conditions); cross-schema linkage is reference-mediated via `group`.
 - **Saturation-based search stopping** (iterating retrieval↔screen until no new relevant docs);
@@ -97,10 +106,11 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **LLM-based screen tool** — `_stub_screen` is the deterministic stub; the real tool (LLM call
   with title/abstract → relevant/not_relevant/failed decision) is the deferred seam.
   `ScreenContext`, `ScreenResult`, and `source_screening_result` are durable and ready.
-- **Thin-base re-search trigger** — `screen_decision_confidence` is stored; the trigger that
-  re-runs `search` when confident-relevant count is below threshold hits the runtime-egress hard
-  gate. Deferred until the search backend lands.
-- **Re-screening** — a second result row for the same `(screening_scope_id, project_source_snapshot_id)`
+- **Thin-base re-search trigger** — `screen_decision_confidence` is stored and
+  `re_searched_still_thin` is a valid `search_coverage_record.stop_condition` (task 007), but
+  nothing fires it; the trigger that re-runs `search` when confident-relevant count is below
+  threshold waits on the live backends (runtime-egress gate).
+- **Re-screening** — a second result row for the same `(evidence_scope_id, project_source_snapshot_id)`
   pair is prevented by `uq_ssr_scope_source`; follow-on seam when re-screening is wanted.
 - **`screen_failed` recovery loop** — `status='failed'` rows are representable; no retry logic
   built. Deferred until a real inference provider makes failure transient.
@@ -108,16 +118,87 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   the findings graph (run-local → project-scoped persistent → graph datastore), gated on an
   entity-resolution-quality bar; **never** an ingestion-time global / cross-project KG.
 
+## Search / acquisition (task 007 seams)
+
+- **Live `SearchBackend` implementations** (OpenAlex, Overton) — the seam is built and both
+  envelope mappings run against authentic recorded structure; wiring live HTTP is **runtime
+  egress**, its own gated slice. Requirements carried from the v2 integration review (task 007
+  contract): explicit request timeouts everywhere (v2's OpenAlex path could hang unbounded);
+  a real Overton rate limiter (max 1 call/s, 429 + key-block on abuse — v2 had none); the
+  OpenAlex query sanitizer (commas inside quoted phrases break queries) applied on the
+  *production* path; per-provider result caps so the verbose provider can't crowd out grey
+  literature; no sync HTTP inside async contexts. Security posture for the same slice: keep
+  provider JSON out of top-level snapshot metadata (everything provider-controlled stays nested
+  under `provider_fields` — the stub sentinels `_stub_*` and envelope keys share the top-level
+  namespace); a third backend requires registering its mapper (`acquire_sources` rejects unknown
+  backend names loudly rather than skipping their results).
+- **Arm-B agentic search loop — the chosen query-derivation direction** (user, 2026-07-05;
+  colleague R&D June 2026: v2 branch `search-experiment-pr`, PR nestauk/discovery_policy_atlas#184;
+  presentation `docs/research-and-development/Search methods [Policy Atlas R&D] - June 2026.pdf`
+  (internal, not published); handover `backend/testing/r_and_d/search_experiments/ONBOARDING.md`,
+  maintainer Aidan Kelly). Iterative search with query reformulation from judged exemplars,
+  citation snowballing (forward + backward), LLM-suggested-paper grounding, Thompson-sampling
+  adaptive judging with a short-circuit stop, blend ranking (0.9·LLM-judge + 0.075·rerank);
+  measured ~2× single-pass recall@k_est at ~$0.44/query, ~6 min. LLM- and egress-heavy → lands
+  behind the LLM + live-backend gates. What 007 left ready: `SearchBackend` grows into the R&D's
+  `SourceClient` shape (add citation-fetch / reference-fetch / title-grounding-lookup /
+  optionally dense-search verbs + per-backend capability flags — additive to the protocol);
+  N search calls per run already fit (per-call `search.executed` events + one per-run coverage
+  record, queries by reference); `stop_condition` vocabulary grows by one-line CHECK migration
+  (quota / exhausted / short-circuit are cousins of the deferred `saturated`). Snowball-discovered
+  records enter as acquired sources through the same envelope + dedup. **Semantic Scholar** is
+  the candidate third backend (Arm C was a close second; dense `/snippet/search`, `x-api-key`,
+  ~1 req/s). An **Overton arm-B** is named future work (the presentation calls it a novel
+  open-source contribution). The **Campbell/3ie/EPPI golden-dataset** recommendation belongs to
+  the eval workstream (per data-model's judge-calibration ownership). Blend-rank + LLM-judge
+  relevance belong to the screen / retrieval-rerank seams, not acquire. v2's central lesson
+  stands recorded: a single LLM-generated boolean query is unstable/low-recall (v2 built a
+  query-stability eval to prove it); its multi-query fan-out design + eval harness are the
+  starting point when the seam opens. v3.0's intent-verbatim query is stable by construction.
+- **User-selectable backend scope** (academic-only / grey-lit-only / both — v2 precedent; later
+  possibly orchestrator-derived from the intent conversation) — lands as a Plan/Config field
+  (its own public-interface gate) driving the `search_backends` parameter `run_harness` gained
+  in task 007; nothing in v3.0 reads a selection, so no inert field shipped.
+- **Per-backend query mode is a backend property, not one-size-fits-all** (user, 2026-07-05):
+  v2 production ran semantic-only on Overton (`squery` + `min_similarity` — cheap) and
+  boolean-only on OpenAlex (semantic exists there but costs more; v2 bet on query generation).
+  To explore at the seam: a semantic/keyword mix per backend; whether Overton's semantic mode is
+  already hybrid under the hood (unverified). The richer **Overton filters**
+  (`source_country`/`source_region` with v2's region-label mapping, `source_type`, date bounds)
+  sit at the same seam; v3.0 sends none (`scope_filters` stays `{}`, shape reserved on the
+  coverage record).
+- **Injection screening of acquired text** — posture recorded at task 007 (contract decision 9):
+  acquired titles/abstracts/snippets are third-party text entering the corpus ("ingestion is not
+  a tool"); v3.0's deterministic stubs never interpret them (security-review-confirmed), but the
+  LLM screen/classify seams will — enforcement lands with those seams / the live backends.
+  Overton's `llm_document_description`/`llm_document_theme` are provider-LLM text, persisted
+  visibly (`abstract_source="llm_description"`; theme retained under `provider_fields`) and
+  never mixed into document-own-words fields — when grounding lands, claims resting on
+  `llm_description` text are flagged distinctly (flag-not-drop).
+- **Downstream consumers of the acquired envelope** (API exploration, 2026-07-05): the LLM
+  screen tool should read `abstract_source` (lower decision confidence on provider-LLM
+  summaries; decide non-English handling — fixtures carry a non-English record); the LLM
+  classify tool should consume structured provider priors (`record_type`, Overton
+  `source.type`/`organisation_type`, provider topics) to cut `Unknown`s on acquired documents —
+  classification quality gates appraisal coverage (all acquired docs are `Unknown` →
+  `skipped_unknown` under the v3.0 stubs, honest but appraisal-empty); `is_retracted` is
+  retained-but-unread — becomes a visible flag in the deferred appraisal second pass
+  (flag-not-block); the small-sample-penalty deferral is now evidence-backed (neither API ships
+  sample size).
+
 ## Data model / evidence
 
 - **`supersedes` edge on `source_snapshot`** — human-asserted pointer from a corrected re-upload
   to its predecessor; deferred until the re-upload UX is scoped. The schema shape (content-addressed
   snapshots without project_id) already supports it; no data migration needed.
 - **Content-hash dedup for acquired cross-project snapshots** — the schema shape supports sharing
-  (no `project_id` on `source_snapshot`), but the dedup lookup logic for the `acquire` path is a
-  follow-on slice.
-- **`search_coverage_record` table** — required to make honest absence claims ("we searched X and
-  found nothing relevant"); deferred to the `acquire` slice where it becomes load-bearing.
+  (no `project_id` on `source_snapshot`); task 007 built **project-scoped** dedup only (three
+  guards: `backend_record_id` · normalized DOI · content hash, preloaded in-memory per call).
+  Cross-project snapshot reuse, **fuzzy near-dup matching** (title similarity — DOI-only
+  cross-backend identity in v3.0), and **concurrent-run dedup hardening** (two simultaneous
+  acquire runs for one project could double-insert past the in-memory preload; a DB-level guard
+  is a gated schema change; v3.0 execution is single-process/serial — Codex adversarial finding,
+  task 007) are the follow-ons.
 - **LLM-as-judge grounding tier on `citation`** — `citation.verification_result` is set by the
   deterministic verbatim quote-presence check only; the full grounding tier classification
   (confident / uncertain / fabricated) is deferred to when a real inference provider lands.

@@ -61,8 +61,8 @@ class AppraiseContext:
 
     Attributes:
         scope_id: The screening scope whose classified set is appraised.
-        intent: The scope's research intent (from screening_scope.intent).
-        context: The scope's context JSONB (from screening_scope.context).
+        intent: The scope's research intent (from evidence_scope.intent).
+        context: The scope's context JSONB (from evidence_scope.context).
     """
 
     scope_id: uuid.UUID
@@ -114,7 +114,7 @@ def appraise_sources(
         skipped_unknown = classification rows for the scope.
     """
     scoped_classifications = (
-        (source_classification_result.c.screening_scope_id == context.scope_id)
+        (source_classification_result.c.evidence_scope_id == context.scope_id)
         & (source_classification_result.c.project_id == project_id)
     )
 
@@ -122,7 +122,7 @@ def appraise_sources(
     already_appraised = conn.execute(
         select(func.count())
         .select_from(source_appraisal_result)
-        .where(source_appraisal_result.c.screening_scope_id == context.scope_id)
+        .where(source_appraisal_result.c.evidence_scope_id == context.scope_id)
         .where(source_appraisal_result.c.project_id == project_id)
     ).scalar_one()
 
@@ -146,12 +146,12 @@ def appraise_sources(
     unclassified = conn.execute(
         select(func.count())
         .select_from(source_screening_result)
-        .where(source_screening_result.c.screening_scope_id == context.scope_id)
+        .where(source_screening_result.c.evidence_scope_id == context.scope_id)
         .where(source_screening_result.c.project_id == project_id)
         .where(source_screening_result.c.status == "relevant")
         .where(
             ~exists().where(
-                (source_classification_result.c.screening_scope_id == context.scope_id)
+                (source_classification_result.c.evidence_scope_id == context.scope_id)
                 & (source_classification_result.c.project_id == project_id)
                 & (source_classification_result.c.project_source_snapshot_id
                    == source_screening_result.c.project_source_snapshot_id)
@@ -177,7 +177,7 @@ def appraise_sources(
         .where(source_classification_result.c.primary_evidence_type.in_(list(DEFAULT_RUBRIC)))
         .where(
             ~exists().where(
-                (source_appraisal_result.c.screening_scope_id == context.scope_id)
+                (source_appraisal_result.c.evidence_scope_id == context.scope_id)
                 & (source_appraisal_result.c.project_id == project_id)
                 & (source_appraisal_result.c.project_source_snapshot_id
                    == project_source_snapshot.c.project_source_snapshot_id)
@@ -196,7 +196,7 @@ def appraise_sources(
         conn.execute(
             source_appraisal_result.insert().values(
                 source_appraisal_result_id=uuid.uuid4(),
-                screening_scope_id=context.scope_id,
+                evidence_scope_id=context.scope_id,
                 project_source_snapshot_id=pss_id,
                 project_id=project_id,
                 appraised_by_run_id=run_id,
@@ -214,7 +214,7 @@ def appraise_sources(
             payload={
                 "source_snapshot_id": str(snap_id),
                 "project_source_snapshot_id": str(pss_id),
-                "screening_scope_id": str(context.scope_id),
+                "evidence_scope_id": str(context.scope_id),
                 "quality_score": result.quality_score,
                 "rubric_version": result.rubric_version,
             },

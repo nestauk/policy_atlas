@@ -22,12 +22,18 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `006-appraise`.
+Implementation — task `007-acquire`.
 
-Tasks `001-walking-skeleton`, `002-test-db-split`, `003-source-snapshot`, `004-screen`, and
-`005-classify` are complete (merged). The active slice adds the `appraise` component: per-document
-evidence-hierarchy score (1–5, v2-ordering default rubric) over the classified set — deterministic
-by design, no LLM; Non-evidence/Unknown skipped-and-counted — persisting results in
-`source_appraisal_result` (columns: `quality_score`, `rubric_version`) scoped by `screening_scope`.
-Build per `docs/tasks/006-appraise/contract.md`. Stay within the contract's scope and stop conditions;
+Tasks `001-walking-skeleton`, `002-test-db-split`, `003-source-snapshot`, `004-screen`,
+`005-classify`, and `006-appraise` are complete (merged). The active slice adds the `acquire`
+component (EB front edge): metadata-only acquisition through the `search` seam — a
+`SearchBackend` protocol with **fixture-backed OpenAlex and Overton backends** (academic +
+grey literature, the two v3.0 backends the spec names) replaying sanitized fixtures derived
+from dev-time-recorded real responses — authentic structure, fabricated values (zero runtime
+egress; live HTTP backends stay behind the egress gate). Acquired
+results ingest as text-in-hand snapshots (`origin="acquired"`, `text_basis="abstract_only"`),
+every search call emits a per-backend `search.executed` governance event, and each acquire run
+writes a `search_coverage_record` row. Two approved schema gates ride this slice: the
+`screening_scope` → `evidence_scope` rename and the new `search_coverage_record` table. Build
+per `docs/tasks/007-acquire/contract.md`. Stay within the contract's scope and stop conditions;
 all other capabilities and seams remain deferred (`docs/deferred.md`).
