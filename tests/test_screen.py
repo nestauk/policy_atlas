@@ -14,9 +14,9 @@ from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.plan import Plan, compile
 from policy_atlas.schema import (
+    evidence_scope,
     metadata,
     runs,
-    screening_scope,
     source_screening_result,
 )
 from policy_atlas.screen import ScreenContext, _stub_screen, screen_sources
@@ -34,17 +34,17 @@ def test_pss_has_composite_unique(conn: Connection) -> None:
     assert "uq_pss_id_project" in names
 
 
-def test_screening_scope_columns(conn: Connection) -> None:
+def test_evidence_scope_columns(conn: Connection) -> None:
     inspector = inspect(conn)
-    cols = {c["name"] for c in inspector.get_columns("screening_scope")}
-    assert {"context", "intent", "project_id", "screening_scope_id", "created_at"} <= cols
+    cols = {c["name"] for c in inspector.get_columns("evidence_scope")}
+    assert {"context", "intent", "project_id", "evidence_scope_id", "created_at"} <= cols
 
 
 def test_ssr_columns(conn: Connection) -> None:
     inspector = inspect(conn)
     cols = {c["name"] for c in inspector.get_columns("source_screening_result")}
     assert {
-        "source_screening_result_id", "screening_scope_id", "project_source_snapshot_id",
+        "source_screening_result_id", "evidence_scope_id", "project_source_snapshot_id",
         "project_id", "screened_by_run_id", "status", "screen_basis",
         "screen_decision_confidence", "screened_at",
     } <= cols
@@ -87,7 +87,7 @@ def _ssr_insert(conn: Connection, project_id: uuid.UUID, run_id: uuid.UUID,
     """Raw insert into source_screening_result for constraint testing."""
     defaults = dict(
         source_screening_result_id=uuid.uuid4(),
-        screening_scope_id=scope_id,
+        evidence_scope_id=scope_id,
         project_source_snapshot_id=pss_id,
         project_id=project_id,
         screened_by_run_id=run_id,
@@ -287,18 +287,18 @@ def test_screen_sources_doc_exception_isolated(
 
 
 def test_screen_context_from_jsonb(conn: Connection) -> None:
-    """ScreenContext.context is loaded from screening_scope.context JSONB via the harness path."""
+    """ScreenContext.context is loaded from evidence_scope.context JSONB via the harness path."""
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid, context={"theme": "housing", "year": 2024})
     seed_source(conn, pid, meta={"abstract": "Housing policy."})
 
-    plan = Plan(component="screen", screening_scope_id=scope_id)
+    plan = Plan(component="screen", evidence_scope_id=scope_id)
     config = compile(plan)
     run_harness(conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider())
 
     # Verify the JSONB round-trips through the harness DB load path (harness.py: dict(row.context))
     row = conn.execute(
-        select(screening_scope).where(screening_scope.c.screening_scope_id == scope_id)
+        select(evidence_scope).where(evidence_scope.c.evidence_scope_id == scope_id)
     ).one()
     assert dict(row.context) == {"theme": "housing", "year": 2024}
 
@@ -317,7 +317,7 @@ def test_source_screened_event_payload(conn: Connection) -> None:
     payload = screened_events[0]["payload"]
     assert payload["source_snapshot_id"] == str(snap_id)
     assert payload["project_source_snapshot_id"] == str(pss_id)
-    assert payload["screening_scope_id"] == str(scope_id)
+    assert payload["evidence_scope_id"] == str(scope_id)
     assert payload["status"] == "relevant"
     assert payload["screen_basis"] == "title_abstract"
     assert payload["screen_decision_confidence"] == 0.9
@@ -346,7 +346,7 @@ def test_cross_project_fk_rejected(conn: Connection) -> None:
 
     # scope belongs to project A, pss belongs to project B → FK violation
     _cross_cols = (
-        "source_screening_result_id, screening_scope_id, project_source_snapshot_id, "
+        "source_screening_result_id, evidence_scope_id, project_source_snapshot_id, "
         "project_id, screened_by_run_id, status, screen_basis, "
         "screen_decision_confidence, screened_at"
     )
@@ -375,7 +375,7 @@ def test_harness_screen_component(conn: Connection) -> None:
     seed_source(conn, pid, meta={"abstract": "Housing policy."})
     seed_source(conn, pid, meta={})
 
-    plan = Plan(component="screen", screening_scope_id=scope_id)
+    plan = Plan(component="screen", evidence_scope_id=scope_id)
     config = compile(plan)
 
     run_harness(conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider())

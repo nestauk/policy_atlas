@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — fifteen tables, five alembic migrations.
+"""SQLAlchemy Core table metadata — fifteen tables, six alembic migrations.
 
 No deferred columns (no block/artefact summary, no same_content_as, no lineage key).
 """
@@ -187,23 +187,23 @@ citation = Table(
 
 # --- Screening model (task 004) ---
 
-screening_scope = Table(
-    "screening_scope",
+evidence_scope = Table(
+    "evidence_scope",
     metadata,
-    Column("screening_scope_id", UUID(as_uuid=True), primary_key=True),
+    Column("evidence_scope_id", UUID(as_uuid=True), primary_key=True),
     Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
     Column("intent", Text, nullable=False),
     Column("context", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     # Composite unique target for source_screening_result FK
-    UniqueConstraint("screening_scope_id", "project_id", name="uq_screening_scope_id_project"),
+    UniqueConstraint("evidence_scope_id", "project_id", name="uq_evidence_scope_id_project"),
 )
 
 source_screening_result = Table(
     "source_screening_result",
     metadata,
     Column("source_screening_result_id", UUID(as_uuid=True), primary_key=True),
-    Column("screening_scope_id", UUID(as_uuid=True), nullable=False),
+    Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
     Column("project_source_snapshot_id", UUID(as_uuid=True), nullable=False),
     Column("project_id", UUID(as_uuid=True), nullable=False),
     Column("screened_by_run_id", UUID(as_uuid=True), nullable=False),
@@ -213,8 +213,8 @@ source_screening_result = Table(
     Column("screened_at", DateTime(timezone=True), nullable=False),
     # Cross-project FK guards: all three parents must share the same project_id
     ForeignKeyConstraint(
-        ["screening_scope_id", "project_id"],
-        ["screening_scope.screening_scope_id", "screening_scope.project_id"],
+        ["evidence_scope_id", "project_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
         name="fk_ssr_scope_project",
     ),
     ForeignKeyConstraint(
@@ -231,7 +231,7 @@ source_screening_result = Table(
         name="fk_ssr_run_project",
     ),
     UniqueConstraint(
-        "screening_scope_id", "project_source_snapshot_id",
+        "evidence_scope_id", "project_source_snapshot_id",
         name="uq_ssr_scope_source",
     ),
     CheckConstraint("status IN ('relevant', 'not_relevant', 'failed')", name="ck_ssr_status"),
@@ -253,7 +253,7 @@ source_screening_result = Table(
         "status != 'failed' OR (screen_basis IS NULL AND screen_decision_confidence IS NULL)",
         name="ck_ssr_null_when_failed",
     ),
-    Index("ix_ssr_scope_status", "screening_scope_id", "status"),
+    Index("ix_ssr_scope_status", "evidence_scope_id", "status"),
 )
 
 # --- Classification model (task 005) ---
@@ -275,7 +275,7 @@ source_classification_result = Table(
     "source_classification_result",
     metadata,
     Column("source_classification_result_id", UUID(as_uuid=True), primary_key=True),
-    Column("screening_scope_id", UUID(as_uuid=True), nullable=False),
+    Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
     Column("project_source_snapshot_id", UUID(as_uuid=True), nullable=False),
     Column("project_id", UUID(as_uuid=True), nullable=False),
     Column("classified_by_run_id", UUID(as_uuid=True), nullable=False),
@@ -284,8 +284,8 @@ source_classification_result = Table(
     Column("classified_at", DateTime(timezone=True), nullable=False),
     # Cross-project FK guards: all three parents must share the same project_id
     ForeignKeyConstraint(
-        ["screening_scope_id", "project_id"],
-        ["screening_scope.screening_scope_id", "screening_scope.project_id"],
+        ["evidence_scope_id", "project_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
         name="fk_scr_scope_project",
     ),
     ForeignKeyConstraint(
@@ -302,7 +302,7 @@ source_classification_result = Table(
         name="fk_scr_run_project",
     ),
     UniqueConstraint(
-        "screening_scope_id", "project_source_snapshot_id",
+        "evidence_scope_id", "project_source_snapshot_id",
         name="uq_scr_scope_source",
     ),
     CheckConstraint(
@@ -315,7 +315,7 @@ source_classification_result = Table(
         f"primary_evidence_type IN ({_EVIDENCE_TYPES_SQL_LIST})",
         name="ck_scr_primary_evidence_type",
     ),
-    Index("ix_scr_scope_type", "screening_scope_id", "primary_evidence_type"),
+    Index("ix_scr_scope_type", "evidence_scope_id", "primary_evidence_type"),
 )
 
 # --- Appraisal model (task 006) ---
@@ -324,7 +324,7 @@ source_appraisal_result = Table(
     "source_appraisal_result",
     metadata,
     Column("source_appraisal_result_id", UUID(as_uuid=True), primary_key=True),
-    Column("screening_scope_id", UUID(as_uuid=True), nullable=False),
+    Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
     Column("project_source_snapshot_id", UUID(as_uuid=True), nullable=False),
     Column("project_id", UUID(as_uuid=True), nullable=False),
     Column("appraised_by_run_id", UUID(as_uuid=True), nullable=False),
@@ -337,8 +337,8 @@ source_appraisal_result = Table(
     # a FK would harden the schema against the recorded re-run relaxation seams
     # (see docs/deferred.md).
     ForeignKeyConstraint(
-        ["screening_scope_id", "project_id"],
-        ["screening_scope.screening_scope_id", "screening_scope.project_id"],
+        ["evidence_scope_id", "project_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
         name="fk_sar_scope_project",
     ),
     ForeignKeyConstraint(
@@ -355,9 +355,9 @@ source_appraisal_result = Table(
         name="fk_sar_run_project",
     ),
     UniqueConstraint(
-        "screening_scope_id", "project_source_snapshot_id",
+        "evidence_scope_id", "project_source_snapshot_id",
         name="uq_sar_scope_source",
     ),
     CheckConstraint("quality_score BETWEEN 1 AND 5", name="ck_sar_quality_score"),
-    Index("ix_sar_scope_score", "screening_scope_id", "quality_score"),
+    Index("ix_sar_scope_score", "evidence_scope_id", "quality_score"),
 )

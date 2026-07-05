@@ -28,10 +28,10 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         artefact,
         block,
         event_log,
+        evidence_scope,
         project,
         project_source_snapshot,
         runs,
-        screening_scope,
         source_appraisal_result,
         source_classification_result,
         source_screening_result,
@@ -98,7 +98,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         conn.execute(delete(source_snapshot).where(
             source_snapshot.c.source_snapshot_id.in_(snapshot_ids)
         ))
-    conn.execute(delete(screening_scope).where(screening_scope.c.project_id == project_id))
+    conn.execute(delete(evidence_scope).where(evidence_scope.c.project_id == project_id))
     conn.execute(delete(project).where(project.c.project_id == project_id))
 
 
@@ -132,12 +132,12 @@ def seed_source(
 def seed_scope(
     conn: Connection, project_id: uuid.UUID, context: dict[str, Any] | None = None
 ) -> uuid.UUID:
-    """Insert a screening_scope; return scope_id."""
-    from policy_atlas.schema import screening_scope
+    """Insert a evidence_scope; return scope_id."""
+    from policy_atlas.schema import evidence_scope
 
     scope_id = uuid.uuid4()
-    conn.execute(screening_scope.insert().values(
-        screening_scope_id=scope_id,
+    conn.execute(evidence_scope.insert().values(
+        evidence_scope_id=scope_id,
         project_id=project_id,
         intent="Test intent",
         context=context or {},
@@ -165,7 +165,7 @@ def seed_screening_result(
         confidence = 0.9 if status == "relevant" else 0.95
     conn.execute(source_screening_result.insert().values(
         source_screening_result_id=uuid.uuid4(),
-        screening_scope_id=scope_id,
+        evidence_scope_id=scope_id,
         project_source_snapshot_id=pss_id,
         project_id=project_id,
         screened_by_run_id=run_id,

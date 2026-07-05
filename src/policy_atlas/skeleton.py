@@ -24,9 +24,9 @@ from policy_atlas.ingest import ingest_upload
 from policy_atlas.logging import configure_logging
 from policy_atlas.plan import Plan, compile
 from policy_atlas.schema import (
+    evidence_scope,
     project,
     runs,
-    screening_scope,
     source_appraisal_result,
     source_classification_result,
     source_screening_result,
@@ -53,7 +53,7 @@ def _run_component(
     )
     log.info("run.started", run_id=str(run_id), component=component)
 
-    config = compile(Plan(component=component, screening_scope_id=scope_id))
+    config = compile(Plan(component=component, evidence_scope_id=scope_id))
     events.append(
         conn,
         project_id=project_id,
@@ -61,7 +61,7 @@ def _run_component(
         event_type="plan.compiled",
         payload={
             "component": config.component,
-            "screening_scope_id": str(config.screening_scope_id),
+            "evidence_scope_id": str(config.evidence_scope_id),
         },
     )
     log.info("plan.compiled", component=config.component)
@@ -112,15 +112,15 @@ def main() -> None:
         # Create screening scope
         scope_id = uuid.uuid4()
         conn.execute(
-            screening_scope.insert().values(
-                screening_scope_id=scope_id,
+            evidence_scope.insert().values(
+                evidence_scope_id=scope_id,
                 project_id=project_id,
                 intent="What policies address housing affordability?",
                 context={"theme": "housing"},
                 created_at=datetime.now(UTC),
             )
         )
-        log.info("screening_scope.created", scope_id=str(scope_id))
+        log.info("evidence_scope.created", scope_id=str(scope_id))
 
         # Walk the chain: three runs over the same scope
         _run_component(conn, project_id, scope_id, "screen")

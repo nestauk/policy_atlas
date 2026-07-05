@@ -68,7 +68,7 @@ def screen_sources(
         .where(project_source_snapshot.c.project_id == project_id)
         .where(
             ~exists().where(
-                (source_screening_result.c.screening_scope_id == context.scope_id)
+                (source_screening_result.c.evidence_scope_id == context.scope_id)
                 & (source_screening_result.c.project_source_snapshot_id
                    == project_source_snapshot.c.project_source_snapshot_id)
             )
@@ -88,7 +88,7 @@ def screen_sources(
                 "screen.doc_failed",
                 project_id=str(project_id),
                 run_id=str(run_id),
-                screening_scope_id=str(context.scope_id),
+                evidence_scope_id=str(context.scope_id),
                 project_source_snapshot_id=str(pss_id),
                 error=str(exc),
             )
@@ -97,7 +97,7 @@ def screen_sources(
         conn.execute(
             source_screening_result.insert().values(
                 source_screening_result_id=uuid.uuid4(),
-                screening_scope_id=context.scope_id,
+                evidence_scope_id=context.scope_id,
                 project_source_snapshot_id=pss_id,
                 project_id=project_id,
                 screened_by_run_id=run_id,
@@ -116,7 +116,7 @@ def screen_sources(
             payload={
                 "source_snapshot_id": str(snap_id),
                 "project_source_snapshot_id": str(pss_id),
-                "screening_scope_id": str(context.scope_id),
+                "evidence_scope_id": str(context.scope_id),
                 "status": result.status,
                 "screen_basis": result.basis,
                 "screen_decision_confidence": result.decision_confidence,

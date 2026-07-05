@@ -21,7 +21,7 @@ from policy_atlas.classify import ClassifyContext, classify_sources
 from policy_atlas.grounding import GroundingError, produce_grounded_block
 from policy_atlas.inference import InferenceProvider
 from policy_atlas.plan import Config
-from policy_atlas.schema import artefact, runs, screening_scope
+from policy_atlas.schema import artefact, evidence_scope, runs
 from policy_atlas.screen import ScreenContext, screen_sources
 
 log = structlog.get_logger()
@@ -125,13 +125,13 @@ def _run_scope_component(
     log.info("component.started", component=config.component)
 
     row = conn.execute(
-        select(screening_scope)
-        .where(screening_scope.c.screening_scope_id == config.screening_scope_id)
-        .where(screening_scope.c.project_id == project_id)
+        select(evidence_scope)
+        .where(evidence_scope.c.evidence_scope_id == config.evidence_scope_id)
+        .where(evidence_scope.c.project_id == project_id)
     ).one_or_none()
     if row is None:
         err = (
-            f"screening_scope {config.screening_scope_id!r} "
+            f"evidence_scope {config.evidence_scope_id!r} "
             f"not found for project {project_id!r}"
         )
         events.append(
@@ -142,7 +142,7 @@ def _run_scope_component(
         return {**state, "error": err}
 
     ctx = context_cls(
-        scope_id=row.screening_scope_id,
+        scope_id=row.evidence_scope_id,
         intent=row.intent,
         context=dict(row.context),
     )

@@ -77,7 +77,7 @@ def test_classify_sources_round_trip(conn: Connection) -> None:
         )
     ).fetchall()
     assert len(rows) == 1
-    assert rows[0].screening_scope_id == scope_id
+    assert rows[0].evidence_scope_id == scope_id
     assert rows[0].project_source_snapshot_id == pss_id
 
 
@@ -127,7 +127,7 @@ def test_classify_sources_skips_failed(conn: Connection) -> None:
     # Insert failed row manually (no basis/confidence)
     conn.execute(source_screening_result.insert().values(
         source_screening_result_id=uuid.uuid4(),
-        screening_scope_id=scope_id,
+        evidence_scope_id=scope_id,
         project_source_snapshot_id=pss_failed,
         project_id=pid,
         screened_by_run_id=rid,
@@ -154,7 +154,7 @@ def test_classify_count_invariant(conn: Connection) -> None:
     seed_screening_result(conn, pid, rid, scope_id, p2, status="not_relevant")
     conn.execute(source_screening_result.insert().values(
         source_screening_result_id=uuid.uuid4(),
-        screening_scope_id=scope_id,
+        evidence_scope_id=scope_id,
         project_source_snapshot_id=p3,
         project_id=pid,
         screened_by_run_id=rid,
@@ -222,7 +222,7 @@ def test_ck_bad_primary_evidence_type(conn: Connection) -> None:
     with pytest.raises(IntegrityError):
         conn.execute(source_classification_result.insert().values(
             source_classification_result_id=uuid.uuid4(),
-            screening_scope_id=scope_id,
+            evidence_scope_id=scope_id,
             project_source_snapshot_id=pss_id,
             project_id=pid,
             classified_by_run_id=rid,
@@ -243,7 +243,7 @@ def test_ck_open_tags_must_be_array(conn: Connection) -> None:
     with pytest.raises(IntegrityError):
         conn.execute(source_classification_result.insert().values(
             source_classification_result_id=uuid.uuid4(),
-            screening_scope_id=scope_id,
+            evidence_scope_id=scope_id,
             project_source_snapshot_id=pss_id,
             project_id=pid,
             classified_by_run_id=rid,
@@ -267,7 +267,7 @@ def test_uq_scope_source_duplicate(conn: Connection) -> None:
     with pytest.raises(IntegrityError):
         conn.execute(source_classification_result.insert().values(
             source_classification_result_id=uuid.uuid4(),
-            screening_scope_id=scope_id,
+            evidence_scope_id=scope_id,
             project_source_snapshot_id=pss_id,
             project_id=pid,
             classified_by_run_id=rid,
@@ -290,7 +290,7 @@ def test_cross_project_fk_rejected(conn: Connection) -> None:
     with pytest.raises(IntegrityError):
         conn.execute(sa.text(
             "INSERT INTO source_classification_result "
-            "(source_classification_result_id, screening_scope_id, project_source_snapshot_id, "
+            "(source_classification_result_id, evidence_scope_id, project_source_snapshot_id, "
             " project_id, classified_by_run_id, primary_evidence_type, open_tags, classified_at) "
             "VALUES (:scrid, :scope_id, :pss_id, :pid_a, :rid_a, "
             "'Unknown / Insufficient information', '[]'::jsonb, :ts)"
@@ -361,7 +361,7 @@ def test_harness_classify_component(conn: Connection) -> None:
         run_id=rid_classify, project_id=pid, status="running", started_at=now()
     ))
 
-    plan = Plan(component="classify", screening_scope_id=scope_id)
+    plan = Plan(component="classify", evidence_scope_id=scope_id)
     config = compile(plan)
     run_harness(
         conn, config=config, project_id=pid, run_id=rid_classify, provider=StubEchoProvider()
@@ -405,7 +405,7 @@ def test_source_classified_event_payload(conn: Connection) -> None:
     p = classified_events[0]["payload"]
     assert p["source_snapshot_id"] == str(snap_id)
     assert p["project_source_snapshot_id"] == str(pss_id)
-    assert p["screening_scope_id"] == str(scope_id)
+    assert p["evidence_scope_id"] == str(scope_id)
     assert p["primary_evidence_type"] == "Unknown / Insufficient information"
     assert p["open_tags"] == []
 

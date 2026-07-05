@@ -49,7 +49,7 @@ def _seed_classified(
     snap_id, pss_id = seed_source(conn, project_id)
     conn.execute(source_classification_result.insert().values(
         source_classification_result_id=uuid.uuid4(),
-        screening_scope_id=scope_id,
+        evidence_scope_id=scope_id,
         project_source_snapshot_id=pss_id,
         project_id=project_id,
         classified_by_run_id=run_id,
@@ -261,7 +261,7 @@ def test_ck_quality_score_bounds(conn: Connection, bad_score: int) -> None:
     with pytest.raises(IntegrityError):
         conn.execute(source_appraisal_result.insert().values(
             source_appraisal_result_id=uuid.uuid4(),
-            screening_scope_id=scope_id,
+            evidence_scope_id=scope_id,
             project_source_snapshot_id=pss_id,
             project_id=pid,
             appraised_by_run_id=rid,
@@ -284,7 +284,7 @@ def test_cross_project_fk_rejected(conn: Connection) -> None:
     with pytest.raises(IntegrityError):
         conn.execute(sa.text(
             "INSERT INTO source_appraisal_result "
-            "(source_appraisal_result_id, screening_scope_id, project_source_snapshot_id, "
+            "(source_appraisal_result_id, evidence_scope_id, project_source_snapshot_id, "
             " project_id, appraised_by_run_id, quality_score, rubric_version, appraised_at) "
             "VALUES (:sarid, :scope_id, :pss_id, :pid_a, :rid_a, 3, 'v2-hierarchy-v1', :ts)"
         ), {
@@ -310,7 +310,7 @@ def test_uq_scope_source_duplicate(conn: Connection) -> None:
     with pytest.raises(IntegrityError):
         conn.execute(source_appraisal_result.insert().values(
             source_appraisal_result_id=uuid.uuid4(),
-            screening_scope_id=scope_id,
+            evidence_scope_id=scope_id,
             project_source_snapshot_id=row.project_source_snapshot_id,
             project_id=pid,
             appraised_by_run_id=rid,
@@ -341,7 +341,7 @@ def test_harness_appraise_component(conn: Connection) -> None:
         run_id=rid_appraise, project_id=pid, status="running", started_at=now()
     ))
 
-    plan = Plan(component="appraise", screening_scope_id=scope_id)
+    plan = Plan(component="appraise", evidence_scope_id=scope_id)
     run_harness(
         conn, config=compile(plan), project_id=pid, run_id=rid_appraise,
         provider=StubEchoProvider(),
@@ -389,7 +389,7 @@ def test_source_appraised_event_payload(conn: Connection) -> None:
     assert appraised_events[0]["payload"] == {
         "source_snapshot_id": str(snap_id),
         "project_source_snapshot_id": str(pss_id),
-        "screening_scope_id": str(scope_id),
+        "evidence_scope_id": str(scope_id),
         "quality_score": 5,
         "rubric_version": "v2-hierarchy-v1",
     }
