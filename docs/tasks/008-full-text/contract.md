@@ -476,7 +476,19 @@ rejected without.
 - **Live `DocumentFetcher`** — runtime egress, its own gated slice; carries the live-seam
   requirements (timeouts, redirects, politeness/robots + per-host rate limiting,
   content-type sniffing, landing-page scrape + PDF-link discovery with v2's meta-refresh
-  follow, DOI-URL fallback, bounded retry/backoff).
+  follow, DOI-URL fallback, bounded retry/backoff). **Paywall detection requirement
+  (user, 2026-07-05 — a constant v2 blind spot: 401/403 were swallowed at debug level,
+  so the paywalled proportion was unmeasurable):** classify access-denied outcomes by a
+  signal ladder — HTTP 401/403 (high confidence, but confusable with bot-blocking to an
+  automated client) → content-type mismatch (PDF URL returning HTML ≈ login/purchase
+  interstitial) → paywall-marker matching in returned HTML (maintained heuristic) →
+  thin-text corroboration — and **cross-check against the retained OpenAlex
+  `open_access` block** (`is_oa`/`oa_status`), which gives a provider-asserted
+  closed-access denominator *before* any fetch: closed-OA + denial signals → `paywall`;
+  open-OA + 403 → likely bot-blocking, not paywall. The
+  `full_text_error`-by-`oa_status` join is the coverage report v2 could never produce.
+  v3.0 lands the accounting (`paywall` as a distinct queryable reason, fixture-simulated);
+  the detection logic is this seam's.
 - **OCR for scanned documents** — `no_text_layer` is honestly representable; an OCR stage
   (heavy models or an egress service) is its own decision. Deferred, recorded.
 - **Vectorisation / embeddings / vector store** — deferred to the first vector reader
