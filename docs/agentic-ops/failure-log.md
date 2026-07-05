@@ -165,3 +165,34 @@ invocation note now states that `codex-rescue` returns a job id, never findings,
 agent retrieves results itself via the plugin runtime — `codex-companion.mjs status|result
 <job-id>` (poll `status` in a background shell, then `result`); the slash commands remain the
 user-typed equivalents. Dispatch briefs need no change; the retrieval leg is now agent-executable.
+
+---
+
+## 2026-07-05 — Plan-time executor marks over-assigned implementation to the lead
+
+**Task:** 008-full-text (build phase)
+
+**What happened:** The plan's executor column routed the schema/migration, the core
+`ingest_full_text.py` module, the concurrency/egress test cases, the spec flow-back and
+`verification.md` to `lead` — only the wiring and bulk-test transcription went to
+`fast-worker`, one task to Codex. The build followed the marks faithfully, so the lead
+(an orchestrator-class model) spent most of its budget typing implementation. The user
+flagged it at the build retro: Fable should orchestrate — brief, adjudicate, review
+delegated output — and do little direct implementation.
+
+**Root cause:** Two gaps in the routing ladder, not a failure to follow it. (1) The
+"seam-bearing product code → lead" rung conflates *designing* a seam (signatures,
+semantics, failure vocabulary — genuinely lead work) with *typing its implementation*
+(delegable against `make verify` + named tests, like any judgment-bearing execution).
+(2) No burden inversion: with `lead` as an unremarkable default, plan-time
+path-of-least-resistance keeps work in-house, and nothing at the plan gate pushes back.
+
+**Fix (adopted 2026-07-05, installed in harness.md § Agent-side model routing +
+task-cycle-design step 3):** the default executor is a delegate; every `lead` mark
+carries a one-line justification the plan gate reviews. The ladder rung now reads
+"seam *design* → lead; implementation of a lead-designed seam → delegable". Mid-build
+smell added: the lead catching itself editing product code directly means a brief
+should have been written. (The post-goal amendments in the same session already ran
+this way — investigation, wiring, and root-cause all delegated — and delegate briefs
+with "report verbatim, no workarounds" acceptance clauses surfaced a real upstream
+parser bug the lead would likely have papered over inline.)

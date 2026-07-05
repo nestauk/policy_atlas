@@ -31,6 +31,9 @@ changes. An optional `/goal` for this phase is "through step 6: verification.md 
   machine-verifiable brief when Claude budget is the constraint — then Claude anchors the
   review (family-flip). The lead reviews delegated output before it lands; if it misses
   the bar, rewrite the brief or escalate the model — don't hand-polish weak output.
+  Mid-build smell (failure-log, 2026-07-05): the lead catching itself editing product
+  code directly means a brief should have been written — delegation is the default and
+  `lead` marks need justification at the plan gate, not re-litigation mid-build.
 - **Debug a red `make verify`:** `agent-skills:debugging-and-error-recovery` (root-cause,
   not guess); escalate a stubborn/substantial fix to `codex:rescue` — write-capable, a
   *doer*, not a reviewer.

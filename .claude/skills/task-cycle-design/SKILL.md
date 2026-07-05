@@ -67,11 +67,17 @@ against the **as-built code** (not its own claims; plans drift, code doesn't).
 **Executor routing is a plan-time decision** (failure-log, 2026-07-05). Mark each plan
 task with its executor — `lead` · `fast-worker` · `deep-reasoner` · `codex` — per
 harness.md § Agent-side model routing, so the plan reviewer and the human gate see the
-routing before the build starts. The ladder (full version in harness.md):
+routing before the build starts. **Default to a delegate; every `lead` mark carries a
+one-line justification the plan gate reviews** (failure-log, 2026-07-05 — the 008 plan
+over-assigned to the lead; the burden sits on keeping work, not on delegating it).
+The ladder (full version in harness.md):
 - Can't write the brief (one concern, its intent, a self-checkable definition of done)?
   Not delegable — `lead`.
-- Seam-bearing product code, prompt-bearing work, taste-bearing surfaces, adjudication →
-  `lead`, regardless of budget.
+- Prompt-bearing work, taste-bearing surfaces, adjudication, and seam *design*
+  (signatures, semantics, the brief itself) → `lead`, regardless of budget. The
+  *implementation* of a lead-designed seam against a machine-verifiable done is
+  delegable like any other execution — "seam-bearing" describes the design decision,
+  not the typing.
 - **Judgment-bearing execution** (nontrivial logic, multi-file coherence, unfamiliar
   APIs) with a machine-verifiable done → `codex` — the **default doer** for complex
   subtasks: ~Opus-tier capability on the non-Claude budget, and the family-flip review
