@@ -743,6 +743,13 @@ def test_licence_guard() -> None:
             assert filename in manifest["documents"]
             assert (fulltext_dir / filename).exists()
 
+    # Corpus size budget (user decision, 2026-07-05): committed documents ship inside
+    # the package while fixture replay is the product behaviour, so growth is a
+    # conscious gate, not drift. Raising this cap = deciding the corpus strategy
+    # (see the live-DocumentFetcher entry in docs/deferred.md).
+    total_bytes = sum(f.stat().st_size for f in fulltext_dir.iterdir() if f.is_file())
+    assert total_bytes <= 30 * 1024 * 1024, f"corpus {total_bytes} bytes exceeds the 30 MB budget"
+
 
 def test_migration_roundtrip_and_checks(conn: Connection) -> None:
     assert len(metadata.tables) == 16

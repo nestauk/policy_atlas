@@ -205,7 +205,13 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   a worker-side / OS-level egress guard in the test suite (the socket-deny test now covers
   parent + workers; an `unshare -n`-style CI guard is the stronger durable control). A
   `pip-audit`-style dependency check belongs in CI now that binary parsing deps (pymupdf,
-  lxml) are in the tree — CI config is its own gate.
+  lxml) are in the tree — CI config is its own gate. **Fixture-corpus relocation** (user
+  decision, 2026-07-05): the ~24 MB committed corpus ships inside the package only because
+  replay *is* the v3.0 product behaviour; when the live fetcher takes over as default, move
+  the documents out of `src/policy_atlas/data/fulltext/` (to `tests/` or a pinned-hash
+  release asset) so the wheel slims — the corpus itself stays in the repo as the
+  deterministic test substrate. Growth is capped meanwhile by a test-enforced ≤30 MB budget
+  (`test_licence_guard`); raising the cap means consciously choosing the corpus strategy.
 - **Concurrent-run write guard** — eligibility selection takes no row locks and final writes
   are unconditional, so two simultaneous ingest runs over **one scope** could interleave
   (mirrors 007's concurrent-run dedup note; Codex adversarial finding, task 008). Scoped
