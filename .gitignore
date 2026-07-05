@@ -24,3 +24,5 @@ dist/
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
+# Internal R&D material — referenced by task contracts but not published (public repo)
+docs/research-and-development/
