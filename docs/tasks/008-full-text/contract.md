@@ -31,10 +31,12 @@ specs in [docs/specs/](../../specs/index.md).
 > seam, joined by a **time-budget-aware parser-selection seam** (user idea: the user's
 > stated time horizon picks the parser — tight → fast, long → ML layout). The
 > parse-profile-per-snapshot design is the hook both seams plug into (decision 5).  
-> Contract approved (before planning): _date · who_ ·
-> Plan approved (before implementation): 2026-07-05 · Shabeer Rauf · ADR: expected for the
-> snapshot-identity decision (decision 2) and the parser selection (decision 5) if
-> approved — both shape every future component.
+> Contract approved (before planning): 2026-07-05 · Shabeer Rauf (see the detailed note
+> above) ·
+> Plan approved (before implementation): 2026-07-05 · Shabeer Rauf ·
+> ADR: [0003 (link-level attachment)](../../adr/0003-full-text-link-level-attachment.md) ·
+> [0004 (parse profiles / PyMuPDF4LLM)](../../adr/0004-parse-profile-per-snapshot-pymupdf4llm.md)
+> — both Accepted 2026-07-05.
 
 ## Goal
 
