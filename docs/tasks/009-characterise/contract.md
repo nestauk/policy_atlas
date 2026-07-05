@@ -3,7 +3,12 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted — awaiting contract approval.
+> **Status:** drafted, rev 2 — awaiting contract approval.
+> Rev 2 (user challenge, 2026-07-05): rev 1's numpy k-means judged subpar-by-default
+> for a heterogeneous policy corpus; replaced with HDBSCAN + honest noise bucket +
+> c-TF-IDF labels (scikit-learn) after a state-of-the-art sweep (last30days) and a v2
+> theming reconnaissance — see § Clustering research grounding. Dependency gate
+> changed accordingly (numpy → scikit-learn).
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ · ADR: 0005 (embed seam / first
 > product egress) — to be written at step 4.
@@ -53,10 +58,11 @@ A PR on `task/009-characterise` → `dev` that:
 - Wires the embed pass into every ingestion path (upload ingest, acquire envelope
   snapshots, full-text ingest) and as an ensure-step at characterise start.
 - Ships `characterise.py`: deterministic Tier-0 coverage distributions; document-level
-  embedding derivation; seeded deterministic k-means (numpy); deterministic term-based
-  cluster labels; tag persistence; the run-scoped characterisation row; the structured
-  landscape summary returned into `component.completed`.
-- Adds `openai` and `numpy` as runtime dependencies (gated change 2).
+  embedding derivation; HDBSCAN clustering with an honest noise bucket (scikit-learn);
+  deterministic c-TF-IDF cluster labels; tag persistence; the run-scoped
+  characterisation row; the structured landscape summary returned into
+  `component.completed`.
+- Adds `openai` and `scikit-learn` as runtime dependencies (gated change 2).
 - Registers `"characterise"` in `COMPONENT_REGISTRY`; wires `_run_characterise`;
   `run_harness` gains optional `embedding_backend` (gated change 3).
 - Extends `skeleton.py`: … appraise → ingest_full_text → **characterise**, rendering the
@@ -155,28 +161,63 @@ artefact/block/annotation machinery exists but nothing here writes to it (decisi
    retrieval contract commits to it there); keying by profile means that migration is
    additive. Profile-keyed rows also mean a future model/route change re-embeds under a
    new profile without touching history.
-4. **Clustering: seeded deterministic k-means over document-level embeddings, run-local.**
-   Document vector = mean of the document's chunk vectors from its **best available
-   snapshot** (full-text snapshot when ingested, else envelope — mirrors "grounding and
-   coverage see which a finding rests on"; the doc vector records which basis it used).
-   Input set = the scope's **screened-in** documents (the landscape rests on the screened
-   base). k-means in numpy, fixed seed, deterministic init (k-means++ with seeded RNG),
-   k from a stated heuristic (`min(ceil(sqrt(n/2)), cap)`, cap a plan detail; degenerate
-   smalls handled honestly: n < a floor → one cluster, counted). Cluster assignments are
-   **run-local** (persisted only in this run's `characterisation_result` row — resume
-   checkpoint, recomputable, superseded by the next run; never a canonical corpus fact,
-   per capability.md). scikit-learn/HDBSCAN-class upgrades are a recorded seam if k-means
-   proves too crude on real embeddings — entered via evals, not by default.
-5. **Cluster labels: deterministic term-based in v3.0; LLM labelling is the recorded
-   seam.** Labels derive from member titles/abstracts by a deterministic salience
-   heuristic (e.g. top TF terms against the corpus, stopworded) — honest, reproducible,
-   and meaningful over real semantic clusters. The spec's "lightly LLM-labelled" is the
-   LLM-generation seam (like screen/classify stubs): it needs the inference-route
-   *generation* gate, prompt-bearing work, and non-deterministic-output handling this
-   slice doesn't otherwise carry. Embeddings ≠ generation: opening the egress gate for
-   vectors does not silently open it for prompts. Labels persist as **topic/theme tags**
-   (decision 6 note: tag writes are idempotent) on member documents via `source_tag`;
-   the run's label→cluster mapping lives in the characterisation row.
+4. **Clustering: HDBSCAN over normalised document-level embeddings (scikit-learn), with
+   an honest noise class — rev 2, research-grounded (2026-07-05).** Rev 1's seeded
+   numpy k-means was challenged by the user (clustering is notoriously finicky; k-means
+   on raw high-dim vectors is the textbook-but-subpar version) and the challenge held
+   against both evidence streams (§ Clustering research grounding below):
+   - **Document vector** = mean of the document's chunk vectors from its **best
+     available snapshot** (full-text when ingested, else envelope), L2-normalised
+     (cosine geometry); the doc vector records which basis it used. Input set = the
+     scope's **screened-in** documents (the landscape rests on the screened base).
+   - **Algorithm: `sklearn.cluster.HDBSCAN`** (density-based; in scikit-learn ≥1.3, no
+     separate hdbscan package). It discovers the cluster count (killing rev 1's weakest
+     piece, the `sqrt(n/2)` k heuristic), handles varying densities, and gives a
+     **native noise/outlier class** — documents fitting no topic land in an honest
+     **`unclustered`** bucket, counted and visible in the landscape summary, never
+     forced into a bad cluster (k-means forces every doc; flag-not-drop applies to
+     shape too). Unclustered docs remain fully eligible downstream — they form their
+     own stratum when `select` lands.
+   - **Small-n floor:** below a stated document floor (plan detail) density estimation
+     is meaningless — degrade honestly to a single labelled cluster, flagged
+     `degenerate_small_n` in the summary. HDBSCAN's known noise-heavy failure mode
+     (30%+ noise observed in benchmarks) is surfaced, not hidden: the summary carries
+     the noise share, and a noise share above a stated threshold flags
+     `high_noise_share` for the user relay (decision 8).
+   - **Determinism:** HDBSCAN has no RNG — deterministic given (embedding set, params,
+     input order); input is ordered by document id. **No UMAP in v3.0**: at our corpus
+     sizes (tens to low hundreds per scope) reduction adds a heavy stochastic
+     dependency (numba) for value benchmarks locate mostly at scale; recorded as a
+     seam (with the caveat that UMAP-reduction benefits both algorithm families when
+     corpora grow).
+   - Cluster assignments are **run-local** (persisted only in this run's
+     `characterisation_result` row — resume checkpoint, recomputable, superseded by
+     the next run; never a canonical corpus fact, per capability.md).
+   - **Mixed-basis caveat, on the record:** abstract-only docs are short texts, and
+     short documents measurably degrade HDBSCAN topic coherence; the summary reports
+     the corpus text-basis mix next to the cluster shapes so the softest-grade caveat
+     is visible. Algorithm-quality tuning beyond this (parameter search, UMAP,
+     alternative algorithms) is **eval-seam territory** — the slice's bar is honest
+     machinery, not optimal clusters.
+5. **Cluster labels: deterministic c-TF-IDF in v3.0; LLM labelling is the recorded
+   seam (rev 2: labelling mechanism upgraded, structure unchanged).** Labels derive
+   from member titles/abstracts by **class-based TF-IDF** (the BERTopic labelling
+   idea: treat each cluster as one composite document, score terms across clusters —
+   strictly better cluster-distinctive labels than rev 1's plain top-TF, same
+   determinism, implementable in a few lines over scikit-learn's vectorizer). Honest,
+   reproducible, meaningful over real semantic clusters. The spec's "lightly
+   LLM-labelled" is the LLM-generation seam (like screen/classify stubs): it needs the
+   inference-route *generation* gate, prompt-bearing work, and
+   non-deterministic-output handling this slice doesn't otherwise carry — and the
+   BERTopic ecosystem itself treats LLM labels as a representation layer on top of
+   exactly this pipeline (top keywords + representative excerpts per cluster → one
+   call **per cluster**, never per document), which is the recorded shape of the seam.
+   v2's prompt discipline (research-question-anchored, MECE, affirmative,
+   evidence-grounded labels) is the porting material *for that seam*, not for v3.0.
+   Embeddings ≠ generation: opening the egress gate for vectors does not silently open
+   it for prompts. Labels persist as **topic/theme tags** (decision 6 note: tag writes
+   are idempotent) on member documents via `source_tag`; the run's label→cluster
+   mapping lives in the characterisation row.
 6. **Egress governance: mechanical infrastructure, telemetry-plane — plus first-egress
    controls.** Embedding calls are not agent-invocable (`search` stays the only
    agent-invocable egress verb); like 008's fetch posture they are mechanical execution
@@ -256,6 +297,48 @@ artefact/block/annotation machinery exists but nothing here writes to it (decisi
     end-to-end in v3.0 (the "agent" half of "procedure + agent" arrives with LLM
     labelling).
 
+### Clustering research grounding (rev 2, 2026-07-05)
+
+User challenge at the draft gate: k-means over raw 1536-dim vectors would "almost
+definitely produce subpar results"; directed a state-of-the-art sweep (last30days) and a
+v2 reconnaissance subagent. Both streams adjudicated by the lead:
+
+**State of the art (web + 30-day social sweep; raw file:
+`~/Documents/Last30Days/document-topic-clustering-with-embeddings-raw-v3.md`):**
+- The practitioner-standard stack for document topic discovery is the **BERTopic-shaped
+  pipeline**: embeddings → (UMAP) → **HDBSCAN** → c-TF-IDF labels, optionally LLM labels
+  as a representation layer. Peer-reviewed policy science uses exactly this on
+  31,000-document policy corpora (Policy Studies Journal research note, 2026) — our
+  domain class.
+- Raw high-dim k-means is the known-weak baseline (distance concentration; forced
+  assignment of outliers; k must be guessed). HDBSCAN discovers k and has a native noise
+  class — but carries its own recorded failure modes: benchmarks show it can label 30%+
+  of points noise, its parameters are unintuitive, and **short documents (our
+  abstract-only class) measurably degrade its coherence** — hence decision 4's honest
+  noise/floor/mix flags rather than pretending the finickiness away.
+- **TopicGPT-class LLM-only topic modelling** aligns best with human topic judgments but
+  is per-document-LLM-shaped (cost, scale cliff, non-reproducible) — the hybrid
+  (algorithmic clustering + LLM label/refine) is the emerging cost/quality balance. That
+  is exactly decision 4 + the decision 5 seam.
+
+**v2 reconnaissance (`../discovery_policy_atlas`, synthesis service): v2's theming was
+LLM-only, LangChain, two-stage** (gpt-5-mini proposes a theme set from ALL concepts in
+one prompt; gpt-5-nano classifies each concept in O(N) fan-out calls), over four fixed
+facets (issue/intervention/outcome/risk) of **extracted findings — which maps to v3's
+`group` component, not characterise** (v2 had no doc-level topic landscape at all).
+Defects found (the task-008 pattern repeating): a **dead critique stage** (full LLM QA
+call whose output is discarded — pure cost sink), **silent concept drops** (mapping
+failures return None and vanish — no unassigned bucket, no count), **silent collapse**
+(discovery failure → everything dumped into one "General Theme" placeholder at warning
+level), **no scale guard** (whole corpus in one prompt — context cliff), MECE promised in
+the prompt but unenforced by construction, temperature=0 with no seed (non-reproducible
+runs). Worth porting: the four-facet decomposition and the MECE/RQ-anchored prompt
+discipline — both recorded at the **`group` + LLM-labelling seams**, not built here.
+Every v2 defect has a structural counter in this contract: unclustered is a counted
+bucket (vs silent drops), degenerate paths are flagged states (vs silent collapse),
+clustering is O(0) LLM calls now and O(clusters) at the seam (vs O(N)), deterministic by
+construction (vs unseeded generative grouping).
+
 ### Schema
 
 **Gated change 1 — three new tables** (one migration; table count 16 → 19):
@@ -287,8 +370,9 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
   deterministic windowing for oversized chunks.
 - **`characterise.py`** — `CharacteriseContext` · `characterise_scope(conn, *,
   project_id, run_id, context, embedder) -> dict` (ensure-embedded → coverage →
-  document vectors → k-means → labels → tags → characterisation row → landscape
-  summary) · deterministic k-means + labelling helpers.
+  document vectors → HDBSCAN → c-TF-IDF labels → tags → characterisation row →
+  landscape summary) · clustering + labelling helpers (noise bucket, small-n floor,
+  flags).
 - **`ingest.py` / `acquire.py` / `ingest_full_text.py`** — call `embed_pending_chunks`
   after their chunk writes (counts folded into their `component.completed` payloads).
 - **`plan.py`** — `"characterise": {"requires": ["evidence_scope_id"]}`.
@@ -313,12 +397,18 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
 - Coverage: distributions over a seeded corpus match hand-computed values; base counts
   (screened-in vs not-relevant vs failed vs unscreened) present; every distribution
   carries its base label; flag-not-block (below-bar/Unknown rows counted, never dropped).
-- Clustering: deterministic across runs and worker/process variation (fixed seed);
-  document vector uses full-text snapshot when present else envelope (and records which);
-  small-n degenerate path honest; assignments land only in the characterisation row
-  (no canonical cluster state anywhere).
-- Labels/tags: deterministic labels; `source_tag` rows for members; re-run accretes
-  without duplicates; created only by characterise (nothing else writes tags).
+- Clustering: deterministic across runs (HDBSCAN, no RNG, id-ordered input — two runs
+  byte-identical); document vector uses full-text snapshot when present else envelope
+  (and records which); **noise honesty** — outlier docs land in the counted
+  `unclustered` bucket, never forced into a cluster, and the invariant covers them
+  (`screened_in == clustered + unclustered + <failure buckets>`); small-n floor →
+  `degenerate_small_n` flagged; high noise share → `high_noise_share` flagged;
+  assignments land only in the characterisation row (no canonical cluster state
+  anywhere).
+- Labels/tags: deterministic c-TF-IDF labels (cluster-distinctive: a term dominating
+  all clusters doesn't label any); `source_tag` rows for members (unclustered docs get
+  no topic tag — no false labels); re-run accretes without duplicates; created only by
+  characterise (nothing else writes tags).
 - Failure semantics: missing embeddings after ensure-pass → `component.failed`-style
   honest outcome with coverage still reported (decision 11); counting invariants hold.
 - Landscape summary payload: structure asserted (coverage + clusters + flags + bases);
@@ -351,6 +441,11 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
 - **Bedrock embedding route** — the seam swap; recorded with the routing-seam note.
 - **Exact-token budgeting (tiktoken-class) and semantic re-chunking** — recorded at the
   embed seam; v3.0 windowing is a char-budget heuristic (decision 2).
+- **UMAP reduction and clustering-quality tuning** — parameter search, reduction,
+  alternative algorithms, cluster-coherence evals; entered via the eval seam when real
+  corpora warrant it (decision 4). The `group` component inherits v2's theming lessons
+  (four-facet decomposition, MECE/RQ-anchored labelling prompts, never LLM-as-grouper)
+  — recorded in deferred.md by this slice.
 - **Tag namespace consolidation / `open_tags` migration** (decisions 5, 10).
 - **`select` and everything deeper** — subsequent slices.
 - **Backfill tooling for large pre-existing corpora** — the ensure-pass covers v3.0
@@ -363,8 +458,11 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
 1. **Schema** — three new tables (`chunk_embedding` · `characterisation_result` ·
    `source_tag`), one migration, no existing-table changes.
 2. **Dependencies** — `openai` (the provider SDK; also the eventual LLM-seam client) and
-   `numpy` (vector math for k-means/means; deliberately *not* scikit-learn/scipy — the
-   smallest step that makes 1536-dim math tractable).
+   `scikit-learn` (brings numpy/scipy; supplies `HDBSCAN`, the vectorizer under
+   c-TF-IDF labels, and the standard algorithm shelf the eval seam will draw on — rev 2
+   supersedes rev 1's numpy-only line, which existed to hand-roll the k-means this
+   contract no longer wants; **not** umap-learn/numba, **not** the BERTopic framework —
+   it would bury the embedding/labelling seams this repo deliberately owns).
 3. **Public interface** — `run_harness` optional `embedding_backend` parameter + the
    `"characterise"` registry entry (007/008 precedent).
 4. **Runtime egress** — `OpenAIEmbeddingBackend` sends chunk text to OpenAI's embeddings
@@ -414,9 +512,9 @@ on every row.
   population/geography absence from Tier-0 is stated, not papered over.
 - **Snapshots and chunks immutable** — embedding rows and windows attach *alongside*;
   no chunk mutation, no re-segmentation (one parse, one segmentation stands).
-- **Deterministic where claimed** — stub vectors, k-means, labels, coverage: same input,
-  same output, test-enforced; live vectors are provider-dependent and never inside
-  `make verify`.
+- **Deterministic where claimed** — stub vectors, clustering (HDBSCAN, no RNG), labels,
+  coverage: same input, same output, test-enforced; live vectors are provider-dependent
+  and never inside `make verify`.
 - **No prompt-bearing work** rides this slice (decision 5 keeps generation out).
 
 ## Stop conditions
@@ -428,9 +526,10 @@ on every row.
   only).
 - The one-artefact shape is threatened mid-build (something needs blocks/artefact writes
   after all) — halt, don't improvise composition.
-- Clustering over real embeddings proves the k-means design inadequate *for the
-  machinery to function* (not merely imperfect clusters — that's the eval seam) — halt
-  and re-open decision 4 with evidence.
+- Clustering over real embeddings proves the HDBSCAN design inadequate *for the
+  machinery to function* (e.g. everything lands in noise on the fixture corpus — not
+  merely imperfect clusters, which is the eval seam) — halt and re-open decision 4
+  with evidence.
 - Scope would grow past the contract (LLM labels, retrieval, composition, policy
   object, select).
 - `make verify` red with unclear root cause; or the turn/token budget is spent.
@@ -461,9 +560,9 @@ on every row.
 - Deferred seams recorded in `docs/deferred.md` (EB artefact composition · LLM cluster
   labelling · steering-mode steer-point reading the landscape payload · dual-view
   coverage behind the policy object · pgvector + retrieval · Bedrock route swap ·
-  exact-token budgeting · clustering-algorithm upgrade via evals · tag namespace
-  consolidation) and the class-1 "vectorisation at first reader" entry updated to
-  discharged.
+  exact-token budgeting · UMAP/clustering-quality tuning via evals · v2 theming
+  lessons at the `group` + LLM-labelling seams · tag namespace consolidation) and the
+  class-1 "vectorisation at first reader" entry updated to discharged.
 - Diff summary (any bulky fixture data excluded from review diffs per the 007 retro).
 
 ## Risk tier & review focus

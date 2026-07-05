@@ -33,14 +33,15 @@ deterministic stub for tests; **eager-and-uniform vectorisation at ingest** (eve
 ingestion path embeds its chunks; absence of an embedding row = pending, idempotent
 backfill). Characterise itself: deterministic **coverage distributions over Tier-0
 columns** (metadata-grounded patterns, base = the scope's screened-in set, flag-not-block)
-and **topic-level clustering** over document embeddings (run-local, never canonical;
-deterministic term-based labels persist as topic/theme tags — LLM labelling is a recorded
-seam). Durable output = a run-scoped characterisation row + `source_tag` rows + a
+and **topic-level clustering** over document embeddings via HDBSCAN with an honest
+`unclustered` noise bucket (run-local, never canonical; deterministic c-TF-IDF labels
+persist as topic/theme tags — LLM labelling is a recorded seam). Durable output = a
+run-scoped characterisation row + `source_tag` rows + a
 structured **landscape summary** in the `component.completed` payload (the future
 steer-point/orchestrator-chat relay surface). **No artefact/blocks here** — the single EB
 artefact is composed at the run terminus by a later composition slice. Gated changes ride
 this slice (schema: `chunk_embedding` · `characterisation_result` · `source_tag` ·
-dependencies: `openai`, `numpy` · `run_harness` `embedding_backend` parameter · **runtime
-egress: live embedding calls**). Build per `docs/tasks/009-characterise/contract.md`. Stay
+dependencies: `openai`, `scikit-learn` · `run_harness` `embedding_backend` parameter ·
+**runtime egress: live embedding calls**). Build per `docs/tasks/009-characterise/contract.md`. Stay
 within the contract's scope and stop conditions; all other capabilities and seams remain
 deferred (`docs/deferred.md`).
