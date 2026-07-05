@@ -27,13 +27,17 @@ Implementation — task `008-full-text`.
 Tasks `001-walking-skeleton` through `007-acquire` are complete (merged). The active slice
 adds **full-text ingestion** — the post-screen Tier-0 step: for a scope's screened-in
 acquired sources, resolve candidate URLs from the provider fields task 007 retained, fetch
-through a `DocumentFetcher` seam (v3.0: fixture replay of wholly fabricated documents —
-zero runtime egress; the live fetcher stays behind the egress gate), parse (PDF via `pypdf`,
-HTML/text via stdlib) under v2's caps with a thin-text guard, segment under named versioned
-policies, and attach the resulting immutable `full_text` snapshot to the corpus document via
-`project_source_snapshot.full_text_snapshot_id`. Fetch/parse failure never drops a source —
-it stays on the text in hand with a queryable `full_text_status`. Vectorisation is deferred
-to the slice where vectors are first read. Three gated changes ride this slice (schema
-columns · `pypdf` dependency · `run_harness` `document_fetcher` parameter). Build per
+through a `DocumentFetcher` seam (v3.0: fixture replay of committed real, openly-licensed
+documents — zero runtime egress; the live fetcher stays behind the egress gate), parse
+structure-aware (PDF via `pymupdf4llm` — AGPL, licence-compatible since the repo is
+AGPL-3.0; HTML via `trafilatura`), segment under named versioned policies with
+page/heading-path chunk locators, and
+attach the resulting immutable `full_text` snapshot to the corpus document via
+`project_source_snapshot.full_text_snapshot_id`. **Never truncate** — full text or an
+honest, reason-coded failure; a failed source stays on the text in hand with a queryable
+`full_text_status`. Ingestion fans out per document over a bounded process pool with
+deterministic results. Vectorisation is deferred to the slice where vectors are first read.
+Three gated changes ride this slice (schema columns · `pymupdf4llm` + `trafilatura`
+dependencies · `run_harness` `document_fetcher` parameter). Build per
 `docs/tasks/008-full-text/contract.md`. Stay within the contract's scope and stop conditions;
 all other capabilities and seams remain deferred (`docs/deferred.md`).

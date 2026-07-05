@@ -3,30 +3,47 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted.  
+> **Status:** drafted — rev 3 (user-steered, 2026-07-05).  
+> Rev 2 changes at user direction: parser selection researched properly (parse quality is
+> foundational for a RAG tool — no default libraries); **truncation abolished** (full text
+> or honest failure, never silent partial); ingestion is a **bounded parallel fan-out**,
+> not a serial loop; fixture documents are **real, openly-licensed publications** (Nesta +
+> seminal OA academic literature), not generated fakes. Grounded in a fresh v2
+> ingestion-code review (§ V2 integration review) and a parser-landscape research pass
+> (saved: `~/Documents/Last30Days/best-pdf-parsing-libraries-for-rag-ingestion-raw-v3.md`).  
+> Rev 3 (team decision, 2026-07-05): **Policy Atlas is licensed AGPL-3.0** (LICENSE file
+> added). That removes the copyleft penalty that had ruled out the PyMuPDF family, and the
+> parser recommendation flips from docling to **PyMuPDF4LLM** (decision 5) — faster by
+> orders of magnitude on CPU, no ML-model stack, no long-document memory risk; docling is
+> recorded as the quality-escalation seam.  
 > Contract approved (before planning): _date · who_ ·
 > Plan approved (before implementation): _date · who_ · ADR: expected for the
-> snapshot-identity decision (decision 2) if approved — it shapes how every future
-> component reads the corpus.
+> snapshot-identity decision (decision 2) and the parser selection (decision 5) if
+> approved — both shape every future component.
 
 ## Goal
 
 Add **full-text ingestion** — the post-screen Tier-0 step the spec gates behind `screen`
 (EB components §4). For every **screened-in acquired** source of a scope, resolve candidate
 URLs from the provider fields task 007 retained for exactly this slice, fetch the document
-through a new `DocumentFetcher` seam, parse and segment it under a named policy, and attach
-the resulting **immutable `full_text` snapshot** to the corpus document. When full text
-can't be fetched (paywall, dead link, unparseable), the source is **not dropped** — it
-stays on the text in hand (`abstract_only`), with the failure **queryable, never silent**
-(fixing v2's fragility of fetch errors swallowed at debug level and thin landing-page text
-reported `ok`).
+through a new `DocumentFetcher` seam, parse it with a **structure-aware parser** and segment
+it under a named policy, and attach the resulting **immutable `full_text` snapshot** to the
+corpus document. When full text can't be fetched or parsed (paywall, dead link, scanned-only,
+corrupt), the source is **not dropped** — it stays on the text in hand (`abstract_only`),
+with the failure **queryable and reason-coded, never silent**.
+
+Parse quality is treated as **foundational, not incidental**: chunks written here are the
+permanent content-of-record (spec: one parse, one segmentation per snapshot; no bytes
+retained, so re-parse is impossible by construction). A cheap parse now is a permanently
+degraded substrate for every downstream component. This is why the slice takes a real
+document-understanding parser rather than a default library (decision 5), and why nothing
+is ever truncated (decision 6).
 
 **Zero runtime egress.** Fetching is egress; the live fetcher stays behind the runtime-egress
-gate. v3.0's `DocumentFetcher` implementation replays **committed, wholly fabricated fixture
-documents** keyed by the `example.org` URLs already present in the acquired fixtures — same
-seam pattern as `SearchBackend` (task 007). No sanitization step is needed here: unlike API
-recordings, the documents are *generated*, never recorded, so no real third-party content
-ever exists in the pipeline.
+gate. v3.0's `DocumentFetcher` implementation replays **committed real documents** keyed by
+the `example.org` URLs already present in the acquired fixtures — same seam pattern as
+`SearchBackend` (task 007). The chosen parsers are model-free local code; the runtime never
+touches the network (test-enforced).
 
 Per spec, fetch is **mechanical execution of the governed `search`** — telemetry plane +
 run-record summary, **not** a per-document audit event. No new governance event type.
@@ -37,13 +54,16 @@ A PR on `task/008-full-text` → `dev` that:
 - Adds three columns to `project_source_snapshot` (`full_text_snapshot_id`,
   `full_text_status`, `full_text_error`) + one Alembic migration (gated change 1).
 - Ships `ingest_full_text.py` with `DocumentFetcher` (protocol), `FixtureFetcher`,
-  URL resolution + fetch cascade, PDF/HTML/text parsing under v2's caps, segmentation
-  under named policies, and `ingest_full_text_sources()`.
-- Adds `pypdf` as a runtime dependency (gated change 2).
+  URL resolution + fetch cascade, structure-aware PDF parsing (PyMuPDF4LLM) and HTML
+  main-content extraction (trafilatura), structure-aware segmentation under named
+  policies, and `ingest_full_text_sources()` with **bounded parallel per-document
+  fan-out**.
+- Adds `pymupdf4llm` (brings `pymupdf`) and `trafilatura` as runtime dependencies
+  (gated change 2).
 - Registers `"ingest_full_text"` in `COMPONENT_REGISTRY`; wires `_run_ingest_full_text`;
   `run_harness` gains optional `document_fetcher` (gated change 3).
-- Ships committed fabricated fixture documents + manifest, and the dev-time
-  `scripts/generate_fulltext_fixtures.py` that produced them.
+- Ships committed **real, openly-licensed** fixture documents + a provenance manifest,
+  and the dev-time `scripts/record_fulltext_fixtures.py` that fetched them.
 - Updates `skeleton.py`: acquire → screen → classify → appraise → **ingest_full_text**,
   logging the text-basis distribution before/after.
 - Spec clarification in EB components §4 (vectorisation deferral — decision 1) + `log.md`.
@@ -58,24 +78,37 @@ A PR on `task/008-full-text` → `dev` that:
   vectorisation eager-and-uniform — see decision 1)
 - [System data-model — § Corpus & source snapshots](../../specs/system/data-model.md)
   (immutable snapshots, no original bytes retained; frozen parsed chunks are the
-  content-of-record; identity = content hash + governance event + locator; segmentation is
-  trust-relevant — named versioned policy, one parse + one segmentation per snapshot)
+  content-of-record; identity = content hash + governance event + locator;
+  **"Segmentation is trust-relevant, not a hidden detail. Structure-aware parse first
+  (pages/headings/tables/captions/footnotes)"** — decision 5 exists to honour this line;
+  one parse + one segmentation per snapshot)
 - [System execution-orchestration](../../specs/system/execution-orchestration.md)
   ("ingestion is not a tool" — indirect-injection surface; `search` is the only
   agent-invocable egress verb)
 - [docs/deferred.md](../../deferred.md) — "Slice 008 (full-text) inputs retained for it":
   OpenAlex URL/OA block and Overton `document_url`/`pdf_url` + `grouped_pdf_ids_in_result`
-  in `metadata.provider_fields`; v2 patterns to carry (OA-location precedence, fetch
-  cascade, parse caps 50 MB / 50 pages / 100 K chars, failure manifest) and fragilities to
-  avoid; the snapshot-identity fork deliberately left to this slice
+  in `metadata.provider_fields`; the snapshot-identity fork deliberately left to this slice
 - [007-acquire contract](../007-acquire/contract.md) — seam pattern precedent
-  (fixture-backed backend, gated `run_harness` parameter, leak guard)
+  (fixture-backed backend, gated `run_harness` parameter)
 
 **Fixture grounding (checked 2026-07-05):** in the committed acquire fixtures, all 12
 Overton records carry `pdf_url` + `document_url` (+ multi-PDF `grouped_pdf_ids_in_result`);
 11 of 12 OpenAlex records are landing-page-only (`primary_location.landing_page_url`), one
 carries the full pdf/OA URL set. The fetch fixtures therefore must serve **HTML documents
 on landing URLs** and PDFs on pdf URLs — the mixed reality the cascade exists for.
+
+**Parser-landscape grounding (researched 2026-07-05; raw file above):** 2026 benchmarks
+(opendataloader-bench, 200 PDFs) rank layout-aware parsers docling 0.877 (permissive
+licence, CPU-capable) > marker 0.861 (GPL, GPU-leaning, 2 GB install) > MinerU 0.831
+(AGPL, GPU-leaning, CJK specialist); PyMuPDF is the fastest classic extractor (~0.01 s/page)
+and led plain-text quality in the cross-category arXiv study; pypdf (BSD) is lightest
+(91 ms/page) but has **no layout model** — plain-text only, weak on multi-column academic
+layouts. All parsers struggle on scanned/image-only PDFs without OCR. For HTML, trafilatura
+leads main-content extraction (mean F1 0.937 vs readability-lxml 0.914; Apache-2.0 since
+v1.8). Docling caveats, on the record: ~1 GB model load, ~0.5–20 s per PDF on CPU, a known
+memory-accumulation issue on very long documents (docling issue #2077) — long documents are
+exactly our corpus. **Licence context (rev 3):** Policy Atlas is itself AGPL-3.0, so the
+PyMuPDF family's AGPL-3.0 is fully compatible and no longer a selection penalty.
 
 ## Scope
 
@@ -109,76 +142,201 @@ on landing URLs** and PDFs on pdf URLs — the mixed reality the cascade exists 
    The spec's `supersedes` edge stays what it is — a *human-asserted* corrected-re-upload
    pointer, deferred; this system-made attachment is a different relation and does not
    reuse it. If approved, record as an ADR (it shapes every future corpus reader).
-3. **Fetch outcome is per-document persistent state, not just a log line.**
-   `full_text_status` on the link: `not_attempted` (default — includes uploads, whose text
-   arrived with them; the column describes the *fetch pipeline*, text availability stays
-   `source_snapshot.text_basis`) · `ingested` · `fetch_failed` · `parse_failed`. A named
-   CHECK constrains values; a second CHECK ties `ingested` ⟺ `full_text_snapshot_id IS NOT
-   NULL`. `full_text_error` holds a compact machine-readable reason (`paywall`, `not_found`,
-   `too_large`, `thin_text`, …); attempt-level detail (each URL tried, per-attempt errors)
-   goes to structured logs — telemetry plane per spec, and the `component.completed` payload
-   carries the run-record summary counts. This is the v3.0 failure manifest: queryable
-   per-document outcome + run summary, nothing swallowed.
+3. **Fetch/parse outcome is per-document persistent state with a reason vocabulary —
+   v2's central failure, fixed by construction.** v2 collapsed every parse failure
+   (oversized, timeout, corrupt, scanned/empty, thin HTML) into one unexplained
+   `skipped_count`, swallowed fetch errors at debug level, and kept no per-document record
+   of loss. Here: `full_text_status` on the link — `not_attempted` (default; includes
+   uploads, whose text arrived with them — the column describes the *fetch pipeline*, text
+   availability stays `source_snapshot.text_basis`) · `ingested` · `fetch_failed` ·
+   `parse_failed` — with a named CHECK, a second CHECK tying `ingested` ⟺
+   `full_text_snapshot_id IS NOT NULL`, and `full_text_error` carrying a **closed,
+   machine-readable reason**: `paywall` · `not_found` · `too_large` · `timeout` ·
+   `corrupt` · `no_text_layer` (scanned/image-only — distinct, because OCR is a deferred
+   seam, not a silent hole) · `thin_text` · `empty`. Attempt-level detail (each URL tried,
+   per-attempt errors) goes to structured logs — telemetry plane per spec — and the
+   `component.completed` payload carries the run-record summary counts by status and
+   reason. Queryable per-document outcome + run summary; nothing swallowed.
 4. **URL resolution + fetch cascade — v2's pattern, deterministic, explicit URLs only.**
    Candidate list per document from `metadata.provider_fields`, in fixed order —
    OpenAlex: `best_oa_location.pdf_url` → `primary_location.pdf_url` →
    `open_access.oa_url` → `primary_location.landing_page_url` (fetched as HTML);
    Overton: `pdf_url` → `document_url`. The cascade tries candidates in order until one
-   fetch+parse succeeds; every failure is counted into the attempt log. **Landing-page
-   scraping with PDF-link discovery and the DOI-URL fallback are live-seam work** (they
-   need real HTML in the wild) — deferred, recorded. A document with no candidate URL at
-   all is `skipped_no_url` (visible, counted; constructible in tests though current
-   fixtures always carry at least one URL). Uploads are never fetched (their text arrived
-   with them).
-5. **Parse: `pypdf` for PDF (gated new dependency), stdlib for HTML/text; v2's caps; a
-   thin-text guard v2 lacked.** `pypdf` is pure-Python (no binary deps), maintained, and
-   parsing is exactly what it's for — hand-rolling PDF extraction fails rung 6 of the
-   ladder in the other direction. HTML via stdlib `html.parser` (tag-strip + block
-   elements → paragraphs); `text/plain` as-is. Caps carried from v2: 50 MB fetched bytes ·
-   50 pages · 100 K chars — over-cap on bytes fails the fetch (`too_large`); page/char caps
-   **truncate at the boundary and flag it** in snapshot metadata (`truncated`), never
-   silently. **Thin-text guard:** parsed text below a minimum (threshold a plan detail,
-   order-of-hundreds of chars) → `parse_failed` / `thin_text`, *not* success — the direct
-   fix for v2 reporting thin DOI-landing text as `ok`. Parse profile is named and versioned
-   in the full-text snapshot's metadata (e.g. `pypdf_v1` · `stdlib_html_v1` · `plain_v1`).
-6. **Segmentation: named versioned policies, structure-aware light.** PDF:
-   `page_paragraph_v1` — pages, then blank-line paragraphs; chunk `locator` carries
-   `{page, paragraph}`. HTML/text: `paragraph_v1` — `{paragraph}`. One parse, one
-   segmentation per snapshot (spec); semantic splitting is a later layer, not this slice.
-   Content hash over the joined chunk text (same convention as `ingest_upload`);
-   `source_locator` = the URL actually fetched; `fetched_from` + content type recorded in
-   snapshot metadata.
-7. **Component wiring mirrors 004–007.** `"ingest_full_text"` in `COMPONENT_REGISTRY`
-   requiring `evidence_scope_id`; eligible set = the scope's screened-in
-   (`is_relevant = true`) links with `origin = "acquired"`. Runs after the cheap envelope
-   passes (spec §4: "after screen/classify/appraise"); the registry gate is screen — the
-   skeleton demonstrates the full order. "Ingestion is not a tool" holds: this is an
-   orchestrator-scheduled plan component (procedure), not an agent-invocable verb, same
-   realisation class as acquire. Fetcher injection: `run_harness` gains optional
-   `document_fetcher: DocumentFetcher | None = None` defaulting to `FixtureFetcher()` —
-   the `search_backends`/`provider` precedent, gated change 3.
-8. **Idempotency and re-runs.** Re-running the component skips `ingested` links
-   (`already_ingested`, counted) and **retries** failed ones (statuses overwrite —
-   deterministic against fixtures; live-world transience is exactly why failed is
-   retryable). Counting invariant, test-enforced:
-   `eligible == ingested + already_ingested + fetch_failed + parse_failed + skipped_no_url`.
-   Return shape mirrors acquire: counts + `coverage`-style summary, no per-document lists.
-9. **Multi-PDF Overton documents: primary `pdf_url` only in v3.0.** Every Overton fixture
-   record is a grouped document; assembling `grouped_pdf_ids_in_result` into one corpus
-   text (ordering, dedup, joint hashing) is real design work with no v3.0 reader —
-   deferred, recorded. The retained field keeps it possible.
-10. **Untrusted-text posture carries forward.** Fetched full text is third-party content at
-    much larger volume than the envelope; v3.0's deterministic code never interprets it
-    (parse/segment only — no execution, no LLM). The injection-screening enforcement point
-    stays at the LLM/live seams, recorded in `docs/deferred.md` (007's posture, extended to
+   fetch+parse succeeds; every failure is logged per attempt. **Landing-page scraping with
+   PDF-link discovery and the DOI-URL fallback are live-seam work** — deferred, recorded
+   (v2's meta-refresh follow and PDF-link discovery are the port-forward pattern there).
+   A document with no candidate URL at all is `skipped_no_url` (visible, counted). Uploads
+   are never fetched (their text arrived with them).
+5. **Parser selection: PyMuPDF4LLM for PDF, trafilatura for HTML — quality over default
+   libraries (user direction, 2026-07-05; researched, see Read first; re-adjudicated at
+   rev 3 under the AGPL decision).** The chunks written here are permanent; the spec
+   demands structure-aware parsing; the 2026 landscape splits the top tier into ML-layout
+   parsers (docling/marker/MinerU — heavy, slow on CPU) and the PyMuPDF engine (fastest,
+   strongest classic extraction, structure via PyMuPDF4LLM). Rev 2 chose docling *because*
+   PyMuPDF is AGPL-3.0 and the project's licence was undecided; **Policy Atlas is now
+   AGPL-3.0 itself, which removes that penalty entirely** — and on pure engineering the
+   PyMuPDF family wins for this corpus:
+   - **PyMuPDF4LLM** (on PyMuPDF/`fitz`): structure-aware markdown extraction — headings,
+     reading order, `find_tables()`-backed tables, per-page output (`page_chunks`) — at
+     ~0.01–0.1 s/page CPU with no ML stack, no model weights, no network, and no
+     long-document memory pathology (docling's #2077 risk is exactly our 100+-page-report
+     corpus). PyMuPDF led plain-text extraction quality in the cross-category arXiv
+     study, and its extraction core was the one part of v2's pipeline the code review
+     rated "works, keep" — v2's failures were truncation, serialism and thrown-away
+     structure, not the engine. At ~200 documents/run, the speed difference is minutes vs
+     hours serial, and stays material even fanned out.
+   - **docling** (permissive licence, best ML-layout benchmark scores, ~0.5–20 s/page,
+     torch + ~1 GB models, long-doc memory issue) is **the recorded quality-escalation
+     seam, not rejected**: the parse-profile-per-snapshot design means a future slice can
+     add a `docling_v1` profile for document classes where heuristic structure detection
+     measurably falls short (parse-quality evals are that seam's entry ticket). Nothing
+     in this slice forecloses it.
+   - **Also considered:** marker (GPL — compatible now, but GPU-leaning, 2 GB install),
+     MinerU (AGPL — compatible now, but GPU-leaning, CJK-specialist strengths we don't
+     need), pypdf/stdlib (no layout model — the floor v2's cautionary tale warns against),
+     unstructured/LlamaParse (heavy/API-shaped; LlamaParse is egress by definition).
+   - **trafilatura** (Apache-2.0) for HTML: main-content extraction with boilerplate
+     removal is a solved problem (mean F1 0.937 vs readability-lxml 0.914) that v2
+     hand-rolled badly (its BS4 fallback swept nav/footer into the corpus; its declared
+     `readability-lxml` dependency was never even imported).
+   - `text/plain` needs no parser.
+   - Parse profile is named and versioned in the full-text snapshot's metadata
+     (e.g. `pymupdf4llm_v1` · `trafilatura_v1` · `plain_v1`).
+6. **No truncation, ever — full text or honest failure (user direction, 2026-07-05).**
+   v2 stacked three silent truncations (50 pages at parse → 100 K chars at normalize →
+   15 K tokens at extraction) so its retrieval corpus never saw past roughly the first
+   30–40 pages of a long report, with no per-document record of the loss. Long policy
+   reports are Policy Atlas's core content, and a truncated text labelled `full_text`
+   would be a false grounding claim. Here caps are **guards that fail loudly, never
+   scissors**: a generous fetch byte cap (100 MB — over it → `fetch_failed`/`too_large`,
+   source stays on the envelope) and a **hard per-document parse timeout** (process-based
+   and genuinely cancellable — v2's `run_in_executor` + `wait_for` leaked uncancellable
+   threads; over it → `parse_failed`/`timeout`). A parsed document is stored **whole**.
+   There is no page cap, no char cap, no `truncated` flag — the flag existed in rev 1 of
+   this contract and is deliberately gone: a state that mixes "full text" with "some text
+   missing" shouldn't be representable.
+7. **Segmentation: structure-aware from the parser's document model, under named
+   versioned policies.** PDF (`pymupdf4llm_struct_v1`): chunks follow PyMuPDF4LLM's
+   markdown structure (heading-bounded sections, paragraphs, tables kept intact as their
+   own chunks), each chunk's `locator` carrying page number(s) and the heading path —
+   the provenance v2 computed and then threw away (its `page_spans` never reached the DB,
+   forcing brittle post-hoc substring matching for quote location). HTML/text
+   (`trafilatura_para_v1` / `plain_para_v1`): paragraph chunks, `{paragraph}` locators.
+   One parse, one segmentation per snapshot (spec); token-budgeted re-chunking belongs to
+   the embed seam. Content hash over the joined chunk text (same convention as
+   `ingest_upload`); `source_locator` = the URL actually fetched; `fetched_from`, content
+   type and parse profile recorded in snapshot metadata. A **thin-text guard** (parsed
+   text below a minimum, threshold a plan detail) → `parse_failed`/`thin_text` — the
+   direct fix for v2 reporting thin DOI-landing stubs as `ok` full text.
+8. **Ingestion is a bounded parallel fan-out (user direction, 2026-07-05).** v2 parsed
+   serially (its throughput bottleneck at ~200 documents) and its concurrency settings
+   were dead config (defined, never wired). Here: per-document ingestion (fetch → parse →
+   segment) is a **pure function** with no DB access, executed over a **bounded process
+   pool** (CPU-bound parsing + genuinely cancellable timeouts, per decision 6); DB writes
+   happen in the parent in **deterministic eligible-set order** as results complete, so
+   the persisted outcome is independent of completion order and worker count
+   (test-enforced: workers=1 and workers=4 produce identical DB state). Worker count is a
+   real wired parameter with a modest default (plan detail). Spec cover: "within-step data-parallel fan-out is retained, not
+   deferred". Per-host politeness/rate limiting matters only when fetches go live —
+   recorded at the live-fetcher seam.
+9. **Fixture documents are real, openly-licensed publications (user decision,
+   2026-07-05 — supersedes the generated-fixtures plan of rev 1 and amends the task-007
+   sanitized-fixtures policy for *documents*).** Real documents carry the parse quirks
+   (layouts, tables, footers, encodings) that generated fakes cannot; for a slice whose
+   entire job is parse quality, fabricated fixtures would test the pipeline against a
+   strawman. Composition:
+   - **Grey literature: Nesta publications** (the user's organisation — own-org content,
+     clearly committable): report PDFs plus at least one Nesta web/HTML report page for
+     the HTML path. Nesta's heat-pump work doubles as domain-relevant content.
+   - **Academic: seminal open-access papers** in Nesta's domains — early years,
+     education, heat pump adoption, food environment policies — **selected for open
+     licences (CC BY or equivalent)** at recording time.
+   - **Provenance manifest, licence-guarded:** `fulltext_manifest.json` maps each
+     acquire-fixture URL → outcome (`ok` + file · `403` · `404` · oversize · no-text-layer)
+     and, for every committed document, records **title, real source URL, publisher,
+     licence, and retrieval date**. A test asserts every committed document carries a
+     licence from the allowlist (own-org · CC BY family) — the successor to 007's leak
+     guard (fetch-keying URLs stay `example.org`; the *documents* are real and their
+     provenance is the safety property).
+   - **Failure cases** need no real paywalled content: manifest entries simulate 403/404/
+     oversize; the `no_text_layer` case uses an image-only PDF derived dev-time from one
+     of the licensed documents (provenance recorded).
+   - **Envelope/document mismatch accepted:** the acquire fixtures' envelope metadata
+     (titles, abstracts) remains sanitized/fabricated from 007; fetch fixtures map those
+     records' URLs to real documents. The join is by URL, and no test asserts
+     envelope-title == document-title. Noted so nobody "fixes" it into re-recording 007.
+   - **Size discipline:** ~10–15 documents, individual files preferably < 5 MB, total
+     committed budget ≈ 25 MB, plus one deliberately long report (100+ pages) for the
+     long-document memory/timeout verification. Binary fixtures are excluded from review
+     diffs per the 007 retro.
+   - `scripts/record_fulltext_fixtures.py` (dev-time, never imported by the package)
+     fetches the curated source list and writes documents + manifest. Dev-time network
+     use is explicitly not gated.
+10. **Idempotency and re-runs.** Re-running the component skips `ingested` links
+    (`already_ingested`, counted) and **retries** failed ones (statuses overwrite —
+    deterministic against fixtures; live-world transience is why failed is retryable;
+    v2 had no retry anywhere). Counting invariant, test-enforced:
+    `eligible == ingested + already_ingested + fetch_failed + parse_failed + skipped_no_url`.
+    Return shape mirrors acquire: counts by status and failure reason, no per-document
+    lists.
+11. **Multi-PDF Overton documents: primary `pdf_url` only in v3.0.** Every Overton fixture
+    record is a grouped document; assembling `grouped_pdf_ids_in_result` into one corpus
+    text (ordering, dedup, joint hashing) is real design work with no v3.0 reader —
+    deferred, recorded. The retained field keeps it possible.
+12. **Untrusted-text posture carries forward.** Fetched full text is third-party content
+    at much larger volume than the envelope; v3.0's deterministic code never interprets it
+    (parse/segment only — no execution, no LLM; the parsers extract text and layout, they
+    do not follow instructions in content). The injection-screening enforcement point stays
+    at the LLM/live seams, recorded in `docs/deferred.md` (007's posture, extended to
     full text). Security review confirms no interpretation path.
-11. **Fixture documents are generated, not recorded.** `scripts/generate_fulltext_fixtures.py`
-    (dev-time, never imported by the package) writes small fabricated documents — multi-page
-    PDFs with text streams, HTML pages, a thin page, plus a manifest JSON mapping each
-    acquire-fixture URL → outcome (`ok` + file · `403` · `404` · oversize). Structural
-    authenticity matters less than in 007: the parser is a third-party library; fixtures
-    exercise **our** cascade/caps/segmentation logic. Leak guard extends: every manifest URL
-    is `example.org` (test-enforced); document text is fabricated by construction.
+13. **Component wiring mirrors 004–007.** `"ingest_full_text"` in `COMPONENT_REGISTRY`
+    requiring `evidence_scope_id`; eligible set = the scope's screened-in
+    (`is_relevant = true`) links with `origin = "acquired"`. Runs after the cheap envelope
+    passes (spec §4: "after screen/classify/appraise"); the registry gate is screen — the
+    skeleton demonstrates the full order. "Ingestion is not a tool" holds: this is an
+    orchestrator-scheduled plan component (procedure), not an agent-invocable verb.
+    Fetcher injection: `run_harness` gains optional
+    `document_fetcher: DocumentFetcher | None = None` defaulting to `FixtureFetcher()` —
+    the `search_backends`/`provider` precedent, gated change 3.
+
+### V2 integration review — full-text ingestion (subagent review, 2026-07-05)
+
+Read-only review of `../discovery_policy_atlas` (`backend/app/services/analysis/`:
+`acquire.py`, `parse.py`, `normalize.py`, `chunking.py`, `extractor_langchain.py`,
+`storage.py`, `service.py`). Adjudication:
+
+**Ported:** PyMuPDF-class fetch cascade *shape* (pdf_url → landing → DOI, meta-refresh
+follow) → live-fetcher seam; dual success/failure manifest pattern → our per-link status +
+run summary; de-hyphenation + whitespace normalization (necessary but not sufficient —
+plan-level normalization detail).
+
+**Fixed by construction in this slice (each a specific v2 defect):**
+- Three stacked silent truncations capping the retrieval corpus at ~15 K tokens/document
+  → decision 6 (no truncation).
+- Serial parsing; dead concurrency config (`ACQUISITION_CONCURRENCY`, `DOWNLOAD_TIMEOUT`
+  defined, never wired) → decision 8 (real, wired, test-covered fan-out).
+- No parse-failure taxonomy (one `skipped_count` for oversized/timeout/corrupt/scanned/
+  empty); fetch errors swallowed at debug; paywalls indistinguishable → decision 3.
+- Thin DOI-landing text reported `ok` → thin-text guard (decision 7).
+- Chunk provenance computed then discarded (`page_spans` never persisted; quote location
+  by post-hoc substring search) → decision 7 (page + heading path in every chunk locator).
+- No structure awareness (headers/footers repeat inline; tables flattened; reference
+  lists chunked as content) → decision 5 (PyMuPDF4LLM structured extraction — the very
+  engine v2 already had but called in plain-text mode).
+- Scanned/image-only PDFs silently empty → explicit `no_text_layer` status; OCR recorded
+  as a deferred seam.
+- Uncancellable parse timeouts (`run_in_executor` threads leak) → process-based hard
+  timeout (decision 6).
+- Chunking gated behind an unrelated storage flag (RAG index silently unpopulated when
+  interim storage was off) → segmentation is unconditionally part of ingestion here.
+- `encoding="utf-8", errors="ignore"` silent character loss → plan-level: explicit
+  encoding handling, no silent-ignore reads.
+- Declared-but-never-imported `readability-lxml` → we ship trafilatura and actually call it.
+
+**Deliberately not carried:** word-count×1.3 token estimation (no token-budgeted chunking
+in this slice at all; tiktoken-class sizing belongs to the embed seam); the documented-but-
+never-implemented "summary chunk" (doc/code drift — we ship no chunk type that code
+doesn't emit); embedding-during-ingestion (decision 1).
 
 ### Schema
 
@@ -196,6 +354,9 @@ CheckConstraint((full_text_status = 'ingested') = (full_text_snapshot_id IS NOT 
                 name="ck_pss_full_text_consistent")
 ```
 
+`full_text_error` values (closed vocabulary, enforced in code + tests, not a CHECK — the
+reason list may grow at the live seam without a migration): `paywall` · `not_found` ·
+`too_large` · `timeout` · `corrupt` · `no_text_layer` · `thin_text` · `empty`.
 Downgrade drops the columns. No data migration (existing rows take the default).
 
 ### Python
@@ -208,7 +369,7 @@ class FetchResult:
     status: str                 # "ok" | "error"
     content_type: str | None    # "application/pdf" | "text/html" | "text/plain"
     body: bytes | None
-    error: str | None           # "paywall" | "not_found" | "too_large" | ...
+    error: str | None           # reason vocabulary, decision 3
 
 class DocumentFetcher(Protocol):
     mode: str  # "fixture" | "live"
@@ -216,17 +377,19 @@ class DocumentFetcher(Protocol):
         """Fetch one URL. Never raises for per-document outcomes."""
 
 class FixtureFetcher:
-    """Replays committed fabricated documents by URL. Zero egress."""
+    """Replays committed real documents by URL from the manifest. Zero egress."""
 ```
 
-Plus private helpers: candidate-URL resolution per backend (decision 4), parse dispatch by
-content type (decision 5), segmentation (decision 6).
+Plus: candidate-URL resolution per backend (decision 4); a pure per-document worker
+(cascade fetch → parse via PyMuPDF4LLM/trafilatura → segment → chunk list + metadata, **no DB
+access**) dispatched over a bounded process pool (decision 8); parent-side DB writes in
+eligible-set order.
 
-`ingest_full_text_sources(conn, *, project_id, run_id, context, fetcher) -> dict`:
-resolve eligible set → per link: cascade fetch → parse → segment → create `source_snapshot`
-(+ chunks) → set `full_text_snapshot_id` / `full_text_status` — or record the failure on
+`ingest_full_text_sources(conn, *, project_id, run_id, context, fetcher, max_workers=...)
+-> dict`: resolve eligible set → fan out workers → per result: create `source_snapshot`
+(+ chunks) and set `full_text_snapshot_id`/`full_text_status`, or record the failure on
 the link. Always completes with honest counts; `component.failed` reserved for
-infrastructure errors (per 007 precedent).
+infrastructure errors (007 precedent).
 
 **`plan.py`** — `"ingest_full_text": {"requires": ["evidence_scope_id"]}`.
 
@@ -234,43 +397,55 @@ infrastructure errors (per 007 precedent).
 parameter; conditional-edge wiring.
 
 **`skeleton.py`** — extend the smoke chain with ingest_full_text after appraise; log
-per-outcome counts and the corpus text-basis distribution.
+per-status/reason counts and the corpus text-basis distribution.
 
 **`tests/helpers.py`** — `delete_project_data` handles the new FK (clear
 `full_text_snapshot_id` links / delete in FK-safe order per task-003 precedent).
 
-**Fixture data** — `src/policy_atlas/data/fulltext/` (fabricated PDFs/HTML) +
-`fulltext_manifest.json` (`_meta` + URL → outcome map, 007's fixture-format precedent).
-Coverage across the acquire fixtures: PDF success (multi-page), HTML landing success,
-paywall 403, dead link 404, thin HTML page, oversize document, cascade fallback (first
-URL fails → second succeeds), and untouched non-screened-in records.
+**Fixture data** — `src/policy_atlas/data/fulltext/` (real licensed documents, decision 9)
++ `fulltext_manifest.json` (`_meta` + URL → outcome map + per-document provenance/licence).
+Coverage: multi-page report PDF (long, 100+ pages), academic paper PDFs (incl. multi-column),
+HTML report page, paywall 403, dead link 404, oversize (simulated), image-only PDF
+(`no_text_layer`), thin HTML page, cascade fallback (first URL fails → second succeeds),
+and untouched non-screened-in records.
 
 **`test_ingest_full_text.py`** — new file, covering:
 - Migration roundtrip; table count still 16; both named CHECKs reject invalid rows
   (bad status; `ingested` without snapshot id; snapshot id with non-`ingested` status).
 - URL resolution order per backend (OpenAlex four-step precedence; Overton two-step);
   no-URL record → `skipped_no_url`.
-- Cascade: first candidate fails, second succeeds — attempt visible in logs, outcome `ingested`.
-- PDF parse: multi-page → `page_paragraph_v1` chunks with `{page, paragraph}` locators,
-  sequenced; page/char caps truncate + set `truncated`; oversize bytes → `fetch_failed` /
-  `too_large`.
-- HTML parse: tags stripped, paragraph chunks under `paragraph_v1`; thin page →
-  `parse_failed` / `thin_text` and the source stays on the envelope (v2-fragility test).
-- Failure semantics: paywall / dead link → `fetch_failed` + compact `full_text_error`; the
-  envelope snapshot and all downstream result rows untouched; source never dropped.
+- Cascade: first candidate fails, second succeeds — attempts logged, outcome `ingested`.
+- PDF parse (PyMuPDF4LLM): multi-page report → heading-bounded chunks under
+  `pymupdf4llm_struct_v1` with page + heading-path locators, tables intact as chunks,
+  sequenced; multi-column academic paper in correct reading order (spot-checked
+  assertion, e.g. a known sentence not interleaved).
+- **No-truncation proof:** the long-report fixture ingests whole — chunk text jointly
+  contains content from the final section/page; no cap code path exists to test.
+- Failure reasons, each separately: paywall (403), dead link (404), oversize →
+  `fetch_failed` + correct reason; image-only PDF → `parse_failed`/`no_text_layer`;
+  thin HTML → `parse_failed`/`thin_text`; parse timeout (in-test slow parser double) →
+  `parse_failed`/`timeout` with the worker actually terminated. In every case the
+  envelope snapshot and downstream result rows are untouched; source never dropped.
+- HTML parse (trafilatura): main content extracted, nav/boilerplate absent (assert a
+  known boilerplate string from the fixture page is not in any chunk).
 - Success semantics: new snapshot `text_basis="full_text"`, own content hash over joined
-  chunks, `source_locator` = fetched URL, `parse_profile` + `fetched_from` in metadata;
+  chunks, `source_locator` = fetched URL, parse profile + `fetched_from` in metadata;
   envelope snapshot byte-identical before/after (immutability).
-- Eligibility: only the scope's screened-in acquired links; `not_relevant`, `screen_failed`,
-  uploads, and other scopes untouched.
+- Fan-out determinism: workers=1 vs workers=4 → identical DB state (snapshots, hashes,
+  chunk sequences, statuses).
+- Eligibility: only the scope's screened-in acquired links; `not_relevant`,
+  `screen_failed`, uploads, and other scopes untouched.
 - Idempotency: re-run → `already_ingested`, no new snapshots; failed links retried;
   counting invariant holds per run, both runs.
-- Events: `component.started`/`component.completed` with summary counts; **no**
-  per-document event types emitted (asserted).
+- Events: `component.started`/`component.completed` with summary counts by status and
+  reason; **no** per-document event types emitted (asserted).
 - Harness round-trip: `Plan(component="ingest_full_text")` → statuses + snapshots in DB.
-- Zero-egress guard: extend 007's import test to `ingest_full_text.py` (no HTTP client
-  usage; generator script never imported by the package).
-- Leak guard: every manifest URL on `example.org`; `_meta` present.
+- Zero-egress guard: extend 007's import test to `ingest_full_text.py`; recorder script
+  outside the package import graph (the parsers are model-free local code — no network
+  path exists to guard beyond the import test).
+- Licence guard: every committed document's manifest entry carries an allowlisted licence
+  (own-org · CC BY family) + source URL + retrieval date; fetch-keying URLs all
+  `example.org`; `_meta` present.
 - `delete_project_data` clean with full-text snapshots present.
 - Downstream unchanged: classify/appraise outputs identical before/after ingest (they read
   the envelope).
@@ -281,17 +456,20 @@ rejected without.
 ### Out of scope
 
 - **Live `DocumentFetcher`** — runtime egress, its own gated slice; carries the live-seam
-  requirements (timeouts, redirects, politeness/robots, content-type sniffing,
-  landing-page scrape + PDF-link discovery, DOI-URL fallback, per-provider fetch pacing).
+  requirements (timeouts, redirects, politeness/robots + per-host rate limiting,
+  content-type sniffing, landing-page scrape + PDF-link discovery with v2's meta-refresh
+  follow, DOI-URL fallback, bounded retry/backoff).
+- **OCR for scanned documents** — `no_text_layer` is honestly representable; an OCR stage
+  (heavy models or an egress service) is its own decision. Deferred, recorded.
 - **Vectorisation / embeddings / vector store** — deferred to the first vector reader
-  (decision 1); eager-and-uniform discipline restated in the spec clarification.
-- **Multi-PDF Overton assembly** (decision 9).
+  (decision 1); token-budgeted chunk sizing goes with it.
+- **Multi-PDF Overton assembly** (decision 11).
 - **Re-screen / re-classify / re-appraise on full text** — existing deferred seams
   (`Unknown` resolution, appraisal second pass) — unchanged.
 - **Full-text for uploads** — their text arrives with them; nothing to fetch.
 - **Cross-project full-text snapshot reuse** — the shared content-addressed substrate stays
   deferred (007); two projects ingesting the same document each get their own snapshot.
-- **Injection screening of fetched text** — posture recorded (decision 10); enforcement at
+- **Injection screening of fetched text** — posture recorded (decision 12); enforcement at
   the LLM/live seams.
 - `characterise`+ and everything downstream of appraise — subsequent slices.
 
@@ -301,93 +479,118 @@ rejected without.
 
 1. **Schema** — three columns + two named CHECKs + one FK on `project_source_snapshot`;
    one Alembic migration.
-2. **Dependency** — `pypdf` (runtime). First new runtime dependency since scaffold;
-   pure-Python, no transitive binary deps.
+2. **Dependencies:** `pymupdf4llm` (brings `pymupdf` — the compiled MuPDF engine,
+   AGPL-3.0, licence-compatible with the project since rev 3; no ML stack, no model
+   weights) and `trafilatura` (light: lxml-based, Apache-2.0). Both parse offline by
+   construction. The ML-layout upgrade (`docling`, torch + ~1 GB models) is the recorded
+   quality-escalation seam, not part of this gate.
 3. **Public interface** — `run_harness` optional `document_fetcher` parameter (+ the
    `"ingest_full_text"` registry entry, per 007 precedent).
 
-Plus one spec clarification (components §4 vectorisation deferral, decision 1) — approved
-with this contract per the spec-refinement flow.
+Plus one spec clarification (components §4 vectorisation deferral, decision 1) and one
+**fixture-policy amendment** (decision 9: real openly-licensed documents supersede
+generate-don't-record for *document* fixtures; the 007 sanitized policy stands for API
+*records*) — both approved with this contract.
 
-**Explicitly not crossed:** no runtime egress (fixture replay; generator script dev-time
-only), no auth, no CI change, no other schema or interface change.
+**Explicitly not crossed:** no runtime egress (fixture replay; the recorder script is
+dev-time only; the parsers are model-free local code), no auth, no CI change, no other
+schema or interface change.
 
 ## Public / private boundary
 
-- Committed fixture documents are **wholly fabricated** (generated, never recorded) — no
-  real third-party content can exist in them; manifest URLs are `example.org` only
-  (test-enforced).
+- Committed fixture documents are **real publications committed under their own open
+  licences** (own-org Nesta · CC BY family), each with provenance (source URL, publisher,
+  licence, retrieval date) in the manifest — licence-guard test-enforced. No paywalled or
+  all-rights-reserved content is ever committed; failure cases are simulated.
 - No credentials involved anywhere in this slice (fixtures need no API).
 - Column names, protocol/function names, policy/profile version strings — durable/committable.
 
 ## Model route
 
-`n/a` — deterministic fetch-replay + parse + segment. No LLM call, no inference provider,
-no runtime network I/O.
+`n/a` — deterministic fetch-replay + parse + segment. No models of any kind: no LLM call,
+no inference provider, no runtime network I/O.
 
 ## Disciplines binding this slice
 
 - **Snapshots immutable** — full text is a *new* snapshot attached at the link; the
   envelope snapshot is never touched (test-enforced byte-identity).
+- **Never truncate** — a stored `full_text` snapshot is the whole parsed document; caps
+  fail loudly (`too_large`, `timeout`) instead of cutting silently (decision 6).
 - **Flag, don't drop** — fetch/parse failure keeps the source on the text in hand with a
-  queryable status + reason; truncation is flagged, thin text is a failure, never `ok`.
-- **Honest absence** — `not_attempted` ≠ `fetch_failed`: coverage claims can distinguish
-  "never tried" from "tried and unavailable".
+  queryable status + closed reason; thin text is a failure, never `ok`.
+- **Honest absence** — `not_attempted` ≠ `fetch_failed` ≠ `no_text_layer`: coverage claims
+  distinguish "never tried", "tried and unavailable", and "exists but needs OCR".
 - **Skip is visible, never silent** — every eligible link lands in exactly one counted
   bucket; invariant test-enforced.
-- **Segmentation is trust-relevant** — named versioned policies + parse profiles on every
-  snapshot; one parse, one segmentation.
+- **Segmentation is trust-relevant** — structure-aware chunks with page + heading-path
+  locators; named versioned policies + parse profiles on every snapshot; one parse, one
+  segmentation.
 - **No per-document governance events** for fetch (spec) — run-record summary + telemetry;
   the `search.executed` discipline stays acquire's.
-- **Deterministic** — same fixtures → same snapshots, hashes, statuses, counts.
+- **Deterministic** — same fixtures + pinned parser versions → same snapshots, hashes,
+  chunks, statuses, counts; independent of worker count (test-enforced).
 
 ## Stop conditions
 
-- Any gated change (schema · dependency · public interface) not yet approved, or any
-  schema/dep change beyond the three gated items.
-- Any code path would perform runtime network I/O.
-- The snapshot-identity decision (2) proves wrong mid-build (e.g. a constraint forces
-  double corpus membership) — halt, don't improvise a fourth shape.
-- Scope would grow past the contract (live fetch, embeddings, multi-PDF, re-screen).
+- Any gated change (schema · dependencies · public interface) not yet approved, or any
+  schema/dep change beyond the gated items.
+- Any runtime code path would perform network I/O.
+- The snapshot-identity decision (2) proves wrong mid-build — halt, don't improvise a
+  fourth shape.
+- The chosen parser proves unable to meet the long-document or structure requirements on
+  the fixtures — halt and re-open parser selection with evidence (the docling seam is the
+  named alternative), rather than quietly re-introducing a page cap or flattening to
+  plain text.
+- Scope would grow past the contract (live fetch, OCR, embeddings, multi-PDF, re-screen).
 - `make verify` red with unclear root cause.
 
 ## Acceptance checks
 
 - `make verify` (test · typecheck · lint · build) — green.
-- All checks deterministic (fixture replay; no LLM, no egress). Every check is a test.
-- One manual dev-time check: the generator script was run once and produced the committed
-  fixture documents + manifest (date + coverage recorded in `_meta`).
+- All checks deterministic (fixture replay, pinned parser versions; no LLM, no egress).
+  Every check is a test.
+- One manual dev-time check: the recorder script was run once and produced the committed
+  documents + manifest (dates, licences, coverage recorded in `_meta`); confirmed in
+  verification.md.
 
 ## Verification evidence expected
 
 `verification.md` must include:
 - `make verify` table with pass counts.
 - Named results from `test_ingest_full_text.py`, including the immutability test, the
-  thin-text (v2-fragility) test, and the cascade-fallback test.
+  **no-truncation long-report test**, the fan-out determinism test, the zero-egress
+  guard, and the failure-reason matrix.
+- Long-document evidence: wall-clock and peak memory for the 100+-page fixture on CPU
+  with the pinned backend (the #2077 risk, measured, not assumed).
 - Migration roundtrip clean; table count still 16.
 - End-to-end command: harness with `component="ingest_full_text"` over an
   acquired+screened corpus — statuses, new snapshots and chunk counts visible in DB;
   text-basis distribution logged by the skeleton.
-- Fixture provenance: generator run date, document/outcome coverage list, leak-guard pass.
-- Public-safety confirmation (fabricated documents only; no credentials).
+- Fixture provenance: per-document licence/source/date table from the manifest;
+  licence-guard pass.
+- Public-safety confirmation (openly-licensed documents only; no credentials).
 - Deferred seams recorded in `docs/deferred.md` (live fetcher with its requirement list ·
-  vectorisation-at-first-reader with the eager-uniform discipline · multi-PDF assembly ·
-  injection screening extended to full text · cross-project full-text reuse).
-- Diff summary.
+  ML-layout parse-profile escalation (docling behind a `docling_v1` parse profile, entered
+  via parse-quality evals) · OCR for `no_text_layer` documents · vectorisation-at-first-reader with the
+  eager-uniform discipline · multi-PDF assembly · injection screening extended to full
+  text · cross-project full-text reuse).
+- Diff summary (binary fixture files excluded from review diffs per the 007 retro).
 
 ## Risk tier & review focus
 
-**Tier 3** — a schema change, the first new runtime dependency since scaffold, a
+**Tier 3** — a schema change, the heaviest dependency addition since scaffold, a
 public-interface addition, and the slice builds the seam through which bulk untrusted
 third-party documents will eventually enter the product.
 
 Review focus:
-- **Correctness:** cascade order; caps + truncation flags; thin-text guard; status/FK
-  consistency; counting invariant; idempotent re-run; envelope immutability.
-- **Provenance:** per-snapshot parse profile + segmentation policy; `source_locator` =
-  fetched URL; honest `text_basis` on both snapshots; `not_attempted` vs `fetch_failed`.
-- **Security:** zero runtime egress; `pypdf` operates on fixture bytes only; no
-  execution/interpretation of fetched content; generator script outside the import graph;
-  no real content in fixtures.
+- **Correctness:** cascade order; failure-reason mapping; thin-text guard; status/FK
+  consistency; counting invariant; idempotent re-run; envelope immutability; **absence of
+  any truncation path**; fan-out determinism and real timeout cancellation.
+- **Provenance:** page + heading-path locators on every chunk; per-snapshot parse profile
+  + segmentation policy; `source_locator` = fetched URL; honest `text_basis`;
+  `not_attempted` vs `fetch_failed` vs `no_text_layer`.
+- **Security:** zero runtime egress; parsers operate on fixture bytes only; no
+  execution/interpretation of fetched content; recorder script outside the import graph;
+  licence guard on committed documents.
 - **Schema:** migration roundtrip; named constraints; downstream FKs untouched.
-- **Scope:** no live fetch, no embeddings, no multi-PDF, no re-screening.
+- **Scope:** no live fetch, no OCR, no embeddings, no multi-PDF, no re-screening.
