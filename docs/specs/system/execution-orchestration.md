@@ -3,7 +3,7 @@ type: System contract
 title: Execution & orchestration
 description: Orchestrator and sub-agents, the tool registry + universal core, steering modes, the routing rule and durability.
 tags: [system, orchestration, execution, tools, steering, durability]
-timestamp: 2026-06-22
+timestamp: 2026-07-05
 ---
 
 # System contract — Execution & orchestration
@@ -132,6 +132,9 @@ quality/latency/filtering/scale/operability.
 suppressible) — **Minimal** (runs to completion; substance still pauses) · **Moderate**
 (recommended default; pauses on important decisions) · **Frequent** (every section/block).
 *(UX label currently reads "Thorough" — sync; "thoroughness" is the separate depth axis, §5.)*
+Per-mode approval/recording guarantees (forecast/shape approval up front in every mode;
+per-commit approval in Frequent/Moderate; every commit recorded) — the **audit posture across
+the modes** — live in [plan-as-object.md](plan-as-object.md).
 
 **The routing rule** — when a run hits something the plan didn't anticipate, route to *pause &
 ask* / *flag & continue* / *silently log & continue*, by **kind of decision × mode**:

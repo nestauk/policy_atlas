@@ -3,7 +3,7 @@ type: System contract
 title: The plan as an object
 description: The plan object, plan→config compile, two-level/progressive planning, source/evidence policy and depth.
 tags: [system, plan, compile, planning]
-timestamp: 2026-06-22
+timestamp: 2026-07-05
 ---
 
 # System contract — The plan as an object
@@ -104,6 +104,11 @@ statistics and peer-reviewed evaluations only"). Two faces:
 - **Progressive** — later capabilities can't be fully planned up front (inputs don't exist);
   **forecast the whole, commit each just-in-time**. Material commit-vs-forecast divergence surfaces
   at the between-capability check-in by mode; **substance divergence escalates in every mode**.
+- **Audit posture across the modes** — approval lands at the **forecast/shape** level up front
+  in every mode; **per-commit approval happens in Frequent/Moderate**. **Every commit is
+  recorded in the decision log** (nothing executes invisibly). Minimal's guarantee =
+  **approved-shape + recorded-commits + substance-escalation**; higher modes add per-commit
+  gating.
 - **Flexible yet robust** — flexibility in the combinations, robustness in the pieces (each choice
   is a bounded selection that always compiles). A user-added **free-form section compiles to a
   generic grounded-section component** (expressive freedom without breaking bounded compile).

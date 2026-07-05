@@ -3,7 +3,7 @@ type: System contract
 title: Core data model
 description: Entity hierarchy, blocks and addressable units, the annotation layer, findings, versioning and staleness.
 tags: [system, data-model, schema, annotations]
-timestamp: 2026-06-22
+timestamp: 2026-07-05
 ---
 
 # System contract — Core data model
@@ -95,8 +95,11 @@ tool-governance level instead (see [security/egress — not yet drafted]; arch �
   shared.** Sharpens a cross-tenant boundary flag → carry to security/egress (arch §11). ⚠️
 - **Origin drives classification richness & default priority, not appraisal** — an uploaded
   SR is appraised the same as an acquired one; priority is handled by **scoping** (soft prior),
-  not a hidden re-weight. Uploaded docs get an **inferred `function`** (`evidence` | `project_context_directive` —
-  ⏸ further lanes added when real upload patterns are observed).
+  not a hidden re-weight. Uploaded docs get an **inferred `function`** (never user-entered;
+  user-confirmable on a misroute) routing each to a treatment lane. 🟡 The lane set is
+  **illustrative — to be specced** (examples: *evidence* → the evidence pool; *framing/subject* →
+  orchestrator task-definition; *directive* → execution-shaping; *contextual* → a context lane;
+  *prior work* → build-on); refined against real upload patterns closer to implementation.
 - **Segmentation is trust-relevant, not a hidden detail.** Structure-aware parse first
   (pages/headings/tables/captions/footnotes), semantic splitting only as a layer over it; a
   named, versioned **segmentation policy**. **One parse, one segmentation per snapshot** —

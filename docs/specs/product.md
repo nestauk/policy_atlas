@@ -3,7 +3,7 @@ type: Product spec
 title: Product boundary & mental model
 description: What Policy Atlas v3 is and isn't — the evidence-led workspace, the decision-support body, and the boundary of the tool.
 tags: [product, mental-model, boundary]
-timestamp: 2026-06-22
+timestamp: 2026-07-05
 ---
 
 # Product boundary & mental model
@@ -39,8 +39,9 @@ the **work product**.
   capabilities. Significant claims carry citations, quotes, grounding tier and appraisal —
   **co-emitted, never stapled on afterwards.**
 - **Agency vs accountability.** Agents get bounded freedom over *method*; humans retain
-  authority over *substance* (options, recommendations, assumptions, value judgements,
-  material deviations). Steering modes change involvement *frequency*, never this boundary.
+  authority over *substance* (options, recommendations, assumptions, counterfactuals, value
+  judgements, material deviations). Steering modes change involvement *frequency*, never this
+  boundary.
 - **Progressive disclosure.** Plan before run, evidence behind claims, comments beside
   blocks, summaries that drill into full grounded detail.
 - **Model only what behaves.** No label, object type or flag exists in the backend unless it
