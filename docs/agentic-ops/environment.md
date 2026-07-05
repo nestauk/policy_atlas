@@ -1,7 +1,9 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–006 — backend only; setup unchanged since 002). Update it when the setup
+stands (tasks 001–007 — backend only; setup unchanged since 002; task 007 adds two dev-time
+fixture-recorder scripts needing `OVERTON_API_KEY`/optional OpenAlex vars in `.env` — see
+`.env.example`; package runtime still needs no keys). Update it when the setup
 changes, not before.
 
 ## Prerequisites

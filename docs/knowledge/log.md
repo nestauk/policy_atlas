@@ -1,5 +1,11 @@
 # Knowledge update log
 
+## 2026-07-05
+* **Creation**: Added
+  [sanitized-fixtures-audit-against-raw](sanitized-fixtures-audit-against-raw.md) — verify
+  recorder sanitization by substring-auditing raw vs committed fixture (list items inherit the
+  list's key; rare fields like grant IDs slip key lists; use a neutral fake lexicon) (task 007).
+
 ## 2026-07-03
 * **Creation**: Added
   [rubric-domain-defines-appraisability](rubric-domain-defines-appraisability.md) — a scoring
