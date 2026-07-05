@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted — rev 3 (user-steered, 2026-07-05).  
+> **Status:** drafted — rev 4 (user-steered, 2026-07-05).  
 > Rev 2 changes at user direction: parser selection researched properly (parse quality is
 > foundational for a RAG tool — no default libraries); **truncation abolished** (full text
 > or honest failure, never silent partial); ingestion is a **bounded parallel fan-out**,
@@ -12,10 +12,11 @@ specs in [docs/specs/](../../specs/index.md).
 > ingestion-code review (§ V2 integration review) and a parser-landscape research pass
 > (saved: `~/Documents/Last30Days/best-pdf-parsing-libraries-for-rag-ingestion-raw-v3.md`).  
 > Rev 3 (team decision, 2026-07-05): **Policy Atlas is licensed AGPL-3.0** (LICENSE file
-> added). That removes the copyleft penalty that had ruled out the PyMuPDF family, and the
-> parser recommendation flips from docling to **PyMuPDF4LLM** (decision 5) — faster by
-> orders of magnitude on CPU, no ML-model stack, no long-document memory risk; docling is
-> recorded as the quality-escalation seam.  
+> added), removing the copyleft penalty that had ruled out the PyMuPDF family.  
+> Rev 4 (user steer, 2026-07-05): **quality outranks latency** — 100+-page documents are
+> rare and can take a fallback path. Parser lands as **docling primary (ML layout — best
+> parse quality), PyMuPDF4LLM as the explicit in-slice fallback** (timeout/failure/long-doc),
+> with the fallback visible per snapshot via the parse profile (decision 5).  
 > Contract approved (before planning): _date · who_ ·
 > Plan approved (before implementation): _date · who_ · ADR: expected for the
 > snapshot-identity decision (decision 2) and the parser selection (decision 5) if
@@ -42,8 +43,8 @@ is ever truncated (decision 6).
 **Zero runtime egress.** Fetching is egress; the live fetcher stays behind the runtime-egress
 gate. v3.0's `DocumentFetcher` implementation replays **committed real documents** keyed by
 the `example.org` URLs already present in the acquired fixtures — same seam pattern as
-`SearchBackend` (task 007). The chosen parsers are model-free local code; the runtime never
-touches the network (test-enforced).
+`SearchBackend` (task 007). Docling's layout-model weights are fetched **once, dev-time**,
+pinned and cached; the runtime parses fully offline (test-enforced).
 
 Per spec, fetch is **mechanical execution of the governed `search`** — telemetry plane +
 run-record summary, **not** a per-document audit event. No new governance event type.
@@ -54,12 +55,12 @@ A PR on `task/008-full-text` → `dev` that:
 - Adds three columns to `project_source_snapshot` (`full_text_snapshot_id`,
   `full_text_status`, `full_text_error`) + one Alembic migration (gated change 1).
 - Ships `ingest_full_text.py` with `DocumentFetcher` (protocol), `FixtureFetcher`,
-  URL resolution + fetch cascade, structure-aware PDF parsing (PyMuPDF4LLM) and HTML
-  main-content extraction (trafilatura), structure-aware segmentation under named
-  policies, and `ingest_full_text_sources()` with **bounded parallel per-document
-  fan-out**.
-- Adds `pymupdf4llm` (brings `pymupdf`) and `trafilatura` as runtime dependencies
-  (gated change 2).
+  URL resolution + fetch cascade, structure-aware PDF parsing (docling primary,
+  PyMuPDF4LLM fallback) and HTML main-content extraction (trafilatura), structure-aware
+  segmentation under named policies, and `ingest_full_text_sources()` with **bounded
+  parallel per-document fan-out**.
+- Adds `docling`, `pymupdf4llm` (brings `pymupdf`) and `trafilatura` as runtime
+  dependencies (gated change 2 — heavy, see Constraints).
 - Registers `"ingest_full_text"` in `COMPONENT_REGISTRY`; wires `_run_ingest_full_text`;
   `run_harness` gains optional `document_fetcher` (gated change 3).
 - Ships committed **real, openly-licensed** fixture documents + a provenance manifest,
@@ -105,10 +106,15 @@ and led plain-text quality in the cross-category arXiv study; pypdf (BSD) is lig
 (91 ms/page) but has **no layout model** — plain-text only, weak on multi-column academic
 layouts. All parsers struggle on scanned/image-only PDFs without OCR. For HTML, trafilatura
 leads main-content extraction (mean F1 0.937 vs readability-lxml 0.914; Apache-2.0 since
-v1.8). Docling caveats, on the record: ~1 GB model load, ~0.5–20 s per PDF on CPU, a known
-memory-accumulation issue on very long documents (docling issue #2077) — long documents are
-exactly our corpus. **Licence context (rev 3):** Policy Atlas is itself AGPL-3.0, so the
-PyMuPDF family's AGPL-3.0 is fully compatible and no longer a selection penalty.
+v1.8). Docling caveats, on the record: ~1 GB model load, ~0.5–0.8 s/page on CPU (≈15–25 s
+for a 30-page paper), a known memory-accumulation issue on very long documents (docling
+issue #2077). **Licence context (rev 3):** Policy Atlas is itself AGPL-3.0, so the PyMuPDF
+family's AGPL-3.0 is fully compatible and no longer a selection penalty. **Quality
+adjudication (rev 4):** docling's structure comes from trained models (DocLayNet-class
+layout detection, TableFormer table structure, a reading-order model); PyMuPDF4LLM's comes
+from heuristics (font-size headings, geometric table finding). On layout-messy grey
+literature and two-column academic PDFs — our corpus — the ML tier is measurably better,
+and the chunks written here are permanent.
 
 ## Scope
 
@@ -167,41 +173,46 @@ PyMuPDF family's AGPL-3.0 is fully compatible and no longer a selection penalty.
    (v2's meta-refresh follow and PDF-link discovery are the port-forward pattern there).
    A document with no candidate URL at all is `skipped_no_url` (visible, counted). Uploads
    are never fetched (their text arrived with them).
-5. **Parser selection: PyMuPDF4LLM for PDF, trafilatura for HTML — quality over default
-   libraries (user direction, 2026-07-05; researched, see Read first; re-adjudicated at
-   rev 3 under the AGPL decision).** The chunks written here are permanent; the spec
-   demands structure-aware parsing; the 2026 landscape splits the top tier into ML-layout
-   parsers (docling/marker/MinerU — heavy, slow on CPU) and the PyMuPDF engine (fastest,
-   strongest classic extraction, structure via PyMuPDF4LLM). Rev 2 chose docling *because*
-   PyMuPDF is AGPL-3.0 and the project's licence was undecided; **Policy Atlas is now
-   AGPL-3.0 itself, which removes that penalty entirely** — and on pure engineering the
-   PyMuPDF family wins for this corpus:
-   - **PyMuPDF4LLM** (on PyMuPDF/`fitz`): structure-aware markdown extraction — headings,
-     reading order, `find_tables()`-backed tables, per-page output (`page_chunks`) — at
-     ~0.01–0.1 s/page CPU with no ML stack, no model weights, no network, and no
-     long-document memory pathology (docling's #2077 risk is exactly our 100+-page-report
-     corpus). PyMuPDF led plain-text extraction quality in the cross-category arXiv
-     study, and its extraction core was the one part of v2's pipeline the code review
-     rated "works, keep" — v2's failures were truncation, serialism and thrown-away
-     structure, not the engine. At ~200 documents/run, the speed difference is minutes vs
-     hours serial, and stays material even fanned out.
-   - **docling** (permissive licence, best ML-layout benchmark scores, ~0.5–20 s/page,
-     torch + ~1 GB models, long-doc memory issue) is **the recorded quality-escalation
-     seam, not rejected**: the parse-profile-per-snapshot design means a future slice can
-     add a `docling_v1` profile for document classes where heuristic structure detection
-     measurably falls short (parse-quality evals are that seam's entry ticket). Nothing
-     in this slice forecloses it.
-   - **Also considered:** marker (GPL — compatible now, but GPU-leaning, 2 GB install),
-     MinerU (AGPL — compatible now, but GPU-leaning, CJK-specialist strengths we don't
-     need), pypdf/stdlib (no layout model — the floor v2's cautionary tale warns against),
-     unstructured/LlamaParse (heavy/API-shaped; LlamaParse is egress by definition).
+5. **Parser selection: docling primary + PyMuPDF4LLM fallback for PDF, trafilatura for
+   HTML — quality first (user direction, 2026-07-05: quality outranks latency; long
+   documents are rare and may take a fallback path).** The chunks written here are
+   permanent; the spec demands structure-aware parsing; and the quality ordering is
+   clear — docling's trained models (DocLayNet-class layout detection, TableFormer table
+   structure, reading order; 0.877 on opendataloader-bench, the top open-source score)
+   beat PyMuPDF4LLM's heuristics (font-size headings, geometric table finding) exactly
+   where our corpus lives: layout-messy grey-literature reports and two-column academic
+   PDFs. With the project AGPL-3.0 (rev 3), licence removes nothing from either side, so
+   the call is pure quality-vs-cost — and the user has ranked quality first.
+   - **docling primary (`docling_v1`):** ML layout analysis on CPU at ~0.5–0.8 s/page
+     (≈15–25 s for a 30-page paper; a 200-document run fans out to roughly 10–20 min
+     worst case — a batch step, decision 8). Costs stated plainly in gated change 2:
+     torch-CPU dependency tree, ~1 GB pinned model weights (dev-time fetched, runtime
+     offline), per-worker memory ≈ model footprint.
+   - **PyMuPDF4LLM fallback (`pymupdf4llm_v1`):** parse order per document is docling
+     under a **hard per-document timeout** → on timeout, crash, or the long-document
+     memory pathology (docling #2077 — why the fallback exists) → PyMuPDF4LLM
+     (~0.01–0.1 s/page, no ML stack, handles arbitrary length; PyMuPDF led plain-text
+     quality in the cross-category arXiv study and its engine was the one part of v2 the
+     code review rated "works, keep") → only if both fail, `parse_failed`. **The
+     fallback is visible, never silent:** the snapshot's parse profile records which
+     parser produced it, so a quality downgrade is queryable per document and countable
+     per run (`by_parse_profile` in the summary counts).
+   - **Also considered:** marker (GPL — compatible, but GPU-leaning, 2 GB install),
+     MinerU (AGPL — compatible, but GPU-leaning, CJK-specialist strengths we don't
+     need), pypdf/stdlib (no layout model — the floor v2's cautionary tale warns
+     against), unstructured/LlamaParse (heavy/API-shaped; LlamaParse is egress by
+     definition).
    - **trafilatura** (Apache-2.0) for HTML: main-content extraction with boilerplate
      removal is a solved problem (mean F1 0.937 vs readability-lxml 0.914) that v2
      hand-rolled badly (its BS4 fallback swept nav/footer into the corpus; its declared
      `readability-lxml` dependency was never even imported).
    - `text/plain` needs no parser.
+   - **Offline discipline:** docling model weights are downloaded and pinned **dev-time**
+     (same class as `uv` installs — not gated); the runtime loads them from the local
+     artifacts cache in offline mode and never touches the network (test-enforced
+     alongside the zero-egress guard).
    - Parse profile is named and versioned in the full-text snapshot's metadata
-     (e.g. `pymupdf4llm_v1` · `trafilatura_v1` · `plain_v1`).
+     (`docling_v1` · `pymupdf4llm_v1` · `trafilatura_v1` · `plain_v1`).
 6. **No truncation, ever — full text or honest failure (user direction, 2026-07-05).**
    v2 stacked three silent truncations (50 pages at parse → 100 K chars at normalize →
    15 K tokens at extraction) so its retrieval corpus never saw past roughly the first
@@ -211,14 +222,17 @@ PyMuPDF family's AGPL-3.0 is fully compatible and no longer a selection penalty.
    scissors**: a generous fetch byte cap (100 MB — over it → `fetch_failed`/`too_large`,
    source stays on the envelope) and a **hard per-document parse timeout** (process-based
    and genuinely cancellable — v2's `run_in_executor` + `wait_for` leaked uncancellable
-   threads; over it → `parse_failed`/`timeout`). A parsed document is stored **whole**.
+   threads; over it → the PyMuPDF4LLM fallback, decision 5; `parse_failed`/`timeout`
+   only when the fallback also fails). A parsed document is stored **whole**.
    There is no page cap, no char cap, no `truncated` flag — the flag existed in rev 1 of
    this contract and is deliberately gone: a state that mixes "full text" with "some text
    missing" shouldn't be representable.
 7. **Segmentation: structure-aware from the parser's document model, under named
-   versioned policies.** PDF (`pymupdf4llm_struct_v1`): chunks follow PyMuPDF4LLM's
-   markdown structure (heading-bounded sections, paragraphs, tables kept intact as their
-   own chunks), each chunk's `locator` carrying page number(s) and the heading path —
+   versioned policies.** PDF (`docling_struct_v1`; fallback `pymupdf4llm_struct_v1`):
+   chunks follow the parser's document structure (heading-bounded sections, paragraphs,
+   tables kept intact as their own chunks — docling's document model primary,
+   PyMuPDF4LLM's markdown structure on the fallback path), each chunk's `locator`
+   carrying page number(s) and the heading path —
    the provenance v2 computed and then threw away (its `page_spans` never reached the DB,
    forcing brittle post-hoc substring matching for quote location). HTML/text
    (`trafilatura_para_v1` / `plain_para_v1`): paragraph chunks, `{paragraph}` locators.
@@ -236,7 +250,8 @@ PyMuPDF family's AGPL-3.0 is fully compatible and no longer a selection penalty.
    happen in the parent in **deterministic eligible-set order** as results complete, so
    the persisted outcome is independent of completion order and worker count
    (test-enforced: workers=1 and workers=4 produce identical DB state). Worker count is a
-   real wired parameter with a modest default (plan detail). Spec cover: "within-step data-parallel fan-out is retained, not
+   real wired parameter with a modest default (memory budget ≈ workers × docling model
+   footprint — plan detail). Spec cover: "within-step data-parallel fan-out is retained, not
    deferred". Per-host politeness/rate limiting matters only when fetches go live —
    recorded at the live-fetcher seam.
 9. **Fixture documents are real, openly-licensed publications (user decision,
@@ -248,7 +263,7 @@ PyMuPDF family's AGPL-3.0 is fully compatible and no longer a selection penalty.
    - **Grey literature: Nesta publications** (the user's organisation — own-org content,
      clearly committable): report PDFs plus at least one Nesta web/HTML report page for
      the HTML path. Nesta's heat-pump work doubles as domain-relevant content.
-   - **Academic: seminal open-access papers** in Nesta's domains — early years,
+   - **Academic: seminal open-access papers** in Nesta's domains — early years
      education, heat pump adoption, food environment policies — **selected for open
      licences (CC BY or equivalent)** at recording time.
    - **Provenance manifest, licence-guarded:** `fulltext_manifest.json` maps each
@@ -381,7 +396,8 @@ class FixtureFetcher:
 ```
 
 Plus: candidate-URL resolution per backend (decision 4); a pure per-document worker
-(cascade fetch → parse via PyMuPDF4LLM/trafilatura → segment → chunk list + metadata, **no DB
+(cascade fetch → parse via docling → PyMuPDF4LLM fallback / trafilatura → segment →
+chunk list + metadata, **no DB
 access**) dispatched over a bounded process pool (decision 8); parent-side DB writes in
 eligible-set order.
 
@@ -415,17 +431,22 @@ and untouched non-screened-in records.
 - URL resolution order per backend (OpenAlex four-step precedence; Overton two-step);
   no-URL record → `skipped_no_url`.
 - Cascade: first candidate fails, second succeeds — attempts logged, outcome `ingested`.
-- PDF parse (PyMuPDF4LLM): multi-page report → heading-bounded chunks under
-  `pymupdf4llm_struct_v1` with page + heading-path locators, tables intact as chunks,
+- PDF parse (docling): multi-page report → heading-bounded chunks under
+  `docling_struct_v1` with page + heading-path locators, tables intact as chunks,
   sequenced; multi-column academic paper in correct reading order (spot-checked
   assertion, e.g. a known sentence not interleaved).
 - **No-truncation proof:** the long-report fixture ingests whole — chunk text jointly
   contains content from the final section/page; no cap code path exists to test.
 - Failure reasons, each separately: paywall (403), dead link (404), oversize →
   `fetch_failed` + correct reason; image-only PDF → `parse_failed`/`no_text_layer`;
-  thin HTML → `parse_failed`/`thin_text`; parse timeout (in-test slow parser double) →
-  `parse_failed`/`timeout` with the worker actually terminated. In every case the
-  envelope snapshot and downstream result rows are untouched; source never dropped.
+  thin HTML → `parse_failed`/`thin_text`; parse timeout with the fallback also failing
+  (in-test slow/raising parser doubles) → `parse_failed`/`timeout` with the worker
+  actually terminated. In every case the envelope snapshot and downstream result rows
+  are untouched; source never dropped.
+- **Fallback visibility:** a document whose docling parse times out/crashes but whose
+  PyMuPDF4LLM parse succeeds → `ingested` with `parse_profile="pymupdf4llm_v1"` on the
+  snapshot and counted in `by_parse_profile`; never silently conflated with the primary
+  path.
 - HTML parse (trafilatura): main content extracted, nav/boilerplate absent (assert a
   known boilerplate string from the fixture page is not in any chunk).
 - Success semantics: new snapshot `text_basis="full_text"`, own content hash over joined
@@ -441,8 +462,9 @@ and untouched non-screened-in records.
   reason; **no** per-document event types emitted (asserted).
 - Harness round-trip: `Plan(component="ingest_full_text")` → statuses + snapshots in DB.
 - Zero-egress guard: extend 007's import test to `ingest_full_text.py`; recorder script
-  outside the package import graph (the parsers are model-free local code — no network
-  path exists to guard beyond the import test).
+  outside the package import graph; **offline-parse guard** — docling invoked with
+  network unavailable (offline mode, artifacts path pinned to the dev-time model cache)
+  still parses the fixtures.
 - Licence guard: every committed document's manifest entry carries an allowlisted licence
   (own-org · CC BY family) + source URL + retrieval date; fetch-keying URLs all
   `example.org`; `_meta` present.
@@ -479,11 +501,13 @@ rejected without.
 
 1. **Schema** — three columns + two named CHECKs + one FK on `project_source_snapshot`;
    one Alembic migration.
-2. **Dependencies:** `pymupdf4llm` (brings `pymupdf` — the compiled MuPDF engine,
-   AGPL-3.0, licence-compatible with the project since rev 3; no ML stack, no model
-   weights) and `trafilatura` (light: lxml-based, Apache-2.0). Both parse offline by
-   construction. The ML-layout upgrade (`docling`, torch + ~1 GB models) is the recorded
-   quality-escalation seam, not part of this gate.
+2. **Dependencies — the heavyweight gate of this slice, stated plainly:** `docling`
+   (brings torch-CPU and a transitive ML stack — hundreds of MB installed, ~1 GB of
+   pinned model weights cached dev-time), `pymupdf4llm` (brings `pymupdf` — the compiled
+   MuPDF engine, AGPL-3.0, licence-compatible since rev 3; the fallback parser) and
+   `trafilatura` (light: lxml-based, Apache-2.0). A deliberate quality-first call
+   (decision 5, user-ranked): the parse substrate is permanent and the spec demands
+   structure awareness.
 3. **Public interface** — `run_harness` optional `document_fetcher` parameter (+ the
    `"ingest_full_text"` registry entry, per 007 precedent).
 
@@ -493,8 +517,8 @@ generate-don't-record for *document* fixtures; the 007 sanitized policy stands f
 *records*) — both approved with this contract.
 
 **Explicitly not crossed:** no runtime egress (fixture replay; the recorder script is
-dev-time only; the parsers are model-free local code), no auth, no CI change, no other
-schema or interface change.
+dev-time only, as are docling model-weight downloads; runtime parses offline), no auth,
+no CI change, no other schema or interface change.
 
 ## Public / private boundary
 
@@ -507,8 +531,9 @@ schema or interface change.
 
 ## Model route
 
-`n/a` — deterministic fetch-replay + parse + segment. No models of any kind: no LLM call,
-no inference provider, no runtime network I/O.
+`n/a` — deterministic fetch-replay + parse + segment. Docling's layout models are local
+deterministic inference (pinned versions, no sampling, no provider); no LLM call, no
+inference provider, no runtime network I/O.
 
 ## Disciplines binding this slice
 
@@ -537,10 +562,10 @@ no inference provider, no runtime network I/O.
 - Any runtime code path would perform network I/O.
 - The snapshot-identity decision (2) proves wrong mid-build — halt, don't improvise a
   fourth shape.
-- The chosen parser proves unable to meet the long-document or structure requirements on
-  the fixtures — halt and re-open parser selection with evidence (the docling seam is the
-  named alternative), rather than quietly re-introducing a page cap or flattening to
-  plain text.
+- The primary parser proves unable to parse the *typical* fixtures within reasonable
+  time/memory on CPU (the fallback exists for outliers, not for the common case) — halt
+  and re-open parser selection with evidence, rather than quietly making the fallback
+  the de-facto primary.
 - Scope would grow past the contract (live fetch, OCR, embeddings, multi-PDF, re-screen).
 - `make verify` red with unclear root cause.
 
@@ -558,8 +583,8 @@ no inference provider, no runtime network I/O.
 `verification.md` must include:
 - `make verify` table with pass counts.
 - Named results from `test_ingest_full_text.py`, including the immutability test, the
-  **no-truncation long-report test**, the fan-out determinism test, the zero-egress
-  guard, and the failure-reason matrix.
+  **no-truncation long-report test**, the fan-out determinism test, the offline-parse
+  guard, the fallback-visibility test, and the failure-reason matrix.
 - Long-document evidence: wall-clock and peak memory for the 100+-page fixture on CPU
   with the pinned backend (the #2077 risk, measured, not assumed).
 - Migration roundtrip clean; table count still 16.
@@ -570,8 +595,7 @@ no inference provider, no runtime network I/O.
   licence-guard pass.
 - Public-safety confirmation (openly-licensed documents only; no credentials).
 - Deferred seams recorded in `docs/deferred.md` (live fetcher with its requirement list ·
-  ML-layout parse-profile escalation (docling behind a `docling_v1` parse profile, entered
-  via parse-quality evals) · OCR for `no_text_layer` documents · vectorisation-at-first-reader with the
+  OCR for `no_text_layer` documents · vectorisation-at-first-reader with the
   eager-uniform discipline · multi-PDF assembly · injection screening extended to full
   text · cross-project full-text reuse).
 - Diff summary (binary fixture files excluded from review diffs per the 007 retro).
