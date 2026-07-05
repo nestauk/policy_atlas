@@ -203,7 +203,9 @@ and the chunks written here are permanent.
         long horizon → ML-layout parser. Naturally a plan/Config-carried setting (its own
         interface gate, per plan-as-object) feeding the same profile mechanism; possibly
         orchestrator-derived from the intent conversation, like the deferred
-        backend-scope selection.
+        backend-scope selection. On GPU-equipped deployments the selector's input may be
+        hardware as much as horizon — docling on a GPU lands near the tight budget too
+        (see the GPU note at the seam record below).
    - **Also considered:** marker (GPL — compatible, but GPU-leaning, 2 GB install),
      MinerU (AGPL — compatible, but GPU-leaning, CJK-specialist strengths we don't
      need), pypdf/stdlib (no layout model — the floor v2's cautionary tale warns
@@ -588,7 +590,14 @@ no inference provider, no runtime network I/O.
 - Deferred seams recorded in `docs/deferred.md` (live fetcher with its requirement list ·
   **ML-layout parse escalation** (docling behind a `docling_v1` parse profile, entered
   via parse-quality evals; torch + ~1 GB models, dev-time-pinned weights + offline mode
-  when it lands) · **time-budget-aware parser selection** (user idea, 2026-07-05: the
+  when it lands. **GPU note, user question 2026-07-05:** on a T4/L4/A10G-class card
+  docling runs ~5–10× faster (~0.05–0.15 s/page — a ~100-doc run in ≈2–5 min, near the
+  wall-clock target CPU misses; page batching on one device replaces the CPU process
+  pool). On AWS — the target deployment — the binding constraint is ops shape, not
+  speed: no serverless GPU exists, so it's cold-start minutes (Batch/ECS/SageMaker-async
+  from zero) vs a warm g5/g6 node (~$0.8–1.3/hr idle) that only amortises if shared with
+  the embedding seam. Entry ticket when the seam opens: a measured spike on our own
+  fixtures on a g6 spot instance, alongside the parse-quality eval) · **time-budget-aware parser selection** (user idea, 2026-07-05: the
   user's stated time horizon steers parser choice per run — tight → fast parser, long →
   ML layout; a plan/Config-carried setting behind its own interface gate, feeding the
   parse-profile mechanism) ·
