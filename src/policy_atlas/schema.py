@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — fifteen tables, six alembic migrations.
+"""SQLAlchemy Core table metadata — sixteen tables, seven alembic migrations.
 
 No deferred columns (no block/artefact summary, no same_content_as, no lineage key).
 """
@@ -360,4 +360,48 @@ source_appraisal_result = Table(
     ),
     CheckConstraint("quality_score BETWEEN 1 AND 5", name="ck_sar_quality_score"),
     Index("ix_sar_scope_score", "evidence_scope_id", "quality_score"),
+)
+
+# --- Acquisition model (task 007) ---
+
+search_coverage_record = Table(
+    "search_coverage_record",
+    metadata,
+    Column("search_coverage_record_id", UUID(as_uuid=True), primary_key=True),
+    Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
+    Column("project_id", UUID(as_uuid=True), nullable=False),  # denormalized; cross-project guard
+    Column("acquired_by_run_id", UUID(as_uuid=True), nullable=False),
+    # [{"backend": ..., "trust_class": ..., "mode": ...}, ...] — the search-space boundary
+    Column("backends", JSONB, nullable=False),
+    Column("scope_filters", JSONB, nullable=False),  # v3.0: {} (no filters); shape reserved
+    Column("stop_condition", Text, nullable=False),
+    Column("adequacy_verdict", Text, nullable=False),
+    Column("verdict_origin", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    ForeignKeyConstraint(
+        ["evidence_scope_id", "project_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
+        name="fk_scov_scope_project",
+    ),
+    ForeignKeyConstraint(
+        ["acquired_by_run_id", "project_id"],
+        ["runs.run_id", "runs.project_id"],
+        name="fk_scov_run_project",
+    ),
+    UniqueConstraint("acquired_by_run_id", name="uq_scov_run"),  # one record per acquire run
+    # 'saturated' deliberately absent — saturation-based stopping is a deferred seam (spec)
+    CheckConstraint(
+        "stop_condition IN ('breadth_truncated', 're_searched_still_thin', 'error')",
+        name="ck_scov_stop_condition",
+    ),
+    CheckConstraint(
+        "adequacy_verdict IN ('adequate', 'inadequate')",
+        name="ck_scov_verdict",
+    ),
+    CheckConstraint(
+        "verdict_origin IN ('model', 'human')",
+        name="ck_scov_verdict_origin",
+    ),
+    CheckConstraint("jsonb_typeof(backends) = 'array'", name="ck_scov_backends_array"),
+    CheckConstraint("jsonb_typeof(scope_filters) = 'object'", name="ck_scov_filters_object"),
 )
