@@ -4,6 +4,48 @@ Harness improvements and decisions, per the manual's maintenance cadence. Each d
 its **trigger to act** — don't pre-build, earn it. Baseline audit 2026-06-24 against the four docs in
 [references/](references/) (manual, quick-start, AI-native playbook, OKF).
 
+## Done (2026-07-05) — task-007 retro follow-through + external-resource evaluation
+
+Retro on slice 007 (user-driven). Three failure-log entries added (same date); changes installed:
+
+- **Task-cycle skill split** into a spine + three phase skills (`task-cycle-design` / `-build` /
+  `-review`) — the conversation boundary is now the invocation boundary, and each conversation
+  loads only its phase's instructions (standing-context economy). Spine keeps the tier gate,
+  hard gates, anti-rationalisation, evidence/exit criteria.
+- **One `/goal` per phase** (harness.md § Verification layer + spine conversation map).
+- **Executor routing at plan time** (design skill step 3 + harness.md § routing) — plan tasks
+  carry `lead`/`fast-worker`/`deep-reasoner`/`codex` marks, reviewed at the plan gate.
+- **Review diff hygiene** — generated/bulk data excluded by pathspec (exclude-list; the
+  2026-06-30 include-list rejection doesn't apply); data files get their own audit lane.
+- **Minor-deviation lane** named in the build skill: resolvable-within-contract-vocabulary
+  deviations are fixed + flagged in verification.md, distinct from halt-and-refine.
+- **Fake-done checks** (relaxed tests, swallowed errors, fake renames, stub returns,
+  comment-deletion-as-fix) folded into review-phase adjudication.
+
+**External resources evaluated** (user-supplied, 2026-07-05):
+
+- *"Loop and Harness engineering" (X article)* — mostly validates the existing design (state on
+  disk, verifier subagents in fresh contexts, memory pruning). Adopted: its context-budget
+  argument reinforced the skill split; its "11 fake-done shortcuts" list seeded the review-phase
+  checks. Not adopted: cron/loop runners (the `loops/` earn-it bar stands), formatter hooks
+  (candidate below).
+- *Fable-as-orchestrator / cheap-model workers (X post)* — its delegation-brief shape (one
+  concern, context, self-checkable done, short report; "if you can't name the subtasks, don't
+  delegate") was **already encoded** in harness.md § routing; the plan-time executor mark is the
+  piece it was missing here.
+- *Superpowers (obra, v6)* — same document-driven phase methodology as the task cycle
+  (brainstorm≈contract, writing-plans≈plan, subagent execution + two-stage review, worktrees);
+  its v6 release notes independently converge on our economy fixes (merged review agents,
+  pre-baked review packets = our diff hygiene, tiered agent routing). Not adopting the framework
+  (the bespoke cycle is tighter to this repo and already OKF/spec-integrated); its
+  **pre-baked review packet** idea (one prepared diff artifact all lanes read, instead of each
+  lane re-running git) is a candidate follow-on — trigger: review spend still >250K after diff
+  hygiene lands.
+- *BMAD-method* — persona-driven document workflow; overlaps the cycle wholesale, no adoption.
+  *claude-mem / Headroom* — session-compression tooling; the cycle's state-in-artifacts design
+  makes long-session compression a non-goal (fresh conversations re-ground from files). *Grill
+  me* ≈ already covered by `agent-skills:interview-me`.
+
 ## Done (2026-07-03) — harness review follow-through
 
 Full review of harness + skills + references + backlog (user-driven). Verdict: sound; the gaps

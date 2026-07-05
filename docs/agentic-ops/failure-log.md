@@ -4,6 +4,81 @@ Recurring issues encountered during the task cycle. Each entry: what happened, r
 
 ---
 
+## 2026-07-05 — One `/goal` spanned the whole cycle: review ran in the build conversation, author adjudicated its own findings
+
+**Task:** 007-acquire
+
+**What happened:** The user set `/goal "run task 007 implementation with the task cycle,
+using the rubric as the completion criteria"`. The goal's stop-hook blocks ending the session
+until the condition holds, and the rubric includes the review stack — so the review ran inside
+the build conversation. Every review *lane* was a fresh context (contract-verifier,
+security-auditor, Codex, code-review finders — none had written the code), but the **lead that
+adjudicated their findings was the author**, sitting on ~150K tokens of build context. Two
+findings were declined by the same agent whose code they criticised; the artifacts-as-handoff
+property was never exercised.
+
+**Root cause:** The task-cycle's conversation-boundary rule ("review in a fresh conversation")
+and the goal's "don't stop until done" were in direct conflict; the agent resolved it toward
+the goal. The monolithic skill made the boundary a paragraph, not a structural gate.
+
+**Fix (adopted 2026-07-05):** (1) **One phase = one conversation = at most one `/goal`** —
+goal #1 "through step 6: verification.md complete, make verify green" (conversation B); fresh
+chat + goal #2 for the review stack (conversation C). (2) The task-cycle skill is **split into
+a spine + three phase skills** (`task-cycle-design` / `-build` / `-review`), making the
+conversation boundary the invocation boundary; the review skill states the
+adjudicator-must-not-be-author rule directly. Also trims standing context: each conversation
+now loads only its phase's instructions.
+
+---
+
+## 2026-07-05 — Step-7 finder lanes ingested 12K lines of fixture JSON: review ran ~2× the token budget
+
+**Task:** 007-acquire
+
+**What happened:** The Tier-3 stack ran the calibrated three-lane baseline plus `/code-review`
+**medium** (8 finder angles on Sonnet) — and still totalled ≈675K subagent tokens against the
+≤250K target. Dominant cause: the slice's diff legitimately contained two committed fixture
+files (~12K lines of sanitized JSON), and every finder ran `git diff dev...HEAD` and read them.
+Eight agents ingested the same generated data for zero findings; the data files already had
+their own purpose-built checks (leak-guard test + the security lane's fixture audit).
+
+**Root cause:** The review dispatch had no diff-hygiene rule for generated/bulk data. The
+2026-06-30 entry had rejected path *include*-lists (they silently drop new code paths), and
+nothing distinguished that from *exclude*-lists of known data globs.
+
+**Fix (adopted 2026-07-05, installed in task-cycle-review step 7):** exclude generated/bulk
+data files from the review diff by pathspec — e.g.
+`git diff dev...HEAD -- ':!src/policy_atlas/data/*.json'` — and route data files to their own
+audit lane. An exclude-list fails open (new code paths still enter review), so the 2026-06-30
+rejection doesn't apply. Secondary observation for future calibration: the five cleanup angles
+(reuse/simplification/efficiency/altitude/conventions, ~298K) yielded one applied one-liner and
+two small refactors, while the three correctness angles (~191K) found all three real bugs — if
+medium is still over budget after diff hygiene, collapse the cleanup angles into one combined
+finder before touching the correctness angles.
+
+---
+
+## 2026-07-05 — Lead wrote ~450 lines of test scaffolding itself; executor routing didn't exist at plan time
+
+**Task:** 007-acquire
+
+**What happened:** `test_acquire.py` (~450 lines) was written by the lead (Fable) despite the
+contract containing an unusually precise test list — the exact shape `fast-worker` (pinned
+Sonnet) exists for. The routing table in harness.md was in place; nothing in the *plan* carried
+a routing decision, so at implement time the lead defaulted to "faster to just do it".
+
+**Root cause:** Delegation was an implement-time impulse instead of a plan-time decision.
+Mid-build, the lead always has full context loaded and every task looks cheapest inline.
+
+**Fix (adopted 2026-07-05, installed in task-cycle-design step 3 + harness.md routing):** the
+plan marks each task with its **executor** (`lead` / `fast-worker` / `deep-reasoner` /
+`codex`), decided at the plan gate where the human sees it. Counter-rule kept explicit:
+one-command mechanical edits (`sed`-able renames, count bumps) stay inline — delegation costs
+more than it saves there; and if you can't write the brief (one concern, intent, self-checkable
+definition of done), it isn't delegable.
+
+---
+
 ## 2026-06-30 — `/code-review` workflow evaluated contract/plan pseudocode as implementation code
 
 **Task:** 004-screen
