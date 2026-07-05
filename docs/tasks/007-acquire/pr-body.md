@@ -1,6 +1,6 @@
 ## What / why
 
-Task: `docs/tasks/007-acquire/` ([contract](../../docs/tasks/007-acquire/contract.md))
+Task: `docs/tasks/007-acquire/` (contract.md there)
 
 Adds the **`acquire` component** — the Evidence Base front edge — so the pipeline runs on
 authentic acquired documents, not only uploads. Metadata-only acquisition through the
@@ -25,7 +25,7 @@ migrations 6 + 7, both roundtrip clean).
 
 ## Proof it works
 
-Evidence: [`docs/tasks/007-acquire/verification.md`](../../docs/tasks/007-acquire/verification.md).
+Evidence: `docs/tasks/007-acquire/verification.md`.
 
 - **`make verify`:** pass — okf-validate · **167 tests** (59 in `test_acquire.py`) ·
   mypy · ruff · build (wheel verified to ship the fixture package data).
