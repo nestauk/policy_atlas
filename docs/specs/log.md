@@ -1,6 +1,19 @@
 # Spec update log
 
 ## 2026-07-05
+* **Fidelity restoration** (full specs-vs-sources review; maintainer-approved): restored source
+  content lost in the original distillation —
+  [product.md](product.md): "counterfactuals" back in the human-substance authority list (briefing §1/§3);
+  [data-model.md](system/data-model.md): inferred-`function` lane set restored to 🟡 illustrative /
+  to-be-specced with the five example lanes (arch §3.3), removing the undocumented
+  `project_context_directive` closed set;
+  [provenance-grounding.md](system/provenance-grounding.md): content-scan pattern rung restored
+  (ships soft and honestly labelled, never gated; arch §3.3) and the citation-scope rule added
+  (citations point to sources, never to sibling blocks; arch §3.3/§4);
+  [plan-as-object.md](system/plan-as-object.md): audit posture across the modes restored
+  (per-commit approval in Frequent/Moderate; every commit recorded; Minimal's guarantee triple;
+  arch §5), cross-referenced from
+  [execution-orchestration.md](system/execution-orchestration.md).
 * **Update**: [EB components §4](capabilities/evidence-base/components.md) — clarified v3.0
   Tier-0 ingestion scope: fetch → parse → segment; vectorisation deferred to the slice where
   vectors are first read, with the eager-and-uniform discipline restated (not weakened) for
