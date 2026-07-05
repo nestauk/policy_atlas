@@ -3,7 +3,15 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted, rev 4 — awaiting contract approval.
+> **Status:** drafted, rev 4.1 — rev 4 accepted by user 2026-07-06 ("seems fine");
+> awaiting final contract sign-off with the 4.1 amendment.
+> Rev 4.1 (user steer, 2026-07-06): provider-asserted topical signals (OpenAlex
+> topics/SDGs; Overton topics/classifications/`llm_document_theme` — retained in 007
+> for exactly this component) join the **coverage pass** as deterministic,
+> provider-asserted-labelled distributions (decision 9); **tag materialisation and
+> prompt enrichment recorded as seams** with provenance constraints (provider
+> assertions never mix into `topic_theme`; a distinct tag type carries them when
+> scoping/retrieval reads tags).
 > Rev 4 (user question, 2026-07-06): the rev-3 single grouping call split into the
 > **two-stage shape from the start** — discover (one judgment-model call, whole
 > corpus) → assign (batched cheap-model calls, concurrent, against the fixed theme
@@ -322,7 +330,15 @@ artefact/block/annotation machinery exists but nothing here writes to it (decisi
    Non-evidence vs Unknown, honest about stub-classification reality) · quality tier ×
    `rubric_version` · `screen_basis` + confidence bands · year · language · backend ·
    publisher/geography where the envelope carries it (Overton `source` fields, retained
-   in 007 *for this component*). The spec's fuller list (study geography, population)
+   in 007 *for this component*) · **provider-asserted topical distributions (rev 4.1,
+   user steer 2026-07-06)**: OpenAlex `primary_topic`/`topics`/SDGs and Overton
+   `topics`/`classifications`/`sdgcategories`/`llm_document_theme`, aggregated
+   deterministically from retained `provider_fields` and **explicitly labelled
+   provider-asserted** — a third party's topical judgment (algorithm- or
+   provider-LLM-assigned), shown distinct from our own grouping in the landscape
+   summary; the 007 never-mix posture extended to the landscape. These provider
+   signals do **not** write tags and do **not** enter the grouping prompts in v3.0
+   (recorded seams — see Out of scope). The spec's fuller list (study geography, population)
    lives in text, not Tier-0 metadata — not fabricated; recorded as arriving with
    extraction. Distributions are computed by deterministic SQL/python (the lookup
    discipline: re-running the query *is* the verification), each carrying `base:
@@ -556,6 +572,15 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
   corpus-size-independent. The `group` component inherits v2's theming lessons
   (four-facet decomposition; the two-stage validated shape) — recorded in deferred.md
   by this slice.
+- **Provider-topic tag materialisation** (rev 4.1) — surfacing provider-asserted
+  topics (incl. Overton `llm_document_theme`) as `source_tag` rows under a **distinct
+  tag type** (e.g. `provider_topic` — the type carries provenance, since nothing else
+  hangs off a tag; **never** written into `topic_theme`, per the 007 never-mix
+  posture). Trigger: when scoping/retrieval reads tags. Until then coverage aggregates
+  them from `provider_fields` directly (decision 9).
+- **Provider-signal prompt enrichment** — feeding provider topics/themes into the
+  grouping prompts as per-doc hints; real bias risk (provider taxonomies vs
+  intent-anchored themes) → enters via the grouping-quality eval seam, not by default.
 - **Tag namespace consolidation / `open_tags` migration** (decisions 5, 10).
 - **`select` and everything deeper** — subsequent slices.
 
