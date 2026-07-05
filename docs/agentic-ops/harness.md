@@ -87,8 +87,14 @@ get their own audit lane; on 007 they alone doubled the review spend.
 of magnitude costlier (measured on 006-appraise: 552K tokens / 16 agents vs ~80K for a single
 reviewer, for one extra low-severity finding) and is user-opt-in only. One security lane per diff
 and one Claude defect pass per diff, never two of either — `/code-review medium` *is* the Claude
-half of the Tier-3 heterogeneous pair (the pair buys family diversity, not reviewer count). A
-routine slice review lands ≤250K subagent tokens (failure-log, 2026-07-03).
+half of the Tier-3 heterogeneous pair (the pair buys family diversity, not reviewer count). The
+budget is a cost proxy split by model class (008 retro): a routine slice review lands **≤250K
+reasoning-class** subagent tokens and **≤500K fast-worker** tokens. When dispatching
+`/code-review` finder angles, hand each angle a **lens-matched diff pathspec** (correctness →
+`src`/`alembic`/config; cleanup → `src`+`tests`; conventions → rule files + changed-file list) —
+the diff dominates finder cost and a shared whole-diff command pays it once per angle (008: 8 ×
+~4.8K lines ≈ 500K before any finding). Big slices are normal (sized to the model's
+orchestration capability — user, 2026-07-05); the scoping keeps their reviews affordable.
 **Family-flip rule:** whichever family implemented, the other family anchors
 review — Claude implements → Codex reviews; Codex implements → Claude reviews. Maker ≠ checker
 holds across model families in both directions. (If a Fable safety classifier declines a benign

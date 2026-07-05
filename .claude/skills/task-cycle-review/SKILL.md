@@ -26,13 +26,27 @@ Reviews run on pinned/heterogeneous reviewers, **not the lead** — the lead adj
 findings and decides fixes (harness.md § review lane economics). Whichever model family
 implemented, the other anchors review.
 
-**Token economy (failure-log 2026-07-03 + 2026-07-05):** a routine slice review lands
-**≤250K subagent tokens**; the Tier-3 baseline is **three lanes** — contract-verifier ·
-one security lane · the heterogeneous pair (Codex adversarial + `/code-review` at
-**`medium`** as the Claude half) — no duplicate lanes, no second Claude defect pass
-(two same-family reads of one diff add ~nothing). `/code-review high` is an order of
-magnitude costlier than `medium` (006: 552K / 16 agents for one low-severity finding);
-reserve `high` for explicit user opt-in.
+**Token economy (failure-log 2026-07-03 → 008 retro 2026-07-05):** the budget is a
+**cost proxy, split by model class** (a flat ceiling misread 008's cheap finder fan-out
+as a 3× blowout): a routine slice review lands **≤250K reasoning-class subagent tokens**
+(contract-verifier · security · Codex adversarial · session-model verifiers) **and
+≤500K fast-worker tokens** (finder/verifier fan-out). The Tier-3 baseline is **three
+lanes** — contract-verifier · one security lane · the heterogeneous pair (Codex
+adversarial + `/code-review` at **`medium`** as the Claude half) — no duplicate lanes,
+no second Claude defect pass (two same-family reads of one diff add ~nothing).
+`/code-review high` is an order of magnitude costlier than `medium` (006: 552K /
+16 agents for one low-severity finding); reserve `high` for explicit user opt-in.
+
+**Per-angle diff scoping (008 retro, 2026-07-05):** the diff is the dominant finder cost
+and a naive fan-out pays it once per angle (008: 8 angles × a ~4.8K-line diff ≈ 500K
+before any finding). When dispatching `/code-review` finder angles, hand each angle a
+**lens-matched pathspec**, never one shared whole-diff command: correctness angles
+(line-by-line · removed-behaviour · cross-file) read product code
+(`src`/`alembic`/config); cleanup angles (reuse · simplification · efficiency ·
+altitude) read `src` + `tests`; conventions reads the governing rule files plus the
+changed-file list. Apply at any diff size — it's free precision, and big slices are
+normal here (user, 2026-07-05: sized to the model's orchestration capability); the
+scoping is what keeps their reviews affordable.
 
 **Diff hygiene (failure-log, 2026-07-05):** before dispatching any reviewer, **exclude
 generated/bulk data files from the review diff by pathspec** — e.g.
@@ -47,8 +61,12 @@ The lanes:
 - **Contract verifier** (Tier 2+) — a *fresh* reviewer checks the implementation against
   **every** rubric item: satisfied? what evidence? what's unverified? **And checks the
   claims in `verification.md` and any ADR against the as-built code** — "documented but
-  not built" is a finding. Use the `contract-verifier` agent (`.claude/agents/`, pinned
-  Opus, read-only), a **read-only** `codex-rescue` brief, or an
+  not built" is a finding. **Name the step-8-scheduled rubric items in the brief**
+  (deferred.md entries, knowledge records) so the verifier reports them as *pending —
+  check for contradictions with shipped code*, not as unmet findings (008 retro: a
+  planned-pending item was reported MAJOR; the valuable part was the stale-entry
+  contradiction inside it — keep that check). Use the `contract-verifier` agent
+  (`.claude/agents/`, pinned Opus, read-only), a **read-only** `codex-rescue` brief, or an
   `agent-skills:code-reviewer` subagent — **not** the agent that wrote the code. (Not
   `/codex:review` — the native diff pass takes no custom instructions, so it can't carry
   the rubric checklist.)
