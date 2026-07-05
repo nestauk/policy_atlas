@@ -207,10 +207,20 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   `pip-audit`-style dependency check belongs in CI now that binary parsing deps (pymupdf,
   lxml) are in the tree — CI config is its own gate.
 - **Concurrent-run write guard** — eligibility selection takes no row locks and final writes
-  are unconditional, so two simultaneous ingest runs over one scope could interleave (mirrors
-  007's concurrent-run dedup note; Codex adversarial finding, task 008). v3.0 execution is
-  single-process/serial; a `SELECT … FOR UPDATE` or status-guarded `UPDATE … WHERE` belongs to
-  whichever slice makes runs concurrent.
+  are unconditional, so two simultaneous ingest runs over **one scope** could interleave
+  (mirrors 007's concurrent-run dedup note; Codex adversarial finding, task 008). Scoped
+  precisely (user question, 2026-07-05): the load-bearing invariant is **at most one active
+  run per project**, not a single-process deployment. Everything the pipeline components
+  mutate is project-scoped (eligibility filters on `project_id`; updates hit
+  `project_source_snapshot`; result-table unique constraints are per-scope; the event-log
+  sequence is `(project_id, sequence)`), so a **multi-user web app with users on different
+  projects is already safe** — the spec's "single active writer" is a per-project property.
+  The hazard is two writers on the *same* project (double-submit, retry racing the original,
+  two queue workers claiming one run). **Pre-registered requirement for the web-app /
+  durable-execution slice:** enforce one-active-run-per-project at run dispatch (Postgres
+  advisory lock on project id, or a partial unique index allowing one `running` run per
+  project) — or add row-level guards (`SELECT … FOR UPDATE` / status-guarded `UPDATE … WHERE`)
+  in the components.
 - **ML-layout parse escalation (docling)** — the quality tier for documents where pymupdf4llm's
   font-size heading heuristic fails. Observed at 008's /verify: four heading-light academic
   PDFs (Nature Comms ×2, Frontiers ASHP, PLOS) collapse into 2–3 very large chunks — content
@@ -242,7 +252,11 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   abstracts (007 entry above): full-text chunks are third-party content-of-record; nothing in
   v3.0 interprets them; enforcement lands with the LLM seams that read them.
 - **Cross-project full-text snapshot reuse** — same shape as the acquired-envelope dedup entry
-  (Data model section): `source_snapshot` is project-free, so reuse is additive.
+  (Data model section): `source_snapshot` is project-free, so reuse is additive. Note: today
+  concurrent ingest of one document in two projects merely duplicates snapshots (wasteful, not
+  corrupting); the reuse seam turns that into the system's first genuinely **cross**-project
+  write race (two projects deduping onto one snapshot) — that slice inherits the concurrency
+  design, alongside the per-project run guard above.
 
 ## Data model / evidence
 
