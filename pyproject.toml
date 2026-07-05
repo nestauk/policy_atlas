@@ -13,6 +13,10 @@ dependencies = [
     "alembic>=1.14",
     "structlog>=24",
     "python-dotenv>=1.2.2",
+    # <1: the 1.x line hard-depends on pymupdf-layout/onnxruntime — the ML stack the
+    # approved dependency gate excludes (contract decision 5; that tier is the docling seam)
+    "pymupdf4llm>=0.0.27,<1",
+    "trafilatura>=1.12",
 ]
 
 [project.scripts]

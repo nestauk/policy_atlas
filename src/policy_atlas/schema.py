@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — sixteen tables, seven alembic migrations.
+"""SQLAlchemy Core table metadata — sixteen tables, eight alembic migrations.
 
 No deferred columns (no block/artefact summary, no same_content_as, no lineage key).
 """
@@ -145,9 +145,34 @@ project_source_snapshot = Table(
     Column("origin", Text, nullable=False),        # "uploaded" | "acquired"
     Column("run_id", UUID(as_uuid=True), ForeignKey("runs.run_id"), nullable=True),
     Column("ingested_at", DateTime(timezone=True), nullable=False),
+    # Full-text attachment (task 008): the corpus document keeps its envelope snapshot
+    # and gains a nullable link to its immutable full-text snapshot once ingested
+    # (ADR 0003). full_text_status describes the fetch pipeline, not text availability
+    # (that stays source_snapshot.text_basis); failure is never silent (ADR/contract
+    # decision 3 — failure status ⟺ machine-readable reason present).
+    Column(
+        "full_text_snapshot_id",
+        UUID(as_uuid=True),
+        ForeignKey("source_snapshot.source_snapshot_id", name="fk_pss_full_text_snapshot"),
+        nullable=True,
+    ),
+    Column("full_text_status", Text, nullable=False, server_default="not_attempted"),
+    Column("full_text_error", Text, nullable=True),
     UniqueConstraint("project_id", "source_snapshot_id", name="uq_project_source_snapshot"),
     # Composite unique target for source_screening_result FK
     UniqueConstraint("project_source_snapshot_id", "project_id", name="uq_pss_id_project"),
+    CheckConstraint(
+        "full_text_status IN ('not_attempted', 'ingested', 'fetch_failed', 'parse_failed')",
+        name="ck_pss_full_text_status",
+    ),
+    CheckConstraint(
+        "(full_text_status = 'ingested') = (full_text_snapshot_id IS NOT NULL)",
+        name="ck_pss_full_text_consistent",
+    ),
+    CheckConstraint(
+        "(full_text_status IN ('fetch_failed', 'parse_failed')) = (full_text_error IS NOT NULL)",
+        name="ck_pss_full_text_error_presence",
+    ),
 )
 
 chunk = Table(
