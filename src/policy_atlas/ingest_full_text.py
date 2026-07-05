@@ -138,7 +138,14 @@ class DocumentFetcher(Protocol):
     mode: str
 
     def fetch(self, url: str) -> FetchResult:
-        """Fetch one URL. Never raises for per-document outcomes."""
+        """Fetch one URL. Never raises for per-document outcomes.
+
+        Args:
+            url: Absolute http(s) URL to fetch.
+
+        Returns:
+            ``ok`` with bytes + content type, or a reason-coded error.
+        """
         ...
 
 
@@ -165,15 +172,26 @@ class FixtureFetcher:
     mode = "fixture"
 
     def fetch(self, url: str) -> FetchResult:
-        """Return the manifest-recorded outcome for ``url``."""
+        """Return the manifest-recorded outcome for ``url``.
+
+        Args:
+            url: Absolute http(s) URL; the manifest's fetch key.
+
+        Returns:
+            ``ok`` with the committed document's bytes, the recorded failure, or
+            ``not_found`` for an unmapped URL (the honest dead-link equivalent).
+        """
         entry = _load_manifest()["outcomes"].get(url)
         if entry is None:
             return FetchResult(status="error", error="not_found")
         outcome = entry["outcome"]
         if outcome == "ok":
+            name = entry["file"]
+            # manifest names are basenames — keeps traversal structurally impossible
+            assert "/" not in name and "\\" not in name, name
             body = (
                 importlib.resources.files("policy_atlas")
-                .joinpath("data", "fulltext", entry["file"])
+                .joinpath("data", "fulltext", name)
                 .read_bytes()
             )
             return FetchResult(status="ok", content_type=entry["content_type"], body=body)
@@ -241,6 +259,9 @@ def candidate_urls(metadata: dict[str, Any]) -> list[str]:
     elif backend == "overton":
         raw = [fields.get("pdf_url"), fields.get("document_url")]
     else:
+        # An unmapped backend would otherwise masquerade as a per-document no_url
+        # data problem — surface the wiring gap loudly (review finding).
+        log.warning("fulltext.unknown_backend", backend=backend)
         raw = []
     urls: list[str] = []
     for value in raw:
@@ -338,12 +359,14 @@ def _parse_pdf(body: bytes) -> dict[str, Any]:
         doc = pymupdf.open(stream=body, filetype="pdf")  # type: ignore[no-untyped-call]
         page_dicts = pymupdf4llm.to_markdown(doc, page_chunks=True)
     except Exception as exc:
-        return {"status": "error", "reason": "corrupt", "detail": str(exc)}
+        return {"status": "error", "reason": "corrupt", "detail": str(exc)[:500]}
     pages = [
         (int(pg.get("metadata", {}).get("page", i + 1)), str(pg.get("text", "")))
         for i, pg in enumerate(page_dicts)
     ]
-    if not any(re.search(r"[0-9A-Za-z]", text) for _, text in pages):
+    # \w is Unicode-aware: a text layer in any script counts (review finding — the
+    # previous ASCII-only class misread e.g. CJK/Arabic PDFs as no_text_layer).
+    if not any(re.search(r"\w", text) for _, text in pages):
         return {"status": "error", "reason": "no_text_layer"}
     chunks = _segment_markdown_pages(pages)
     return {
@@ -439,7 +462,7 @@ def _worker_entry(
     try:
         result = parse_fn(body, content_type, thin_min)
     except Exception as exc:  # defensive: an unexpected parser crash is a corrupt parse
-        result = {"status": "error", "reason": "corrupt", "detail": str(exc)}
+        result = {"status": "error", "reason": "corrupt", "detail": str(exc)[:500]}
     send_conn.send(result)
     send_conn.close()
 
@@ -491,7 +514,11 @@ def _run_parse_jobs(
 
         idx, proc, recv_conn, started = live.popleft()
         remaining = parse_timeout - (time.monotonic() - started)
-        if remaining > 0 and recv_conn.poll(remaining):
+        # Poll even when the deadline has lapsed (max → non-blocking): a sibling job
+        # whose result is already buffered must never be misread as a timeout just
+        # because an earlier-submitted job consumed this loop's wall-clock (step-7
+        # review finding, confirmed).
+        if recv_conn.poll(max(remaining, 0.0)):
             try:
                 result = recv_conn.recv()
             except EOFError:  # worker died before sending (e.g. OOM-killed)
@@ -499,7 +526,10 @@ def _run_parse_jobs(
             proc.join()
         else:
             proc.terminate()
-            proc.join()
+            proc.join(5.0)
+            if proc.is_alive():  # SIGTERM ignored/stuck in native code — escalate
+                proc.kill()
+                proc.join()
             result = {"status": "error", "reason": "timeout"}
         recv_conn.close()
         results[idx] = result
@@ -609,7 +639,6 @@ def ingest_full_text_sources(
     # candidates remaining re-enters the next round on its next URL (decision 4).
     while True:
         jobs: list[tuple[int, bytes, str]] = []
-        job_meta: dict[int, tuple[str, str]] = {}
         for i, doc in enumerate(docs):
             if doc.resolution is not None:
                 continue
@@ -646,7 +675,6 @@ def ingest_full_text_sources(
                 doc.resolution = "fetch_failed"
                 continue
             jobs.append((i, body, doc.content_type or ""))
-            job_meta[i] = (doc.fetched_from or "", doc.content_type or "")
         if not jobs:
             break
 
@@ -731,7 +759,9 @@ def ingest_full_text_sources(
                 chunk_count=len(chunks),
             )
         else:
-            assert doc.reason is not None  # failure ⟺ reason, enforced by the CHECK too
+            # failure ⟺ closed-vocabulary reason (the CHECK enforces presence; the
+            # vocabulary is code-enforced here, as the FAILURE_REASONS comment claims)
+            assert doc.reason in FAILURE_REASONS, doc.reason
             conn.execute(
                 project_source_snapshot.update()
                 .where(project_source_snapshot.c.project_source_snapshot_id == doc.pss_id)

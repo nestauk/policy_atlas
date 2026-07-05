@@ -35,8 +35,10 @@ from policy_atlas.inference import StubEchoProvider
 from policy_atlas.ingest_full_text import (
     FixtureFetcher,
     IngestFullTextContext,
+    _run_parse_jobs,
     candidate_urls,
     ingest_full_text_sources,
+    parse_and_segment,
 )
 from policy_atlas.plan import Plan, compile
 from policy_atlas.schema import chunk as chunk_table
@@ -290,9 +292,52 @@ def test_parse_timeout_terminates_worker_and_run_completes(conn: Connection) -> 
     assert not multiprocessing.active_children(), "worker processes leaked"
 
 
+def _sleep_by_marker_parse(body: bytes, content_type: str, thin_min: int) -> dict[str, Any]:
+    """Spawn-picklable double: hangs on the marked body, parses others instantly."""
+    if body == b"slow":
+        time.sleep(60)
+    return {"status": "ok", "chunks": [{"content": "x", "locator": {}}],
+            "parse_profile": "p", "segmentation_policy": "s"}
+
+
+def test_timeout_does_not_swallow_completed_sibling() -> None:
+    """A fast job co-started with a genuinely-hung sibling keeps its result
+    (step-7 review finding, confirmed): the drain loop blocks on the hung job's
+    whole budget, so by the time the fast job is dequeued its own deadline has
+    lapsed — its buffered ``ok`` must still be received, never mislabelled
+    ``timeout``.
+    """
+    import multiprocessing
+
+    results = _run_parse_jobs(
+        [(0, b"slow", "text/plain"), (1, b"fast", "text/plain")],
+        max_workers=2, parse_timeout=5.0, thin_min=0, parse_fn=_sleep_by_marker_parse,
+    )
+    assert results[0] == {"status": "error", "reason": "timeout"}
+    assert results[1]["status"] == "ok"
+    for proc in multiprocessing.active_children():
+        proc.join(timeout=5)
+    assert not multiprocessing.active_children(), "worker processes leaked"
+
+
+def _socket_deny_parse(body: bytes, content_type: str, thin_min: int) -> dict[str, Any]:
+    """Spawn-picklable wrapper: denies socket creation *inside the worker*, then
+    parses for real — extends the zero-egress proof across the process boundary
+    (step-7 security finding: the parent-side patch does not reach spawned children,
+    where the third-party parsers actually run)."""
+    socket.socket = _deny_socket  # type: ignore[misc, assignment]
+    return parse_and_segment(body, content_type, thin_min)
+
+
+def _deny_socket(*args: Any, **kwargs: Any) -> Any:
+    raise AssertionError("socket creation attempted inside parse worker")
+
+
 def test_zero_egress_socket_deny(conn: Connection, monkeypatch: pytest.MonkeyPatch) -> None:
     """A fixture ingest with socket creation blocked completes green
-    (adversarial finding 5) — the zero-egress claim proven at runtime.
+    (adversarial finding 5) — the zero-egress claim proven at runtime, in the
+    parent (monkeypatch) and inside every spawned parse worker
+    (``_socket_deny_parse``, step-7 security finding).
 
     Scoped, not autouse: the suite's own Postgres connection runs over a socket,
     so the guard patches socket.socket only around the ingest call, after the DB
@@ -304,11 +349,8 @@ def test_zero_egress_socket_deny(conn: Connection, monkeypatch: pytest.MonkeyPat
     """
     project_id, run_id, scope_id = seed_small_corpus(conn)
 
-    def _deny(*args: Any, **kwargs: Any) -> Any:
-        raise AssertionError("socket creation attempted during fixture ingest")
-
-    monkeypatch.setattr(socket, "socket", _deny)
-    summary = run_ingest(conn, project_id, run_id, scope_id)
+    monkeypatch.setattr(socket, "socket", _deny_socket)
+    summary = run_ingest(conn, project_id, run_id, scope_id, parse_fn=_socket_deny_parse)
     monkeypatch.undo()
     assert summary["ingested"] == 2
     assert summary["fetch_failed"] == 1

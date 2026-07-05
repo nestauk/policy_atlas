@@ -196,3 +196,32 @@ should have been written. (The post-goal amendments in the same session already 
 this way — investigation, wiring, and root-cause all delegated — and delegate briefs
 with "report verbatim, no workarounds" acceptance clauses surfaced a real upstream
 parser bug the lead would likely have papered over inline.)
+
+---
+
+## 2026-07-05 — Review-stack token target blown 3× by finder fan-out on a large diff
+
+**Task:** 008-full-text (review phase)
+
+**What happened:** The Tier-3 stack ran within its lane shape (contract-verifier ·
+security-auditor · Codex adversarial · `/code-review` medium — no duplicate lanes) and
+with the 007 diff hygiene applied (bulk fixtures + lockfile pathspec-excluded), yet spent
+≈760K subagent tokens against the ≤250K slice target. Breakdown: the 8 `/code-review`
+medium finder angles ≈500K (each angle independently re-read the ~4.8K-line review diff
+plus surrounding files), contract-verifier ≈118K, security ≈56K, verifiers ≈70K, Codex
+≈20K. The economy rules bounded lane *count* but nothing bounded per-lane reading on a
+diff this size.
+
+**Root cause:** The ≤250K target was calibrated on smaller slices; `/code-review`
+medium's cost scales with diff size × angle count, and each finder pays the full diff
+independently. Diff hygiene removed the *data* bulk but 008's legitimate code+test+docs
+diff was still ~4.8K lines.
+
+**Fix (proposed for the next slice's review):** for review diffs over ~3K lines, scope
+each finder angle to the files its lens actually needs (correctness angles → src;
+conventions → whole diff; cleanup angles → src+tests) and/or drop from 8 angles to the
+3 correctness + 1 cleanup core; alternatively write the pathspec'd diff to a file once
+and hand finders the path with instructions to read only their assigned hunks. Keep the
+three main lanes unchanged — they were on-budget and each earned unique findings
+(timeout-mislabel bug: /code-review only; unmet rubric item: contract-verifier only;
+worker-egress gap: security only).

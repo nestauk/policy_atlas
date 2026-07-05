@@ -15,7 +15,9 @@ dependencies = [
     "python-dotenv>=1.2.2",
     # <1: the 1.x line hard-depends on pymupdf-layout/onnxruntime — the ML stack the
     # approved dependency gate excludes (contract decision 5; that tier is the docling seam)
-    "pymupdf4llm>=0.0.27,<1",
+    # >=0.3.4: the determinism source-patch in ingest_full_text targets 0.3.4's
+    # column_boxes source; older floors would let a lock regen land on unpatched code
+    "pymupdf4llm>=0.3.4,<1",
     "trafilatura>=1.12",
 ]
 

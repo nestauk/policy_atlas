@@ -928,7 +928,7 @@ requires-dist = [
     { name = "langgraph", specifier = ">=0.2" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3" },
     { name = "pydantic", specifier = ">=2" },
-    { name = "pymupdf4llm", specifier = ">=0.0.27,<1" },
+    { name = "pymupdf4llm", specifier = ">=0.3.4,<1" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "sqlalchemy", specifier = ">=2" },
     { name = "structlog", specifier = ">=24" },

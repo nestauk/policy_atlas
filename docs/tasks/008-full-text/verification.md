@@ -1,7 +1,8 @@
 # Verification: 008-full-text
 
-Evidence for the full-text ingestion slice. Filled at step 6 (build phase); **Review
-findings** + **Rubric status** to be added by the review stack (step 7).
+Evidence for the full-text ingestion slice. Build sections filled at step 6; **Review
+findings** + **Rubric status** added by the step-7 review stack (fresh conversation,
+2026-07-05 — the adjudicator did not write the code).
 
 ## Commands run
 
@@ -253,10 +254,112 @@ decarbonisation · food environment/obesity).
 
 ## Deferred work
 
-Step-8 obligation (after the review stack): record in `docs/deferred.md` — live
-`DocumentFetcher` (+ paywall-detection signal ladder & OA-status cross-check) · docling
-ML-layout escalation (+ GPU/AWS sizing note) · time-budget-aware parser selection ·
-chunk-volume-bias controls at retrieve · OCR for `no_text_layer` · multi-PDF assembly ·
-injection posture extended to full text · cross-project full-text reuse · update the
-"Slice 008 inputs retained" entry (OpenAlex URL-precedence supersession, finding 4).
-The /verify chunk-granularity observation above feeds the docling-seam entry.
+**Discharged at step 8 (2026-07-05):** `docs/deferred.md` gained a "Full-text ingestion
+(task 008 seams)" section — live `DocumentFetcher` (+ paywall ladder, OA cross-check, and
+the review stack's pre-registered live-seam requirements: content-type sniffing, charset,
+per-link exception isolation, bounded buffering, concurrent fetch, worker-side egress
+guard) · concurrent-run write guard · docling escalation (+ GPU sizing, pymupdf-layout
+licence blocker, the /verify chunk-granularity observation) · time-budget parser
+selection · chunk-volume-bias controls · OCR · vectorisation-at-first-reader · multi-PDF
+assembly · injection posture · cross-project reuse — and the stale "Slice 008 inputs
+retained" entry was rewritten to the as-built precedence and no-caps design (review
+finding CV-1).
+
+## Review findings (step 7)
+
+Tier-3 stack, run 2026-07-05 in a fresh conversation. Lanes: **contract-verifier**
+(pinned Opus, read-only) · **security-auditor** · **Codex adversarial** (read-only
+brief) · **`/code-review` medium** (8 finder angles, 1-vote verify) — heterogeneous pair
+= Codex + `/code-review` per the Tier-3 baseline. `make verify` green before the stack
+ran and after fixes (205 → 206 tests). Review diff excluded
+`src/policy_atlas/data/fulltext/*` and `uv.lock` by pathspec (007 retro); the licence
+guard covers the data files.
+
+**Adopted (fixed on this branch, then `make verify` re-run green):**
+
+1. **Timeout mislabels a completed sibling** (`/code-review` finder A, verifier
+   CONFIRMED; the round's only correctness bug) — `_run_parse_jobs` drained pipes in
+   strict FIFO with `remaining > 0 and poll(remaining)`, so a job whose `ok` result was
+   already buffered could be terminated and recorded `parse_failed`/`timeout` after a
+   genuinely-hung earlier sibling consumed the loop's wall-clock. Fix:
+   `poll(max(remaining, 0.0))` — a buffered result is always received; only genuinely
+   unfinished jobs time out. New test: `test_timeout_does_not_swallow_completed_sibling`
+   (mixed fast/slow pair; fails on the old code).
+2. **`terminate()` → unbounded `join()`** (Codex 2) — a worker ignoring SIGTERM (stuck
+   native code) could hang the run despite the "hard timeout" claim. Fix: `join(5.0)`
+   then `kill()` escalation.
+3. **Worker processes escaped the egress guard** (security 1) — the socket-deny patch
+   applied to the parent only; the parsers run in spawned children.
+   `test_zero_egress_socket_deny` now also installs the deny inside every worker via a
+   picklable `parse_fn` wrapper.
+4. **`pymupdf4llm` floor loosened vs the determinism patch's target** (security 2 ·
+   Codex 4 · contract-verifier 3, convergent across three lanes) — `>=0.0.27,<1` let a
+   lock regen land on pre-0.3.4 source the patch silently no-ops on. Floor raised to
+   `>=0.3.4,<1` (lock unchanged: 0.3.4). The related import-crash claim was **REFUTED**
+   by empirical check: every PyPI release in the range ships the `helpers` layout.
+5. **`FAILURE_REASONS` claimed code-enforced but wasn't** (Codex 5, adopted-in-part) —
+   the write path now asserts `doc.reason in FAILURE_REASONS`; the DB CHECK stays
+   presence-only by design (vocabulary can grow at the live seam without a migration).
+6. **ASCII-only text-layer detection** (Codex 6) — `[0-9A-Za-z]` misread any non-Latin
+   text layer as `no_text_layer`; now Unicode `\w`. Fixture outcomes unchanged
+   (image-only derivative still fails honestly).
+7. **Unknown acquire backend masqueraded as per-document `no_url`** (`/code-review`
+   altitude) — `candidate_urls` now logs `fulltext.unknown_backend` so a wiring gap
+   can't pass as a data-quality issue.
+8. Smaller adopted items: dead `job_meta` dict deleted (simplification); parser
+   exception `detail` truncated to 500 chars before logging (security 4); manifest
+   filename basename-guarded against traversal (security 5); missing `Args:` sections
+   added to the two `fetch` docstrings (conventions, AGENTS.md rule).
+
+**Deferred (recorded in `docs/deferred.md`, task-008 seams section):** concurrent-run
+write race (Codex 1 — v3.0 is single-process/serial; mirrors 007's dedup note) ·
+content-type sniffing incl. the octet-stream-PDF fallthrough (Codex 3 — already a
+contract-named live-fetcher deferral) · charset handling (Codex 9) · per-link fetch
+exception isolation (Codex 7 — fail-loud is correct fixture-world) · parent-side
+buffering / serial fetch (security 3, `/code-review` efficiency) · `pip-audit` in CI
+(security info — CI config is its own gate).
+
+**Declined (reasons recorded):** re-validating snapshots behind `already_ingested`
+(Codex 8 — requires external DB corruption; CHECKs + immutability are the boundary) ·
+downgrade leaving unreachable full-text rows (Codex 10 — preserving data on downgrade is
+the safe default) · hash-of-chunk-hashes instead of re-hashing joined text
+(`/code-review` efficiency — would change the tested content-identity semantics for a
+negligible saving) · per-document spawn vs persistent pool (efficiency — per-document
+processes are what make `terminate()` semantics possible, adversarial finding 6; 24-doc
+run measured at ~51 s) · sharing acquire's private `_load_fixture` (reuse — a 5-line
+stdlib idiom; cross-component import of a private helper couples the modules) · a
+source-hash assertion on the determinism patch (the guarded no-op + determinism test +
+tightened floor are the recorded position).
+
+**Convergence notes:** the pymupdf4llm-pin/monkeypatch fragility was raised
+independently by three lanes (high-confidence); the timeout-mislabel bug was unique to
+the `/code-review` line-by-line angle and the FIFO-drain trace was confirmed by an
+independent verifier — the lane earned its place. The contract verifier was the only
+lane to catch the unmet rubric item 7 (`deferred.md` untouched + stale entry
+contradicting shipped code) — fixed at step 8 above.
+
+**`/simplify` / ponytail-review skipped with justification (per the review-stack
+economy):** `/code-review` medium already ran the reuse, simplification, efficiency and
+altitude finder angles on this diff and their adopted fixes were applied (dead
+`job_meta` deleted; the declined cleanup candidates are recorded above) — a separate
+same-family cleanup pass would duplicate it.
+
+**Fake-done check over the fixes applied this phase:** no test was relaxed, skipped or
+deleted; the egress test got strictly stronger (worker-side guard added); two tests were
+added; no swallowed errors introduced (the `kill()` escalation still records `timeout`);
+no stub returns.
+
+**Token economy (recorded for the retro):** subagent total ≈ **760K tokens — 3× the
+≤250K target**. Driver: the 8 `/code-review` finder angles each independently re-read a
+~4.8K-line diff (~500K combined) — the pathspec exclusions were honoured, but on a diff
+this size the medium tier's fan-out alone exceeds the whole-slice budget. Candidate
+remedy for the next slice: hand finders a pre-computed diff artifact and scope each
+angle to its relevant files, or drop to fewer angles for >3K-line diffs.
+
+## Rubric status (step 7)
+
+Items 1–6 and 8–12: **hold** — contract-verifier evidence per item (all HOLDS in its
+report), plus this phase's fixes verified by the re-run gate (206 passed, mypy strict,
+ruff, build; migration roundtrip unchanged). Item 7: **holds after step 8** (deferred.md
+updated above — the verifier correctly caught it unmet at review time). Item 13:
+**holds** — all four Tier-3 lanes ran; findings and adjudication recorded here.
