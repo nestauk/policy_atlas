@@ -3,15 +3,15 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** approved (rev 7) → adversarial review adjudicated (rev 8) — **one item
-> reopened for approval: gated change 3** (`run_harness` optional `search_backends`
-> parameter, finding 7). Planning starts on that sign-off.  
+> **Status:** approved — planning.  
 > Contract approved (before planning): 2026-07-05 · Shabeer Rauf (rev 7; shaped across
 > review rounds: both backends + trust-class names + `evidence_scope` rename + sanitized
 > fixtures for both + `abstract_source` provenance + retained-provider-fields tier +
 > Arm-B R&D direction as seam context — all user-settled at this gate).
 > Adversarial findings adjudicated: 2026-07-05 (10 findings, all adopted/resolved — see
-> § Contract-stage adversarial review).  
+> § Contract-stage adversarial review). All three gated changes approved 2026-07-05
+> (rename · `search_coverage_record` · `run_harness` optional `search_backends` param;
+> backend-scope *selection* recorded as a seam, not built).  
 > Contract approved (before planning): _date · who_ ·
 > Plan approved (before implementation): _date · who_ · ADR: none expected
 > (the fixture-backed-backends and rename decisions are contract-recorded; promote to an ADR
@@ -629,6 +629,11 @@ Updates to existing tests:
   built; wiring live calls is runtime egress, its own gated slice.
 - **Full-text fetch + Tier-0 ingestion** (parse/segment/embed of fetched documents) — slice
   008; its snapshot-identity fork must not be foreclosed here.
+- **User-selectable backend scope** (academic-only / grey-lit-only / both — v2 precedent;
+  user note 2026-07-05), later possibly orchestrator-derived from the intent/planning
+  conversation — ⏸ a recorded seam: lands as a Plan/Config field (its own interface gate,
+  per plan-as-object) driving the `search_backends` parameter this slice adds; nothing in
+  v3.0 reads a selection, so no inert field ships now.
 - LLM query expansion / intent-derived breadth strategies / multi-query plans — ⏸ (needs a
   real inference provider).
 - Thin-base re-search trigger (`re_searched_still_thin` is representable, nothing fires it) —
