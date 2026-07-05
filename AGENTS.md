@@ -22,24 +22,25 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `008-full-text`.
+Implementation — task `009-characterise`.
 
-Tasks `001-walking-skeleton` through `007-acquire` are complete (merged). The active slice
-adds **full-text ingestion** — the post-screen Tier-0 step: for a scope's screened-in
-acquired sources, resolve candidate URLs from the provider fields task 007 retained, fetch
-through a `DocumentFetcher` seam (current build: fixture replay of committed real,
-openly-licensed documents — zero runtime egress until the live-fetcher slice opens that
-gate; live fetching is v3.0-required, per deferred.md), parse
-structure-aware (PDF via `pymupdf4llm` — meets the couple-of-minutes-per-run wall-clock
-target; docling ML-layout escalation and time-budget-aware parser selection are recorded
-seams; HTML via `trafilatura`), segment under named versioned policies with
-page/heading-path chunk locators, and
-attach the resulting immutable `full_text` snapshot to the corpus document via
-`project_source_snapshot.full_text_snapshot_id`. **Never truncate** — full text or an
-honest, reason-coded failure; a failed source stays on the text in hand with a queryable
-`full_text_status`. Ingestion fans out per document over a bounded process pool with
-deterministic results. Vectorisation is deferred to the slice where vectors are first read.
-Three gated changes ride this slice (schema columns · `pymupdf4llm` + `trafilatura`
-dependencies · `run_harness` `document_fetcher` parameter). Build per
-`docs/tasks/008-full-text/contract.md`. Stay within the contract's scope and stop conditions;
-all other capabilities and seams remain deferred (`docs/deferred.md`).
+Tasks `001-walking-skeleton` through `008-full-text` are complete (merged). The active slice
+adds **characterise** — the EB shallow terminus (component 5) — and, because its clustering
+is the system's first vector reader, the **embed seam** comes due with it: an
+`EmbeddingBackend` protocol with a **live provider implementation (OpenAI
+`text-embedding-3-small` — the slice that opens the runtime-egress/inference gate)** plus a
+deterministic stub for tests; **eager-and-uniform vectorisation at ingest** (every
+ingestion path embeds its chunks; absence of an embedding row = pending, idempotent
+backfill). Characterise itself: deterministic **coverage distributions over Tier-0
+columns** (metadata-grounded patterns, base = the scope's screened-in set, flag-not-block)
+and **topic-level clustering** over document embeddings (run-local, never canonical;
+deterministic term-based labels persist as topic/theme tags — LLM labelling is a recorded
+seam). Durable output = a run-scoped characterisation row + `source_tag` rows + a
+structured **landscape summary** in the `component.completed` payload (the future
+steer-point/orchestrator-chat relay surface). **No artefact/blocks here** — the single EB
+artefact is composed at the run terminus by a later composition slice. Gated changes ride
+this slice (schema: `chunk_embedding` · `characterisation_result` · `source_tag` ·
+dependencies: `openai`, `numpy` · `run_harness` `embedding_backend` parameter · **runtime
+egress: live embedding calls**). Build per `docs/tasks/009-characterise/contract.md`. Stay
+within the contract's scope and stop conditions; all other capabilities and seams remain
+deferred (`docs/deferred.md`).
