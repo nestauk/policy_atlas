@@ -25,7 +25,7 @@ from pathlib import Path
 QUERY = "housing affordability policy"
 N_RECORDS = 12
 TIMEOUT_S = 30
-SANITIZER_VERSION = "v1"
+SANITIZER_VERSION = "v2"
 RAW_PATH = Path(__file__).parent / "recordings" / "openalex_raw.json"
 FIXTURE_PATH = (
     Path(__file__).parent.parent / "src" / "policy_atlas" / "data" / "openalex_works.json"
@@ -88,6 +88,10 @@ def _sanitize_string(value: str, key: str | None, parent: str | None) -> str:
         return _fake_doi(value)
     if key in ("issn_l",) or parent == "issn":
         return _fake_issn(value)
+    if key in ("funder_award_id", "award_id"):
+        # real grant IDs are unique, indexed identifiers — one API query re-identifies
+        # the whole record; hash like mag below
+        return _h("award:" + value)[:8]
     if key == "mag":
         return "".join(str(int(c, 16) % 10) for c in _h("mag:" + value)[:10])
     if key == "display_name" and parent == "author":
@@ -143,6 +147,9 @@ def _fetch() -> dict:
     api_key = os.environ.get("OPENALEX_API_KEY")
     if api_key:
         params["api_key"] = api_key
+    mailto = os.environ.get("OPENALEX_EMAIL")
+    if mailto:
+        params["mailto"] = mailto  # polite pool
     url = "https://api.openalex.org/works?" + urllib.parse.urlencode(params)
     with urllib.request.urlopen(url, timeout=TIMEOUT_S) as resp:
         return json.load(resp)
@@ -224,7 +231,9 @@ def main() -> None:
             "record_count": len(records),
             "sanitizer_version": SANITIZER_VERSION,
             "sanitized": "real structure/nesting/nullability, fabricated values; "
-            "DOIs 10.99999/*, URLs example.org (leak guard, test-enforced)",
+            "DOIs 10.99999/*, URLs example.org (leak guard, test-enforced); "
+            "residual: authentic dates/counts/biblio retained (accepted risk, "
+            "see task 007 verification.md)",
             "quirk_coverage": quirks,
         },
         "records": records,

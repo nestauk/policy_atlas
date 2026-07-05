@@ -5,6 +5,7 @@ In-process this slice; durable checkpointer is a deferred seam.
 Block-boundary commit is modelled as one event (component.completed + block.written).
 """
 
+import functools
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -176,15 +177,7 @@ def _run_scope_component(
 
 
 def _run_acquire(state: HarnessState) -> HarnessState:
-    backends = state["search_backends"]
-
-    def sources_fn(
-        conn: Connection, *, project_id: uuid.UUID, run_id: uuid.UUID, context: AcquireContext
-    ) -> dict[str, Any]:
-        return acquire_sources(
-            conn, project_id=project_id, run_id=run_id, context=context, backends=backends
-        )
-
+    sources_fn = functools.partial(acquire_sources, backends=state["search_backends"])
     return _run_scope_component(state, AcquireContext, sources_fn)
 
 

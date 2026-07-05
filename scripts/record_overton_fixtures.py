@@ -27,7 +27,7 @@ from pathlib import Path
 QUERY = "housing affordability policy"
 N_RECORDS = 12
 TIMEOUT_S = 30
-SANITIZER_VERSION = "v1"
+SANITIZER_VERSION = "v2"
 RAW_PATH = Path(__file__).parent / "recordings" / "overton_raw.json"
 FIXTURE_PATH = (
     Path(__file__).parent.parent / "src" / "policy_atlas" / "data" / "overton_documents.json"
@@ -263,7 +263,14 @@ def main() -> None:
     else:
         raw = _fetch()
         RAW_PATH.parent.mkdir(parents=True, exist_ok=True)
-        RAW_PATH.write_text(json.dumps(raw, indent=1))
+        # Overton responses can echo request params (next-page URLs) — never let the
+        # key rest on disk, even in the gitignored raw path
+        raw_text = json.dumps(raw, indent=1)
+        api_key = os.environ.get("OVERTON_API_KEY", "")
+        if api_key:
+            raw_text = raw_text.replace(api_key, "REDACTED_API_KEY")
+        RAW_PATH.write_text(raw_text)
+        raw = json.loads(raw_text)
     print(f"raw response ({len(raw['results'])} documents) -> {RAW_PATH} (gitignored)")
 
     records = [_sanitize(r) for r in _pick_records(raw["results"])]
@@ -278,7 +285,9 @@ def main() -> None:
             "record_count": len(records),
             "sanitizer_version": SANITIZER_VERSION,
             "sanitized": "real structure/nesting/nullability, fabricated values; "
-            "DOIs 10.99999/*, URLs example.org (leak guard, test-enforced)",
+            "DOIs 10.99999/*, URLs example.org (leak guard, test-enforced); "
+            "residual: authentic dates/counts/scores retained (accepted risk, "
+            "see task 007 verification.md)",
             "quirk_coverage": quirks,
         },
         "records": records,

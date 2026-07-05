@@ -39,7 +39,7 @@ from policy_atlas.schema import (
     source_snapshot,
 )
 from policy_atlas.screen import ScreenContext, screen_sources
-from tests.helpers import delete_project_data, now, seed_project_and_run, seed_scope
+from tests.helpers import delete_project_data, now, seed_project_and_run, seed_run, seed_scope
 
 # --- Test doubles / builders ---
 
@@ -290,6 +290,13 @@ def test_map_openalex_no_title_unusable() -> None:
     assert _map_openalex_work({}) is None
 
 
+def test_map_openalex_no_id_unusable() -> None:
+    """No id -> no locator, no re-run identity: unusable, never a NOT NULL crash."""
+    rec = oa_record()
+    rec["id"] = None
+    assert _map_openalex_work(rec) is None
+
+
 def test_map_openalex_missing_abstract() -> None:
     mapped = _map_openalex_work(oa_record(index=None))
     assert mapped is not None
@@ -365,6 +372,23 @@ def test_map_overton_absent_shapes_tolerated() -> None:
     assert env["publisher_org"] is None
     assert env["year"] is None
     assert mapped["source_locator"] == "https://example.org/o"  # document_url fallback
+
+
+def test_map_overton_no_locator_unusable() -> None:
+    """Neither document_url nor overton_url -> unusable, never a NOT NULL crash."""
+    rec = ov_record()
+    rec["document_url"] = ""
+    rec["overton_url"] = ""
+    assert _map_overton_document(rec) is None
+
+
+def test_map_overton_empty_string_language_absent() -> None:
+    """languages=[''] is Overton's absence pattern -> envelope language is None."""
+    rec = ov_record(snippet="s")
+    rec["languages"] = [""]
+    mapped = _map_overton_document(rec)
+    assert mapped is not None
+    assert mapped["envelope"]["language"] is None
 
 
 def test_map_overton_empty_source_locator_falls_back() -> None:
@@ -493,12 +517,7 @@ def test_acquire_idempotent_rerun(conn: Connection) -> None:
     first = acquire(conn, pid, rid, scope_id)
     assert_invariant(first)
 
-    rid2 = uuid.uuid4()
-    conn.execute(sa.text(
-        "INSERT INTO runs (run_id, project_id, status, started_at)"
-        " VALUES (:r, :p, 'running', now())"
-    ), {"r": rid2, "p": pid})
-    second = acquire(conn, pid, rid2, scope_id)
+    second = acquire(conn, pid, seed_run(conn, pid), scope_id)
     assert second["acquired"] == 0
     assert second["already_acquired"] == first["acquired"] + first["already_acquired"]
     assert_invariant(second)
@@ -523,12 +542,7 @@ def test_identity_guards_each_separately(conn: Connection) -> None:
     scope_id = seed_scope(conn, pid)
 
     def fresh_run() -> uuid.UUID:
-        r = uuid.uuid4()
-        conn.execute(sa.text(
-            "INSERT INTO runs (run_id, project_id, status, started_at)"
-            " VALUES (:r, :p, 'running', now())"
-        ), {"r": r, "p": pid})
-        return r
+        return seed_run(conn, pid)
 
     # guard (a): backend_record_id — same id, changed content
     acquire(conn, pid, rid, scope_id, backends=[
@@ -620,6 +634,42 @@ def test_cross_project_dedup_isolation(conn: Connection) -> None:
         assert n == expected
 
 
+def test_unknown_backend_name_rejected_upfront(conn: Connection) -> None:
+    """A backend with no registered mapper is a wiring error — loud, before any work."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    stranger = FakeBackend(name="semantic_scholar", records=[oa_record()])
+    with pytest.raises(ValueError, match="no mapper registered"):
+        acquire(conn, pid, rid, scope_id, backends=[stranger])
+
+
+def test_duplicate_backend_names_rejected_upfront(conn: Connection) -> None:
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    with pytest.raises(ValueError, match="duplicate backend names"):
+        acquire(conn, pid, rid, scope_id, backends=[FakeBackend(), FakeBackend()])
+
+
+def test_doi_guard_normalizes_persisted_uploaded_doi(conn: Connection) -> None:
+    """An uploaded snapshot with a prefixed/mixed-case DOI still blocks re-acquisition."""
+    from policy_atlas.ingest import ingest_upload
+
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    ingest_upload(
+        conn,
+        project_id=pid,
+        chunks=["Uploaded text, different from any fixture."],
+        source_locator="upload.pdf",
+        metadata={"doi": "https://doi.org/10.99999/UPLOADED"},
+        text_basis="full_text",
+    )
+    counts = acquire(conn, pid, rid, scope_id, backends=[
+        FakeBackend(records=[oa_record(doi="10.99999/uploaded", title="Acquired twin")])
+    ])
+    assert counts["already_acquired"] == 1 and counts["acquired"] == 0
+
+
 # --- Events ---
 
 
@@ -660,12 +710,7 @@ def test_source_acquired_events(conn: Connection) -> None:
         assert payload["evidence_scope_id"] == str(scope_id)
 
     # second run: skips/dedups emit no source.acquired
-    rid2 = uuid.uuid4()
-    conn.execute(sa.text(
-        "INSERT INTO runs (run_id, project_id, status, started_at)"
-        " VALUES (:r, :p, 'running', now())"
-    ), {"r": rid2, "p": pid})
-    acquire(conn, pid, rid2, scope_id)
+    acquire(conn, pid, seed_run(conn, pid), scope_id)
     acquired_events_after = [
         e for e in events.read(conn, pid) if e["event_type"] == "source.acquired"
     ]
@@ -889,6 +934,12 @@ def test_fixture_leak_guard(name: str) -> None:
         assert url.startswith(("https://example.org/", "https://doi.org/10.99999/")), url
     for doi in re.findall(r"\b10\.\d[\d.]*/[^\s\"\\]+", text):
         assert doi.startswith("10.99999/"), doi
+    # grant/award IDs are unique indexed identifiers — must be hashed, never raw
+    for record in load_fixture_file(name)["records"]:
+        for award in record.get("awards") or []:
+            for key in ("funder_award_id", "award_id"):
+                if award.get(key):
+                    assert re.fullmatch(r"[0-9a-f]{8}", award[key]), award[key]
 
 
 @pytest.mark.parametrize("name", FIXTURE_FILES)
@@ -949,13 +1000,13 @@ def test_acquire_module_has_no_http_client() -> None:
         r"^\s*(import|from)\s+(urllib|requests|httpx|aiohttp|http\.client|socket)\b",
         re.MULTILINE,
     )
-    for module in src_dir.glob("*.py"):
+    for module in src_dir.rglob("*.py"):
         assert not forbidden.search(module.read_text()), f"HTTP client import in {module}"
 
 
 def test_recorder_scripts_not_imported_by_package() -> None:
     src_dir = Path(__file__).parent.parent / "src" / "policy_atlas"
-    for module in src_dir.glob("*.py"):
+    for module in src_dir.rglob("*.py"):
         text = module.read_text()
         assert "record_openalex_fixtures" not in text
         assert "record_overton_fixtures" not in text

@@ -5,8 +5,8 @@
   "recorder_query": "housing affordability policy",
   "recorded_at": "2026-07-05",
   "record_count": 12,
-  "sanitizer_version": "v1",
-  "sanitized": "real structure/nesting/nullability, fabricated values; DOIs 10.99999/*, URLs example.org (leak guard, test-enforced)",
+  "sanitizer_version": "v2",
+  "sanitized": "real structure/nesting/nullability, fabricated values; DOIs 10.99999/*, URLs example.org (leak guard, test-enforced); residual: authentic dates/counts/biblio retained (accepted risk, see task 007 verification.md)",
   "quirk_coverage": [
    "missing abstract (recorded)",
    "missing year (patched: nulled per documented nullability)",
@@ -1562,28 +1562,28 @@
     {
      "id": "https://example.org/9c5bd0909376",
      "display_name": null,
-     "funder_award_id": "13JZD009",
+     "funder_award_id": "bd4e9e08",
      "funder_id": "https://example.org/f285496f96f7",
      "funder_display_name": "Pewter cedar orchid glacier lantern delta quill sable quill"
     },
     {
      "id": "https://example.org/6e21ab5fc36a",
      "display_name": null,
-     "funder_award_id": "71573766",
+     "funder_award_id": "f5caf7c3",
      "funder_id": "https://example.org/f63fcf460699",
      "funder_display_name": "Meadow cobalt marble cedar harbor lantern"
     },
     {
      "id": "https://example.org/d33dda8ecd89",
      "display_name": "Willow velvet sable",
-     "funder_award_id": "71173045",
+     "funder_award_id": "f1f1ff44",
      "funder_id": "https://example.org/f63fcf460699",
      "funder_display_name": "Meadow cobalt marble cedar harbor lantern"
     },
     {
      "id": "https://example.org/0db3a86f1bae",
      "display_name": null,
-     "funder_award_id": "13SG35",
+     "funder_award_id": "769c6c15",
      "funder_id": "https://example.org/f285496f96f7",
      "funder_display_name": "Pewter cedar orchid glacier lantern delta quill sable quill"
     }

@@ -10,6 +10,7 @@ All gates approved; see ADR 0001 and contract.md.
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 from sqlalchemy import select, text
@@ -33,6 +34,23 @@ from policy_atlas.schema import (
 )
 
 log = structlog.get_logger()
+
+
+def _log_component_counts(log_entries: list[dict[str, Any]], component: str) -> None:
+    """Surface a component's completed-event counts (or note the missing event)."""
+    counts = next(
+        (
+            e["payload"] for e in log_entries
+            if e["event_type"] == "component.completed"
+            and e["payload"].get("component") == component
+        ),
+        None,
+    )
+    if counts is None:
+        # the component emitted component.failed — the event log below shows it
+        log.warning(f"{component}_counts.missing")
+    else:
+        log.info(f"{component}_counts", **{k: v for k, v in counts.items() if k != "component"})
 
 
 def _run_component(
@@ -156,20 +174,7 @@ def main() -> None:
         log_entries = events.read(conn, project_id)
 
     # Per-backend acquire counts — makes the authentic-shapes path visible
-    acquire_counts = next(
-        (
-            e["payload"] for e in log_entries
-            if e["event_type"] == "component.completed"
-            and e["payload"].get("component") == "acquire"
-        ),
-        None,
-    )
-    if acquire_counts is None:
-        log.warning("acquire_counts.missing")
-    else:
-        log.info(
-            "acquire_counts", **{k: v for k, v in acquire_counts.items() if k != "component"}
-        )
+    _log_component_counts(log_entries, "acquire")
 
     # Screen-basis distribution: missing abstracts/snippets flow the title_only
     # fail-open path — visible here, per contract.
@@ -192,21 +197,7 @@ def main() -> None:
                  rubric_version=row.rubric_version)
 
     # Surface the skip counts so both the scored and skipped paths are visible
-    appraise_counts = next(
-        (
-            e["payload"] for e in log_entries
-            if e["event_type"] == "component.completed"
-            and e["payload"].get("component") == "appraise"
-        ),
-        None,
-    )
-    if appraise_counts is None:
-        # appraise emitted component.failed — fall through to the event log below
-        log.warning("appraise_counts.missing")
-    else:
-        log.info(
-            "appraise_counts", **{k: v for k, v in appraise_counts.items() if k != "component"}
-        )
+    _log_component_counts(log_entries, "appraise")
 
     for entry in log_entries:
         log.info("event_log_entry", sequence=entry["sequence"], event_type=entry["event_type"])

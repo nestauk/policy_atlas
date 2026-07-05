@@ -5,8 +5,8 @@
   "recorder_query": "housing affordability policy",
   "recorded_at": "2026-07-05",
   "record_count": 12,
-  "sanitizer_version": "v1",
-  "sanitized": "real structure/nesting/nullability, fabricated values; DOIs 10.99999/*, URLs example.org (leak guard, test-enforced)",
+  "sanitizer_version": "v2",
+  "sanitized": "real structure/nesting/nullability, fabricated values; DOIs 10.99999/*, URLs example.org (leak guard, test-enforced); residual: authentic dates/counts/scores retained (accepted risk, see task 007 verification.md)",
   "quirk_coverage": [
    "DOI in keyed_other_identifiers.doi list (recorded)",
    "no-DOI record (common case) (recorded)",

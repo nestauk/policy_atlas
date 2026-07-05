@@ -184,12 +184,21 @@ def seed_screening_result(
 
 def seed_project_and_run(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:
     """Insert a project + running run; return (project_id, run_id)."""
-    from policy_atlas.schema import project, runs
+    from policy_atlas.schema import project
 
     pid = uuid.uuid4()
-    rid = uuid.uuid4()
     conn.execute(project.insert().values(project_id=pid, created_at=now()))
+    return pid, seed_run(conn, pid)
+
+
+def seed_run(conn: Connection, project_id: uuid.UUID) -> uuid.UUID:
+    """Insert an additional running run for an existing project; return run_id."""
+    from policy_atlas.schema import runs
+
+    rid = uuid.uuid4()
     conn.execute(
-        runs.insert().values(run_id=rid, project_id=pid, status="running", started_at=now())
+        runs.insert().values(
+            run_id=rid, project_id=project_id, status="running", started_at=now()
+        )
     )
-    return pid, rid
+    return rid

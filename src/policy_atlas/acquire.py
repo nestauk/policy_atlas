@@ -12,6 +12,7 @@ emits a ``search.executed`` governance event; every acquire run writes one
 ``search_coverage_record`` row.
 """
 
+import functools
 import importlib.resources
 import json
 import uuid
@@ -70,6 +71,7 @@ class SearchBackend(Protocol):
         ...
 
 
+@functools.cache  # fixture files are immutable for the process lifetime
 def _load_fixture(filename: str) -> list[dict[str, Any]]:
     data = json.loads(
         importlib.resources.files("policy_atlas").joinpath("data", filename).read_text()
@@ -191,9 +193,13 @@ _OVERTON_RETAIN_KEYS = (
 
 
 def _map_openalex_work(record: dict[str, Any]) -> dict[str, Any] | None:
-    """OpenAlex Work -> normalized envelope + chunk; None when unusable (no title)."""
+    """OpenAlex Work -> normalized envelope + chunk; None when unusable.
+
+    Unusable = no title (nothing screenable) or no ``id`` (no locator, no
+    re-run identity — and ``source_locator`` is NOT NULL).
+    """
     title = record.get("display_name")
-    if not title:
+    if not title or not record.get("id"):
         return None
     abstract = _reconstruct_abstract(record.get("abstract_inverted_index"))
     source = (record.get("primary_location") or {}).get("source") or {}
@@ -249,6 +255,12 @@ def _map_overton_document(record: dict[str, Any]) -> dict[str, Any] | None:
     published_on = record.get("published_on") or ""
     year = int(published_on[:4]) if published_on[:4].isdigit() else None
 
+    source_locator = record.get("document_url") or record.get("overton_url")
+    if not source_locator:
+        # no address at all: the identity triple can't be completed and
+        # source_locator is NOT NULL — unusable, counted, never a crashed run
+        return None
+
     koi = record.get("keyed_other_identifiers")
     doi = _normalize_doi(_first_or_none(koi.get("doi")) if isinstance(koi, dict) else None)
 
@@ -258,7 +270,7 @@ def _map_overton_document(record: dict[str, Any]) -> dict[str, Any] | None:
         "abstract": abstract,
         "year": year,
         "doi": doi,
-        "language": _first_or_none(record.get("languages")),
+        "language": _first_or_none(record.get("languages")) or None,
         "backend": "overton",
         "backend_record_id": record.get("policy_document_id"),
         "record_type": source.get("type") or None,
@@ -268,7 +280,7 @@ def _map_overton_document(record: dict[str, Any]) -> dict[str, Any] | None:
     return {
         "envelope": envelope,
         "abstract_source": abstract_source,
-        "source_locator": record.get("document_url") or record.get("overton_url"),
+        "source_locator": source_locator,
         "provider_fields": provider_fields,
     }
 
@@ -316,6 +328,16 @@ def acquire_sources(
         and in total), ``by_backend`` (with per-backend ``status``/``error``),
         ``stop_condition``, ``adequacy_verdict``, ``coverage_record_id``.
     """
+    # A backend without a registered mapping (or a duplicate name, which would
+    # corrupt by_backend) is a wiring error, not a search failure — fail loud
+    # before any work; the harness reports it as component.failed.
+    names = [b.name for b in backends]
+    unknown = [n for n in names if n not in _MAPPERS]
+    if unknown:
+        raise ValueError(f"no mapper registered for backend(s): {unknown}")
+    if len(set(names)) != len(names):
+        raise ValueError(f"duplicate backend names: {names}")
+
     # Preload the project's existing identity keys — dedup is then in-memory,
     # and also catches duplicates within this call's own result stream.
     # ponytail: JSONB ->> scan over all project snapshots; fine at v3.0 corpus
@@ -337,8 +359,12 @@ def acquire_sources(
         seen_hashes.add(chash)
         if meta.get("backend_record_id"):
             seen_record_ids.add(meta["backend_record_id"])
-        if meta.get("doi"):
-            seen_dois.add(meta["doi"])
+        # normalize on read: uploaded snapshots may carry a prefixed/mixed-case
+        # DOI in their free-form metadata; acquire-written envelopes are already
+        # normalized, but the guard must hold across origins
+        doi = _normalize_doi(meta.get("doi"))
+        if doi:
+            seen_dois.add(doi)
 
     now = datetime.now(UTC)
     by_backend: dict[str, dict[str, Any]] = {}
@@ -388,12 +414,10 @@ def acquire_sources(
             "already_acquired": 0,
             "skipped_unusable": 0,
         }
-        # No registered mapping (unknown backend name) -> its records are not
-        # usable; counted per record below, never silently dropped.
-        mapper = _MAPPERS.get(backend.name)
+        mapper = _MAPPERS[backend.name]  # validated upfront
 
         for record in results:
-            mapped = mapper(record) if mapper else None
+            mapped = mapper(record)
             if mapped is None:
                 # A snapshot needs at least a title to be screenable —
                 # skip is visible, never silent.

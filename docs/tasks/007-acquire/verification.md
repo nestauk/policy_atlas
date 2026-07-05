@@ -110,18 +110,63 @@ screen genuinely unchanged, fail-open path test-covered (`failed == 0`,
 
 ## Review findings
 
-_Added after the review stack (step 7)._
+Tier-3 stack, run 2026-07-05 in fresh contexts (none by the implementing conversation):
+contract-verifier (pinned agent) · `/code-review` medium (8 finder angles) ·
+`security-auditor` subagent (the one security lane) · Codex adversarial pass
+(heterogeneous half) — ~470K total incl. the Codex leg. After the fix batch:
+`make verify` green (**167 passed**), skeleton exits 0.
 
-- **Contract verifier:**
-- **`/code-review` (medium):**
-- **Security lane (`security-auditor`):**
-- **Adversarial review (Codex):**
-- **`ponytail-review` + `/simplify`:**
+- **Contract verifier:** all 19 rubric items verified satisfied (items 7/8 pending by
+  design at that point — closed below); every verification.md/contract claim reproduced
+  against as-built code; no findings. One observation — unknown-backend records silently
+  counted `skipped_unusable` — was independently escalated by Codex (#5) and fixed.
+- **`/code-review` (medium):** three confirmed correctness findings, all fixed +
+  test-covered: (1) Overton record with no `document_url`/`overton_url` crashed the whole
+  run on `source_locator NOT NULL` instead of counting `skipped_unusable`; (2) same for
+  an OpenAlex Work missing `id`; (3) `languages=[""]` persisted `language: ""` against
+  the absence convention. Cleanups applied: `functools.cache` on fixture loading,
+  `functools.partial` for `_run_acquire`, skeleton counts-logging deduped into
+  `_log_component_counts`, raw-SQL run-seeding replaced with `tests/helpers.seed_run`.
+  Declined: shared sanitizer module across the two recorders (plan explicitly sanctions
+  inline-per-script; leak-guard test is parametrized over both), derivable
+  `results_returned` (explicit count is honest; invariant is test-enforced).
+- **Security lane (`security-auditor`):** 1 Medium — **real funder grant IDs**
+  (`awards[].funder_award_id`) had passed through the sanitizer; unique indexed
+  identifiers, one API query re-identifies the record. Fixed: sanitizer v2 hashes
+  award ids, fixtures re-derived (`--resanitize`), leak-guard test widened to assert
+  hashed award ids. 3 Low, all fixed: Overton raw recording could embed the API key via
+  echoed pagination URLs (recorder now redacts on write; the existing on-disk raw was
+  scrubbed and confirmed key-free); zero-egress test guard made recursive (`rglob`);
+  quantitative-fingerprint residual (authentic dates/counts/biblio) documented as an
+  accepted risk in each fixture's `_meta.sanitized`. Info: `OPENALEX_EMAIL` wired into
+  the recorder as the polite-pool `mailto`; stub-namespace forward note recorded at the
+  live-backend seam. Verdicts: runtime egress CLEAN · keys CLEAN (incl. branch history) ·
+  untrusted-text CLEAN · cross-project integrity CLEAN · secrets hygiene CLEAN.
+- **Adversarial review (Codex):** five findings, adjudicated: (1) **High, adopted** —
+  dedup preload read persisted DOIs verbatim, so an uploaded snapshot with a
+  prefixed/mixed-case DOI never blocked re-acquisition; preload now normalizes on read
+  (+ test). (2) Medium, **deferred** — concurrent acquire runs could double-insert
+  (preload race); v3.0 is single-process/serial and a DB-level guard is a gated schema
+  change — recorded in deferred.md. (3) Medium — missing-locator crash: same as
+  `/code-review` finding 1 (independent cross-family convergence), fixed. (4) Medium —
+  raw-recording key echo: same as the security Low, fixed. (5) Low, adopted stronger —
+  unknown/duplicate backend names now rejected upfront (`ValueError` → the harness's
+  `component.failed` infrastructure-error path) instead of silently skipping records.
+- **`ponytail-review` + `/simplify`:** covered by the reuse/simplification/efficiency/
+  altitude finder angles of the `/code-review` run, with fixes applied inline (above) —
+  a separate same-family pass over the same diff was skipped per the review-stack
+  economy (006 adjudication: near-zero marginal findings). Altitude angle confirmed the
+  contract-sanctioned shapes (mapping layer as private helpers, quirk patching,
+  event-log counts readback) are designed, not bandaids.
 - **`make okf-validate`:** pass (runs inside `make verify`).
 
 ## Rubric status
 
-_Final check after the review stack._
+All 19 items hold (contract-verifier confirmed 1–6 and 9–19 item-by-item with evidence;
+its two pending-by-design items are now closed):
+
+- Item 7 (deferred seams in docs/deferred.md) — closed at step 8, in this PR.
+- Item 8 (review stack ran, findings recorded) — closed by this section.
 
 ## Intent & assumptions
 
