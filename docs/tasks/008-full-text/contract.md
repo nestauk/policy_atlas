@@ -265,9 +265,14 @@ and the chunks written here are permanent.
    - **Grey literature: Nesta publications** (the user's organisation — own-org content,
      clearly committable): report PDFs plus at least one Nesta web/HTML report page for
      the HTML path. Nesta's heat-pump work doubles as domain-relevant content.
-   - **Academic: seminal open-access papers** in Nesta's domains — early years
-     education, heat pump adoption, food environment policies — **selected for open
-     licences (CC BY or equivalent)** at recording time.
+   - **Academic: seminal open-access papers** in the domains of Nesta's three missions
+     (strategy to 2030, verified 2026-07-05) — **early-years education/development**
+     (A Fairer Start: every child developing to their full potential in the early
+     years), **heat pump adoption / home decarbonisation** (A Sustainable Future: 30%
+     cut in UK home carbon emissions), and **food environment / obesity policy**
+     (A Healthy Life: halving UK obesity prevalence) — **selected for open licences
+     (CC BY or equivalent)** at recording time. Three mission-aligned domains, not
+     four topics ("early years education" is one subject, per user, 2026-07-05).
    - **Provenance manifest, licence-guarded:** `fulltext_manifest.json` maps each
      acquire-fixture URL → outcome (`ok` + file · `403` · `404` · oversize · no-text-layer)
      and, for every committed document, records **title, real source URL, publisher,
