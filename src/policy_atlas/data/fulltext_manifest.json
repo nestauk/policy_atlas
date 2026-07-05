@@ -1,0 +1,303 @@
+{
+  "_meta": {
+    "coverage": [
+      "long report 100+ pages",
+      "multi-column academic PDF",
+      "HTML report page",
+      "HTML academic article",
+      "thin HTML",
+      "image-only PDF",
+      "corrupt PDF",
+      "paywall 403",
+      "dead link 404",
+      "oversize",
+      "cascade fallback",
+      "n/a-sentinel URL"
+    ],
+    "pymupdf4llm_version": "0.3.4",
+    "recorded_at": "2026-07-05",
+    "recorder": "scripts/record_fulltext_fixtures.py",
+    "recorder_version": "v1",
+    "total_bytes": 24403444,
+    "trafilatura_version": "2.1.0"
+  },
+  "documents": {
+    "bmc_fiscal_policies_review.html": {
+      "bytes": 785359,
+      "content_type": "text/html",
+      "licence": "CC-BY-4.0",
+      "publisher": "BMC (Springer Nature)",
+      "retrieved": "2026-07-05",
+      "source_url": "https://bmcpublichealth.biomedcentral.com/articles/10.1186/s12889-024-19988-4",
+      "title": "Effectiveness of implemented global dietary interventions: a scoping review of fiscal policies"
+    },
+    "derived_corrupt.pdf": {
+      "bytes": 4105,
+      "content_type": "application/pdf",
+      "generated": true,
+      "licence": "CC0-1.0",
+      "publisher": "Policy Atlas task 008 fixture recorder",
+      "retrieved": "2026-07-05",
+      "source_url": "urn:policy-atlas:fixture:derived_corrupt.pdf",
+      "title": "Generated derived_corrupt.pdf fixture"
+    },
+    "derived_image_only.pdf": {
+      "bytes": 516972,
+      "content_type": "application/pdf",
+      "derived_from": "nesta_heat_pump_costs.pdf",
+      "licence": null,
+      "permission": {
+        "date": "2026-07-05",
+        "note": "own-org content; committing authorised with task-008 contract approval (decision 9)",
+        "org": "Nesta",
+        "who": "Shabeer Rauf"
+      },
+      "publisher": "Policy Atlas task 008 fixture recorder",
+      "retrieved": "2026-07-05",
+      "source_url": "urn:policy-atlas:fixture:derived_image_only.pdf",
+      "title": "Image-only derivative of How to reduce the cost of heat pumps"
+    },
+    "derived_thin_stub.html": {
+      "bytes": 176,
+      "content_type": "text/html",
+      "generated": true,
+      "licence": "CC0-1.0",
+      "publisher": "Policy Atlas task 008 fixture recorder",
+      "retrieved": "2026-07-05",
+      "source_url": "urn:policy-atlas:fixture:derived_thin_stub.html",
+      "title": "Generated derived_thin_stub.html fixture"
+    },
+    "frontiers_ashp_ventilation_2021.pdf": {
+      "bytes": 3265210,
+      "content_type": "application/pdf",
+      "licence": "CC-BY-4.0",
+      "publisher": "Frontiers Media",
+      "retrieved": "2026-07-05",
+      "source_url": "https://www.frontiersin.org/journals/energy-research/articles/10.3389/fenrg.2021.785461/pdf",
+      "title": "An Experimental Study on External Ventilation to the Heating Performance of Household Air Source Heat Pump"
+    },
+    "frontiers_getting_ready_2018.pdf": {
+      "bytes": 600136,
+      "content_type": "application/pdf",
+      "licence": "CC-BY-4.0",
+      "publisher": "Frontiers Media",
+      "retrieved": "2026-07-05",
+      "source_url": "https://www.frontiersin.org/journals/psychology/articles/10.3389/fpsyg.2018.00759/pdf",
+      "title": "Parent Involvement in the Getting Ready for School Intervention Is Associated With Changes in School Readiness Skills"
+    },
+    "frontiers_school_readiness_2022.pdf": {
+      "bytes": 671661,
+      "content_type": "application/pdf",
+      "licence": "CC-BY-4.0",
+      "publisher": "Frontiers Media",
+      "retrieved": "2026-07-05",
+      "source_url": "https://www.frontiersin.org/journals/psychology/articles/10.3389/fpsyg.2022.1023505/pdf",
+      "title": "Predicting school readiness program implementation in community-based childcare centers"
+    },
+    "naturecomms_a2a_heat_pumps_2024.pdf": {
+      "bytes": 5295656,
+      "content_type": "application/pdf",
+      "licence": "CC-BY-4.0",
+      "publisher": "Springer Nature",
+      "retrieved": "2026-07-05",
+      "source_url": "https://www.nature.com/articles/s41467-024-49836-3.pdf",
+      "title": "Energy and environmental impacts of air-to-air heat pumps in a mid-latitude city"
+    },
+    "nesta_fairer_start_discovery.pdf": {
+      "bytes": 3623351,
+      "content_type": "application/pdf",
+      "licence": null,
+      "permission": {
+        "date": "2026-07-05",
+        "note": "own-org content; committing authorised with task-008 contract approval (decision 9)",
+        "org": "Nesta",
+        "who": "Shabeer Rauf"
+      },
+      "publisher": "Nesta",
+      "retrieved": "2026-07-05",
+      "source_url": "https://media.nesta.org.uk/documents/A_Fairer_Start_Local-_Learning_from_rapid_discovery_projects_v5.pdf",
+      "title": "A Fairer Start Local: Learning from rapid discovery projects"
+    },
+    "nesta_heat_pump_costs.pdf": {
+      "bytes": 2996675,
+      "content_type": "application/pdf",
+      "licence": null,
+      "permission": {
+        "date": "2026-07-05",
+        "note": "own-org content; committing authorised with task-008 contract approval (decision 9)",
+        "org": "Nesta",
+        "who": "Shabeer Rauf"
+      },
+      "publisher": "Nesta",
+      "retrieved": "2026-07-05",
+      "source_url": "https://media.nesta.org.uk/documents/How_to_reduce_the_cost_of_heat_pumps_v4_1.pdf",
+      "title": "How to reduce the cost of heat pumps"
+    },
+    "nesta_heat_pumps_report_page.html": {
+      "bytes": 106564,
+      "content_type": "text/html",
+      "licence": null,
+      "permission": {
+        "date": "2026-07-05",
+        "note": "own-org content; committing authorised with task-008 contract approval (decision 9)",
+        "org": "Nesta",
+        "who": "Shabeer Rauf"
+      },
+      "publisher": "Nesta",
+      "retrieved": "2026-07-05",
+      "source_url": "https://www.nesta.org.uk/report/reduce-the-cost-of-heat-pumps/",
+      "title": "How to reduce the cost of heat pumps (web report page)"
+    },
+    "plos_food_environment_review.pdf": {
+      "bytes": 1307470,
+      "content_type": "application/pdf",
+      "licence": "CC-BY-4.0",
+      "publisher": "PLOS",
+      "retrieved": "2026-07-05",
+      "source_url": "https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0182581&type=printable",
+      "title": "Improving food environments and tackling obesity: A realist systematic review of the policy success of regulatory interventions targeting population nutrition"
+    },
+    "worldbank_obesity_flagship.pdf": {
+      "bytes": 5230109,
+      "content_type": "application/pdf",
+      "licence": "CC-BY-3.0-IGO",
+      "publisher": "World Bank",
+      "retrieved": "2026-07-05",
+      "source_url": "https://openknowledge.worldbank.org/server/api/core/bitstreams/cddcb99b-9d0b-5f08-9cf6-934974a308cf/content",
+      "title": "Obesity: Health and Economic Consequences of an Impending Global Challenge"
+    }
+  },
+  "outcomes": {
+    "https://doi.org/10.99999/03c049fed0": {
+      "http_status": 404,
+      "outcome": "http_error"
+    },
+    "https://doi.org/10.99999/050131ae0e": {
+      "content_type": "text/html",
+      "file": "derived_thin_stub.html",
+      "outcome": "ok"
+    },
+    "https://doi.org/10.99999/287b9e9e3a": {
+      "content_type": "application/pdf",
+      "file": "frontiers_school_readiness_2022.pdf",
+      "outcome": "ok"
+    },
+    "https://doi.org/10.99999/348dc19a06": {
+      "http_status": 403,
+      "outcome": "http_error"
+    },
+    "https://doi.org/10.99999/40ee8970fd": {
+      "http_status": 404,
+      "outcome": "http_error"
+    },
+    "https://doi.org/10.99999/64eb9d2623": {
+      "http_status": 404,
+      "outcome": "http_error"
+    },
+    "https://doi.org/10.99999/8aaf38d751": {
+      "http_status": 404,
+      "outcome": "http_error"
+    },
+    "https://doi.org/10.99999/c12dbae192": {
+      "http_status": 403,
+      "outcome": "http_error"
+    },
+    "https://doi.org/10.99999/cacf1b906a": {
+      "content_type": "text/html",
+      "file": "nesta_heat_pumps_report_page.html",
+      "outcome": "ok"
+    },
+    "https://doi.org/10.99999/cf91b048b2": {
+      "content_type": "application/pdf",
+      "file": "nesta_heat_pump_costs.pdf",
+      "outcome": "ok"
+    },
+    "https://doi.org/10.99999/d621138b12": {
+      "http_status": 404,
+      "outcome": "http_error"
+    },
+    "https://doi.org/10.99999/dfdbddcf6b": {
+      "content_length": 209715200,
+      "outcome": "oversize"
+    },
+    "https://doi.org/10.99999/ec5197d219": {
+      "http_status": 403,
+      "outcome": "http_error"
+    },
+    "https://doi.org/10.99999/f99b17cdd3": {
+      "content_type": "text/html",
+      "file": "bmc_fiscal_policies_review.html",
+      "outcome": "ok"
+    },
+    "https://example.org/04fc90d2b999.pdf": {
+      "http_status": 404,
+      "outcome": "http_error"
+    },
+    "https://example.org/051e008a0329": {
+      "http_status": 403,
+      "outcome": "http_error"
+    },
+    "https://example.org/0914a0ee980b.pdf": {
+      "content_type": "application/pdf",
+      "file": "derived_corrupt.pdf",
+      "outcome": "ok"
+    },
+    "https://example.org/0e75c7f28b57": {
+      "http_status": 404,
+      "outcome": "http_error"
+    },
+    "https://example.org/0f7f4a9baf7b.pdf": {
+      "content_type": "application/pdf",
+      "file": "derived_image_only.pdf",
+      "outcome": "ok"
+    },
+    "https://example.org/1938908cc6b7.pdf": {
+      "http_status": 403,
+      "outcome": "http_error"
+    },
+    "https://example.org/2717858d3fb6": {
+      "content_length": 209715200,
+      "outcome": "oversize"
+    },
+    "https://example.org/42ad8806fb1f": {
+      "content_type": "application/pdf",
+      "file": "frontiers_getting_ready_2018.pdf",
+      "outcome": "ok"
+    },
+    "https://example.org/63c7141e1da9.pdf": {
+      "content_type": "application/pdf",
+      "file": "worldbank_obesity_flagship.pdf",
+      "outcome": "ok"
+    },
+    "https://example.org/7a1dc062abde": {
+      "content_type": "application/pdf",
+      "file": "derived_image_only.pdf",
+      "outcome": "ok"
+    },
+    "https://example.org/7af181a9eb31": {
+      "content_type": "application/pdf",
+      "file": "nesta_fairer_start_discovery.pdf",
+      "outcome": "ok"
+    },
+    "https://example.org/9088148a5445": {
+      "content_type": "application/pdf",
+      "file": "derived_corrupt.pdf",
+      "outcome": "ok"
+    },
+    "https://example.org/e1209ba1a2a6": {
+      "content_type": "application/pdf",
+      "file": "naturecomms_a2a_heat_pumps_2024.pdf",
+      "outcome": "ok"
+    },
+    "https://example.org/ef2da3f38189": {
+      "content_type": "application/pdf",
+      "file": "frontiers_ashp_ventilation_2021.pdf",
+      "outcome": "ok"
+    },
+    "https://example.org/fcb0d6954f74": {
+      "content_type": "application/pdf",
+      "file": "plos_food_environment_review.pdf",
+      "outcome": "ok"
+    }
+  }
+}
