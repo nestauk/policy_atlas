@@ -3,12 +3,25 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted, rev 2 — awaiting contract approval.
+> **Status:** drafted, rev 3 — awaiting contract approval.
 > Rev 2 (user challenge, 2026-07-05): rev 1's numpy k-means judged subpar-by-default
 > for a heterogeneous policy corpus; replaced with HDBSCAN + honest noise bucket +
 > c-TF-IDF labels (scikit-learn) after a state-of-the-art sweep (last30days) and a v2
-> theming reconnaissance — see § Clustering research grounding. Dependency gate
-> changed accordingly (numpy → scikit-learn).
+> theming reconnaissance — see § Clustering research grounding.
+> Rev 3 (user decisions, 2026-07-06): algorithmic clustering dropped entirely —
+> **thematic grouping is one bounded LLM call** (HDBSCAN judged degenerate-by-default
+> at 10s-of-docs scopes; agglomerative judged tuning-fiddly with term-soup labels; the
+> LLM aligns best with human topic judgment and generation was always coming — "don't
+> hack together something needing constant tweaking"). **User explicitly confirmed the
+> two gate expansions:** (1) the generation gate opens in 009 (first product prompt,
+> lead-authored, versioned) and (2) the injection posture recorded at 007/008 comes
+> due (first slice where third-party corpus text enters an LLM prompt). Also rev 3:
+> **`chunk_embedding` stays chunk-grain at ingest** (user product call: certain future
+> substrate for retrieval/synthesis; landing it with the egress gate beats a third
+> egress slice — a recorded, approved exception to 008's vectorise-at-first-reader
+> line, since nothing in 009 reads chunk vectors) · greenfield acknowledged (no
+> backfill framing — nothing is deployed) · scikit-learn dropped from the dependency
+> gate (no algorithm to ship).
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ · ADR: 0005 (embed seam / first
 > product egress) — to be written at step 4.
@@ -27,19 +40,23 @@ Add **characterise** — the EB shallow terminus (component 5). After the cheap 
 passes and full-text ingestion, characterise produces the **evidence landscape content**
 for a scope: (a) **deterministic coverage distributions** over Tier-0 columns — the
 hardest pattern grade, exactly reproducible, resting on the **screened base**,
-flag-not-block — and (b) **topic-level thematic shape**: clustering over document
-embeddings, labelled per cluster, honest about being the **softest grade** (an
-interpretive shape, not a count — recomputable, never a deterministic fact).
+flag-not-block — and (b) **topic-level thematic shape**: an LLM proposes the scope's
+themes and assigns every screened-in document to one (or explicitly to none), from
+titles + abstracts, in **one bounded call** — honest about being the **softest grade**
+(an interpretive shape, not a count — recomputable, never a deterministic fact, which
+is exactly the epistemic class an LLM grouping belongs to).
 
-Because clustering is the system's **first vector reader**, the 008 deferral comes due
-here: **vectorisation lands eager-and-uniform at ingest** (EB components §4 — the
-discipline restated by task 008's decision 1, now honoured). This is also, by user
-decision, the slice that **opens the runtime-egress gate**: embeddings come from a live
-provider (OpenAI `text-embedding-3-small`) behind an `EmbeddingBackend` seam — the first
-product code path that reaches the outside world carrying project data. The spec accepts
-this as a documented v3.0 posture (inference via the configured route, first pass OpenAI →
-target Bedrock, behind the routing seam); the gate exists so it is opened deliberately,
-here, with the controls named below.
+By user decision this is the slice that **opens the runtime-egress gate on both
+fronts**: **embeddings** (OpenAI `text-embedding-3-small` behind an `EmbeddingBackend`
+seam — eager-and-uniform chunk-grain vectorisation at ingest, landed ahead of its first
+reader as an approved exception, because it is certain retrieval/synthesis substrate
+and this is the gate-opening slice) and **generation** (the grouping call — the repo's
+first product prompt and the first time third-party corpus text enters an LLM prompt,
+so the recorded injection posture comes due here). The spec accepts live egress as the
+documented v3.0 posture (inference via the configured route, first pass OpenAI → target
+Bedrock, behind the routing seam); the gates exist so it is opened deliberately, here,
+with the controls named below. `make verify` remains deterministic and egress-free
+(stub embedder + stub grouper); live paths are explicit wiring + manual evidence.
 
 Characterise writes **content, not presentation**: a run-scoped characterisation record +
 topic/theme tags. It does **not** mint an artefact — EB produces **one** artefact,
@@ -57,12 +74,15 @@ A PR on `task/009-characterise` → `dev` that:
   Alembic migration (gated change 1; table count 16 → 19).
 - Wires the embed pass into every ingestion path (upload ingest, acquire envelope
   snapshots, full-text ingest) and as an ensure-step at characterise start.
-- Ships `characterise.py`: deterministic Tier-0 coverage distributions; document-level
-  embedding derivation; HDBSCAN clustering with an honest noise bucket (scikit-learn);
-  deterministic c-TF-IDF cluster labels; tag persistence; the run-scoped
+- Ships `characterise.py`: deterministic Tier-0 coverage distributions; the one-call
+  LLM grouping (lead-authored versioned prompt, schema-constrained output,
+  code-enforced exhaustive assignment, bounded repair, honest `unclustered` bucket);
+  a deterministic stub grouper for the suite; tag persistence; the run-scoped
   characterisation row; the structured landscape summary returned into
   `component.completed`.
-- Adds `openai` and `scikit-learn` as runtime dependencies (gated change 2).
+- Ships the live OpenAI inference path for structured generation behind the existing
+  `provider` seam (stub remains the default; gated change 4).
+- Adds `openai` as a runtime dependency (gated change 2).
 - Registers `"characterise"` in `COMPONENT_REGISTRY`; wires `_run_characterise`;
   `run_harness` gains optional `embedding_backend` (gated change 3).
 - Extends `skeleton.py`: … appraise → ingest_full_text → **characterise**, rendering the
@@ -138,9 +158,15 @@ artefact/block/annotation machinery exists but nothing here writes to it (decisi
    `embed_pending_chunks(conn, embedder, ...)` embeds every chunk lacking a
    `chunk_embedding` row for the active profile (anti-join — the exact idempotency
    pattern the result tables use), in deterministic chunk order, batched. Called at the
-   end of each of the three ingestion paths **and** as an ensure-step at characterise
-   start (safety net for corpora ingested pre-009 — the mechanism is eager; the backfill
-   is honest). Uniform means *all* snapshots: uploads, acquired envelopes
+   end of each of the three ingestion paths (greenfield — rev 3 drops the
+   characterise-time ensure/backfill: nothing is deployed, characterise reads no
+   vectors, and the anti-join makes any later ingest run the natural retry). **Rev 3
+   scope note (user decision, 2026-07-06): chunk-grain embedding ships in this slice
+   ahead of its first reader** — an approved exception to 008's
+   vectorise-at-first-reader line (spec log entry rides this contract): chunk vectors
+   are certain retrieval/synthesis substrate, and landing them with the egress gate
+   beats relitigating egress in a third slice. Uniform means *all* snapshots: uploads,
+   acquired envelopes
    (`abstract_only`) and full-text snapshots alike — no source class is second-class in
    retrieval later. Embed failures never fail ingestion: the pass returns honest counts
    (`embedded` / `already_embedded` / `failed`), failures stay pending (no status column
@@ -155,88 +181,103 @@ artefact/block/annotation machinery exists but nothing here writes to it (decisi
 3. **Embedding storage: `chunk_embedding` table, JSONB vector, no pgvector yet.**
    One row per (chunk × embedding profile): `chunk_id` FK, `embedding_profile`,
    `vector JSONB` (float array), `created_at`; unique `(chunk_id, embedding_profile)`.
-   Nothing in this slice does similarity search — clustering loads the scope's vectors
-   into memory — so a pgvector column/index would be an unread index behind a dependency
-   + extension + infra decision. pgvector arrives with the `retrieve` slice (the Tier-0
-   retrieval contract commits to it there); keying by profile means that migration is
-   additive. Profile-keyed rows also mean a future model/route change re-embeds under a
+   Nothing in this slice reads the vectors at all (rev 3 — the rows are landed
+   substrate for retrieval/synthesis, decision 2's approved exception), so a pgvector
+   column/index would be an unread index behind a dependency + extension + infra
+   decision. pgvector arrives with the `retrieve` slice — the vectors' actual first
+   reader (the Tier-0 retrieval contract commits to it there); keying by profile means
+   that migration is additive. Profile-keyed rows also mean a future model/route change re-embeds under a
    new profile without touching history.
-4. **Clustering: HDBSCAN over normalised document-level embeddings (scikit-learn), with
-   an honest noise class — rev 2, research-grounded (2026-07-05).** Rev 1's seeded
-   numpy k-means was challenged by the user (clustering is notoriously finicky; k-means
-   on raw high-dim vectors is the textbook-but-subpar version) and the challenge held
-   against both evidence streams (§ Clustering research grounding below):
-   - **Document vector** = mean of the document's chunk vectors from its **best
-     available snapshot** (full-text when ingested, else envelope), L2-normalised
-     (cosine geometry); the doc vector records which basis it used. Input set = the
-     scope's **screened-in** documents (the landscape rests on the screened base).
-   - **Algorithm: `sklearn.cluster.HDBSCAN`** (density-based; in scikit-learn ≥1.3, no
-     separate hdbscan package). It discovers the cluster count (killing rev 1's weakest
-     piece, the `sqrt(n/2)` k heuristic), handles varying densities, and gives a
-     **native noise/outlier class** — documents fitting no topic land in an honest
-     **`unclustered`** bucket, counted and visible in the landscape summary, never
-     forced into a bad cluster (k-means forces every doc; flag-not-drop applies to
-     shape too). Unclustered docs remain fully eligible downstream — they form their
-     own stratum when `select` lands.
-   - **Small-n floor:** below a stated document floor (plan detail) density estimation
-     is meaningless — degrade honestly to a single labelled cluster, flagged
-     `degenerate_small_n` in the summary. HDBSCAN's known noise-heavy failure mode
-     (30%+ noise observed in benchmarks) is surfaced, not hidden: the summary carries
-     the noise share, and a noise share above a stated threshold flags
-     `high_noise_share` for the user relay (decision 8).
-   - **Determinism:** HDBSCAN has no RNG — deterministic given (embedding set, params,
-     input order); input is ordered by document id. **No UMAP in v3.0**: at our corpus
-     sizes (tens to low hundreds per scope) reduction adds a heavy stochastic
-     dependency (numba) for value benchmarks locate mostly at scale; recorded as a
-     seam (with the caveat that UMAP-reduction benefits both algorithm families when
-     corpora grow).
-   - Cluster assignments are **run-local** (persisted only in this run's
-     `characterisation_result` row — resume checkpoint, recomputable, superseded by
-     the next run; never a canonical corpus fact, per capability.md).
-   - **Mixed-basis caveat, on the record:** abstract-only docs are short texts, and
-     short documents measurably degrade HDBSCAN topic coherence; the summary reports
-     the corpus text-basis mix next to the cluster shapes so the softest-grade caveat
-     is visible. Algorithm-quality tuning beyond this (parameter search, UMAP,
-     alternative algorithms) is **eval-seam territory** — the slice's bar is honest
-     machinery, not optimal clusters.
-5. **Cluster labels: deterministic c-TF-IDF in v3.0; LLM labelling is the recorded
-   seam (rev 2: labelling mechanism upgraded, structure unchanged).** Labels derive
-   from member titles/abstracts by **class-based TF-IDF** (the BERTopic labelling
-   idea: treat each cluster as one composite document, score terms across clusters —
-   strictly better cluster-distinctive labels than rev 1's plain top-TF, same
-   determinism, implementable in a few lines over scikit-learn's vectorizer). Honest,
-   reproducible, meaningful over real semantic clusters. The spec's "lightly
-   LLM-labelled" is the LLM-generation seam (like screen/classify stubs): it needs the
-   inference-route *generation* gate, prompt-bearing work, and
-   non-deterministic-output handling this slice doesn't otherwise carry — and the
-   BERTopic ecosystem itself treats LLM labels as a representation layer on top of
-   exactly this pipeline (top keywords + representative excerpts per cluster → one
-   call **per cluster**, never per document), which is the recorded shape of the seam.
-   v2's prompt discipline (research-question-anchored, MECE, affirmative,
-   evidence-grounded labels) is the porting material *for that seam*, not for v3.0.
-   Embeddings ≠ generation: opening the egress gate for vectors does not silently open
-   it for prompts. Labels persist as **topic/theme tags** (decision 6 note: tag writes
-   are idempotent) on member documents via `source_tag`; the run's label→cluster
-   mapping lives in the characterisation row.
-6. **Egress governance: mechanical infrastructure, telemetry-plane — plus first-egress
-   controls.** Embedding calls are not agent-invocable (`search` stays the only
-   agent-invocable egress verb); like 008's fetch posture they are mechanical execution
-   under the governed run: structured telemetry per batch + run-record summary counts
-   (chunks embedded, batches, failures) in `component.completed` — no per-chunk
-   governance events. First-egress controls, named: API key **only** from the
-   environment (never a parameter default, never logged, never committed — `.env` is
-   already gitignored); explicit request timeouts; bounded retry/backoff on transient
-   failures; batch size capped; a **per-run embed budget guard** (max chunks per pass, a
-   generous configurable cap — over it → the pass stops with honest `failed`/pending
-   counts and a loud log, never a silent partial that looks complete; runaway-cost
-   protection). What leaves the machine is chunk text (project corpus content) to the
-   configured provider — the documented, spec-accepted v3.0 inference-route posture;
-   embeddings return vectors only and interpret nothing (no instruction-following
-   surface, so the injection posture is unchanged).
+4. **Thematic grouping: one bounded LLM call — discover + assign together, code-owned
+   validation and repair (rev 3; user-confirmed generation gate).** Rev 2's HDBSCAN
+   fell to the corpus-size check (density estimation is degenerate-by-default at
+   10s-of-docs scopes); agglomerative survives technically but needs per-corpus
+   threshold tuning and yields term-soup labels — the "hack needing constant tweaking"
+   the user rejected. The LLM route aligns best with human topic judgment
+   (TopicGPT-class evidence) and fits the spec's own epistemics for clusters
+   (interpretive, recomputable, never a deterministic fact). Design — every v2
+   operational defect structurally closed:
+   - **One structured call** (the happy path): all screened-in documents' `(id, title,
+     abstract)` — ~30K tokens at 100 docs, no context cliff below several hundred —
+     with the scope's intent; output constrained by JSON schema to a **theme set**
+     (name + one-line description, count bounded, e.g. 3–12) plus an **exhaustive
+     assignment** list of `(doc_id, theme | "unclustered")`. Discovery and assignment
+     in one pass is reliable at this scale; TopicGPT separates them for corpus sizes
+     we don't have (recorded at the large-corpus seam).
+   - **Validation is code, not model trust:** schema conformance is provider-enforced
+     (strict structured outputs); **exhaustiveness is not schema-expressible**, so
+     code asserts every input id assigned exactly once, no invented ids, theme count
+     in bounds. On violation: **one bounded repair call** re-asking only the residue
+     (assign the missing/invalid docs against the now-fixed theme list — cheaper and
+     more reliable than regenerating everything). Still failing → the component fails
+     honestly (decision 11); never silent drops, never a placeholder theme (v2's
+     "General Theme" collapse is unrepresentable — a degenerate outcome is a flagged
+     failure state, not fake success).
+   - **`unclustered` is a first-class, counted outcome** — the model may decline to
+     force-fit a document; those docs stay fully eligible downstream and form their
+     own stratum when `select` lands. Counting invariant:
+     `screened_in == grouped + unclustered` (+ honest failure states).
+   - **No LangChain, no workflow framework:** this is a plain procedure against the
+     existing inference seam — build prompt, one call, validate, one repair, done.
+     v2's LangChain workflow shape is where its defects lived (dead critique stage,
+     O(N) mapping fan-out, silent drops); the valuable part was the prompt discipline,
+     which moves into the prompt itself (below). The component-level orchestration
+     framework in this repo is already the LangGraph harness.
+   - **Grouping is run-local** (persisted only in this run's `characterisation_result`
+     row — resume checkpoint, recomputable, superseded by the next run; never a
+     canonical corpus fact, per capability.md). Re-runs may group differently — the
+     spec's softest grade says exactly this; the run records prompt version, model id
+     and settings so any grouping is attributable.
+   - **Test seam:** a deterministic **stub grouper** (the `_stub_screen`/`_stub_classify`
+     pattern — e.g. groups by a metadata key) keeps `make verify` egress-free and
+     exercises all downstream machinery (validation, tags, row, summary, events);
+     the live path is manual evidence. **Large-corpus seam recorded:** past several
+     hundred docs, two-stage TopicGPT-style (discover on a sample, batched assignment)
+     or embedding-based clustering — the hybrid inverts at scale; chunk embeddings
+     (decision 1) are already in place for it.
+5. **The grouping prompt is the repo's first product prompt — prompt-bearing,
+   lead-authored, versioned (rev 3).** Named + versioned (`characterise_grouping_v1`),
+   recorded on the characterisation row and in the event payload (the appraisal
+   `rubric_version` discipline applied to prompts). It carries v2's genuinely good
+   prompt discipline where it belongs: **intent-anchored** (themes must serve the
+   scope's stated intent), **MECE-oriented** (collectively exhaustive is *enforced in
+   code*, not prompt-hoped; mutually exclusive and meaningful granularity are prompt
+   discipline), **affirmative, evidence-grounded labels** (derived only from supplied
+   text, no editorialising). Theme names double as the labels — no separate labelling
+   mechanism exists (rev 2's c-TF-IDF is gone with the algorithm) — and persist as
+   **topic/theme tags** (decision 6 note: tag writes are idempotent) on member
+   documents via `source_tag`; the run's theme→members mapping lives in the
+   characterisation row. Prompt-bearing work is lead-only per AGENTS.md — the prompt
+   is written by the lead, never delegated.
+6. **Egress governance + the injection posture coming due (rev 3).** Neither egress
+   path is agent-invocable (`search` stays the only agent-invocable egress verb); like
+   008's fetch posture both are mechanical execution under the governed run: structured
+   telemetry per call/batch + run-record summary counts in `component.completed` — no
+   per-chunk or per-document governance events. First-egress controls, named: API key
+   **only** from the environment (never a parameter default, never logged, never
+   committed — `.env` is already gitignored; asserted absent from all captured output);
+   explicit request timeouts; bounded retry/backoff on transient failures; batch size
+   capped; **per-run budget guards on both paths** (max chunks per embed pass; the
+   grouping call is one-plus-one-repair by construction — over any cap → stop with
+   honest counts and a loud log, never a silent partial that looks complete). What
+   leaves the machine is corpus text (chunk text on the embed path; titles + abstracts
+   on the grouping path) to the configured provider — the documented, spec-accepted
+   v3.0 inference-route posture. **Injection posture (user-confirmed): this is the
+   first slice where third-party corpus text flows *into* an LLM prompt** — including
+   provider-LLM-written Overton descriptions — the seam 007/008 pre-registered
+   ("enforcement lands with the LLM seams that read them"). Mitigations, structural
+   where possible: document content is passed as **data records keyed by id** under an
+   explicit data/instructions separation in the prompt; the output channel is
+   **schema-constrained to theme names + id assignments** (no tools, no free text
+   acting on the world — a hijacked model can at worst mis-group, which validation
+   and the softest-grade framing already bound); exhaustiveness and id validity are
+   **enforced in code after the call**; embeddings interpret nothing (vectors back
+   only). The ADR covers this posture; adversarial prompt-content behaviour beyond
+   the structural bounds is eval-seam territory, recorded.
 7. **Characterise writes content, not presentation (user decision, 2026-07-05).**
-   Durable output per run: one `characterisation_result` row (scope, run, embedding
-   profile, `coverage JSONB`, `clusters JSONB` — labels, sizes, member ids, top terms,
-   doc-vector text-basis mix) + `source_tag` rows. **No artefact, no blocks**: EB
+   Durable output per run: one `characterisation_result` row (scope, run, prompt
+   version + model id, `coverage JSONB`, `themes JSONB` — names, descriptions, member
+   ids, sizes, the unclustered set) + `source_tag` rows. **No artefact, no blocks**: EB
    produces one artefact, composed at the run terminus by the orchestrator; the
    **EB artefact-composition step** (create-or-supersede the single artefact, write
    landscape blocks from this content, summary/key-findings conventions, artefact
@@ -248,9 +289,10 @@ artefact/block/annotation machinery exists but nothing here writes to it (decisi
    2026-07-05).** v3.0's steerability principle vs monolithic v2 means each stage should
    have something to say to the user. Characterise's `component.completed` payload
    carries a structured **landscape summary** designed for relay, not just counts:
-   coverage distributions (with their base), cluster labels + sizes, and honest flags
-   (full-text coverage rate, Unknown-classification share, share failed embedding,
-   degenerate-clustering fallbacks). The skeleton renders it human-readably. This is
+   coverage distributions (with their base), theme names + descriptions + sizes, the
+   unclustered share, and honest flags (full-text coverage rate, Unknown-classification
+   share, share failed embedding, repair-path taken). The skeleton renders it
+   human-readably. This is
    exactly what the spec's mode-governed **landscape→synthesis steer-point** reads when
    steering modes land — that pause machinery is a recorded seam (plan-as-object
    territory), but the content it will relay ships now. No new event types; the payload
@@ -278,24 +320,25 @@ artefact/block/annotation machinery exists but nothing here writes to it (decisi
     duplicating; namespace consolidation stays the recorded orchestrator seam. classify's
     `open_tags` JSONB column is untouched — migrating it into this table is part of the
     LLM-classify seam, not this slice.
-11. **Failure semantics: clustering requires full embedding coverage of its input.**
-    After the ensure-pass, if any screened-in document still lacks a document vector
-    (provider outage, budget guard tripped), characterise **fails loudly with honest
-    counts** rather than clustering a biased subset (partial vectorisation biasing the
-    shape is exactly what eager-uniform exists to prevent — lazy/on-demand stays
-    rejected). Coverage distributions (metadata-only, no vectors needed) are still
-    computed and reported in the failure payload — the deterministic half degrades
-    honestly, the interpretive half refuses to fake it. Re-run retries pending
-    embeddings idempotently.
+11. **Failure semantics: the interpretive half refuses to fake it (rev 3).** If the
+    grouping call fails (provider outage, repair exhausted, validation still
+    violated), characterise **fails loudly with honest counts** — no placeholder
+    theme, no partial grouping presented as complete. Coverage distributions
+    (deterministic, metadata-only) are still computed and reported in the failure
+    payload — the deterministic half degrades honestly, the interpretive half refuses
+    to fake it. Re-running characterise retries the grouping cleanly (run-local rows
+    are per-run; nothing to unwind). Embed-pass failures at ingest never block
+    ingestion or characterise (nothing in 009 reads vectors); they surface as honest
+    counts and retry via the anti-join on any later ingest run.
 12. **Component wiring mirrors 004–008.** `"characterise"` in `COMPONENT_REGISTRY`
     requiring `evidence_scope_id`; context dataclass `(scope_id, intent, context)`;
     `_run_characterise` via `_run_scope_component`; conditional-edge wiring;
     `component.started`/`completed`/`failed`. Counting invariant:
-    `screened_in == clustered + <honest failure buckets>`, embed pass reports
-    `embedded + already_embedded + failed == pending_at_start`, and the
-    characterisation row is unique per `(scope, run)`. Realisation is "procedure"
-    end-to-end in v3.0 (the "agent" half of "procedure + agent" arrives with LLM
-    labelling).
+    `screened_in == grouped + unclustered` (+ honest failure states), embed pass
+    reports `embedded + already_embedded + failed == pending_at_start`, and the
+    characterisation row is unique per `(scope, run)`. Realisation is the spec's
+    "procedure + agent" in miniature: a deterministic procedure wrapping one bounded
+    LLM call.
 
 ### Clustering research grounding (rev 2, 2026-07-05)
 
@@ -339,6 +382,26 @@ bucket (vs silent drops), degenerate paths are flagged states (vs silent collaps
 clustering is O(0) LLM calls now and O(clusters) at the seam (vs O(N)), deterministic by
 construction (vs unseeded generative grouping).
 
+**Rev 3 adjudication (2026-07-06) — why the LLM route won after all, and why one call:**
+the corpus-size check killed HDBSCAN as default (density estimation degenerate at
+10s-of-docs scopes) and exposed agglomerative's cost (per-corpus cosine-threshold
+tuning, term-soup labels — refinement-heavy machinery for clusters the spec calls
+interpretive anyway). The user's judgment: generation was always coming in an LLM-based
+tool; if an LLM call is the most appropriate mechanism, use it rather than hack an
+algorithmic stand-in — confirmed with both gate expansions (generation egress + the
+injection posture). The v2 lesson is thereby *refined, not reversed*: v2's failure was
+not "LLM grouping" but its **operational shape** — O(N) mapping calls, a context cliff
+with no guard, silent drops, a dead critique stage, MECE promised but unenforced. At
+v3.0 scope sizes (10s–100s docs) one bounded structured call with code-enforced
+validation + one repair call closes every one of those defects while keeping the
+quality edge TopicGPT-class evidence documents. Discover+assign stay in a single call
+because splitting them (v2/TopicGPT-style) buys robustness only at corpus sizes past
+several hundred documents — recorded as the large-corpus seam. **No LangChain**: the
+valuable v2 residue is prompt discipline (moved into the versioned prompt) and the
+facet decomposition (moved to the `group` seam); the workflow framework itself is where
+v2's dead code and silent drops lived, and this repo's component orchestration is
+already the LangGraph harness.
+
 ### Schema
 
 **Gated change 1 — three new tables** (one migration; table count 16 → 19):
@@ -349,8 +412,8 @@ chunk_embedding          chunk_embedding_id PK · chunk_id FK→chunk · embeddi
                          UNIQUE (chunk_id, embedding_profile)
 
 characterisation_result  characterisation_id PK · evidence_scope_id FK · run_id FK
-                         · embedding_profile TEXT · coverage JSONB · clusters JSONB
-                         · created_at
+                         · grouping_prompt_version TEXT · grouping_model TEXT
+                         · coverage JSONB · themes JSONB · created_at
                          UNIQUE (evidence_scope_id, run_id)      -- run-local by design
 
 source_tag               source_tag_id PK · project_source_snapshot_id FK · tag TEXT
@@ -369,10 +432,10 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
   *, embedder, project_id, run_id, batch_size=…, max_chunks=…) -> dict` (counts) ·
   deterministic windowing for oversized chunks.
 - **`characterise.py`** — `CharacteriseContext` · `characterise_scope(conn, *,
-  project_id, run_id, context, embedder) -> dict` (ensure-embedded → coverage →
-  document vectors → HDBSCAN → c-TF-IDF labels → tags → characterisation row →
-  landscape summary) · clustering + labelling helpers (noise bucket, small-n floor,
-  flags).
+  project_id, run_id, context, grouper) -> dict` (coverage → grouping call →
+  validate/repair → tags → characterisation row → landscape summary) · the
+  `characterise_grouping_v1` prompt (lead-authored) · grouping-output validation
+  helpers · deterministic stub grouper.
 - **`ingest.py` / `acquire.py` / `ingest_full_text.py`** — call `embed_pending_chunks`
   after their chunk writes (counts folded into their `component.completed` payloads).
 - **`plan.py`** — `"characterise": {"requires": ["evidence_scope_id"]}`.
@@ -380,7 +443,7 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
   None` on `run_harness` (defaults to `StubEmbeddingBackend()` — no default egress);
   threaded through `HarnessState`.
 - **`skeleton.py`** — chain extended with characterise; renders the landscape summary;
-  uses the live backend iff `OPENAI_API_KEY` is set.
+  uses the live embedder + live grouper iff `OPENAI_API_KEY` is set, stubs otherwise.
 
 ### Tests (`tests/test_characterise.py` + `tests/test_embeddings.py`)
 
@@ -397,26 +460,33 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
 - Coverage: distributions over a seeded corpus match hand-computed values; base counts
   (screened-in vs not-relevant vs failed vs unscreened) present; every distribution
   carries its base label; flag-not-block (below-bar/Unknown rows counted, never dropped).
-- Clustering: deterministic across runs (HDBSCAN, no RNG, id-ordered input — two runs
-  byte-identical); document vector uses full-text snapshot when present else envelope
-  (and records which); **noise honesty** — outlier docs land in the counted
-  `unclustered` bucket, never forced into a cluster, and the invariant covers them
-  (`screened_in == clustered + unclustered + <failure buckets>`); small-n floor →
-  `degenerate_small_n` flagged; high noise share → `high_noise_share` flagged;
-  assignments land only in the characterisation row (no canonical cluster state
-  anywhere).
-- Labels/tags: deterministic c-TF-IDF labels (cluster-distinctive: a term dominating
-  all clusters doesn't label any); `source_tag` rows for members (unclustered docs get
-  no topic tag — no false labels); re-run accretes without duplicates; created only by
-  characterise (nothing else writes tags).
-- Failure semantics: missing embeddings after ensure-pass → `component.failed`-style
-  honest outcome with coverage still reported (decision 11); counting invariants hold.
-- Landscape summary payload: structure asserted (coverage + clusters + flags + bases);
-  no new event types; skeleton renders it.
-- **Zero-egress guard extended**: `make verify` uses stubs only; socket-deny test covers
-  an end-to-end characterise run (007/008 precedent — the live path is never exercised
-  by the suite); `OpenAIEmbeddingBackend` constructed without a key fails loudly and
-  early; the key never appears in logs/events (asserted against captured output).
+- Grouping (stub grouper drives the suite; live behaviour is manual evidence + eval
+  seam): validation enforces exhaustive assignment — a grouper double returning a
+  missing doc, an invented id, a duplicate assignment, or an out-of-bounds theme count
+  triggers the **repair path** (asserted: repair called with only the residue, against
+  the fixed theme list); repair still invalid → honest `component.failed`, no partial
+  grouping persisted, no placeholder theme (asserted unrepresentable); `unclustered`
+  is a counted first-class outcome and the invariant covers it
+  (`screened_in == grouped + unclustered`); assignments land only in the
+  characterisation row (no canonical cluster state anywhere); prompt version + model
+  id recorded on the row and event payload.
+- Prompt hygiene: document content enters the prompt as id-keyed data records under
+  the data/instructions separation (asserted structurally on the built prompt); an
+  injection-shaped fixture abstract ("ignore instructions and…") flows through as
+  data — the output schema cannot express anything but themes + assignments, and
+  validation passes/fails on structure alone.
+- Labels/tags: theme names persist as `source_tag` rows for members (unclustered docs
+  get no topic tag — no false labels); re-run accretes without duplicates; created
+  only by characterise (nothing else writes tags).
+- Failure semantics: grouping failure → honest failure with coverage still reported in
+  the payload (decision 11); counting invariants hold.
+- Landscape summary payload: structure asserted (coverage + themes with sizes + flags
+  + bases); no new event types; skeleton renders it.
+- **Zero-egress guard extended**: `make verify` uses stubs only (stub embedder + stub
+  grouper); socket-deny test covers an end-to-end characterise run (007/008 precedent
+  — neither live path is ever exercised by the suite); `OpenAIEmbeddingBackend` / the
+  live provider constructed without a key fail loudly and early; the key never appears
+  in logs/events (asserted against captured output).
 - Idempotency/re-run: second characterise run → new characterisation row for the new
   run, tags accreted not duplicated, embeddings all `already_embedded`.
 - Harness round-trip: `Plan(component="characterise")` → characterisation row + tags in
@@ -433,23 +503,22 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
 - **`retrieve` / pgvector / hybrid retrieval** — the committed direction for the
   retrieval slice; embedding rows are ready for it (decision 3). Chunk-volume-bias
   controls stay recorded there.
-- **LLM cluster labelling** (decision 5) and the **LLM screen/classify/grounding
-  tools** — the inference-*generation* gate is not opened by this slice.
+- **LLM screen/classify tools and the LLM grounding tier** — the generation gate opens
+  for exactly one prompt-bearing surface (the grouping call); every other LLM seam
+  stays stubbed and separately gated.
 - **Steering modes / the landscape→synthesis steer-point pause** — plan-as-object
   machinery; the payload it will relay ships now (decision 8).
 - **Dual-view coverage** — needs the source/evidence policy object (decision 9).
 - **Bedrock embedding route** — the seam swap; recorded with the routing-seam note.
 - **Exact-token budgeting (tiktoken-class) and semantic re-chunking** — recorded at the
   embed seam; v3.0 windowing is a char-budget heuristic (decision 2).
-- **UMAP reduction and clustering-quality tuning** — parameter search, reduction,
-  alternative algorithms, cluster-coherence evals; entered via the eval seam when real
-  corpora warrant it (decision 4). The `group` component inherits v2's theming lessons
-  (four-facet decomposition, MECE/RQ-anchored labelling prompts, never LLM-as-grouper)
-  — recorded in deferred.md by this slice.
+- **Large-corpus grouping** — two-stage TopicGPT-style (discover on a sample, batched
+  assignment) or embedding-based clustering (HDBSCAN/agglomerative over the chunk
+  vectors this slice lands) past several hundred docs; grouping-quality evals
+  (decision 4). The `group` component inherits v2's theming lessons (four-facet
+  decomposition; the bounded-call shape) — recorded in deferred.md by this slice.
 - **Tag namespace consolidation / `open_tags` migration** (decisions 5, 10).
 - **`select` and everything deeper** — subsequent slices.
-- **Backfill tooling for large pre-existing corpora** — the ensure-pass covers v3.0
-  realities; a bulk backfill command is not needed until there is production data.
 
 ## Constraints & approval gates
 
@@ -457,31 +526,41 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
 
 1. **Schema** — three new tables (`chunk_embedding` · `characterisation_result` ·
    `source_tag`), one migration, no existing-table changes.
-2. **Dependencies** — `openai` (the provider SDK; also the eventual LLM-seam client) and
-   `scikit-learn` (brings numpy/scipy; supplies `HDBSCAN`, the vectorizer under
-   c-TF-IDF labels, and the standard algorithm shelf the eval seam will draw on — rev 2
-   supersedes rev 1's numpy-only line, which existed to hand-roll the k-means this
-   contract no longer wants; **not** umap-learn/numba, **not** the BERTopic framework —
-   it would bury the embedding/labelling seams this repo deliberately owns).
+2. **Dependencies** — `openai` only (embeddings + structured generation through one
+   SDK). Rev 3 drops rev 2's `scikit-learn` (no clustering algorithm ships) and rev 1's
+   `numpy`; **not** the BERTopic framework (default install pulls
+   sentence-transformers → torch plus umap-learn/numba — the gate-excluded ML tier —
+   to supply a pipeline this design no longer runs).
 3. **Public interface** — `run_harness` optional `embedding_backend` parameter + the
-   `"characterise"` registry entry (007/008 precedent).
-4. **Runtime egress** — `OpenAIEmbeddingBackend` sends chunk text to OpenAI's embeddings
-   API on the production path. **The first product egress.** Controls in decision 6;
-   `make verify` and all defaults remain egress-free; live is opt-in by explicit wiring
-   + environment key.
+   `"characterise"` registry entry (007/008 precedent). Generation reuses the existing
+   `provider` parameter (a live implementation lands behind it; no signature change).
+4. **Runtime egress — both fronts, user-confirmed (2026-07-06).**
+   `OpenAIEmbeddingBackend` sends chunk text to the embeddings API;
+   the grouping call sends titles + abstracts to the chat API with the repo's first
+   **product prompt** (lead-authored, versioned) — and the **injection posture comes
+   due** (decision 6). Controls in decision 6; `make verify` and all defaults remain
+   egress-free (stub embedder + stub grouper); live is opt-in by explicit wiring +
+   environment key.
 
-Plus one spec clarification (components §5, decision 7) approved with this contract.
+Plus two spec flow-backs approved with this contract: the components §5
+content-vs-artefact clarification (decision 7), and the §5 thematic-mechanism update
+(decision 4: v3.0 groups via one bounded LLM call over titles/abstracts at small corpus
+scale; embedding-based clustering is the recorded large-corpus path; chunk vectorisation
+lands with the egress gate ahead of its first reader — approved exception to the 008
+deferral line).
 
-**Explicitly not crossed:** no LLM/generation calls, no auth/tenancy change, no CI
-change, no pgvector/extension, no artefact/block writes, no changes to existing tables.
+**Explicitly not crossed:** no agent-loop / multi-call generation (one call + one
+repair, schema-bound), no auth/tenancy change, no CI change, no pgvector/extension, no
+artefact/block writes, no changes to existing tables, no LangChain or new framework.
 
 ## Public / private boundary
 
 - **Credentials**: `OPENAI_API_KEY` environment-only; never committed, logged, or echoed
   into events/verification artifacts (test-asserted). `.env` stays gitignored.
-- **Chunk text leaves the machine on the live path** — to the configured provider only,
-  under the spec-accepted v3.0 inference-route posture. Fixture-corpus content is
-  openly licensed (008's licence guard), so even live verification runs send only
+- **Corpus text leaves the machine on the live paths** — chunk text (embeddings) and
+  titles + abstracts (grouping) — to the configured provider only, under the
+  spec-accepted v3.0 inference-route posture. Fixture-corpus content is openly
+  licensed (008's licence guard), so even live verification runs send only
   committable text.
 - Committed artifacts (profile names, table/column names, deterministic labels over
   fixture corpora, verification counts) are all public-safe. No recorded live vectors
@@ -490,17 +569,19 @@ change, no pgvector/extension, no artefact/block writes, no changes to existing 
 
 ## Model route
 
-**Embeddings only**: OpenAI `text-embedding-3-small` under the approved-controls posture
-(→ Bedrock behind the `EmbeddingBackend` seam when the route lands). **No generation, no
-prompts** — there is no prompt-bearing surface in this slice (cluster labels are
-deterministic; decision 5). The embedding profile string is the model-version provenance
-on every row.
+**Embeddings**: OpenAI `text-embedding-3-small` under the approved-controls posture
+(→ Bedrock behind the `EmbeddingBackend` seam when the route lands); the embedding
+profile string is the model-version provenance on every row. **Generation**: one
+structured chat call per characterise run (gpt-5-mini-class; exact model pinned at the
+plan gate) behind the existing `provider` seam (→ Bedrock at the same route swap).
+**Prompt-bearing surface: `characterise_grouping_v1`** (decision 5) — lead-authored,
+versioned, recorded on the characterisation row and event payload; the only prompt in
+the slice.
 
 ## Disciplines binding this slice
 
 - **Eager and uniform** — every ingested chunk embeds under the active profile; absence
-  is pending, never a silent skip; lazy/on-demand stays rejected (partial-coverage
-  clustering refused, decision 11).
+  is pending, never a silent skip; lazy/on-demand stays rejected.
 - **Pattern grades never conflated** — coverage = metadata-grounded facts with an
   explicit base; clusters = interpretive shape, run-local, honestly soft; the summary
   carries both with their grades visible.
@@ -512,10 +593,15 @@ on every row.
   population/geography absence from Tier-0 is stated, not papered over.
 - **Snapshots and chunks immutable** — embedding rows and windows attach *alongside*;
   no chunk mutation, no re-segmentation (one parse, one segmentation stands).
-- **Deterministic where claimed** — stub vectors, clustering (HDBSCAN, no RNG), labels,
-  coverage: same input, same output, test-enforced; live vectors are provider-dependent
-  and never inside `make verify`.
-- **No prompt-bearing work** rides this slice (decision 5 keeps generation out).
+- **Deterministic where claimed, honestly soft where not** — coverage, stub paths,
+  validation logic: same input, same output, test-enforced. The live grouping is
+  interpretive by design (softest grade); its provenance (prompt version, model id)
+  makes every grouping attributable. Neither live path is inside `make verify`.
+- **Exactly one prompt-bearing surface** — `characterise_grouping_v1`, lead-authored,
+  versioned; no other generation call exists in the slice (decision 5).
+- **Never silent, never fake** — no placeholder themes, no silent drops, no partial
+  grouping presented as complete (decisions 4, 11 — v2's failure modes made
+  unrepresentable).
 
 ## Stop conditions
 
@@ -526,11 +612,13 @@ on every row.
   only).
 - The one-artefact shape is threatened mid-build (something needs blocks/artefact writes
   after all) — halt, don't improvise composition.
-- Clustering over real embeddings proves the HDBSCAN design inadequate *for the
-  machinery to function* (e.g. everything lands in noise on the fixture corpus — not
-  merely imperfect clusters, which is the eval seam) — halt and re-open decision 4
-  with evidence.
-- Scope would grow past the contract (LLM labels, retrieval, composition, policy
+- The one-call grouping proves inadequate *for the machinery to function* on the live
+  manual check (e.g. validation + repair cannot converge on the fixture corpus — not
+  merely imperfect themes, which is the eval seam) — halt and re-open decision 4 with
+  evidence; don't quietly grow a multi-call workflow.
+- The grouping prompt needs capabilities beyond themes+assignments (tool use, free
+  text, multi-turn) — that's a different design; halt.
+- Scope would grow past the contract (other LLM seams, retrieval, composition, policy
   object, select).
 - `make verify` red with unclear root cause; or the turn/token budget is spent.
 
@@ -539,12 +627,14 @@ on every row.
 - `make verify` (test · typecheck · lint · build) — green, deterministic, zero egress
   (socket-deny covers the characterise round-trip).
 - **One manual live check** (evidence in verification.md): skeleton end-to-end with
-  `OPENAI_API_KEY` set against the fixture corpus — real embeddings, real clusters,
-  landscape summary rendered; per-run token/chunk counts and cost note recorded; key
-  absent from all captured output.
-- Deterministic vs AI eval: all suite checks are deterministic tests. Cluster *quality*
-  on real embeddings is eval territory (the labelling/clustering upgrade seams); this
-  slice's bar is machinery correctness + honest output, not cluster goodness.
+  `OPENAI_API_KEY` set against the fixture corpus — real embeddings, a real grouping
+  call (themes + assignments over the fixture docs), landscape summary rendered;
+  per-run token/chunk counts and cost note recorded; key absent from all captured
+  output.
+- Deterministic vs AI eval: all suite checks are deterministic tests (stub embedder +
+  stub grouper). Theme *quality* on the live path is eval territory (the
+  grouping-quality seam); this slice's bar is machinery correctness + honest output,
+  not theme goodness.
 
 ## Verification evidence expected
 
@@ -552,35 +642,44 @@ on every row.
 - `make verify` table with pass counts; socket-deny + key-hygiene test results named.
 - Migration roundtrip clean; table count 19.
 - Counting-invariant + idempotency + eager-uniform coverage test results named.
-- The live-run evidence (manual check above): landscape summary as rendered, cluster
-  labels + sizes over the fixture corpus, embed counts/batches, honest cost/token note.
+- The live-run evidence (manual check above): landscape summary as rendered, theme
+  names + sizes over the fixture corpus, embed counts/batches, grouping
+  token/validation/repair counts, honest cost note.
 - Determinism evidence: two stub runs byte-identical on the characterisation row.
 - Public-safety confirmation (no credentials anywhere; live run sent openly-licensed
   fixture text only).
-- Deferred seams recorded in `docs/deferred.md` (EB artefact composition · LLM cluster
-  labelling · steering-mode steer-point reading the landscape payload · dual-view
-  coverage behind the policy object · pgvector + retrieval · Bedrock route swap ·
-  exact-token budgeting · UMAP/clustering-quality tuning via evals · v2 theming
-  lessons at the `group` + LLM-labelling seams · tag namespace consolidation) and the
-  class-1 "vectorisation at first reader" entry updated to discharged.
+- Deferred seams recorded in `docs/deferred.md` (EB artefact composition ·
+  large-corpus grouping — two-stage/batched or embedding-based clustering over the
+  landed chunk vectors · grouping-quality + adversarial-content evals · steering-mode
+  steer-point reading the landscape payload · dual-view coverage behind the policy
+  object · pgvector + retrieval — the chunk vectors' first reader · Bedrock route
+  swap · exact-token budgeting · v2 theming lessons at the `group` seam · tag
+  namespace consolidation) and the class-1 "vectorisation at first reader" entry
+  updated: discharged by 009 ahead of its reader (approved exception).
 - Diff summary (any bulky fixture data excluded from review diffs per the 007 retro).
 
 ## Risk tier & review focus
 
-**Tier 3** — opens the runtime-egress gate (first product egress, credentials, project
-data leaving the machine), three new tables, two new dependencies, a public-interface
-addition. ADR 0005 (embed seam / first egress) due at step 4; contract- and plan-stage
-adversarial reviews standard.
+**Tier 3** — opens the runtime-egress gate on both fronts (first product egress:
+embeddings + generation; credentials; project data leaving the machine; the repo's
+first product prompt; the injection posture coming due), three new tables, a new
+dependency, a public-interface addition. ADR 0005 (embed + generation seams / first
+egress / injection posture) due at step 4; contract- and plan-stage adversarial
+reviews standard.
 
 Review focus:
 - **Security (the headline lane)**: key handling (env-only, never logged/committed);
-  egress boundaries (stub default, live explicit; socket-deny in suite); what text
-  leaves and under what posture; budget guard; timeout/retry bounds; no
-  instruction-following surface in the embed path.
+  egress boundaries (stub defaults, live explicit; socket-deny in suite); what text
+  leaves and under what posture; **the prompt-injection surface** (id-keyed data
+  records, schema-constrained output, no tools, code-side validation — the structural
+  bounds hold?); budget guards; timeout/retry bounds.
 - **Correctness**: anti-join idempotency; eager-uniform coverage across all three
-  ingestion paths; windowing determinism; k-means/label determinism; counting
-  invariants; decision-11 refusal on partial coverage.
-- **Provenance/honesty**: pattern grades kept distinct; bases on every claim; run-local
-  clusters not leaking into canonical state; profile stamped everywhere.
+  ingestion paths; windowing determinism; grouping validation + repair logic
+  (exhaustiveness, invented ids, duplicates, bounds); counting invariants;
+  decision-11 honest failure.
+- **Provenance/honesty**: pattern grades kept distinct; bases on every claim;
+  run-local groupings not leaking into canonical state; embedding profile + prompt
+  version stamped everywhere; no placeholder-theme or silent-drop path representable.
 - **Schema**: migration roundtrip; FK-safe deletes; unique constraints.
-- **Scope**: no generation calls, no composition/blocks, no pgvector, no select.
+- **Scope**: exactly one generation surface; no composition/blocks, no pgvector, no
+  select, no LangChain.
