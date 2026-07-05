@@ -3,7 +3,13 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted — rev 5 (user-steered, 2026-07-05).  
+> **Status:** approved — adversarial review.  
+> Contract approved (before planning): 2026-07-05 · Shabeer Rauf (rev 5 + seam notes;
+> user-settled at this gate: PyMuPDF4LLM-only parser under the ~2-min wall-clock target ·
+> no-truncation-ever ratified after cost/quality challenge · link-level snapshot
+> attachment · real openly-licensed fixtures across Nesta's three mission domains ·
+> docling/time-budget/GPU + paywall-detection + chunk-volume-bias seams · AGPL-3.0
+> licence · all three gated changes + spec clarification + fixture-policy amendment).  
 > Rev 2 changes at user direction: parser selection researched properly (parse quality is
 > foundational for a RAG tool — no default libraries); **truncation abolished** (full text
 > or honest failure, never silent partial); ingestion is a **bounded parallel fan-out**,
