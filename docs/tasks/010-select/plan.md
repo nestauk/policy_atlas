@@ -1,10 +1,11 @@
 # Implementation Plan: 010-select
 
-> **Status:** rev 2 — plan-stage adversarial review adjudicated (Codex,
-> 2026-07-06, 9 findings: 2 blockers · 6 majors · 1 minor — 9/9 adopted, finding
-> 1 with a redesigned remedy; § Findings & adjudication). Pending human 🛑, which
-> also covers the flagged contract amendment (explicit `characterisation_run_id`
-> — contract rev 7). ADR 0006 written at that gate (Task 8b).
+> **Status:** **confirmed — 2026-07-06 · Shabeer Rauf** (after the plan-stage
+> adversarial review was adjudicated: Codex, 9 findings — 2 blockers · 6 majors ·
+> 1 minor, 9/9 adopted, finding 1 with a redesigned remedy; § Findings &
+> adjudication. Confirmation covers the rev-7 contract amendment — explicit
+> `characterisation_run_id` — and the run-model framing settled at this gate).
+> ADR 0006 written and Accepted at this gate (Task 8b).
 > Contract: [contract.md](contract.md) (approved 2026-07-06 · Shabeer Rauf, rev 5;
 > contract-stage adversarial findings adjudicated at rev 6; user follow-ups at
 > rev 6.1; plan-stage amendment at rev 7).
@@ -350,7 +351,10 @@ plan-as-object, never a run entity; **capability run** = the missing middle —
 additive `capability_run` table + nullable FK on `runs`, trace root moves to
 that grain, dissolving the detached-trace warts; **component execution** = the
 as-built `runs` grain; `characterisation_run_id` is the interim explicit edge
-and "same capability run" becomes its natural value later) ·
+and "same capability run" becomes its natural value later; user note
+2026-07-06: a project will eventually hold **multiple plans and multiple plan
+runs** — plan-level multiplicity is part of this seam's shape, consistent with
+plan-as-object's plan-as-registry and capability→artefact one-to-many) ·
 embedding-relevance-for-select (declined, rev 4) · selection-diversity
 extensions · policy soft-prior tilt (integration shape: policy compiles into
 directive boosts) · second strategies · full appraisal on the selected subset —

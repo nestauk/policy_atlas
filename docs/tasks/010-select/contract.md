@@ -8,9 +8,11 @@ specs in [docs/specs/](../../specs/index.md).
 > covering the three gated changes: `selection_result` schema · `"select"`
 > registry entry + `ranking_backend` parameter · the `select_rerank_v1`
 > generation surface — and the components §6 realisation flow-back) ·
-> Plan approved (before implementation): _pending_ ·
-> ADR: 0006 (selection strategy · directive · rerank seam · rationale record) —
-> due at step 4.
+> Plan approved (before implementation): **2026-07-06 · Shabeer Rauf** (plan
+> rev 2, covering the rev-7 amendment: `characterisation_run_id` on
+> `Plan`/`Config`) ·
+> ADR: [0006](../../adr/0006-selection-strategy-directive-rerank.md) —
+> Accepted 2026-07-06.
 >
 > **Revision history:**
 > - **rev 1** (2026-07-06): initial draft — deterministic stratified strategy,
