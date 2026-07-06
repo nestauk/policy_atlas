@@ -240,9 +240,12 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
    (Transferability's dependency-scoping strategy is that capability's problem,
    ⏸ deferred). The seam is the signature — deliberately shaped as the facade the
    capability agent invokes as one tool. Three recorded seams sit on it:
-   **agent-authored directives** (the commit layer authors the directive from
-   intent + the landscape summary — the LLM reasoning over selection, at the seam
-   the spec built for it); an **`llm_assisted` strategy** (eval-gated: reopen with
+   **agent-authored directives** (the capability agent authors the directive
+   **just-in-time at invocation, once the characterisation row exists** — reading
+   this run's landscape + the intent; per plan-as-object the up-front plan is a
+   non-compiling *forecast*, never the executed directive — the LLM reasoning over
+   selection, at the seam the spec built for it); an **`llm_assisted` strategy**
+   (eval-gated: reopen with
    evidence once extract gives selection quality a consequence — the pattern that
    legitimately flipped characterise); and the **capability-run entity** (today a
    run = one component execution and the chain order lives only in `skeleton.py`,
