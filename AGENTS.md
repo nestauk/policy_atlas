@@ -22,44 +22,29 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `009-characterise`.
+Implementation — task `010-select`.
 
-Tasks `001-walking-skeleton` through `008-full-text` are complete (merged). The active
-slice adds **characterise** — the EB shallow terminus (component 5) — and **opens the
-runtime-egress gate on both fronts** (user-confirmed): **embeddings** (an
-`EmbeddingBackend` protocol; live OpenAI `text-embedding-3-small`; eager-and-uniform
-chunk-grain vectorisation at ingest, landed ahead of its first reader as an approved
-exception — chunk vectors are certain retrieval/synthesis substrate) and **generation**
-(the repo's first product prompts: the `characterise_grouping_v1` discovery+assignment
-pair, lead-authored, co-versioned).
-Characterise itself: deterministic **coverage distributions over Tier-0 columns**
-(metadata-grounded patterns, base = the scope's screened-in set, flag-not-block) and
-**thematic grouping via a bounded two-stage LLM procedure** — discover themes (one
-judgment-model call over all titles/abstracts), then assign each document against the
-fixed theme list (batched concurrent cheap-model calls), schema-constrained throughout,
-**code-enforced per-batch exhaustive assignment** with targeted per-batch repair, an
-honest counted `unclustered` bucket, a call budget known before the run
-(`1 + ceil(n/batch) + repairs`), no placeholder themes or silent drops representable
-(v2's theming defects structurally closed). Groupings are run-local,
-never canonical; theme names persist as typed topic/theme tags. The **tag layer lands
-with assertion provenance** (`source_tag.asserted_by`): acquire materialises provider
-topical assertions (OpenAlex topics/SDGs; Overton topics/classifications/LLM themes) as
-provenance-classed tags, and coverage aggregates the tag layer by
-`(tag_type, asserted_by)` — provider, provider-LLM and own-capability assertions never
-mix. The **injection posture
-comes due here** (first slice where third-party corpus text enters an LLM prompt —
-id-keyed data records, constrained schema, no tools). Durable output = a run-scoped
-characterisation row + `source_tag` rows + a structured **landscape summary** in the
-`component.completed` payload (the future steer-point/orchestrator-chat relay surface).
-**No artefact/blocks here** — the single EB artefact is composed at the run terminus by a
-later composition slice. `make verify` stays deterministic and egress-free (stub embedder
-+ stub grouper); live is explicit wiring + env key. Gated changes ride this slice
-(schema: `chunk_embedding` · `characterisation_result` · `source_tag`, all
-project-scope-guarded · dependencies: `openai`, `langfuse` · `run_harness`
-`embedding_backend` + `grouping_backend` parameters · **runtime egress: embeddings +
-the two-stage grouping calls + Langfuse traces to user-operated instances**). The
-**Langfuse tracing baseline** lands here (first LLM traffic): live backends traced
-(run/component/call spans, prompt version, tokens/cost), env-driven and no-op without
-keys; repo-first prompt governance; registry deployment is a recorded seam. Build per `docs/tasks/009-characterise/contract.md`.
-Stay within the contract's scope and stop conditions; all other capabilities and seams
-remain deferred (`docs/deferred.md`).
+Tasks `001-walking-skeleton` through `009-characterise` are complete (merged). The active
+slice adds **select** — EB component 6, opening the deep terminus: **coverage-aware
+stratified selection over the run's characterisation strata** (themes + the counted
+`unclustered` stratum), choosing the subset for Tier-1 extraction under a budget.
+A **fully deterministic slice** — no prompts, no generation, no new dependencies:
+breadth-preserving allocation across strata, within-stratum ranking over **cheap
+pre-extract signals** (embedding relevance to the scope intent — the first reader of the
+009 chunk vectors — recency, light appraisal tier, origin/upload priority), and
+**must-includes as the one hard rule** (bypass the budget, never dropped). Realised as
+the spec's shared strategy-parameterised `select` verb with EB's
+coverage-aware-stratified strategy as the one shipped implementation. Durable output =
+one run-scoped `selection_result` row per (scope, run) carrying the **bidirectional
+rationale** (what was selected and why; aggregate exclusion reasons + notable flagged
+exclusions) plus the deepening-selection **escalation-trigger flags** computed now
+(large/user-nominated-stratum exclusions, thin base) — the steer-point *pause* machinery
+stays a recorded seam. Selection is run-local, never canonical; `not_selected` is
+derivable coverage state, never persisted as doc status. No new egress front: the one
+live call is a single intent-embedding via the 009-approved `EmbeddingBackend`
+(stub-covered in the suite; `make verify` stays deterministic and egress-free). Gated
+changes riding this slice: schema (`selection_result`, project-scope-guarded; table
+count 19 → 20) · public interface (`"select"` registry entry; no new `run_harness`
+parameter). Build per `docs/tasks/010-select/contract.md`. Stay within the contract's
+scope and stop conditions; all other capabilities and seams remain deferred
+(`docs/deferred.md`).
