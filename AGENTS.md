@@ -28,29 +28,36 @@ Tasks `001-walking-skeleton` through `009-characterise` are complete (merged). T
 slice adds **select** — EB component 6, opening the deep terminus: **coverage-aware
 stratified selection over the run's characterisation strata** (themes + the counted
 `unclustered` stratum), choosing the subset for Tier-1 extraction under a budget.
-A **fully deterministic slice** — no prompts, no generation, no new dependencies:
-breadth-preserving allocation across strata, within-stratum ranking over **cheap
-pre-extract signals** (embedding relevance to the scope intent — the first reader of the
-009 chunk vectors — recency, light appraisal tier, origin/upload priority), and
-**must-includes as the one hard rule** (bypass the budget, never dropped). Steering
-enters through the **selection directive** — a first-class, declarative facade argument
-(budget · must-includes · **soft boosts over columns + tags**, the scoping vocabulary ·
-weight emphasis; soft = re-weights, never excludes) — designed as the tool-call surface
-the future capability agent authors at commit time (v3.0 sources it from the scope
-context; agent-authored directives, an eval-gated `llm_assisted` strategy, and the
-capability-run entity are recorded seams). Realised as the spec's shared
-strategy-parameterised `select` verb with EB's
-coverage-aware-stratified strategy as the one shipped implementation. Durable output =
-one run-scoped `selection_result` row per (scope, run) carrying the **bidirectional
-rationale** (what was selected and why; aggregate exclusion reasons + notable flagged
-exclusions) plus the deepening-selection **escalation-trigger flags** computed now
-(large/user-nominated-stratum exclusions, thin base) — the steer-point *pause* machinery
-stays a recorded seam. Selection is run-local, never canonical; `not_selected` is
-derivable coverage state, never persisted as doc status. No new egress front: the one
-live call is a single intent-embedding via the 009-approved `EmbeddingBackend`
-(stub-covered in the suite; `make verify` stays deterministic and egress-free). Gated
+The **structure is deterministic and code-owned** under both shipped strategies —
+breadth-preserving allocation across strata, budget arithmetic, **must-includes as the
+one hard rule** (bypass the budget, never dropped) — over **cheap pre-extract signals**
+(embedding relevance to the scope intent — the first reader of the 009 chunk vectors —
+recency, light appraisal tier, origin/upload priority). `coverage_stratified_v1`
+(default, suite path) is deterministic end-to-end; **`llm_rerank_v1`** (live skeleton
+path) replaces only the *within-stratum ordering* with bounded batched
+schema-constrained judgment calls on contested strata — per-doc scores + reasons under
+the repo's **second product prompt** (`select_rerank_v1`, lead-authored), pre-run call
+budget, per-doc **fallback to the deterministic composite** (flagged `rank_fallback`,
+never dropped); scores order, **never exclude**. Steering enters through the
+**selection directive** — a first-class, declarative facade argument (budget ·
+must-includes · **soft boosts over columns + tags**, the scoping vocabulary · weight
+emphasis; soft = re-weights, never excludes) — designed as the tool-call surface the
+future capability agent authors just-in-time at invocation (v3.0 sources it from the
+scope context; agent-authored directives, rerank-quality evals, Cohere-class
+cross-encoders at the `retrieve` seam, and the capability-run entity are recorded
+seams). Realised as the spec's shared strategy-parameterised `select` verb. Durable
+output = one run-scoped `selection_result` row per (scope, run) carrying the
+**bidirectional rationale** (what was selected and why; aggregate exclusion reasons +
+notable flagged exclusions), the executed directive, rerank provenance, and the
+deepening-selection **escalation-trigger flags** computed now — the steer-point *pause*
+machinery stays a recorded seam. Selection is run-local, never canonical;
+`not_selected` is derivable coverage state, never persisted as doc status. Gated
 changes riding this slice: schema (`selection_result`, project-scope-guarded; table
-count 19 → 20) · public interface (`"select"` registry entry; no new `run_harness`
-parameter). Build per `docs/tasks/010-select/contract.md`. Stay within the contract's
-scope and stop conditions; all other capabilities and seams remain deferred
-(`docs/deferred.md`).
+count 19 → 20) · public interface (`"select"` registry entry + `run_harness
+ranking_backend`, stub default) · **runtime egress: the `select_rerank_v1` generation
+surface (titles + abstracts, contested strata only) + one intent-embed call site on the
+approved embeddings front**. One spec flow-back rides the slice (components §6 select
+realisation: procedure → procedure with bounded generative rerank). `make verify` stays
+deterministic and egress-free (stub embedder + stub ranker). Build per
+`docs/tasks/010-select/contract.md`. Stay within the contract's scope and stop
+conditions; all other capabilities and seams remain deferred (`docs/deferred.md`).

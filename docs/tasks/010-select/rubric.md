@@ -5,11 +5,13 @@ is in progress, not done.
 
 1. [ ] Implementation satisfies [contract.md](contract.md).
 2. [ ] `make verify` passes; the declared manual live check (intent embedding + real-vector
-       relevance through the skeleton) passes with evidence.
-3. [ ] No approval-gated change snuck in unapproved — the slice lands exactly the two gated
-       items (the `selection_result` table · the `"select"` registry entry) and nothing else
-       gated: no new dependency, no new egress front, no existing-table change, no new
-       `run_harness` parameter.
+       relevance + live `llm_rerank_v1` calls through the skeleton, traced) passes with
+       evidence.
+3. [ ] No approval-gated change snuck in unapproved — the slice lands exactly the three gated
+       items (the `selection_result` table · the `"select"` registry entry +
+       `ranking_backend` parameter · the `select_rerank_v1` generation surface + intent-embed
+       call site) and nothing else gated: no new dependency, no existing-table change, no
+       second prompt surface.
 4. [ ] No generated files or secrets edited by hand.
 5. [ ] No tests deleted, skipped or weakened without written justification.
 6. [ ] Verification evidence recorded ([verification.md](verification.md) or PR), including
@@ -22,8 +24,10 @@ is in progress, not done.
 
 Slice-specific criteria (from the contract's disciplines):
 
-9.  [ ] **Determinism holds end-to-end**: two identical runs produce byte-identical
-        `selection_result` rows (test-asserted); no ordering leak found in review.
+9.  [ ] **Determinism holds where claimed**: under `coverage_stratified_v1`, two identical
+        runs produce byte-identical `selection_result` rows (test-asserted); no ordering
+        leak found in review. The structure (strata, allocation, budget, hard rules) is
+        deterministic under both strategies.
 10. [ ] **The bidirectional rationale is complete and countable**: every screened-in doc is
         accounted for as selected (with reason `must_include` | `breadth_floor` | `ranked`)
         or in an exclusion aggregate; totals reconcile with the counting invariants
@@ -41,6 +45,12 @@ Slice-specific criteria (from the contract's disciplines):
 13. [ ] **`not_selected` never masquerades as absence**: no payload or summary phrasing
         claims a gap; selection is run-local (no canonical writes, no doc-status column);
         the escalation-trigger flags are computed and present in the payload.
-14. [ ] **Suite stays egress-free**: socket-deny covers a select round-trip; the intent
-        embedding on the live path is the slice's only new call site, on the approved
-        embeddings front, traced by the existing wiring.
+14. [ ] **Suite stays egress-free**: socket-deny covers a select round-trip (stub embedder +
+        stub ranker); live egress is exactly the two approved surfaces (intent embedding ·
+        `select_rerank_v1` on contested strata), both traced by the existing wiring; no key
+        appears in logs/events/artifacts.
+15. [ ] **The rerank degrades, never fails or excludes**: every contested doc is LLM-scored
+        or falls back to the deterministic composite with a counted `rank_fallback` flag;
+        the call-budget maximum is enforced pre-call (counting-double test); LLM scores
+        demonstrably cannot exclude a document; reasons are code-constrained and stored as
+        inert data; prompt hygiene (id-keyed data records) asserted structurally.
