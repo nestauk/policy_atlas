@@ -325,6 +325,13 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
       `(id, title, abstract)` data records + the intent + the fixed scoring
       instruction; output **schema-constrained to per-doc
       `(doc_id, score, reason)`** — no tools, no free text acting on the world.
+      **The judged basis is the envelope, uniformly**: title + abstract (the
+      surface the grouping calls read; degrading to title-only where the
+      envelope did, flagged) — never full-text chunks, which sit on extraction's
+      side of the pre-extract line. Uniform basis = abstract-only and full-text
+      documents compete fairly. The LLM **ranks; it never selects**: strata,
+      budget, must-includes and the breadth floor are code — the ranker only
+      orders candidates within contested strata.
       Call budget known pre-run: `ceil(contested/batch) × (1 + retry_cap)`
       (caps plan-pinned), checked before any live call.
     - **Fallback, never failure — exhaustiveness in code**: a doc the ranker
