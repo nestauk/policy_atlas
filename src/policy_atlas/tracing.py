@@ -30,12 +30,30 @@ def get_langfuse() -> Langfuse | None:
     Returns:
         ``Langfuse`` when both ``LANGFUSE_PUBLIC_KEY`` and
         ``LANGFUSE_SECRET_KEY`` are non-empty; otherwise ``None``.
+
+    Raises:
+        RuntimeError: When the Langfuse configuration is partial — exactly one
+            key set, or both keys set without a host. Without an explicit host
+            the SDK silently defaults to Langfuse's SaaS cloud, which would
+            send full-I/O traces outside the user-operated boundary.
     """
     public_key = os.environ.get("LANGFUSE_PUBLIC_KEY")
     secret_key = os.environ.get("LANGFUSE_SECRET_KEY")
-    if not public_key or not secret_key:
+    if not public_key and not secret_key:
         return None
-    return Langfuse()
+    if not public_key or not secret_key:
+        raise RuntimeError(
+            "Langfuse partially configured: exactly one of LANGFUSE_PUBLIC_KEY / "
+            "LANGFUSE_SECRET_KEY is set. Set both (plus LANGFUSE_HOST) or neither."
+        )
+    host = os.environ.get("LANGFUSE_BASE_URL") or os.environ.get("LANGFUSE_HOST")
+    if not host:
+        raise RuntimeError(
+            "LANGFUSE_PUBLIC_KEY/SECRET_KEY are set but no LANGFUSE_HOST (or "
+            "LANGFUSE_BASE_URL): refusing to fall back to the SDK's SaaS cloud "
+            "default for full-I/O traces. Set the user-operated instance host."
+        )
+    return Langfuse(host=host)
 
 
 @contextmanager

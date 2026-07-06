@@ -273,6 +273,9 @@ def _run_characterise(state: HarnessState) -> HarnessState:
         )
         return {**state, "error": exc.error}
     except Exception as exc:
+        # str(exc) persists into the event log: provider raise paths inside
+        # characterise_scope must keep reducing errors to exception type names
+        # (never raw response bodies) before they can reach this handler.
         err = str(exc)
         events.append(
             conn, project_id=project_id, run_id=run_id,

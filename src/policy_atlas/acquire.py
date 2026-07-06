@@ -22,7 +22,6 @@ from typing import Any, Protocol
 
 import structlog
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
 
 from policy_atlas import events
@@ -33,12 +32,16 @@ from policy_atlas.schema import (
     project_source_snapshot,
     search_coverage_record,
     source_snapshot,
-    source_tag,
 )
+from policy_atlas.tags import has_control_character, insert_source_tags
 
 log = structlog.get_logger()
 
 SEGMENTATION_POLICY = "metadata_envelope_v1"
+# Provider tag values are third-party (including provider-LLM) output; bound them
+# like theme names so no unvalidated text shape reaches source_tag or coverage keys.
+TAG_MAX_LENGTH = 200
+MAX_TAGS_PER_RECORD = 50
 
 
 @dataclass
@@ -305,7 +308,9 @@ def _normalize_tag(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
     tag = " ".join(value.strip().split())
-    return tag or None
+    if not tag or len(tag) > TAG_MAX_LENGTH or has_control_character(tag):
+        return None
+    return tag
 
 
 def _dedupe_tag_values(values: list[Any], asserted_by: str) -> list[tuple[str, str]]:
@@ -439,6 +444,7 @@ def acquire_sources(
     now = datetime.now(UTC)
     by_backend: dict[str, dict[str, Any]] = {}
     any_error = False
+    tag_assertions: list[tuple[uuid.UUID, str, str]] = []
 
     for backend in backends:
         status, error = "ok", None
@@ -554,24 +560,18 @@ def acquire_sources(
                 )
             )
             tag_pairs = _provider_tags(backend.name, record)
-            if tag_pairs:
-                conn.execute(
-                    pg_insert(source_tag)
-                    .values([
-                        {
-                            "source_tag_id": uuid.uuid4(),
-                            "project_id": project_id,
-                            "project_source_snapshot_id": pss_id,
-                            "tag": tag,
-                            "tag_type": "topic_theme",
-                            "asserted_by": asserted_by,
-                            "created_by_run_id": run_id,
-                            "created_at": now,
-                        }
-                        for tag, asserted_by in tag_pairs
-                    ])
-                    .on_conflict_do_nothing(constraint="uq_source_tag_assertion")
+            if len(tag_pairs) > MAX_TAGS_PER_RECORD:
+                log.warning(
+                    "acquire.tags_truncated",
+                    backend=backend.name,
+                    backend_record_id=record_id,
+                    tag_count=len(tag_pairs),
+                    cap=MAX_TAGS_PER_RECORD,
                 )
+                tag_pairs = tag_pairs[:MAX_TAGS_PER_RECORD]
+            tag_assertions.extend(
+                (pss_id, tag, asserted_by) for tag, asserted_by in tag_pairs
+            )
             counts["tags_materialised"] += len(tag_pairs)
             events.append(
                 conn,
@@ -595,6 +595,11 @@ def acquire_sources(
                 seen_dois.add(doi)
 
         by_backend[backend.name] = counts
+
+    # One bulk insert for the whole run instead of one statement per record.
+    insert_source_tags(
+        conn, project_id=project_id, run_id=run_id, now=now, assertions=tag_assertions
+    )
 
     totals = {
         key: sum(b[key] for b in by_backend.values())

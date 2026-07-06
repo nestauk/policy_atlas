@@ -20,6 +20,7 @@ from typing import Protocol, TypedDict
 import structlog
 from openai import OpenAI
 from sqlalchemy import exists, func, select, union
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
 
 from policy_atlas.schema import chunk as chunk_table
@@ -126,6 +127,32 @@ class StubEmbeddingBackend:
         return [_hash_vector(text) for text in texts]
 
 
+def resolve_openai_client(
+    api_key: str | None,
+    *,
+    backend_name: str,
+    timeout: float,
+    max_retries: int,
+) -> OpenAI:
+    """Resolve the OpenAI API key and construct a client, failing loudly.
+
+    Shared by both live backends so key-resolution policy lives in one place.
+
+    Args:
+        api_key: Explicit key, or ``None`` to read ``OPENAI_API_KEY``.
+        backend_name: Backend class name for the error message.
+        timeout: Per-request timeout in seconds.
+        max_retries: SDK-level retry cap for transient failures.
+
+    Raises:
+        RuntimeError: If no API key is provided or configured.
+    """
+    resolved_key = api_key or os.environ.get("OPENAI_API_KEY")
+    if not resolved_key:
+        raise RuntimeError(f"{backend_name} requires OPENAI_API_KEY or an explicit api_key.")
+    return OpenAI(api_key=resolved_key, timeout=timeout, max_retries=max_retries)
+
+
 class OpenAIEmbeddingBackend:
     """Live OpenAI embedding backend.
 
@@ -140,12 +167,9 @@ class OpenAIEmbeddingBackend:
     mode = "live"
 
     def __init__(self, api_key: str | None = None) -> None:
-        resolved_key = api_key or os.environ.get("OPENAI_API_KEY")
-        if not resolved_key:
-            raise RuntimeError(
-                "OpenAIEmbeddingBackend requires OPENAI_API_KEY or an explicit api_key."
-            )
-        self._client = OpenAI(api_key=resolved_key, timeout=30.0, max_retries=3)
+        self._client = resolve_openai_client(
+            api_key, backend_name="OpenAIEmbeddingBackend", timeout=30.0, max_retries=3
+        )
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """Embed texts through OpenAI's embeddings API.
@@ -270,7 +294,15 @@ def derive_units(content: str) -> list[_UnitDict]:
             break
         next_start = _overlap_start(content, unit_start=start, unit_end=end)
         start = end if next_start <= start else next_start
-    return units
+
+    # A slice inside long whitespace padding can be whitespace-only even when the
+    # chunk as a whole has content; embedding it would store a meaningless vector.
+    # Offsets stay anchored to the untouched canonical chunk; only unit_index is
+    # renumbered so the per-chunk sequence stays gap-free.
+    kept = [unit for unit in units if unit["text"].strip()]
+    for index, unit in enumerate(kept):
+        unit["unit_index"] = index
+    return kept
 
 
 def validate_vector(vector: object) -> list[float]:
@@ -320,7 +352,9 @@ def _chunk_rows_for_insert(state: _ChunkState) -> list[dict[str, object]]:
     ]
 
 
-def _pending_chunks(conn: Connection, project_id: uuid.UUID) -> tuple[int, list[_PendingChunk]]:
+def _pending_chunks(
+    conn: Connection, project_id: uuid.UUID, *, max_hydrated: int
+) -> tuple[int, int, list[_PendingChunk]]:
     eligible_snapshot_ids = union(
         select(
             project_source_snapshot.c.source_snapshot_id.label("source_snapshot_id")
@@ -346,6 +380,18 @@ def _pending_chunks(conn: Connection, project_id: uuid.UUID) -> tuple[int, list[
             select(func.count()).select_from(chunk_table).where(eligible_filter)
         ).scalar_one()
     )
+    pending_count = int(
+        conn.execute(
+            select(func.count())
+            .select_from(chunk_table)
+            .where(eligible_filter)
+            .where(pending_filter)
+        ).scalar_one()
+    )
+    if pending_count > max_hydrated:
+        # The budget guard will trip anyway (units >= chunks with content); skip
+        # hydrating full content for a backlog the pass is going to refuse.
+        return eligible_count, pending_count, []
     rows = conn.execute(
         select(
             chunk_table.c.chunk_id,
@@ -357,7 +403,7 @@ def _pending_chunks(conn: Connection, project_id: uuid.UUID) -> tuple[int, list[
         .where(pending_filter)
         .order_by(chunk_table.c.source_snapshot_id, chunk_table.c.sequence)
     ).fetchall()
-    return eligible_count, [
+    return eligible_count, pending_count, [
         _PendingChunk(
             chunk_id=row.chunk_id,
             source_snapshot_id=row.source_snapshot_id,
@@ -420,7 +466,8 @@ def embed_pending_chunks(
 
     Returns:
         Counts for newly embedded chunks, already embedded eligible chunks, failed
-        pending chunks, inserted units and whether the budget guard stopped the pass.
+        pending chunks, skipped unitless chunks, inserted units and whether the
+        budget guard stopped the pass — the same key set on every path.
 
     Raises:
         ValueError: If ``batch_size`` is not positive or ``max_chunks`` is negative.
@@ -430,30 +477,34 @@ def embed_pending_chunks(
     if max_chunks < 0:
         raise ValueError("max_chunks must be non-negative")
 
-    eligible_count, pending_chunks = _pending_chunks(conn, project_id)
-    already_embedded = eligible_count - len(pending_chunks)
+    eligible_count, pending_count, pending_chunks = _pending_chunks(
+        conn, project_id, max_hydrated=max_chunks
+    )
+    already_embedded = eligible_count - pending_count
     states, all_units, unitless_chunk_ids = _derive_unit_work(pending_chunks)
     total_units = len(all_units)
 
-    if total_units > max_chunks:
+    if pending_count > max_chunks or total_units > max_chunks:
         log.error(
             "embed.budget_exceeded",
             eligible_chunks=eligible_count,
-            pending_chunks=len(pending_chunks),
+            pending_chunks=pending_count,
             already_embedded=already_embedded,
-            pending_units=total_units,
+            pending_units=total_units if pending_chunks else None,
             max_chunks=max_chunks,
         )
         return {
             "embedded": 0,
             "already_embedded": already_embedded,
             "failed": 0,
-            "pending": len(pending_chunks),
+            "skipped_no_units": len(unitless_chunk_ids),
+            "units_embedded": 0,
             "budget_exceeded": 1,
         }
 
-    for chunk_id in unitless_chunk_ids:
-        states[chunk_id].failed = True
+    # Unitless chunks (whitespace-only content) are skipped, not failed: nothing
+    # was attempted, and counting them as failed would inflate the failure share
+    # on every future pass since they never gain an embedding row.
     if unitless_chunk_ids:
         log.warning(
             "embed.chunk_no_units",
@@ -505,20 +556,27 @@ def embed_pending_chunks(
             for unit in active_units
             if len(states[unit.chunk_id].vectors) == len(states[unit.chunk_id].units)
         }
+        batch_rows: list[dict[str, object]] = []
         for chunk_id in sorted(completed_chunk_ids, key=lambda item: chunk_order[item]):
             state = states[chunk_id]
             if state.failed or state.inserted:
                 continue
-            conn.execute(chunk_embedding.insert(), _chunk_rows_for_insert(state))
+            batch_rows.extend(_chunk_rows_for_insert(state))
             state.inserted = True
             embedded += 1
             units_embedded += len(state.units)
+        if batch_rows:
+            # ON CONFLICT DO NOTHING keeps an overlapping embed pass (two runs
+            # racing the same anti-join) from failing the whole component on the
+            # unit unique constraint; the loser's duplicate rows are discarded.
+            conn.execute(pg_insert(chunk_embedding).values(batch_rows).on_conflict_do_nothing())
 
     failed = sum(1 for state in states.values() if state.failed)
     result = {
         "embedded": embedded,
         "already_embedded": already_embedded,
         "failed": failed,
+        "skipped_no_units": len(unitless_chunk_ids),
         "units_embedded": units_embedded,
         "budget_exceeded": 0,
     }

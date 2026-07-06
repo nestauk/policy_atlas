@@ -1140,9 +1140,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
-    { name = "langfuse", specifier = ">=3" },
+    { name = "langfuse", specifier = ">=4.13,<5" },
     { name = "langgraph", specifier = ">=0.2" },
-    { name = "openai", specifier = ">=1.60" },
+    { name = "openai", specifier = ">=2.44,<3" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3" },
     { name = "pydantic", specifier = ">=2" },
     { name = "pymupdf4llm", specifier = ">=0.3.4,<1" },

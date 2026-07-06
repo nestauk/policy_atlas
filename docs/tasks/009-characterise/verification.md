@@ -8,7 +8,7 @@ the Langfuse trace baseline). Build sections filled at step 6; **Review findings
 
 | Command | Result | Notes |
 |---|---:|---|
-| `make test` | pass | 261 passed (207 pre-Phase-5 + 54 in `test_embeddings.py` (20) / `test_characterise.py` (34)); stub backends throughout — deterministic, zero egress |
+| `make test` | pass | 261 passed (207 pre-Phase-5 + 54 in `test_embeddings.py` (20) / `test_characterise.py` (34)); stub backends throughout — deterministic, zero egress. 267 after the step-7 review fixes (+6 guard tests) |
 | `make typecheck` | pass | mypy strict, 37 source files |
 | `make lint` | pass | ruff |
 | `make build` | pass | sdist + wheel |
@@ -205,10 +205,110 @@ Langfuse follow-ons incl. the thread-context span-nesting wart · upload audit-e
 `open_tags` entry revisions · class-1 vectorisation entry discharge) land at **step 8**,
 after the review stack finalises the code.
 
-## Review findings
+## Review findings (step 7, 2026-07-06 — fresh conversation)
 
-_To be added by the step-7 review stack (fresh conversation)._
+Tier-3 stack as specified: **contract verifier** (pinned Opus, read-only) ·
+**security lane** (security-auditor subagent) · **heterogeneous pair** = Codex
+adversarial (read-only rescue brief) + `/code-review medium` (8 scoped finder angles →
+per-file 3-state verify). `make verify` green before and after. Diff scoped
+`':!uv.lock' ':!docs/tasks'` throughout.
 
-## Rubric status
+**Convergent across families (high-confidence):**
+- **Langfuse host default** (security MEDIUM + Codex HIGH, found independently):
+  keys-without-host silently exported full-I/O traces to the SDK's SaaS cloud default.
+  **Adopted**: `get_langfuse()` now requires a host (`LANGFUSE_BASE_URL`/`LANGFUSE_HOST`)
+  when keys are set and raises loudly on partial config (tracing.py; test-asserted).
+- **Stale `.env.example` model comment** (security note + contract-verifier minor):
+  still documented `gpt-5-nano` assignment. **Adopted**: comment fixed.
 
-_To be added at step 7 against `rubric.md`._
+**Unique-to-one-lane adoptions (each justifies its lane):**
+- *Codex*: embed anti-join race — plain INSERT loses to a concurrent pass on the unit
+  unique constraint → bulk `ON CONFLICT DO NOTHING` per API batch (also batches the
+  per-chunk inserts the efficiency finder flagged). Whitespace-only units inside long
+  padding were embedded → dropped and renumbered in `derive_units` (offset anchors
+  test-asserted). Budget-vs-SDK-retry semantics documented at the client seam
+  (logical budget × (1+max_retries) HTTP ceiling — comment, no behaviour change).
+- *Security lane*: `unclustered` theme-name/sentinel collision → rejected in
+  `validate_themes`; provider tags unbounded → `_normalize_tag` caps length (200),
+  rejects control chars (shared `tags.has_control_character`), 50-tag/record cap;
+  dependency pins tightened to what the live check ran (`openai>=2.44,<3`,
+  `langfuse>=4.13,<5` — the first `<2` attempt was wrong, the lock ran openai 2.44);
+  `str(exc)`-into-events constraint comment in harness.
+- */code-review* line-by-line + verify: whitespace-only chunks were re-marked `failed`
+  every pass forever → now a `skipped_no_units` count, never `failed`; both
+  `embed_pending_chunks` paths return one key set (shape divergence refuted as a crash,
+  fixed as cleanup). Skeleton score-summary read the *oldest* characterise event
+  (ascending log + `next()`) → newest-first with a `run_id` pin — the multi-run
+  scenario is already a tested reality.
+- */code-review* cleanup angles: `_pending_chunks` hydrated the full backlog before the
+  budget check → cheap COUNT guard first; hand-built `_AssignmentValidation` branch
+  proved byte-identical to `_validate_assignments(batch, {})` → deleted; `source_tag`
+  writes consolidated into `tags.insert_source_tags` + `schema.TOPIC_THEME` (kills the
+  acquire/characterise near-verbatim duplication, the 3× `topic_theme` literal, and the
+  per-record insert round-trips in one move); OpenAI key/client resolution shared
+  (`embeddings.resolve_openai_client`) so key policy lives in one place.
+
+**Declined, with reasons:**
+- Multi-scope "unscreened" conflation (finder CONFIRMED): correct semantics —
+  screening screens *all project sources against a scope* (screen.py contract), so a
+  source screened only under scope B is honestly unscreened for scope A. Noted: no
+  two-scope test exists; grouped with the eval seam.
+- Embed pass runs after an inadequate acquire verdict: flag-not-block posture —
+  acquired chunks are real and the pass is idempotent.
+- Second explicit live flag (security note): user reversed exactly this at contract
+  rev 6.1 ("egress is the product").
+- Zero-support discovered themes persist with `size: 0` (Codex HIGH): honest counts,
+  no document misattributed — theme *quality* pruning belongs to the grouping-quality
+  eval seam (deferred). Not the rubric's "placeholder theme" (that bans absorbing
+  docs into an invented bucket, which repair exhaustion already prevents).
+- Conflicted-assignment ids counted as missing in repair telemetry: the backend logs
+  `assign_conflicting_duplicates` with counts; repair handles the ids correctly.
+- Unified OpenAI call-telemetry shape: false economy — embeddings and chat usage are
+  structurally different objects.
+- `mode`-protocol base class, stub-default triplication, traced-counter dedup: below
+  the abstraction-payback line (2–6 line idioms).
+- Batch failure blast radius (one bad unit fails all chunks sharing the API batch):
+  transient over-reporting only — failed chunks re-embed next pass; retry/backoff
+  granularity is the recorded live-robustness seam (deferred.md at step 8, with the
+  `_provider_tags`/`_MAPPERS` dual-dispatch note for a third backend).
+
+**Already recorded:** detached first-`assign` trace (ThreadPool context propagation) —
+verify pass confirmed code matches the recorded wart exactly; stays under the Langfuse
+seam. Contract-verifier notes: decision-12 invariant wording imprecise in the contract
+(code/tests/verification are correct; historical doc, untouched); `deferred.md`
+`open_tags` lines contradict the shipped migration (step-8 revision, already
+scheduled); commit 982e19e (specs fidelity restoration, separately logged) rides in
+this branch and inflates the review diff — scope it out when reading the PR.
+
+**`/simplify` lane:** skipped with justification (per the review-phase rule): the
+`/code-review` run already carried dedicated reuse/simplification/efficiency/altitude
+finder angles and their adopted fixes are applied above — a separate same-family
+cleanup pass would re-read the same diff for the same lenses.
+
+**Fake-done check:** no tests deleted/relaxed; fixes added 6 tests (sentinel, host
+guard, tag bounds, skipped-not-failed, uniform shape, whitespace units); all suite
+changes are additive; `make verify` re-run green after fixes.
+
+**Lane economics (honest):** reasoning-class ≈ 263K (contract-verifier 162K,
+security 81K, Codex wrapper 20K) — at the ≤250K target. Fast-worker ≈ 886K
+(8 finders 620K + 5 batched verifiers 266K) vs the ≤500K target — the per-angle
+pathspecs were applied but this diff's product-code share is large; verifiers were
+batched per-file (5 agents for 24 candidates) to cut the overrun. Note for the next
+retro: on a ~5K-line product-code diff, 8 angles × full lens scope is the dominant
+cost; consider 6 angles or shared-context finder pairs.
+
+## Rubric status (step 7)
+
+| # | Item | Status |
+|---|---|---|
+| 1 | Contract's 13 decisions | ✅ verified by contract-verifier lane (evidence per decision) |
+| 2 | `make verify` green + zero-egress + live check | ✅ suite independently re-run by verifier; live evidence documented above (not re-runnable without keys) |
+| 3 | No unapproved gated change | ✅ exactly the four approved changes |
+| 4 | No secrets committed; key hygiene test-asserted | ✅ (canary + live substring audit) |
+| 5 | No tests deleted/weakened | ✅ net +60 tests after review fixes |
+| 6 | Verification evidence recorded | ✅ |
+| 7 | Deferred seams listed / class-1 discharge | ⏳ step 8 (this PR); in-tree `open_tags` contradiction noted above |
+| 8 | Spec flow-backs + log.md | ✅ verified in diff (commit 9e98800) |
+| 9 | Honesty properties | ✅ verified in code, incl. in-code invariant (characterise.py:836) — strengthened by the sentinel + skipped-not-failed fixes |
+| 10 | ADR 0005 Accepted; prompts co-versioned | ✅ |
+| 11 | Tier-3 review stack + adjudication | ✅ this section |

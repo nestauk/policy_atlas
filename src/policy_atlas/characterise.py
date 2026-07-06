@@ -11,7 +11,6 @@ from typing import Any
 
 import structlog
 from sqlalchemy import exists, func, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
 
 from policy_atlas import grouping
@@ -37,6 +36,7 @@ from policy_atlas.schema import (
 from policy_atlas.schema import (
     chunk as chunk_table,
 )
+from policy_atlas.tags import insert_source_tags
 
 log = structlog.get_logger()
 
@@ -583,20 +583,13 @@ def _resolve_assignment_batch(
     theme_names: set[str],
     budget: _CallBudget,
 ) -> tuple[dict[str, str], bool]:
-    if attempt.assignments is None:
-        validation = _AssignmentValidation(
-            valid={},
-            residue=attempt.batch,
-            invented_count=0,
-            missing_count=len(attempt.batch),
-            unknown_theme_count=0,
-        )
-    else:
-        validation = _validate_assignments(
-            attempt.batch,
-            attempt.assignments,
-            theme_names=theme_names,
-        )
+    # A failed first call (assignments None) validates as an empty mapping: the
+    # whole batch becomes missing residue, identical to the hand-built case.
+    validation = _validate_assignments(
+        attempt.batch,
+        attempt.assignments or {},
+        theme_names=theme_names,
+    )
 
     if not validation.residue:
         return validation.valid, False
@@ -717,26 +710,17 @@ def _insert_theme_tags(
     assignments: dict[str, str],
     now: datetime,
 ) -> None:
-    rows = [
-        {
-            "source_tag_id": uuid.uuid4(),
-            "project_id": project_id,
-            "project_source_snapshot_id": uuid.UUID(doc_id),
-            "tag": theme_name,
-            "tag_type": "topic_theme",
-            "asserted_by": "characterise",
-            "created_by_run_id": run_id,
-            "created_at": now,
-        }
-        for doc_id, theme_name in assignments.items()
-        if theme_name != UNCLUSTERED
-    ]
-    if rows:
-        conn.execute(
-            pg_insert(source_tag)
-            .values(rows)
-            .on_conflict_do_nothing(constraint="uq_source_tag_assertion")
-        )
+    insert_source_tags(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        now=now,
+        assertions=[
+            (uuid.UUID(doc_id), theme_name, "characterise")
+            for doc_id, theme_name in assignments.items()
+            if theme_name != UNCLUSTERED
+        ],
+    )
 
 
 def _summary(

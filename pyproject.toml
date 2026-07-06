@@ -20,9 +20,12 @@ dependencies = [
     "pymupdf4llm>=0.3.4,<1",
     "trafilatura>=1.12",
     # Task 009 (approved gated change 2): embeddings + structured generation, one SDK
-    "openai>=1.60",
+    # >=2.44: what the live check actually ran; <3: a major bump on the
+    # product-egress SDK must be a deliberate change, not a lock regen
+    "openai>=2.44,<3",
     # Task 009: trace backbone — env-driven, no-op without LANGFUSE_* keys
-    "langfuse>=3",
+    # >=4.13: what the live check actually ran; <5: full-I/O trace exporter, same rule as openai
+    "langfuse>=4.13,<5",
 ]
 
 [project.scripts]

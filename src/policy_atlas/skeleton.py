@@ -114,7 +114,7 @@ def _run_component(
         )
         if component == "characterise" and langfuse_client is not None:
             # Scores must attach while the run's span is still the active context.
-            payload = _characterise_payload(events.read(conn, project_id))
+            payload = _characterise_payload(events.read(conn, project_id), run_id=run_id)
             if payload is not None:
                 tracing.score_summary(langfuse_client, payload)
 
@@ -149,13 +149,20 @@ def _text_basis_distribution(conn: Connection, project_id: uuid.UUID) -> dict[st
     return distribution
 
 
-def _characterise_payload(log_entries: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Return the characterise component's completed-event payload, or None if it failed."""
+def _characterise_payload(
+    log_entries: list[dict[str, Any]], *, run_id: uuid.UUID | None = None
+) -> dict[str, Any] | None:
+    """Return the characterise component's completed-event payload, or None if it failed.
+
+    Entries arrive in ascending sequence order, so the search runs newest-first;
+    pass ``run_id`` to pin the payload to one run rather than the latest.
+    """
     return next(
         (
-            e["payload"] for e in log_entries
+            e["payload"] for e in reversed(log_entries)
             if e["event_type"] == "component.completed"
             and e["payload"].get("component") == "characterise"
+            and (run_id is None or e["run_id"] == run_id)
         ),
         None,
     )

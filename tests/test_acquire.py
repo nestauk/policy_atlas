@@ -1011,3 +1011,15 @@ def test_recorder_scripts_not_imported_by_package() -> None:
         assert "record_openalex_fixtures" not in text
         assert "record_overton_fixtures" not in text
         assert "import scripts" not in text and "from scripts" not in text
+
+
+# --- Review-stack fixes (task 009 step 7): provider tag bounds ---
+
+
+def test_provider_tag_bounds() -> None:
+    from policy_atlas.acquire import TAG_MAX_LENGTH, _normalize_tag
+
+    assert _normalize_tag("  Fine   Tag ") == "Fine Tag"
+    assert _normalize_tag("x" * (TAG_MAX_LENGTH + 1)) is None
+    assert _normalize_tag("bad\x1b[31mtag") is None
+    assert _normalize_tag(42) is None

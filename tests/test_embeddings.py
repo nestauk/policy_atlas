@@ -474,3 +474,54 @@ def test_judgment_one_vector_per_unit_no_mean_pooling_path(conn: Connection) -> 
         "mean" in name.casefold() or "pool" in name.casefold()
         for name in dir(embeddings_module)
     )
+
+
+# --- Review-stack fixes (task 009 step 7) ---
+
+
+def test_derive_units_drops_whitespace_only_units_and_renumbers() -> None:
+    content = " " * (UNIT_CHAR_BUDGET + 500) + "Policy evidence sentence."
+    units = derive_units(content)
+    assert units, "non-whitespace content must yield at least one unit"
+    assert all(unit["text"].strip() for unit in units)
+    assert [unit["unit_index"] for unit in units] == list(range(len(units)))
+    for unit in units:
+        assert content[unit["start"]:unit["end"]] == unit["text"]
+
+
+def test_embed_pending_chunks_whitespace_chunk_skipped_not_failed(conn: Connection) -> None:
+    pid, rid = seed_project_and_run(conn)
+    snap_id, _pss_id = seed_source(conn, pid)
+    _insert_chunk(conn, snap_id, 1, "\n\n\t  \n")
+    _insert_chunk(conn, snap_id, 2, "A real chunk body.")
+
+    result = embed_pending_chunks(
+        conn, embedder=StubEmbeddingBackend(), project_id=pid, run_id=rid
+    )
+    assert result["embedded"] == 1
+    assert result["failed"] == 0
+    assert result["skipped_no_units"] == 1
+
+    # The unitless chunk stays pending and stays out of the failed count on re-runs.
+    second = embed_pending_chunks(
+        conn, embedder=StubEmbeddingBackend(), project_id=pid, run_id=rid
+    )
+    assert second["embedded"] == 0
+    assert second["failed"] == 0
+    assert second["skipped_no_units"] == 1
+
+
+def test_embed_pending_chunks_budget_path_returns_uniform_shape(conn: Connection) -> None:
+    pid, rid = seed_project_and_run(conn)
+    snap_id, _pss_id = seed_source(conn, pid)
+    _insert_chunk(conn, snap_id, 1, "One chunk over a zero budget.")
+
+    result = embed_pending_chunks(
+        conn, embedder=StubEmbeddingBackend(), project_id=pid, run_id=rid, max_chunks=0
+    )
+    assert result["budget_exceeded"] == 1
+    ok = embed_pending_chunks(
+        conn, embedder=StubEmbeddingBackend(), project_id=pid, run_id=rid
+    )
+    assert ok["budget_exceeded"] == 0
+    assert set(result) == set(ok)

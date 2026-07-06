@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import json
-import os
 import re
-import unicodedata
 from typing import Protocol, TypedDict
 
 import structlog
-from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 from openai.types.completion_usage import CompletionUsage
 from pydantic import BaseModel, ConfigDict
+
+from policy_atlas.embeddings import resolve_openai_client
+from policy_atlas.tags import has_control_character
 
 log = structlog.get_logger()
 
@@ -136,10 +136,6 @@ class _AssignmentsModel(BaseModel):
     assignments: list[_AssignmentModel]
 
 
-def _has_control_character(value: str) -> bool:
-    return any(unicodedata.category(char).startswith("C") for char in value)
-
-
 def validate_themes(
     themes: list[Theme],
     *,
@@ -157,8 +153,8 @@ def validate_themes(
         Themes with names and descriptions stripped.
 
     Raises:
-        InvalidDiscoveryOutput: If count, length, control-character or duplicate
-            constraints are violated.
+        InvalidDiscoveryOutput: If count, length, control-character, duplicate
+            or ``UNCLUSTERED``-sentinel-collision constraints are violated.
     """
     if not min_themes <= len(themes) <= max_themes:
         raise InvalidDiscoveryOutput(
@@ -180,13 +176,17 @@ def validate_themes(
             raise InvalidDiscoveryOutput(
                 f"theme {index} description exceeds {THEME_DESC_MAX} chars"
             )
-        if _has_control_character(name):
+        if has_control_character(name):
             raise InvalidDiscoveryOutput(f"theme {index} name contains a control character")
-        if _has_control_character(description):
+        if has_control_character(description):
             raise InvalidDiscoveryOutput(
                 f"theme {index} description contains a control character"
             )
         name_key = name.casefold()
+        if name_key == UNCLUSTERED:
+            raise InvalidDiscoveryOutput(
+                f"theme {index} name collides with the {UNCLUSTERED!r} sentinel"
+            )
         if name_key in seen_names:
             raise InvalidDiscoveryOutput(f"duplicate theme name: {name}")
         seen_names.add(name_key)
@@ -295,12 +295,12 @@ class OpenAIGroupingBackend:
     mode = "live"
 
     def __init__(self, api_key: str | None = None) -> None:
-        resolved_key = api_key or os.environ.get("OPENAI_API_KEY")
-        if not resolved_key:
-            raise RuntimeError(
-                "OpenAIGroupingBackend requires OPENAI_API_KEY or an explicit api_key."
-            )
-        self._client = OpenAI(api_key=resolved_key, timeout=60.0, max_retries=2)
+        # The call budget in characterise.py counts logical discover/assign calls;
+        # the SDK additionally retries transient 429/5xx failures, so the HTTP
+        # attempt ceiling is (1 + max_retries) x the logical budget maximum.
+        self._client = resolve_openai_client(
+            api_key, backend_name="OpenAIGroupingBackend", timeout=60.0, max_retries=2
+        )
 
     def discover(
         self,

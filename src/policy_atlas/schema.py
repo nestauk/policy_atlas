@@ -477,6 +477,9 @@ characterisation_result = Table(
     UniqueConstraint("evidence_scope_id", "run_id", name="uq_char_scope_run"),
 )
 
+# The only shipped tag_type (decision 10); writers import it via policy_atlas.tags.
+TOPIC_THEME = "topic_theme"
+
 source_tag = Table(
     "source_tag",
     metadata,
@@ -510,5 +513,5 @@ source_tag = Table(
     ),
     # Widens by a one-line migration when the LLM classify tool's seam opens
     # ("methodological_structural") — no speculative value ships now (decision 10).
-    CheckConstraint("tag_type IN ('topic_theme')", name="ck_stag_tag_type"),
+    CheckConstraint(f"tag_type IN ('{TOPIC_THEME}')", name="ck_stag_tag_type"),
 )

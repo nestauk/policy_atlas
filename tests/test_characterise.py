@@ -1348,3 +1348,32 @@ def test_stub_runs_byte_identical(conn: Connection) -> None:
     left = json.dumps(dict(rows[0]._mapping), sort_keys=True)
     right = json.dumps(dict(rows[1]._mapping), sort_keys=True)
     assert left == right
+
+
+# --- Review-stack fixes (task 009 step 7) ---
+
+
+def test_validate_themes_rejects_unclustered_sentinel_collision() -> None:
+    themes: list[Theme] = [
+        {"name": "Unclustered", "description": "collides with the sentinel"},
+        {"name": "Housing", "description": "housing"},
+        {"name": "Health", "description": "health"},
+    ]
+    with pytest.raises(grouping.InvalidDiscoveryOutput, match="sentinel"):
+        grouping.validate_themes(themes, min_themes=3, max_themes=12)
+
+
+def test_judgment_tracing_requires_host_when_keys_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-test")
+    monkeypatch.delenv("LANGFUSE_HOST", raising=False)
+    monkeypatch.delenv("LANGFUSE_BASE_URL", raising=False)
+    with pytest.raises(RuntimeError, match="LANGFUSE_HOST"):
+        tracing.get_langfuse()
+
+    # Partial configuration (one key) is loud too, not a silent no-op.
+    monkeypatch.delenv("LANGFUSE_SECRET_KEY")
+    with pytest.raises(RuntimeError, match="partially configured"):
+        tracing.get_langfuse()
