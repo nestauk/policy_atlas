@@ -82,7 +82,9 @@ class CharacteriseFailure(Exception):
 
 
 @dataclass(frozen=True)
-class _ScreenedSource:
+class ScreenedSource:
+    """Screened-in source plus cheap downstream signals."""
+
     pss_id: uuid.UUID
     source_snapshot_id: uuid.UUID
     full_text_snapshot_id: uuid.UUID | None
@@ -183,12 +185,22 @@ def _base_counts(conn: Connection, *, project_id: uuid.UUID, scope_id: uuid.UUID
     }
 
 
-def _screened_sources(
+def screened_sources(
     conn: Connection,
     *,
     project_id: uuid.UUID,
     scope_id: uuid.UUID,
-) -> list[_ScreenedSource]:
+) -> list[ScreenedSource]:
+    """Load relevant screened sources in deterministic project-source order.
+
+    Args:
+        conn: Open database connection.
+        project_id: Owning project.
+        scope_id: Evidence scope whose relevant sources are loaded.
+
+    Returns:
+        Screened-in sources enriched with classification and appraisal fields.
+    """
     full_text_snapshot = source_snapshot.alias("full_text_snapshot")
     rows = conn.execute(
         select(
@@ -267,14 +279,14 @@ def _screened_sources(
         .order_by(project_source_snapshot.c.project_source_snapshot_id)
     ).fetchall()
 
-    sources: list[_ScreenedSource] = []
+    sources: list[ScreenedSource] = []
     for row in rows:
         metadata = row.metadata if isinstance(row.metadata, dict) else {}
         text_basis = row.envelope_text_basis
         if row.full_text_snapshot_id is not None and row.full_text_text_basis is not None:
             text_basis = row.full_text_text_basis
         sources.append(
-            _ScreenedSource(
+            ScreenedSource(
                 pss_id=row.project_source_snapshot_id,
                 source_snapshot_id=row.source_snapshot_id,
                 full_text_snapshot_id=row.full_text_snapshot_id,
@@ -323,7 +335,7 @@ def _tag_distribution(
     return distributions
 
 
-def _failed_embedding_count(conn: Connection, sources: list[_ScreenedSource]) -> int:
+def _failed_embedding_count(conn: Connection, sources: list[ScreenedSource]) -> int:
     snapshot_to_pss: dict[uuid.UUID, set[uuid.UUID]] = {}
     for source in sources:
         snapshot_to_pss.setdefault(source.source_snapshot_id, set()).add(source.pss_id)
@@ -348,11 +360,11 @@ def _failed_embedding_count(conn: Connection, sources: list[_ScreenedSource]) ->
     return len(failed_pss_ids)
 
 
-def _metadata_value(source: _ScreenedSource, key: str) -> Any:
+def _metadata_value(source: ScreenedSource, key: str) -> Any:
     return source.metadata.get(key)
 
 
-def _quality_value(source: _ScreenedSource) -> str:
+def _quality_value(source: ScreenedSource) -> str:
     if source.quality_score is None:
         return "unappraised"
     return f"{source.quality_score} ({source.rubric_version})"
@@ -363,8 +375,8 @@ def _coverage(
     *,
     project_id: uuid.UUID,
     context: CharacteriseContext,
-) -> tuple[dict[str, Any], list[_ScreenedSource]]:
-    sources = _screened_sources(conn, project_id=project_id, scope_id=context.scope_id)
+) -> tuple[dict[str, Any], list[ScreenedSource]]:
+    sources = screened_sources(conn, project_id=project_id, scope_id=context.scope_id)
     pss_ids = [source.pss_id for source in sources]
     confidence_bands: dict[str, int] = {}
     for source in sources:
@@ -421,7 +433,7 @@ def _coverage(
     )
 
 
-def _doc_for_grouping(source: _ScreenedSource) -> GroupingDoc:
+def _doc_for_grouping(source: ScreenedSource) -> GroupingDoc:
     title_value = source.metadata.get("title")
     title = title_value if isinstance(title_value, str) and title_value else source.source_locator
     abstract_value = source.metadata.get("abstract")
