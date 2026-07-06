@@ -3,10 +3,14 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 2) — awaiting contract 🛑.
-> Contract approved (before planning): _pending_ ·
+> **Status:** **approved** (rev 5) — contract-stage adversarial review in progress.
+> Contract approved (before planning): **2026-07-06 · Shabeer Rauf** (rev 5,
+> covering the three gated changes: `selection_result` schema · `"select"`
+> registry entry + `ranking_backend` parameter · the `select_rerank_v1`
+> generation surface — and the components §6 realisation flow-back) ·
 > Plan approved (before implementation): _pending_ ·
-> ADR: 0006 (selection strategy + rationale record) — due at step 4.
+> ADR: 0006 (selection strategy · directive · rerank seam · rationale record) —
+> due at step 4.
 >
 > **Revision history:**
 > - **rev 1** (2026-07-06): initial draft — deterministic stratified strategy,
