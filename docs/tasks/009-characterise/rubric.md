@@ -16,8 +16,9 @@ in progress, not done.
        calls (budget `1 + ceil(n/batch) + repairs`) + telemetry to the user's
        Langfuse instances**) are exactly as approved; no existing-table change, no
        pgvector, no generation surface beyond the grouping pair, no artefact/block
-       writes, no new orchestration dependency; trace-content scope matches the
-       decision-13 sign-off.
+       writes, no new orchestration dependency; traces carry full I/O payloads with
+       eval-ready span metadata + validation scores (decision-13 sign-off,
+       2026-07-06).
 4. [ ] No generated files or secrets edited by hand; `OPENAI_API_KEY` and
        `LANGFUSE_*` credentials appear in no committed file, log, event payload or
        verification artifact (test-asserted).

@@ -494,15 +494,19 @@ artefact/block/annotation machinery exists but nothing here writes to it (decisi
       egress-free (socket-deny unchanged). Telemetry egress goes only to the
       user-operated Langfuse instances — a third egress destination, named at
       gate 4.
-    - **Trace content — the flagged decision:** engineering-considerations lists
-      "whether acquired source text may appear in traces" among the
-      resolve-before-sensitive-tracing items. **Recommendation: full I/O payloads**
-      (prompts + outputs) — that is the trace backbone's entire value for the eval
-      workstream (trace → eval-dataset promotion), and the instances are
-      user-operated; retention, sampling, masking and access control are recorded as
-      the observability seam's open items, not silently defaulted. 🛑 human call at
-      this gate; the fallback is metadata-only tracing until those items are
-      settled.
+    - **Trace content — SETTLED (user, 2026-07-06): full I/O payloads** (prompts +
+      outputs), resolving the engineering-considerations
+      resolve-before-sensitive-tracing item for acquired text in traces; the
+      instances are user-operated. Retention, sampling, masking and access control
+      are recorded as the observability seam's open items, not silently defaulted.
+      **Direction set with it ("maximum use — state-of-the-art telemetry layer and
+      eval surface"):** traces ship **eval-ready, not log-shaped** — spans carry
+      structured metadata (doc ids, batch index, validation outcome, retry/repair
+      events, `unclustered` counts) and validation outcomes are attached as Langfuse
+      scores, so the trace → eval-dataset promotion path has real substrate from day
+      one. The fuller eval surface (datasets, annotation queues, LLM-as-judge
+      integration) is the eval workstream's, building on these traces — recorded at
+      the observability seam with this direction quoted.
     - **Prompt registry stays repo-first** (prompts live in the repo,
       `characterise_grouping_v1`); traces record the prompt name + version so the
       runtime-registry hookup (deployment, labels/environments, emergency-edit
