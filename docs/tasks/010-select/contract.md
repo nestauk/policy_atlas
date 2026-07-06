@@ -60,6 +60,23 @@ specs in [docs/specs/](../../specs/index.md).
 >   stays content-only (title + abstract + intent): metadata and tags are weighed
 >   arithmetically or via directive boosts, never fed to the ranker — signals
 >   stay attributable, never double-counted.
+> - **rev 6** (2026-07-06): contract-stage adversarial review adjudicated
+>   (Codex, 14 findings: 3 blockers · 10 majors · 1 minor — 12 adopted, 1
+>   in-part, 1 declined; § Adversarial review). Blockers: candidate set =
+>   screened-in **eligible** (components §3 `Non-evidence` excluded from
+>   select/extract, counted not silent; `Unknown` stays eligible) · allocator
+>   arithmetic pinned (must-include × breadth-floor interaction, budget < strata,
+>   exhausted-stratum redistribution, reason precedence) · rerank score
+>   commensurability pinned (scored-then-fallback ordering, bounded integer
+>   scores, deterministic ties). Also: `priority_strata` directive field + the
+>   `priority_stratum_excluded` trigger (the spec's user-nominated-**cluster**
+>   escalation, hardest) · directive semantics pinned in-contract · `thin_base`
+>   defined over sufficiently-confident docs · reasons acknowledged as
+>   source-derived text · determinism defined over payload columns · schema
+>   subsection added · same-run re-run semantics stated · strategy-count and
+>   stale-verification wording fixed. Declined: a no-op policy field (spec's
+>   tilt is conditional on a policy object that doesn't exist; the 009 dual-view
+>   precedent defers identically).
 
 ## Goal
 
@@ -177,9 +194,11 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
    Stratification, the breadth floor, budget arithmetic, must-include bypass,
    exhaustive accounting: all deterministic, identical under both strategies, with
    stable ordering and deterministic tie-breaks (snapshot id). Under the default
-   `coverage_stratified_v1` the whole component is deterministic end-to-end (same
-   input → byte-identical selection row, test-enforced — this is the suite's
-   path). `llm_rerank_v1` (decision 10) bounds its judgment to within-stratum
+   `coverage_stratified_v1` the whole component is deterministic end-to-end —
+   same input → **byte-identical payload columns** (`strategy`, `budget`,
+   `selection_provenance`, `selected`, `excluded`, `flags`; the surrogate PK and
+   `created_at` are excluded from the claim — adversarial finding 11),
+   test-enforced; this is the suite's path. `llm_rerank_v1` (decision 10) bounds its judgment to within-stratum
    *ordering* only, inside that structure — a spec flow-back records the
    realisation refinement (components §6: procedure → procedure with bounded
    generative rerank). Every signal stays cheap and **pre-extract** (titles +
@@ -208,17 +227,42 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
      the fallback/deterministic ordering needs a semantic leg.
 3. **Strategy mechanics: `coverage_stratified_v1` — breadth floor, proportional
    remainder, weighted within-stratum ranking.**
+   - **Candidates = the scope's screened-in *eligible* set** (adversarial
+     finding 1): screened-in minus `primary_evidence_type = "Non-evidence"` —
+     components §3 makes `Non-evidence` a landscape label that **excludes from
+     select/extract**, while `Unknown` is **kept-and-eligible**. The exclusion
+     is a **counted base-ladder line** in the rationale (`non_evidence: N`),
+     never a silent drop; the accounting invariant runs over the eligible set
+     (decision 8).
    - **Strata = this run's themes + `unclustered`** (a partition — assignment is
      single-theme-or-unclustered; the 009 contract pre-committed unclustered to
      "form their own stratum when select lands"). Select reads the **same run's**
      `characterisation_result` row; no row for `(scope, run)` → honest failure
      (clusters are run-local — a previous run's grouping is never silently reused).
-   - **Allocation:** must-includes first (outside the budget — decision 4). Then
-     every non-empty stratum gets **one slot** (the breadth floor — this is the
-     anti-top-k guard) while budget remains, in deterministic stratum order (size
-     descending, name); the remainder is allocated **proportionally to stratum
-     size** (largest-remainder method — deterministic, sums exactly to budget).
-     Budget ≥ candidates → select all (still recorded, with rationale).
+   - **Allocation — exact arithmetic** (adversarial finding 2), in order:
+     1. **Must-includes** selected first, outside the budget (decision 4);
+        reason `must_include`. A stratum containing a must-include **counts as
+        covered** for the breadth floor (the floor's purpose — every stratum
+        represented — is already met there).
+     2. **Breadth floor**: each non-empty stratum not yet covered gets one slot
+        from the budget, in deterministic stratum order (candidate count
+        descending, then stratum name); reason `breadth_floor`. If
+        **budget < uncovered strata**, floors are granted in that order until
+        the budget is exhausted — unfloored strata end with zero selections and
+        are exactly what `large_stratum_excluded` / `priority_stratum_excluded`
+        watch (decision 6).
+     3. **Proportional remainder**: remaining budget allocated across strata
+        proportionally to **remaining candidate count** (largest-remainder
+        method: floor the quotas, distribute leftovers by largest fractional
+        part, ties by stratum order) — deterministic, sums exactly to the
+        remaining budget, and never allocates a stratum more than it has
+        (surplus from capped strata re-enters the same largest-remainder pass
+        over the uncapped ones); reason `ranked`.
+     4. **Reason precedence** per doc: `must_include` > `breadth_floor` >
+        `ranked` (a must-include is never relabelled; the top-ranked doc that
+        satisfies a floor carries `breadth_floor`).
+     Budget ≥ eligible candidates → select all (each doc still carries its
+     reason and the rationale still records the full arithmetic).
    - **Within-stratum ranking (the deterministic composite):** a weighted
      composite over the normalised cheap signals — recency (year, bounded decay) ·
      light appraisal tier · origin/upload priority (`uploaded` favoured, per the
@@ -260,6 +304,26 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
      live data to act on today.
    - **Signal-weight emphasis** — optional multipliers over the default weights
      (e.g. recency-heavy for a "latest evidence" intent).
+   - **`priority_strata`** (adversarial finding 4) — the spec's escalation
+     triggers are **cluster**-level ("large / high-priority / **user-nominated**
+     cluster"; the nominated-cluster drop escalates hardest), and doc-level
+     must-includes can't express them. Optional patterns (case-insensitive
+     substring/tag match against discovered stratum names and the scope's tag
+     layer — strata don't exist until characterise runs, so nomination is by
+     topic, resolved at invocation). Priority is **soft for selection**
+     (it never forces slots) but **hard for escalation**: a priority stratum
+     with zero selections fires `priority_stratum_excluded`, the hardest flag
+     (decision 6). Unmatched patterns are flagged, non-fatal.
+   **Directive semantics pinned here** (adversarial finding 5; the exact JSON
+   schema stays plan-pinned): all weights and multipliers are **positive,
+   bounded** (multiplicative fold into the composite; caps as named constants —
+   indicatively [0.1, 10]); multiple matching boosts **multiply, then clamp**;
+   a boost on the stratifying dimension itself (a theme-tag boost) is legal —
+   it re-weights within strata and cannot alter allocation; year predicates are
+   closed ranges `{gte, lte}`; tag predicates match `(tag_type, tag[,
+   asserted_by])` exactly; malformed directives are a **caught error, never a
+   silent run** (plan-as-object's compile posture applied to the one
+   execution-bearing input this component takes).
    An **empty directive is the default**: the plain stratified scan. In v3.0 the
    directive is *sourced* from the evidence-scope `context` JSONB (user/plan
    authored; the skeleton demonstrates one) — no new `run_harness` parameter, no
@@ -267,7 +331,12 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
    directly at commit time: a parameter-authoring change, zero re-plumbing. The
    executed directive is recorded whole in `selection_provenance` (decision 5).
    The source/evidence **policy** signal (soft prior, never a gate) structurally
-   cannot fire — no policy object exists in v3.0; recorded seam, not built.
+   cannot fire — no policy object exists in v3.0; recorded seam, not built. (An
+   adversarial finding proposed a no-op policy field or a spec flow-back:
+   **declined** — the spec's tilt is conditional on a supplied policy, exactly
+   like characterise's dual-view coverage, which 009 deferred the same way
+   without a spec change; an inert field is what data-model Principle 10
+   forbids.)
 5. **Persistence: one run-scoped `selection_result` row — selection is run-local.**
    Mirrors `characterisation_result`: one row per `(evidence_scope_id, run_id)`,
    recomputable, superseded by the next run, never canonical corpus state. Extract
@@ -287,10 +356,16 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
    capability spec pre-declares deepening selection as EB's one conditional
    steer-point. This slice lands its read surface: the bidirectional rationale
    (always logged) and the computed **trigger flags** — `large_stratum_excluded`
-   (a stratum with zero selections above a size share), `must_include_conflict`
-   (decision 4's validation flag; the user-nominated integrity signal),
-   `thin_base` (screened-in below a floor — the screen thin-base trigger read at
-   selection time), and `thin_full_text` (the **selected set's** full-text share
+   (a stratum with zero selections above a size share),
+   `priority_stratum_excluded` (a `priority_strata`-matched stratum with zero
+   selections — the spec's user-nominated-cluster drop, **the hardest flag**,
+   surfacing even in Minimal when modes land; adversarial finding 4),
+   `must_include_conflict` (decision 4's validation flag; doc-level nomination
+   integrity), `thin_base` (too few **sufficiently-confident** relevant docs —
+   the screen thin-base trigger's own definition, components §2, read at
+   selection time; confidence threshold + floor are plan-pinned named constants,
+   honestly noted stub-constant until the LLM screen tool lands; adversarial
+   finding 7), and `thin_full_text` (the **selected set's** full-text share
    below a floor — extraction-shaping, rev 5: downstream extraction must know
    whether it works from full text or abstracts before it starts).
    The policy-unmeetable trigger cannot fire (no policy object).
@@ -303,12 +378,12 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
 7. **The shared tool is a function, not a framework — and its signature is the
    future agent's tool call.** The spec fixes the verb's contract — *(candidate
    set, cheap signals, strategy, directive) → chosen subset + rationale* — and
-   that lands as a pure function with a `strategy` parameter validated against the
-   registry of shipped strategies (exactly one: `coverage_stratified_v1`). No
-   protocol class, no plugin machinery for a second strategy that doesn't exist
-   (Transferability's dependency-scoping strategy is that capability's problem,
-   ⏸ deferred — note the strategy *registry* now holds two entries, decision 10,
-   still with no plugin machinery). The seam is the signature — deliberately
+   that lands as a pure function with a `strategy` parameter validated against
+   the registry of **two built-in strategies** (`coverage_stratified_v1` ·
+   `llm_rerank_v1`; adversarial finding 10 fixed the stale "exactly one"). No
+   protocol class, no plugin machinery — future *non-EB* strategies
+   (Transferability's dependency-scoping) are that capability's problem,
+   ⏸ deferred. The seam is the signature — deliberately
    shaped as the facade the capability agent invokes as one tool. Recorded seams
    sitting on it: **agent-authored directives** (the capability agent authors the
    directive **just-in-time at invocation, once the characterisation row exists**
@@ -325,8 +400,9 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
    requiring `evidence_scope_id`; `SelectContext(scope_id, intent, context)`;
    `_run_select` via `_run_scope_component`; conditional-edge wiring;
    `component.started/completed/failed`. Invariants:
-   `screened_in == selected + not_selected` (must-includes ⊆ selected; each
-   selected doc in exactly one stratum bucket);
+   `screened_in == non_evidence + eligible` and
+   `eligible == selected + not_selected` (the base ladder visible — finding 1;
+   must-includes ⊆ selected; each selected doc in exactly one stratum bucket);
    `selected == must_include + breadth_floor + ranked`; one selection row per
    `(scope, run)`. Skeleton chain extends to select and renders the summary.
 9. **Edge scopes and failure semantics — honest, tested.** `n = 0` → skip honestly
@@ -336,7 +412,12 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
    budget ≥ n → select-all with rationale; unclustered-only grouping (zero themes)
    → one stratum, still stratified formally; all-must-include scopes → budget
    untouched, flagged if that exhausts the scope. Under `coverage_stratified_v1`
-   there are no retries and no partial writes; re-running is clean (run-local row).
+   there are no retries and no partial writes. **Re-run semantics** (adversarial
+   finding 13): the row is written once, at success, inside the component's
+   transaction — a failed run persists nothing, so retrying is a **new run**
+   (new `run_id`, new row); same-run re-execution is not a supported operation
+   and the `UNIQUE (evidence_scope_id, run_id)` constraint makes it a loud
+   error, never a silent overwrite (the 009 characterisation-row pattern).
 10. **`llm_rerank_v1` — purpose-sensitive within-stratum ordering, in-slice**
     (user-decided, rev 3). The generative judgment layer, bounded to the one thing
     arithmetic can't do: weighing candidates against the intent (and the synthesis
@@ -365,6 +446,17 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
       `coverage_stratified_v1`, never to a partial or silent state. LLM scores
       order candidates; they never exclude (the structure of decision 1 is
       untouched).
+    - **Score semantics — LLM and composite scores are never mixed in one
+      comparison** (adversarial finding 3). LLM scores are **bounded integers
+      0–100** (schema-enforced). The within-stratum ordering under
+      `llm_rerank_v1` is: **LLM-scored docs first** (score desc → composite
+      desc → pss id), **then fallback docs** (composite desc → pss id), each
+      block internally deterministic. Whole stratum fallback ≡ the
+      deterministic composite ordering exactly. Rationale: the two scales are
+      not commensurable — interleaving them would fake precision; a defined
+      scored-before-fallback rule is honest, deterministic, and collapses to
+      the right limit in both directions (no fallbacks / all fallbacks). Both
+      scores are recorded per doc either way.
     - **`RankingBackend` seam** mirroring `GroupingBackend`:
       `rank(batch, intent) -> scores+reasons` + `mode`; `OpenAIRankingBackend`
       (structured outputs) + deterministic stub for the suite. `run_harness
@@ -393,6 +485,77 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
       models (Cohere-class, on Bedrock) were considered and routed to the
       **`retrieve` seam** instead — they score query-relevance, not
       purpose-fit; recorded there, not here.
+
+### Contract-stage adversarial review — findings & adjudication (Codex, 2026-07-06)
+
+Fourteen findings against rev 5 (3 blockers · 10 majors · 1 minor); none
+challenged the user-settled directions. Adjudicated by the lead — 12 adopted,
+1 in-part, 1 declined:
+
+1. Candidate set ignored components §3 `Non-evidence` exclusion (blocker):
+   **adopted** — eligible set defined, counted base-ladder line, invariants
+   updated (decisions 3, 8).
+2. Allocator arithmetic underspecified — must-include × breadth-floor
+   interaction, budget < strata, exhausted strata, reason precedence (blocker):
+   **adopted** — exact ordered arithmetic in decision 3.
+3. LLM and composite scores incommensurable in one ordering (blocker):
+   **adopted** — bounded integer scores, scored-before-fallback rule,
+   deterministic ties (decision 10).
+4. Spec's user-nominated escalation is **cluster**-level; contract had doc-level
+   only: **adopted** — `priority_strata` directive field +
+   `priority_stratum_excluded`, the hardest flag (decisions 4, 6).
+5. Directive semantics too open for a fresh implementer: **adopted-in-part** —
+   merge arithmetic, bounds, predicate forms and fail-closed validation pinned
+   in-contract; the exact JSON schema stays plan-pinned.
+6. Policy tilt needs a no-op field or spec flow-back: **declined** — the spec's
+   tilt is conditional on a policy object that doesn't exist; 009's dual-view
+   precedent defers identically; an inert field violates Principle 10.
+7. `thin_base` diverged from the spec's sufficiently-confident definition:
+   **adopted** (decision 6).
+8. Reason strings may quote source text vs the "no source text" claim:
+   **adopted** — boundary corrected; rationale rows inherit corpus sensitivity.
+9. Verification's "intent string only" stale from rev 4: **adopted** — fixed.
+10. Decision 7's "exactly one strategy" contradicted the two-strategy
+    deliverable: **adopted** — fixed.
+11. Byte-identity claim false over PK/timestamp: **adopted** — determinism
+    defined over payload columns.
+12. No schema subsection (009 precedent): **adopted** — added.
+13. `UNIQUE(scope, run)` vs "re-running is clean" ambiguity: **adopted** —
+    same-run re-execution unsupported and loud; retry = new run (decision 9).
+14. Rubric still required the dropped vectorisation-entry update (minor):
+    **adopted** — rubric corrected.
+
+### Schema
+
+**Gated change 1 — one new table** (one migration; table count 19 → 20; the 009
+precedent's shape — adversarial finding 12):
+
+```
+selection_result   selection_result_id PK · project_id FK→project
+                   · evidence_scope_id · run_id
+                   · strategy TEXT CHECK (strategy IN
+                       ('coverage_stratified_v1', 'llm_rerank_v1'))
+                   · budget INT NOT NULL CHECK (budget > 0)
+                   · selection_provenance JSONB NOT NULL (required keys,
+                       test-asserted: strategy version, executed directive +
+                       source, effective weights, signal availability; under
+                       llm_rerank_v1 additionally: prompt_version, model,
+                       batch_size, retry/fallback counts)
+                   · selected JSONB NOT NULL   (per doc: pss id, stratum,
+                       signal scores [+ llm score/reason where ranked],
+                       text_basis, reason)
+                   · excluded JSONB NOT NULL   (per stratum: counts by reason
+                       class + notable flagged exclusions; base-ladder counts
+                       incl. non_evidence)
+                   · flags JSONB NOT NULL      (the decision-6 triggers)
+                   · created_at
+                   Composite FKs (evidence_scope_id, project_id),
+                   (run_id, project_id) — cross-project guard
+                   UNIQUE (evidence_scope_id, run_id)   -- run-local by design
+```
+
+Downgrade drops the table. `tests/helpers.py` `delete_project_data` gains it in
+FK-safe order.
 
 ### Out of scope
 
@@ -469,8 +632,14 @@ exist").
   per the 009 posture.
 - Committed artifacts (strategy names, weights, prompt text, table/column names,
   verification counts, rationale shapes) are public-safe. Selection rationale
-  contains ids, scores, reason enums and the ranker's short reason strings
-  (code-constrained, stored as data) — no source text.
+  contains ids, scores, reason enums and the ranker's short reason strings —
+  and reason strings are **potentially source-derived text** (a model
+  paraphrasing or quoting the abstract it judged; length-capped and stored as
+  data, but not quote-free by construction — adversarial finding 8). The
+  `selection_result` row therefore inherits the corpus's sensitivity class:
+  public-safe for the openly-licensed fixture corpus, private-by-default for
+  arbitrary corpora (same class as the characterisation row's theme
+  descriptions).
 
 ## Model route
 
@@ -484,8 +653,8 @@ payload; the only prompt in the slice. No embeddings use (rev 4).
 
 - **Deterministic where claimed, honestly soft where not** — under
   `coverage_stratified_v1`: same corpus, same characterisation row, same
-  parameters → byte-identical selection row, test-enforced (the 009 two-run
-  determinism check). The structure (strata, allocation, budget, hard rules) is
+  parameters → byte-identical payload columns (PK/timestamp excluded),
+  test-enforced (the 009 two-run determinism check). The structure (strata, allocation, budget, hard rules) is
   deterministic under *both* strategies; `llm_rerank_v1`'s ordering is
   interpretive by design and fully attributable (prompt version, model, per-doc
   scores + fallbacks recorded). Neither live path is inside `make verify`.
@@ -544,10 +713,13 @@ payload; the only prompt in the slice. No embeddings use (rev 4).
 `verification.md` must include:
 - `make verify` table with pass counts; socket-deny result named.
 - Migration roundtrip clean; table count 20.
-- Named test results: stratified-allocation math (hand-computed fixture),
+- Named test results: stratified-allocation math (hand-computed fixture,
+  including exhausted-stratum redistribution and budget < strata),
   breadth-floor anti-top-k case (a dominant stratum cannot starve the rest),
-  must-include bypass + out-of-scope flag, counting invariants, determinism
-  (two-run byte-identical), edge scopes (n=0, missing characterisation row,
+  must-include bypass + out-of-scope flag + must-include-satisfies-floor,
+  non-evidence exclusion (counted, Unknown stays eligible), counting invariants
+  (eligible-set based), determinism
+  (two-run byte-identical payload columns), edge scopes (n=0, missing characterisation row,
   budget ≥ n, unclustered-only), missing-signal flag-not-block, text-basis tilt
   (soft — an abstract-only doc still selectable; hand-computed weight effect),
   trigger flags (large-stratum-excluded and thin-full-text fixtures), rationale
@@ -556,8 +728,11 @@ payload; the only prompt in the slice. No embeddings use (rev 4).
   deterministically reorders a stratum · a boost can never exclude — the boosted-
   against doc still selectable · unknown column/tag in a directive flagged,
   non-fatal · empty directive = default scan, byte-identical to the no-directive
-  path · executed directive + source recorded in `selection_provenance`), rerank
+  path · executed directive + source recorded in `selection_provenance` ·
+  malformed directive fails closed · priority-strata match + the
+  `priority_stratum_excluded` fixture), rerank
   semantics (contested-strata-only calls asserted against a counting double ·
+  scored-before-fallback ordering with both scores recorded ·
   call-budget maximum enforced pre-call · per-doc fallback on missing/invalid
   scores, flagged and counted, batch fallback on batch failure — selection always
   completes · LLM scores order but never exclude · reasons length/charset
@@ -566,8 +741,10 @@ payload; the only prompt in the slice. No embeddings use (rev 4).
   on the built prompt · provenance keys — prompt version, model, fallback counts —
   present on row and event payload).
 - Live-run evidence per the manual check above.
-- Public-safety confirmation (no credentials; live path sent the intent string
-  only).
+- Public-safety confirmation (no credentials; live path sent the scope intent
+  plus titles + abstracts of contested-strata candidates — openly-licensed
+  fixture text only; adversarial finding 9 corrected the earlier "intent string
+  only" wording, stale from rev 4).
 - Deferred seams recorded in `docs/deferred.md` (steer-point pause reading the
   flags · **agent-authored directives at the commit layer** · **rerank-quality
   evals** (ranked vs reranked on downstream yield, once extract exists) ·

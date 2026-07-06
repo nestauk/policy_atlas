@@ -15,8 +15,9 @@ is in progress, not done.
 5. [ ] No tests deleted, skipped or weakened without written justification.
 6. [ ] Verification evidence recorded ([verification.md](verification.md) or PR), including
        every named test result the contract lists.
-7. [ ] Known gaps and deferred seams listed (gap → [docs/deferred.md](../../deferred.md)),
-       including the 009 vectorisation-entry update (first read landed).
+7. [ ] Known gaps and deferred seams listed (gap → [docs/deferred.md](../../deferred.md));
+       the 009 vectorisation entry stands unchanged (retrieve remains the first reader) and
+       the declined embedding-relevance seam is recorded.
 8. [ ] Required review stack ran for Tier 3 (contract verifier · code/security review ·
        adversarial · simplification), sized per the 009 retro note, or skipped with written
        justification — findings in [verification.md](verification.md).
@@ -24,13 +25,14 @@ is in progress, not done.
 Slice-specific criteria (from the contract's disciplines):
 
 9.  [ ] **Determinism holds where claimed**: under `coverage_stratified_v1`, two identical
-        runs produce byte-identical `selection_result` rows (test-asserted); no ordering
-        leak found in review. The structure (strata, allocation, budget, hard rules) is
-        deterministic under both strategies.
+        runs produce byte-identical payload columns (PK/`created_at` excluded, per the
+        contract) — test-asserted; no ordering leak found in review. The structure (strata,
+        allocation, budget, hard rules) is deterministic under both strategies.
 10. [ ] **The bidirectional rationale is complete and countable**: every screened-in doc is
-        accounted for as selected (with reason `must_include` | `breadth_floor` | `ranked`)
-        or in an exclusion aggregate; totals reconcile with the counting invariants
-        (`screened_in == selected + not_selected`).
+        accounted for — `non_evidence` (counted, spec-excluded), selected (with reason
+        `must_include` | `breadth_floor` | `ranked`), or an exclusion aggregate; totals
+        reconcile with the counting invariants (`screened_in == non_evidence + eligible`;
+        `eligible == selected + not_selected`).
 11. [ ] **Flag-not-block verified**: missing appraisal and unknown metadata
         demonstrably never exclude a document; directive boosts re-weight and can never
         exclude (no directive shape manufactures a hard gate); must-includes are the only
