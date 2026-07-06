@@ -3,10 +3,12 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted, rev 9 (clean consolidation of revs 1–8, plus one design
-> change: **`source_tag` becomes the single tag home** — classify's stub-empty
-> `open_tags` column retired; user steer, 2026-07-06) — awaiting final sign-off.
-> Contract approved (before planning): _pending_ ·
+> **Status:** **approved** (rev 9 — clean consolidation of revs 1–8 plus the
+> single-tag-home change) — planning in progress.
+> Contract approved (before planning): **2026-07-06 · Shabeer Rauf** (rev 9,
+> covering the four flagged acks: `grouping_backend` parameter · project-scoped
+> composite FKs · `open_tags` retirement · `langfuse` dependency; contract-stage
+> adversarial review adjudicated at revs 6–6.1) ·
 > Plan approved (before implementation): _pending_ ·
 > ADR: 0005 (embed + generation seams / first product egress / injection posture) —
 > due at step 4.
