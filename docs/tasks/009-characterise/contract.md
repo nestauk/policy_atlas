@@ -70,8 +70,8 @@ specs in [docs/specs/](../../specs/index.md).
 > backfill framing — nothing is deployed) · scikit-learn dropped from the dependency
 > gate (no algorithm to ship).
 > Contract approved (before planning): _pending_ ·
-> Plan approved (before implementation): _pending_ · ADR: 0005 (embed seam / first
-> product egress) — to be written at step 4.
+> Plan approved (before implementation): _pending_ · ADR: 0005 (embed + generation
+> seams / first product egress / injection posture) — to be written at step 4.
 > User-settled before drafting (2026-07-05): **whole characterise in one slice** (coverage
 > + embed seam + clustering — no split) · **live provider embeddings** (this slice opens
 > the runtime-egress/inference gate; stub/local-model alternatives considered and
@@ -90,7 +90,7 @@ hardest pattern grade, exactly reproducible, resting on the **screened base**,
 flag-not-block — and (b) **topic-level thematic shape**: an LLM discovers the scope's
 themes from all titles + abstracts (one call), then assigns every screened-in document
 against that fixed theme list (batched concurrent calls; a document may land
-explicitly in none) — a **bounded, known-in-advance call budget**, honest about being
+explicitly in none) — a **bounded call budget with an enforced maximum**, honest about being
 the **softest grade** (an interpretive shape, not a count — recomputable, never a
 deterministic fact, which is exactly the epistemic class an LLM grouping belongs to).
 
