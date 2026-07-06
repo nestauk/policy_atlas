@@ -10,24 +10,48 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
+from sqlalchemy.exc import IntegrityError
 
+from policy_atlas import events
+from policy_atlas.characterise import ScreenedSource
 from policy_atlas.grouping import GroupingDoc
+from policy_atlas.harness import run_harness
+from policy_atlas.inference import StubEchoProvider
+from policy_atlas.plan import Plan, compile
 from policy_atlas.ranking import RankedDoc
 from policy_atlas.schema import (
+    TOPIC_THEME,
+    artefact,
+    block,
     characterisation_result,
     project_source_snapshot,
+    runs,
     selection_result,
     source_appraisal_result,
     source_classification_result,
+    source_screening_result,
     source_snapshot,
 )
 from policy_atlas.select import (
+    DEFAULT_SELECTION_BUDGET,
     DirectiveError,
     SelectContext,
     SelectError,
+    SelectionCandidate,
+    SelectionDirective,
+    SelectionStratum,
+    select_documents,
     select_scope,
 )
-from tests.helpers import now, seed_project_and_run, seed_run, seed_scope, seed_screening_result
+from policy_atlas.tags import insert_source_tags
+from tests.helpers import (
+    delete_project_data,
+    now,
+    seed_project_and_run,
+    seed_run,
+    seed_scope,
+    seed_screening_result,
+)
 from tests.helpers import seed_source as helper_seed_source
 
 EVIDENCE_TYPE = "RCTs and Quasi-Experimental Studies"
@@ -652,3 +676,756 @@ def test_llm_rerank_contested_scope_and_fallback_ordering(conn: Connection) -> N
     assert provenance["call_budget"] == {"baseline": 1, "maximum": 2, "used": 1}
     assert provenance["retry_count"] == 0
     assert provenance["fallback_count"] == 3
+
+
+# --- Schema constraints ---
+
+
+def test_schema_constraints_reject_bad_rows(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    docs = _docs(conn, pid, characterise_run_id, scope_id, "A", 2)
+    _seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
+    _summary, row, run_id = _run_select(
+        conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 2}}
+    )
+    selection_result_id = row._mapping["selection_result_id"]
+
+    with pytest.raises(IntegrityError, match="ck_selr_strategy"), conn.begin_nested():
+        conn.execute(
+            selection_result.update()
+            .where(selection_result.c.selection_result_id == selection_result_id)
+            .values(strategy="bogus_strategy")
+        )
+
+    with pytest.raises(IntegrityError, match="ck_selr_budget_positive"), conn.begin_nested():
+        conn.execute(
+            selection_result.update()
+            .where(selection_result.c.selection_result_id == selection_result_id)
+            .values(budget=0)
+        )
+
+    # Duplicate (evidence_scope_id, run_id): the row above already occupies
+    # (scope_id, run_id) — a second insert for the same pair must be rejected.
+    with pytest.raises(IntegrityError, match="uq_selr_scope_run"), conn.begin_nested():
+        conn.execute(selection_result.insert().values(
+            selection_result_id=uuid.uuid4(),
+            project_id=pid,
+            evidence_scope_id=scope_id,
+            run_id=run_id,
+            strategy="coverage_stratified_v1",
+            budget=1,
+            selection_provenance={},
+            selected=[],
+            excluded={},
+            flags={},
+            created_at=now(),
+        ))
+
+    # Cross-project guard: evidence_scope_id belongs to project pid, but run_id
+    # belongs to a different project (pid_b) — no (run_id, project_id=pid) row
+    # exists in runs, so fk_selr_run_project rejects it.
+    pid_b, run_b = seed_project_and_run(conn)
+    with pytest.raises(IntegrityError), conn.begin_nested():
+        conn.execute(selection_result.insert().values(
+            selection_result_id=uuid.uuid4(),
+            project_id=pid,
+            evidence_scope_id=scope_id,
+            run_id=run_b,
+            strategy="coverage_stratified_v1",
+            budget=1,
+            selection_provenance={},
+            selected=[],
+            excluded={},
+            flags={},
+            created_at=now(),
+        ))
+    del pid_b
+
+
+# --- Eligibility ---
+
+
+def test_eligibility_base_ladder_by_evidence_type(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _seed_select_doc(
+        conn, pid, characterise_run_id, scope_id,
+        title="non-evidence", evidence_type=NON_EVIDENCE_TYPE,
+    )
+    unknown = _seed_select_doc(
+        conn, pid, characterise_run_id, scope_id,
+        title="unknown", evidence_type="Unknown / Insufficient information",
+    )
+    unclassified = _seed_select_doc(
+        conn, pid, characterise_run_id, scope_id,
+        title="unclassified", evidence_type=None,
+    )
+    _seed_characterisation(
+        conn, pid, scope_id, characterise_run_id,
+        themes={"A": [unknown, unclassified]},
+    )
+
+    summary, row, _ = _run_select(
+        conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 5}}
+    )
+
+    # 3 docs screened relevant: 1 "Other (Non-evidence documents)" excluded;
+    # "Unknown / Insufficient information" and unclassified/NULL both eligible.
+    # screened_in (3) == non_evidence (1) + eligible (2).
+    assert summary["base"] == {"screened_in": 3, "non_evidence": 1, "eligible": 2}
+    assert summary["base"]["screened_in"] == (
+        summary["base"]["non_evidence"] + summary["base"]["eligible"]
+    )
+    assert row._mapping["excluded"]["base"]["non_evidence"] == 1
+
+
+# --- Counting invariants ---
+
+
+def test_counting_invariants_on_mixed_fixture(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    theme_a = _docs(conn, pid, characterise_run_id, scope_id, "A", 5)
+    theme_b = _docs(conn, pid, characterise_run_id, scope_id, "B", 4)
+    unclustered_docs = _docs(conn, pid, characterise_run_id, scope_id, "U", 1)
+    _seed_select_doc(
+        conn, pid, characterise_run_id, scope_id,
+        title="non-evidence", evidence_type=NON_EVIDENCE_TYPE,
+    )
+    _seed_select_doc(conn, pid, characterise_run_id, scope_id, title="late-eligible")
+    _seed_characterisation(
+        conn, pid, scope_id, characterise_run_id,
+        themes={"A": theme_a, "B": theme_b},
+        unclustered=unclustered_docs,
+    )
+
+    summary, row, _ = _run_select(
+        conn, pid, scope_id, characterise_run_id,
+        context={
+            "selection": {"budget": 4, "must_include_ids": [str(theme_b[0])]},
+        },
+    )
+
+    # screened_in = 5 + 4 + 1 + 1(late) + 1(non-evidence) = 12; non_evidence = 1;
+    # eligible = 11.
+    #
+    # Floors (stratum order A(5), B(4), unclustered(1)): A has no must-include so
+    # gets a floor (remaining 4->3); B's floor is skipped because it already has
+    # a must-include; unclustered gets a floor (remaining 3->2). Capacities:
+    # A = 5-0-1=4, B = 4-1-0=3, unclustered = 1-0-1=0. Ranked slots for the
+    # remaining budget of 2 over capacities {A:4, B:3}: quotas A=8/7β‰ˆ1.14,
+    # B=6/7β‰ˆ0.86; floor(quota) gives A=1, B=0, one leftover goes to B (larger
+    # fraction) -> ranked A=1, B=1, unclustered=0.
+    # Allocated: A=1+1=2, B=0+1=1 (+1 must), unclustered=1+0=1.
+    # Selected = must(1) + breadth_floor(A:1, unclustered:1 = 2) + ranked(A:1, B:1 = 2) = 5.
+    assert summary["base"] == {"screened_in": 12, "non_evidence": 1, "eligible": 11}
+    assert summary["selected"] == {
+        "count": 5,
+        "by_reason": {"must_include": 1, "breadth_floor": 2, "ranked": 2},
+    }
+    # Excluded: A candidates(5) - selected(2) = 3 ranked_below_cut;
+    # B candidates(4) - selected(2, incl. must) = 2 ranked_below_cut;
+    # unclustered candidates(1) - selected(1) = 0 (no entry).
+    assert row._mapping["excluded"]["by_stratum"] == {
+        "A": {"ranked_below_cut": 3},
+        "B": {"ranked_below_cut": 2},
+    }
+    assert row._mapping["excluded"]["base"]["not_in_characterisation"] == 1
+
+    eligible = summary["base"]["eligible"]
+    excluded_total = sum(
+        sum(reasons.values())
+        for reasons in row._mapping["excluded"]["by_stratum"].values()
+    )
+    not_in_characterisation = row._mapping["excluded"]["base"]["not_in_characterisation"]
+    assert eligible == summary["selected"]["count"] + excluded_total + not_in_characterisation
+    assert summary["selected"]["count"] == sum(summary["selected"]["by_reason"].values())
+
+    strata_names = {stratum["name"] for stratum in summary["strata"]}
+    for record in row._mapping["selected"]:
+        assert record["stratum"] in strata_names
+
+
+# --- Text-basis tilt (soft) ---
+
+
+def test_text_basis_soft_tilt_ranks_full_text_above_but_never_excludes(
+    conn: Connection,
+) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    full_text_doc = _seed_select_doc(
+        conn, pid, characterise_run_id, scope_id,
+        title="full", text_basis="full_text", quality=3, year=2026, origin="uploaded",
+    )
+    abstract_doc = _seed_select_doc(
+        conn, pid, characterise_run_id, scope_id,
+        title="abstract", text_basis="abstract_only", quality=3, year=2026, origin="uploaded",
+    )
+    _seed_characterisation(
+        conn, pid, scope_id, characterise_run_id,
+        themes={"A": [full_text_doc, abstract_doc]},
+    )
+
+    summary, row, _ = _run_select(
+        conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 2}}
+    )
+
+    # Both docs share recency=1.0 (year 2026, age 0), quality=(3-1)/4=0.5,
+    # screen_confidence=0.9 (default relevant screening), origin=1.0 (uploaded).
+    # composite_full     = .25*1 + .25*.5 + .20*1.00 + .15*.9 + .15*1 = 0.86
+    # composite_abstract = .25*1 + .25*.5 + .20*0.25 + .15*.9 + .15*1 = 0.71
+    # difference = 0.20 * (1.0 - 0.25) = 0.15, matching 0.86 - 0.71.
+    records = {record["pss_id"]: record for record in row._mapping["selected"]}
+    assert records[str(full_text_doc)]["composite"] == pytest.approx(0.86)
+    assert records[str(abstract_doc)]["composite"] == pytest.approx(0.71)
+    assert (
+        records[str(full_text_doc)]["composite"] - records[str(abstract_doc)]["composite"]
+        == pytest.approx(0.15)
+    )
+    # Full-text ranks first (breadth floor goes to the top-composite doc); budget
+    # covers both, so the abstract-only doc is still selected (flag, not block).
+    assert row._mapping["selected"][0]["pss_id"] == str(full_text_doc)
+    assert {str(full_text_doc), str(abstract_doc)} == set(records)
+    assert summary["selected"]["count"] == 2
+
+
+# --- Missing-signal flag-not-block ---
+
+
+def test_missing_signals_flag_not_block() -> None:
+    # NULL screen_confidence is unreachable through the DB for a "relevant"
+    # screening row (ck_ssr_non_null_when_decided forbids it), so this signal
+    # combination is exercised at the pure select_documents level instead of
+    # through select_scope/DB fixtures, per the same ScreenedSource shape
+    # screened_sources() would build.
+    pss_id = uuid.uuid4()
+    source = ScreenedSource(
+        pss_id=pss_id,
+        source_snapshot_id=uuid.uuid4(),
+        full_text_snapshot_id=None,
+        origin="uploaded",
+        full_text_status="not_attempted",
+        full_text_error=None,
+        metadata={"title": "missing", "abstract": "Abstract."},  # no "year" key
+        source_locator="test.pdf",
+        text_basis="full_text",
+        screen_basis="title_abstract",
+        screen_confidence=None,  # NULL screen confidence
+        primary_evidence_type=EVIDENCE_TYPE,
+        quality_score=None,  # no appraisal row
+        rubric_version=None,
+    )
+    candidate = SelectionCandidate(source=source, tags=())
+    stratum = SelectionStratum(name="A", candidate_ids=(pss_id,))
+
+    outcome = select_documents(
+        [candidate],
+        strata=[stratum],
+        strategy="coverage_stratified_v1",
+        directive=SelectionDirective(budget=1),
+        intent="Test intent",
+        ranking_backend=None,
+    )
+
+    # No year -> recency reads 0.5; no appraisal row -> quality reads 0.5;
+    # NULL screen confidence -> screen_confidence reads 0.5. text_basis is set
+    # (full_text) and origin is "uploaded", so those two stay non-missing.
+    assert len(outcome.selected) == 1
+    record = outcome.selected[0]
+    assert record["pss_id"] == str(pss_id)
+    assert record["signals"]["recency"] == 0.5
+    assert record["signals"]["quality"] == 0.5
+    assert record["signals"]["screen_confidence"] == 0.5
+    assert record["missing_signals"] == ["recency", "quality", "screen_confidence"]
+
+    assert outcome.provenance["signal_availability"]["recency"] == 1
+    assert outcome.provenance["signal_availability"]["quality"] == 1
+    assert outcome.provenance["signal_availability"]["screen_confidence"] == 1
+    assert outcome.provenance["signal_availability"]["text_basis"] == 0
+    assert outcome.provenance["signal_availability"]["origin"] == 0
+
+
+# --- Directive semantics ---
+
+
+def test_directive_tag_boost_reorders_stratum_and_never_excludes(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    better = _seed_select_doc(
+        conn, pid, characterise_run_id, scope_id,
+        title="better", quality=5, year=2026, origin="uploaded", text_basis="full_text",
+    )
+    worse = _seed_select_doc(
+        conn, pid, characterise_run_id, scope_id,
+        title="worse", quality=1, year=2011, origin="acquired", text_basis="abstract_only",
+    )
+    insert_source_tags(
+        conn, project_id=pid, run_id=characterise_run_id, now=now(),
+        assertions=[(worse, "boosted", "test")],
+    )
+    _seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": [better, worse]})
+
+    # composite_better = .25*1(recency,2026) + .25*1((5-1)/4=1,quality) + .20*1(full_text)
+    #                   + .15*.9(screen_confidence) + .15*1(uploaded) = 0.985
+    # composite_worse   = .25*0(recency,2011,age15) + .25*0((1-1)/4=0,quality)
+    #                   + .20*.25(abstract_only) + .15*.9 + .15*.5(acquired) = 0.26
+    # weight 4 x 0.26 = 1.04 > 0.985, so a tag boost of 4 reorders the stratum.
+    _summary_no_boost, row_no_boost, _ = _run_select(
+        conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 1}}
+    )
+    assert row_no_boost._mapping["selected"][0]["pss_id"] == str(better)
+
+    boost_context = {
+        "selection": {
+            "budget": 1,
+            "boosts": [{"match": {"tag_type": TOPIC_THEME, "tag": "boosted"}, "weight": 4}],
+        }
+    }
+    _summary_boost, row_boost, _ = _run_select(
+        conn, pid, scope_id, characterise_run_id, context=boost_context
+    )
+    assert row_boost._mapping["selected"][0]["pss_id"] == str(worse)
+
+    # Boost can never exclude: with budget covering both, the unboosted
+    # (higher-composite) doc is still selected alongside the boosted one.
+    all_context = {
+        "selection": {
+            "budget": 2,
+            "boosts": [{"match": {"tag_type": TOPIC_THEME, "tag": "boosted"}, "weight": 4}],
+        }
+    }
+    _summary_all, row_all, _ = _run_select(
+        conn, pid, scope_id, characterise_run_id, context=all_context
+    )
+    assert {record["pss_id"] for record in row_all._mapping["selected"]} == {
+        str(better), str(worse),
+    }
+
+
+def test_directive_year_boost_matches_only_in_range_docs(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    in_range = _seed_select_doc(conn, pid, characterise_run_id, scope_id, title="in", year=2021)
+    below_range = _seed_select_doc(
+        conn, pid, characterise_run_id, scope_id, title="below", year=2015
+    )
+    above_range = _seed_select_doc(
+        conn, pid, characterise_run_id, scope_id, title="above", year=2025
+    )
+    _seed_characterisation(
+        conn, pid, scope_id, characterise_run_id,
+        themes={"A": [in_range, below_range, above_range]},
+    )
+
+    summary, row, _ = _run_select(
+        conn, pid, scope_id, characterise_run_id,
+        context={
+            "selection": {
+                "budget": 3,
+                "boosts": [
+                    {"match": {"year": {"gte": 2020, "lte": 2022}}, "weight": 5},
+                ],
+            },
+        },
+    )
+
+    # Only the year-2021 doc falls in [2020, 2022]; its boost_multiplier is the
+    # weight (5), the other two docs stay unmultiplied (1.0).
+    records = {record["pss_id"]: record for record in row._mapping["selected"]}
+    assert records[str(in_range)]["boost_multiplier"] == 5
+    assert records[str(below_range)]["boost_multiplier"] == 1.0
+    assert records[str(above_range)]["boost_multiplier"] == 1.0
+    assert row._mapping["selection_provenance"]["unmatched_boosts"] == []
+    assert summary["selected"]["count"] == 3
+
+
+def test_directive_boost_matching_zero_docs_flags_unmatched_and_completes(
+    conn: Connection,
+) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    doc = _seed_select_doc(conn, pid, characterise_run_id, scope_id, title="doc", origin="uploaded")
+    _seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": [doc]})
+
+    summary, row, _ = _run_select(
+        conn, pid, scope_id, characterise_run_id,
+        context={
+            "selection": {
+                "budget": 1,
+                "boosts": [{"match": {"column": "origin", "equals": "acquired"}, "weight": 2}],
+            },
+        },
+    )
+
+    # The only doc is "uploaded"; a boost matching "acquired" matches zero docs
+    # (index 0 in the boosts list) but the run still completes normally.
+    assert row._mapping["selection_provenance"]["unmatched_boosts"] == [0]
+    assert summary["selected"]["count"] == 1
+
+
+def test_directive_and_source_recorded_whole_in_provenance(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    doc = _seed_select_doc(conn, pid, characterise_run_id, scope_id, title="doc")
+    _seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": [doc]})
+
+    _summary_default, row_default, _ = _run_select(conn, pid, scope_id, characterise_run_id)
+    provenance_default = row_default._mapping["selection_provenance"]
+    assert provenance_default["directive_source"] == "default"
+    assert provenance_default["directive"] == {
+        "budget": DEFAULT_SELECTION_BUDGET,
+        "must_include_ids": [],
+        "boosts": [],
+        "weight_emphasis": {},
+        "priority_strata": [],
+    }
+
+    _summary_ctx, row_ctx, _ = _run_select(
+        conn, pid, scope_id, characterise_run_id,
+        context={"selection": {"budget": 3, "must_include_ids": [str(doc)]}},
+    )
+    provenance_ctx = row_ctx._mapping["selection_provenance"]
+    assert provenance_ctx["directive_source"] == "scope_context"
+    assert provenance_ctx["directive"] == {
+        "budget": 3,
+        "must_include_ids": [str(doc)],
+        "boosts": [],
+        "weight_emphasis": {},
+        "priority_strata": [],
+    }
+
+
+# --- Trigger-flag fixtures ---
+
+
+def test_trigger_flag_large_stratum_excluded_detail_payload(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    theme_a = _docs(conn, pid, characterise_run_id, scope_id, "A", 6)
+    theme_b = _docs(conn, pid, characterise_run_id, scope_id, "B", 5)
+    _seed_characterisation(
+        conn, pid, scope_id, characterise_run_id, themes={"A": theme_a, "B": theme_b}
+    )
+
+    summary, row, _ = _run_select(
+        conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 1}}
+    )
+
+    # Eligible total 11; 20% threshold = 2.2. Budget 1's one floor slot goes to
+    # A (processed first: 6 > 5 candidates), leaving B (5 candidates, above the
+    # 2.2 threshold) with zero selected.
+    assert row._mapping["flags"]["large_stratum_excluded"] == ["B"]
+    assert summary["selected"]["count"] == 1
+
+
+def test_trigger_flag_thin_base(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    docs = _docs(conn, pid, characterise_run_id, scope_id, "A", 3)
+    conn.execute(
+        source_screening_result.update()
+        .where(source_screening_result.c.project_source_snapshot_id.in_(docs))
+        .values(screen_decision_confidence=0.5)
+    )
+    _seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
+
+    _summary, row, _ = _run_select(
+        conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 3}}
+    )
+
+    # All 3 eligible docs have confidence 0.5 < SUFFICIENT_CONFIDENCE (0.6), so
+    # sufficiently_confident = 0, below the THIN_BASE_FLOOR of 10.
+    assert row._mapping["flags"]["thin_base"] == {"sufficiently_confident": 0, "floor": 10}
+
+
+def test_trigger_flag_thin_full_text(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    full = _seed_select_doc(
+        conn, pid, characterise_run_id, scope_id, title="full", text_basis="full_text"
+    )
+    abs1 = _seed_select_doc(
+        conn, pid, characterise_run_id, scope_id, title="abs1", text_basis="abstract_only"
+    )
+    abs2 = _seed_select_doc(
+        conn, pid, characterise_run_id, scope_id, title="abs2", text_basis="abstract_only"
+    )
+    _seed_characterisation(
+        conn, pid, scope_id, characterise_run_id, themes={"A": [full, abs1, abs2]}
+    )
+
+    summary, row, _ = _run_select(
+        conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 3}}
+    )
+
+    # Budget covers the whole stratum: all 3 selected. 1 of 3 is full_text, so
+    # full_text_share = 1/3 β‰ˆ 0.333, below THIN_FULL_TEXT_SHARE (0.5).
+    assert summary["selected"]["count"] == 3
+    assert row._mapping["flags"]["thin_full_text"] == {
+        "share": pytest.approx(1 / 3), "floor": 0.5,
+    }
+
+
+def test_trigger_flag_negative_case_has_no_flags(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    docs = _docs(conn, pid, characterise_run_id, scope_id, "A", 12)
+    _seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
+
+    summary, row, _ = _run_select(
+        conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 12}}
+    )
+
+    # 12 eligible docs, all full_text, screen_confidence 0.9 (>= 10 sufficiently
+    # confident docs, full_text_share 1.0); the single stratum is fully selected
+    # (never zero): no trigger-flag threshold is crossed.
+    assert summary["selected"]["count"] == 12
+    assert row._mapping["flags"] == {}
+
+
+# --- Rationale bidirectionality + shares ---
+
+
+def test_rationale_bidirectional_with_hand_computed_full_text_shares(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    theme_a_full = [
+        _seed_select_doc(
+            conn, pid, characterise_run_id, scope_id, title=f"A-full-{i}", text_basis="full_text"
+        )
+        for i in range(2)
+    ]
+    theme_a_abs = [
+        _seed_select_doc(
+            conn, pid, characterise_run_id, scope_id, title=f"A-abs-{i}",
+            text_basis="abstract_only",
+        )
+        for i in range(2)
+    ]
+    theme_b_full = [
+        _seed_select_doc(
+            conn, pid, characterise_run_id, scope_id, title="B-full", text_basis="full_text"
+        )
+    ]
+    theme_b_abs = [
+        _seed_select_doc(
+            conn, pid, characterise_run_id, scope_id, title="B-abs", text_basis="abstract_only"
+        )
+    ]
+    theme_a = theme_a_full + theme_a_abs
+    theme_b = theme_b_full + theme_b_abs
+    _seed_characterisation(
+        conn, pid, scope_id, characterise_run_id, themes={"A": theme_a, "B": theme_b}
+    )
+
+    summary, row, _ = _run_select(
+        conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 3}}
+    )
+
+    # All docs share identical non-text_basis signals, so full_text docs always
+    # out-rank abstract_only docs within a stratum (0.86 vs 0.71 composite, per
+    # the text-basis tilt test above).
+    #
+    # Stratum order A(4), B(2): floor A=1 (remaining 3->2), floor B=1
+    # (remaining 2->1). Capacities: A=4-0-1=3, B=2-0-1=1. Ranked slot(s)=1 over
+    # capacities {A:3, B:1}; quotas A=0.75, B=0.25 -> the 1 leftover goes to A
+    # (larger fraction). Allocated: A=1+1=2, B=1+0=1.
+    # A candidates=4, selected=2 (both full_text docs, higher composite) ->
+    #   full_text_share_candidates=2/4=0.5, full_text_share_selected=2/2=1.0.
+    # B candidates=2, selected=1 (the full_text doc) ->
+    #   full_text_share_candidates=1/2=0.5, full_text_share_selected=1/1=1.0.
+    # Excluded: A has 2 unselected with ranked_slots>0 -> ranked_below_cut:2;
+    # B has 1 unselected with ranked_slots==0 -> budget_exhausted:1.
+    strata_by_name = {stratum["name"]: stratum for stratum in summary["strata"]}
+    assert strata_by_name["A"]["candidate_count"] == 4
+    assert strata_by_name["A"]["allocated_count"] == 2
+    assert strata_by_name["A"]["selected_count"] == 2
+    assert strata_by_name["A"]["full_text_share_candidates"] == 0.5
+    assert strata_by_name["A"]["full_text_share_selected"] == 1.0
+    assert set(strata_by_name["A"]["selected_ids"]) == {str(pss_id) for pss_id in theme_a_full}
+
+    assert strata_by_name["B"]["candidate_count"] == 2
+    assert strata_by_name["B"]["allocated_count"] == 1
+    assert strata_by_name["B"]["selected_count"] == 1
+    assert strata_by_name["B"]["full_text_share_candidates"] == 0.5
+    assert strata_by_name["B"]["full_text_share_selected"] == 1.0
+    assert strata_by_name["B"]["selected_ids"] == [str(theme_b_full[0])]
+
+    assert row._mapping["excluded"]["by_stratum"] == {
+        "A": {"ranked_below_cut": 2},
+        "B": {"budget_exhausted": 1},
+    }
+    # Bidirectional: both the selected list and the excluded aggregate are
+    # present in the one persisted row.
+    assert len(row._mapping["selected"]) == 3
+    assert row._mapping["excluded"]["by_stratum"]
+
+
+# --- Summary payload shape freeze ---
+
+
+def test_summary_payload_shape_is_frozen(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    docs = _docs(conn, pid, characterise_run_id, scope_id, "A", 2)
+    _seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
+
+    summary, _row, _ = _run_select(
+        conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 2}}
+    )
+
+    assert set(summary.keys()) == {
+        "strata", "selected", "excluded", "base", "characterisation_run_id",
+        "flags", "provenance",
+    }
+    assert summary["strata"], "fixture must produce at least one stratum"
+    for stratum in summary["strata"]:
+        assert set(stratum.keys()) == {
+            "name", "candidate_count", "allocated_count", "selected_count",
+            "selected_ids", "full_text_share_candidates", "full_text_share_selected",
+        }
+
+
+# --- Harness round-trip ---
+
+
+def test_harness_select_component_success(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    docs = _docs(conn, pid, characterise_run_id, scope_id, "A", 2)
+    _seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
+
+    rid = seed_run(conn, pid)
+    plan = Plan(
+        component="select", evidence_scope_id=scope_id,
+        characterisation_run_id=characterise_run_id,
+    )
+    config = compile(plan)
+    run_harness(conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider())
+
+    log_entries = events.read(conn, pid)
+    started = [
+        e for e in log_entries
+        if e["event_type"] == "component.started" and e["payload"].get("component") == "select"
+    ]
+    completed = [
+        e for e in log_entries
+        if e["event_type"] == "component.completed" and e["payload"].get("component") == "select"
+    ]
+    assert len(started) == 1
+    assert len(completed) == 1
+    payload = completed[0]["payload"]
+    assert {
+        "strata", "selected", "excluded", "base", "characterisation_run_id",
+        "flags", "provenance",
+    } <= set(payload.keys())
+
+    count = conn.execute(
+        select(sa.func.count())
+        .select_from(selection_result)
+        .where(selection_result.c.run_id == rid)
+    ).scalar_one()
+    assert count == 1
+
+    run_row = conn.execute(select(runs).where(runs.c.run_id == rid)).one()
+    assert run_row.status == "succeeded"
+
+
+def test_harness_select_component_missing_characterisation_fails(conn: Connection) -> None:
+    pid, other_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _seed_select_doc(conn, pid, other_run_id, scope_id, title="doc")
+
+    rid = seed_run(conn, pid)
+    plan = Plan(
+        component="select", evidence_scope_id=scope_id,
+        characterisation_run_id=uuid.uuid4(),
+    )
+    config = compile(plan)
+    run_harness(conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider())
+
+    log_entries = events.read(conn, pid)
+    failed = [
+        e for e in log_entries
+        if e["event_type"] == "component.failed" and e["payload"].get("component") == "select"
+    ]
+    assert len(failed) == 1
+    assert "run characterise first" in failed[0]["payload"]["error"]
+
+    count = conn.execute(
+        select(sa.func.count())
+        .select_from(selection_result)
+        .where(selection_result.c.run_id == rid)
+    ).scalar_one()
+    assert count == 0
+
+    run_failed = [e for e in log_entries if e["event_type"] == "run.failed"]
+    assert len(run_failed) == 1
+    run_row = conn.execute(select(runs).where(runs.c.run_id == rid)).one()
+    assert run_row.status == "failed"
+
+
+# --- delete_project_data ---
+
+
+def test_delete_project_data_removes_selection_result(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    docs = _docs(conn, pid, characterise_run_id, scope_id, "A", 2)
+    _seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
+    _run_select(conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 2}})
+
+    conn.commit()
+    delete_project_data(conn, pid)
+    conn.commit()
+
+    count = conn.execute(
+        select(sa.func.count())
+        .select_from(selection_result)
+        .where(selection_result.c.project_id == pid)
+    ).scalar_one()
+    assert count == 0
+
+
+# --- Downstream untouched ---
+
+
+def test_select_writes_no_artefact_or_block_and_leaves_screening_untouched(
+    conn: Connection,
+) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    docs = _docs(conn, pid, characterise_run_id, scope_id, "A", 2)
+    _seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
+
+    screening_before = conn.execute(
+        select(source_screening_result)
+        .where(source_screening_result.c.project_id == pid)
+        .order_by(source_screening_result.c.project_source_snapshot_id)
+    ).fetchall()
+
+    _run_select(conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 2}})
+
+    artefact_count = conn.execute(
+        select(sa.func.count()).select_from(artefact).where(artefact.c.project_id == pid)
+    ).scalar_one()
+    block_count = conn.execute(
+        select(sa.func.count())
+        .select_from(block)
+        .where(
+            block.c.artefact_id.in_(
+                select(artefact.c.artefact_id).where(artefact.c.project_id == pid)
+            )
+        )
+    ).scalar_one()
+    assert artefact_count == 0
+    assert block_count == 0
+
+    screening_after = conn.execute(
+        select(source_screening_result)
+        .where(source_screening_result.c.project_id == pid)
+        .order_by(source_screening_result.c.project_source_snapshot_id)
+    ).fetchall()
+    assert screening_after == screening_before
