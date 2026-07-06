@@ -1,8 +1,10 @@
 # Implementation Plan: 009-characterise
 
-> **Status:** drafted, rev 2 — plan-phase adversarial review adjudicated (Codex,
-> 2026-07-06: 9 findings — 2 blockers · 6 majors · 1 minor; 8 adopted, 1
-> adopted-in-part; § Findings & adjudication) — awaiting human confirmation.
+> **Status:** confirmed — 2026-07-06 · Shabeer Rauf ("Plan confirmed", after the
+> plan-phase adversarial review was adjudicated: Codex, 2026-07-06, 9 findings —
+> 2 blockers · 6 majors · 1 minor; 8 adopted, 1 adopted-in-part; § Findings &
+> adjudication — and the theme-string/upload-surface clarifications were answered).
+> ADR 0005 written and Accepted at this gate (Task 11b).
 > Contract: [contract.md](contract.md) (approved 2026-07-06 · Shabeer Rauf, rev 9;
 > contract-stage adversarial findings adjudicated at revs 6–6.1).
 
@@ -256,12 +258,12 @@ components §5 ×2 (content-vs-artefact; thematic mechanism + vectorisation-with
 exception) + data-model tag-layer provenance clarification + `log.md` entries;
 `make okf-validate` green.
 
-### Task 11b: ADR 0005 — `lead` (design-phase step 4; finding 7)
+### Task 11b: ADR 0005 — `lead` (design-phase step 4; finding 7) — **DONE**
 
-`docs/adr/0005-embed-grouping-seams-first-egress.md` — the embed + generation
-seams, first product egress, injection posture, and Langfuse full-I/O decision;
-status Accepted with sign-off date. **Written at plan confirmation, before the
-build conversation opens** (it records design decisions, not build outcomes).
+[`docs/adr/0005-embed-grouping-seams-first-egress.md`](../../adr/0005-embed-grouping-seams-first-egress.md)
+— the embed + generation seams, first product egress, injection posture, and
+Langfuse full-I/O decision; **Accepted 2026-07-06**, written at plan confirmation
+before the build conversation opened.
 
 ### Task 12: `verification.md` + live manual run — `lead`
 
@@ -287,7 +289,10 @@ grouping · grouping-quality + adversarial evals · TopicGPT refinement +
 quotation-verified assignment · contextual retrieval/late chunking/exact-token ·
 steer-point pause · dual-view · pgvector/retrieval · Bedrock swaps ·
 provider-signal prompt enrichment · `group`-seam v2 lessons · tag consolidation ·
-Langfuse follow-ons) · revise the existing `open_tags` entries · mark the class-1
+Langfuse follow-ons · **upload audit-event seam**: when the web-app slice gives
+uploads a real surface, they get their own audit event + observable processing
+incl. embed counts — an app-boundary event, not a run component; user Q&A at the
+plan gate, 2026-07-06) · revise the existing `open_tags` entries · mark the class-1
 vectorisation entry discharged-ahead-of-reader · point-in-time claims sweep.
 
 ---
