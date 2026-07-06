@@ -6,14 +6,18 @@ in progress, not done.
 1. [ ] Implementation satisfies [contract.md](contract.md) — all twelve numbered
        decisions as approved (or as amended at the gates, recorded in the contract).
 2. [ ] `make verify` passes — deterministic and **zero-egress** (stub embedder + stub
-       grouper; socket-deny covers an end-to-end characterise run); the declared manual
-       live check ran with evidence in [verification.md](verification.md).
+       grouper; tracing no-op without keys; socket-deny covers an end-to-end
+       characterise run); the declared manual live check ran with evidence in
+       [verification.md](verification.md), including the run trace visible in the
+       dev Langfuse instance.
 3. [ ] No approval-gated change snuck in unapproved — the four gated changes (schema ·
-       `openai` dep · `run_harness` parameter · **live egress: embeddings + the
-       two-stage grouping calls, budget `1 + ceil(n/batch) + repairs`**) are exactly
-       as approved; no existing-table change, no pgvector, no generation surface
-       beyond the grouping pair, no artefact/block writes, no new orchestration
-       dependency.
+       `openai` + `langfuse` deps · `run_harness` parameters (`embedding_backend`,
+       `grouping_backend`) · **live egress: embeddings + the two-stage grouping
+       calls (budget `1 + ceil(n/batch) + repairs`) + telemetry to the user's
+       Langfuse instances**) are exactly as approved; no existing-table change, no
+       pgvector, no generation surface beyond the grouping pair, no artefact/block
+       writes, no new orchestration dependency; trace-content scope matches the
+       decision-13 sign-off.
 4. [ ] No generated files or secrets edited by hand; `OPENAI_API_KEY` appears in no
        committed file, log, event payload or verification artifact (test-asserted).
 5. [ ] No tests deleted, skipped or weakened without written justification.

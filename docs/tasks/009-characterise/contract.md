@@ -3,7 +3,20 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted, rev 6.1 — awaiting final sign-off.
+> **Status:** drafted, rev 7 — awaiting final sign-off.
+> Rev 7 (user steer, 2026-07-06): **Langfuse tracing baseline lands in this slice**
+> (engineering-considerations: "Langfuse as the trace backbone and prompt registry";
+> user has dev + prod instances ready; first slice with real LLM traffic — the
+> retrofit-avoiding moment). Scope: `langfuse` dependency + tracing on the two live
+> backends (run/component/call spans; project/run ids; prompt version; models;
+> tokens/latency/cost), env-driven and disabled when unconfigured — the suite stays
+> egress-free. Repo-first prompt governance stands; deployment-to-Langfuse as
+> runtime prompt registry is a recorded seam. **One decision flagged for the human
+> at sign-off (decision 13): whether corpus text (titles/abstracts, chunk text)
+> appears in traces** — engineering-considerations lists this among the
+> resolve-before-sensitive-tracing items; recommendation is full I/O on the
+> user-operated instances with retention/masking/sampling/access recorded as the
+> observability seam's open items.
 > Rev 6.1 (user pushback on two adjudications, 2026-07-06): finding 9's
 > discard-and-retry **reversed** → targeted residue repair with defined case
 > semantics (invented/dup-same = code fixes, no call; residue = missing ∪
@@ -465,8 +478,36 @@ artefact/block/annotation machinery exists but nothing here writes to it (decisi
     `screened_in == grouped + unclustered` (+ honest failure states), embed pass
     reports `embedded + already_embedded + failed == pending_at_start`, and the
     characterisation row is unique per `(scope, run)`. Realisation is the spec's
-    "procedure + agent" in miniature: a deterministic procedure wrapping one bounded
-    LLM call.
+    "procedure + agent" in miniature: a deterministic procedure wrapping bounded
+    LLM calls.
+13. **Langfuse tracing baseline (rev 7, user decision 2026-07-06).**
+    Engineering-considerations commits to Langfuse as the trace backbone; this is the
+    first slice with LLM traffic, so the baseline lands with the seams instead of
+    being retrofitted. Scope, deliberately minimal:
+    - Tracing wraps the **two live backends only** (`OpenAIEmbeddingBackend`,
+      `OpenAIGroupingBackend`): one trace per run, spans per component and per call,
+      carrying `project_id`/`run_id`/component, embedding profile, prompt version,
+      model ids, token counts, latency and cost. Dev vs prod instance routing is
+      environment configuration.
+    - **Env-driven, off by default**: no `LANGFUSE_*` keys → tracing disabled and
+      no-op; stubs are never traced; `make verify` remains deterministic and
+      egress-free (socket-deny unchanged). Telemetry egress goes only to the
+      user-operated Langfuse instances — a third egress destination, named at
+      gate 4.
+    - **Trace content — the flagged decision:** engineering-considerations lists
+      "whether acquired source text may appear in traces" among the
+      resolve-before-sensitive-tracing items. **Recommendation: full I/O payloads**
+      (prompts + outputs) — that is the trace backbone's entire value for the eval
+      workstream (trace → eval-dataset promotion), and the instances are
+      user-operated; retention, sampling, masking and access control are recorded as
+      the observability seam's open items, not silently defaulted. 🛑 human call at
+      this gate; the fallback is metadata-only tracing until those items are
+      settled.
+    - **Prompt registry stays repo-first** (prompts live in the repo,
+      `characterise_grouping_v1`); traces record the prompt name + version so the
+      runtime-registry hookup (deployment, labels/environments, emergency-edit
+      reconciliation — the engineering-considerations § Prompt management decisions)
+      is additive — a recorded seam, not slice work.
 
 ### Clustering research grounding (rev 2, 2026-07-05)
 
@@ -659,7 +700,9 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
   + bases); no new event types; skeleton renders it.
 - **Zero-egress guard extended**: `make verify` uses stubs only (stub embedder + stub
   grouper); socket-deny test covers an end-to-end characterise run (007/008 precedent
-  — neither live path is ever exercised by the suite); `OpenAIEmbeddingBackend` / the
+  — neither live path is ever exercised by the suite); tracing disabled without
+  `LANGFUSE_*` keys (asserted: no tracing side effects, no egress attempts from the
+  SDK in the suite); `OpenAIEmbeddingBackend` / the
   live provider constructed without a key fail loudly and early; the key never appears
   in logs/events (asserted against captured output).
 - Idempotency/re-run: second characterise run → new characterisation row for the new
@@ -773,8 +816,8 @@ discipline). Both flagged here rather than silently folded.
 
 1. **Schema** — three new tables (`chunk_embedding` · `characterisation_result` ·
    `source_tag`), one migration, no existing-table changes.
-2. **Dependencies** — `openai` only (embeddings + structured generation through one
-   SDK). Rev 3 drops rev 2's `scikit-learn` (no clustering algorithm ships) and rev 1's
+2. **Dependencies** — `openai` (embeddings + structured generation through one SDK)
+   and `langfuse` (rev 7 — the trace backbone; SDK is no-op without keys). Rev 3 drops rev 2's `scikit-learn` (no clustering algorithm ships) and rev 1's
    `numpy`; **not** the BERTopic framework (default install pulls
    sentence-transformers → torch plus umap-learn/numba — the gate-excluded ML tier —
    to supply a pipeline this design no longer runs).
@@ -797,6 +840,9 @@ discipline). Both flagged here rather than silently folded.
    defaults remain egress-free (stub embedder + stub grouper, socket-deny in the
    suite); live activates by explicit wiring — for the skeleton, a configured
    `OPENAI_API_KEY` (egress is the product; finding 12 reversed at user pushback).
+   **Third destination (rev 7): telemetry to the user-operated Langfuse instances**
+   (decision 13) — env-keyed, off when unconfigured; trace-content scope is the
+   flagged human decision.
 
 Plus three spec flow-backs approved with this contract: the data-model tag-layer
 clarification (rev 5, decision 10: "nothing hangs off a tag" governs the label; the
@@ -820,8 +866,10 @@ does).
 - **Credentials**: `OPENAI_API_KEY` environment-only; never committed, logged, or echoed
   into events/verification artifacts (test-asserted). `.env` stays gitignored.
 - **Corpus text leaves the machine on the live paths** — chunk text (embeddings) and
-  titles + abstracts (grouping) — to the configured provider only, under the
-  spec-accepted v3.0 inference-route posture. Fixture-corpus content is openly
+  titles + abstracts (grouping) — to the configured provider, and (decision 13,
+  pending the trace-content call) to the user-operated Langfuse instances as traces,
+  under the spec-accepted v3.0 inference-route posture. Langfuse credentials are
+  env-only, same hygiene as the provider key. Fixture-corpus content is openly
   licensed (008's licence guard), so even live verification runs send only
   committable text.
 - Committed artifacts (profile names, table/column names, deterministic labels over
@@ -892,10 +940,11 @@ characterisation row and event payload; the only prompts in the slice.
 - `make verify` (test · typecheck · lint · build) — green, deterministic, zero egress
   (socket-deny covers the characterise round-trip).
 - **One manual live check** (evidence in verification.md): skeleton end-to-end with
-  `OPENAI_API_KEY` set against the fixture corpus — real embeddings, a real grouping
-  call (themes + assignments over the fixture docs), landscape summary rendered;
-  per-run token/chunk counts and cost note recorded; key absent from all captured
-  output.
+  `OPENAI_API_KEY` (+ `LANGFUSE_*` for the dev instance) set against the fixture
+  corpus — real embeddings, real discovery + assignment calls (themes + assignments
+  over the fixture docs), landscape summary rendered, **run trace visible in the dev
+  Langfuse instance** (span structure + prompt version + token/cost noted); per-run
+  token/chunk counts and cost note recorded; keys absent from all captured output.
 - Deterministic vs AI eval: all suite checks are deterministic tests (stub embedder +
   stub grouper). Theme *quality* on the live path is eval territory (the
   grouping-quality seam); this slice's bar is machinery correctness + honest output,
@@ -919,7 +968,10 @@ characterisation row and event payload; the only prompts in the slice.
   steer-point reading the landscape payload · dual-view coverage behind the policy
   object · pgvector + retrieval — the chunk vectors' first reader · Bedrock route
   swap · exact-token budgeting · v2 theming lessons at the `group` seam · tag
-  namespace consolidation) and the class-1 "vectorisation at first reader" entry
+  namespace consolidation · **Langfuse observability follow-ons** (rev 7): prompt
+  deployment to the runtime registry (labels/environments, emergency-edit
+  reconciliation), retention/sampling/masking/access policies, trace→eval-dataset
+  promotion) and the class-1 "vectorisation at first reader" entry
   updated: discharged by 009 ahead of its reader (approved exception).
 - Diff summary (any bulky fixture data excluded from review diffs per the 007 retro).
 

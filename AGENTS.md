@@ -54,8 +54,12 @@ characterisation row + `source_tag` rows + a structured **landscape summary** in
 **No artefact/blocks here** — the single EB artefact is composed at the run terminus by a
 later composition slice. `make verify` stays deterministic and egress-free (stub embedder
 + stub grouper); live is explicit wiring + env key. Gated changes ride this slice
-(schema: `chunk_embedding` · `characterisation_result` · `source_tag` · dependency:
-`openai` · `run_harness` `embedding_backend` parameter · **runtime egress: embeddings +
-the grouping generation call**). Build per `docs/tasks/009-characterise/contract.md`.
+(schema: `chunk_embedding` · `characterisation_result` · `source_tag`, all
+project-scope-guarded · dependencies: `openai`, `langfuse` · `run_harness`
+`embedding_backend` + `grouping_backend` parameters · **runtime egress: embeddings +
+the two-stage grouping calls + Langfuse traces to user-operated instances**). The
+**Langfuse tracing baseline** lands here (first LLM traffic): live backends traced
+(run/component/call spans, prompt version, tokens/cost), env-driven and no-op without
+keys; repo-first prompt governance; registry deployment is a recorded seam. Build per `docs/tasks/009-characterise/contract.md`.
 Stay within the contract's scope and stop conditions; all other capabilities and seams
 remain deferred (`docs/deferred.md`).
