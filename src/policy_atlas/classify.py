@@ -4,7 +4,7 @@ Deterministic stub only; real LLM-based classify tool is a deferred seam.
 """
 
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -35,7 +35,6 @@ class ClassifyContext:
 @dataclass
 class ClassifyResult:
     primary_evidence_type: str
-    open_tags: list[str] = field(default_factory=list)
 
 
 # Maps metadata sentinel keys to evidence types; first matching sentinel wins.
@@ -147,7 +146,6 @@ def classify_sources(
                 project_id=project_id,
                 classified_by_run_id=run_id,
                 primary_evidence_type=result.primary_evidence_type,
-                open_tags=result.open_tags,
                 classified_at=datetime.now(UTC),
             )
         )
@@ -162,7 +160,6 @@ def classify_sources(
                 "project_source_snapshot_id": str(pss_id),
                 "evidence_scope_id": str(context.scope_id),
                 "primary_evidence_type": result.primary_evidence_type,
-                "open_tags": result.open_tags,
             },
         )
 

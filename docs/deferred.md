@@ -14,9 +14,10 @@ architectural decision to defer, not an omission. Sources: architecture referenc
    product", arch-ref §3.3). "Zero runtime egress" in task docs is a *build-stage discipline*
    (each slice introducing product egress needs explicit approval — harness.md), never a v3.0
    scope statement. In this class: **live `SearchBackend`s** · **live `DocumentFetcher`** ·
-   the **LLM screen / classify tools** · the **LLM grounding tier** · **vectorisation at the
-   first vector reader** — the product cannot search, fetch, ingest, vectorise or reason
-   without them.
+   the **LLM screen / classify tools** · the **LLM grounding tier** — the product cannot
+   search, fetch, ingest or reason without them. **Vectorisation** left this class in
+   task 009: live OpenAI embeddings shipped at ingest, deliberately *ahead of* their first
+   reader (approved exception — see the discharged entry under Full-text ingestion).
 2. **Deferred beyond v3.0** — everything else below: doors deliberately left open (other
    capabilities, branch parallelism, per-item egress controls, private deployments, …).
 
@@ -82,10 +83,14 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **LLM-based classify tool** — `_stub_classify` is the deterministic stub; the real tool (LLM
   call → one of the 9 closed `primary_evidence_type` values) is the deferred seam.
   `ClassifyContext`, `ClassifyResult`, and `source_classification_result` are durable and ready.
-- **`open_tags` population** — the column exists and the `ck_scr_open_tags_array` constraint
-  enforces the array type; the LLM classify tool will populate it. Stub always returns `[]`.
-- **Open tag namespace consolidation / dedup / type management** — follow-on once the LLM tool
-  populates `open_tags` and the tag space emerges from real data.
+- **Open tags → `source_tag`** (revised, task 009): the stub-empty
+  `source_classification_result.open_tags` column and its array CHECK were **retired** by
+  migration 9 — `source_tag` (item × tag, typed, assertion provenance in the unique key) is
+  the single tag home. When the LLM classify tool's seam opens it writes `source_tag`
+  directly (`asserted_by='classify'`, `tag_type='methodological_structural'` — the
+  `ck_stag_tag_type` CHECK widens by a one-line migration; the value lives in
+  `schema.TOPIC_THEME`-style constants and all writers route through
+  `tags.insert_source_tags`). There is no `open_tags` migration left to do.
 - **`Unknown / Insufficient information` resolution** — sources landing `Unknown` are kept-and-eligible;
   full-text re-classification is a deferred seam mirroring the appraisal path.
 - **`source_classification_result` → `source_screening_result` FK — deliberately absent, not just
@@ -269,9 +274,14 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **OCR for `no_text_layer` documents** — scanned-only PDFs are reason-coded and kept, never
   parsed; an OCR tier (with its own honesty label) is the follow-on. Text-layer detection is
   Unicode-aware (`\w`), so non-Latin scripts don't false-positive into this bucket.
-- **Vectorisation at the first vector reader** — eager-and-uniform discipline restated in EB
-  components §4 (008 spec clarification): embed at ingest *when the first vector consumer
-  lands*, with token-budgeted chunk sizing decided there.
+- **Vectorisation at the first vector reader — DISCHARGED ahead of the reader (task 009,
+  approved exception).** The eager-and-uniform discipline (EB components §4) now runs: every
+  chunk on all three ingestion paths gets unit-grain vectors (`embedding_unit_policy_v1`,
+  ~2000-char sentence-boundary units, ~200-char overlap, one vector per unit, offsets into
+  the untouched canonical chunk) via the `EmbeddingBackend` seam, live
+  `text-embedding-3-small` behind the runtime-egress gate. The *reader* (retrieve/pgvector)
+  is still the deferred piece — see the 009 section below. Token-budgeted re-chunking of
+  oversized heading-light sections remains at the embed/eval seam.
 - **Multi-PDF Overton assembly** — `grouped_pdf_ids_in_result` is retained; v3.0 ingests the
   primary `pdf_url` only.
 - **Injection-screening posture extended to fetched full text** — same posture as acquired
@@ -283,6 +293,82 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   corrupting); the reuse seam turns that into the system's first genuinely **cross**-project
   write race (two projects deduping onto one snapshot) — that slice inherits the concurrency
   design, alongside the per-project run guard above.
+
+## Characterise / embeddings / telemetry (task 009 seams)
+
+- **EB artefact composition** — characterise writes *content* (run-scoped
+  characterisation row + provenance-stamped tags), never an artefact: EB produces **one**
+  artefact, composed at the run terminus by the orchestrator (capability.md; contract
+  decision 7). The composition slice owns landscape blocks, summary/key-findings
+  conventions and supersede + lock-on-advance versioning.
+- **`retrieve` / pgvector / hybrid retrieval** — the first *reader* of the landed
+  `chunk_embedding` rows. Vectors ship as JSONB by design (no extension gate crossed);
+  this slice decides pgvector vs alternatives, migrates storage if needed, and inherits
+  the chunk-volume-bias controls (per-doc caps / MMR / doc-grain grouping, 008 entry).
+- **Contextual retrieval, late chunking, exact-token budgeting, semantic re-chunking** —
+  retrieval-eval seams on the embedding-unit layer (contract decision 2, rev-8 research).
+  The unit policy is versioned (`embedding_unit_policy_v1`) so any of these lands as a new
+  co-existing policy, not a rewrite.
+- **Embed-pass live robustness** — fixture-scale is single-batch; pre-registered for real
+  corpora: rate-limit backoff under real 429s (the SDK retries transient failures at
+  `max_retries=2`, so the HTTP ceiling is (1+retries)× the logical call budget — comment at
+  the client seam), batch-failure isolation granularity (one bad unit currently fails every
+  chunk sharing its 128-unit API batch — transient over-reporting only, failed chunks
+  re-embed next pass; split-on-failure lands here), and concurrent multi-batch behaviour at
+  n ≫ batch (review adjudication, 2026-07-06).
+- **Very-large-corpus grouping** — discovery currently reads all titles+abstracts in one
+  call; the scale seam is discovery-sampling and/or embedding-based clustering over the
+  landed chunk vectors (contract decision 4). Assignment already scales (batched,
+  concurrent, budget-enforced).
+- **Grouping-quality + adversarial-content evals** — theme quality is *not* asserted by
+  the build (sanitized fixture corpora make it meaningless by construction); the eval seam
+  owns: quality bars, adversarial/injection-shaped corpora beyond the shipped unit tests,
+  **zero-support theme pruning** (discovery can emit themes assignment gives no members;
+  they persist honestly with `size: 0` — pruning is a quality call, review adjudication
+  2026-07-06), and a **two-scopes-one-project coverage fixture** (semantics verified
+  correct, untested combination).
+- **TopicGPT extensions** — topic refinement (merge/split against assignment evidence) and
+  quotation-verified assignment, at the grouping-quality eval seam (contract § Research
+  grounding).
+- **Provider-signal prompt enrichment** — provider topics as per-doc grouping hints;
+  taxonomy-bias risk → enters via the eval seam, never as a silent default.
+- **`group`-component inheritance** — v2's theming lessons transfer when `group` (component
+  8, facet grouping over extracted findings) is built: facet decomposition, the two-stage
+  validated shape, and v2's recorded defects to avoid (dead critique stage, silent concept
+  drops, "General Theme" collapse, no scale guard, unseeded runs).
+- **Tag namespace consolidation** — pruning/merging accreted `source_tag` assertions
+  (re-runs accrete by design; provenance classes never merge) — an orchestrator-seam
+  follow-on once real tag spaces emerge (contract decisions 5, 10). A third search backend
+  also registers its tag extractor next to its mapper — `_provider_tags` dispatches by
+  backend name and silently yields no tags for unknown names (`_MAPPERS` and the tag
+  branches are two structures today; unify or add exhaustiveness enforcement when backend
+  #3 lands — review adjudication, 2026-07-06).
+- **Langfuse follow-ons** (decision 13 ships the baseline: env-gated client, full-I/O
+  spans, in-span scores, no-op with nothing configured, loud on partial config / missing
+  host): runtime prompt-registry deployment (labels/environments, emergency-edit
+  reconciliation), retention/sampling/masking/access policies, trace→eval-dataset
+  promotion, and **two detached-trace warts** (span content complete in both; verified
+  against the live instance, 2026-07-06): (a) OTel context does not propagate into
+  `ThreadPoolExecutor` workers, so the first concurrent `assign` call surfaces as a
+  detached trace — fix is context capture/attach at submit; (b) the **upload-ingest embed
+  pass** runs outside any `component_span` (`ingest_upload` is app-boundary, not a run
+  component), so its `embed:batchN` observations mint their own root traces — resolves
+  with the upload audit-event seam below, which gives uploads their own observability
+  surface.
+- **Steering modes / landscape→synthesis steer-point pause** — plan-as-object machinery;
+  the payload it relays (the structured landscape summary in `component.completed`) ships
+  now (contract decision 8).
+- **Dual-view coverage** — corpus-view vs evidence-view distributions need the
+  source/evidence policy object (contract decision 9); v3.0 ships single-view with the
+  explicit `base` ladder and **no absence claims** (test-asserted).
+- **Bedrock routes** — both seams (`EmbeddingBackend`, `GroupingBackend`) swap
+  implementations; first pass OpenAI → target Bedrock is the documented v3.0 posture.
+- **Upload audit-event seam** — when the web-app slice gives uploads a real surface they
+  get their own audit event + observable processing (incl. embed counts, currently a
+  structured log line `ingest_upload.embed_counts`) — an app-boundary event, not a run
+  component (user Q&A at the 009 plan gate). Its tracing rides along: a live upload's
+  embed batches currently surface as detached root traces (no surrounding span — wart (b)
+  in the Langfuse entry above); the seam wraps them in an upload-scoped span.
 
 ## Data model / evidence
 

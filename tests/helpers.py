@@ -27,6 +27,8 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         annotation,
         artefact,
         block,
+        characterisation_result,
+        chunk_embedding,
         event_log,
         evidence_scope,
         project,
@@ -37,6 +39,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         source_classification_result,
         source_screening_result,
         source_snapshot,
+        source_tag,
     )
     from policy_atlas.schema import (
         chunk as chunk_table,
@@ -76,6 +79,11 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
     ))
     conn.execute(delete(annotation).where(annotation.c.block_id.in_(block_ids_subq)))
     conn.execute(delete(addressable_unit).where(addressable_unit.c.block_id.in_(block_ids_subq)))
+    # Task 009 rows first: tags/characterisation FK onto pss/runs; embeddings FK onto chunk
+    conn.execute(delete(source_tag).where(source_tag.c.project_id == project_id))
+    conn.execute(delete(characterisation_result).where(
+        characterisation_result.c.project_id == project_id
+    ))
     # source_appraisal_result → source_classification_result → source_screening_result
     # (FK-safe order)
     conn.execute(delete(source_appraisal_result).where(
@@ -106,6 +114,13 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
     ))
     conn.execute(delete(runs).where(runs.c.project_id == project_id))
     if snapshot_ids:
+        conn.execute(delete(chunk_embedding).where(
+            chunk_embedding.c.chunk_id.in_(
+                select(chunk_table.c.chunk_id).where(
+                    chunk_table.c.source_snapshot_id.in_(snapshot_ids)
+                )
+            )
+        ))
         conn.execute(delete(chunk_table).where(
             chunk_table.c.source_snapshot_id.in_(snapshot_ids)
         ))

@@ -3,7 +3,7 @@ type: Capability spec
 title: Evidence Base — component skeleton
 description: The nine EB components — declared I/O, tool wiring, realisation and gating.
 tags: [capability, evidence-base, components]
-timestamp: 2026-06-22
+timestamp: 2026-07-06
 ---
 
 # Evidence Base — component skeleton
@@ -100,15 +100,22 @@ it is snapshotted/ingested on the text in hand (abstract + metadata), carrying a
 rests on. Full-text fetch is egress but mechanical execution of the governed `search` (telemetry
 plane + run-record summary, *not* a per-document audit event). Vectorisation is **eager and
 uniform** (lazy/on-demand rejected — biases retrieval toward what was vectorised early). In v3.0
-Tier-0 ingestion lands as fetch → parse → segment; **vectorisation is deferred to the slice where
-vectors are first read** (nothing in v3.0 reads an embedding), and when the embed seam lands it
-vectorises eagerly and uniformly over all ingested snapshots — the discipline is kept, not
-weakened (task 008, decision 1). ⏸
+Tier-0 ingestion lands as fetch → parse → segment → embed: the embed seam opened in task 009
+**ahead of its first reader** (approved exception to "vectorise at the first vector reader" —
+chunk vectors are certain retrieval/synthesis substrate, and landing them with the egress
+gate beat relitigating egress in a third slice). Vectorisation is eager and uniform over all
+ingested snapshot classes, at **embedding-unit grain** (a named, versioned unit policy over
+the immutable canonical chunks — units attach alongside; chunks are never re-segmented), each
+unit stamped with the embedding profile (the substrate-key leg for embedding-model version). ⏸
 budget cap + lazy vectorisation for very large relevant sets is a possible later refinement.
 
 ## 5 — characterise (shallow terminus)
 
-Produces the corpus-shape blocks, in two parts:
+Produces the evidence-landscape **content, not presentation**: a run-scoped characterisation
+record + topic/theme tags (task 009 clarification, decision 7). Characterise does **not** mint
+an artefact or blocks — EB produces **one** artefact, composed once at the run terminus by the
+orchestrator (see [capability.md](capability.md)); the artefact-composition step is a recorded
+seam. Two parts:
 - **Coverage / patterns over metadata** — deterministic distributions and gaps over Tier-0
   columns (study-type, geography, recency, population, category). **Source/evidence policy is
   flag-not-block here** — EB reads and counts *all* relevant in-corpus evidence, so coverage/gaps
@@ -118,11 +125,18 @@ Produces the corpus-shape blocks, in two parts:
   showing where the base thins under the citable bar (descriptive **dual-view coverage**, cheap
   and deterministic — *not* the deferred weighted-strength roll-up). These shallow gaps rest on
   the **screened base** (never read `not_selected` / `not_extracted` as absence).
-- **Thematic shape — graded by depth.** At the shallow landscape: cheap **topic-level
-  clustering** (`cluster`) over abstract/document embeddings, lightly LLM-labelled per cluster
-  (cost scales with cluster count, not corpus size). Honest about what's cheaply knowable —
-  coverage + broad topic shape, not facet-level themes. Per-cluster labels persist as
-  **topic/theme tags**; the run's cluster grouping stays **run-local**.
+- **Thematic shape — graded by depth.** At the shallow landscape: a **bounded two-stage LLM
+  grouping** (task 009 clarification, decision 4) — one judgment-model call discovers the
+  scope's themes from all titles + abstracts, then batched cheap-model calls assign every
+  screened-in document against the fixed theme list. Exhaustiveness is **code-enforced**
+  (schema-constrained outputs, per-batch validation with targeted repair); a document may
+  land explicitly in a counted **`unclustered`** bucket — never silently dropped, no
+  placeholder themes representable. Call budget is known before the run
+  (`1 + ceil(n/batch)`, retry-capped maximum enforced). Honest about being the softest
+  grade — an interpretive shape, recomputable, never a deterministic fact. Per-theme labels
+  persist as **topic/theme tags**; the run's grouping memberships stay **run-local** (in the
+  run's characterisation record only). ⏸ Embedding-based clustering over the landed chunk
+  vectors (and discovery-sampling) is the recorded very-large-corpus seam.
 
 Facet-level thematic grouping is a **deeper product** (component 8 `group`), not part of the
 shallow terminus.

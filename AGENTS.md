@@ -22,24 +22,44 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `008-full-text`.
+Implementation — task `009-characterise`.
 
-Tasks `001-walking-skeleton` through `007-acquire` are complete (merged). The active slice
-adds **full-text ingestion** — the post-screen Tier-0 step: for a scope's screened-in
-acquired sources, resolve candidate URLs from the provider fields task 007 retained, fetch
-through a `DocumentFetcher` seam (current build: fixture replay of committed real,
-openly-licensed documents — zero runtime egress until the live-fetcher slice opens that
-gate; live fetching is v3.0-required, per deferred.md), parse
-structure-aware (PDF via `pymupdf4llm` — meets the couple-of-minutes-per-run wall-clock
-target; docling ML-layout escalation and time-budget-aware parser selection are recorded
-seams; HTML via `trafilatura`), segment under named versioned policies with
-page/heading-path chunk locators, and
-attach the resulting immutable `full_text` snapshot to the corpus document via
-`project_source_snapshot.full_text_snapshot_id`. **Never truncate** — full text or an
-honest, reason-coded failure; a failed source stays on the text in hand with a queryable
-`full_text_status`. Ingestion fans out per document over a bounded process pool with
-deterministic results. Vectorisation is deferred to the slice where vectors are first read.
-Three gated changes ride this slice (schema columns · `pymupdf4llm` + `trafilatura`
-dependencies · `run_harness` `document_fetcher` parameter). Build per
-`docs/tasks/008-full-text/contract.md`. Stay within the contract's scope and stop conditions;
-all other capabilities and seams remain deferred (`docs/deferred.md`).
+Tasks `001-walking-skeleton` through `008-full-text` are complete (merged). The active
+slice adds **characterise** — the EB shallow terminus (component 5) — and **opens the
+runtime-egress gate on both fronts** (user-confirmed): **embeddings** (an
+`EmbeddingBackend` protocol; live OpenAI `text-embedding-3-small`; eager-and-uniform
+chunk-grain vectorisation at ingest, landed ahead of its first reader as an approved
+exception — chunk vectors are certain retrieval/synthesis substrate) and **generation**
+(the repo's first product prompts: the `characterise_grouping_v1` discovery+assignment
+pair, lead-authored, co-versioned).
+Characterise itself: deterministic **coverage distributions over Tier-0 columns**
+(metadata-grounded patterns, base = the scope's screened-in set, flag-not-block) and
+**thematic grouping via a bounded two-stage LLM procedure** — discover themes (one
+judgment-model call over all titles/abstracts), then assign each document against the
+fixed theme list (batched concurrent cheap-model calls), schema-constrained throughout,
+**code-enforced per-batch exhaustive assignment** with targeted per-batch repair, an
+honest counted `unclustered` bucket, a call budget known before the run
+(`1 + ceil(n/batch) + repairs`), no placeholder themes or silent drops representable
+(v2's theming defects structurally closed). Groupings are run-local,
+never canonical; theme names persist as typed topic/theme tags. The **tag layer lands
+with assertion provenance** (`source_tag.asserted_by`): acquire materialises provider
+topical assertions (OpenAlex topics/SDGs; Overton topics/classifications/LLM themes) as
+provenance-classed tags, and coverage aggregates the tag layer by
+`(tag_type, asserted_by)` — provider, provider-LLM and own-capability assertions never
+mix. The **injection posture
+comes due here** (first slice where third-party corpus text enters an LLM prompt —
+id-keyed data records, constrained schema, no tools). Durable output = a run-scoped
+characterisation row + `source_tag` rows + a structured **landscape summary** in the
+`component.completed` payload (the future steer-point/orchestrator-chat relay surface).
+**No artefact/blocks here** — the single EB artefact is composed at the run terminus by a
+later composition slice. `make verify` stays deterministic and egress-free (stub embedder
++ stub grouper); live is explicit wiring + env key. Gated changes ride this slice
+(schema: `chunk_embedding` · `characterisation_result` · `source_tag`, all
+project-scope-guarded · dependencies: `openai`, `langfuse` · `run_harness`
+`embedding_backend` + `grouping_backend` parameters · **runtime egress: embeddings +
+the two-stage grouping calls + Langfuse traces to user-operated instances**). The
+**Langfuse tracing baseline** lands here (first LLM traffic): live backends traced
+(run/component/call spans, prompt version, tokens/cost), env-driven and no-op without
+keys; repo-first prompt governance; registry deployment is a recorded seam. Build per `docs/tasks/009-characterise/contract.md`.
+Stay within the contract's scope and stop conditions; all other capabilities and seams
+remain deferred (`docs/deferred.md`).

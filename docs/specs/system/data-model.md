@@ -3,7 +3,7 @@ type: System contract
 title: Core data model
 description: Entity hierarchy, blocks and addressable units, the annotation layer, findings, versioning and staleness.
 tags: [system, data-model, schema, annotations]
-timestamp: 2026-07-05
+timestamp: 2026-07-06
 ---
 
 # System contract — Core data model
@@ -29,11 +29,17 @@ project and artefact.
 - **Tag layer** — item × tag, many-to-many, open/emergent vocabulary, mostly inferred. Each
   tag carries a **type** (topic/theme · methodological/structural · scoping/line-of-work · …,
   an open/extensible type-set). **Nothing hangs off a tag** (no owner, status, lifecycle —
-  just a label). **Created by the capabilities that read documents** (`classify` →
-  methodological/structural; characterise → topic/theme), **never by the orchestrator**,
-  which only **keeps the namespace consistent**. Vocabulary is open-but-seeded and
-  namespace-consolidated (consolidation buys *precision*; *recall* rides the soft-prior
-  widening over hybrid retrieval).
+  just a label). Clarified (task 009, decision 10): that rule governs the tag **label**; the
+  **assignment row carries assertion provenance** like every other assertion in the system —
+  **`asserted_by`** + the creating run, so every assertion is dateable and attributable.
+  Provider topical signals (e.g. OpenAlex topics/SDGs, Overton topics/classifications/LLM
+  themes) materialise at acquire as **provenance-classed tag rows**; provider-curated,
+  provider-LLM and own-capability assertions **never mix** — the same tag from two asserters
+  is two rows (corroboration, not duplication). **Created by the capabilities that read
+  documents** (`classify` → methodological/structural; characterise → topic/theme), **never
+  by the orchestrator**, which only **keeps the namespace consistent**. Vocabulary is
+  open-but-seeded and namespace-consolidated (consolidation buys *precision*; *recall* rides
+  the soft-prior widening over hybrid retrieval).
 - **Scoping** is the behaviour of pointing an agent at a subset (queries over columns + tags
   alike). A **soft retrieval prior, not a hard boundary** — "look here first," then widen
   when thin (the evidence escape-hatch). Agents are never penned in.

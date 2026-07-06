@@ -54,7 +54,6 @@ def _seed_classified(
         project_id=project_id,
         classified_by_run_id=run_id,
         primary_evidence_type=evidence_type,
-        open_tags=[],
         classified_at=now(),
     ))
     return snap_id, pss_id
@@ -75,7 +74,7 @@ def _appraisal_rows(conn: Connection, project_id: uuid.UUID) -> list[sa.Row[Any]
 # --- Schema ---
 
 def test_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 16
+    assert len(metadata.tables) == 19
 
 
 # --- Rubric and labels (pure Python, no DB) ---

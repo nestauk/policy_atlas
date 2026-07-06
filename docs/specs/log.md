@@ -1,5 +1,24 @@
 # Spec update log
 
+## 2026-07-06
+* **Update**: [EB components §5](capabilities/evidence-base/components.md) — clarified
+  content-vs-artefact: characterise produces the landscape *content* (run-scoped
+  characterisation record + topic/theme tags); the single EB artefact is composed once at the
+  run terminus by the orchestrator (artefact composition is a recorded seam). Approved with
+  the task 009 contract per the spec-refinement flow (decision 7).
+* **Update**: [EB components §5](capabilities/evidence-base/components.md) — thematic
+  mechanism clarified to the bounded two-stage LLM grouping (discover over all
+  titles+abstracts, batched assignment against the fixed theme list; code-enforced
+  exhaustiveness; counted `unclustered`; run-local memberships; embedding-based clustering
+  recorded as the very-large-corpus seam); and [EB components §4] — the embed seam opened in
+  task 009 ahead of its first reader (approved exception), eager-and-uniform at
+  embedding-unit grain over immutable canonical chunks. Approved with the task 009 contract
+  (decisions 4, 2).
+* **Update**: [data-model.md](system/data-model.md) — tag-layer clarification: "nothing hangs
+  off a tag" governs the tag *label*; the assignment row carries assertion provenance
+  (`asserted_by` + creating run); provider topical signals materialise as provenance-classed
+  tags; provenance classes never mix. Approved with the task 009 contract (decision 10).
+
 ## 2026-07-05
 * **Fidelity restoration** (full specs-vs-sources review; maintainer-approved): restored source
   content lost in the original distillation —
