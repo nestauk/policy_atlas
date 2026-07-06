@@ -1,5 +1,17 @@
 # Knowledge update log
 
+## 2026-07-06
+* **Creation**: Added
+  [llm-schema-valid-empty-output](llm-schema-valid-empty-output.md) — structured outputs
+  guarantee shape, never completeness; validate counts against the input set in code
+  (gpt-5-nano returned `{"assignments":[]}` schema-perfectly on realistic batches; task 009
+  live evidence). First entry in a new "Integration quirks" index section.
+* **Creation**: Added
+  [langfuse-host-must-be-explicit](langfuse-host-must-be-explicit.md) — the Langfuse SDK
+  defaults its endpoint to the SaaS cloud when no host is set; with full-I/O traces
+  `get_langfuse()` requires an explicit host and raises on partial config (task 009 review
+  stack, convergent security + adversarial finding).
+
 ## 2026-07-05
 * **Creation**: Added
   [fulltext-chunk-hash-determinism](fulltext-chunk-hash-determinism.md) — same bytes must hash

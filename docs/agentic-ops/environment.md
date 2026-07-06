@@ -1,11 +1,16 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–008 — backend only; setup unchanged since 002; task 007 adds two dev-time
+stands (tasks 001–009 — backend only; setup unchanged since 002; task 007 adds two dev-time
 fixture-recorder scripts needing `OVERTON_API_KEY`/optional OpenAlex vars in `.env` — see
 `.env.example`; task 008 adds parsing deps (pymupdf/pymupdf4llm/trafilatura — arrive via
-`make setup`/`uv sync`) and a keyless dev-time recorder using system `curl`; package runtime
-still needs no keys). Update it when the setup changes, not before.
+`make setup`/`uv sync`) and a keyless dev-time recorder using system `curl`; task 009 adds
+`openai` + `langfuse` deps (via `uv sync`) and three **optional** live-route vars —
+`OPENAI_API_KEY` makes the skeleton entrypoint go live (real embedding + grouping egress,
+costs money), `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` **plus a required
+`LANGFUSE_HOST`** enable full-I/O tracing; `make verify` and the test suite need none of
+them — stub backends + socket-deny keep the suite egress-free). Update it when the setup
+changes, not before.
 
 ## Prerequisites
 
