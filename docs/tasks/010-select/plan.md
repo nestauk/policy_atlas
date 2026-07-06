@@ -344,7 +344,14 @@ note (smaller diff → fewer finder angles). Handoff artifact is verification.md
 `docs/deferred.md` per the contract's list: steer-point pause reading the flags ·
 agent-authored directives (invocation-time) · rerank-quality evals (incl. listwise
 ordering) · Cohere-class cross-encoders at the `retrieve` seam · capability-run
-entity · embedding-relevance-for-select (declined, rev 4) · selection-diversity
+entity (record the three-level model settled at the plan gate, 2026-07-06:
+plan/orchestration groups via the **plan object + decision log** per
+plan-as-object, never a run entity; **capability run** = the missing middle —
+additive `capability_run` table + nullable FK on `runs`, trace root moves to
+that grain, dissolving the detached-trace warts; **component execution** = the
+as-built `runs` grain; `characterisation_run_id` is the interim explicit edge
+and "same capability run" becomes its natural value later) ·
+embedding-relevance-for-select (declined, rev 4) · selection-diversity
 extensions · policy soft-prior tilt (integration shape: policy compiles into
 directive boosts) · second strategies · full appraisal on the selected subset —
 plus pointer updates where 009 entries already exist.
