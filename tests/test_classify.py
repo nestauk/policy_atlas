@@ -31,7 +31,7 @@ from tests.helpers import (
 # --- Schema ---
 
 def test_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 19
+    assert len(metadata.tables) == 20
 
 
 # --- Stub logic (pure Python, no DB) ---

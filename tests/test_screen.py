@@ -25,7 +25,7 @@ from tests.helpers import now, seed_project_and_run, seed_scope, seed_source
 # --- Schema / structure ---
 
 def test_screen_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 19
+    assert len(metadata.tables) == 20
 
 
 def test_pss_has_composite_unique(conn: Connection) -> None:
