@@ -22,15 +22,18 @@ from typing import Any, Protocol
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
 
 from policy_atlas import events
+from policy_atlas.embeddings import EmbeddingBackend, StubEmbeddingBackend, embed_pending_chunks
 from policy_atlas.grounding import content_hash
 from policy_atlas.schema import chunk as chunk_table
 from policy_atlas.schema import (
     project_source_snapshot,
     search_coverage_record,
     source_snapshot,
+    source_tag,
 )
 
 log = structlog.get_logger()
@@ -298,6 +301,70 @@ def _chunk_text(envelope: dict[str, Any]) -> str:
     return f"{title}\n\n{abstract}" if abstract else title
 
 
+def _normalize_tag(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    tag = " ".join(value.strip().split())
+    return tag or None
+
+
+def _dedupe_tag_values(values: list[Any], asserted_by: str) -> list[tuple[str, str]]:
+    tags: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for value in values:
+        tag = _normalize_tag(value)
+        if tag is None:
+            continue
+        key = tag.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        tags.append((tag, asserted_by))
+    return tags
+
+
+def _provider_tags(backend_name: str, record: dict[str, Any]) -> list[tuple[str, str]]:
+    """Extract provider topical assertions from a raw provider record."""
+    if backend_name == "openalex":
+        values: list[Any] = []
+        primary_topic = record.get("primary_topic")
+        if isinstance(primary_topic, dict):
+            values.append(primary_topic.get("display_name"))
+        topics = record.get("topics")
+        if isinstance(topics, list):
+            values.extend(
+                topic.get("display_name") for topic in topics if isinstance(topic, dict)
+            )
+        sdgs = record.get("sustainable_development_goals")
+        if isinstance(sdgs, list):
+            values.extend(sdg.get("display_name") for sdg in sdgs if isinstance(sdg, dict))
+        return _dedupe_tag_values(values, "openalex")
+
+    if backend_name == "overton":
+        overton_values: list[Any] = []
+        topics = record.get("topics")
+        if isinstance(topics, str):
+            overton_values.append(topics)
+        elif isinstance(topics, list):
+            overton_values.extend(topics)
+        classifications = record.get("classifications")
+        if isinstance(classifications, list):
+            for classification in classifications:
+                if isinstance(classification, dict):
+                    overton_values.append(classification.get("name"))
+                else:
+                    overton_values.append(classification)
+        sdgcategories = record.get("sdgcategories")
+        if isinstance(sdgcategories, list):
+            overton_values.extend(sdgcategories)
+        return [
+            *_dedupe_tag_values(overton_values, "overton"),
+            *_dedupe_tag_values([record.get("llm_document_theme")], "overton_llm"),
+        ]
+
+    return []
+
+
 def acquire_sources(
     conn: Connection,
     *,
@@ -305,6 +372,7 @@ def acquire_sources(
     run_id: uuid.UUID,
     context: AcquireContext,
     backends: list[SearchBackend],
+    embedder: EmbeddingBackend | None = None,
 ) -> dict[str, Any]:
     """Acquire metadata-only sources for an evidence scope over the given backends.
 
@@ -321,12 +389,14 @@ def acquire_sources(
         context: Scope-level input; ``context.intent`` is the query, verbatim.
         backends: Configured backends, searched in list order (dedup outcomes
             are deterministic because the order is fixed).
+        embedder: Optional embedding backend. Defaults to the deterministic stub.
 
     Returns:
         Counts dict: ``acquired``, ``already_acquired``, ``skipped_unusable``,
         ``results_returned`` (invariant: the first three sum to it, per backend
         and in total), ``by_backend`` (with per-backend ``status``/``error``),
-        ``stop_condition``, ``adequacy_verdict``, ``coverage_record_id``.
+        ``tags_materialised``, ``embed``, ``stop_condition``,
+        ``adequacy_verdict``, ``coverage_record_id``.
     """
     # A backend without a registered mapping (or a duplicate name, which would
     # corrupt by_backend) is a wiring error, not a search failure — fail loud
@@ -413,6 +483,7 @@ def acquire_sources(
             "acquired": 0,
             "already_acquired": 0,
             "skipped_unusable": 0,
+            "tags_materialised": 0,
         }
         mapper = _MAPPERS[backend.name]  # validated upfront
 
@@ -482,6 +553,26 @@ def acquire_sources(
                     ingested_at=now,
                 )
             )
+            tag_pairs = _provider_tags(backend.name, record)
+            if tag_pairs:
+                conn.execute(
+                    pg_insert(source_tag)
+                    .values([
+                        {
+                            "source_tag_id": uuid.uuid4(),
+                            "project_id": project_id,
+                            "project_source_snapshot_id": pss_id,
+                            "tag": tag,
+                            "tag_type": "topic_theme",
+                            "asserted_by": asserted_by,
+                            "created_by_run_id": run_id,
+                            "created_at": now,
+                        }
+                        for tag, asserted_by in tag_pairs
+                    ])
+                    .on_conflict_do_nothing(constraint="uq_source_tag_assertion")
+                )
+            counts["tags_materialised"] += len(tag_pairs)
             events.append(
                 conn,
                 project_id=project_id,
@@ -507,7 +598,13 @@ def acquire_sources(
 
     totals = {
         key: sum(b[key] for b in by_backend.values())
-        for key in ("acquired", "already_acquired", "skipped_unusable", "results_returned")
+        for key in (
+            "acquired",
+            "already_acquired",
+            "skipped_unusable",
+            "results_returned",
+            "tags_materialised",
+        )
     }
 
     # Fail-closed adequacy (decision 8): any backend error -> inadequate (that
@@ -537,9 +634,19 @@ def acquire_sources(
         )
     )
 
+    if embedder is None:
+        embedder = StubEmbeddingBackend()
+    embed_counts = embed_pending_chunks(
+        conn,
+        embedder=embedder,
+        project_id=project_id,
+        run_id=run_id,
+    )
+
     return {
         **totals,
         "by_backend": by_backend,
+        "embed": embed_counts,
         "stop_condition": stop_condition,
         "adequacy_verdict": adequacy_verdict,
         "coverage_record_id": str(coverage_record_id),

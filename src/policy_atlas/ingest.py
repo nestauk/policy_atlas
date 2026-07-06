@@ -4,11 +4,15 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+import structlog
 from sqlalchemy.engine import Connection
 
+from policy_atlas.embeddings import EmbeddingBackend, StubEmbeddingBackend, embed_pending_chunks
 from policy_atlas.grounding import content_hash
 from policy_atlas.schema import chunk as chunk_table
 from policy_atlas.schema import project_source_snapshot, source_snapshot
+
+log = structlog.get_logger()
 
 
 def ingest_upload(
@@ -19,6 +23,7 @@ def ingest_upload(
     source_locator: str,
     metadata: dict[str, Any],
     text_basis: str,
+    embedder: EmbeddingBackend | None = None,
 ) -> uuid.UUID:
     """Ingest an uploaded source into the project corpus.
 
@@ -33,10 +38,14 @@ def ingest_upload(
         source_locator: Filename or user-assigned ref for this upload.
         metadata: Arbitrary metadata (stored as JSONB).
         text_basis: ``"full_text"`` or ``"abstract_only"``.
+        embedder: Optional embedding backend. Defaults to the deterministic stub.
 
     Returns:
         The new ``source_snapshot_id`` UUID.
     """
+    if embedder is None:
+        embedder = StubEmbeddingBackend()
+
     snapshot_id = uuid.uuid4()
     now = datetime.now(UTC)
 
@@ -75,5 +84,13 @@ def ingest_upload(
             ingested_at=now,
         )
     )
+    counts = embed_pending_chunks(
+        conn,
+        embedder=embedder,
+        project_id=project_id,
+        # upload ingest runs outside any run; nil UUID marks that in embed logs (finding 3)
+        run_id=uuid.UUID(int=0),
+    )
+    log.info("ingest_upload.embed_counts", **counts)
 
     return snapshot_id

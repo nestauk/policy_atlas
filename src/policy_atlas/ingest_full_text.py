@@ -42,6 +42,7 @@ import trafilatura
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.embeddings import EmbeddingBackend, StubEmbeddingBackend, embed_pending_chunks
 from policy_atlas.grounding import content_hash
 from policy_atlas.schema import (
     chunk as chunk_table,
@@ -564,6 +565,7 @@ def ingest_full_text_sources(
     run_id: uuid.UUID,
     context: IngestFullTextContext,
     fetcher: DocumentFetcher,
+    embedder: EmbeddingBackend | None = None,
     max_workers: int = DEFAULT_MAX_WORKERS,
     parse_timeout: float = PARSE_TIMEOUT_SECONDS,
     thin_min: int = THIN_TEXT_MIN_CHARS,
@@ -584,6 +586,7 @@ def ingest_full_text_sources(
         run_id: The run recorded in the snapshot's governance breadcrumbs.
         context: Scope-level input naming the evidence scope.
         fetcher: The ``DocumentFetcher`` seam implementation.
+        embedder: Optional embedding backend. Defaults to the deterministic stub.
         max_workers: Bound on live worker processes.
         parse_timeout: Hard per-document parse timeout in seconds.
         thin_min: Thin-text guard threshold in characters.
@@ -591,7 +594,7 @@ def ingest_full_text_sources(
 
     Returns:
         Counts dict: ``eligible``, ``ingested``, ``already_ingested``,
-        ``fetch_failed``, ``parse_failed``, ``by_reason`` (invariant:
+        ``fetch_failed``, ``parse_failed``, ``by_reason``, ``embed`` (invariant:
         ``eligible == ingested + already_ingested + fetch_failed + parse_failed``).
     """
     eligible_rows = conn.execute(
@@ -780,11 +783,21 @@ def ingest_full_text_sources(
                 reason=doc.reason, attempts=doc.attempts,
             )
 
+    if embedder is None:
+        embedder = StubEmbeddingBackend()
+    embed_counts = embed_pending_chunks(
+        conn,
+        embedder=embedder,
+        project_id=project_id,
+        run_id=run_id,
+    )
+
     summary = {
         "eligible": len(eligible_rows),
         "already_ingested": already_ingested,
         **counts,
         "by_reason": by_reason,
+        "embed": embed_counts,
     }
     log.info("fulltext.summary", **summary)
     return summary
