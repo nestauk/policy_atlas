@@ -8,7 +8,8 @@ is in progress, not done.
        through the skeleton, traced) passes with evidence.
 3. [ ] No approval-gated change snuck in unapproved — the slice lands exactly the three gated
        items (the `selection_result` table · the `"select"` registry entry +
-       `ranking_backend` parameter · the `select_rerank_v1` generation surface) and nothing
+       `ranking_backend` parameter + the `characterisation_run_id` Plan/Config field ·
+       the `select_rerank_v1` generation surface) and nothing
        else gated: no new dependency, no existing-table change, no second prompt surface,
        no embeddings use.
 4. [ ] No generated files or secrets edited by hand.

@@ -1,9 +1,13 @@
 # Implementation Plan: 010-select
 
-> **Status:** drafted — pending plan-stage adversarial review and human 🛑.
+> **Status:** rev 2 — plan-stage adversarial review adjudicated (Codex,
+> 2026-07-06, 9 findings: 2 blockers · 6 majors · 1 minor — 9/9 adopted, finding
+> 1 with a redesigned remedy; § Findings & adjudication). Pending human 🛑, which
+> also covers the flagged contract amendment (explicit `characterisation_run_id`
+> — contract rev 7). ADR 0006 written at that gate (Task 8b).
 > Contract: [contract.md](contract.md) (approved 2026-07-06 · Shabeer Rauf, rev 5;
 > contract-stage adversarial findings adjudicated at rev 6; user follow-ups at
-> rev 6.1). ADR 0006 due at plan confirmation (Task 8b).
+> rev 6.1; plan-stage amendment at rev 7).
 
 ## Overview
 
@@ -11,10 +15,11 @@ One component and one small seam, on `task/010-select`:
 1. **Schema** — `selection_result` (migration 10; tables 19 → 20).
 2. **Ranking layer** — `RankingBackend` seam (live OpenAI + stub), the
    lead-authored `select_rerank_v1` prompt, Langfuse tracing on the live backend.
-3. **`select.py`** — directive validation, signal assembly, stratification over the
-   same-run characterisation row, the exact allocation arithmetic, two strategies
-   (`coverage_stratified_v1` · `llm_rerank_v1`), bidirectional rationale, trigger
-   flags, selection row, selection summary.
+3. **`select.py`** — directive validation, signal assembly, stratification over
+   the explicitly referenced characterisation row (`characterisation_run_id`),
+   the exact allocation arithmetic, two strategies (`coverage_stratified_v1` ·
+   `llm_rerank_v1`), bidirectional rationale, trigger flags, selection row,
+   selection summary.
 4. **Wiring + tests + one spec flow-back** (components §6 realisation refinement).
 
 Smaller than 009 by construction: one table, one prompt, one backend seam, no
@@ -81,6 +86,18 @@ brief test at build time is a plan deviation to flag, not silently absorb.
   **[0.1, 10]** before applying. Unknown keys, wrong types, out-of-range values →
   **fail closed** (structured error, `component.failed`). Unknown column values /
   unmatched tag or priority patterns → flagged in provenance, non-fatal.
+  **Effective-weight formula** (adversarial finding 6):
+  `effective_w[i] = default_w[i] × emphasis[i]` (absent key → 1.0), **no
+  renormalisation and no further clamp** — emphasis is already bounded [0.1, 10]
+  and composites are compared **within a stratum only**, so absolute scale is
+  inert; `composite(doc) = (Σ effective_w[i] × signal[i]) ×
+  clamp(∏ matched_boost_weights, 0.1, 10)`. Effective weights and the clamped
+  boost multiplier are recorded per-doc-class in `selection_provenance`.
+  **Priority matching is casefolded on both sides** (adversarial finding 7):
+  `pattern.casefold()` substring-matched against `stratum_name.casefold()`, and
+  equality-matched against each member tag's `tag.casefold()`
+  (`source_tag.tag` preserves source case — schema.py:489); mixed-case fixture
+  test required.
 - **Trigger thresholds** (named constants): `LARGE_STRATUM_SHARE = 0.20` (an
   unselected-from stratum holding ≥ 20% of eligible) · `SUFFICIENT_CONFIDENCE
   = 0.6` and `THIN_BASE_FLOOR = 10` (thin_base; honestly stub-constant until the
@@ -97,15 +114,22 @@ brief test at build time is a plan deviation to flag, not silently absorb.
   shape `{themes: [{name, description, member_ids, size}], unclustered_ids}`
   (characterise.py:683); `member_ids`/`unclustered_ids` are stringified pss UUIDs.
   Stratum membership at select time = member ids ∩ eligible set.
-- **Selection summary shape**: `{strata: [{name, candidates, allocated, selected,
+- **Selection summary shape**: `{strata: [{name, candidate_count,
+  allocated_count, selected_count, selected_ids,
   full_text_share_candidates, full_text_share_selected}], selected: {count,
   by_reason}, excluded: {by_stratum_reason_counts, notable}, base: {screened_in,
-  non_evidence, eligible}, flags: [...], provenance: {...}}` — exact keys frozen in
-  Task 4 and asserted by the payload test.
-- **Langfuse**: reuse the 009 tracing helpers; spans `rank:batch{i}` under the
-  component span, metadata = batch index, doc ids, model, prompt version, token
-  counts, validation outcome, fallback counts; batch validation outcome as a score
-  (`rank_batch_valid` 0/1). Full I/O per the settled posture. No-op without keys.
+  non_evidence, eligible}, characterisation_run_id, flags: [...],
+  provenance: {...}}` — counts named as counts, per-stratum picks renderable
+  from `selected_ids` (adversarial finding 9); exact keys frozen in Task 4 and
+  asserted by the payload test.
+- **Langfuse**: spans `rank:batch{i}` are opened **inside
+  `OpenAIRankingBackend`**, where `response.usage` is available (adversarial
+  finding 8 — the as-built grouping pattern, grouping.py:344: the protocol
+  returns parsed data only, so token counts can't be traced from outside the
+  backend); metadata = batch index, doc ids, model, prompt version, token
+  counts, validation outcome, fallback counts; batch validation outcome as a
+  score (`rank_batch_valid` 0/1). Full I/O per the settled posture. No-op
+  without keys; the stub is never traced.
 - **Stub ranker**: deterministic score = `int(sha256(pss_id)[:8], 16) % 11`,
   reason = fixed template string — spread, reproducible, egress-free. Misbehaving
   doubles (missing ids, duplicates, out-of-range scores) are Task-7 test fixtures,
@@ -129,8 +153,12 @@ brief test at build time is a plan deviation to flag, not silently absorb.
 - Directive semantics: positive bounded multiplicative weights, clamp, fail-closed
   validation; boosts re-weight, never exclude; priority is soft for selection,
   hard for escalation.
-- One run-scoped row per (scope, run); written once at success inside the
-  transaction; retry = new run; UNIQUE makes same-run rewrite a loud error.
+- One run-scoped row per (scope, run) — keyed by **select's own run**; the
+  characterisation it stratified over is an explicit reference
+  (`characterisation_run_id`, required at compile, recorded in provenance).
+  Written once at success, **as the last statement** after all fallible work;
+  empty scope writes **no row** (summary + `empty_scope` flag only); retry =
+  new run; UNIQUE makes same-run rewrite a loud error.
 - Determinism (deterministic strategy): byte-identical payload columns, PK and
   `created_at` excluded.
 - Trigger flags: `large_stratum_excluded` · `priority_stratum_excluded` (hardest)
@@ -194,38 +222,57 @@ backend construction/failure tests, stub determinism, no-keys no-op. Scope: S–
 `SelectionDirective` (parse + fail-closed validation from
 `context["selection"]`) → candidate/eligibility query (shared helper) → signal
 assembly + composite (pinned normalisations/weights/boosts) → strata from the
-same-run characterisation row (missing row → structured failure) → allocation
-(the contract's exact arithmetic) → strategy dispatch (deterministic order or
-contested-strata rerank with per-doc/batch fallback and pre-call budget check) →
-bidirectional rationale + trigger flags → `selection_result` row → selection
-summary (frozen shape). Generic `_run_scope_component` failure path suffices —
-select has no partial-payload-on-failure requirement (unlike 009's coverage).
-Done = the allocation + directive + rerank + rationale test blocks.
-Scope: L (~400 lines). **Commit** after Phase 3 verify green.
+**referenced** characterisation row (`characterisation_run_id`; missing row →
+structured failure) → allocation (the contract's exact arithmetic) → strategy
+dispatch (deterministic order or contested-strata rerank with per-doc/batch
+fallback and pre-call budget check) → bidirectional rationale + trigger flags →
+selection summary → **`selection_result` row written last**, after all fallible
+work (adversarial finding 2: `_run_scope_component` catches without rollback,
+harness.py:171 — the row insert is the final statement of `select_scope`, so a
+failure anywhere persists nothing; the residual completed-event window matches
+the accepted 009 pattern). **Empty scope (`n = 0`) is an explicit branch**
+(finding 3, per the contract): completed summary with `empty_scope` flag and
+base counts, **no selection row**. Generic `_run_scope_component` failure path
+suffices otherwise — select has no partial-payload-on-failure requirement
+(unlike 009's coverage). Done = the allocation + directive + rerank + rationale
+test blocks. Scope: L (~400 lines). **Commit** after Phase 3 verify green.
 
 ## Phase 4 — Wiring
 
 ### Task 5: Registry/harness/skeleton/helpers — `fast-worker`
 
-- `plan.py`: `"select": {"requires": ["evidence_scope_id"]}`.
+- `plan.py`: `"select": {"requires": ["evidence_scope_id",
+  "characterisation_run_id"]}` — `Plan`/`_ValidatedRunSpec`/`Config` gain the
+  optional `characterisation_run_id: uuid.UUID | None` field, required-by-registry
+  for select only (compile fails closed; the contract amendment from adversarial
+  finding 1).
 - `harness.py`: `ranking_backend: RankingBackend | None = None` on `run_harness`
   (stub resolved inside, the 009 pattern), threaded through `HarnessState`;
-  `_run_select` via `_run_scope_component`; node + conditional edge.
-- `skeleton.py`: select after characterise, **under one shared `run_id`** — the
-  contract's same-run rule (select reads its own run's characterisation row).
-  Verified as-built mechanics (skeleton.py:75–83, harness.py:307–318): the run
-  row is created caller-side and `run_harness` only updates status at the end —
-  so the skeleton creates the row **once**, emits `run.started` once, and makes
-  **two** `run_harness` calls with the same `run_id` (two `plan.compiled` +
-  component event pairs under one run; final status = select's outcome; the
-  intermediate `succeeded` after characterise is accepted and noted — a small
-  pre-echo of the capability-run seam). All other components keep
-  one-run-per-component. A `select` run without a same-run characterise fails
-  honestly (missing row).
+  `_run_select` via `_run_scope_component` with `SelectContext` carrying
+  `characterisation_run_id` from the config; node + conditional edge.
+- `skeleton.py`: select after characterise, as **its own run** — the
+  one-run-per-component model is preserved (adversarial finding 1 killed the
+  shared-run draft: `_finish` emits a terminal `run.completed`/`run.failed` and
+  updates status on **every** `run_harness` call, harness.py:300–320, and
+  `tracing.component_span` opens a `run:{run_id}` root per call, tracing.py:229
+  — a shared run would mean two terminal events and two identically-named trace
+  roots, and the contract's out-of-scope list keeps the capability-run entity
+  deferred). Instead the linkage is **explicit**: `Plan`/`Config` gain a
+  `characterisation_run_id` field, **required for `select`** by the registry
+  (compile fails closed without it — the plan-as-object posture; no silent
+  "latest row" default, honouring the contract's never-silently-reused rule).
+  The skeleton passes the characterise run's id; select loads the
+  characterisation row by `(scope, characterisation_run_id)` and records the
+  reference in `selection_provenance` and the summary. **Contract amendment
+  riding this gate** (decision 3's "same run's row" wording + gate 2 grows by
+  this one compile-surface field — flagged for the human).
 - Skeleton renders the selection summary; live ranker iff `OPENAI_API_KEY` set
   (egress is the product); logs the baseline call budget before live calls; demo
-  directive in the fixture scope's `context["selection"]` (a tag boost + budget —
-  gives the live check a visible steering effect).
+  directive in the fixture scope's `context["selection"]` pinned as **budget 8 +
+  one tag boost** (adversarial finding 5: the fixture corpus is ~24–25 docs, so
+  the default budget 25 would leave **zero contested strata** and the live
+  rerank would never fire; the skeleton asserts-and-logs `contested > 0` before
+  the live check).
 - `tests/helpers.py`: `selection_result` in FK-safe delete order;
   `test_compile.py`: registry case. Scope: S–M. **Commit** with Phase 4.
 
@@ -266,13 +313,16 @@ components §6: realisation "procedure" → procedure with bounded generative re
 (hard rules code-side; scores order, never exclude) + `unclustered` named a
 stratum; realisation table row updated; `log.md` entry. `make okf-validate` green.
 
-### Task 8b: ADR 0006 — `lead` (design-phase step 4)
+### Task 8b: ADR 0006 — `lead` — **at plan confirmation, NOT a build task**
+(adversarial finding 4: this is design-phase step 4; it listed under Phase 6 only
+by 009's layout accident)
 
 `docs/adr/0006-selection-strategy-directive-rerank.md`: the selection structure
 (stratified, code-owned hard rules), the directive as the agent-facing surface
-(and the policy-compiles-to-boosts integration path), the rerank seam + score
-semantics, the run-local rationale record. Written at plan confirmation, before
-the build conversation opens.
+(and the policy-compiles-to-boosts integration path), the explicit
+characterisation reference, the rerank seam + score semantics, the run-local
+rationale record. **Written and Accepted at the plan 🛑, before the build
+conversation opens** — the build inherits it done.
 
 ### Task 9: `verification.md` + live manual run — `lead`
 
@@ -305,7 +355,7 @@ plus pointer updates where 009 entries already exist.
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Same-run coupling (select needs characterise's run id) | Select fails on its own run | Pinned in Task 5: skeleton shares one `run_id` across the two `run_harness` calls (caller-supplied ids are as-built); missing row fails honestly with a clear message |
+| Stale characterisation referenced (corpus changed since that run) | Selection stratifies over an outdated grouping | The reference is explicit + compile-required, recorded in provenance and the summary (`characterisation_run_id`) — attributable, never silent; the skeleton always passes the run it just executed; staleness *checks* are the capability-run seam |
 | Strict structured outputs with bounded integer scores | Schema rejection or drift | JSON schema `integer, minimum 0, maximum 10`; out-of-range despite schema → per-doc fallback (code-side, tested with a misbehaving double) |
 | Ranker returns duplicates/missing ids | Silent mis-ordering | Contract rule: mangled docs fall back per doc, flagged `rank_fallback`; asserted no-drop/no-exclude |
 | Contested-strata scoping bug sends wholesale strata | Wasted egress + wrong surface | Counting-double test asserts exactly the contested candidates (minus must-includes) are sent |
@@ -316,9 +366,47 @@ plus pointer updates where 009 entries already exist.
 | Live rerank on fixture corpus looks unimpressive | Verification looks weak | The bar is machinery correctness + a visible directive effect; ranking quality is the recorded eval seam |
 | Cost runaway | Spend | Pre-call enforced budget max; contested-strata-only scoping; batch cap; cost note in verification.md |
 
+## Plan-phase adversarial review — findings & adjudication (Codex, 2026-07-06)
+
+Nine findings, verified against the repo before adoption; **9/9 adopted** (finding
+1 with a different remedy than proposed):
+
+1. Shared-run resolution contradicts as-built run lifecycle (terminal
+   `run.completed` per `run_harness` call, harness.py:300–320; `run:{id}` trace
+   root per component, tracing.py:229) **and** the contract's own
+   one-run-per-component out-of-scope line (blocker): **adopted, remedy
+   redesigned** — one-run-per-component preserved; explicit
+   `characterisation_run_id` on `Plan`/`Config`, required-by-registry for
+   select, recorded in provenance/summary. **Contract amendment flagged at this
+   gate** (decision 3 wording + gate 2 grows by the compile-surface field).
+2. Row written before summary + `_run_scope_component` catches without rollback
+   → failed run could persist a row, violating the contract (blocker):
+   **adopted** — the row insert is the last statement after all fallible work;
+   residual completed-event window = the accepted 009 pattern.
+3. `n = 0` must not write a selection row (contract) but Task 4 wrote one
+   unconditionally: **adopted** — explicit empty-scope branch, summary + flag,
+   no row.
+4. ADR 0006 mislaid under Phase 6 while due at plan confirmation: **adopted** —
+   Task 8b re-marked as a plan-🛑 deliverable, not a build task.
+5. Default budget 25 ≈ fixture corpus size → zero contested strata → the live
+   rerank check never fires: **adopted** — demo directive pinned to budget 8 +
+   one tag boost; skeleton asserts `contested > 0` before the live check.
+6. `weight_emphasis` formula unpinned (renormalise? clamp?): **adopted** —
+   `effective_w = default_w × emphasis`, no renormalisation (within-stratum
+   comparisons make absolute scale inert), boost product clamped [0.1, 10],
+   formula recorded in provenance.
+7. Priority-strata tag matching case semantics unpinned (`source_tag.tag`
+   preserves source case): **adopted** — casefold both sides, mixed-case fixture
+   test.
+8. Token counts unavailable outside the backend (protocol returns parsed data
+   only — the as-built grouping precedent, grouping.py:344): **adopted** —
+   `rank:batch{i}` spans open inside `OpenAIRankingBackend` where
+   `response.usage` lives.
+9. Summary `strata[].selected` ambiguous: **adopted** — `candidate_count` /
+   `allocated_count` / `selected_count` / `selected_ids`.
+
 ## Open questions
 
-None blocking — all design decisions are fixed in the approved contract; the one
-resolution made at plan time (shared `run_id` across characterise + select in the
-skeleton) is flagged above for the plan gate and rides the as-built
-caller-supplied-run pattern.
+None blocking — all design decisions are fixed in the approved contract plus the
+one flagged amendment (explicit `characterisation_run_id`, adversarial finding 1)
+awaiting the human at the plan 🛑.

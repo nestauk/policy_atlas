@@ -57,7 +57,10 @@ machinery stays a recorded seam. Selection is run-local, never canonical;
 `not_selected` is derivable coverage state, never persisted as doc status. Gated
 changes riding this slice: schema (`selection_result`, project-scope-guarded; table
 count 19 → 20) · public interface (`"select"` registry entry + `run_harness
-ranking_backend`, stub default) · **runtime egress: the `select_rerank_v1` generation
+ranking_backend`, stub default + the `characterisation_run_id` Plan/Config field —
+select stratifies over an **explicitly referenced** characterisation, compile-required,
+provenance-recorded; one-run-per-component stands) · **runtime egress: the
+`select_rerank_v1` generation
 surface (titles + abstracts + intent, contested strata only)**. One spec flow-back
 rides the slice (components §6 select
 realisation: procedure → procedure with bounded generative rerank). `make verify` stays

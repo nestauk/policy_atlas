@@ -83,6 +83,14 @@ specs in [docs/specs/](../../specs/index.md).
 >   slice lands — the boost surface is the ground-up design; select code
 >   untouched by construction) · listwise ordering noted at the rerank-quality
 >   eval seam.
+> - **rev 7** (2026-07-06, plan-stage adversarial finding 1): "same run's
+>   characterisation row" → **explicit `characterisation_run_id`** on
+>   `Plan`/`Config`, required for select at compile (fails closed), recorded in
+>   provenance + summary. The shared-run reading contradicted the as-built run
+>   lifecycle (terminal events + trace root per `run_harness` call) and this
+>   contract's own capability-run deferral; explicit reference preserves the
+>   never-silently-reused intent. **Gate 2 grows by this one compile-surface
+>   field** — approved with the plan 🛑.
 
 ## Goal
 
@@ -141,7 +149,8 @@ A PR on `task/010-select` → `dev` that:
   provenance) — the slice's only prompt-bearing surface.
 - Adds **one table — `selection_result`** — via one Alembic migration (gated
   change 1; table count 19 → 20), project-scope-guarded per repo discipline.
-- Registers `"select"` in `COMPONENT_REGISTRY` (requires `evidence_scope_id`); wires
+- Registers `"select"` in `COMPONENT_REGISTRY` (requires `evidence_scope_id` +
+  `characterisation_run_id`, rev 7); wires
   `_run_select`; `run_harness` gains one optional **`ranking_backend`** parameter
   (defaults to the stub — no default egress; gated change 2). No embeddings use
   (rev 4).
@@ -240,11 +249,19 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
      is a **counted base-ladder line** in the rationale (`non_evidence: N`),
      never a silent drop; the accounting invariant runs over the eligible set
      (decision 8).
-   - **Strata = this run's themes + `unclustered`** (a partition — assignment is
-     single-theme-or-unclustered; the 009 contract pre-committed unclustered to
-     "form their own stratum when select lands"). Select reads the **same run's**
-     `characterisation_result` row; no row for `(scope, run)` → honest failure
-     (clusters are run-local — a previous run's grouping is never silently reused).
+   - **Strata = the referenced characterisation's themes + `unclustered`** (a
+     partition — assignment is single-theme-or-unclustered; the 009 contract
+     pre-committed unclustered to "form their own stratum when select lands").
+     **Rev 7 (plan-stage finding 1):** the reference is an **explicit
+     `characterisation_run_id`** on `Plan`/`Config`, required-by-registry for
+     select — compile fails closed without it, and it is recorded in
+     `selection_provenance` and the summary. (Rev 5's "same run's row" wording
+     assumed a shared run; as-built, every `run_harness` call is its own run
+     with terminal events and a trace root, and the capability-run entity is
+     this contract's own deferred seam. Explicit reference preserves the rule's
+     intent exactly: clusters stay run-local and **a grouping is never silently
+     reused** — the caller names which one, attributably.) No row for
+     `(scope, characterisation_run_id)` → honest failure.
    - **Allocation — exact arithmetic** (adversarial finding 2), in order:
      1. **Must-includes** selected first, outside the budget (decision 4);
         reason `must_include`. A stratum containing a must-include **counts as
@@ -612,7 +629,9 @@ FK-safe order.
    existing-table changes.
 2. **Public interface** — the `"select"` `COMPONENT_REGISTRY` entry (compile
    surface widens) + `run_harness` gains optional `ranking_backend` (stub default —
-   no default egress; the `grouping_backend` precedent). The selection directive
+   no default egress; the `grouping_backend` precedent) + **`Plan`/`Config` gain
+   `characterisation_run_id`** (required for select by the registry; rev 7,
+   plan-stage finding 1 — flagged, not silently folded). The selection directive
    rides the evidence-scope context (a first-class facade argument internally, not
    a harness signature change).
 3. **Runtime egress — one new generation surface (user-confirmed, rev 3):** the
