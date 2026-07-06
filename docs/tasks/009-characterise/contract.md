@@ -3,10 +3,26 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted, rev 5 — rev 4 accepted by user 2026-07-06 ("seems fine");
-> awaiting final sign-off with the 4.1 + 5 amendments. Contract-stage adversarial
-> review launched against rev 4.1 (in flight); findings will be adjudicated onto
-> this rev.
+> **Status:** drafted, rev 6 — rev 4 accepted by user 2026-07-06 ("seems fine");
+> awaiting final sign-off with the 4.1 + 5 amendments and the rev-6 adversarial
+> adjudication.
+> Rev 6 (adversarial adjudication, 2026-07-06): Codex review of rev 4.1 returned
+> **15 findings (2 blockers · 11 majors · 2 minors) — 12 adopted, 2 adopted-in-part,
+> 1 rejected with rationale** (§ Contract-stage adversarial review). Blockers: the
+> generation interface cannot ride `InferenceProvider.complete(prompt)->str` → a
+> dedicated **`GroupingBackend` seam** + `run_harness` parameter (grows gate 3 —
+> **flagged for the human at re-read**); the new tables lacked the repo's
+> project-scoped composite-FK discipline → `project_id` + composite FKs added.
+> Notable adoptions: per-batch **discard-and-retry-once** replaces residue-repair
+> (simpler semantics); call budget restated as baseline vs enforced max; explicit
+> **live opt-in flag** (env key alone never flips a path to egress); theme names
+> treated as untrusted model output (length/charset constraints); no gap/absence
+> *claims* in 009 output (distributions only — gap machinery stays at its seam);
+> empty/small-n behaviour specified; provider-field normalisation named a plan
+> requirement; `grouping_provenance JSONB` replaces the two scalar columns.
+> Rejected: "tags must be run-scoped or not written" — components.md §5 explicitly
+> sanctions label-persist-as-tags while the *grouping* stays run-local; the line is
+> now stated in decision 10 (adopted-in-part as a clarification).
 > Rev 5 (user steer, 2026-07-06 — "the whole point of characterise is understanding
 > the corpus landscape; why not use the provider tags here?"): provider-topic tag
 > materialisation pulled **in-slice**. `source_tag` gains **`asserted_by`** (assertion
@@ -105,7 +121,8 @@ A PR on `task/009-characterise` → `dev` that:
 - Adds three tables — `chunk_embedding`, `characterisation_result`, `source_tag` — via one
   Alembic migration (gated change 1; table count 16 → 19).
 - Wires the embed pass into every ingestion path (upload ingest, acquire envelope
-  snapshots, full-text ingest) and as an ensure-step at characterise start.
+  snapshots, full-text ingest) — no characterise-time ensure-step (greenfield,
+  decision 2; deliverable/decision contradiction was adversarial finding 3).
 - Ships `characterise.py`: deterministic Tier-0 coverage distributions; the two-stage
   LLM grouping — discover (one call) → assign (batched, concurrent, fixed theme list)
   — with lead-authored co-versioned prompts, schema-constrained outputs, code-enforced
@@ -113,14 +130,18 @@ A PR on `task/009-characterise` → `dev` that:
   `unclustered` bucket; a deterministic stub grouper for the suite; tag persistence;
   the run-scoped characterisation row; the structured landscape summary returned into
   `component.completed`.
-- Ships the live OpenAI inference path for structured generation behind the existing
-  `provider` seam (stub remains the default; gated change 4).
+- Ships the `GroupingBackend` seam (protocol + `OpenAIGroupingBackend` +
+  deterministic stub; adversarial finding 1) — the structured-generation path; stub
+  remains the default (gated changes 3 + 4).
 - Adds `openai` as a runtime dependency (gated change 2).
 - Registers `"characterise"` in `COMPONENT_REGISTRY`; wires `_run_characterise`;
   `run_harness` gains optional `embedding_backend` (gated change 3).
 - Extends `skeleton.py`: … appraise → ingest_full_text → **characterise**, rendering the
   landscape summary (the intermediate-feedback surface, decision 8).
-- Spec clarification in EB components §5 (content vs artefact — decision 7) + `log.md`.
+- The three spec flow-backs + `log.md` entries (matching the gates section exactly —
+  adversarial finding 15): components §5 content-vs-artefact (decision 7); components
+  §5 thematic mechanism + vectorisation-with-gate exception (decisions 4, 2);
+  data-model tag-layer assertion provenance (decision 10).
 - Records the deferred seams in `docs/deferred.md`; updates `tests/helpers.py`
   delete order for the new tables.
 - Passes `make verify` — all green, **deterministic and egress-free** (live path exercised
@@ -243,16 +264,27 @@ artefact/block/annotation machinery exists but nothing here writes to it (decisi
      "unclustered")` per doc. Assignment against a fixed list is an easier task than
      joint discovery+assignment, and bounded batch outputs avoid long-structured-
      output degradation — quality is equal or better at our sizes, and the same
-     design runs unchanged at 2,000 docs. Total calls: `1 + ceil(n/batch) + repairs`
-     — bounded and known before the run starts (the budget guard's input).
-   - **Validation is code, not model trust — per batch:** schema conformance is
+     design runs unchanged at 2,000 docs. **Call budget (adversarial finding 7):
+     baseline `1 + ceil(n/batch)`; enforced maximum
+     `(1 + discovery_retry_cap) + ceil(n/batch) × (1 + assignment_retry_cap)`**
+     (caps a plan detail, small) — the maximum is checked before any live call; the
+     baseline is known before the run starts.
+   - **Validation is code, not model trust — per batch, discard-and-retry
+     (adversarial finding 9, adopted simplification):** schema conformance is
      provider-enforced (strict structured outputs); **exhaustiveness is not
      schema-expressible**, so code asserts every batch id assigned exactly once, no
-     invented ids. A violating batch gets **one repair call re-asking only that
-     batch's residue** — small, targeted, against the fixed theme list. Still
-     failing → the component fails honestly (decision 11); never silent drops, never
-     a placeholder theme (v2's "General Theme" collapse is unrepresentable — a
-     degenerate outcome is a flagged failure state, not fake success).
+     invented ids. A violating batch's output is **discarded whole and the batch
+     retried once** — a batch persists only when fully valid, so "residue" semantics
+     (undefined for invented-id or duplicate-conflict outputs) never arise; an
+     invalid discovery output (theme count out of bounds, malformed) is likewise
+     discarded and retried once. Still failing → the component fails honestly
+     (decision 11); never silent drops, never a placeholder theme (v2's "General
+     Theme" collapse is unrepresentable — a degenerate outcome is a flagged failure
+     state, not fake success).
+   - **Empty and small scopes (adversarial finding 8):** `n = 0` → grouping is
+     skipped honestly (coverage still reported; summary flags `empty_scope`); small
+     `n` → theme-count bounds become `1..min(n, max)`; `n < batch` is one batch.
+     Each is a tested path, not an assumed one.
    - **`unclustered` is a first-class, counted outcome** — the model may decline to
      force-fit a document; those docs stay fully eligible downstream and form their
      own stratum when `select` lands. Counting invariant:
@@ -296,9 +328,10 @@ artefact/block/annotation machinery exists but nothing here writes to it (decisi
    committed — `.env` is already gitignored; asserted absent from all captured output);
    explicit request timeouts; bounded retry/backoff on transient failures; batch size
    capped; **per-run budget guards on both paths** (max chunks per embed pass; the
-   grouping budget is `1 + ceil(n/batch) + per-batch repairs` by construction, known
-   before the run starts — over any cap → stop with honest counts and a loud log,
-   never a silent partial that looks complete). What
+   grouping budget has a known baseline `1 + ceil(n/batch)` and an **enforced
+   maximum** `(1 + discovery_retry_cap) + ceil(n/batch) × (1 + assignment_retry_cap)`
+   checked before any live call (finding 7) — over any cap → stop with honest counts
+   and a loud log, never a silent partial that looks complete). What
    leaves the machine is corpus text (chunk text on the embed path; titles + abstracts
    on the grouping path) to the configured provider — the documented, spec-accepted
    v3.0 inference-route posture. **Injection posture (user-confirmed): this is the
@@ -308,11 +341,17 @@ artefact/block/annotation machinery exists but nothing here writes to it (decisi
    where possible: document content is passed as **data records keyed by id** under an
    explicit data/instructions separation in the prompt; the output channel is
    **schema-constrained to theme names + id assignments** (no tools, no free text
-   acting on the world — a hijacked model can at worst mis-group, which validation
-   and the softest-grade framing already bound); exhaustiveness and id validity are
-   **enforced in code after the call**; embeddings interpret nothing (vectors back
-   only). The ADR covers this posture; adversarial prompt-content behaviour beyond
-   the structural bounds is eval-seam territory, recorded.
+   acting on the world — a hijacked model can at worst mis-group or mis-label, which
+   validation and the softest-grade framing bound); exhaustiveness and id validity
+   are **enforced in code after the call**; embeddings interpret nothing (vectors
+   back only). **Theme names and descriptions are themselves untrusted model output
+   (adversarial finding 10, adopted):** they flow onward into the landscape summary
+   and `source_tag` rows, so they carry code-enforced length and character
+   constraints, are rendered/stored as data (never interpolated into anything
+   executable), and the standing rule is recorded for future seams: **tags and
+   summaries re-enter prompts only as data**. An injection-shaped theme-name case is
+   a named test. The ADR covers this posture; adversarial prompt-content behaviour
+   beyond the structural bounds is eval-seam territory, recorded.
 7. **Characterise writes content, not presentation (user decision, 2026-07-05).**
    Durable output per run: one `characterisation_result` row (scope, run, prompt
    version + model id, `coverage JSONB`, `themes JSONB` — names, descriptions, member
@@ -355,9 +394,19 @@ artefact/block/annotation machinery exists but nothing here writes to it (decisi
    extraction. Distributions are computed by deterministic SQL/python (the lookup
    discipline: re-running the query *is* the verification), each carrying `base:
    "screened"` explicitly. **Flag-not-block** — nothing is excluded from coverage for
-   being below any bar. **Dual-view coverage is a recorded seam**: no source/evidence
-   policy object exists in v3.0 (verified), so the spec's "when the user has supplied a
-   policy" condition never fires; single overall view ships.
+   being below any bar. **No gap or absence claims (adversarial finding 11, adopted):**
+   009's landscape output renders distributions and counts only — it never asserts
+   "little/no evidence exists on X". Absence claims require the coverage-base +
+   search-adequacy machinery (`search_coverage_record` join, fail-closed degradation)
+   that belongs to the gap-claim seam; a wording constraint on the landscape summary
+   enforces this and a test asserts no absence-claim field exists in the payload.
+   **Provider-field normalisation is a named plan requirement (finding 13):** exact
+   field paths, display-name vs id choice, string-vs-list handling (Overton `topics`
+   is either), per-document dedup, and missing/unknown buckets — pinned at the plan
+   gate with fixture tests over the mixed shapes 007 recorded. **Dual-view coverage
+   is a recorded seam**: no source/evidence policy object exists in v3.0 (verified),
+   so the spec's "when the user has supplied a policy" condition never fires; single
+   overall view ships.
 10. **Tag layer lands with assertion provenance: `source_tag` + `asserted_by`
     (rev 5, user steer 2026-07-06).** Item × tag × type × asserter
     (`project_source_snapshot_id` FK, `tag`, `tag_type` — CHECK: `topic_theme` for
@@ -376,8 +425,16 @@ artefact/block/annotation machinery exists but nothing here writes to it (decisi
     - **Characterise's themes** — `asserted_by="characterise"` + the run id.
     Insert-if-absent on the full key so re-runs accrete without duplicating; the same
     document may carry the same topic from two asserters — **two rows, and that
-    corroboration is signal, not duplication**. Namespace consolidation stays the
-    recorded orchestrator seam. classify's `open_tags` JSONB column is untouched —
+    corroboration is signal, not duplication**. **The canonical/run-local line
+    (adversarial finding 5, adopted-in-part):** components §5 draws it explicitly —
+    "per-cluster labels persist as topic/theme tags; the run's cluster grouping stays
+    run-local". Tags are **canonical soft item metadata** (assertions with provenance,
+    accreting like any assertion history); grouping *memberships* are run-local and
+    live only in the characterisation row. A later run grouping differently adds new
+    assertions rather than mutating old ones — earlier tags remain as attributed
+    historical assertions (`created_by_run_id NOT NULL` makes every one dateable and
+    attributable; finding 6), and pruning/merging them is the namespace-consolidation
+    seam. Namespace consolidation stays the recorded orchestrator seam. classify's `open_tags` JSONB column is untouched —
     migrating it into this table is part of the LLM-classify seam, not this slice.
     **Spec flow-back (rev 5, user as spec author):** data-model.md's "nothing hangs
     off a tag" is clarified, not repealed — it governs the tag *label* (no per-tag
@@ -489,18 +546,26 @@ validation, and silent drops between stages.
 
 ```
 chunk_embedding          chunk_embedding_id PK · chunk_id FK→chunk · embedding_profile TEXT
-                         · vector JSONB · created_at
+                         · vector JSONB (code-validated: JSON array, expected dims,
+                           finite floats — adversarial finding 14) · created_at
                          UNIQUE (chunk_id, embedding_profile)
 
-characterisation_result  characterisation_id PK · evidence_scope_id FK · run_id FK
-                         · grouping_prompt_version TEXT · grouping_model TEXT
+characterisation_result  characterisation_id PK · project_id FK · evidence_scope_id ·
+                         run_id · grouping_provenance JSONB (required keys, test-
+                         asserted: prompt_version, discovery_model, assignment_model,
+                         batch_size, retry counts — adversarial finding 4)
                          · coverage JSONB · themes JSONB · created_at
+                         Composite FKs (evidence_scope_id, project_id) and
+                         (run_id, project_id) — the result-table cross-project guard
+                         (adversarial finding 2; screening-result precedent)
                          UNIQUE (evidence_scope_id, run_id)      -- run-local by design
 
-source_tag               source_tag_id PK · project_source_snapshot_id FK · tag TEXT
-                         · tag_type TEXT CHECK (tag_type IN ('topic_theme'))
-                         · asserted_by TEXT · created_by_run_id FK→runs (nullable)
-                         · created_at
+source_tag               source_tag_id PK · project_id FK · project_source_snapshot_id ·
+                         tag TEXT · tag_type TEXT CHECK (tag_type IN ('topic_theme'))
+                         · asserted_by TEXT NOT NULL
+                         · created_by_run_id NOT NULL · created_at
+                         Composite FKs (project_source_snapshot_id, project_id) and
+                         (created_by_run_id, project_id) (adversarial findings 2 + 6)
                          UNIQUE (project_source_snapshot_id, tag_type, tag, asserted_by)
 ```
 
@@ -514,7 +579,8 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
   *, embedder, project_id, run_id, batch_size=…, max_chunks=…) -> dict` (counts) ·
   deterministic windowing for oversized chunks.
 - **`characterise.py`** — `CharacteriseContext` · `characterise_scope(conn, *,
-  project_id, run_id, context, grouper) -> dict` (coverage → grouping call →
+  project_id, run_id, context, grouping_backend) -> dict` (coverage → discover →
+  batched assign →
   validate/repair → tags → characterisation row → landscape summary) · the
   `characterise_grouping_v1` prompt (lead-authored) · grouping-output validation
   helpers · deterministic stub grouper.
@@ -524,11 +590,14 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
   `source_tag` when writing each envelope (deterministic normalisation per backend
   mapper; `asserted_by` per provenance class; insert-if-absent — decision 10).
 - **`plan.py`** — `"characterise": {"requires": ["evidence_scope_id"]}`.
-- **`harness.py`** — `_run_characterise`; `embedding_backend: EmbeddingBackend | None =
-  None` on `run_harness` (defaults to `StubEmbeddingBackend()` — no default egress);
-  threaded through `HarnessState`.
+- **`harness.py`** — `_run_characterise`; `embedding_backend: EmbeddingBackend | None
+  = None` and `grouping_backend: GroupingBackend | None = None` on `run_harness`
+  (both default to stubs — no default egress); threaded through `HarnessState`.
 - **`skeleton.py`** — chain extended with characterise; renders the landscape summary;
-  uses the live embedder + live grouper iff `OPENAI_API_KEY` is set, stubs otherwise.
+  uses the live embedder + live grouper **only when an explicit live flag is set
+  (e.g. `POLICY_ATLAS_LIVE=1`) in addition to `OPENAI_API_KEY`** — key presence alone
+  never flips a path to egress (adversarial finding 12, adopted); the baseline call
+  budget is printed before live execution. Stubs otherwise.
 
 ### Tests (`tests/test_characterise.py` + `tests/test_embeddings.py`)
 
@@ -548,16 +617,20 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
 - Grouping (stub grouper drives the suite; live behaviour is manual evidence + eval
   seam): batching is deterministic (id-ordered, stated batch size); per-batch
   validation enforces exhaustive assignment — an assignment double returning a missing
-  doc, an invented id, or a duplicate triggers the **repair path for that batch only**
-  (asserted: repair called with just the residue, against the fixed theme list; other
-  batches untouched); out-of-bounds theme count from discovery → repair or honest
-  failure; repair still invalid → honest `component.failed`, no partial grouping
-  persisted, no placeholder theme (asserted unrepresentable); `unclustered` is a
-  counted first-class outcome and the invariant covers it
-  (`screened_in == grouped + unclustered`); the call budget matches
-  `1 + ceil(n/batch) + repairs` (asserted against a counting double); assignments land
-  only in the characterisation row (no canonical cluster state anywhere); prompt
-  version + model ids recorded on the row and event payload.
+  doc, an invented id, or a duplicate triggers **discard-and-retry of that batch
+  only, once** (asserted: the whole batch re-asked against the fixed theme list;
+  other batches untouched; nothing from the invalid output persisted); invalid
+  discovery output (theme count out of bounds, malformed) discarded and retried once;
+  retry still invalid → honest `component.failed`, no partial grouping persisted, no
+  placeholder theme (asserted unrepresentable); **edge scopes tested: `n=0` (skip +
+  `empty_scope` flag, coverage still reported), `n=1`, `n < batch`** (finding 8);
+  `unclustered` is a counted first-class outcome and the invariant covers it
+  (`screened_in == grouped + unclustered`); the enforced call-budget maximum is
+  asserted against a counting double; theme names violating length/charset
+  constraints rejected, injection-shaped theme name stored/rendered as inert data
+  (finding 10); grouping memberships land only in the characterisation row (no
+  canonical cluster state anywhere); `grouping_provenance` required keys present on
+  the row and event payload.
 - Prompt hygiene: document content enters the prompt as id-keyed data records under
   the data/instructions separation (asserted structurally on the built prompt); an
   injection-shaped fixture abstract ("ignore instructions and…") flows through as
@@ -621,6 +694,56 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
 - **Tag namespace consolidation / `open_tags` migration** (decisions 5, 10).
 - **`select` and everything deeper** — subsequent slices.
 
+### Contract-stage adversarial review — findings & adjudication (Codex, 2026-07-06)
+
+Fifteen findings against rev 4.1 (2 blockers · 11 majors · 2 minors); none challenged
+the user-settled directions. Adjudicated by the lead onto rev 6 (rev 5 had already
+landed the `asserted_by` provenance findings 5/6 partially anticipate):
+
+1. Generation can't ride `InferenceProvider.complete(prompt)->str` (blocker):
+   **adopted** — dedicated `GroupingBackend` protocol + `run_harness
+   grouping_backend` parameter (gate 3 grew — flagged for the human).
+2. Missing project-scoped composite-FK discipline on new tables (blocker):
+   **adopted** — `project_id` + composite FKs on `characterisation_result` and
+   `source_tag`, per the screening-result precedent.
+3. Deliverable/decision-2 ensure-step contradiction: **adopted** — ensure-step
+   removed from the deliverable (greenfield; decision 2 stands).
+4. Singular `grouping_model` vs two models: **adopted** — `grouping_provenance
+   JSONB` with required, test-asserted keys.
+5. Run-local clusters vs canonical tags tension: **adopted-in-part** — the spec
+   itself draws the line (components §5: labels persist as tags; grouping stays
+   run-local); now stated explicitly in decision 10. The "key tags by run or don't
+   write them" remedy is **rejected** — it would contradict components §5.
+6. Nullable run provenance + stale-tag accretion: **adopted-in-part** —
+   `created_by_run_id NOT NULL` (every assertion attributable); accretion retained
+   by design (assertion history), pruning/merging recorded at the consolidation seam.
+7. "Budget known before run" false w.r.t. retries: **adopted** — baseline
+   `1 + ceil(n/batch)` vs enforced retry-capped maximum, checked pre-call.
+8. Empty/small-n scopes unspecified: **adopted** — `n=0` skip + `empty_scope` flag;
+   theme bounds `1..min(n, max)`; tests for n=0, n=1, n<batch.
+9. Repair-residue semantics undefined: **adopted (as simplification)** — per-batch
+   discard-and-retry-once; a batch persists only when fully valid.
+10. Theme names are untrusted model output: **adopted** — length/charset
+    constraints, stored/rendered as data, injection-shaped-name test, standing rule
+    that tags/summaries re-enter prompts only as data.
+11. Gap/absence claims need coverage-base machinery: **adopted (forbid option)** —
+    009 output makes no absence claims; distributions only, test-asserted; gap-claim
+    machinery stays at its seam.
+12. Env-key presence alone flips paths live: **adopted** — explicit live flag
+    required in addition to the key; budget printed before live execution.
+13. Provider-field shape normalisation unspecified: **adopted** — named plan
+    requirement (paths, name-vs-id, string-vs-list, dedup, missing buckets) with
+    mixed-shape fixture tests.
+14. Vector JSONB unvalidated: **adopted** — code-level array/dims/finite validation
+    + tests.
+15. Deliverable vs gates flow-back mismatch: **adopted** — lists synced (three
+    flow-backs).
+
+Gate-scope note for the human: finding 1 **grows gate 3** (a second `run_harness`
+parameter, `grouping_backend`) and finding 2 grows the approved schema item within
+the same three tables (project_id + composite FKs — enforcing existing repo
+discipline). Both flagged here rather than silently folded.
+
 ## Constraints & approval gates
 
 **Four gated changes (approval needed at this gate):**
@@ -633,15 +756,24 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
    sentence-transformers → torch plus umap-learn/numba — the gate-excluded ML tier —
    to supply a pipeline this design no longer runs).
 3. **Public interface** — `run_harness` optional `embedding_backend` parameter + the
-   `"characterise"` registry entry (007/008 precedent). Generation reuses the existing
-   `provider` parameter (a live implementation lands behind it; no signature change).
+   `"characterise"` registry entry (007/08 precedent) + **`grouping_backend` parameter
+   (adversarial finding 1 — blocker, adopted):** the existing
+   `InferenceProvider.complete(prompt) -> str` cannot honestly carry strict structured
+   outputs, two models, schemas, timeouts and budget caps, so generation gets its own
+   seam — a **`GroupingBackend` protocol** (`discover(docs, intent) -> ThemeSet`,
+   `assign(batch, themes) -> Assignments`; `mode: "live" | "stub"`), the
+   SearchBackend/DocumentFetcher/EmbeddingBackend precedent exactly. `run_harness`
+   gains optional `grouping_backend` defaulting to the stub. The grounding
+   `provider` seam is untouched. **This grew gate 3 at adjudication — flagged for
+   the human at re-read.**
 4. **Runtime egress — both fronts, user-confirmed (2026-07-06).**
    `OpenAIEmbeddingBackend` sends chunk text to the embeddings API;
    the grouping call sends titles + abstracts to the chat API with the repo's first
    **product prompt** (lead-authored, versioned) — and the **injection posture comes
    due** (decision 6). Controls in decision 6; `make verify` and all defaults remain
-   egress-free (stub embedder + stub grouper); live is opt-in by explicit wiring +
-   environment key.
+   egress-free (stub embedder + stub grouper); live requires an **explicit live flag
+   in addition to the environment key** (finding 12 — key presence alone never
+   selects egress).
 
 Plus three spec flow-backs approved with this contract: the data-model tag-layer
 clarification (rev 5, decision 10: "nothing hangs off a tag" governs the label; the
@@ -654,8 +786,8 @@ with the egress gate ahead of its first reader — approved exception to the 008
 deferral line).
 
 **Explicitly not crossed:** no agent-loop generation (a fixed two-stage procedure with
-a known call budget — `1 + ceil(n/batch) + per-batch repairs` — schema-bound
-throughout), no auth/tenancy change, no CI change, no pgvector/extension, no
+a baseline call budget of `1 + ceil(n/batch)` and an enforced retry-capped
+maximum — schema-bound throughout), no auth/tenancy change, no CI change, no pgvector/extension, no
 artefact/block writes, no changes to existing tables, no new orchestration dependency
 (the SDK covers structured calls; LangChain would add a dependency for what plain code
 does).
@@ -737,7 +869,7 @@ characterisation row and event payload; the only prompts in the slice.
 - `make verify` (test · typecheck · lint · build) — green, deterministic, zero egress
   (socket-deny covers the characterise round-trip).
 - **One manual live check** (evidence in verification.md): skeleton end-to-end with
-  `OPENAI_API_KEY` set against the fixture corpus — real embeddings, a real grouping
+  the explicit live flag + `OPENAI_API_KEY` set against the fixture corpus — real embeddings, a real grouping
   call (themes + assignments over the fixture docs), landscape summary rendered;
   per-run token/chunk counts and cost note recorded; key absent from all captured
   output.
