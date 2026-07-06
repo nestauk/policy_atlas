@@ -3,9 +3,13 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted, rev 6 — rev 4 accepted by user 2026-07-06 ("seems fine");
-> awaiting final sign-off with the 4.1 + 5 amendments and the rev-6 adversarial
-> adjudication.
+> **Status:** drafted, rev 6.1 — awaiting final sign-off.
+> Rev 6.1 (user pushback on two adjudications, 2026-07-06): finding 9's
+> discard-and-retry **reversed** → targeted residue repair with defined case
+> semantics (invented/dup-same = code fixes, no call; residue = missing ∪
+> conflicting ids, one targeted call — good batches are never burned); finding 12's
+> explicit live flag **reversed** → egress is the product; a configured key on the
+> skeleton is live intent (suite + library defaults stay stub/egress-free).
 > Rev 6 (adversarial adjudication, 2026-07-06): Codex review of rev 4.1 returned
 > **15 findings (2 blockers · 11 majors · 2 minors) — 12 adopted, 2 adopted-in-part,
 > 1 rejected with rationale** (§ Contract-stage adversarial review). Blockers: the
@@ -269,18 +273,20 @@ artefact/block/annotation machinery exists but nothing here writes to it (decisi
      `(1 + discovery_retry_cap) + ceil(n/batch) × (1 + assignment_retry_cap)`**
      (caps a plan detail, small) — the maximum is checked before any live call; the
      baseline is known before the run starts.
-   - **Validation is code, not model trust — per batch, discard-and-retry
-     (adversarial finding 9, adopted simplification):** schema conformance is
-     provider-enforced (strict structured outputs); **exhaustiveness is not
-     schema-expressible**, so code asserts every batch id assigned exactly once, no
-     invented ids. A violating batch's output is **discarded whole and the batch
-     retried once** — a batch persists only when fully valid, so "residue" semantics
-     (undefined for invented-id or duplicate-conflict outputs) never arise; an
-     invalid discovery output (theme count out of bounds, malformed) is likewise
-     discarded and retried once. Still failing → the component fails honestly
-     (decision 11); never silent drops, never a placeholder theme (v2's "General
-     Theme" collapse is unrepresentable — a degenerate outcome is a flagged failure
-     state, not fake success).
+   - **Validation is code, not model trust — per batch, targeted repair with
+     defined residue semantics (finding 9 adopted-then-reversed at user pushback,
+     2026-07-06 — at a few hundred docs, targeted fixes beat burning good
+     batches):** schema conformance is provider-enforced (strict structured
+     outputs); **exhaustiveness is not schema-expressible**, so code validates each
+     batch and repairs by case — **invented ids**: rows dropped in code (no call);
+     **duplicate, same theme**: deduped in code (no call); **missing ids** and
+     **duplicate-conflict ids**: the **residue** — one targeted repair call re-asks
+     exactly those ids against the fixed theme list, the batch's valid assignments
+     kept. An invalid discovery output (theme count out of bounds, malformed) is
+     retried once. Residue still invalid after its repair → the component fails
+     honestly (decision 11); never silent drops, never a placeholder theme (v2's
+     "General Theme" collapse is unrepresentable — a degenerate outcome is a
+     flagged failure state, not fake success).
    - **Empty and small scopes (adversarial finding 8):** `n = 0` → grouping is
      skipped honestly (coverage still reported; summary flags `empty_scope`); small
      `n` → theme-count bounds become `1..min(n, max)`; `n < batch` is one batch.
@@ -594,10 +600,11 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
   = None` and `grouping_backend: GroupingBackend | None = None` on `run_harness`
   (both default to stubs — no default egress); threaded through `HarnessState`.
 - **`skeleton.py`** — chain extended with characterise; renders the landscape summary;
-  uses the live embedder + live grouper **only when an explicit live flag is set
-  (e.g. `POLICY_ATLAS_LIVE=1`) in addition to `OPENAI_API_KEY`** — key presence alone
-  never flips a path to egress (adversarial finding 12, adopted); the baseline call
-  budget is printed before live execution. Stubs otherwise.
+  uses the live embedder + live grouper when `OPENAI_API_KEY` is configured (finding
+  12 adopted-then-reversed at user pushback: egress is the product — a configured key
+  on the demo entrypoint *is* the operator's live intent; the suite and library
+  defaults stay stub/egress-free regardless), logging the baseline call budget before
+  live execution. Stubs otherwise.
 
 ### Tests (`tests/test_characterise.py` + `tests/test_embeddings.py`)
 
@@ -616,13 +623,14 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
   carries its base label; flag-not-block (below-bar/Unknown rows counted, never dropped).
 - Grouping (stub grouper drives the suite; live behaviour is manual evidence + eval
   seam): batching is deterministic (id-ordered, stated batch size); per-batch
-  validation enforces exhaustive assignment — an assignment double returning a missing
-  doc, an invented id, or a duplicate triggers **discard-and-retry of that batch
-  only, once** (asserted: the whole batch re-asked against the fixed theme list;
-  other batches untouched; nothing from the invalid output persisted); invalid
-  discovery output (theme count out of bounds, malformed) discarded and retried once;
-  retry still invalid → honest `component.failed`, no partial grouping persisted, no
-  placeholder theme (asserted unrepresentable); **edge scopes tested: `n=0` (skip +
+  validation enforces exhaustive assignment, repaired by case (finding 9 as
+  reversed): invented ids dropped in code and duplicates-same-theme deduped in code
+  (asserted: **no LLM call made** for either); missing + conflicting ids form the
+  residue — one targeted repair call re-asks exactly those ids (asserted: valid
+  assignments from the batch kept; other batches untouched); invalid discovery
+  output (theme count out of bounds, malformed) retried once; residue repair still
+  invalid → honest `component.failed`, no partial grouping persisted, no placeholder
+  theme (asserted unrepresentable); **edge scopes tested: `n=0` (skip +
   `empty_scope` flag, coverage still reported), `n=1`, `n < batch`** (finding 8);
   `unclustered` is a counted first-class outcome and the invariant covers it
   (`screened_in == grouped + unclustered`); the enforced call-budget maximum is
@@ -721,16 +729,22 @@ landed the `asserted_by` provenance findings 5/6 partially anticipate):
    `1 + ceil(n/batch)` vs enforced retry-capped maximum, checked pre-call.
 8. Empty/small-n scopes unspecified: **adopted** — `n=0` skip + `empty_scope` flag;
    theme bounds `1..min(n, max)`; tests for n=0, n=1, n<batch.
-9. Repair-residue semantics undefined: **adopted (as simplification)** — per-batch
-   discard-and-retry-once; a batch persists only when fully valid.
+9. Repair-residue semantics undefined: **adopted, then reversed at user pushback
+   (2026-07-06)** — the gap is real but the fix is *defining* the semantics, not
+   discarding good batches: invented ids and same-theme duplicates are code-side
+   fixes (no call); residue = missing ∪ conflicting ids, one targeted repair call.
+   At a few hundred docs targeted fixes beat whole-batch retries.
 10. Theme names are untrusted model output: **adopted** — length/charset
     constraints, stored/rendered as data, injection-shaped-name test, standing rule
     that tags/summaries re-enter prompts only as data.
 11. Gap/absence claims need coverage-base machinery: **adopted (forbid option)** —
     009 output makes no absence claims; distributions only, test-asserted; gap-claim
     machinery stays at its seam.
-12. Env-key presence alone flips paths live: **adopted** — explicit live flag
-    required in addition to the key; budget printed before live execution.
+12. Env-key presence alone flips paths live: **adopted, then reversed at user
+    pushback (2026-07-06)** — egress is the product (LLM calls are the tool's normal
+    operation); a configured key on the skeleton is the operator's live intent. What
+    stands: the suite and library defaults are stub/egress-free (socket-deny), and
+    the baseline budget is logged before live execution.
 13. Provider-field shape normalisation unspecified: **adopted** — named plan
     requirement (paths, name-vs-id, string-vs-list, dedup, missing buckets) with
     mixed-shape fixture tests.
@@ -770,10 +784,10 @@ discipline). Both flagged here rather than silently folded.
    `OpenAIEmbeddingBackend` sends chunk text to the embeddings API;
    the grouping call sends titles + abstracts to the chat API with the repo's first
    **product prompt** (lead-authored, versioned) — and the **injection posture comes
-   due** (decision 6). Controls in decision 6; `make verify` and all defaults remain
-   egress-free (stub embedder + stub grouper); live requires an **explicit live flag
-   in addition to the environment key** (finding 12 — key presence alone never
-   selects egress).
+   due** (decision 6). Controls in decision 6; `make verify` and all library
+   defaults remain egress-free (stub embedder + stub grouper, socket-deny in the
+   suite); live activates by explicit wiring — for the skeleton, a configured
+   `OPENAI_API_KEY` (egress is the product; finding 12 reversed at user pushback).
 
 Plus three spec flow-backs approved with this contract: the data-model tag-layer
 clarification (rev 5, decision 10: "nothing hangs off a tag" governs the label; the
@@ -869,7 +883,7 @@ characterisation row and event payload; the only prompts in the slice.
 - `make verify` (test · typecheck · lint · build) — green, deterministic, zero egress
   (socket-deny covers the characterise round-trip).
 - **One manual live check** (evidence in verification.md): skeleton end-to-end with
-  the explicit live flag + `OPENAI_API_KEY` set against the fixture corpus — real embeddings, a real grouping
+  `OPENAI_API_KEY` set against the fixture corpus — real embeddings, a real grouping
   call (themes + assignments over the fixture docs), landscape summary rendered;
   per-run token/chunk counts and cost note recorded; key absent from all captured
   output.
