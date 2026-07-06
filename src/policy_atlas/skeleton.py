@@ -112,6 +112,11 @@ def _run_component(
             embedding_backend=embedding_backend,
             grouping_backend=grouping_backend,
         )
+        if component == "characterise" and langfuse_client is not None:
+            # Scores must attach while the run's span is still the active context.
+            payload = _characterise_payload(events.read(conn, project_id))
+            if payload is not None:
+                tracing.score_summary(langfuse_client, payload)
 
 
 def _text_basis_distribution(conn: Connection, project_id: uuid.UUID) -> dict[str, int]:
@@ -361,9 +366,7 @@ def main() -> None:
     _render_landscape(log_entries)
     log.info("characterisation_row", present=char_row is not None)
 
-    characterise_payload = _characterise_payload(log_entries)
-    if characterise_payload is not None:
-        tracing.score_summary(langfuse_client, characterise_payload)
+    # Scores attach inside the characterise run's span (_run_component); only flush here.
     tracing.flush(langfuse_client)
 
     log.info("skeleton.done")

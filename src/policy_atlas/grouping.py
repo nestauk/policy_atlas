@@ -18,7 +18,11 @@ log = structlog.get_logger()
 
 PROMPT_VERSION = "characterise_grouping_v1"
 DISCOVERY_MODEL = "gpt-5-mini"
-ASSIGNMENT_MODEL = "gpt-5-nano"
+# Plan pinned gpt-5-nano; flipped to gpt-5-mini on live evidence (2026-07-06): nano
+# emits an empty assignments list on realistic 25-doc batches at any reasoning effort
+# (16K reasoning tokens -> `{"assignments":[]}`), mini assigns 25/25 cleanly. Deviation
+# flagged in verification.md; the nano-class pin was plan-gate detail, not contract.
+ASSIGNMENT_MODEL = "gpt-5-mini"
 BATCH_SIZE = 40
 MAX_CONCURRENT_BATCHES = 4
 DISCOVERY_RETRY_CAP = 1
