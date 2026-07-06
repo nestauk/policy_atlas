@@ -561,8 +561,9 @@ FK-safe order.
   summary) · the `characterise_grouping_v1` prompt pair (lead-authored) ·
   validation/repair helpers.
 - **`ingest.py` / `acquire.py` / `ingest_full_text.py`** — call
-  `embed_pending_chunks` after their chunk writes (counts folded into their
-  `component.completed` payloads). `acquire.py` additionally materialises provider
+  `embed_pending_chunks` after their chunk writes (counts folded into the two
+  components' `component.completed` payloads; upload ingest has no component
+  surface, so its counts go to a structured log — plan-review finding 3). `acquire.py` additionally materialises provider
   topical assertions into `source_tag` per envelope (deterministic per-backend
   normalisation; `asserted_by` per provenance class; insert-if-absent).
 - **`plan.py`** — `"characterise": {"requires": ["evidence_scope_id"]}`.

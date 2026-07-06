@@ -1,6 +1,8 @@
 # Implementation Plan: 009-characterise
 
-> **Status:** drafted — awaiting plan-phase adversarial review + human confirmation.
+> **Status:** drafted, rev 2 — plan-phase adversarial review adjudicated (Codex,
+> 2026-07-06: 9 findings — 2 blockers · 6 majors · 1 minor; 8 adopted, 1
+> adopted-in-part; § Findings & adjudication) — awaiting human confirmation.
 > Contract: [contract.md](contract.md) (approved 2026-07-06 · Shabeer Rauf, rev 9;
 > contract-stage adversarial findings adjudicated at revs 6–6.1).
 
@@ -67,8 +69,9 @@ flag, not silently absorb.
   - OpenAlex: `primary_topic.display_name`; `topics[].display_name`;
     `sustainable_development_goals[].display_name` → asserted_by `openalex`.
   - Overton: `topics` (string **or** list — both handled); `classifications[]`
-    (name field); `sdgcategories[]` → `overton`; `llm_document_theme` (single
-    string) → `overton_llm`.
+    (**string entries** — the as-built fixture shape, overton_documents.json:76;
+    object-with-`name` accepted defensively; finding 5); `sdgcategories[]` →
+    `overton`; `llm_document_theme` (single string) → `overton_llm`.
   - Normalisation: strip, collapse internal whitespace, preserve case for display,
     dedupe per (document × tag_type × asserted_by) case-insensitively; missing/
     non-string values skipped silently (they are absent, not errors).
@@ -128,9 +131,16 @@ Task 1 (schema + migration 9 + deps openai/langfuse)
   don't already exist from the screening-result precedent; any addition is within
   gate 1 and noted in verification.md).
 - Drop `source_classification_result.open_tags` + `ck_scr_open_tags_array`
-  (downgrade restores); `classify.py` stops emitting the field.
+  (downgrade restores) **with the full reader/writer/test cleanup in this task**
+  (plan-review finding 1 — Phase 1's `make verify` must be green): `classify.py`
+  (`ClassifyResult.open_tags` field, insert values, event payload —
+  classify.py:38/150/165), `skeleton.py` (column select + log kwarg —
+  skeleton.py:194/238), `tests/test_classify.py` (its `open_tags` assertions).
 - Module docstring: "nineteen tables, nine alembic migrations".
-- `pyproject.toml`: `openai` + `langfuse` (pin minimums); `uv lock`.
+- `pyproject.toml`: `openai` + `langfuse` (pin minimums); `uv lock`. **SDK surface
+  verification** (finding 9): after install, confirm the pinned versions' actual
+  APIs (OpenAI strict structured outputs; Langfuse spans/scores + no-keys behaviour)
+  and record any deltas in a scratch note before Tasks 5/7 briefs go out.
 
 **Acceptance:** migration roundtrips; `make verify` green (nothing reads the new
 tables yet). **Commit.** Scope: S–M.
@@ -143,13 +153,22 @@ Protocol + `OpenAIEmbeddingBackend` (timeouts, retry/backoff, 128-text batches) 
 `StubEmbeddingBackend` (content-hash vectors, 1536-dim) + unit derivation
 (2,000-char sentence-boundary units, 200-char overlap, offsets) +
 `embed_pending_chunks` (anti-join over units, deterministic order, honest counts,
-`max_chunks` guard). Vector validation on insert. Done = the embed-pass test block.
-Scope: M (~250 lines).
+`max_chunks` guard). **The pending-chunk query is project-scoped** (finding 4 —
+`chunk`/`source_snapshot` are project-free): eligible chunks = those whose
+`source_snapshot_id` is in the current project's envelope ∪ full-text snapshot
+union from `project_source_snapshot`, deduped — a two-project test proves no other
+project's chunks are embedded or sent (egress scope, not just correctness). Vector
+validation on insert. Done = the embed-pass test block. Scope: M (~250 lines).
 
 ### Task 3: Ingestion wiring + provider tags — `codex`
 
-`ingest.py` / `acquire.py` / `ingest_full_text.py` call `embed_pending_chunks`
-post-chunk-write (counts into their payloads). `acquire.py` materialises provider
+`acquire.py` / `ingest_full_text.py` call `embed_pending_chunks` post-chunk-write,
+counts folded into their `component.completed` payloads. `ingest.py`
+(`ingest_upload`) also calls it, but it is a plain function returning a UUID with
+no component/event surface (finding 3 — ingest.py:14/22): its embed counts go to a
+**structured log line only**; no return-shape or interface change. (Contract's
+"their payloads" wording adjusted to match — flagged in § Findings, within
+approved semantics.) `acquire.py` materialises provider
 tags per the pinned normalisation table (insert-if-absent, provenance classes).
 Done = eager-uniform + tag-materialisation test blocks. Scope: M. **Commit** after
 Phase 2 verify green.
@@ -178,7 +197,9 @@ absence-claim fields) → grouping orchestration (budget check → discover → 
 batched concurrent assign → per-batch validation/repair by the decision-4 case
 table) → theme tags (`asserted_by="characterise"`) → characterisation row
 (`grouping_provenance` required keys) → landscape summary (frozen shape). Honest
-failure per decision 11. Done = the grouping + coverage + summary test blocks.
+failure per decision 11: grouping failure raises a structured
+`CharacteriseFailure` carrying the already-computed coverage (consumed by Task 8's
+node — finding 2). Done = the grouping + coverage + summary test blocks.
 Scope: L (~350 lines). **Commit** after Phase 3 verify green.
 
 ## Phase 4 — Tracing + wiring
@@ -192,8 +213,13 @@ without keys (asserted); full I/O on spans. Scope: S–M.
 
 - `plan.py`: `"characterise": {"requires": ["evidence_scope_id"]}`.
 - `harness.py`: `embedding_backend` + `grouping_backend` params (stub defaults
-  resolved inside `run_harness`), `HarnessState`, `_run_characterise` via
-  `_run_scope_component`, node + conditional edge.
+  resolved inside `run_harness`), `HarnessState`, **`_run_characterise` as a
+  characterise-specific node** (finding 2 — `_run_scope_component`'s generic
+  except-path emits only `{component, error}`, harness.py:166-170, which cannot
+  carry decision 11's coverage-in-failure-payload): mirrors `_run_scope_component`
+  but catches a structured `CharacteriseFailure(coverage=…, error=…)` from
+  `characterise_scope` and emits `component.failed` with `{component, error,
+  coverage}`; node + conditional edge.
 - `skeleton.py`: characterise after ingest_full_text; render the landscape summary;
   live backends iff `OPENAI_API_KEY` set; log baseline budget before live calls.
 - `tests/helpers.py`: three tables in FK-safe delete order.
@@ -230,6 +256,13 @@ components §5 ×2 (content-vs-artefact; thematic mechanism + vectorisation-with
 exception) + data-model tag-layer provenance clarification + `log.md` entries;
 `make okf-validate` green.
 
+### Task 11b: ADR 0005 — `lead` (design-phase step 4; finding 7)
+
+`docs/adr/0005-embed-grouping-seams-first-egress.md` — the embed + generation
+seams, first product egress, injection posture, and Langfuse full-I/O decision;
+status Accepted with sign-off date. **Written at plan confirmation, before the
+build conversation opens** (it records design decisions, not build outcomes).
+
 ### Task 12: `verification.md` + live manual run — `lead`
 
 Per the contract's evidence list, including the live skeleton run with
@@ -237,6 +270,15 @@ Per the contract's evidence list, including the live skeleton run with
 over the fixture corpus, embed/grouping counts, cost note, dev-instance trace
 (span structure, prompt version, tokens); determinism evidence (two stub runs
 byte-identical). **Commit** (flow-backs + verification).
+
+### Review stack (rubric box 11 — owned by conversation C, not this plan;
+finding 8 adopted-in-part)
+
+Per the task-cycle spine, the Tier-3 review stack (contract verifier · code review ·
+security lane · adversarial review · simplification) runs in a **fresh review
+conversation** after the build completes — the adjudicator must not be the chat
+that wrote the code. Its findings land in verification.md § Review findings. This
+plan's scope ends at step 6; the handoff artifact is verification.md.
 
 ### Step-8 obligations (after the review stack, in the PR)
 
@@ -254,7 +296,7 @@ vectorisation entry discharged-ahead-of-reader · point-in-time claims sweep.
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| OpenAI strict structured outputs with a per-run dynamic theme list | Assignment schema can't enumerate themes statically | Assignment output uses `theme_index: int` validated in code against the list (no dynamic enum needed); invalid index = invented-id case |
+| OpenAI strict structured outputs with a per-run dynamic theme list | Assignment schema can't enumerate themes statically | Schema field is `theme: string` (matching the contract's `theme \| "unclustered"`); the fixed list travels in the prompt and **code validates the returned string** against it — an unknown theme string joins the residue (finding 6; no `theme_index`, no dynamic enum) |
 | Rate limits on the concurrent assignment wave | 429s mid-run | Concurrency cap 4 + bounded backoff inside the backend; batches are independent |
 | Char-budget heuristic misestimates tokens on dense text | Oversized embed input rejected by API | Conservative 2,000-char target ≈ half the 8K window; API-side length error → that unit fails honestly and retries next pass |
 | Stub grouper too clean to exercise repair paths | Repair logic untested | Task 10 uses purpose-built misbehaving doubles (invented ids, dups, missing) — the stub is for happy paths only |
@@ -263,6 +305,36 @@ vectorisation entry discharged-ahead-of-reader · point-in-time claims sweep.
 | Overton `topics` shape variance beyond string-or-list | Materialisation drops tags silently | Normalisation skips non-strings by rule (absent, not error) + mixed-shape fixture tests pin behaviour |
 | Live discovery themes disappoint on fixture corpus | Verification looks weak | The bar is machinery correctness (contract); theme quality is the eval seam — note honestly in verification.md |
 | Cost runaway on a mis-scoped run | Spend | Budget maximum checked pre-call; embed `max_chunks` guard; skeleton logs baseline budget before live calls |
+
+## Plan-phase adversarial review — findings & adjudication (Codex, 2026-07-06)
+
+Nine findings, verified against the repo before adoption; 8 adopted, 1
+adopted-in-part:
+1. Phase-1 `make verify` impossible after `open_tags` drop (blocker — classify.py,
+   skeleton.py, test_classify.py all still touch it): **adopted** — full cleanup
+   moved into Task 1.
+2. `_run_scope_component`'s failure path can't carry decision 11's coverage payload
+   (blocker — harness.py:166-170 emits `{component, error}` only): **adopted** —
+   characterise-specific node + structured `CharacteriseFailure(coverage=…)`.
+3. Upload ingest has no component/payload surface for embed counts (ingest.py
+   returns a UUID; no registry entry): **adopted** — upload embed counts go to a
+   structured log; no interface change; contract wording aligned.
+4. Embed anti-join not project-scoped (chunk/source_snapshot are project-free;
+   egress-scope risk): **adopted** — query pinned to the project's snapshot union;
+   two-project egress-scope test added.
+5. Overton `classifications[]` entries are strings in the as-built fixtures, not
+   `{name}` objects: **adopted** — normalisation table corrected (strings primary,
+   object-with-name defensive).
+6. `theme_index` in the risk table contradicts the approved contract's
+   `theme | "unclustered"` schema: **adopted** — theme strings validated in code;
+   unknown string joins the residue; no index.
+7. ADR 0005 required but unowned: **adopted** — Task 11b, lead, written at plan
+   confirmation before the build.
+8. Review-stack execution unowned: **adopted-in-part** — it is deliberately not a
+   build task (the spine assigns it to fresh conversation C); the plan now states
+   the ownership and handoff explicitly instead of leaving it implicit.
+9. OpenAI/Langfuse SDK surfaces unverifiable from the repo: **adopted** — SDK
+   verification step in Task 1 before dependent briefs go out.
 
 ## Open questions
 
