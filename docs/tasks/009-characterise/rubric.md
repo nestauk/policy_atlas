@@ -3,7 +3,7 @@
 Core completion criteria. The task is **done only if every box holds** — otherwise it is
 in progress, not done.
 
-1. [ ] Implementation satisfies [contract.md](contract.md) — all twelve numbered
+1. [ ] Implementation satisfies [contract.md](contract.md) — all thirteen numbered
        decisions as approved (or as amended at the gates, recorded in the contract).
 2. [ ] `make verify` passes — deterministic and **zero-egress** (stub embedder + stub
        grouper; tracing no-op without keys; socket-deny covers an end-to-end
@@ -18,8 +18,9 @@ in progress, not done.
        pgvector, no generation surface beyond the grouping pair, no artefact/block
        writes, no new orchestration dependency; trace-content scope matches the
        decision-13 sign-off.
-4. [ ] No generated files or secrets edited by hand; `OPENAI_API_KEY` appears in no
-       committed file, log, event payload or verification artifact (test-asserted).
+4. [ ] No generated files or secrets edited by hand; `OPENAI_API_KEY` and
+       `LANGFUSE_*` credentials appear in no committed file, log, event payload or
+       verification artifact (test-asserted).
 5. [ ] No tests deleted, skipped or weakened without written justification.
 6. [ ] Verification evidence recorded ([verification.md](verification.md)): counting
        invariants, eager-uniform coverage, validation/repair behaviour, determinism
