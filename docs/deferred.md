@@ -347,10 +347,14 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   spans, in-span scores, no-op with nothing configured, loud on partial config / missing
   host): runtime prompt-registry deployment (labels/environments, emergency-edit
   reconciliation), retention/sampling/masking/access policies, trace→eval-dataset
-  promotion, and the **thread-context span-nesting wart** — OTel context does not
-  propagate into `ThreadPoolExecutor` workers, so the first concurrent `assign` call
-  surfaces as a detached trace (span content complete; fix is context capture/attach at
-  submit, verified still present at the 009 review).
+  promotion, and **two detached-trace warts** (span content complete in both; verified
+  against the live instance, 2026-07-06): (a) OTel context does not propagate into
+  `ThreadPoolExecutor` workers, so the first concurrent `assign` call surfaces as a
+  detached trace — fix is context capture/attach at submit; (b) the **upload-ingest embed
+  pass** runs outside any `component_span` (`ingest_upload` is app-boundary, not a run
+  component), so its `embed:batchN` observations mint their own root traces — resolves
+  with the upload audit-event seam below, which gives uploads their own observability
+  surface.
 - **Steering modes / landscape→synthesis steer-point pause** — plan-as-object machinery;
   the payload it relays (the structured landscape summary in `component.completed`) ships
   now (contract decision 8).
@@ -362,7 +366,9 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **Upload audit-event seam** — when the web-app slice gives uploads a real surface they
   get their own audit event + observable processing (incl. embed counts, currently a
   structured log line `ingest_upload.embed_counts`) — an app-boundary event, not a run
-  component (user Q&A at the 009 plan gate).
+  component (user Q&A at the 009 plan gate). Its tracing rides along: a live upload's
+  embed batches currently surface as detached root traces (no surrounding span — wart (b)
+  in the Langfuse entry above); the seam wraps them in an upload-scoped span.
 
 ## Data model / evidence
 

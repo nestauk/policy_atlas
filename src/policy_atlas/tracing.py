@@ -232,7 +232,7 @@ def component_span(
     run_id: uuid.UUID,
     project_id: uuid.UUID,
     component: str,
-) -> Iterator[None]:
+) -> Iterator[Any]:
     """Open run and component spans when tracing is enabled.
 
     Args:
@@ -242,10 +242,11 @@ def component_span(
         component: Component name.
 
     Yields:
-        ``None``.
+        The root ``run:{run_id}`` span (trace-level input/output derive from the
+        root observation in the OTel SDK), or ``None`` when tracing is off.
     """
     if client is None:
-        yield
+        yield None
         return
 
     with _observation(client, name=f"run:{run_id}", as_type="span") as run_span:
@@ -256,18 +257,35 @@ def component_span(
             as_type="span",
         ) as component_observation:
             component_observation.update(metadata={"component": component})
-            yield
+            yield run_span
 
 
-def score_summary(client: Langfuse | None, summary: dict[str, Any]) -> None:
-    """Attach summary scores to the current Langfuse trace.
+def score_summary(
+    client: Langfuse | None,
+    summary: dict[str, Any],
+    *,
+    intent: str | None = None,
+    root_span: Any = None,
+) -> None:
+    """Attach summary scores and trace-level I/O to the current Langfuse trace.
+
+    Trace input/output derive from the root observation, making the run legible
+    from the trace *list* view; the full per-call payloads stay on the nested
+    observations.
 
     Args:
         client: Langfuse client, or ``None`` for no-op tracing.
-        summary: Characterise landscape summary.
+        summary: Characterise landscape summary — becomes the trace output.
+        intent: Evidence-scope intent — becomes the trace input.
+        root_span: The ``run:{run_id}`` root span yielded by ``component_span``.
     """
     if client is None:
         return
+    if root_span is not None:
+        root_span.update(
+            input={"component": "characterise", "intent": intent},
+            output=summary,
+        )
     client.score_current_trace(
         name="unclustered_share",
         value=float(summary["unclustered"]["share"]),

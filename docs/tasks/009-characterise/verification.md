@@ -112,10 +112,18 @@ mode=live traced=True`; exit 0; `characterisation_row present=True`.
   generation (model, prompt_version `characterise_grouping_v1`, token usage, full I/O)
   and scores (`unclustered_share`, `grouping_repair_taken`) attached in-span (0 context
   errors after the score-placement fix). The full-text run trace carries the 10 embed
-  batch observations. **Known wart**: the first `assign` call surfaces as a detached
-  trace — OTel context does not propagate into the `ThreadPoolExecutor` worker that runs
-  concurrent assignment batches. Recorded under the Langfuse observability seam
-  (docs/deferred.md at step 8); span content itself is complete.
+  batch observations. **Post-review trace improvement (user-directed, 2026-07-06)**: the
+  characterise run trace now also carries **trace-level input/output** (scope intent →
+  landscape summary, set on the `run:{run_id}` root span per the OTel model) so the run
+  is legible from the trace-list view — verified live via the public API
+  (`run:6522945a…`: input 87ch, output 9,452ch, 2 scores); stub-only component traces
+  stay I/O-null by choice (they fill when live tools replace the stubs). **Known warts
+  (both recorded in docs/deferred.md)**: (a) the first `assign` call surfaces as a
+  detached trace — OTel context does not propagate into the `ThreadPoolExecutor` worker
+  that runs concurrent assignment batches; (b) the upload-ingest embed batch surfaces as
+  a detached `embed:batch1` root trace — `ingest_upload` is app-boundary, outside any
+  `component_span` (spotted at the step-7 API audit; resolves with the upload audit-event
+  seam). Span content is complete in both.
 - **Honest cost note**: successful run ≈ 0.5M embedding tokens (~$0.01) + ~15K gpt-5-mini
   tokens (<$0.03). Including the first (failed) live run and the assignment-model
   diagnostics, total live spend for the slice ≈ $0.10.

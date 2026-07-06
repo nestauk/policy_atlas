@@ -101,7 +101,7 @@ def _run_component(
 
     with tracing.component_span(
         langfuse_client, run_id=run_id, project_id=project_id, component=component
-    ):
+    ) as run_span:
         # provider unused by scope components but required by the harness signature
         run_harness(
             conn,
@@ -113,10 +113,18 @@ def _run_component(
             grouping_backend=grouping_backend,
         )
         if component == "characterise" and langfuse_client is not None:
-            # Scores must attach while the run's span is still the active context.
+            # Scores and trace I/O must attach while the run's span is still the
+            # active context.
             payload = _characterise_payload(events.read(conn, project_id), run_id=run_id)
             if payload is not None:
-                tracing.score_summary(langfuse_client, payload)
+                intent = conn.execute(
+                    select(evidence_scope.c.intent).where(
+                        evidence_scope.c.evidence_scope_id == scope_id
+                    )
+                ).scalar_one()
+                tracing.score_summary(
+                    langfuse_client, payload, intent=intent, root_span=run_span
+                )
 
 
 def _text_basis_distribution(conn: Connection, project_id: uuid.UUID) -> dict[str, int]:
