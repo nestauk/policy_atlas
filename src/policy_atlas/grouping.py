@@ -236,12 +236,12 @@ class GroupingBackend(Protocol):
     Backends perform provider calls or deterministic fixture-like work and return
     raw model output after structural parsing only. Callers own semantic
     validation, including ``validate_themes`` and assignment exhaustiveness.
-
-    Attributes:
-        mode: ``"live"`` or ``"stub"``.
     """
 
-    mode: str
+    @property
+    def mode(self) -> str:
+        """``"live"`` or ``"stub"``; read-only so tracing wrappers can proxy it."""
+        ...
 
     def discover(
         self,

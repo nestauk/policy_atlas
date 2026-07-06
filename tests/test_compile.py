@@ -102,3 +102,16 @@ def test_ingest_full_text_valid_with_scope_id() -> None:
     config = compile(plan)
     assert config.component == "ingest_full_text"
     assert config.evidence_scope_id == scope_id
+
+
+def test_characterise_requires_evidence_scope_id() -> None:
+    with pytest.raises(ValidationError):
+        Plan(component="characterise")
+
+
+def test_characterise_valid_with_scope_id() -> None:
+    scope_id = uuid.uuid4()
+    plan = Plan(component="characterise", evidence_scope_id=scope_id)
+    config = compile(plan)
+    assert config.component == "characterise"
+    assert config.evidence_scope_id == scope_id

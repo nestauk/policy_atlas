@@ -76,13 +76,12 @@ class _ChunkState:
 
 
 class EmbeddingBackend(Protocol):
-    """The embedding seam, implemented by live and deterministic backends.
+    """The embedding seam, implemented by live and deterministic backends."""
 
-    Attributes:
-        mode: ``"live"`` or ``"stub"``.
-    """
-
-    mode: str
+    @property
+    def mode(self) -> str:
+        """``"live"`` or ``"stub"``; read-only so tracing wrappers can proxy it."""
+        ...
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """Embed texts in input order.
