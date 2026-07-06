@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — sixteen tables, eight alembic migrations.
+"""SQLAlchemy Core table metadata — nineteen tables, nine alembic migrations.
 
 No deferred columns (no block/artefact summary, no same_content_as, no lineage key).
 """
@@ -305,7 +305,6 @@ source_classification_result = Table(
     Column("project_id", UUID(as_uuid=True), nullable=False),
     Column("classified_by_run_id", UUID(as_uuid=True), nullable=False),
     Column("primary_evidence_type", Text, nullable=False),
-    Column("open_tags", JSONB, nullable=False),
     Column("classified_at", DateTime(timezone=True), nullable=False),
     # Cross-project FK guards: all three parents must share the same project_id
     ForeignKeyConstraint(
@@ -330,10 +329,7 @@ source_classification_result = Table(
         "evidence_scope_id", "project_source_snapshot_id",
         name="uq_scr_scope_source",
     ),
-    CheckConstraint(
-        "jsonb_typeof(open_tags) = 'array'",
-        name="ck_scr_open_tags_array",
-    ),
+    # open_tags retired in task 009 (decision 10) — source_tag is the single tag home.
     # Safe only because EVIDENCE_TYPES is a fixed, developer-controlled tuple (no user input,
     # no apostrophe-escaping) — never build a CHECK constraint this way from runtime data.
     CheckConstraint(
@@ -429,4 +425,90 @@ search_coverage_record = Table(
     ),
     CheckConstraint("jsonb_typeof(backends) = 'array'", name="ck_scov_backends_array"),
     CheckConstraint("jsonb_typeof(scope_filters) = 'object'", name="ck_scov_filters_object"),
+)
+
+# --- Characterise model (task 009) ---
+
+chunk_embedding = Table(
+    "chunk_embedding",
+    metadata,
+    Column("chunk_embedding_id", UUID(as_uuid=True), primary_key=True),
+    Column("chunk_id", UUID(as_uuid=True), ForeignKey("chunk.chunk_id"), nullable=False),
+    Column("embedding_profile", Text, nullable=False),  # e.g. "openai_text_embedding_3_small_v1"
+    Column("unit_policy", Text, nullable=False),        # e.g. "embedding_unit_policy_v1"
+    Column("unit_index", Integer, nullable=False),
+    Column("unit_locator", JSONB, nullable=False),      # char offsets into the canonical chunk
+    # Vector as a JSONB float array — code-validated (array, expected dims, finite floats);
+    # pgvector arrives with the retrieve slice, the vectors' first reader (decision 3).
+    Column("vector", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint(
+        "chunk_id", "embedding_profile", "unit_policy", "unit_index",
+        name="uq_chunk_embedding_unit",
+    ),
+)
+
+characterisation_result = Table(
+    "characterisation_result",
+    metadata,
+    Column("characterisation_id", UUID(as_uuid=True), primary_key=True),
+    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
+    Column("run_id", UUID(as_uuid=True), nullable=False),
+    # Required keys (test-asserted): prompt_version, discovery_model, assignment_model,
+    # batch_size, retry counts.
+    Column("grouping_provenance", JSONB, nullable=False),
+    Column("coverage", JSONB, nullable=False),
+    # Theme names, descriptions, member ids, sizes, the unclustered set — run-local by
+    # design (capability.md): memberships never promote to canonical corpus state.
+    Column("themes", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    # Cross-project FK guards, per the screening-result precedent.
+    ForeignKeyConstraint(
+        ["evidence_scope_id", "project_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
+        name="fk_char_scope_project",
+    ),
+    ForeignKeyConstraint(
+        ["run_id", "project_id"],
+        ["runs.run_id", "runs.project_id"],
+        name="fk_char_run_project",
+    ),
+    UniqueConstraint("evidence_scope_id", "run_id", name="uq_char_scope_run"),
+)
+
+source_tag = Table(
+    "source_tag",
+    metadata,
+    Column("source_tag_id", UUID(as_uuid=True), primary_key=True),
+    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("project_source_snapshot_id", UUID(as_uuid=True), nullable=False),
+    Column("tag", Text, nullable=False),
+    Column("tag_type", Text, nullable=False),
+    # Assertion provenance: provider-curated ("openalex", "overton"), provider-LLM
+    # ("overton_llm") and own-capability ("characterise") assertions never mix —
+    # the same tag from two asserters is two rows (corroboration, not duplication).
+    Column("asserted_by", Text, nullable=False),
+    Column("created_by_run_id", UUID(as_uuid=True), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    ForeignKeyConstraint(
+        ["project_source_snapshot_id", "project_id"],
+        [
+            "project_source_snapshot.project_source_snapshot_id",
+            "project_source_snapshot.project_id",
+        ],
+        name="fk_stag_pss_project",
+    ),
+    ForeignKeyConstraint(
+        ["created_by_run_id", "project_id"],
+        ["runs.run_id", "runs.project_id"],
+        name="fk_stag_run_project",
+    ),
+    UniqueConstraint(
+        "project_source_snapshot_id", "tag_type", "tag", "asserted_by",
+        name="uq_source_tag_assertion",
+    ),
+    # Widens by a one-line migration when the LLM classify tool's seam opens
+    # ("methodological_structural") — no speculative value ships now (decision 10).
+    CheckConstraint("tag_type IN ('topic_theme')", name="ck_stag_tag_type"),
 )

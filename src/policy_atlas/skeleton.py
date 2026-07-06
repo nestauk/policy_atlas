@@ -191,7 +191,6 @@ def main() -> None:
         classify_results = conn.execute(
             select(
                 source_classification_result.c.primary_evidence_type,
-                source_classification_result.c.open_tags,
             ).where(source_classification_result.c.project_id == project_id)
         ).fetchall()
 
@@ -234,8 +233,7 @@ def main() -> None:
                  confidence=row.screen_decision_confidence)
 
     for row in classify_results:
-        log.info("classification_result", evidence_type=row.primary_evidence_type,
-                 open_tags=row.open_tags)
+        log.info("classification_result", evidence_type=row.primary_evidence_type)
 
     for row in appraise_results:
         log.info("appraisal_result", quality_score=row.quality_score,

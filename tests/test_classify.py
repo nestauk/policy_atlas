@@ -31,7 +31,7 @@ from tests.helpers import (
 # --- Schema ---
 
 def test_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 16
+    assert len(metadata.tables) == 19
 
 
 # --- Stub logic (pure Python, no DB) ---
@@ -39,25 +39,21 @@ def test_table_count(conn: Connection) -> None:
 def test_stub_default_unknown() -> None:
     result = _stub_classify({})
     assert result.primary_evidence_type == "Unknown / Insufficient information"
-    assert result.open_tags == []
 
 
 def test_stub_non_evidence() -> None:
     result = _stub_classify({"_stub_non_evidence": True})
     assert result.primary_evidence_type == "Other (Non-evidence documents)"
-    assert result.open_tags == []
 
 
 def test_stub_policy_guidance() -> None:
     result = _stub_classify({"_stub_policy_guidance": True})
     assert result.primary_evidence_type == "Policy Syntheses & Guidance Documents"
-    assert result.open_tags == []
 
 
 def test_stub_rct() -> None:
     result = _stub_classify({"_stub_rct": True})
     assert result.primary_evidence_type == "RCTs and Quasi-Experimental Studies"
-    assert result.open_tags == []
 
 
 # --- Round-trips ---
@@ -227,28 +223,6 @@ def test_ck_bad_primary_evidence_type(conn: Connection) -> None:
             project_id=pid,
             classified_by_run_id=rid,
             primary_evidence_type="Not A Valid Type",
-            open_tags=[],
-            classified_at=now(),
-        ))
-    conn.rollback()
-    conn.begin()
-
-
-def test_ck_open_tags_must_be_array(conn: Connection) -> None:
-    pid, rid = seed_project_and_run(conn)
-    scope_id = seed_scope(conn, pid)
-    _, pss_id = seed_source(conn, pid)
-
-    # Pass a Python dict — SQLAlchemy stores it as JSON object {}, violating the array constraint
-    with pytest.raises(IntegrityError):
-        conn.execute(source_classification_result.insert().values(
-            source_classification_result_id=uuid.uuid4(),
-            evidence_scope_id=scope_id,
-            project_source_snapshot_id=pss_id,
-            project_id=pid,
-            classified_by_run_id=rid,
-            primary_evidence_type="Unknown / Insufficient information",
-            open_tags={},
             classified_at=now(),
         ))
     conn.rollback()
@@ -272,7 +246,6 @@ def test_uq_scope_source_duplicate(conn: Connection) -> None:
             project_id=pid,
             classified_by_run_id=rid,
             primary_evidence_type="Unknown / Insufficient information",
-            open_tags=[],
             classified_at=now(),
         ))
     conn.rollback()
@@ -291,9 +264,9 @@ def test_cross_project_fk_rejected(conn: Connection) -> None:
         conn.execute(sa.text(
             "INSERT INTO source_classification_result "
             "(source_classification_result_id, evidence_scope_id, project_source_snapshot_id, "
-            " project_id, classified_by_run_id, primary_evidence_type, open_tags, classified_at) "
+            " project_id, classified_by_run_id, primary_evidence_type, classified_at) "
             "VALUES (:scrid, :scope_id, :pss_id, :pid_a, :rid_a, "
-            "'Unknown / Insufficient information', '[]'::jsonb, :ts)"
+            "'Unknown / Insufficient information', :ts)"
         ), {
             "scrid": uuid.uuid4(),
             "scope_id": scope_id,
@@ -407,7 +380,6 @@ def test_source_classified_event_payload(conn: Connection) -> None:
     assert p["project_source_snapshot_id"] == str(pss_id)
     assert p["evidence_scope_id"] == str(scope_id)
     assert p["primary_evidence_type"] == "Unknown / Insufficient information"
-    assert p["open_tags"] == []
 
 
 def test_delete_project_data_removes_classification(conn: Connection) -> None:
