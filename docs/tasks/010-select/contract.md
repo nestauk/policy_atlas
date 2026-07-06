@@ -76,7 +76,13 @@ specs in [docs/specs/](../../specs/index.md).
 >   subsection added · same-run re-run semantics stated · strategy-count and
 >   stale-verification wording fixed. Declined: a no-op policy field (spec's
 >   tilt is conditional on a policy object that doesn't exist; the 009 dual-view
->   precedent defers identically).
+>   precedent defers identically). **Rev 6.1** (user follow-ups): LLM score
+>   scale 0–100 → **0–10** (coarse judgment levels; composite breaks ties —
+>   fine granularity was false precision across batches) · the policy
+>   integration path pinned (policy compiles into directive boosts when its
+>   slice lands — the boost surface is the ground-up design; select code
+>   untouched by construction) · listwise ordering noted at the rerank-quality
+>   eval seam.
 
 ## Goal
 
@@ -336,7 +342,13 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
    **declined** — the spec's tilt is conditional on a supplied policy, exactly
    like characterise's dual-view coverage, which 009 deferred the same way
    without a spec change; an inert field is what data-model Principle 10
-   forbids.)
+   forbids.) **The policy's integration path is designed, not deferred-blind**
+   (user question, rev 6.1): "tilts but never gates" is mechanically a set of
+   soft boosts — so when the policy slice lands, the policy **compiles into
+   directive boosts** (provenance-stamped as policy-sourced), becoming one more
+   directive author alongside the user and the capability agent. Select's code
+   is untouched by construction; the boost surface *is* the ground-up design
+   for it. Recorded in `docs/deferred.md` with this shape.
 5. **Persistence: one run-scoped `selection_result` row — selection is run-local.**
    Mirrors `characterisation_result`: one row per `(evidence_scope_id, run_id)`,
    recomputable, superseded by the next run, never canonical corpus state. Extract
@@ -447,16 +459,23 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
       order candidates; they never exclude (the structure of decision 1 is
       untouched).
     - **Score semantics — LLM and composite scores are never mixed in one
-      comparison** (adversarial finding 3). LLM scores are **bounded integers
-      0–100** (schema-enforced). The within-stratum ordering under
-      `llm_rerank_v1` is: **LLM-scored docs first** (score desc → composite
-      desc → pss id), **then fallback docs** (composite desc → pss id), each
-      block internally deterministic. Whole stratum fallback ≡ the
-      deterministic composite ordering exactly. Rationale: the two scales are
-      not commensurable — interleaving them would fake precision; a defined
-      scored-before-fallback rule is honest, deterministic, and collapses to
-      the right limit in both directions (no fallbacks / all fallbacks). Both
-      scores are recorded per doc either way.
+      comparison** (adversarial finding 3). LLM scores are **coarse bounded
+      integers 0–10** (schema-enforced; rev 6.1 — user challenge held: 0–100
+      was false precision; LLM pointwise scores are poorly calibrated and a
+      stratum's candidates can span batches, so cross-call noise would do the
+      ordering at fine granularity). The within-stratum ordering under
+      `llm_rerank_v1` is: **LLM-scored docs first** (score desc → **ties by
+      composite desc** → pss id), **then fallback docs** (composite desc →
+      pss id), each block internally deterministic. Ties are the designed
+      handoff: the LLM expresses ~10 levels of purpose-fit judgment; the
+      deterministic composite refines within a level. Whole-stratum fallback ≡
+      the deterministic composite ordering exactly. The two scales are never
+      interleaved (incommensurable — a defined scored-before-fallback rule is
+      honest, deterministic, and collapses to the right limit in both
+      directions). Both scores are recorded per doc either way. (Listwise
+      ordering — the model emitting a ranking, not scores — is the known-better
+      method with a cross-batch merge cost: recorded at the rerank-quality eval
+      seam.)
     - **`RankingBackend` seam** mirroring `GroupingBackend`:
       `rank(batch, intent) -> scores+reasons` + `mode`; `OpenAIRankingBackend`
       (structured outputs) + deterministic stub for the suite. `run_harness
@@ -751,7 +770,9 @@ payload; the only prompt in the slice. No embeddings use (rev 4).
   **cross-encoder relevance models (Cohere-class, Bedrock) at the `retrieve`
   seam** · **capability-run entity spanning components** · **embedding-relevance
   for select, declined** (rev 4 — revisit only via rerank-quality evals) ·
-  selection-diversity extensions · policy soft-prior tilt · second strategies ·
+  selection-diversity extensions · policy soft-prior tilt (integration shape
+  recorded: the policy compiles into directive boosts, provenance-stamped —
+  select untouched) · listwise rerank ordering · second strategies ·
   full appraisal on the selected subset — pointer updates where 009 entries
   already exist). The 009 "ahead of its first reader" vectorisation entry stands
   unchanged (retrieve remains the first reader).
