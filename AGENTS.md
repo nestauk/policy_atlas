@@ -31,7 +31,9 @@ stratified selection over the run's characterisation strata** (themes + the coun
 The **structure is deterministic and code-owned** under both shipped strategies —
 breadth-preserving allocation across strata, budget arithmetic, **must-includes as the
 one hard rule** (bypass the budget, never dropped) — over **cheap pre-extract signals**
-(recency, light appraisal tier, origin/upload priority, screen confidence; no
+(recency, light appraisal tier, origin/upload priority, screen confidence, and
+full-text availability as a soft tilt — the selection also reports full-text shares
+and a `thin_full_text` trigger flag, since extract works on what select chooses; no
 embeddings use — cosine relevance was cut at rev 4, the semantic dimension being
 already spent by screening + stratification). `coverage_stratified_v1`
 (default, suite path) is deterministic end-to-end; **`llm_rerank_v1`** (live skeleton

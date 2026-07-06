@@ -42,7 +42,20 @@ specs in [docs/specs/](../../specs/index.md).
 >   rerank surface only), vector reads + cosine code, the max-over-units bias, and
 >   null-relevance handling. Vectors' first reader reverts to `retrieve` as
 >   designed; embedding-relevance-for-select recorded as a declined seam
->   (revisit only with rerank-quality evals).
+>   (revisit only with rerank-quality evals). Rev 4.1 pinned the rerank basis:
+>   envelope uniformly (title + abstract), never full text; the LLM ranks, never
+>   selects.
+> - **rev 5** (2026-07-06, user-caught gap): **full-text availability joins
+>   select** — extract works on what select chooses, so the selection must know
+>   and say how much of it has full text. `text_basis` enters the deterministic
+>   composite (soft tilt toward `full_text`, flag-not-block — abstract-only docs
+>   stay fully selectable), the bidirectional rationale carries per-doc
+>   `text_basis` + per-stratum full-text shares, and a **`thin_full_text` trigger
+>   flag** joins the steer-point signals (selected set's full-text share below a
+>   floor — extraction-shaping, so the steer-point must see it). The rerank input
+>   stays content-only (title + abstract + intent): metadata and tags are weighed
+>   arithmetically or via directive boosts, never fed to the ranker — signals
+>   stay attributable, never double-counted.
 
 ## Goal
 
@@ -206,7 +219,10 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
      composite over the normalised cheap signals — recency (year, bounded decay) ·
      light appraisal tier · origin/upload priority (`uploaded` favoured, per the
      spec's default-priority-via-scoping posture) · screen confidence (the
-     relevance leg, decision 2) — plus the directive's **soft boosts**
+     relevance leg, decision 2) · **full-text availability** (`text_basis`, a
+     soft tilt toward `full_text` — extract works on what select chooses;
+     abstract-only docs stay fully selectable, flag-not-block, rev 5) — plus the
+     directive's **soft boosts**
      (decision 4), folded into the same composite. Default weights are named
      constants pinned at the plan gate; the effective weights (defaults ⊕
      directive emphasis) are recorded in `selection_provenance`. Ties break on
@@ -258,7 +274,7 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
    the **executed directive recorded whole** + its source, effective weights,
    signal availability, rerank provenance where applicable — prompt version,
    model, batch size, fallback/retry counts) ·
-   `selected` JSONB (per doc: pss id, stratum, signal scores,
+   `selected` JSONB (per doc: pss id, stratum, signal scores, `text_basis`,
    selection reason — `must_include` | `breadth_floor` | `ranked`) · `excluded`
    JSONB (aggregate per stratum: counts by reason class — `budget_exhausted`,
    `ranked_below_cut` — plus **notable flagged exclusions** by name) · `flags`
@@ -270,12 +286,16 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
    (a stratum with zero selections above a size share), `must_include_conflict`
    (decision 4's validation flag; the user-nominated integrity signal),
    `thin_base` (screened-in below a floor — the screen thin-base trigger read at
-   selection time). The policy-unmeetable trigger cannot fire (no policy object).
+   selection time), and `thin_full_text` (the **selected set's** full-text share
+   below a floor — extraction-shaping, rev 5: downstream extraction must know
+   whether it works from full text or abstracts before it starts).
+   The policy-unmeetable trigger cannot fire (no policy object).
    Thresholds are named constants pinned at the plan gate. The mode-governed pause
    (Frequent/Moderate/Minimal routing, escalation UX) is plan-as-object machinery —
    already a recorded seam, unchanged here. No new event types; the
-   `component.completed` payload (selection summary: per-stratum picks/exclusions,
-   reason aggregates, flags) is the surface, mirroring 009's landscape summary.
+   `component.completed` payload (selection summary: per-stratum picks/exclusions
+   with **full-text shares per stratum, selected vs candidate**, reason
+   aggregates, flags) is the surface, mirroring 009's landscape summary.
 7. **The shared tool is a function, not a framework — and its signature is the
    future agent's tool call.** The spec fixes the verb's contract — *(candidate
    set, cheap signals, strategy, directive) → chosen subset + rationale* — and
@@ -524,8 +544,10 @@ payload; the only prompt in the slice. No embeddings use (rev 4).
   breadth-floor anti-top-k case (a dominant stratum cannot starve the rest),
   must-include bypass + out-of-scope flag, counting invariants, determinism
   (two-run byte-identical), edge scopes (n=0, missing characterisation row,
-  budget ≥ n, unclustered-only), missing-signal flag-not-block, trigger flags
-  (large-stratum-excluded fixture), rationale bidirectionality (selected + excluded
+  budget ≥ n, unclustered-only), missing-signal flag-not-block, text-basis tilt
+  (soft — an abstract-only doc still selectable; hand-computed weight effect),
+  trigger flags (large-stratum-excluded and thin-full-text fixtures), rationale
+  bidirectionality (selected + excluded
   aggregates present and summing), directive semantics (a tag/column boost
   deterministically reorders a stratum · a boost can never exclude — the boosted-
   against doc still selectable · unknown column/tag in a directive flagged,
