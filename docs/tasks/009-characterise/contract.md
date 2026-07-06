@@ -699,6 +699,15 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
   intent-anchored themes) → enters via the grouping-quality eval seam, not by default.
   (Provider-topic *tag materialisation* was a rev-4.1 seam, pulled in-slice by rev 5
   with `asserted_by` provenance — decision 10.)
+- **TopicGPT extensions (lineage note, 2026-07-06)** — decision 4 *is* TopicGPT's
+  two-stage method reimplemented against our seams (the codebase is a research
+  artifact; prompts must be lead-authored here regardless). Two paper stages are
+  deliberately deferred to the grouping-quality eval seam: **topic refinement**
+  (merge/prune near-duplicate themes — largely suppressed by the bounded theme
+  count) and **quotation-verified assignment** (each assignment cites a supporting
+  quote — the cheapest known lever on assignment quality, but it would pull the
+  grounding economy into an output the spec deliberately keeps soft; adopt only
+  with evals). Its iterative topic generation is the discovery-sampling seam above.
 - **Tag namespace consolidation / `open_tags` migration** (decisions 5, 10).
 - **`select` and everything deeper** — subsequent slices.
 
