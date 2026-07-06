@@ -32,6 +32,17 @@ specs in [docs/specs/](../../specs/index.md).
 >   (`select_rerank_v1`) + its generation egress · one spec flow-back (components
 >   §6 select realisation: procedure → procedure with bounded generative rerank,
 >   hard rules staying code-side).
+> - **rev 4** (2026-07-06, user challenge: "is cosine matching appropriate here at
+>   all?"): **embedding-cosine relevance cut.** By select time the semantic
+>   dimension is spent twice (screening judged relevance; stratification grouped
+>   semantically) — within-stratum cosine-to-intent discriminates weakly, and its
+>   live role was only the fallback, which recency·tier·origin serves honestly.
+>   The spec's relevance signal reads "embeddings / **screening**" — the screening
+>   leg stands. Cuts with it: the intent-embed call (egress gate shrinks to the
+>   rerank surface only), vector reads + cosine code, the max-over-units bias, and
+>   null-relevance handling. Vectors' first reader reverts to `retrieve` as
+>   designed; embedding-relevance-for-select recorded as a declined seam
+>   (revisit only with rerank-quality evals).
 
 ## Goal
 
@@ -92,8 +103,8 @@ A PR on `task/010-select` → `dev` that:
   change 1; table count 19 → 20), project-scope-guarded per repo discipline.
 - Registers `"select"` in `COMPONENT_REGISTRY` (requires `evidence_scope_id`); wires
   `_run_select`; `run_harness` gains one optional **`ranking_backend`** parameter
-  (defaults to the stub — no default egress; gated change 2). The intent embedding
-  reuses the existing `embedding_backend`.
+  (defaults to the stub — no default egress; gated change 2). No embeddings use
+  (rev 4).
 - Extends `skeleton.py`: … characterise → **select**, rendering the selection
   summary (strata, per-stratum picks, exclusion aggregates, trigger flags).
 - Records the deferred seams in `docs/deferred.md`; updates `tests/helpers.py`
@@ -122,8 +133,9 @@ A PR on `task/010-select` → `dev` that:
   component realisation classes (select is pure "procedure"); `search` stays the
   only agent-invocable egress verb (select adds none).
 - [docs/deferred.md](../../deferred.md) — the 009 seams this slice touches:
-  steer-point pause (stays deferred), unclustered-as-stratum (lands here), pgvector
-  at the retrieve slice (unchanged — select reads vectors in code, builds no index).
+  steer-point pause (stays deferred), unclustered-as-stratum (lands here);
+  pgvector/retrieval and the chunk vectors untouched (retrieve stays their first
+  reader, rev 4).
 - [009-characterise contract](../009-characterise/contract.md) — pattern precedent
   (run-scoped result row, project-scoped composite FKs, component wiring,
   edge-scope handling, honest failure).
@@ -131,11 +143,10 @@ A PR on `task/010-select` → `dev` that:
 **Code grounding (surveyed 2026-07-06):** 19 tables. `characterisation_result` is
 per `(evidence_scope_id, run_id)` with `themes` JSONB (`themes[]` = name /
 description / member_ids / size + `unclustered_ids`) and `coverage` JSONB carrying
-base counts — select's stratification input, same-run. `chunk_embedding` holds unit
-vectors as JSONB float arrays keyed by profile/policy (no pgvector — reading them in
-Python is cheap at 10s–100s docs). Cheap Tier-0 signals in place: `origin`,
-metadata year, `source_appraisal_result` quality tier, screen confidence,
-`text_basis`/`full_text_status`. `run_harness(conn, *, config, project_id, run_id,
+base counts — select's stratification input, same-run. Cheap Tier-0 signals in
+place: `origin`, metadata year, `source_appraisal_result` quality tier, screen
+confidence, `text_basis`/`full_text_status`; titles + abstracts for the rerank ride
+the same envelope reads characterise uses. `run_harness(conn, *, config, project_id, run_id,
 provider, search_backends, document_fetcher, embedding_backend, grouping_backend)` —
 `embedding_backend` already threads through `HarnessState`. Component wiring pattern:
 registry entry → context dataclass `(scope_id, intent, context)` → `_run_scope_component`
@@ -157,25 +168,27 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
    generative rerank). Every signal stays cheap and **pre-extract** (titles +
    abstracts at most — never full text; that's extraction's side of the line).
 
-2. **Relevance signal = embedding cosine against the scope intent — the 009 vectors'
-   first reader.** The spec names relevance-to-intent via "embeddings / screening";
-   both land, with embeddings primary:
-   - One intent-embedding call per run through the **existing `embedding_backend`**
-     (stub in the suite — deterministic, egress-free; live under the 009-approved
-     embeddings gate — a **new call site on an approved front, not a new front**).
-   - Document relevance = **max cosine over the document's embedding units** for the
-     active profile (small-to-big: match at unit grain, score the document). Computed
-     in Python over the JSONB vectors — no pgvector, no index (that stays with
-     `retrieve`, the committed first *retrieval* reader; select is a batch read of a
-     bounded scope, not a search).
-   - Screen confidence folds in as a secondary signal. It is stub-constant today
-     (screen's LLM tool is a deferred seam), which is exactly why embeddings lead:
-     the vectors are the only live-discriminating relevance signal the corpus
-     actually carries. Documents with no embedding rows (embed-failure stragglers)
-     get a null relevance score and are flagged, never dropped (flag-not-block).
-   - Declined: screening-confidence-only (zero new call sites, but no live
-     discrimination — and it leaves the landed vectors unread for another slice);
-     deferring relevance entirely (the spec names it as a core signal).
+2. **Relevance signal = the screening leg; embedding-cosine declined** (rev 4).
+   The spec names relevance-to-intent via "embeddings / screening" — the
+   **screening leg** lands: screened-in status is the base relevance judgment
+   (it defines the candidate set) and screen confidence folds into the composite
+   (honestly stub-constant today; it becomes discriminating when the LLM screen
+   tool lands at its own seam).
+   - **Embedding-cosine relevance was drafted (revs 1–3) and cut at the gate**:
+     by select time the semantic dimension is already spent twice — screening
+     judged every candidate relevant, and stratification grouped them
+     semantically (the themes are the LLM's semantic read against the intent) —
+     so within-stratum cosine-to-intent compares already-similar,
+     already-relevant documents and discriminates weakly. Purpose-fit, the
+     judgment that *does* discriminate there, is `llm_rerank_v1`'s job
+     (decision 10). Cutting it also cuts the intent-embed call (the egress gate
+     shrinks to the rerank surface), the vector-read/cosine code, its
+     full-text-vs-abstract-only bias, and null-relevance handling.
+   - The 009 chunk vectors stay untouched and unread here; their first reader
+     remains `retrieve`, as designed (the ahead-of-reader exception stands
+     unchanged). **Embedding-relevance-for-select is a declined seam** —
+     recorded in `docs/deferred.md`, revisited only if rerank-quality evals show
+     the fallback/deterministic ordering needs a semantic leg.
 3. **Strategy mechanics: `coverage_stratified_v1` — breadth floor, proportional
    remainder, weighted within-stratum ranking.**
    - **Strata = this run's themes + `unclustered`** (a partition — assignment is
@@ -190,10 +203,10 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
      size** (largest-remainder method — deterministic, sums exactly to budget).
      Budget ≥ candidates → select all (still recorded, with rationale).
    - **Within-stratum ranking (the deterministic composite):** a weighted
-     composite over the normalised cheap signals — relevance (embedding cosine;
-     screen-confidence secondary) · recency (year, bounded decay) · light
-     appraisal tier · origin/upload priority (`uploaded` favoured, per the spec's
-     default-priority-via-scoping posture) — plus the directive's **soft boosts**
+     composite over the normalised cheap signals — recency (year, bounded decay) ·
+     light appraisal tier · origin/upload priority (`uploaded` favoured, per the
+     spec's default-priority-via-scoping posture) · screen confidence (the
+     relevance leg, decision 2) — plus the directive's **soft boosts**
      (decision 4), folded into the same composite. Default weights are named
      constants pinned at the plan gate; the effective weights (defaults ⊕
      directive emphasis) are recorded in `selection_provenance`. Ties break on
@@ -243,7 +256,8 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
    status writes; the findings-layer coverage vocabulary arrives with extract.
    Row: `strategy` · `budget` · `selection_provenance` JSONB (strategy version,
    the **executed directive recorded whole** + its source, effective weights,
-   signal availability incl. embedding profile + null-relevance counts) ·
+   signal availability, rerank provenance where applicable — prompt version,
+   model, batch size, fallback/retry counts) ·
    `selected` JSONB (per doc: pss id, stratum, signal scores,
    selection reason — `must_include` | `breadth_floor` | `ranked`) · `excluded`
    JSONB (aggregate per stratum: counts by reason class — `budget_exhausted`,
@@ -277,8 +291,8 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
    — reading this run's landscape + the intent; per plan-as-object the up-front
    plan is a non-compiling *forecast*, never the executed directive — the LLM
    reasoning over selection, at the seam the spec built for it); the
-   **rerank-quality eval seam** (decision 10 — cosine-ranked vs LLM-reranked on
-   downstream consequence, once extract exists); and the **capability-run
+   **rerank-quality eval seam** (decision 10 — deterministic-ranked vs
+   LLM-reranked on downstream consequence, once extract exists); and the **capability-run
    entity** (today a run = one component execution and the chain order lives only
    in `skeleton.py`, the agent's stand-in; the agent layer needs a durable run
    spanning components — the recorded Langfuse detached-trace warts are early
@@ -340,8 +354,8 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
       the rationale carries both and every ordering is attributable
       (`selection_provenance`: prompt version, model, batch size, fallback/retry
       counts). Rerank *quality* is eval territory once extract gives selection a
-      consequence (the promoted eval seam: compare cosine-ranked vs LLM-reranked
-      selections on downstream yield, using the eval-ready traces).
+      consequence (the promoted eval seam: compare deterministic-ranked vs
+      LLM-reranked selections on downstream yield, using the eval-ready traces).
     - **Strategy routing**: suite and library default = `coverage_stratified_v1`
       (stub, deterministic); the skeleton uses `llm_rerank_v1` on a configured
       key (egress is the product — the rev-6.1 posture). Cross-encoder relevance
@@ -365,7 +379,7 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
 - **The steer-point pause** (steering modes, escalation UX) — plan-as-object seam;
   the flags it will read ship now (decision 6).
 - **`retrieve` / pgvector / hybrid retrieval** — still the vectors' committed
-  retrieval reader; select's batch cosine read changes nothing there.
+  first reader (rev 4 restored the clean line: select reads no vectors).
 - **Source/evidence policy object** (the soft-prior tilt) and **dual-view
   coverage** — the policy trigger and tilt are structurally inert until it exists.
 - **Selection-diversity extensions** — publication-country stratification,
@@ -385,18 +399,17 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
    existing-table changes.
 2. **Public interface** — the `"select"` `COMPONENT_REGISTRY` entry (compile
    surface widens) + `run_harness` gains optional `ranking_backend` (stub default —
-   no default egress; the `grouping_backend` precedent). The intent embedding rides
-   the existing `embedding_backend`; the selection directive rides the
-   evidence-scope context (a first-class facade argument internally, not a harness
-   signature change).
+   no default egress; the `grouping_backend` precedent). The selection directive
+   rides the evidence-scope context (a first-class facade argument internally, not
+   a harness signature change).
 3. **Runtime egress — one new generation surface (user-confirmed, rev 3):** the
-   `select_rerank_v1` calls send titles + abstracts to the chat API under the
-   repo's **second product prompt** (the 009-approved generation front, one new
-   bounded surface on it: schema-constrained scores + reasons, contested strata
-   only, pre-run call budget, fallback-not-failure). Also one new call site on the
-   approved **embeddings** front — a single intent-string embedding per run.
-   Both traced by the existing Langfuse wiring. Suite and library defaults stay
-   stub + socket-deny; `make verify` remains egress-free.
+   `select_rerank_v1` calls send titles + abstracts (+ the scope intent) to the
+   chat API under the repo's **second product prompt** (the 009-approved
+   generation front, one new bounded surface on it: schema-constrained scores +
+   reasons, contested strata only, pre-run call budget, fallback-not-failure).
+   Traced by the existing Langfuse wiring. No embeddings call — the intent-embed
+   site was cut at rev 4. Suite and library defaults stay stub + socket-deny;
+   `make verify` remains egress-free.
 
 No new dependency rides this slice (`openai` and `langfuse` land it all).
 
@@ -417,11 +430,11 @@ exist").
 
 ## Public / private boundary
 
-- No credentials beyond the existing env keys. On the live paths, what leaves:
-  the scope intent string (embed path) and titles + abstracts of contested-strata
-  candidates (rerank path) — the same text class and posture as 009's grouping
-  calls; fixture-corpus content is openly licensed, so live verification sends
-  only committable text. Full-I/O traces to the user-operated Langfuse instances,
+- No credentials beyond the existing env keys. On the live path, what leaves:
+  the scope intent string and titles + abstracts of contested-strata candidates
+  (the rerank calls) — the same text class and posture as 009's grouping calls;
+  fixture-corpus content is openly licensed, so live verification sends only
+  committable text. Full-I/O traces to the user-operated Langfuse instances,
   per the 009 posture.
 - Committed artifacts (strategy names, weights, prompt text, table/column names,
   verification counts, rationale shapes) are public-safe. Selection rationale
@@ -434,9 +447,7 @@ exist").
 at the plan gate; gpt-5-mini-class per 009's nano lesson; → Bedrock at the seam
 swap). **Prompt-bearing surface: `select_rerank_v1`** — the repo's second product
 prompt, lead-authored, versioned, recorded in `selection_provenance` and the event
-payload; the only prompt in the slice. **Embeddings**: the intent embedding rides
-the existing `EmbeddingBackend` seam (profile stamped and recorded in
-`selection_provenance`).
+payload; the only prompt in the slice. No embeddings use (rev 4).
 
 ## Disciplines binding this slice
 
@@ -447,8 +458,8 @@ the existing `EmbeddingBackend` seam (profile stamped and recorded in
   deterministic under *both* strategies; `llm_rerank_v1`'s ordering is
   interpretive by design and fully attributable (prompt version, model, per-doc
   scores + fallbacks recorded). Neither live path is inside `make verify`.
-- **Flag, don't drop** — no signal gates: null relevance, missing appraisal,
-  unknown year lower a score or flag a doc, never exclude it; directive boosts
+- **Flag, don't drop** — no signal gates: missing appraisal or unknown year
+  lower a score or flag a doc, never exclude it; directive boosts
   re-weight, never exclude; ranker misses fall back to the deterministic
   composite, flagged `rank_fallback`, never dropped; must-includes are the only
   hard rule and they *include*.
@@ -487,14 +498,13 @@ the existing `EmbeddingBackend` seam (profile stamped and recorded in
 - `make verify` (test · typecheck · lint · build) — green, deterministic, zero
   egress (socket-deny covers a select round-trip; the suite runs on stubs only).
 - **One manual live check** (evidence in verification.md): skeleton end-to-end with
-  `OPENAI_API_KEY` (+ `LANGFUSE_*`) against the fixture corpus — real intent
-  embedding, cosine relevance over the 009-landed real vectors, **real
+  `OPENAI_API_KEY` (+ `LANGFUSE_*`) against the fixture corpus — **real
   `llm_rerank_v1` calls on the contested strata** (scores + reasons + any
-  fallbacks recorded), selection summary rendered, embed + rerank calls visible in
+  fallbacks recorded), selection summary rendered, rerank calls visible in
   the dev Langfuse trace (prompt version, tokens/cost); per-run counts and an
   honest cost note recorded; keys absent from captured output.
 - Deterministic vs AI eval: all suite checks are deterministic tests (stub
-  embedder + stub ranker; `coverage_stratified_v1` byte-identity). Rerank
+  ranker; `coverage_stratified_v1` byte-identity). Rerank
   *quality* (are the right docs ranked up?) is eval territory once extract gives
   it a consequence; this slice's bar is machinery correctness + honest rationale.
 
@@ -507,7 +517,7 @@ the existing `EmbeddingBackend` seam (profile stamped and recorded in
   breadth-floor anti-top-k case (a dominant stratum cannot starve the rest),
   must-include bypass + out-of-scope flag, counting invariants, determinism
   (two-run byte-identical), edge scopes (n=0, missing characterisation row,
-  budget ≥ n, unclustered-only), null-relevance flag-not-block, trigger flags
+  budget ≥ n, unclustered-only), missing-signal flag-not-block, trigger flags
   (large-stratum-excluded fixture), rationale bidirectionality (selected + excluded
   aggregates present and summing), directive semantics (a tag/column boost
   deterministically reorders a stratum · a boost can never exclude — the boosted-
@@ -529,11 +539,12 @@ the existing `EmbeddingBackend` seam (profile stamped and recorded in
   flags · **agent-authored directives at the commit layer** · **rerank-quality
   evals** (ranked vs reranked on downstream yield, once extract exists) ·
   **cross-encoder relevance models (Cohere-class, Bedrock) at the `retrieve`
-  seam** · **capability-run entity spanning components** · selection-diversity
-  extensions · policy soft-prior tilt · second strategies · full appraisal on the
-  selected subset — pointer updates where 009 entries already exist), and the 009
-  "ahead of its first reader" vectorisation entry updated: first read landed
-  (select's relevance signal; retrieval remains the indexed reader).
+  seam** · **capability-run entity spanning components** · **embedding-relevance
+  for select, declined** (rev 4 — revisit only via rerank-quality evals) ·
+  selection-diversity extensions · policy soft-prior tilt · second strategies ·
+  full appraisal on the selected subset — pointer updates where 009 entries
+  already exist). The 009 "ahead of its first reader" vectorisation entry stands
+  unchanged (retrieve remains the first reader).
 - Diff summary (data files excluded from review diffs per the 007 retro).
 
 ## Risk tier & review focus
@@ -561,8 +572,8 @@ Review focus:
   breadth floor under adversarial size distributions; must-include bypass
   arithmetic; directive semantics (boosts fold into scores and can never exclude;
   no directive shape can manufacture a hard gate; unknown references flagged);
-  cosine relevance (profile-matched units, max-over-units, null handling);
-  counting invariants; edge scopes.
+  rerank fallback semantics (every contested doc scored or flagged, budget
+  enforced pre-call); counting invariants; edge scopes.
 - **Determinism**: stable orderings everywhere; two-run byte-identity; no
   set/dict-iteration-order leaks into the row.
 - **Schema**: migration roundtrip; composite FKs; FK-safe deletes; unique

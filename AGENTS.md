@@ -31,8 +31,9 @@ stratified selection over the run's characterisation strata** (themes + the coun
 The **structure is deterministic and code-owned** under both shipped strategies —
 breadth-preserving allocation across strata, budget arithmetic, **must-includes as the
 one hard rule** (bypass the budget, never dropped) — over **cheap pre-extract signals**
-(embedding relevance to the scope intent — the first reader of the 009 chunk vectors —
-recency, light appraisal tier, origin/upload priority). `coverage_stratified_v1`
+(recency, light appraisal tier, origin/upload priority, screen confidence; no
+embeddings use — cosine relevance was cut at rev 4, the semantic dimension being
+already spent by screening + stratification). `coverage_stratified_v1`
 (default, suite path) is deterministic end-to-end; **`llm_rerank_v1`** (live skeleton
 path) replaces only the *within-stratum ordering* with bounded batched
 schema-constrained judgment calls on contested strata — per-doc scores + reasons under
@@ -55,9 +56,9 @@ machinery stays a recorded seam. Selection is run-local, never canonical;
 changes riding this slice: schema (`selection_result`, project-scope-guarded; table
 count 19 → 20) · public interface (`"select"` registry entry + `run_harness
 ranking_backend`, stub default) · **runtime egress: the `select_rerank_v1` generation
-surface (titles + abstracts, contested strata only) + one intent-embed call site on the
-approved embeddings front**. One spec flow-back rides the slice (components §6 select
+surface (titles + abstracts + intent, contested strata only)**. One spec flow-back
+rides the slice (components §6 select
 realisation: procedure → procedure with bounded generative rerank). `make verify` stays
-deterministic and egress-free (stub embedder + stub ranker). Build per
+deterministic and egress-free (stub ranker). Build per
 `docs/tasks/010-select/contract.md`. Stay within the contract's scope and stop
 conditions; all other capabilities and seams remain deferred (`docs/deferred.md`).
