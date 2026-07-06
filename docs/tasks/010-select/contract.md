@@ -3,10 +3,24 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 1) — awaiting contract 🛑.
+> **Status:** drafted (rev 2) — awaiting contract 🛑.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
 > ADR: 0006 (selection strategy + rationale record) — due at step 4.
+>
+> **Revision history:**
+> - **rev 1** (2026-07-06): initial draft — deterministic stratified strategy,
+>   budget + must-includes as scope-context parameters.
+> - **rev 2** (2026-07-06, user-steered): the LLM-vs-deterministic question
+>   adjudicated against the specs (components §6 realisation = *procedure*; the
+>   reasoning belongs to the capability agent's just-in-time **commit**, which
+>   *parameterises* the tool — plan-as-object § forecast-vs-commit). Adopted:
+>   **selection directive** as a first-class facade argument (the future agent's
+>   tool-call surface, designed for the agent-interaction architecture now) ·
+>   **soft boosts/filters over columns + tags** (the scoping vocabulary — what the
+>   tag layer was built for) · seams recorded (agent-authored directive at the
+>   commit layer · `llm_assisted` strategy, eval-gated · the missing
+>   **capability-run entity** spanning components).
 
 ## Goal
 
@@ -22,22 +36,34 @@ generation, no new dependencies, no new egress front. Same inputs → same selec
 test-enforced. The one interpretive-adjacent input is the embedding-relevance signal,
 and that is a cosine computation over already-landed vectors, not a judgment call.
 
+The judgment select *does* need — which emphases matter for this intent and this
+synthesis purpose — enters through the **selection directive**: a first-class,
+declarative parameter surface (budget, must-includes, soft boosts/filters over
+columns + tags, signal-weight emphasis) that steers the deterministic scan. This is
+the spec's own split (plan-as-object § forecast-vs-commit): the **capability agent**
+reasons and authors the directive at commit time; the **tool** executes it as an
+auditable procedure. The agent layer doesn't exist yet — v3.0 sources the directive
+from the scope context — but the facade signature is designed as the tool call that
+agent will make, so its arrival is a parameter-authoring change, not a re-plumb.
+
 Select writes **content, not presentation**: one run-scoped selection record carrying
-the **bidirectional rationale** the spec makes mandatory — what was selected (why, per
-document) and what was not (aggregate exclusion reasons + notable flagged exclusions).
-That rationale is exactly what the pre-declared **deepening-selection steer-point**
-reads; this slice computes its escalation-trigger *signals* now (as flags in the
-rationale and summary payload) while the mode-governed *pause* machinery stays a
-recorded seam (plan-as-object).
+the directive it executed and the **bidirectional rationale** the spec makes
+mandatory — what was selected (why, per document) and what was not (aggregate
+exclusion reasons + notable flagged exclusions). That rationale is exactly what the
+pre-declared **deepening-selection steer-point** reads; this slice computes its
+escalation-trigger *signals* now (as flags in the rationale and summary payload)
+while the mode-governed *pause* machinery stays a recorded seam (plan-as-object).
 
 ## Deliverable
 
 A PR on `task/010-select` → `dev` that:
 
 - Ships `select.py`: the shared strategy-parameterised `select` function
-  (*(candidates, signals, strategy, budget) → chosen subset + bidirectional
+  (*(candidates, signals, strategy, directive) → chosen subset + bidirectional
   rationale*, per the spec's tool contract) with **`coverage_stratified_v1`** as the
-  one shipped strategy; `SelectContext`; `select_scope(...)` — signal assembly →
+  one shipped strategy; the **`SelectionDirective`** (first-class facade argument —
+  budget, must-includes, column/tag soft boosts, weight emphasis);
+  `SelectContext`; `select_scope(...)` — directive resolution → signal assembly →
   stratification → allocation → ranking → rationale → the `selection_result` row →
   the selection summary in `component.completed`.
 - Adds **one table — `selection_result`** — via one Alembic migration (gated
@@ -137,23 +163,47 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
    - **Within-stratum ranking:** a weighted composite over the normalised cheap
      signals — relevance (embedding cosine; screen-confidence secondary) · recency
      (year, bounded decay) · light appraisal tier · origin/upload priority
-     (`uploaded` favoured, per the spec's default-priority-via-scoping posture).
-     Weights are named constants pinned at the plan gate, recorded in
+     (`uploaded` favoured, per the spec's default-priority-via-scoping posture) —
+     plus the directive's **soft boosts** (decision 4), folded into the same
+     composite. Default weights are named constants pinned at the plan gate; the
+     effective weights (defaults ⊕ directive emphasis) are recorded in
      `selection_provenance`. Ties break on snapshot id.
    - Publication-country stratification and study-geography/population diversity:
      **not built** — the spec itself marks them rough/cluster-approximated and
      properly post-extraction; recorded as the selection-diversity seam.
-4. **Must-includes are the one hard rule; parameters ride the scope context.**
-   `must_include_ids` (project-source-snapshot ids) are **hard-includes bypassing
-   the budget** — never counted against it, never displaced, validated against the
-   scope's screened-in set (an id outside it is a flagged, non-fatal rationale
-   entry: `must_include_not_in_scope`, honest, not silently obeyed or dropped).
-   Both parameters ride the **evidence-scope `context` JSONB** (`selection_budget`,
-   `must_include_ids`) — no new `run_harness` parameter, no schema column; the
-   scope row is already the home of per-scope intent. Default budget when unset is
-   a named constant pinned at the plan gate. The source/evidence **policy** signal
-   (soft prior, never a gate) structurally cannot fire — no policy object exists in
-   v3.0; recorded seam, not built.
+4. **The selection directive — the agent-facing parameter surface, designed for
+   the orchestrator/sub-agent architecture now** (user-steered, rev 2). The
+   reasoning select needs is intent- and purpose-dependent; the spec locates it in
+   the capability agent's just-in-time **commit**, which *parameterises* the tool
+   (plan-as-object § forecast-vs-commit; the facade principle). So the directive
+   is a **first-class field of `SelectContext` / argument of the `select` facade**
+   — the exact tool-call signature the future agent will author — not buried
+   configuration. A declarative object (exact schema plan-pinned):
+   - **`budget`** — Tier-1 slot count; default a named constant.
+   - **`must_include_ids`** — the one **hard** rule: hard-includes bypassing the
+     budget, never counted against it, never displaced; validated against the
+     scope's screened-in set (an id outside it is a flagged, non-fatal rationale
+     entry — `must_include_not_in_scope` — honest, not silently obeyed or dropped).
+   - **Soft boosts/filters over columns + tags** — the data-model's **scoping
+     vocabulary** ("queries over columns + tags alike; a soft retrieval prior"),
+     which is what the tag layer was built for: predicates over Tier-0 columns
+     (e.g. `primary_evidence_type`, `origin`, year ranges) and tag assertions
+     (by `tag_type` / `tag` / optionally `asserted_by`), each carrying a weight.
+     **Soft means flag-not-block**: a boost re-weights within the composite score,
+     never excludes; a directive cannot manufacture a hard gate (must-includes
+     stay the only hard rule). Unknown columns/tags referenced by a directive are
+     flagged in the rationale, never fatal. Provider tags (009) give boosts real,
+     live data to act on today.
+   - **Signal-weight emphasis** — optional multipliers over the default weights
+     (e.g. recency-heavy for a "latest evidence" intent).
+   An **empty directive is the default**: the plain stratified scan. In v3.0 the
+   directive is *sourced* from the evidence-scope `context` JSONB (user/plan
+   authored; the skeleton demonstrates one) — no new `run_harness` parameter, no
+   schema column — and when the capability-agent layer lands, the agent authors it
+   directly at commit time: a parameter-authoring change, zero re-plumbing. The
+   executed directive is recorded whole in `selection_provenance` (decision 5).
+   The source/evidence **policy** signal (soft prior, never a gate) structurally
+   cannot fire — no policy object exists in v3.0; recorded seam, not built.
 5. **Persistence: one run-scoped `selection_result` row — selection is run-local.**
    Mirrors `characterisation_result`: one row per `(evidence_scope_id, run_id)`,
    recomputable, superseded by the next run, never canonical corpus state. Extract
@@ -161,8 +211,9 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
    coverage state (screened-in minus selected) — no doc-level status column, no
    status writes; the findings-layer coverage vocabulary arrives with extract.
    Row: `strategy` · `budget` · `selection_provenance` JSONB (strategy version,
-   weights, signal availability incl. embedding profile + null-relevance counts,
-   parameter sources) · `selected` JSONB (per doc: pss id, stratum, signal scores,
+   the **executed directive recorded whole** + its source, effective weights,
+   signal availability incl. embedding profile + null-relevance counts) ·
+   `selected` JSONB (per doc: pss id, stratum, signal scores,
    selection reason — `must_include` | `breadth_floor` | `ranked`) · `excluded`
    JSONB (aggregate per stratum: counts by reason class — `budget_exhausted`,
    `ranked_below_cut` — plus **notable flagged exclusions** by name) · `flags`
@@ -180,13 +231,23 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
    already a recorded seam, unchanged here. No new event types; the
    `component.completed` payload (selection summary: per-stratum picks/exclusions,
    reason aggregates, flags) is the surface, mirroring 009's landscape summary.
-7. **The shared tool is a function, not a framework.** The spec fixes the verb's
-   contract — *(candidate set, cheap signals, strategy, budget) → chosen subset +
-   rationale* — and that lands as a pure function with a `strategy` parameter
-   validated against the registry of shipped strategies (exactly one:
-   `coverage_stratified_v1`). No protocol class, no plugin machinery for a second
-   strategy that doesn't exist (Transferability's dependency-scoping strategy is
-   that capability's problem, ⏸ deferred). The seam is the signature.
+7. **The shared tool is a function, not a framework — and its signature is the
+   future agent's tool call.** The spec fixes the verb's contract — *(candidate
+   set, cheap signals, strategy, directive) → chosen subset + rationale* — and
+   that lands as a pure function with a `strategy` parameter validated against the
+   registry of shipped strategies (exactly one: `coverage_stratified_v1`). No
+   protocol class, no plugin machinery for a second strategy that doesn't exist
+   (Transferability's dependency-scoping strategy is that capability's problem,
+   ⏸ deferred). The seam is the signature — deliberately shaped as the facade the
+   capability agent invokes as one tool. Three recorded seams sit on it:
+   **agent-authored directives** (the commit layer authors the directive from
+   intent + the landscape summary — the LLM reasoning over selection, at the seam
+   the spec built for it); an **`llm_assisted` strategy** (eval-gated: reopen with
+   evidence once extract gives selection quality a consequence — the pattern that
+   legitimately flipped characterise); and the **capability-run entity** (today a
+   run = one component execution and the chain order lives only in `skeleton.py`,
+   the agent's stand-in; the agent layer needs a durable run spanning components —
+   the recorded Langfuse detached-trace warts are early symptoms).
 8. **Component wiring mirrors 004–009.** `"select"` in `COMPONENT_REGISTRY`
    requiring `evidence_scope_id`; `SelectContext(scope_id, intent, context)`;
    `_run_select` via `_run_scope_component`; conditional-edge wiring;
@@ -207,6 +268,14 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
 ### Out of scope
 
 - **`extract` and everything deeper** — select's consumer; subsequent slices.
+- **Agent-authored directives** — the capability-agent commit layer (an LLM
+  reading intent + landscape summary and authoring the `SelectionDirective`) is
+  the agent-layer slice; this slice ships the surface it will drive (decision 4).
+  No prompt-bearing work here.
+- **`llm_assisted` selection strategies** — eval-gated at the strategy seam
+  (decision 7); reopen with selection-quality evidence, not speculation.
+- **The capability-run entity** (a durable run spanning components) — recorded
+  seam (decision 7); this slice keeps the one-run-per-component model.
 - **The steer-point pause** (steering modes, escalation UX) — plan-as-object seam;
   the flags it will read ship now (decision 6).
 - **`retrieve` / pgvector / hybrid retrieval** — still the vectors' committed
@@ -230,7 +299,9 @@ registry entry → context dataclass `(scope_id, intent, context)` → `_run_sco
    existing-table changes.
 2. **Public interface** — the `"select"` `COMPONENT_REGISTRY` entry (compile
    surface widens). **No new `run_harness` parameter** — the intent embedding rides
-   the existing `embedding_backend`.
+   the existing `embedding_backend`, and the selection directive rides the
+   evidence-scope context (a first-class facade argument internally, not a harness
+   signature change).
 
 **Runtime egress — no new front (flagged for the record, not gated as new):** one
 new call site on the 009-approved embeddings front — a single intent-string
@@ -271,8 +342,9 @@ the existing `EmbeddingBackend` seam (profile already stamped and recorded in
   characterisation row, same parameters → byte-identical selection row.
   Test-enforced (the 009 two-run determinism check, applied here).
 - **Flag, don't drop** — no signal gates: null relevance, missing appraisal,
-  unknown year lower a score or flag a doc, never exclude it; must-includes are the
-  only hard rule and they *include*.
+  unknown year lower a score or flag a doc, never exclude it; directive boosts
+  re-weight, never exclude; must-includes are the only hard rule and they
+  *include*.
 - **Honest absence** — `not_selected` is coverage, never silence: the bidirectional
   rationale makes every exclusion countable, and nothing in the payload phrases an
   exclusion as corpus absence.
@@ -291,6 +363,9 @@ the existing `EmbeddingBackend` seam (profile already stamped and recorded in
 - Any *suite or library-default* code path would perform network I/O.
 - The strategy needs a signal that isn't cheaply in Tier-0 (anything requiring
   text interpretation) — that's extraction's side of the line; halt, don't reach.
+- The directive surface tempts a generation call (authoring directives from
+  intent) or a hard exclude — the former is the agent-layer slice, the latter a
+  design violation; halt, don't grow either.
 - Extract-shaped scope creep (reading full text, writing findings, coverage-state
   vocabulary) — the next slice, not this one.
 - `make verify` red with unclear root cause; or the turn/token budget is spent.
@@ -319,16 +394,22 @@ the existing `EmbeddingBackend` seam (profile already stamped and recorded in
   (two-run byte-identical), edge scopes (n=0, missing characterisation row,
   budget ≥ n, unclustered-only), null-relevance flag-not-block, trigger flags
   (large-stratum-excluded fixture), rationale bidirectionality (selected + excluded
-  aggregates present and summing).
+  aggregates present and summing), directive semantics (a tag/column boost
+  deterministically reorders a stratum · a boost can never exclude — the boosted-
+  against doc still selectable · unknown column/tag in a directive flagged,
+  non-fatal · empty directive = default scan, byte-identical to the no-directive
+  path · executed directive + source recorded in `selection_provenance`).
 - Live-run evidence per the manual check above.
 - Public-safety confirmation (no credentials; live path sent the intent string
   only).
 - Deferred seams recorded in `docs/deferred.md` (steer-point pause reading the
-  flags · selection-diversity extensions · policy soft-prior tilt · second
-  strategies · full appraisal on the selected subset — pointer updates where 009
-  entries already exist), and the 009 "ahead of its first reader" vectorisation
-  entry updated: first read landed (select's relevance signal; retrieval remains
-  the indexed reader).
+  flags · **agent-authored directives at the commit layer** · **`llm_assisted`
+  strategy, eval-gated** · **capability-run entity spanning components** ·
+  selection-diversity extensions · policy soft-prior tilt · second strategies ·
+  full appraisal on the selected subset — pointer updates where 009 entries
+  already exist), and the 009 "ahead of its first reader" vectorisation entry
+  updated: first read landed (select's relevance signal; retrieval remains the
+  indexed reader).
 - Diff summary (data files excluded from review diffs per the 007 retro).
 
 ## Risk tier & review focus
@@ -347,8 +428,10 @@ Review focus:
   trigger flags computed from the right bases.
 - **Correctness**: largest-remainder allocation (sums to budget, deterministic);
   breadth floor under adversarial size distributions; must-include bypass
-  arithmetic; cosine relevance (profile-matched units, max-over-units, null
-  handling); counting invariants; edge scopes.
+  arithmetic; directive semantics (boosts fold into scores and can never exclude;
+  no directive shape can manufacture a hard gate; unknown references flagged);
+  cosine relevance (profile-matched units, max-over-units, null handling);
+  counting invariants; edge scopes.
 - **Determinism**: stable orderings everywhere; two-run byte-identity; no
   set/dict-iteration-order leaks into the row.
 - **Schema**: migration roundtrip; composite FKs; FK-safe deletes; unique

@@ -32,8 +32,14 @@ A **fully deterministic slice** — no prompts, no generation, no new dependenci
 breadth-preserving allocation across strata, within-stratum ranking over **cheap
 pre-extract signals** (embedding relevance to the scope intent — the first reader of the
 009 chunk vectors — recency, light appraisal tier, origin/upload priority), and
-**must-includes as the one hard rule** (bypass the budget, never dropped). Realised as
-the spec's shared strategy-parameterised `select` verb with EB's
+**must-includes as the one hard rule** (bypass the budget, never dropped). Steering
+enters through the **selection directive** — a first-class, declarative facade argument
+(budget · must-includes · **soft boosts over columns + tags**, the scoping vocabulary ·
+weight emphasis; soft = re-weights, never excludes) — designed as the tool-call surface
+the future capability agent authors at commit time (v3.0 sources it from the scope
+context; agent-authored directives, an eval-gated `llm_assisted` strategy, and the
+capability-run entity are recorded seams). Realised as the spec's shared
+strategy-parameterised `select` verb with EB's
 coverage-aware-stratified strategy as the one shipped implementation. Durable output =
 one run-scoped `selection_result` row per (scope, run) carrying the **bidirectional
 rationale** (what was selected and why; aggregate exclusion reasons + notable flagged

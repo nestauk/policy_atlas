@@ -29,8 +29,13 @@ Slice-specific criteria (from the contract's disciplines):
         or in an exclusion aggregate; totals reconcile with the counting invariants
         (`screened_in == selected + not_selected`).
 11. [ ] **Flag-not-block verified**: null relevance, missing appraisal and unknown metadata
-        demonstrably never exclude a document; must-includes are the only hard rule and
-        out-of-scope must-includes are flagged, not silently handled.
+        demonstrably never exclude a document; directive boosts re-weight and can never
+        exclude (no directive shape manufactures a hard gate); must-includes are the only
+        hard rule and out-of-scope must-includes are flagged, not silently handled.
+11a. [ ] **The directive surface is agent-ready**: `SelectionDirective` is a first-class
+        facade argument (not JSONB archaeology); an empty directive equals the default scan;
+        a column boost and a tag boost each demonstrably steer a selection; the executed
+        directive + its source are recorded whole in `selection_provenance`.
 12. [ ] **The anti-top-k guard works**: the breadth-floor test shows a dominant stratum
         cannot starve the others; the unclustered stratum participates as a stratum.
 13. [ ] **`not_selected` never masquerades as absence**: no payload or summary phrasing
