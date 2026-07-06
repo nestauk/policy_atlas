@@ -3,7 +3,19 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted, rev 7 — awaiting final sign-off.
+> **Status:** drafted, rev 8 — awaiting final sign-off.
+> Rev 8 (user steer, 2026-07-06 — "make sure the chunking is state of the art";
+> last30days sweep + benchmark review, raw file:
+> `~/Documents/Last30Days/rag-chunking-strategies-for-embeddings-raw-v3.md`):
+> rev 2-7's mean-pooled char-windowing replaced by a first-class **embedding-unit
+> layer** (`embedding_unit_policy_v1`): canonical chunks stay untouched; in-budget
+> chunks embed as one unit; oversized chunks split at sentence boundaries to a
+> ~512-token target with ~10% intra-chunk overlap; **one vector per unit** with
+> offsets (small-to-big: match units, cite chunks). Research verdicts recorded:
+> structural/recursive ~512 beats semantic chunking (69% vs 54%, ~10x cheaper) —
+> 008's structure-aware canonical chunks are exactly what benchmarks reward;
+> contextual retrieval (+49-67%, LLM-call-per-chunk) and late chunking
+> (long-context embedder) recorded as retrieval-eval seams.
 > Rev 7 (user steer, 2026-07-06): **Langfuse tracing baseline lands in this slice**
 > (engineering-considerations: "Langfuse as the trace backbone and prompt registry";
 > user has dev + prod instances ready; first slice with real LLM traffic — the
@@ -242,13 +254,31 @@ artefact/block/annotation machinery exists but nothing here writes to it (decisi
    retrieval later. Embed failures never fail ingestion: the pass returns honest counts
    (`embedded` / `already_embedded` / `failed`), failures stay pending (no status column
    — the missing row *is* retryable state) and are retried on the next pass.
-   **Oversized chunks** (008's known heading-light giants) exceed the provider's token
-   window: embed-side **windowing** splits an oversized chunk's text deterministically
-   (character-budget heuristic with a generous safety margin — no tokenizer dependency;
-   exact-token budgeting is recorded at the seam), embeds each window, and stores the
-   **mean vector** as the chunk's embedding — canonical chunks are never touched
-   (one parse, one segmentation per snapshot stands; 008's "token-budgeted re-chunking"
-   lands as embed-side windowing, not chunk mutation).
+   **Embedding units, not mean-pooled windows (rev 8, research-grounded — user steer
+   on state-of-the-art chunking, 2026-07-06):** embedding-side segmentation is a
+   first-class, named, versioned layer (`embedding_unit_policy_v1`). Each canonical
+   chunk yields one or more **units**: chunks within the token budget are one unit
+   (the common case — most paragraphs and abstracts); oversized chunks (008's known
+   heading-light giants) are split deterministically at sentence/paragraph boundaries
+   into ~512-token-target units with ~10% intra-chunk overlap (the practitioner
+   optimum across 2026 benchmarks: recursive/structural ~512-token splitting won
+   end-to-end accuracy 69% vs semantic chunking's 54%; 512–1024 suits
+   descriptive/technical content — our corpus; ~10% overlap kills
+   boundary-straddling artifacts; token budget approximated by a conservative
+   character heuristic — no tokenizer dependency, exact-token at the seam). **One
+   embedding row per unit** with its offset/locator back into the canonical chunk —
+   never a mean vector over a 10-page section (mean-pooling dilutes topical signal
+   and is known-weak for retrieval; nothing in 009 reads these rows, so per-unit
+   grain costs only storage and is strictly better retrieval substrate — the
+   small-to-big pattern: match at unit grain, cite the canonical chunk). Canonical
+   chunks are never touched (one parse, one segmentation per snapshot stands; 008's
+   "token-budgeted re-chunking" lands as this embed-side unit layer, not chunk
+   mutation). **Semantic chunking is deliberately not adopted** (marginal benchmark
+   gains, ~10x cost — and our canonical chunks are already structure-aware, which is
+   the property benchmarks reward); **contextual retrieval** (Anthropic-style chunk
+   context — 49–67% retrieval-failure reduction at an LLM-call-per-chunk cost) and
+   **late chunking** (long-context embedder, pool-after) are recorded seams entered
+   via retrieval evals.
 3. **Embedding storage: `chunk_embedding` table, JSONB vector, no pgvector yet.**
    One row per (chunk × embedding profile): `chunk_id` FK, `embedding_profile`,
    `vector JSONB` (float array), `created_at`; unique `(chunk_id, embedding_profile)`.
@@ -597,9 +627,11 @@ validation, and silent drops between stages.
 
 ```
 chunk_embedding          chunk_embedding_id PK · chunk_id FK→chunk · embedding_profile TEXT
+                         · unit_policy TEXT · unit_index INT · unit_locator JSONB
+                           (offsets into the canonical chunk — rev 8)
                          · vector JSONB (code-validated: JSON array, expected dims,
                            finite floats — adversarial finding 14) · created_at
-                         UNIQUE (chunk_id, embedding_profile)
+                         UNIQUE (chunk_id, embedding_profile, unit_policy, unit_index)
 
 characterisation_result  characterisation_id PK · project_id FK · evidence_scope_id ·
                          run_id · grouping_provenance JSONB (required keys, test-
@@ -658,8 +690,10 @@ Downgrade drops the tables. No existing table changes. `tests/helpers.py`
 - Embed pass: anti-join idempotency (second call all `already_embedded`); deterministic
   chunk order; batching; failure isolation (a failing embedder double → honest `failed`
   counts, ingestion still succeeds, retry embeds the stragglers); budget guard trips
-  loudly; oversized-chunk windowing (windows deterministic, mean vector stored, canonical
-  chunk untouched); profile stamped on every row; stub vectors deterministic across
+  loudly; embedding units deterministic (in-budget chunk → exactly one unit; oversized
+  chunk → sentence-boundary units at the token target with ~10% overlap, offsets
+  recorded, canonical chunk untouched; no mean-pooling path exists); profile +
+  unit policy stamped on every row; stub vectors deterministic across
   processes (no hash randomisation dependency).
 - Eager-uniform: after upload + acquire + full-text ingest, every chunk of every
   snapshot class has an embedding row for the profile.
