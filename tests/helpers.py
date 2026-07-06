@@ -35,6 +35,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         project_source_snapshot,
         runs,
         search_coverage_record,
+        selection_result,
         source_appraisal_result,
         source_classification_result,
         source_screening_result,
@@ -81,6 +82,10 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
     conn.execute(delete(addressable_unit).where(addressable_unit.c.block_id.in_(block_ids_subq)))
     # Task 009 rows first: tags/characterisation FK onto pss/runs; embeddings FK onto chunk
     conn.execute(delete(source_tag).where(source_tag.c.project_id == project_id))
+    # Task 010 row: same FK class as characterisation_result (scope + runs guards).
+    conn.execute(delete(selection_result).where(
+        selection_result.c.project_id == project_id
+    ))
     conn.execute(delete(characterisation_result).where(
         characterisation_result.c.project_id == project_id
     ))
