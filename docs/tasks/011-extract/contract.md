@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **approved** (rev 1.4) — contract-stage adversarial review next.
+> **Status:** **approved** (rev 1.5) — adversarial review adjudicated; planning next.
 > Contract approved (before planning): **2026-07-07 · Shabeer Rauf** (rev 1.4,
 > covering the three gated changes — three-table schema · `"extract"` registry
 > entry + `selection_run_id` + `extraction_backend` · the `extract_iof_v1`
@@ -114,6 +114,38 @@ specs in [docs/specs/](../../specs/index.md).
 >   `implementation_context_finding` seam · mixed/unclear findings are
 >   first-class and must survive into group/synthesise (V2 extracted then
 >   discarded them at aggregation).
+> - **rev 1.5** (2026-07-07): contract-stage adversarial review adjudicated
+>   (Codex, 12 findings: 4 blockers · 8 majors — 11 adopted, 1 in-part; none
+>   contradicted a user-settled decision). Blockers: **scope intent removed
+>   from `extract_iof_v1`** (it entered the prompt while the memo treated
+>   findings as intent-independent — stale-reuse risk; extraction is
+>   question-agnostic per components §7 and V2's own lesson; **gate 3
+>   shrinks**: the egress payload is document text + envelope + evidence type,
+>   no intent) · **memo states = `extracted` | `no_findings` only** (a failed
+>   row under the unique key blocked its own retry; failures insert freely via
+>   a partial unique index and never satisfy the memo lookup) · **DDL sketch
+>   completed** (comparator · estimate_level · stratum_qualifiers · τ² were
+>   prose-only) · **composite project guards completed** (pss and
+>   extraction-record composite FKs; snapshot-consistency rule pinned — the
+>   extracted snapshot must be the selected pss's full-text or envelope
+>   snapshot per basis). Majors: fingerprint = digest over ALL output-affecting
+>   versions (schema, prompt, model, backend mode, field-rule set,
+>   quote-verifier, windowing policy) · **dedup key = claim dimensions, not
+>   quote** (one claim with two quotes = one finding, anchors merge — the
+>   grain rule applied) · field coverage gains `not_applicable` (pooled-only
+>   stats on a study-level finding; `searched_and_absent`/`not_selected`
+>   clarified as gap/doc-ladder vocabulary, `no_findings` as component status)
+>   · `effect_direction` value `null` renamed **`no_effect`**, column NOT
+>   NULL, closed enums exempt from null-string coercion (SQL-NULL ambiguity)
+>   · doc-status rule pinned: valid-empty → `no_findings`; every candidate
+>   record grain-invalid → `extraction_failed` (reason `invalid_records`);
+>   mixed → `extracted` with invalid candidates dropped-and-counted ·
+>   stratum qualifiers = canonical sorted array over a closed type vocabulary
+>   (timepoint | subgroup | setting; plan-extensible) · **LLM quote-repair
+>   attempt removed** (deterministic verification only — rev-1.4 normalisation
+>   + cursor handle false failures; a genuine non-verbatim quote flags
+>   immediately; repair rides the eval-gated seam; keeps the one-prompt-surface
+>   and call-budget claims exact).
 
 ## Goal
 
@@ -260,10 +292,18 @@ internal (`OpenAIRankingBackend`) — either precedent stands.
 2. **The memo (reuse) check is v3.0-minimal, the service is a seam.** Before any
    call, each selected document's `(source_snapshot_id, fingerprint)` is looked
    up; a hit reuses the existing record + findings (counted `reused` in the
-   roll-up, no call, no new finding rows). The **extraction fingerprint** is a
-   deterministic key: `profile_id · prompt_version · model · backend mode`
-   (indicatively `eb_iof_base_v1:extract_iof_v1:gpt-5-mini:live`) — stub results
-   carry a `stub`-moded fingerprint and can never masquerade as live extraction.
+   roll-up, no call, no new finding rows). **Only `extracted` and `no_findings`
+   are memo states** (rev 1.5, adversarial blocker): a failed attempt inserts
+   freely (attempt history) but never satisfies the memo lookup and never
+   blocks a retry — the unique key is a **partial unique index over the two
+   success states**. The **extraction fingerprint** covers *every
+   output-affecting version* (rev 1.5): a deterministic digest over
+   {profile id, output-schema version, prompt version, model, backend mode,
+   field-rule-set version, quote-verifier version, windowing policy} — exact
+   composition plan-pinned; in v1 all components are named constants. Stub
+   results carry a `stub`-moded fingerprint and can never masquerade as live
+   extraction; a change to any rule that alters stored findings changes the
+   fingerprint, so upgrades create records alongside, never stale reuse.
    The framework's extraction *service* (a capability commit declaring a profile,
    resolved against existing records) stays deferred; EB's profile is this
    slice's named constant (`eb_iof_base_v1` = the base fields over the selected
@@ -273,9 +313,11 @@ internal (`OpenAIRankingBackend`) — either precedent stands.
 3. **The field set is the spec's, sharpened by the V2 autopsy — and the line is
    enforced both ways.**
    Base fields: `intervention`, `outcome`, `population` (source-named text
-   references; nullable population), `effect_direction` (closed set:
-   `positive` | `negative` | `null` | `mixed` | `unclear` — a reported null is a
-   **finding**, first-class), effect size + type, uncertainty (CI/SE), p-value,
+   references; nullable population), `effect_direction` (closed set, NOT NULL:
+   `positive` | `negative` | `no_effect` | `mixed` | `unclear` — rev 1.5
+   renamed `null` → `no_effect` to kill the SQL-NULL/string-"null" ambiguity;
+   a reported null result is a **finding**, first-class), effect size + type,
+   uncertainty (CI/SE), p-value,
    study-design/sample metadata (design, N, k, I², τ²), the descriptive
    **causality-by-design** label (closed set, plan-pinned, derived from the
    design the source reports), primacy/prevalence flags. Three V2-derived
@@ -283,8 +325,12 @@ internal (`OpenAIRankingBackend`) — either precedent stands.
    source-groundability line; candidate minor data-model flow-back):
    - **Outcome ⊥ stratum**: `outcome` is the **base measure only** ("BMI",
      never "BMI at 12 months"); timepoint/subgroup/setting qualifiers are
-     structured **stratum qualifiers** on the finding (nullable
-     type + value). One finding per (intervention, outcome, effect, stratum) —
+     structured **stratum qualifiers** on the finding — a **canonical sorted
+     array of (type, value) pairs over a closed type vocabulary**
+     (`timepoint` | `subgroup` | `setting`, plan-extensible; normalisation
+     plan-pinned — rev 1.5: multi-dimensional strata need one deterministic
+     representation for dedup and grouping).
+     One finding per (intervention, outcome, effect, stratum) —
      the decomposition that keeps outcome references groupable downstream
      (V2's best prompt rule, lifted).
    - **Comparator**: a nullable source-named reference — an effect direction
@@ -308,8 +354,10 @@ internal (`OpenAIRankingBackend`) — either precedent stands.
    prompt actively forbids them).
 4. **Every finding anchors to its frozen source text — deterministically
    checked.** Each finding carries ≥1 grounding anchor: verbatim supporting
-   quote + chunk reference (`chunk_id`; null for abstract-basis findings, which
-   anchor against the envelope abstract). At write time the quote is checked by
+   quote + a location — **a chunk location (chunk_id + char interval) or an
+   abstract-envelope location (chunk_id null + char interval into the envelope
+   abstract), by basis** (rev 1.5 pinned the abstract-basis anchor shape).
+   At write time the quote is checked by
    normalised string match against the document's frozen text (concatenated
    chunk content, so a boundary-spanning quote isn't a spurious miss — the
    produce-grounded-block presence-check discipline applied at the finding
@@ -323,30 +371,50 @@ internal (`OpenAIRankingBackend`) — either precedent stands.
    substrate); an **ordered occurrence cursor** per document so repeated
    identical quotes map to successive occurrences, never all to the first; a
    **graded match status** recorded per anchor (exact | normalised | failed —
-   the method, not just a bit). A finding whose quote fails the check after
-   one repair attempt lands **flagged `quote_unverified`, never dropped and
+   the method, not just a bit). A finding whose quote fails the check lands
+   **flagged `quote_unverified` immediately — no LLM repair attempt**
+   (rev 1.5: verification is deterministic-only; the rev-1.4 normalisation +
+   cursor eliminate false failures, a genuinely non-verbatim quote flags
+   honestly, and the call budget and one-prompt-surface claims stay exact;
+   repair rides the eval-gated seam), **never dropped and
    never silently kept** — the flag rides the finding row and the roll-up
    counts it. **Deterministic
    field-rule validation runs after schema parse** (rev 1.3): bounds and
    consistency checks over the reported statistics (indicatively: p-value ∈
    [0,1], CI lower ≤ upper, N a positive integer, closed vocabularies
    enforced; estimate-level coherence [pooled ⇢ k, study ⇢ N]; **null-like
-   strings — "null"/"n/a"/"none"/"unknown"/"" — in nullable fields coerced to
-   real null + coverage marker** (rev 1.4: V2's literal-"null" instruction
-   polluted every downstream consumer); exact rule set plan-pinned) — a
+   strings — "null"/"n/a"/"none"/"unknown"/"" — in **nullable free-text/numeric
+   fields** coerced to real null + coverage marker; **closed enums are exempt**
+   from the coercion (`no_effect` is a value, not an absence — rev 1.5); exact
+   rule set plan-pinned) — a
    violating field is flagged
    `unclear` and counted, never silently accepted (schema validity is the easy
-   part; rule checks catch schema-valid nonsense). **Within-doc exact-duplicate
-   dedup** (rev 1.4): two findings from one document identical on
-   (intervention, outcome, effect direction, stratum, quote) collapse to one,
-   deterministically, flagged and counted — MECE is enforced in code, never
+   part; rule checks catch schema-valid nonsense). **Within-doc duplicate
+   dedup keys on the claim, not the quote** (rev 1.5, adversarial finding —
+   the grain rule applied): two candidate findings from one document identical
+   on the claim dimensions (intervention, outcome, effect direction, effect
+   size + type, comparator, estimate level, canonical stratum) collapse to
+   **one finding whose anchors merge** (≥1 anchors was the design already);
+   the collapse is deterministic, flagged and counted — MECE is enforced in
+   code, never
    merely requested in the prompt (V2's counting unit was result rows, so
    verbose extraction silently inflated a document's evidence weight).
+   **Doc-status rule for invalid candidates** (rev 1.5): a schema-valid
+   response with zero candidate records → `no_findings`; every candidate
+   grain-invalid (missing intervention/outcome) → `extraction_failed`, reason
+   `invalid_records`, retryable; a mix → `extracted`, with invalid candidates
+   dropped-and-counted in the roll-up (they are malformed emissions, not
+   findings — counting is the honest treatment).
    Field-level coverage:
    nullable base fields carry a per-field coverage map with values
    `not_extracted` (the source does not report it) | `unclear` (reported
-   ambiguously, or failed a validation rule) — the data-model's field-level
+   ambiguously, or failed a validation rule) | `not_applicable` (the field
+   does not apply to this evidence shape — pooled-only stats on a study-level
+   finding; rev 1.5) — the data-model's field-level
    vocabulary; a null field with a marker is coverage, never a claim.
+   (`searched_and_absent` / `not_selected` are gap- and doc-ladder vocabulary,
+   not field-level; `no_findings` is a component status, not a data-model
+   coverage state — rev 1.5 clarification, no spec change.)
 5. **Extraction mechanics — per-source fan-out, windowed, budgeted, honest.**
    Per document: the basis text enters the prompt as **id-keyed segment records**
    (chunk ids as keys) under the standing data/instructions separation; the
@@ -417,6 +485,43 @@ internal (`OpenAIRankingBackend`) — either precedent stands.
    stays egress-free. There is no non-LLM production extraction path —
    the stub is a test seam, not a strategy (unlike select's two strategies).
 
+### Contract-stage adversarial review — findings & adjudication (Codex, 2026-07-07)
+
+Twelve findings against rev 1.4 (3 blockers by our adjudication were 4 by the
+reviewer's count · 8 majors); none challenged a user-settled decision.
+Adjudicated by the lead — 11 adopted, 1 adopted-in-part:
+
+1. Intent in prompt vs intent-independent memo (blocker): **adopted** — intent
+   removed from `extract_iof_v1`; gate 3 shrinks (decision 2, gate 3).
+2. Fingerprint omits output-affecting rule versions: **adopted** — digest over
+   all output-affecting versions, composition plan-pinned (decision 2).
+3. Failed records block their own retry via the memo key (blocker):
+   **adopted** — partial unique index over success states only (decisions 1–2,
+   schema).
+4. Coverage vocabulary narrowed vs data-model: **adopted-in-part** —
+   `not_applicable` added at field level; `searched_and_absent`/`not_selected`
+   clarified as gap/doc-ladder vocabulary and `no_findings` as component
+   status; no spec change needed (decision 4).
+5. Dedup keyed on quote conflicts with the claim grain: **adopted** — dedup
+   keys on claim dimensions; anchors merge (decision 4).
+6. Rev-1.4 fields missing from the binding DDL sketch (blocker): **adopted** —
+   comparator, estimate_level, stratum_qualifiers, τ² added (schema).
+7. Abstract-basis anchors vs "chunk reference" wording: **adopted** — anchor =
+   chunk location or abstract-envelope location by basis; rubric item 9
+   reworded (decision 4, rubric).
+8. `effect_direction='null'` SQL-NULL ambiguity: **adopted** — value renamed
+   `no_effect`, column NOT NULL, closed enums exempt from null-string coercion
+   (decisions 3–4, schema).
+9. All-candidates-invalid doc status undefined: **adopted** — status rules
+   pinned (decision 4).
+10. Stratum multiplicity/canonicalisation unpinned: **adopted** — canonical
+    sorted (type, value) array over a closed vocabulary (decision 3).
+11. Quote-repair attempt unbudgeted and prompt-surface-ambiguous: **adopted** —
+    repair removed; deterministic verification only (decision 4).
+12. Project-scope composite guards incomplete vs 010 precedent (blocker):
+    **adopted** — pss and extraction-record composite FKs + the
+    snapshot-consistency rule (schema).
+
 ### Schema
 
 **Gated change 1 — three new tables** (one migration; table count 20 → 23;
@@ -436,24 +541,41 @@ source_extraction_record   extraction_record_id PK · project_id FK→project
                            · finding_count INT NOT NULL DEFAULT 0
                            · run_id (creating run; assertion provenance)
                            · created_at
-                           UNIQUE (project_id, source_snapshot_id,
-                                   extraction_fingerprint)      -- the memo key
-                           Composite FK (run_id, project_id) — cross-project guard
+                           PARTIAL UNIQUE (project_id, source_snapshot_id,
+                                   extraction_fingerprint)
+                                   WHERE status IN ('extracted','no_findings')
+                                   -- the memo key; failures insert freely and
+                                   -- never block a retry (rev 1.5)
+                           Composite FKs (run_id, project_id),
+                           (project_source_snapshot_id, project_id) —
+                               cross-project guards (rev 1.5; source_snapshot
+                               itself is content-keyed/shared, guarded via the
+                               pss link). Consistency rule (rev 1.5):
+                               source_snapshot_id must be the selected pss's
+                               full_text_snapshot_id (basis full_text) or its
+                               envelope snapshot (basis abstract_only).
 
 intervention_outcome_finding
                            finding_id PK · project_id FK→project
                            · extraction_record_id FK→source_extraction_record
                            · intervention TEXT NOT NULL · outcome TEXT NOT NULL
-                           · population TEXT NULL
-                           · effect_direction TEXT CHECK (effect_direction IN
-                               ('positive','negative','null','mixed','unclear'))
+                           · population TEXT NULL · comparator TEXT NULL
+                           · effect_direction TEXT NOT NULL CHECK
+                               (effect_direction IN ('positive','negative',
+                               'no_effect','mixed','unclear'))   -- rev 1.5
+                           · estimate_level TEXT CHECK (estimate_level IN
+                               ('study','pooled','claim'))       -- rev 1.5
                            · study_design TEXT NULL
+                           · stratum_qualifiers JSONB (canonical sorted array of
+                               (type, value); closed type vocab — rev 1.5)
                            · statistics JSONB      (effect size + type, CI/SE,
-                               p-value, N, k, I² — reported values only)
+                               p-value, N, k, I², τ² — reported values only)
                            · causality_by_design TEXT (closed set, plan-pinned)
                            · primacy/prevalence flags (exact form plan-pinned)
                            · field_coverage JSONB  (per absent field:
-                               not_extracted | unclear)
+                               not_extracted | unclear | not_applicable)
+                           Composite FK (extraction_record_id, project_id) —
+                               cross-project guard (rev 1.5)
                            · grounding JSONB NOT NULL (anchors: chunk_id NULL for
                                abstract basis · verbatim quote · quote_verified BOOL
                                · match location [chunk id + char interval] when
@@ -520,9 +642,11 @@ before their ancestors).
    no default egress; the `ranking_backend` precedent).
 3. **Runtime egress — one new generation surface, and a materially larger text
    class than 009/010:** `extract_iof_v1` sends **full document text** (the
-   frozen chunks, windowed) — not just titles/abstracts — plus the scope intent
-   to the chat API. Same provider route and injection posture; the *content*
-   crossing the wire grows from envelope to full text. On the live verification
+   frozen chunks, windowed) plus the envelope block and the document's
+   evidence type — **no scope intent** (rev 1.5: extraction is
+   question-agnostic; intent in the prompt would poison the intent-independent
+   memo) — to the chat API. Same provider route and injection posture; the
+   *content* crossing the wire grows from envelope to full text. On the live verification
    path this is the openly-licensed fixture corpus only. Full-I/O Langfuse
    traces (user-operated dev instance) will therefore carry document full text —
    flagged here explicitly for approval, per the 009 trace posture.
@@ -550,7 +674,7 @@ deferrals ride `docs/deferred.md` as entries, not spec changes.
 
 ## Public / private boundary
 
-- On the live path, what leaves: the scope intent and the **full frozen text**
+- On the live path, what leaves: the **full frozen text**
   of selected fixture documents (openly licensed by construction — the
   sanitized-fixtures policy's full-text amendment) to the OpenAI API; full-I/O
   traces to the user-operated dev Langfuse. For arbitrary future corpora this
@@ -655,7 +779,9 @@ example text fails loudly before any API call.
 - `make verify` table with pass counts; socket-deny result named.
 - Migration roundtrip clean; table count 23.
 - Named test results: memo semantics (hit → reuse, no call, no new rows; stub
-  vs live fingerprints distinct; `no_findings` memoised and not re-paid),
+  vs live fingerprints distinct; `no_findings` memoised and not re-paid;
+  **a failed record never blocks or satisfies the memo — retry in a new run
+  extracts fresh**, rev 1.5),
   coverage invariants (statuses cover exactly the selected set;
   `selected == extracted + no_findings + failed`; findings ↔ records ↔ selected
   docs), quote verification (verbatim hit passes; boundary-spanning quote
@@ -668,8 +794,12 @@ example text fails loudly before any API call.
   real null + coverage marker; estimate-level coherence — rev 1.4),
   repeated-quote cursor (two findings citing the same sentence twice ground to
   successive occurrences — rev 1.4), match-status grading recorded per anchor
-  (rev 1.4), within-doc exact-duplicate dedup (collapsed, flagged, counted —
-  rev 1.4), pre-flight example validation (a deliberately non-verbatim few-shot
+  (rev 1.4), within-doc claim-keyed dedup (same claim, two quotes → one
+  finding with merged anchors, flagged, counted; different effect sizes →
+  distinct findings — rev 1.5), doc-status rules (valid-empty → `no_findings`
+  · all-grain-invalid → `extraction_failed(invalid_records)` · mixed →
+  `extracted` with dropped-and-counted invalids — rev 1.5), pre-flight example
+  validation (a deliberately non-verbatim few-shot
   example fails at load — rev 1.4), empty-findings-is-legal (a fixture doc with
   no IOF content yields `no_findings`, no forced stats — rev 1.4), windowing
   (multi-window doc: budget arithmetic,

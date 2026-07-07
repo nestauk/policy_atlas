@@ -20,12 +20,14 @@ otherwise it is in progress, not done.
        skipped with written justification — findings in
        [verification.md](verification.md).
 9. [ ] Provenance integrity holds as specced: every finding is single-source and
-       anchored to frozen text (verbatim quote + chunk reference,
-       deterministically checked, flagged-not-dropped on failure); coverage
-       states (`no_findings` · `extraction_failed` · `not_extracted` · `unclear`)
-       are never phrased as absence; the counting invariants over the selected
+       anchored to frozen text (verbatim quote + a chunk location or
+       abstract-envelope location per its basis, deterministically checked,
+       flagged-not-dropped on failure); coverage vocabulary (`no_findings` ·
+       `extraction_failed` · `not_extracted` · `unclear` · `not_applicable`)
+       is never phrased as absence; the counting invariants over the selected
        base are test-enforced; existing findings are never invalidated or
-       overwritten by a later run.
+       overwritten by a later run, and a failed extraction never blocks its
+       own retry.
 10. [ ] The source-groundability line holds both ways: the spec's base fields are
        all representable; question-relative judgements (normalised magnitude,
        causal weighting, is-beneficial) are absent from schema, prompt and
