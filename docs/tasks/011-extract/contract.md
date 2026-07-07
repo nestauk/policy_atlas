@@ -56,6 +56,59 @@ specs in [docs/specs/](../../specs/index.md).
 >   (grounding-tier/eval territory). Findings that confirmed the design
 >   unchanged: grounding-or-flag anchoring, span-level verification as best
 >   practice, mini-class model floor.
+> - **rev 1.4** (2026-07-07, two code-grounded studies — LangExtract source
+>   dissection + V2 extraction autopsy (`../discovery_policy_atlas`), both
+>   subagent reports adjudicated by the lead):
+>   **From LangExtract** (all quote-check mechanics, decision 4): ordered
+>   occurrence cursor (repeated quotes map to successive occurrences, never all
+>   to the first — a silent grounding bug class) · normalisation pinned as
+>   lowercase + whitespace-collapse + punctuation folding (smart quotes/dashes/
+>   NBSP) on both sides, **offsets always recorded into raw frozen text** (their
+>   deliberate NFC-avoidance lesson: normalising the offset substrate makes
+>   intervals drift) · graded match-status vocabulary (record the match method,
+>   not a binary flag) · pre-flight few-shot example validation (the
+>   quote-verifier runs over the prompt's own examples at load; a non-verbatim
+>   demonstration fails loudly). Confirmed: keep-on-failure; our
+>   concatenate-before-matching beats their per-chunk alignment for
+>   boundary-spanning quotes; their multi-pass merge recipe (identical prompt,
+>   char-interval overlap, first-pass-wins) recorded at the seam.
+>   **From V2 — what quietly worked, kept** (decision 3): the SR pooled grain
+>   (one finding per outcome × stratum; k/N/I²/τ²; pooled effect-size-type
+>   vocabulary; an estimate-level discriminator {study | pooled | claim}) · the
+>   **outcome-⊥-stratum rule** (outcome = base measure only, never "BMI at 12
+>   months"; timepoint/subgroup are structured stratum qualifiers — what makes
+>   cross-document grouping tractable) · **comparator** as a source-named
+>   nullable reference (effect direction is vs-something) · the prevalence-only
+>   guard semantics with skip/extract examples and unsure→prevalence default ·
+>   control-arms-are-not-interventions. ⚑ *Stratum qualifiers + comparator +
+>   estimate level slightly extend the data-model's literal base-field list —
+>   within its source-groundability line ("what the source reports"), flagged
+>   at this gate; candidate minor flow-back to the data-model base-field list
+>   rides the contract.*
+>   **From V2 — failure modes closed** (decisions 4, 5): null-like-string
+>   coercion joins field-rule validation ("null"/"n/a"/"none"/"unknown" in
+>   nullable fields → real null + coverage marker; V2 instructed the literal
+>   string "null" and paid in permanent downstream cleanup) · the pydantic
+>   record model is the **single source of truth** for API schema and prompt
+>   field docs, `extra="forbid"` (V2's prompt/schema drift silently deleted
+>   three requested fields incl. the SR evidence-volume signal) · prompt
+>   receives the doc's `primary_evidence_type` as context with pooled-vs-study
+>   guidance; **an empty findings list is explicitly legal** and "never force
+>   effect fields onto documents that don't report them" joins the negative
+>   rules (V2 ran RCT prompts on qualitative/policy docs → forced stats) ·
+>   **within-doc exact-duplicate dedup**, deterministic, flagged and counted
+>   (V2 requested MECE in the prompt but never enforced it; verbose extraction
+>   inflated evidence weight downstream) · explicit max-output-tokens
+>   plan-pinned (V2's uncapped calls truncated mid-JSON, silently emptying
+>   stages) · grounding-rate instrumentation from day one: roll-up counts +
+>   Langfuse run scores make extraction quality measurable (V2's ">95%
+>   grounding" had no measurement artifact behind it).
+>   Seams recorded: per-intervention focused-call decomposition (V2's
+>   cross-contamination remedy — eval-gated, same family as multi-pass) ·
+>   V2's CFIR implementation-profile field definitions noted as input to the
+>   `implementation_context_finding` seam · mixed/unclear findings are
+>   first-class and must survive into group/synthesise (V2 extracted then
+>   discarded them at aggregation).
 
 ## Goal
 
@@ -212,21 +265,42 @@ internal (`OpenAIRankingBackend`) — either precedent stands.
    subset). Evidence dataset snapshots (pinned point-in-time consumption) stay
    deferred with it — `group` will read the run roll-up, not a pinned dataset,
    until that seam lands.
-3. **The field set is the spec's, verbatim — and the line is enforced both ways.**
+3. **The field set is the spec's, sharpened by the V2 autopsy — and the line is
+   enforced both ways.**
    Base fields: `intervention`, `outcome`, `population` (source-named text
    references; nullable population), `effect_direction` (closed set:
    `positive` | `negative` | `null` | `mixed` | `unclear` — a reported null is a
    **finding**, first-class), effect size + type, uncertainty (CI/SE), p-value,
-   study-design/sample metadata (design, N, k, I²), the descriptive
+   study-design/sample metadata (design, N, k, I², τ²), the descriptive
    **causality-by-design** label (closed set, plan-pinned, derived from the
-   design the source reports), primacy/prevalence flags. The typed record keeps
-   its dimensions **intact and queryable** — `intervention`/`outcome`/
-   `population`/`effect_direction`/`study_design` as real columns (filterable
-   now; hybrid-indexing waits at the `retrieve` seam), the stats bundle as
-   structured JSONB (exact column-vs-JSONB split plan-pinned). **Not present
-   anywhere** — schema, prompt, or output: normalised magnitude, causal
-   weighting, is-beneficial (test-asserted absent from the schema; the prompt
-   never asks for them).
+   design the source reports), primacy/prevalence flags. Three V2-derived
+   sharpenings (rev 1.4, ⚑ flagged at this gate — all inside the
+   source-groundability line; candidate minor data-model flow-back):
+   - **Outcome ⊥ stratum**: `outcome` is the **base measure only** ("BMI",
+     never "BMI at 12 months"); timepoint/subgroup/setting qualifiers are
+     structured **stratum qualifiers** on the finding (nullable
+     type + value). One finding per (intervention, outcome, effect, stratum) —
+     the decomposition that keeps outcome references groupable downstream
+     (V2's best prompt rule, lifted).
+   - **Comparator**: a nullable source-named reference — an effect direction
+     is *versus something* (control, usual care, another arm); reported by the
+     source, so a base field.
+   - **Estimate level**: closed discriminator {`study` | `pooled` | `claim`} —
+     a systematic review's pooled estimate (with k/I²/τ² and pooled
+     effect-size types) and a primary study's estimate (with N) are different
+     evidence shapes sharing one schema; cross-checked by field rules (pooled
+     ⇢ k expected; study ⇢ N expected — violations flag, never block).
+   The typed record keeps its dimensions **intact and queryable** —
+   `intervention`/`outcome`/`population`/`effect_direction`/`study_design` as
+   real columns (filterable now; hybrid-indexing waits at the `retrieve`
+   seam), the stats bundle + qualifiers as structured JSONB (exact
+   column-vs-JSONB split plan-pinned). **The pydantic record model is the
+   single source of truth** for the API response schema *and* the prompt's
+   field documentation, `extra="forbid"` — prompt/schema drift is structurally
+   impossible (V2 silently discarded three requested fields this way).
+   **Not present anywhere** — schema, prompt, or output: normalised magnitude,
+   causal weighting, is-beneficial (test-asserted absent from the schema; the
+   prompt actively forbids them).
 4. **Every finding anchors to its frozen source text — deterministically
    checked.** Each finding carries ≥1 grounding anchor: verbatim supporting
    quote + chunk reference (`chunk_id`; null for abstract-basis findings, which
@@ -237,15 +311,33 @@ internal (`OpenAIRankingBackend`) — either precedent stands.
    grain). **A verified quote records its match location** (chunk id + char
    interval the check found — rev 1.3: the recorded by-product of verify, per
    the data-model; localizes anchors within the coarse-chunk PDFs 008
-   documented). A finding whose quote fails the check after one repair attempt
-   lands **flagged `quote_unverified`, never dropped and never silently kept**
-   — the flag rides the finding row and the roll-up counts it. **Deterministic
+   documented). Quote-check mechanics pinned from the LangExtract dissection
+   (rev 1.4): **normalisation = lowercase + whitespace-collapse + punctuation
+   folding** (smart quotes, dashes, NBSP) applied to both sides, with offsets
+   always recorded into the **raw** frozen text (never normalise the offset
+   substrate); an **ordered occurrence cursor** per document so repeated
+   identical quotes map to successive occurrences, never all to the first; a
+   **graded match status** recorded per anchor (exact | normalised | failed —
+   the method, not just a bit). A finding whose quote fails the check after
+   one repair attempt lands **flagged `quote_unverified`, never dropped and
+   never silently kept** — the flag rides the finding row and the roll-up
+   counts it. **Deterministic
    field-rule validation runs after schema parse** (rev 1.3): bounds and
    consistency checks over the reported statistics (indicatively: p-value ∈
    [0,1], CI lower ≤ upper, N a positive integer, closed vocabularies
-   enforced; exact rule set plan-pinned) — a violating field is flagged
+   enforced; estimate-level coherence [pooled ⇢ k, study ⇢ N]; **null-like
+   strings — "null"/"n/a"/"none"/"unknown"/"" — in nullable fields coerced to
+   real null + coverage marker** (rev 1.4: V2's literal-"null" instruction
+   polluted every downstream consumer); exact rule set plan-pinned) — a
+   violating field is flagged
    `unclear` and counted, never silently accepted (schema validity is the easy
-   part; rule checks catch schema-valid nonsense). Field-level coverage:
+   part; rule checks catch schema-valid nonsense). **Within-doc exact-duplicate
+   dedup** (rev 1.4): two findings from one document identical on
+   (intervention, outcome, effect direction, stratum, quote) collapse to one,
+   deterministically, flagged and counted — MECE is enforced in code, never
+   merely requested in the prompt (V2's counting unit was result rows, so
+   verbose extraction silently inflated a document's evidence weight).
+   Field-level coverage:
    nullable base fields carry a per-field coverage map with values
    `not_extracted` (the source does not report it) | `unclear` (reported
    ambiguously, or failed a validation rule) — the data-model's field-level
@@ -440,10 +532,16 @@ artefact/block writes; no new event types; no doc-level status columns on
 existing tables (`not_selected`/`not_extracted` stay derivable/recorded, never
 canonical doc state).
 
-**Spec flow-backs:** none required — components §7 and the data-model findings
-layer are implemented as written. Two deferrals ride `docs/deferred.md` as new
-entries (extraction service + dataset snapshots; hybrid-indexing at the
-`retrieve` seam), not spec changes.
+**Spec flow-backs:** one **candidate minor clarification** rides this contract
+(rev 1.4, ⚑ approve or strike at this gate): the data-model's
+`intervention_outcome_finding` base-field list gains three source-groundable
+sharpenings surfaced by the V2 autopsy — **stratum qualifiers**
+(timepoint/subgroup/setting; outcome stays the base measure), **comparator**
+(source-named, nullable), and the **estimate-level discriminator**
+(study | pooled | claim, with τ² joining the pooled stats). All are "what the
+source reports" — the spec's own line — made explicit; `log.md` entry rides
+the slice if approved. Components §7 is implemented as written. Other
+deferrals ride `docs/deferred.md` as entries, not spec changes.
 
 ## Public / private boundary
 
@@ -473,6 +571,20 @@ and the event payload; the only prompt in the slice. Prompt design carries
 (question-relative judgements, cross-source claims, anything this document
 does not itself report) — actively limiting degrees of freedom, not just
 omitting the ask; enrichment absence stays test-asserted on the schema side.
+Further prompt requirements (rev 1.4): quotes must be **verbatim exact text,
+never paraphrased**; the prompt receives the document's
+`primary_evidence_type` as context, with pooled-vs-study guidance (an SR
+reports meta-analytic estimates per outcome × stratum; a primary study reports
+its own) — one prompt surface, evidence-type-conditioned, not prompt families;
+**an empty findings list is explicitly legal** ("this document reports no
+intervention–outcome findings" is a valid, expected answer — V2 forced
+effect-shaped output onto qualitative/policy documents and got fabricated
+stats); V2's prevalence-only skip/extract examples and
+control-arms-are-not-interventions rule are mined into the prompt (unsure →
+`prevalence_only = true`). **Pre-flight example validation** (rev 1.4,
+LangExtract's guardrail): at load, the quote-verifier runs over the prompt's
+own few-shot examples — a demonstration whose quote is not verbatim in its
+example text fails loudly before any API call.
 
 ## Disciplines binding this slice
 
@@ -520,7 +632,10 @@ omitting the ask; enrichment absence stays test-asserted on the schema side.
   flowing through select's budget), findings written with verified quotes,
   memo behaviour shown (a second run reuses, zero fresh calls for unchanged
   docs), extraction summary rendered, calls visible in the dev Langfuse trace
-  (prompt version, tokens/cost); per-run counts and an honest cost note
+  (prompt version, tokens/cost) with **run-level grounding scores** (rev 1.4:
+  quote-verified share, field-coverage shares, dedup/fallback counts — the 009
+  `score_summary` pattern; V2's extraction quality was never measured, ours is
+  measurable from the first live run); per-run counts and an honest cost note
   recorded; keys absent from captured output.
 - Deterministic vs AI eval: all suite checks are deterministic (stub backend).
   Extraction *quality* (are the findings right/complete?) is eval territory —
@@ -544,7 +659,14 @@ omitting the ask; enrichment absence stays test-asserted on the schema side.
   basis recorded end-to-end), verified-quote match location recorded (chunk +
   char interval present on verified anchors, absent on unverified — rev 1.3),
   field-rule validation (out-of-bounds p-value / inverted CI / non-positive N →
-  field flagged `unclear`, counted, finding kept — rev 1.3), windowing
+  field flagged `unclear`, counted, finding kept — rev 1.3; null-like string →
+  real null + coverage marker; estimate-level coherence — rev 1.4),
+  repeated-quote cursor (two findings citing the same sentence twice ground to
+  successive occurrences — rev 1.4), match-status grading recorded per anchor
+  (rev 1.4), within-doc exact-duplicate dedup (collapsed, flagged, counted —
+  rev 1.4), pre-flight example validation (a deliberately non-verbatim few-shot
+  example fails at load — rev 1.4), empty-findings-is-legal (a fixture doc with
+  no IOF content yields `no_findings`, no forced stats — rev 1.4), windowing
   (multi-window doc: budget arithmetic,
   ordered concatenation, window-failure → doc `extraction_failed`, others
   proceed), schema line (enrichment fields absent from schema and prompt,
@@ -583,7 +705,19 @@ omitting the ask; enrichment absence stays test-asserted on the schema side.
   Gemini-first and outside our provenance model) · **parse-quality escalation
   pointer** (rev 1.3 — extraction yield/failures on the 008-documented
   collapsed-chunk PDFs become the first downstream consumer signal for the
-  docling ML-escalation seam; note on the existing entry).
+  docling ML-escalation seam; note on the existing entry) ·
+  **per-intervention focused-call decomposition** (rev 1.4 — V2's
+  cross-contamination remedy: one intervention per call; eval-gated remedy if
+  quality evals show cross-finding contamination in the per-doc call) ·
+  **bounded fuzzy quote fallback** (rev 1.4 — LangExtract's coverage+density
+  gated LCS tier, fuzzy-only-on-failure; adopt only if evals show
+  exact-normalised recall insufficient, and never inside the verified-verbatim
+  guarantee) · **V2 CFIR implementation-profile fields**
+  (cost/staffing/complexity + the inner-setting rule) recorded as design input
+  to the `implementation_context_finding` seam · **mixed/unclear findings are
+  first-class** — carried forward as a requirement on group/synthesise (V2
+  extracted them, then aggregation silently zeroed them; flag-not-drop must
+  survive the whole deep chain).
 - Diff summary (data files excluded from review diffs per the 007 retro).
 
 ## Risk tier & review focus
