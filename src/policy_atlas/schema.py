@@ -724,6 +724,13 @@ extraction_result = Table(
         ["runs.run_id", "runs.project_id"],
         name="fk_exr_run_project",
     ),
+    # The executed selection must exist for this scope (targets uq_selr_scope_run),
+    # so a roll-up can never reference a selection that was never written.
+    ForeignKeyConstraint(
+        ["evidence_scope_id", "selection_run_id"],
+        ["selection_result.evidence_scope_id", "selection_result.run_id"],
+        name="fk_exr_selection",
+    ),
     # Run-local roll-up: same-run re-execution is a loud error, retry = new run.
     UniqueConstraint("evidence_scope_id", "run_id", name="uq_exr_scope_run"),
 )

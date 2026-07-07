@@ -43,8 +43,11 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [Rubric domain defines appraisability](rubric-domain-defines-appraisability.md) - types absent from `DEFAULT_RUBRIC` are skipped-and-counted, never scored; a domain test against the closed vocabulary makes the lookup infallible.
 * [Full-text chunk hashes are deterministic — via a pymupdf4llm source patch](fulltext-chunk-hash-determinism.md) - same bytes → same chunks in every process; pymupdf4llm 0.3.4's id()-keyed cache breaks this and is patched at import; determinism test is the backstop on any parser bump.
 * [Untrusted directive parsing — malformed fails closed, unknown references flag](directive-parse-malformed-vs-unknown.md) - structural malformation raises `DirectiveError` (bounded strings/collections, static messages); a well-formed unknown column/tag reference matches nothing and surfaces in `unmatched_boosts` (task 010).
+* [Grounding locations come from the verifier, never the model's claim](grounding-location-from-verification.md) - a model-emitted segment/chunk id is untrusted claim data; every dereferenceable location field derives from the verified spans (task 011, convergent review finding).
 
 ## Integration quirks (model / telemetry providers)
 
 * [Schema-valid LLM output can still be empty](llm-schema-valid-empty-output.md) - structured outputs guarantee shape, never completeness; validate counts against the input set in code (gpt-5-nano returned a schema-perfect empty assignment list, live-proven, task 009).
 * [Langfuse keys without a host silently export to the SaaS cloud](langfuse-host-must-be-explicit.md) - the SDK defaults to cloud.langfuse.com; with full-I/O traces that is a boundary violation, so `get_langfuse()` requires an explicit host and is loud on partial config.
+* [On reasoning models, max_completion_tokens covers reasoning + output](reasoning-model-output-cap.md) - a cap tuned for output alone truncates real answers on gpt-5-class models (LengthFinishReasonError, task 011 live run 1); keep the cap explicit and fingerprinted, size it for both.
+* [Postgres rejects NUL (U+0000) in TEXT/JSONB — scrub model output at the backend boundary](model-output-nul-scrub.md) - LLMs emit NUL-bearing strings; psycopg aborts at INSERT; strip once where records come off the wire (task 011 live run 2).

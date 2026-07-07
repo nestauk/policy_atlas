@@ -22,7 +22,11 @@ denies `socket.socket` around a full 2-doc mixed-basis `extract_scope` round tri
 — pass. Composite-FK note (plan Task 1): the new `uq_ser_id_project` composite
 unique was added as the finding table's FK target per the repo's parent pattern;
 the other composite-FK targets (`uq_runs_run_project`, `uq_pss_id_project`,
-`uq_evidence_scope_id_project`) pre-existed — verified, not assumed. No
+`uq_evidence_scope_id_project`) pre-existed — verified, not assumed. Post-review,
+`extraction_result.selection_run_id` gained the pattern-conforming composite FK
+`fk_exr_selection` (targets `uq_selr_scope_run`) — the review stack found it was
+the schema's only run-referencing column with no FK; migration amended
+branch-local, roundtrip re-run clean. No
 dependency changes (`openai`/`langfuse`/`pydantic` already present — asserted,
 not added).
 
@@ -32,11 +36,12 @@ All suite checks are deterministic (sentinel-driven stub + misbehaving /
 recording / hijacked doubles for the judgment paths). Named results per the
 contract's evidence list:
 
-- **Memo semantics** — `test_memo_reuse_second_run` (hit → reuse, no call, no
+- **Memo semantics** — `test_memo_reuse` (hit → reuse, no call, no
   new finding rows, the first run's `extraction_record_id` returned);
-  `test_fingerprint_stub_vs_live_distinct` (stub and live fingerprints are
-  distinct full sha256 hexes); `test_no_findings_memoised` (a `no_findings` doc
-  is memoised and not re-paid); `test_failed_record_never_blocks_or_satisfies_memo`
+  `test_fingerprint_stub_vs_live_distinct_and_hex` (stub and live fingerprints
+  are distinct full sha256 hexes); `test_no_findings_and_memo` (a `no_findings`
+  doc is memoised and not re-paid);
+  `test_failed_extraction_never_blocks_or_satisfies_memo`
   (a failed record inserts freely, never matches the memo, and a retry in a new
   run extracts fresh — two records coexist under the partial unique index).
 - **Coverage invariants** — `test_coverage_invariants_at_payload_boundary`
@@ -56,6 +61,9 @@ contract's evidence list:
 - **Verified-quote match location** — verified anchors carry non-empty
   `spans` (chunk id + raw char interval) and a graded `match_status`
   (`exact` | `normalised`); unverified anchors carry `failed` + empty spans.
+  Post-review: the anchor's top-level `chunk_id` is derived from the verified
+  span, never from the model's emitted `segment_id` (which is stored verbatim
+  as untrusted claim data) — `test_chunk_id_is_verified_location_not_model_claim`.
 - **Field-rule validation** — out-of-bounds p-value / inverted CI /
   non-positive N / I² > 100 / negative τ² / NaN effect size → field nulled +
   flagged `unclear`, finding kept; null-like strings (`"null"`, `"n/a"`, …) in
@@ -329,15 +337,114 @@ extended) · parse-quality escalation pointer (docling entry extended).
 
 ## Review findings
 
-Added after the review stack (step 7):
+Step-7 review stack, fresh conversation (2026-07-07). Tier-3 baseline: three
+reasoning lanes (contract verifier · security auditor · Codex adversarial) plus
+`/code-review medium` as the Claude half of the heterogeneous pair (8 scoped
+finder angles → 5 grouped verifiers). Reviewer spend: ≈ 270K reasoning-class
+(contract verifier 142K · security 105K · Codex plumbing 23K — ~8% over the
+250K proxy) + ≈ 700K fast-worker (8 finders ≈ 520K on the 8K-line diff even
+with per-angle pathspec scoping + 5 verifiers ≈ 180K — ~40% over the 500K
+proxy; finders ran on the cheapest model class, so the cost proxy overstates
+this side). No duplicate lanes were run; recorded honestly for the retro.
 
-- **Contract verifier:**
-- **`/code-review`:**
-- **`/security-review`:**
-- **Adversarial review** (Tier 3):
-- **`/simplify`:**
-- **`/okf validate`:**
+- **Contract verifier** (fresh Opus, read-only): 9/11 rubric items HOLD, none
+  FAIL (item 8 = this review; knowledge/agentic-ops records step-8-pending as
+  scheduled). MINOR: four test names in this file didn't match the actual test
+  names — **adopted**, corrected above. MINOR: the phase-5 transient suite
+  failure remains unattributed — held under Known unverified (three further
+  green full runs since, incl. this phase's two). NOTE: `EXTRACT_MAX_OUTPUT_TOKENS`
+  deviates from the plan pin (recorded as deviation 2 — no action). NOTE:
+  `_assert_invariants` ran after `_write_docs`, so the (structurally
+  unreachable) violation raise could not prevent the partial write it reported —
+  **adopted**, assert moved before any write.
+- **Security auditor** (Tier-3 lane): 0 critical/high/medium; all six contracted
+  posture items confirmed genuinely test-enforced (injection placement/inertness/
+  hijack triad, NUL scrub, key canary, socket-deny, stub default, static DDL +
+  bound parameters). LOW ×3: envelope title/abstract not structurally fenced in
+  the user template — **deferred** (bounded threat; prompt changes are
+  eval-blind — deferred.md "Prompt envelope fencing"); top-level grounding
+  `chunk_id` stored from the model's claim — **adopted** (see below, convergent
+  with Codex); no absolute call-volume ceiling — **deferred** (`select` is the
+  designed cost control; deferred.md "Per-run window/call ceiling"). INFO ×2
+  accepted as-is (stub sentinels follow the established pattern; CHECK-list SQL
+  from compile-time constants).
+- **Adversarial review** (Codex, read-only, Tier 3): 5 findings. (1) evidence
+  type is prompt input but not a memo key component — **deferred with reason**
+  (classify is insert-once and skeleton orders classify-before-extract; only a
+  hand-rolled classify-less plan triggers it — deferred.md entry). (2) memo
+  check non-atomic across concurrent runs — **declined** (single-writer model;
+  `uq_ser_memo` makes the race loud, never corrupting; noted on the memo seam).
+  (3) quote verification searches the whole basis while the grounding stores
+  the model-claimed `segment_id`/`chunk_id` beside `quote_verified: true` —
+  **adopted** (convergent with security LOW-2, two model families
+  independently): `chunk_id` is now derived from the verified span (None when
+  unverified/abstract); `segment_id` stays stored-verbatim claim data;
+  regression test `test_chunk_id_is_verified_location_not_model_claim` plus a
+  hardened `test_fabricated_quote_kept_and_flagged`. (4) memo-reused docs
+  don't contribute to fresh-run quality counters — **declined**, documented
+  deliberate (§ Intent & assumptions; reused docs are attributable to their
+  creating run's roll-up). (5) no window overlap between window-filling
+  segments — **declined as defect** (forced by the no-regress progress
+  guarantee); the recall gap is named on the eval-gated multi-pass seam.
+- **`/code-review medium`** (8 lens-scoped finder angles; A/B/C correctness →
+  `src`+`alembic`, cleanup → `src`+`tests`, conventions → rule files): B and
+  conventions returned clean. 15 raw candidates → dedup → 5 verifiers:
+  1 PLAUSIBLE correctness/schema-fidelity finding **adopted** — 
+  `extraction_result.selection_run_id` was the schema's only run-referencing
+  column with no FK (`fk_exr_selection` added, migration amended, roundtrip
+  re-run); 6 cleanups CONFIRMED and **adopted** (basis-snapshot rule was
+  triplicated → single `_frozen_text_snapshot_id` resolver; duplicate segment
+  comprehension; `_apply_memo` untyped-dict casts → `_MemoHit` NamedTuple;
+  duplicated local void-field helpers in quote_verify → `_void_unclear`;
+  estimate-coherence if/elif → data-driven `_INCOHERENT_FIELDS_BY_LEVEL`;
+  usage-logging helpers byte-identical in `extraction_backend.py`/`ranking.py`
+  → shared `log_usage`/`usage_metadata` in `embeddings.py` beside
+  `resolve_openai_client`). 1 CONFIRMED cleanup **declined on inspection**:
+  "carry `claim_key` instead of recomputing" breaks on `dedup_records`'
+  deliberate `model_copy` of survivors — recomputation is the honest form.
+  Others REFUTED by verifiers (guarded empty-quote loop; deliberate independent
+  recount in `_assert_invariants`; micro-optimisations not worth changes).
+- **`/simplify`:** skipped with justification — `/code-review`'s
+  reuse/simplification/efficiency/altitude angles ran with fixes applied; a
+  separate same-family pass would duplicate it (task-cycle-review § lanes).
+- **`make okf-validate`:** pass (24 concepts, 0 violations; runs inside
+  `make verify`).
+
+**Convergence note:** the one finding surfaced independently by two model
+families (Claude security lane + Codex adversarial) — claim-derived `chunk_id` —
+was the highest-confidence defect and was adopted; each lane also produced
+unique findings (contract verifier: assert-order + doc accuracy; Codex: memo
+semantics; code-review: the missing FK), justifying every lane.
+
+**Fake-done check over the review fixes:** no tests deleted/skipped/weakened —
+the fabricated-quote test gained assertions and one test was added (428 → 429);
+no swallowed errors introduced; all fixes are real code changes, not renames;
+`make verify` re-run green after fixes.
 
 ## Rubric status
 
-To be completed at step 7 against `rubric.md`.
+Completed at step 7 (2026-07-07), post-fix:
+
+1. ☑ Contract satisfied — contract-verifier lane: HOLDS, six deviations
+   correctly classified within contract vocabulary.
+2. ☑ `make verify` green post-fixes (429 passed); live check evidence above
+   (3 runs, memo reuse demonstrated). The one transient unattributed failure
+   stays flagged under Known unverified.
+3. ☑ No unapproved gated change — the diff carries exactly the three approved
+   gates; the review-phase FK is a pattern-conforming constraint inside the
+   approved table shape (branch-local migration amendment, roundtrip re-run).
+4. ☑ No generated files or secrets edited by hand.
+5. ☑ No tests deleted/skipped/weakened (review fixes only added/strengthened).
+6. ☑ Verification evidence recorded (this file).
+7. ☑ Known gaps + deferred seams listed (deferred.md § task-011, extended by
+   four review-stack seams).
+8. ☑ Review stack ran per Tier 3, findings + adjudication above; `/simplify`
+   skipped with written justification; reasoning-class spend overage recorded
+   honestly in § Review findings.
+9. ☑ Provenance integrity — contract-verifier + Codex lanes checked memo
+   durability, anchoring, flag-not-drop, invariants; the one anchoring gap
+   found (claim-derived chunk_id) is fixed and test-enforced.
+10. ☑ Source-groundability both ways — test-asserted (schema columns, wire
+    `extra="forbid"`, prompt negative rules).
+11. ☑ Stub + egress-free defaults; one prompt surface; socket-deny named;
+    fingerprints stub ≠ live — all test-enforced (security lane confirmed).

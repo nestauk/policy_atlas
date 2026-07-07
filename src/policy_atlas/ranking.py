@@ -13,7 +13,7 @@ from openai.types.completion_usage import CompletionUsage
 from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas import tracing
-from policy_atlas.embeddings import resolve_openai_client
+from policy_atlas.embeddings import log_usage, resolve_openai_client, usage_metadata
 from policy_atlas.grouping import GroupingDoc, records_json
 from policy_atlas.tags import has_control_character
 
@@ -163,24 +163,6 @@ def validate_ranked(batch_ids: set[str], ranked: list[RankedDoc]) -> dict[str, R
     return accepted
 
 
-def _log_usage(event: str, usage: CompletionUsage | None) -> None:
-    log.info(event, **_usage_metadata(usage))
-
-
-def _usage_metadata(usage: CompletionUsage | None) -> dict[str, int | None]:
-    if usage is None:
-        return {
-            "prompt_tokens": None,
-            "completion_tokens": None,
-            "total_tokens": None,
-        }
-    return {
-        "prompt_tokens": usage.prompt_tokens,
-        "completion_tokens": usage.completion_tokens,
-        "total_tokens": usage.total_tokens,
-    }
-
-
 class RankingBackend(Protocol):
     """The select ranking seam.
 
@@ -260,7 +242,7 @@ class OpenAIRankingBackend:
             messages=messages,
             response_format=_RankedDocsModel,
         )
-        _log_usage("ranking.rank.usage", response.usage)
+        log_usage("ranking.rank.usage", response.usage)
         if not response.choices:
             raise RuntimeError("OpenAI ranking response had no choices.")
         parsed = response.choices[0].message.parsed
@@ -315,7 +297,7 @@ class OpenAIRankingBackend:
                     "batch_index": batch_index,
                     "batch_size": len(batch),
                     "doc_ids": [doc["id"] for doc in batch],
-                    **_usage_metadata(usage),
+                    **usage_metadata(usage),
                 },
             )
             self._langfuse_client.score_current_trace(

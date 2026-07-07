@@ -2,6 +2,19 @@
 
 ## 2026-07-07
 * **Creation**: Added
+  [grounding-location-from-verification](grounding-location-from-verification.md) — a
+  model-emitted location is a claim by untrusted output; dereferenceable location fields
+  derive from verified spans (task 011 review stack, the convergent security + adversarial
+  finding).
+* **Creation**: Added
+  [reasoning-model-output-cap](reasoning-model-output-cap.md) — `max_completion_tokens`
+  covers reasoning + output on gpt-5-class models; an output-sized cap truncates real
+  answers (task 011 live evidence, deviation 2).
+* **Creation**: Added
+  [model-output-nul-scrub](model-output-nul-scrub.md) — Postgres rejects U+0000 in
+  TEXT/JSONB; model output is scrubbed once at the backend boundary (task 011 live
+  evidence, deviation 3).
+* **Creation**: Added
   [directive-parse-malformed-vs-unknown](directive-parse-malformed-vs-unknown.md) — untrusted
   execution-bearing JSONB inputs parse fail-closed on structural malformation (bounded
   strings/collections, static messages) but flag unknown column/tag references non-fatally;

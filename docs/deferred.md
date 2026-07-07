@@ -443,7 +443,10 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   raises recall on long documents (LangExtract's recipe: char-interval overlap merge,
   first-pass-wins recorded at the seam); can't be measured without ground truth →
   eval-gated. `extraction_provenance.pass_count` records 1 from day one so the seam opens
-  cheaply.
+  cheaply. One named recall gap for the evals to weigh (011 review, Codex): when a single
+  segment fills a whole window, the greedy windowing must advance without overlap (the
+  no-regress progress guarantee), so a claim spanning the boundary between two
+  window-filling chunks is never seen whole by any one call.
 - **Retrieval-augmented extraction** (contract rev 1.1c) — full read + targeted in-doc
   retrieval repair / cross-window context assembly (incl. cross-window naming consistency,
   cut at rev 1.2). Composable and legitimate — the full read licenses coverage — but
@@ -488,7 +491,32 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   fresh-extract and collide on the memo key (IntegrityError → honest loud failure).
   Impossible with the current corpus (pss is unique per project+snapshot; full-text
   snapshots are per-doc); if content-hash full-text dedup ever lands, add an in-run memo
-  update so the second doc reuses the first's record.
+  update so the second doc reuses the first's record. Same posture for **concurrent
+  extract runs** over the same project/fingerprint (011 review, Codex): the memo read is
+  not atomic with the insert, so two simultaneous runs can both extract fresh and the
+  second fails loudly on `uq_ser_memo` — wasted spend, never corruption; a single-writer
+  operating model makes this a non-path today.
+- **Evidence type is prompt input but not a memo/record key component** (011 review,
+  Codex) — `primary_evidence_type` conditions the extraction prompt, yet the memo keys on
+  (project, basis snapshot, fingerprint) only and the record does not store the evidence
+  type used. Unreachable today: classification is insert-once per (scope, doc) and the
+  skeleton orders classify before extract — the only trigger is a hand-rolled plan that
+  extracts *before* classifying (docs extract as "Unclassified" and memo-reuse after
+  classification lands). If such plans become supported, record the evidence type on
+  `source_extraction_record` and make memo hits require a match.
+- **Per-run window/call ceiling** (011 review, security) — the enforced call budget is
+  `windows × (1 + retry_cap)`, which scales with document length; there is no absolute
+  per-run cap, so a pathological oversized corpus drives spend linearly ("within
+  budget"). Bounded today by `select`'s budget (the designed cost control) and the
+  fixture corpus. If arbitrary corpora land, add an absolute window ceiling as a
+  fingerprint component with a per-doc `window_cap_exceeded` failure reason.
+- **Prompt envelope fencing** (011 review, security) — segment text enters the prompt as
+  id-keyed JSON data records, but the envelope title/abstract are interpolated inline in
+  the user template, so a hostile abstract can structurally spoof the template around
+  them (impact bounded: wrong findings for its own document, quotes still
+  verified-or-flagged). Fence the envelope as a JSON data object at the next
+  `extract_iof_v1` version bump — prompt changes are eval-blind until the
+  extraction-quality evals exist, so this deliberately does not ride the review phase.
 - **`thin_extraction` roll-up flag** — named in the contract "where computed"; no
   definition was pinned and v1 deliberately does not compute it. Define (e.g. findings per
   extracted full-text doc below a floor) when a consumer needs it.

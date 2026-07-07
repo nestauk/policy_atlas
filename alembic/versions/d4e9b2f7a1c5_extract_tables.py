@@ -149,6 +149,11 @@ def upgrade() -> None:
             ["runs.run_id", "runs.project_id"],
             name="fk_exr_run_project",
         ),
+        sa.ForeignKeyConstraint(
+            ["evidence_scope_id", "selection_run_id"],
+            ["selection_result.evidence_scope_id", "selection_result.run_id"],
+            name="fk_exr_selection",
+        ),
         sa.UniqueConstraint("evidence_scope_id", "run_id", name="uq_exr_scope_run"),
     )
 

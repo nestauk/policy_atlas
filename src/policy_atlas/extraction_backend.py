@@ -9,7 +9,7 @@ from langfuse import Langfuse
 from openai.types.completion_usage import CompletionUsage
 
 from policy_atlas import tracing
-from policy_atlas.embeddings import resolve_openai_client
+from policy_atlas.embeddings import log_usage, resolve_openai_client, usage_metadata
 from policy_atlas.extract_prompt import (
     EXTRACT_MAX_OUTPUT_TOKENS,
     EXTRACTION_MODEL,
@@ -19,24 +19,6 @@ from policy_atlas.extract_prompt import (
 from policy_atlas.extraction_records import ExtractionResponse, ExtractionWindowPayload
 
 log = structlog.get_logger()
-
-
-def _log_usage(event: str, usage: CompletionUsage | None) -> None:
-    log.info(event, **_usage_metadata(usage))
-
-
-def _usage_metadata(usage: CompletionUsage | None) -> dict[str, int | None]:
-    if usage is None:
-        return {
-            "prompt_tokens": None,
-            "completion_tokens": None,
-            "total_tokens": None,
-        }
-    return {
-        "prompt_tokens": usage.prompt_tokens,
-        "completion_tokens": usage.completion_tokens,
-        "total_tokens": usage.total_tokens,
-    }
 
 
 class ExtractionBackend(Protocol):
@@ -103,7 +85,7 @@ class OpenAIExtractionBackend:
             response_format=ExtractionResponse,
             max_completion_tokens=EXTRACT_MAX_OUTPUT_TOKENS,
         )
-        _log_usage("extraction.extract.usage", response.usage)
+        log_usage("extraction.extract.usage", response.usage)
         if not response.choices:
             raise RuntimeError("OpenAI extraction response had no choices.")
         parsed = response.choices[0].message.parsed
@@ -143,7 +125,7 @@ class OpenAIExtractionBackend:
                     "window_index": payload.window_index,
                     "segment_ids": [s["segment_id"] for s in payload.segments],
                     "finding_count": len(response.findings),
-                    **_usage_metadata(usage),
+                    **usage_metadata(usage),
                 },
             )
             return response

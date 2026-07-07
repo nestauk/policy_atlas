@@ -19,10 +19,11 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from collections.abc import Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 import structlog
 from sqlalchemy import select as sa_select
@@ -180,7 +181,7 @@ class _Doc:
     basis: str = ""
     basis_snapshot_id: uuid.UUID | None = None
     record_snapshot_id: uuid.UUID | None = None
-    original_segments: list[tuple[str | None, str]] = field(default_factory=list)
+    original_segments: Sequence[tuple[str | None, str]] = ()
     window_payloads: list[ExtractionWindowPayload] = field(default_factory=list)
 
     # Provenance class.
@@ -302,13 +303,8 @@ def _load_docs(
                 "primary_evidence_type": row.primary_evidence_type,
             }
 
-    # A document's frozen full text lives on its full-text snapshot when one was
-    # ingested (acquired docs), else on the envelope snapshot itself (uploaded
-    # docs carry their chunks there — the 008 corpus model).
     chunk_source_ids = {
-        row["full_text_snapshot_id"]
-        if row["full_text_snapshot_id"] is not None
-        else row["source_snapshot_id"]
+        _frozen_text_snapshot_id(row["full_text_snapshot_id"], row["source_snapshot_id"])
         for row in loaded.values()
     }
     chunks_by_snapshot: dict[uuid.UUID, list[tuple[uuid.UUID, str]]] = {}
@@ -340,7 +336,7 @@ def _load_docs(
                 metadata=cast("dict[str, Any]", row_data["metadata"]),
                 primary_evidence_type=row_data["primary_evidence_type"],
                 chunks=chunks_by_snapshot.get(
-                    full_text_id if full_text_id is not None else envelope_id, []
+                    _frozen_text_snapshot_id(full_text_id, envelope_id), []
                 ),
             )
         )
@@ -348,6 +344,21 @@ def _load_docs(
 
 
 # --- Basis resolution + windowing ------------------------------------------
+
+
+def _frozen_text_snapshot_id(
+    full_text_snapshot_id: uuid.UUID | None, envelope_snapshot_id: uuid.UUID
+) -> uuid.UUID:
+    """The frozen text's home snapshot — the single statement of the rule.
+
+    The full-text snapshot when one was ingested (acquired docs), else the
+    envelope snapshot itself (uploaded docs carry their chunks there — the 008
+    corpus model). Chunk loading, basis resolution and the memo/record key all
+    resolve through here so they can never silently diverge.
+    """
+    return (
+        full_text_snapshot_id if full_text_snapshot_id is not None else envelope_snapshot_id
+    )
 
 
 def _fail_basis(doc: _Doc, *, basis: str, snapshot_id: uuid.UUID, error: str) -> None:
@@ -368,12 +379,8 @@ def _resolve_basis(doc: _Doc) -> None:
     basis snapshot is unavailable (NOT NULL honesty).
     """
     if doc.text_basis == "full_text":
-        # The full-text snapshot when ingested (acquired docs), else the envelope
-        # snapshot itself (uploaded docs carry their chunks there — 008 model).
-        basis_snapshot_id = (
-            doc.full_text_snapshot_id
-            if doc.full_text_snapshot_id is not None
-            else doc.envelope_snapshot_id
+        basis_snapshot_id = _frozen_text_snapshot_id(
+            doc.full_text_snapshot_id, doc.envelope_snapshot_id
         )
         if not doc.chunks:
             # An ingested-but-chunkless snapshot is empty text; a doc selected as
@@ -384,9 +391,9 @@ def _resolve_basis(doc: _Doc) -> None:
         doc.basis = "full_text"
         doc.basis_snapshot_id = basis_snapshot_id
         doc.record_snapshot_id = basis_snapshot_id
-        doc.original_segments = [(str(chunk_id), content) for chunk_id, content in doc.chunks]
-        window_segments = [(str(chunk_id), content) for chunk_id, content in doc.chunks]
-        doc.window_payloads = _window_payloads(doc, window_segments)
+        segments = [(str(chunk_id), content) for chunk_id, content in doc.chunks]
+        doc.original_segments = segments
+        doc.window_payloads = _window_payloads(doc, segments)
         return
 
     if doc.text_basis == "abstract_only":
@@ -481,6 +488,15 @@ def _window_payloads(doc: _Doc, segments: list[tuple[str, str]]) -> list[Extract
 # --- Memo -------------------------------------------------------------------
 
 
+class _MemoHit(NamedTuple):
+    """One durable memo row (success states only) for a basis snapshot."""
+
+    extraction_record_id: uuid.UUID
+    status: str
+    basis: str
+    finding_count: int
+
+
 def _apply_memo(
     conn: Connection,
     *,
@@ -494,7 +510,7 @@ def _apply_memo(
         for doc in docs
         if doc.status == "" and doc.basis_snapshot_id is not None
     ]
-    memo: dict[uuid.UUID, dict[str, Any]] = {}
+    memo: dict[uuid.UUID, _MemoHit] = {}
     if basis_snapshots:
         rows = conn.execute(
             sa_select(
@@ -510,12 +526,12 @@ def _apply_memo(
             .where(source_extraction_record.c.source_snapshot_id.in_(basis_snapshots))
         ).fetchall()
         for row in rows:
-            memo[cast("uuid.UUID", row.source_snapshot_id)] = {
-                "extraction_record_id": row.extraction_record_id,
-                "status": row.status,
-                "basis": row.basis,
-                "finding_count": row.finding_count,
-            }
+            memo[cast("uuid.UUID", row.source_snapshot_id)] = _MemoHit(
+                extraction_record_id=row.extraction_record_id,
+                status=row.status,
+                basis=row.basis,
+                finding_count=int(row.finding_count),
+            )
 
     for doc in docs:
         if doc.status != "" or doc.basis_snapshot_id is None:
@@ -525,10 +541,10 @@ def _apply_memo(
             doc.extractable = True
             continue
         doc.reused = True
-        doc.extraction_record_id = cast("uuid.UUID", hit["extraction_record_id"])
-        doc.status = cast("str", hit["status"])
-        doc.basis = cast("str", hit["basis"])
-        doc.finding_count = int(hit["finding_count"])
+        doc.extraction_record_id = hit.extraction_record_id
+        doc.status = hit.status
+        doc.basis = hit.basis
+        doc.finding_count = hit.finding_count
 
 
 # --- Fan-out ----------------------------------------------------------------
@@ -632,9 +648,17 @@ def _run_windows(
 
 
 def _grounding_entry(segment_id: str | None, quote: str, match: QuoteMatch) -> dict[str, Any]:
+    """Build one anchor's grounding entry.
+
+    ``segment_id`` is the model's *claim* about location, stored verbatim as
+    untrusted data and never dereferenced. The top-level ``chunk_id`` is the
+    **verified** location — the first span found by the presence check against
+    the whole document basis (``None`` when unverified or abstract-basis) — so
+    a consumer reading ``chunk_id`` can never be steered by a fabricated claim.
+    """
     return {
         "segment_id": segment_id,
-        "chunk_id": _derive_chunk_id(segment_id),
+        "chunk_id": match.spans[0].chunk_id if match.spans else None,
         "quote": quote,
         "match_status": match.status,
         "quote_verified": match.status != "failed",
@@ -643,22 +667,6 @@ def _grounding_entry(segment_id: str | None, quote: str, match: QuoteMatch) -> d
             for span in match.spans
         ],
     }
-
-
-def _derive_chunk_id(segment_id: str | None) -> str | None:
-    """Derive a finding's top-level chunk_id from the anchor's emitted segment_id.
-
-    The uuid part before ``#`` for a subsegment id, the plain id for a chunk id,
-    and ``None`` for the abstract sentinel or a null segment_id. This reflects
-    the model's *claim* about location; the true verified spans live in the
-    grounding entry's ``spans`` (they run against the whole document basis).
-    """
-    if segment_id is None:
-        return None
-    base = segment_id.split("#", 1)[0]
-    if base == ABSTRACT_SEGMENT_ID:
-        return None
-    return base
 
 
 def _process_doc(doc: _Doc, window_findings: dict[int, list[IOFRecordWire]]) -> None:
@@ -797,7 +805,7 @@ def _doc_summary(doc: _Doc) -> dict[str, Any]:
 
 
 def _assert_invariants(docs: list[_Doc], *, selected_count: int) -> None:
-    """Assert the coverage invariants before the roll-up write (violation raises)."""
+    """Assert the coverage invariants before any write (violation raises)."""
     pss_ids = [doc.pss_id for doc in docs]
     if len(pss_ids) != selected_count or len(set(pss_ids)) != selected_count:
         raise ExtractError(
@@ -982,6 +990,10 @@ def extract_scope(
             continue
         _process_doc(doc, per_doc.get(doc_index, {}))
 
+    # Asserted BEFORE any row is written: the harness catches without rollback,
+    # so a violation raising here must precede the writes it would indict.
+    _assert_invariants(docs, selected_count=len(selected))
+
     _write_docs(
         conn,
         project_id=project_id,
@@ -991,7 +1003,6 @@ def extract_scope(
         created_at=created_at,
     )
 
-    _assert_invariants(docs, selected_count=len(selected))
     summary = _build_summary(
         docs,
         selection_run_id=context.selection_run_id,

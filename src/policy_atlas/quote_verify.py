@@ -21,6 +21,7 @@ finding.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -219,7 +220,7 @@ class BasisText:
         return tuple(spans)
 
 
-def build_basis(segments: list[tuple[str | None, str]]) -> BasisText:
+def build_basis(segments: Sequence[tuple[str | None, str]]) -> BasisText:
     """Assemble a :class:`BasisText` from ordered ``(chunk_id, content)`` pairs.
 
     Segment raw contents are concatenated with a single ``"\\n"`` separator
@@ -403,6 +404,18 @@ def _parse_numeric(
     return numeric
 
 
+def _void_unclear(
+    field_name: str,
+    stats: dict[str, float | int | None],
+    coverage: dict[str, str],
+    unclear: list[str],
+) -> None:
+    """Void one field's value, flagging it ``unclear``."""
+    stats[field_name] = None
+    coverage[field_name] = "unclear"
+    unclear.append(field_name)
+
+
 def _apply_bounds(
     stats: dict[str, float | int | None],
     coverage: dict[str, str],
@@ -411,9 +424,7 @@ def _apply_bounds(
     """Void out-of-bounds numerics, flagging each ``unclear``."""
 
     def fail(field_name: str) -> None:
-        stats[field_name] = None
-        coverage[field_name] = "unclear"
-        unclear.append(field_name)
+        _void_unclear(field_name, stats, coverage, unclear)
 
     p_value = stats["p_value"]
     if p_value is not None and not 0.0 <= p_value <= 1.0:
@@ -439,6 +450,14 @@ def _apply_bounds(
         fail("effect_size")
 
 
+# Fields incoherent with an estimate level: pooled-only stats on a study
+# estimate; every numeric stat on a claim (a claim carries no estimate).
+_INCOHERENT_FIELDS_BY_LEVEL: dict[str, tuple[str, ...]] = {
+    "study": _POOLED_ONLY_FIELDS,
+    "claim": _NUMERIC_STAT_FIELDS,
+}
+
+
 def _apply_estimate_coherence(
     estimate_level: str | None,
     stats: dict[str, float | int | None],
@@ -446,25 +465,15 @@ def _apply_estimate_coherence(
     unclear: list[str],
 ) -> None:
     """Apply estimate-level coherence, voiding incoherent stats and marking N/A."""
-
-    def mark_unclear(field_name: str) -> None:
-        stats[field_name] = None
-        coverage[field_name] = "unclear"
-        unclear.append(field_name)
-
-    if estimate_level == "study":
-        for field_name in _POOLED_ONLY_FIELDS:
-            if stats[field_name] is not None:
-                mark_unclear(field_name)  # pooled-only stat on a study estimate
-            else:
-                coverage[field_name] = "not_applicable"
-    elif estimate_level == "claim":
-        for field_name in _NUMERIC_STAT_FIELDS:
-            if stats[field_name] is not None:
-                mark_unclear(field_name)  # a claim carries no estimate
-            else:
-                coverage[field_name] = "not_applicable"
-    # pooled / None: absent numerics fall through to "not_extracted" in step 5.
+    incoherent = _INCOHERENT_FIELDS_BY_LEVEL.get(estimate_level or "")
+    if incoherent is None:
+        # pooled / None: absent numerics fall through to "not_extracted" in step 5.
+        return
+    for field_name in incoherent:
+        if stats[field_name] is not None:
+            _void_unclear(field_name, stats, coverage, unclear)
+        else:
+            coverage[field_name] = "not_applicable"
 
 
 def validate_record(wire: IOFRecordWire) -> ValidatedRecord:

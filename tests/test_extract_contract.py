@@ -519,6 +519,44 @@ def test_fabricated_quote_kept_and_flagged(conn: Connection) -> None:
     assert anchor["quote_verified"] is False
     assert anchor["match_status"] == "failed"
     assert anchor["spans"] == []
+    # The claimed segment survives as data, but the top-level chunk_id is the
+    # verified location — None when nothing verified, never the model's claim.
+    assert anchor["segment_id"] == str(cid)
+    assert anchor["chunk_id"] is None
+
+
+def test_chunk_id_is_verified_location_not_model_claim(conn: Connection) -> None:
+    """The top-level chunk_id comes from the verified span, never the emitted claim."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    seeded_chunk_ids = [uuid.uuid4(), uuid.uuid4()]
+    quote = "Tutoring improved reading scores among pupils."
+    pss_id, chunk_ids = _seed_multi_chunk_doc(
+        conn, project_id, sel_run, scope_id, title="Misclaimed doc",
+        contents=[quote + " More first-chunk text.", "Unrelated second chunk content."],
+        chunk_ids=seeded_chunk_ids,
+        stub_iof=[_record(
+            intervention="tutoring", outcome="reading scores",
+            quote=quote,
+            # The model claims the second chunk; the quote lives in the first.
+            segment_id=str(seeded_chunk_ids[1]),
+        )],
+    )
+    _seed_selection(
+        conn, project_id, sel_run, scope_id, [{"pss_id": str(pss_id), "text_basis": "full_text"}]
+    )
+
+    _run(conn, project_id, scope_id, sel_run)
+
+    grounding = conn.execute(
+        select(intervention_outcome_finding.c.grounding)
+        .where(intervention_outcome_finding.c.project_id == project_id)
+    ).scalar_one()
+    anchor = grounding[0]
+    assert anchor["quote_verified"] is True
+    assert anchor["segment_id"] == str(chunk_ids[1])  # the claim, stored as data
+    assert anchor["chunk_id"] == str(chunk_ids[0])  # the verified location wins
+    assert anchor["spans"][0]["chunk_id"] == str(chunk_ids[0])
 
 
 def test_boundary_spanning_quote_verifies_across_chunks(conn: Connection) -> None:
