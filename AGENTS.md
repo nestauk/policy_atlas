@@ -22,48 +22,35 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `010-select`.
+Implementation — task `011-extract`.
 
-Tasks `001-walking-skeleton` through `009-characterise` are complete (merged). The active
-slice adds **select** — EB component 6, opening the deep terminus: **coverage-aware
-stratified selection over the run's characterisation strata** (themes + the counted
-`unclustered` stratum), choosing the subset for Tier-1 extraction under a budget.
-The **structure is deterministic and code-owned** under both shipped strategies —
-breadth-preserving allocation across strata, budget arithmetic, **must-includes as the
-one hard rule** (bypass the budget, never dropped) — over **cheap pre-extract signals**
-(recency, light appraisal tier, origin/upload priority, screen confidence, and
-full-text availability as a soft tilt — the selection also reports full-text shares
-and a `thin_full_text` trigger flag, since extract works on what select chooses; no
-embeddings use — cosine relevance was cut at rev 4, the semantic dimension being
-already spent by screening + stratification). `coverage_stratified_v1`
-(default, suite path) is deterministic end-to-end; **`llm_rerank_v1`** (live skeleton
-path) replaces only the *within-stratum ordering* with bounded batched
-schema-constrained judgment calls on contested strata — per-doc scores + reasons under
-the repo's **second product prompt** (`select_rerank_v1`, lead-authored), pre-run call
-budget, per-doc **fallback to the deterministic composite** (flagged `rank_fallback`,
-never dropped); scores order, **never exclude**. Steering enters through the
-**selection directive** — a first-class, declarative facade argument (budget ·
-must-includes · **soft boosts over columns + tags**, the scoping vocabulary · weight
-emphasis; soft = re-weights, never excludes) — designed as the tool-call surface the
-future capability agent authors just-in-time at invocation (v3.0 sources it from the
-scope context; agent-authored directives, rerank-quality evals, Cohere-class
-cross-encoders at the `retrieve` seam, and the capability-run entity are recorded
-seams). Realised as the spec's shared strategy-parameterised `select` verb. Durable
-output = one run-scoped `selection_result` row per (scope, run) carrying the
-**bidirectional rationale** (what was selected and why; aggregate exclusion reasons +
-notable flagged exclusions), the executed directive, rerank provenance, and the
-deepening-selection **escalation-trigger flags** computed now — the steer-point *pause*
-machinery stays a recorded seam. Selection is run-local, never canonical;
-`not_selected` is derivable coverage state, never persisted as doc status. Gated
-changes riding this slice: schema (`selection_result`, project-scope-guarded; table
-count 19 → 20) · public interface (`"select"` registry entry + `run_harness
-ranking_backend`, stub default + the `characterisation_run_id` Plan/Config field —
-select stratifies over an **explicitly referenced** characterisation, compile-required,
-provenance-recorded; one-run-per-component stands) · **runtime egress: the
-`select_rerank_v1` generation
-surface (titles + abstracts + intent, contested strata only)**. One spec flow-back
-rides the slice (components §6 select
-realisation: procedure → procedure with bounded generative rerank). `make verify` stays
-deterministic and egress-free (stub ranker). Build per
-`docs/tasks/010-select/contract.md`. Stay within the contract's scope and stop
+Tasks `001-walking-skeleton` through `010-select` are complete (merged). The active
+slice adds **extract** — EB component 7, Tier-1 extraction, the step `select` gates:
+per selected document, extract **`intervention_outcome_finding`** records — the
+framework's first reusable findings-layer schema. Grain: one *(intervention, outcome,
+effect)* claim grounded in a **single source**; intervention/outcome/population are
+**source-named references**, never canonical entities. **Base fields only** (what the
+source reports — effect direction/size/type, uncertainty, p-value, design/N/k/I²,
+population, causality-by-design, primacy/prevalence); question-relative judgements
+(normalised magnitude, causal weighting, is-beneficial) are Impact/VfM enrichment and
+stay out. Findings are **durable information-layer records** (unlike run-local
+characterisation/selection rows), memoised by *(source snapshot, extraction
+fingerprint)* — reuse checked before any call; the extraction *service* and evidence
+dataset snapshots stay recorded seams. Every finding **anchors to frozen source
+text** (verbatim quote + chunk reference, deterministically checked at write,
+flagged-not-dropped on failure); `abstract_only` docs are extracted from the envelope
+abstract, basis-flagged, never skipped. Per-source fan-out with windowed id-keyed
+segment records, pre-run call budget, per-doc honest failure
+(`extraction_failed`, reason-coded — never partial, never silent); doc-level statuses
+`extracted | no_findings | extraction_failed` cover exactly the selected set
+(invariants test-enforced); coverage states are never phrased as absence. Gated
+changes riding this slice: schema (three tables — `source_extraction_record` ·
+`intervention_outcome_finding` · `extraction_result`, project-scope-guarded; table
+count 20 → 23) · public interface (`"extract"` registry entry requiring an explicit
+`selection_run_id` Plan/Config field, compile-fails-closed + `run_harness
+extraction_backend`, stub default) · **runtime egress: the `extract_iof_v1`
+generation surface — the repo's third product prompt and its first over full document
+text** (frozen chunks, windowed; fixture corpus is openly licensed). `make verify`
+stays deterministic and egress-free (stub backend, sentinel-driven). Build per
+`docs/tasks/011-extract/contract.md`. Stay within the contract's scope and stop
 conditions; all other capabilities and seams remain deferred (`docs/deferred.md`).
