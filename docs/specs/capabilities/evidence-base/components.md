@@ -211,11 +211,21 @@ on what the run produced:
 
 - **One substrate-conditional flow — intent-led sections whose claim types are gated by
   what the run produced** ([ADR 0010](../../../adr/0010-intent-led-synthesis-sections.md),
-  as amended twice): synthesise takes explicit fail-closed references
-  (characterisation required; the deepest available of selection / extraction / grouping
-  optional, upstream references resolved transitively from the referenced rows and
-  cross-checked) and never hard-wires a component combination — the orchestrator selects
-  any coherent registry subset and synthesise adapts. The section set is shaped from the
+  as amended): synthesise takes explicit fail-closed references (**all optional** —
+  characterisation, and the deepest available of selection / extraction / grouping,
+  upstream references resolved transitively from the referenced rows and cross-checked;
+  the requirement is **at least one groundable substrate**, else structural failure) and
+  never hard-wires a component combination — the orchestrator selects any coherent
+  registry subset and synthesise adapts. **Retrieval scope = the screened-in corpus
+  always** (screen is the relevance discipline that bounds reading); **a referenced
+  selection is a soft ranking prior, never a hard boundary** — the data-model's scoping
+  principle ("look here first, widen when thin; agents are never penned in"); select
+  gates *extraction cost*, not reading; every chunk citation records its origin
+  (selected | unselected_screened) so widening is visible. Scope guarded by a fail-closed
+  in-memory retrieval ceiling (beyond it, the index-backed `retrieve` slice is required —
+  loudly, never a degraded pass). A rapid run (acquire → screen → ingest → synthesise)
+  is fully served; a run without characterise yields an artefact with no landscape — a
+  grounded answer, not an evidence report; the plan's legitimate choice. The section set is shaped from the
   user's **intent** (a bounded schema-constrained section proposal over intent + the
   available substrate summaries, overridable by a fail-closed scope directive; plan-compile
   section machinery is the recorded seam). Per section, **the section loop** — a capped
@@ -223,28 +233,31 @@ on what the run produced:
   [execution-orchestration](../../system/execution-orchestration.md) declares, running
   *inside* the component per the facade principle (the capability sub-agent invokes
   synthesise as one tool; no second agent) — gathers evidence via **`search_chunks`**
-  (hybrid embedding + lexical, rank-fused, over the **selected set's** frozen units — the
-  009 vectors' first reader; the `retrieve` seam's first increment; present only when a
-  selection is referenced), **`query-findings`** (present only when an extraction is
-  referenced) and **`lookup`** (the universal-core read tool: appraisals, classifications,
-  selection rationale, coverage records, characterisation/grouping rows — closed query
-  vocabulary, project-guarded), under a hard per-section turn cap, then emits typed claims.
-  **Availability by substrate**: **pattern claims** (coverage counts always; direction
-  spreads with extraction/grouping — deterministically validated; v2's `effect_consensus`
-  counts as this steer) · **cluster claims** (characterise themes always; facet groups with
-  grouping — validated against the referenced clustering row; softest interpretive grade,
-  base-labelled) · **gap claims** (always; graded per [provenance.md](provenance.md) with
-  deterministic per-grade validation and the required coverage base — base-labelled to the
-  narrowest base the substrate supports, promoted to corpus absence only on a
-  non-`inadequate` `search_coverage_record`, else fail-closed degraded) · **reasoning
-  claims** (always; visibly-labelled Tier 4 authoring; judge strict-routing keeps empirical
-  content out; never counts toward strength roll-ups) · **chunk claims** (with a
-  **selection** — verbatim quotes from retrieved selected-set frozen text; select's
-  coverage discipline, not extraction, is what bounds them — so a question outside the
-  intervention–outcome schema is served by characterise → select → synthesise with no
-  extract) · **finding claims** (with an **extraction** — cite finding ids resolved to
+  (hybrid embedding + lexical, rank-fused with the selection prior where referenced, over
+  the **screened-in corpus's** frozen units, each returned chunk carrying its origin —
+  the 009 vectors' first reader; the `retrieve` seam's first increment),
+  **`query-findings`** (present only when an extraction is referenced) and **`lookup`**
+  (the universal-core read tool: appraisals, classifications, selection rationale,
+  coverage records, characterisation/grouping rows, **and the tag layer** — per its own
+  definition, aggregate queries over columns/tags included; closed query vocabulary,
+  project-guarded), under a hard per-section turn cap, then emits typed claims.
+  **Availability by substrate**: **pattern claims** (coverage counts with a
+  characterisation; direction spreads with extraction/grouping — deterministically
+  validated; v2's `effect_consensus` counts as this steer) · **cluster claims**
+  (characterise themes with a characterisation; facet groups with grouping — validated
+  against the referenced clustering row; softest interpretive grade, base-labelled) ·
+  **gap claims** (always; graded per [provenance.md](provenance.md) with deterministic
+  per-grade validation and the required coverage base — sparsity-grade gaps need the
+  characterisation coverage; base-labelled to the narrowest base the substrate supports,
+  promoted to corpus absence only on a non-`inadequate` `search_coverage_record`, else
+  fail-closed degraded) · **reasoning claims** (always; visibly-labelled Tier 4 authoring;
+  judge strict-routing keeps empirical content out; never counts toward strength
+  roll-ups) · **chunk claims** (with screened-in ingested documents — screen's relevance
+  discipline bounds them, the selection prior steers them, each citation carries its
+  origin; not extraction — so a question outside the intervention–outcome schema is
+  served without extract) · **finding claims** (with an **extraction** — cite finding ids resolved to
   extract-verified anchors; the model never authors these quotes). A characterisation-only
-  run is the degenerate case (pattern/cluster/gap/reasoning sections — the landscape).
+  run is the landscape degenerate case (pattern/cluster/gap/reasoning sections).
   **Groups, where present, are input, not structure** (uncovered groups counted, never
   silently dropped). Every cited claim goes through the settled `produce-grounded-block`
   mechanism (deterministic quote-presence + LLM judge; Unsupported/mis-cited a real state)

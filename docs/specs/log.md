@@ -37,6 +37,20 @@
   appraisals, classifications, selection rationale, coverage records, clusterings); "writer
   agent" corrected to **the section loop** (component-internal realisation per the facade
   principle — no second agent; the capability sub-agent remains the capability-run seam).
+  **Sixth/seventh-round amendment (same day, ADR 0010 § fourth Amendment):** **all
+  references optional** — characterisation joins the substrate-conditional logic
+  (requirement = ≥ 1 groundable substrate; a rapid acquire → screen → ingest → synthesise
+  run is fully served); **select is a soft prior, never a reading boundary** — retrieval
+  scope = the screened-in corpus always (the data-model's agents-are-never-penned-in
+  scoping principle; select gates extraction cost), a referenced selection contributes a
+  recorded look-here-first rank boost, every chunk citation records its origin
+  (selected | unselected_screened); fail-closed in-memory retrieval ceiling
+  (`RETRIEVAL_UNIT_CAP`), beyond which the index-backed `retrieve` slice is required;
+  `lookup` explicitly covers the **tag layer** (per its universal-core definition);
+  clarified on the record: verification is non-agentic — deterministic code legs + a
+  separate single-call judge surface (maker ≠ checker at the surface level) — and the
+  verify loop's rewrite step is explicit (judge rationales → one reword-down regeneration
+  → one re-judge; `REPAIR_ROUND_CAP` = 1, plan-pinned).
 * **Update**: [EB capability](capabilities/evidence-base/capability.md), [EB components
   §§5/6/9](capabilities/evidence-base/components.md),
   [execution-orchestration.md](system/execution-orchestration.md) — the **terminus

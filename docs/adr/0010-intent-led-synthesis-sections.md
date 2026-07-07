@@ -234,6 +234,55 @@ Three user challenges, all adopted; net effect is a **simplification**:
    tool; that sub-agent is the standing capability-run seam, with the
    skeleton standing in today). Renamed "the section loop" throughout.
 
+## Amendment (2026-07-07, sixth–seventh gate rounds — Shabeer Rauf)
+
+Five user probes across two waves; adopted or clarified on the record:
+
+1. **Characterisation is optional too.** The fifth-round unification had
+   left `characterisation_run_id` mandatory — an unprincipled residue:
+   it gates coverage-pattern claims, theme-cluster claims and
+   sparsity-grade gaps exactly as extraction gates finding claims. A
+   rapid run (acquire → screen → ingest → synthesise) is coherent and
+   groundable. The requirement drops to **at least one groundable
+   substrate** (zero → structural failure). Recorded honestly: a run
+   that skips characterise produces an artefact with no landscape — a
+   grounded answer, not an evidence report; the plan's legitimate
+   choice.
+2. **Select is a soft prior, never a reading boundary.** The first draft
+   of this amendment made chunk scope "the selection if referenced, else
+   the screened-in set" — which inverted the data-model's own scoping
+   principle ("a **soft retrieval prior, not a hard boundary** — look
+   here first, then widen when thin; **agents are never penned in**")
+   and produced a perversity: a full-chain run could quote *fewer*
+   documents than a rapid run. Corrected: **retrieval scope = the
+   screened-in corpus always** (screen is the relevance discipline that
+   bounds reading; select gates *extraction cost*); a referenced
+   selection contributes a **look-here-first rank boost**, recorded in
+   provenance, and **every chunk citation records its origin**
+   (`selected` | `unselected_screened`) so widening is visible, never
+   silent. Scope guarded by the **fail-closed `RETRIEVAL_UNIT_CAP`**
+   (the `FACET_VALUE_CAP` precedent: beyond it the index-backed
+   `retrieve` slice is required, loudly, never a degraded pass).
+3. **`lookup` covers the tag layer** — per the universal-core definition
+   itself ("including aggregate queries over columns/tags"); the v1
+   query vocabulary gains tag queries (tags by document, documents by
+   tag, aggregates by tag type/asserter, provider-classed rows included).
+4. **Verification needs no second agent — clarified on the record.**
+   Verify is two non-agent mechanisms: the deterministic legs (presence
+   check via `QuoteMatcher`; per-type validators) are pure code, and the
+   judge is a **separate single-call schema-constrained surface**
+   (`grounding_judge_v1`, own backend seam, no tools, no loop). Maker ≠
+   checker holds at the surface level — the section loop never grades
+   its own homework; the seam permits a heterogeneous judge model at the
+   Bedrock swap; calibration stays with the eval workstream.
+5. **The verify loop's rewrite step named explicitly.** The judge's
+   per-claim rationales drive a **reword-down regeneration** of failing
+   claims followed by one re-judge — the spec's bounded
+   claim↔evidence-convergence loop — pinned as **`REPAIR_ROUND_CAP` = 1**
+   (plan-pinned; round-count calibration = eval seam); exhaustion →
+   soft-flagged, never dropped (fabricated chunk quotes excluded and
+   counted, as before).
+
 ## Rejected
 
 - **Group-per-block as the artefact structure** (contract rev 2) — an
