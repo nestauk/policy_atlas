@@ -29,6 +29,13 @@ specs in [docs/specs/](../../specs/index.md).
 >   eval-gated seam (needs `retrieve` + extraction-quality evals showing a
 >   field-completeness gap on multi-window docs). The cheap in-slice mitigation
 >   lands instead: the **cross-window document-context header** (decision 5).
+> - **rev 1.2** (2026-07-07, user challenge held): the rev-1.1 header **slimmed
+>   to the envelope block** (title + abstract in every call — plain prompt
+>   assembly). The running-names element was cut: it would serialize per-doc
+>   windows (window N depends on N−1) and add state/provenance/test machinery
+>   for a path the corpus barely exercises — most documents fit in one call;
+>   windowing is the honest rare path, not the norm. Windows stay independent
+>   and parallel; naming consistency across windows rides the eval-gated seam.
 
 ## Goal
 
@@ -220,13 +227,17 @@ internal (`OpenAIRankingBackend`) — either precedent stands.
    model returns schema-constrained findings, each naming its supporting segment
    id(s) + quote. Documents whose basis exceeds the per-call token budget are
    **windowed** (ordered segment windows, per-window calls, findings
-   concatenated; window overlap and size plan-pinned). Every window after the
-   first carries a deterministic **document-context header** — title, abstract,
-   and the running list of intervention/outcome names extracted from earlier
-   windows (rev 1.1) — so cross-window evidence dispersal (effect in results,
-   design/N in methods) degrades gracefully without retrieval machinery; the
-   header is assembled by code, recorded in provenance, and is context, never
-   instruction. The call budget is known
+   concatenated; window overlap and size plan-pinned). Every call — single or
+   windowed — carries the document's **envelope block** (title + abstract) as
+   identity/framing context, assembled by code, data-not-instruction (rev 1.2:
+   this is plain prompt assembly, not a header mechanism). Windows are
+   **independent and parallelizable** — no cross-window state: the rev-1.1
+   running-names header was cut at the gate (it would serialize per-doc windows
+   and add state threading for a path ~zero real documents exercise; windowing
+   fires only past the per-call token budget, i.e. multi-hundred-page documents
+   — the majority of documents fit in one call). Cross-window naming
+   consistency, if evals ever show it matters, belongs to the eval-gated
+   retrieval-augmented seam. The call budget is known
    pre-run — `Σ_docs ceil(segments/window) × (1 + retry_cap)` — and enforced by
    the existing call-budget pattern before any live call. Failure semantics:
    per-window retry once; a window still failing fails the **document**
