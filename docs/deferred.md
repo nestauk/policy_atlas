@@ -564,6 +564,18 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   asserts cross-source identity, often question-relative — never trusted canonically
   before that bar exists). Options Assessment reads run-referenced groupings by
   `grouping_run_id` until then.
+- **Shared traced-call helper across OpenAI backends** (012 review, reuse finder) — the
+  "branch on langfuse_client, wrap in `tracing._observation`, update the span" shape is
+  now hand-copied in three backends (`extraction_backend.py`, `ranking.py`,
+  `facet_grouping.py`), with parameterisation already drifting between copies. Factor
+  the traced parse-once shape into `tracing.py` when a fourth backend lands (013's
+  synthesise is the likely trigger) — not worth a cross-slice refactor ride-along now.
+- **Harness failure-event append dies inside an aborted transaction** (012 live check,
+  standing behaviour — predates 012, affects every component): a server-side DB error
+  mid-component leaves the connection's transaction aborted, so `_run_scope_component`'s
+  `component.failed` event INSERT itself fails (`InFailedSqlTransaction`) — the run dies
+  loudly but without its failure event recorded. Fix belongs in the harness (append the
+  failure event on a fresh transaction/rollback first); repo-wide, not group-specific.
 
 ## Data model / evidence
 

@@ -42,6 +42,11 @@ FACET_VALUE_CAP = 150
 # ungrouped residual, never re-asked. Budget is always 1 + REPAIR_CAP.
 REPAIR_CAP = 1
 
+# Per-string bound on prompt input (012 review, security lane): value surfaces
+# and counterparts are unbounded upstream wire text — an oversize string fails
+# the component closed before any call, mirroring the FACET_VALUE_CAP posture.
+VALUE_SURFACE_MAX = 500
+
 # Label/description bounds (deterministic output-checking beyond prompt rules —
 # the 009 validate_themes precedent; enforced in facet_values.validate_partition).
 LABEL_MAX = 80

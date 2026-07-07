@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from policy_atlas.facet_grouping import (
     FACET_VALUE_CAP,
     PROMPT_VERSION,
+    VALUE_SURFACE_MAX,
     FacetValueRecord,
     PartitionResult,
     ProposedGroup,
@@ -369,6 +370,11 @@ def test_happy_path_writes_rollup_summary_and_provenance(conn: Connection) -> No
     }
     assert sum(summary["counts"][key] for key in ("grouped", "ungrouped", "no_value")) == 6
 
+    row_payload = cast("dict[str, Any]", row["groups"])
+    row_overall = cast("dict[str, int]", row_payload["overall_direction_spread"])
+    assert row_overall == summary["overall_direction_spread"]
+    assert sum(row_overall.values()) == 6
+
     provenance = cast("dict[str, Any]", row["grouping_provenance"])
     assert provenance.keys() == {
         "prompt_version",
@@ -524,6 +530,7 @@ def test_zero_findings_writes_empty_rollup_without_backend_call(conn: Connection
         "groups": [],
         "ungrouped": {"values": [], "finding_ids": [], "direction_spread": _zero_spread()},
         "no_value": {"finding_ids": [], "direction_spread": _zero_spread()},
+        "overall_direction_spread": _zero_spread(),
     }
     assert summary["counts"] == {
         "findings_total": 0,
@@ -795,6 +802,36 @@ def test_value_cap_fails_before_backend_call(conn: Connection) -> None:
     assert "value_cap_exceeded" in str(excinfo.value)
     assert str(FACET_VALUE_CAP) in str(excinfo.value)
     assert "deferred large-corpus seam" in str(excinfo.value)
+    assert backend.partition_calls == 0
+    assert backend.repair_calls == 0
+    assert _group_count(conn, project_id) == 0
+
+
+def test_value_surface_too_long_fails_before_backend_call(conn: Connection) -> None:
+    project_id, _ = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    seeded = seed_extraction(
+        conn,
+        project_id,
+        scope_id,
+        docs=[
+            (
+                uuid.uuid4(),
+                [
+                    {
+                        "intervention": "x" * (VALUE_SURFACE_MAX + 1),
+                        "outcome": "Outcome",
+                    }
+                ],
+            )
+        ],
+    )
+    backend = CountingFacetGroupingBackend()
+
+    with pytest.raises(GroupError) as excinfo:
+        _run_group(conn, project_id, scope_id, seeded.run_id, backend=backend)
+    assert "value_surface_too_long" in str(excinfo.value)
+    assert str(VALUE_SURFACE_MAX) in str(excinfo.value)
     assert backend.partition_calls == 0
     assert backend.repair_calls == 0
     assert _group_count(conn, project_id) == 0

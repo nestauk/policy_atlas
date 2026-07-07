@@ -211,22 +211,90 @@ delegated output lead-reviewed before landing.
 
 ## Review findings
 
-_Added after the review stack (step 7, conversation C)._
+Review stack run 2026-07-07 (conversation C, fresh adjudicator). Lanes: contract
+verifier (fresh Opus subagent, read-only) · `/code-review medium` (8 finder
+angles, per-angle diff scoping, Sonnet fast-workers) · security-auditor subagent
+(Tier-3 lane) · Codex adversarial (read-only rescue brief). Budget honoured:
+reasoning-class lanes ≈ 220K; fast-worker fan-out ≈ 560K (slightly over the 500K
+proxy — 8 angles; verification of the 5 surviving candidates was done by the
+lead inline instead of verifier agents to compensate). `/simplify` skipped with
+justification: `/code-review` ran the reuse/simplification/efficiency/altitude
+angles and their adoptions were applied — a separate same-family pass would
+duplicate it.
 
-- **Contract verifier:**
-- **`/code-review`:**
-- **`/security-review`:**
-- **Adversarial review** (Tier 3):
-- **`/simplify`:**
+- **Contract verifier:** all rubric items PASS (8 pending — this stack);
+  independently re-ran the suite twice (526 green both times); traced rubric
+  9–11 to code and tests; no "documented but not built" gaps in
+  verification.md or ADR 0008. Forwarded the standing transaction-abort
+  observation (below).
+- **`/code-review medium`:** 0 correctness findings (line-by-line,
+  removed-behaviour and cross-file angles all clean — the rename ripple was
+  verified hunk-by-hunk with no weakened assertion). 5 cleanup candidates,
+  lead-verified inline: **adopted** the altitude finding (`DIRECTIVE_STRING_MAX`
+  borrowed from `select.py` → hoisted to `schema.py`, both importers updated);
+  **deferred** the traced-call-shape triplication across OpenAI backends
+  (deferred.md § 012 seams — factor when a fourth backend lands); **declined**
+  the per-group full-list scans in `build_groups_payload` (the `values`-order
+  iteration deliberately pins payload ordering to the sorted input, n ≤ 150),
+  the duplicated 2-line try/except in `_partition_values` (a helper is more
+  indirection than it saves), and a shared pydantic→TypedDict unwrap helper
+  (speculative abstraction over two genuinely different shapes).
+- **Security lane (security-auditor subagent):** 0 critical/high/medium; all
+  six contracted posture points verified as holding (injection, untrusted
+  labels, egress bounds, key hygiene, tenancy FKs, fail-closed directive).
+  **Adopted** both findings: LOW — no per-string length cap on facet
+  values/counterparts entering the live prompt → fail-closed
+  `VALUE_SURFACE_MAX` (500) check before any call, mirroring the
+  `FACET_VALUE_CAP` posture (+ named test); INFO — unknown directive keys
+  echoed unbounded into the failure message → bounded/sanitised echo
+  (repr-escaped, truncated, first 5).
+- **Adversarial review (Codex, Tier 3):** no critical/high. **MEDIUM,
+  CONFIRMED and adopted (unique to this lane):** the contracted *overall*
+  direction spread was computed only into the `component.completed` summary,
+  never persisted — a synthesise reader of `grouping_result` by
+  `grouping_run_id` could not read it. Fixed: `build_groups_payload` now
+  writes `overall_direction_spread` into the row payload,
+  `assert_grouping_invariants` enforces its sum identity
+  (`Σ overall == findings_total`), the summary reads the payload key instead
+  of recomputing, and the happy-path + zero-findings tests assert it on the
+  written row. **LOW, declined with reason:** the count-only integrity
+  cross-check could in principle be bypassed by a *corrupted* roll-up whose
+  `docs[].extraction_record_id` points at a same-project record with an equal
+  finding count — resolution via the roll-up's own recorded ids is the
+  contract's rev-1.3 blocker fix, the count cross-check is the contracted
+  integrity bar, and a tampered first-party roll-up row is outside the trust
+  model (the FK guard already pins the extraction row to the scope).
+- **Convergence note:** the `build_groups_payload` scan candidate surfaced
+  independently in two cleanup angles (simplification + efficiency) —
+  convergent but declined on the ordering-semantics ground both missed. The
+  row-payload overall-spread defect was unique to the Codex lane (the contract
+  verifier graded rubric 9 partly on the summary's spread) — family diversity
+  earned its keep.
+- **Forwarded (not a 012 defect):** the standing harness behaviour where a
+  server-side DB error mid-component aborts the transaction and the
+  `component.failed` event append itself fails (`InFailedSqlTransaction`) —
+  recorded repo-wide in deferred.md, fix belongs in the harness.
+
+**Fixes applied in this phase** (fake-done check: no test deleted/weakened —
+two exact-equality expectations *extended* with the new payload key, one test
+added): `overall_direction_spread` persisted + invariant + tests ·
+`VALUE_SURFACE_MAX` fail-closed cap + test · bounded directive-key echo ·
+`DIRECTIVE_STRING_MAX` hoisted to `schema.py`. `make verify` re-run green after
+fixes: **527 passed** (526 + 1 added test), okf/typecheck/lint/build clean.
 
 ## Rubric status
 
-_Checked after the review stack (step 7). Build-phase status: rubric items 1–2
-(implementation + verify) evidenced above except the pending live check; 3 (gated
-changes only — schema/interface/egress all approved at contract rev 1.2/1.3); 4–5
-(no generated files or secrets touched; no tests deleted/weakened — one
-expectation corrected, documented above); 6 this document; 7 deferred.md updated;
-9–11 test-enforced as listed. Item 8 (review stack) is conversation C's._
+Checked after the review stack (step 7, 2026-07-07): **all 11 items hold.**
+1–2 implementation + `make verify` green (527 after review fixes) + live check
+evidenced above; 3 gated changes only (schema/interface/egress approved at
+contract rev 1.2/1.3 — review confirmed nothing beyond them); 4–5 no generated
+files/secrets touched, no tests deleted/weakened (contract verifier + removed-
+behaviour angle both confirmed; review-phase fixes extended expectations, added
+one test); 6 this document; 7 deferred.md updated (seven seams + two
+review-phase entries); 8 the review stack above — four lanes run, adjudicated,
+fixes applied, re-verified; 9–11 test-enforced and independently traced to code
+by the contract verifier (rubric 9's overall-spread-in-row gap found by the
+adversarial lane and closed this phase).
 
 ## Intent & assumptions
 

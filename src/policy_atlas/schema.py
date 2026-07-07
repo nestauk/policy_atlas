@@ -565,6 +565,11 @@ source_tag = Table(
     CheckConstraint(f"tag_type IN ('{TOPIC_THEME}')", name="ck_stag_tag_type"),
 )
 
+# Shared bound for untrusted scope-context directive strings (select's selection
+# directive, group's grouping directive) — each parser fails closed above it.
+# Hoisted from select.py (012 review): the bound is cross-component, not select's.
+DIRECTIVE_STRING_MAX = 200
+
 # --- Extract / findings layer (task 011) ---
 
 EXTRACTION_STATUSES: tuple[str, ...] = ("extracted", "no_findings", "extraction_failed")

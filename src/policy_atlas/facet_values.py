@@ -14,8 +14,7 @@ from policy_atlas.facet_grouping import (
     FacetValueRecord,
     PartitionResult,
 )
-from policy_atlas.schema import EFFECT_DIRECTIONS, GROUPING_FACETS
-from policy_atlas.select import DIRECTIVE_STRING_MAX
+from policy_atlas.schema import DIRECTIVE_STRING_MAX, EFFECT_DIRECTIONS, GROUPING_FACETS
 from policy_atlas.tags import has_control_character
 
 COUNTERPART_CAP = 5
@@ -136,7 +135,10 @@ def parse_grouping_directive(context: dict[str, Any]) -> tuple[str, str]:
 
     unknown_keys = set(directive) - {"facet"}
     if unknown_keys:
-        raise FacetDirectiveError(f"grouping directive has unknown keys: {sorted(unknown_keys)}")
+        # Bounded echo (012 review, security lane): keys are untrusted JSONB text
+        # and the message lands in the component.failed event payload.
+        shown = sorted(repr(key)[:DIRECTIVE_STRING_MAX] for key in unknown_keys)[:5]
+        raise FacetDirectiveError(f"grouping directive has unknown keys: {shown}")
 
     facet = directive.get("facet")
     if not isinstance(facet, str):
@@ -425,6 +427,9 @@ def build_groups_payload(
                 no_value_finding_ids, finding_direction_by_id
             ),
         },
+        "overall_direction_spread": direction_spread(
+            finding.effect_direction for finding in findings
+        ),
     }
 
 
@@ -468,6 +473,10 @@ def assert_grouping_invariants(
 
     _assert_residual_spread(ungrouped, "ungrouped")
     _assert_residual_spread(no_value, "no_value")
+
+    overall = cast(dict[str, int], payload["overall_direction_spread"])
+    if sum(overall.values()) != len(finding_ids):
+        raise InvalidPartitionOutput("overall direction spread does not sum to finding count")
 
     if actual != expected:
         raise InvalidPartitionOutput("finding ids are not covered exactly once")

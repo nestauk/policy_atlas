@@ -25,7 +25,7 @@ from policy_atlas.facet_values import (
     validate_partition,
     value_records,
 )
-from policy_atlas.select import DIRECTIVE_STRING_MAX
+from policy_atlas.schema import DIRECTIVE_STRING_MAX
 
 
 def finding(

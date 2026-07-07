@@ -25,6 +25,7 @@ from policy_atlas.facet_grouping import (
     FACET_VALUE_CAP,
     PROMPT_VERSION,
     REPAIR_CAP,
+    VALUE_SURFACE_MAX,
     FacetGroupingBackend,
     FacetValueRecord,
     ProposedGroup,
@@ -37,7 +38,6 @@ from policy_atlas.facet_values import (
     InvalidPartitionOutput,
     assert_grouping_invariants,
     build_groups_payload,
-    direction_spread,
     extract_facet_values,
     merge_repair,
     parse_grouping_directive,
@@ -145,6 +145,14 @@ def group_findings(
                 f"{len(values)} distinct facet values exceeds cap {FACET_VALUE_CAP}; "
                 "deferred large-corpus seam required"
             )
+        for value in values:
+            if len(value.surface) > VALUE_SURFACE_MAX or any(
+                len(counterpart) > VALUE_SURFACE_MAX for counterpart in value.counterparts
+            ):
+                raise GroupError(
+                    "value_surface_too_long: "
+                    f"facet value {value.value_id} exceeds {VALUE_SURFACE_MAX} chars"
+                )
 
         log.info("group.call_budget", baseline=1, maximum=1 + REPAIR_CAP)
         records = value_records(values)
@@ -192,7 +200,6 @@ def group_findings(
         extraction_run_id=context.extraction_run_id,
         flags=flags,
         provenance=provenance,
-        views=views,
     )
 
     conn.execute(
@@ -523,7 +530,6 @@ def _build_summary(
     extraction_run_id: uuid.UUID,
     flags: list[str],
     provenance: dict[str, Any],
-    views: Sequence[FindingFacetView],
 ) -> dict[str, Any]:
     groups = cast("list[dict[str, Any]]", payload["groups"])
     ungrouped = cast("dict[str, Any]", payload["ungrouped"])
@@ -551,7 +557,9 @@ def _build_summary(
                 "direction_spread": cast("dict[str, int]", no_value["direction_spread"]),
             },
         },
-        "overall_direction_spread": direction_spread(view.effect_direction for view in views),
+        "overall_direction_spread": cast(
+            "dict[str, int]", payload["overall_direction_spread"]
+        ),
         "counts": counts,
         "extraction_run_id": str(extraction_run_id),
         "flags": flags,
