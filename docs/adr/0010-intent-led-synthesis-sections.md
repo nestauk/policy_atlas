@@ -111,6 +111,42 @@ The interrogation confirmed the challenge and sharpened it:
 - The 012 recomputability line is scoped in the specs: intent-exclusion was
   grouping-specific; synthesis determinism tests fix intent as input.
 
+## Amendment (2026-07-07, third gate round — Shabeer Rauf)
+
+Three user challenges against the rev-3 realisation, all adopted:
+
+1. **"Deep path" terminology retired.** Synthesise is one component that
+   always runs (ADR 0009); it renders **content modes by available
+   references** — landscape content always, question-led grounded synthesis
+   when the run produced findings. No mode is called a "path" or "deep".
+2. **The claim vocabulary is completed to the spec's full set.** Rev 3
+   carried finding/chunk/pattern/theme claims only — an amputation of two
+   assertion types the specs make core: **gap claims** (the absence dual —
+   EB's most consequential claim class; three grades with deterministic
+   per-grade validation: corpus/coverage gaps require a non-`inadequate`
+   `search_coverage_record` reference (007 machinery, fail-closed —
+   otherwise the claim degrades to base-labelled), acknowledged domain gaps
+   require the in-corpus sparsity signal validated against the
+   characterisation coverage, inferred domain gaps ship visibly labelled
+   as inference, never gated; grounded-synthesis gaps are base-labelled to
+   the selected/extracted base, never promoted to corpus absence) and
+   **reasoning claims** (visibly-labelled Tier 4 as an *authoring* mode —
+   uncited framing/context; the judge applies the spec's strict-routing
+   rule so policy-specific/empirical/causal content cannot hide there;
+   never contributes to strength roll-ups). The earlier blanket "no absence
+   claims" rule is replaced by the spec's own fail-closed gap discipline.
+3. **Whole-document windowing replaced by scoped retrieval.** Feeding whole
+   selected documents per section crowds context with irrelevant text and
+   scales cost with length, not relevance. Instead: per section, the
+   writer's chunk context = the cited findings' anchor chunks (always) +
+   the top-k selected-set chunks ranked by embedding cosine against the
+   section focus — in-memory over the 009-landed JSONB unit vectors (their
+   **first reader**), no index, no new dependency. Recorded as the **first
+   increment of the `retrieve` seam** (grounding/citation profile,
+   selected-set scope), upgraded — not duplicated — by the future retrieve
+   slice (index-backed, hybrid, corpus-wide); corpus-wide chunk claims
+   remain gated on that slice.
+
 ## Rejected
 
 - **Group-per-block as the artefact structure** (contract rev 2) — an

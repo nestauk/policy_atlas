@@ -12,7 +12,14 @@
   pattern claims (deterministically validated). **Groups demoted to input, not structure**
   (pure intent-led — no rendered backbone, user choice; uncovered groups counted). ADR 0009
   decision 5 amended: only **corpus-wide** chunk grounding stays retrieve-gated. Supersedes
-  the group-per-block reading of §9's "per group produce a grounded block".
+  the group-per-block reading of §9's "per group produce a grounded block". **Third-round
+  amendment (same day, ADR 0010 § Amendment):** "deep path" terminology retired (content
+  modes by available references); the claim vocabulary completed to the spec's full set —
+  **gap claims** (graded, coverage-base-carrying, fail-closed corpus-promotion via
+  `search_coverage_record`) and **reasoning claims** (visibly-labelled Tier-4 authoring,
+  judge strict-routing guard) join finding/chunk/pattern/theme; whole-document windowing
+  replaced by **scoped retrieval** (anchor chunks + top-k embedding-relevant selected-set
+  chunks — the 009 unit vectors' first reader; the `retrieve` seam's first increment).
 * **Update**: [EB capability](capabilities/evidence-base/capability.md), [EB components
   §§5/6/9](capabilities/evidence-base/components.md),
   [execution-orchestration.md](system/execution-orchestration.md) — the **terminus

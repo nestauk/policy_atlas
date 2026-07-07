@@ -214,26 +214,33 @@ on what the run produced:
   **deterministically validated against the record** (pattern-grounded — the metadata-grade and
   interpretive-shape grades of [provenance.md](provenance.md)); no source citations — there is
   nothing chunk-anchored to cite at this grade, and none is faked.
-- **Grounded synthesis (when the deep chain ran) — intent-led sections, mixed grounding modes**
-  ([ADR 0010](../../../adr/0010-intent-led-synthesis-sections.md)): the section set is shaped
-  from the user's **intent** (v3.0: a bounded schema-constrained section proposal over intent +
-  group summaries, overridable by a fail-closed scope directive; plan-compile section machinery
-  is the recorded seam), and each section's claims mix grounding modes per this spec's own
-  output-structure line: **finding claims** (cite finding ids, resolved to extract-verified
-  anchors — the model never authors these quotes), **chunk claims** (verbatim quotes from the
-  **selected set's** windowed frozen text — the mechanisms/context/caveat texture the narrow
-  IOF schema cannot carry; scope bounded by select's budget, so select's coverage discipline is
-  inherited), and **pattern claims** (deterministically validated against computed spreads —
-  the direction-spread steer, "5 of 7 positive, two null"; v2's `effect_consensus` counts as
-  this steer). **Groups are input, not structure**: summaries inform sectioning and emphasis;
-  uncovered groups are counted (`groups_unsectioned`), never silently dropped. Every cited
-  claim goes through the settled `produce-grounded-block` mechanism (deterministic
-  quote-presence + LLM judge; Unsupported/mis-cited a real state) — *not* v2's permissive
-  post-hoc fuzzy matching. Intent shapes emphasis, never verification ("topical relevance ≠
-  support"). The source/evidence policy's citable bar is applied **flag-not-block** (below-bar
-  support flagged weakly-grounded/below-policy, never hidden/dropped). Deep "gaps" rest on the
-  **selected/extracted base**, **base-labelled, never promoted to corpus absence** — the
-  shallow landscape is the check (see [provenance.md](provenance.md)).
+- **Question-led grounded synthesis (when the run produced findings) — intent-led sections,
+  the full grounding-mode vocabulary**
+  ([ADR 0010](../../../adr/0010-intent-led-synthesis-sections.md), as amended): the section
+  set is shaped from the user's **intent** (v3.0: a bounded schema-constrained section
+  proposal over intent + group summaries, overridable by a fail-closed scope directive;
+  plan-compile section machinery is the recorded seam), and each section's typed claims span
+  the system's honest assertion types: **finding claims** (cite finding ids, resolved to
+  extract-verified anchors — the model never authors these quotes), **chunk claims** (verbatim
+  quotes from the **selected set's** frozen text, chosen by **scoped retrieval** — anchor
+  chunks always + top-k by embedding relevance to the section focus, the 009 unit vectors'
+  first reader and the first increment of the `retrieve` seam; select's coverage discipline
+  inherited — carrying the mechanisms/context/caveat texture the narrow IOF schema cannot),
+  **pattern claims** (deterministically validated against computed spreads — the
+  direction-spread steer; v2's `effect_consensus` counts as this steer), **gap claims**
+  (graded per [provenance.md](provenance.md) with deterministic per-grade validation and the
+  required coverage base — base-labelled to the **selected/extracted base**, promoted to
+  corpus absence only on a non-`inadequate` `search_coverage_record`, else fail-closed
+  degraded; the shallow landscape is the structural check), and **reasoning claims**
+  (visibly-labelled Tier 4 authoring for framing/context; the judge's strict-routing rule
+  keeps empirical content out; never counts toward strength roll-ups). **Groups are input,
+  not structure**: summaries inform sectioning and emphasis; uncovered groups are counted
+  (`groups_unsectioned`), never silently dropped. Every cited claim goes through the settled
+  `produce-grounded-block` mechanism (deterministic quote-presence + LLM judge;
+  Unsupported/mis-cited a real state) — *not* v2's permissive post-hoc fuzzy matching. Intent
+  shapes emphasis, never verification ("topical relevance ≠ support"). The source/evidence
+  policy's citable bar is applied **flag-not-block** (below-bar support flagged
+  weakly-grounded/below-policy, never hidden/dropped).
 - ⏸ **Corpus-wide chunk-grounded narrative** (sanctioned, ADR 0009 as amended by ADR 0010):
   for targeted questions answered before the findings chain has run — prose grounded directly
   in frozen chunks of **unselected** documents, full `produce-grounded-block` bar, visibly
