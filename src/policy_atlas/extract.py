@@ -424,7 +424,9 @@ def _split_oversize(segment_id: str, content: str) -> list[tuple[str, str]]:
         index += 1
         if start + WINDOW_CHAR_BUDGET >= length:
             break
-        start = start + WINDOW_CHAR_BUDGET - OVERSIZE_SUBSEGMENT_OVERLAP
+        # max(1, …) guards termination should the overlap ever be configured
+        # at or above the budget (impossible with the shipped constants).
+        start = start + max(1, WINDOW_CHAR_BUDGET - OVERSIZE_SUBSEGMENT_OVERLAP)
     return parts
 
 
