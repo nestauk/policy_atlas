@@ -1,4 +1,4 @@
-.PHONY: setup test test-fast typecheck lint build verify okf-validate
+.PHONY: setup test test-fast typecheck lint build verify verify-fast okf-validate
 
 # Tests run against a dedicated database on the same local container, so committing
 # tests can't pollute the dev DB. Override for a different host/DB.
@@ -45,3 +45,14 @@ verify:
 	$(MAKE) typecheck
 	$(MAKE) lint
 	$(MAKE) build
+
+# Intermediate phase-commit gate (011 retro): test-fast + typecheck + lint.
+# Full `make verify` remains mandatory at the build-open baseline, any phase
+# touching schema or ingest-adjacent code, and the step-6 exit.
+verify-fast:
+	@if ! docker compose exec db pg_isready -U policy_atlas -q 2>/dev/null; then \
+		echo "ERROR: Postgres is not running. Run 'make setup' first." >&2; exit 1; \
+	fi
+	$(MAKE) test-fast
+	$(MAKE) typecheck
+	$(MAKE) lint

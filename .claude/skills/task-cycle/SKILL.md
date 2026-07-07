@@ -75,7 +75,10 @@ the adjudicator (failure-log, 2026-07-05) — never do it.
 Each phase boundary (and each build sub-phase from the plan) ends with a commit on the
 `task/NNN-slug` branch — that's what turns the artifact into a real handoff. The agent
 prepares and runs commits as defined steps: never on the default branch, never on a red
-`make verify`. **commit ≠ push** — pushing and merging stay human; the agent drafts the PR
+gate. The gate is **tiered** (011 retro): intermediate build sub-phases commit on green
+`make verify-fast`; full `make verify` is mandatory at the build-open baseline, any
+schema/ingest-adjacent phase, and the step-6 exit — task-cycle-build § Step 5 has the
+rule. **commit ≠ push** — pushing and merging stay human; the agent drafts the PR
 and opens it on your go (step 8); the human owns review + merge (step 9).
 
 ## Evidence requirements
