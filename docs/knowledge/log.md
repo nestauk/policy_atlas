@@ -2,6 +2,14 @@
 
 ## 2026-07-07
 * **Creation**: Added
+  [facet-grouping-exhaustive-partition](facet-grouping-exhaustive-partition.md) — the
+  grouped set is exactly the referenced run's finding set, residuals counted never
+  dropped, sum identities enforced at write (task 012).
+* **Creation**: Added
+  [assert-on-row-not-summary](assert-on-row-not-summary.md) — contract-required keys must
+  be asserted on the persisted row, not the completed-event summary; the two drift (task
+  012 review stack, the unique-to-adversarial-lane finding).
+* **Creation**: Added
   [grounding-location-from-verification](grounding-location-from-verification.md) — a
   model-emitted location is a claim by untrusted output; dereferenceable location fields
   derive from verified spans (task 011 review stack, the convergent security + adversarial
