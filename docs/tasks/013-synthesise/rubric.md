@@ -3,7 +3,7 @@
 Core completion criteria. The task is **done only if every box holds** —
 otherwise it is in progress, not done.
 
-1. [ ] Implementation satisfies [contract.md](contract.md) (rev 7.4) — every
+1. [ ] Implementation satisfies [contract.md](contract.md) (rev 7.5) — every
        numbered design decision as approved (or as amended at the gates),
        implementing the spec as refined by ADRs 0009 + 0010 (four
        amendments).
@@ -51,14 +51,22 @@ substrate-conditional flexibility, test- or evidence-enforced):
         characterise-theme and sparsity-gap claims on a characterisation;
         group-theme claims on a grouping; unsupported claim types
         reject; the substrate profile is recorded in provenance.
-10. [ ] **Retrieval scope + prior are honest**: scope = the screened-in
-        corpus always (screened-out or foreign content never returned —
-        test-enforced); a referenced selection **boosts ranking, never
-        filters** (an unselected-but-screened chunk is reachable); every
-        chunk citation records its origin (selected |
-        unselected_screened); boost + scope counts in provenance;
-        **unit count > `RETRIEVAL_UNIT_CAP` → structural failure naming
-        the cap** — no call, no degraded sample.
+10. [ ] **Retrieval scope, priors and stages are honest**: scope = the
+        screened-in corpus always (screened-out or foreign content never
+        returned — test-enforced); a referenced selection **boosts
+        ranking, never filters** (an unselected-but-screened chunk is
+        reachable); every chunk citation records its origin (selected |
+        unselected_screened); the relevance leg is **content-only**
+        (metadata never enters embedding/lexical scoring — the 010
+        signal-attributability rule, test-asserted); directive
+        **`retrieval_boosts` re-weight, never exclude** (clamps enforced;
+        malformed fails closed; unknown columns/tags →
+        `unmatched_boosts`, never fatal); the **reranker stage is
+        pass-through v1** (`reranker: "none"` in provenance; protocol
+        exercised by a test-scoped fake; no public kwarg ships); boosts +
+        scope counts in provenance; **unit count > `RETRIEVAL_UNIT_CAP` →
+        structural failure naming the cap** — no call, no degraded
+        sample.
 11. [ ] **Intent-led structure holds**: sections derive from intent
         (proposal validated 1..SECTION_CAP, bounded non-generic titles,
         real assignments; fail-closed directive override recorded as

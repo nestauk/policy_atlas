@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 7.4) — awaiting contract 🛑.
+> **Status:** drafted (rev 7.5) — awaiting contract 🛑.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
 > ADRs: [0009](../../adr/0009-capability-composes-synthesise-terminus.md)
@@ -125,6 +125,24 @@ specs in [docs/specs/](../../specs/index.md).
 >   the spread, never "the evidence supports X", until the ⏸
 >   weighted-consensus seam lands — user-affirmed as the intended v3.0
 >   line.
+> - **rev 7.5** (2026-07-08, user retrieval-stack round): **(a) the
+>   `search_chunks` pipeline gains a cross-encoder reranker stage** —
+>   `ChunkRerankerBackend` protocol, **v1 default pass-through**
+>   (recorded `reranker: "none"`); the spec's retrieval contract assigns
+>   this slot to Bedrock Rerank (inference trust boundary) and 010
+>   recorded the user's Cohere-class interest here — the live backend +
+>   its `run_harness` injection point land with the Bedrock slice (no
+>   public kwarg while nothing live exists — the V2 dead-config lesson).
+>   **(b) directive-driven metadata biasing adopted** — the
+>   `context["synthesis"]` directive gains optional `retrieval_boosts`
+>   (select's vocabulary: clamped multiplicative weights over columns /
+>   tags / appraisal tier), applied **arithmetically post-fusion** —
+>   never fed to the relevance leg (the 010 signal-attributability
+>   rule) — re-weight-never-exclude, default none, executed boosts +
+>   `unmatched_boosts` in provenance; honours plan-as-object's
+>   quality-prior ruling (steerable per-directive, never a baked
+>   default) and is the surface the future source/evidence policy
+>   compiles into.
 
 ## Goal
 
@@ -407,7 +425,19 @@ registry entry + Config fields → context dataclass →
    titles/focus; group assignments, where groups exist, ⊆ real group
    ids, overlap allowed, exhaustiveness not required — uncovered groups
    → `groups_unsectioned`). The fail-closed **`context["synthesis"]`
-   directive** can supply the list; executed source recorded.
+   directive** can supply the list; executed source recorded. The same
+   directive may carry an optional **`retrieval_boosts`** object
+   (rev 7.5 — select's directive vocabulary and disciplines exactly):
+   clamped positive multiplicative weights over columns (`origin`,
+   `primary_evidence_type`, `text_basis`), tags, and appraisal tier —
+   parsed fail-closed per the select precedent, with the 010-review
+   semantics carried whole: **malformed structure fails closed; unknown
+   columns/tags match nothing and surface via `unmatched_boosts`, never
+   fatal**. Boosts **re-weight, never exclude**; default = none;
+   executed boosts recorded in provenance. This is the surface the
+   future source/evidence policy compiles into (the 010 pin), and the
+   plan-as-object's quality-prior ruling honoured: steerable
+   per-directive, never a baked default.
 6. **The section loop: one agent-loop surface, three read-only tools,
    hard caps — sections written serially with a rolling claim ledger.**
    Sections are written **in proposal order** (v3.0 execution is serial
@@ -425,11 +455,22 @@ registry entry + Config fields → context dataclass →
    finding/chunk ids, structurally, so sibling-content citation is
    impossible by construction (the citation-scope rule). Tools per
    decision 2's gating:
-   `search_chunks` (hybrid cosine+lexical rank-fused **with the
-   selection prior where referenced**, plan-pinned `SYNTH_CHUNK_TOP_K` /
-   `SYNTH_CHUNK_CHAR_BUDGET`, id-keyed frozen chunk records out **with
-   per-chunk origin: selected | unselected_screened**, deterministic
-   given stored vectors + query, the **screened-in corpus** only) ·
+   `search_chunks` — a staged pipeline (rev 7.5): **content-only hybrid
+   relevance** (embedding cosine + lexical, rank-fused; metadata never
+   feeds the relevance leg — the 010 signal-attributability rule) →
+   **arithmetic soft priors** (the selection look-here-first boost where
+   referenced + the directive's `retrieval_boosts`; transparent,
+   re-weight-never-exclude, per-chunk contributions attributable) →
+   **cross-encoder reranker stage** (`ChunkRerankerBackend` protocol —
+   the retrieval-profile seam's cross-encoder slot the spec assigns to
+   Bedrock Rerank; **v1 default = pass-through, recorded as
+   `reranker: "none"`**; the live backend and its `run_harness`
+   injection point land with the Bedrock integration slice — no public
+   kwarg ships while nothing live exists, the V2 dead-config lesson) →
+   plan-pinned `SYNTH_CHUNK_TOP_K` / `SYNTH_CHUNK_CHAR_BUDGET` caps.
+   Id-keyed frozen chunk records out **with per-chunk origin: selected |
+   unselected_screened**; deterministic given stored vectors + query;
+   the **screened-in corpus** only ·
    `query_findings` (the referenced extraction's findings only) ·
    `lookup` (closed query vocabulary v1 incl. the tag layer; this
    project and the referenced runs only).
@@ -572,7 +613,9 @@ synthesis_result  synthesis_result_id PK · project_id FK→project
                       per-phase call/turn/repair counts, the substrate
                       profile (which references resolved) + the
                       retrieval scope (screened-in doc/unit counts; the
-                      selection prior + its boost where referenced), the
+                      selection prior + its boost where referenced; the
+                      executed retrieval_boosts + unmatched_boosts; the
+                      reranker mode ["none" v1]), the
                       section set + source [proposal|scope_context] +
                       caps (SECTION_CAP · SECTION_TURN_CAP ·
                       SYNTH_CHUNK_TOP_K · SYNTH_CHUNK_CHAR_BUDGET ·
@@ -846,7 +889,15 @@ payloads. The judge rubric is lead-only per AGENTS.md.
   unselected-but-screened chunk is reachable and its citation records
   origin `unselected_screened`; boost + scope doc/unit counts in
   provenance; **unit count > RETRIEVAL_UNIT_CAP → structural failure
-  naming the cap, no call, no degraded sample**), **substrate gating**
+  naming the cap, no call, no degraded sample**; **directive
+  retrieval_boosts re-weight, never exclude** — a zero-relevance chunk
+  is never surfaced by boost alone and a boosted-away chunk is still
+  reachable; clamps enforced; malformed boosts fail closed; unknown
+  columns/tags match nothing and surface via `unmatched_boosts`; the
+  relevance leg is content-only (metadata never enters the
+  embedding/lexical scoring — test-asserted); **the reranker stage is
+  pass-through v1 and recorded** (`reranker: "none"` in provenance; the
+  protocol seam exercised by a test-scoped fake)), **substrate gating**
   (chunk claims/`search_chunks` absent without screened-in ingested
   docs; finding claims/`query_findings` absent without an extraction;
   coverage-pattern, characterise-theme and sparsity-gap claims absent without
@@ -939,9 +990,14 @@ payloads. The judge rubric is lead-only per AGENTS.md.
   lands, if one-shot structure proves a real problem) · **regeneration-
   time coherence** (the data-model's original seam — a coherence pass
   when blocks regenerate; deliberately not a write-time pass, the
-  rolling ledger owns write-time coherence) · synthesis/judge/retrieval
-  quality evals (envelope, SECTION_CAP, SECTION_TURN_CAP, top-k,
-  RETRIEVAL_UNIT_CAP and `lookup`-vocabulary calibration).
+  rolling ledger owns write-time coherence) · **cross-encoder chunk
+  reranking** (rev 7.5 — the `ChunkRerankerBackend` stage ships
+  pass-through; the live Bedrock Rerank backend + its `run_harness`
+  injection point land with the Bedrock integration slice, per the
+  retrieval contract's inference-trust-boundary line and the 010
+  Cohere-class note) · synthesis/judge/retrieval quality evals
+  (envelope, SECTION_CAP, SECTION_TURN_CAP, top-k, RETRIEVAL_UNIT_CAP,
+  retrieval-boost weights and `lookup`-vocabulary calibration).
 - Diff summary (data files excluded from review diffs per the 007
   retro).
 
