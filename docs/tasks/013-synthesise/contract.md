@@ -618,6 +618,17 @@ synthesis_result  synthesis_result_id PK · project_id FK→project
                   UNIQUE (evidence_scope_id, run_id)
 ```
 
+**`synthesis_result` is a run-scoped execution roll-up, not the artefact
+store** (clarity, folded post-rev-7.4 at the user's question): the
+repository of all artefacts — for every current and future capability —
+is the 001 substrate (`artefact` + `block`/`addressable_unit`/
+`annotation`/`citation`); this table is the component's roll-up sibling
+of `characterisation/selection/extraction/grouping_result`, pointing at
+its artefact via `artefact_id`. Future capabilities mint artefacts into
+the same substrate with their own roll-ups; an artefact
+capability-discriminator column and the versioning grain arrive with
+their first readers (recorded seams).
+
 No existing-table changes. Downgrade drops the table. `tests/helpers.py`
 `delete_project_data` gains it in FK-safe order.
 
