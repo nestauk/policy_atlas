@@ -133,14 +133,15 @@ through the `codex-rescue` agent instead — same runtime, auto-applies the GPT-
 shaping. ⚠️ rescue defaults to **write-capable**: every review brief sent through it must
 state **read-only / critique-only** explicitly. ⚠️ rescue is **async fire-and-forget**:
 its final message is **either the findings or a job id** — check which before doing
-anything else. For a job id, retrieve results with the repo wrapper:
-`scripts/codex_job.sh wait <job-id>` (or `status`/`result`) — it resolves the companion
-script itself and fails loudly. ⚠️ Never call `node "$CODEX_PLUGIN_ROOT/..."` from the
-lead's shell: that env var exists only inside the rescue agent, the call
-MODULE_NOT_FOUNDs, and a grep-filtered background poll turns that into a silent
-spin-to-timeout (failure-log, 2026-07-07). If you do hand-roll a poll: dry-run it in
-the foreground once before backgrounding, and match the `Phase:` / job-state line,
-never progress lines (failure-log, 2026-07-05).
+anything else. For a job id, retrieve results with the repo shim:
+`scripts/codex_job.sh wait <job-id> [timeout-s]` (or `status`/`result`) — it only
+resolves the companion-script path (the plugin's `${CLAUDE_PLUGIN_ROOT}` is injected
+solely while its user-typed `/codex:*` commands run; no such variable exists in the
+lead's shell — `$CODEX_PLUGIN_ROOT` never existed at all) and delegates waiting to the
+runtime's **native** `status --wait --timeout-ms`. ⚠️ Do not hand-roll a status poll —
+the runtime has one built in, and a grep-filtered background loop turns a hard error
+into a silent spin-to-timeout (failure-log, 2026-07-07; progress-line pitfall
+2026-07-05).
 
 ## Phase exit
 

@@ -319,3 +319,14 @@ require any hand-rolled poll to be foreground-dry-run before backgrounding.
 
 **Rule:** never background a poll you haven't run successfully in the foreground once;
 never filter a command's output without also checking the command's own success.
+
+**Addendum (same day, user challenge "have we over-engineered this?"):** yes, the
+first wrapper was — reading the plugin's own docs showed the companion runtime has a
+NATIVE `status <id> --wait --timeout-ms` (surfaced as `/codex:status [job-id]
+[--wait]`, user-typed only), so the hand-rolled 15s polling loop duplicated built-in
+functionality. Also, the skills' `$CODEX_PLUGIN_ROOT` never existed anywhere — the
+plugin uses `${CLAUDE_PLUGIN_ROOT}`, injected only while its slash commands execute.
+The shim now does the one thing the plugin genuinely leaves unsolved for the lead's
+shell (path resolution) and delegates waiting to the native flag. Meta-lesson: read
+the tool's own invocation docs BEFORE building the fix — the first wrapper was written
+from the failure, not from the docs.
