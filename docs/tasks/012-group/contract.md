@@ -3,8 +3,13 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 1.2) — awaiting contract approval.
-> Contract approved (before planning): _date · who_ ·
+> **Status:** **approved** (rev 1.2) — adversarial review next; planning follows.
+> Contract approved (before planning): **2026-07-07 · Shabeer Rauf** (rev 1.2,
+> covering the three gated changes — one run-scoped `grouping_result` table ·
+> `"group"` registry entry + `extraction_run_id` + `facet_grouping_backend` +
+> the `grouping_backend` → `theme_grouping_backend` symmetry rename · the
+> `group_facet_v1` generation surface incl. facet-value strings in Langfuse
+> traces) ·
 > Plan approved (before implementation): _date · who_ · ADR: _due at step 4 if a
 > design decision is made or changed_.
 >
