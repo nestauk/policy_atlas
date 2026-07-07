@@ -291,3 +291,31 @@ now seeds a real selection row, and the FK gained a positive rejection test
 (`test_extraction_result_dangling_selection_run_rejected`). If migration amendments
 recur, consider a `make test-db-rebuild` target (drop + fresh `upgrade head`) as the
 standard post-amendment step.
+
+## 2026-07-07 — Codex job tracking failed silently again: $CODEX_PLUGIN_ROOT absent in the lead's shell + error-swallowing background poll
+
+**What happened:** During the 012 design phase, the plan-stage adversarial review came
+back as a job id (the contract-stage one, minutes earlier, had returned findings
+directly). The lead launched a background poll using the documented
+`node "$CODEX_PLUGIN_ROOT/scripts/codex-companion.mjs" status …` command. That env var
+is set only inside the codex-rescue agent's environment — in the lead's shell the call
+dies with MODULE_NOT_FOUND. The poll piped status through `grep`/`case`, so the error
+was swallowed and the loop degenerated into a silent spin-to-timeout; the finished
+review (6m 36s) sat unread until the user asked "is the review still running?". Same
+failure family as 2026-07-05 (polling progress lines) — job tracking has now failed in
+design and implementation phases both.
+
+**Root cause:** Two compounding defects. (1) The skill instruction encoded an
+environment assumption that only holds inside the subagent, not where the instruction
+is executed. (2) The hand-rolled poll violated fail-loud: filtering command output
+before checking command success turns a hard error into an infinite wait.
+
+**Fix (installed):** `scripts/codex_job.sh` — resolves the companion script itself
+(env var → newest plugin cache → marketplaces checkout, error if none) and provides
+`status | result | wait`; `wait` aborts immediately on any status failure and times
+out loudly. Both task-cycle skills (design § Codex plumbing, review § Codex plumbing)
+now point at the wrapper, state that a rescue return may be findings OR a job id, and
+require any hand-rolled poll to be foreground-dry-run before backgrounding.
+
+**Rule:** never background a poll you haven't run successfully in the foreground once;
+never filter a command's output without also checking the command's own success.
