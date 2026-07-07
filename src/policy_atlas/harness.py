@@ -28,6 +28,8 @@ from policy_atlas.appraise import AppraiseContext, appraise_sources
 from policy_atlas.characterise import CharacteriseContext, CharacteriseFailure, characterise_scope
 from policy_atlas.classify import ClassifyContext, classify_sources
 from policy_atlas.embeddings import EmbeddingBackend, StubEmbeddingBackend
+from policy_atlas.extract import ExtractContext, extract_scope
+from policy_atlas.extraction_backend import ExtractionBackend, StubExtractionBackend
 from policy_atlas.grounding import GroundingError, produce_grounded_block
 from policy_atlas.grouping import GroupingBackend, StubGroupingBackend
 from policy_atlas.inference import InferenceProvider
@@ -60,6 +62,7 @@ class HarnessState(TypedDict):
     embedding_backend: EmbeddingBackend
     grouping_backend: GroupingBackend
     ranking_backend: RankingBackend | None
+    extraction_backend: ExtractionBackend
     block_ids: dict[str, Any]
     error: str | None
 
@@ -233,6 +236,18 @@ def _run_select(state: HarnessState) -> HarnessState:
     return _run_scope_component(state, context_cls, sources_fn)
 
 
+def _run_extract(state: HarnessState) -> HarnessState:
+    config = state["config"]
+    assert config.selection_run_id is not None  # registry-enforced at compile
+    context_cls = functools.partial(
+        ExtractContext, selection_run_id=config.selection_run_id
+    )
+    sources_fn = functools.partial(
+        extract_scope, extraction_backend=state["extraction_backend"]
+    )
+    return _run_scope_component(state, context_cls, sources_fn)
+
+
 def _run_characterise(state: HarnessState) -> HarnessState:
     """Characterise node — not routed through ``_run_scope_component``: its generic
     except emits only {component, error}, and a ``CharacteriseFailure`` must carry
@@ -360,6 +375,7 @@ def build_graph() -> Any:
     g.add_node("ingest_full_text", _run_ingest_full_text)
     g.add_node("characterise", _run_characterise)
     g.add_node("select", _run_select)
+    g.add_node("extract", _run_extract)
     g.add_node("finish", _finish)
 
     g.set_entry_point("dispatch")
@@ -375,6 +391,7 @@ def build_graph() -> Any:
             "ingest_full_text": "ingest_full_text",
             "characterise": "characterise",
             "select": "select",
+            "extract": "extract",
         },
     )
     g.add_edge("echo", "finish")
@@ -385,6 +402,7 @@ def build_graph() -> Any:
     g.add_edge("ingest_full_text", "finish")
     g.add_edge("characterise", "finish")
     g.add_edge("select", "finish")
+    g.add_edge("extract", "finish")
     g.add_edge("finish", END)
     return g.compile()
 
@@ -401,6 +419,7 @@ def run_harness(
     embedding_backend: EmbeddingBackend | None = None,
     grouping_backend: GroupingBackend | None = None,
     ranking_backend: RankingBackend | None = None,
+    extraction_backend: ExtractionBackend | None = None,
 ) -> dict[str, Any]:
     """Run the compiled harness graph for one run, persisting its output.
 
@@ -427,6 +446,9 @@ def run_harness(
             here. ``None`` IS the deterministic ``coverage_stratified_v1``
             routing and stays ``None``; passing a backend selects
             ``llm_rerank_v1``. No default egress.
+        extraction_backend: Extraction backend for the extract component;
+            defaults to ``StubExtractionBackend()`` — no default egress, the
+            grouping_backend pattern (approved gated change 2, task 011).
 
     Returns:
         Persisted IDs; ``artefact_id`` is None for non-echo components that do
@@ -471,6 +493,9 @@ def run_harness(
             grouping_backend if grouping_backend is not None else StubGroupingBackend()
         ),
         "ranking_backend": ranking_backend,
+        "extraction_backend": (
+            extraction_backend if extraction_backend is not None else StubExtractionBackend()
+        ),
         "block_ids": {},
         "error": None,
     }

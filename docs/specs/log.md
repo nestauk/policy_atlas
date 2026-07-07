@@ -1,5 +1,16 @@
 # Spec update log
 
+## 2026-07-07
+* **Update**: [data-model.md](system/data-model.md) — findings-layer base-field list made
+  explicit with three source-groundable sharpenings surfaced by the task-011 V2 extraction
+  autopsy, all inside the spec's own "what the source reports" line: **stratum qualifiers**
+  (timepoint/subgroup/setting as structured qualifiers; the outcome reference stays the base
+  measure only — grain becomes *(intervention, outcome, effect, stratum)*), source-named
+  nullable **comparator** (an effect direction is versus something), and the
+  **estimate-level discriminator** (`study` | `pooled` | `claim`), with **τ²** joining the
+  pooled stats (k, I²). Approved with the task 011 contract (rev 1.4 ⚑) per the
+  spec-refinement flow.
+
 ## 2026-07-06
 * **Update**: [EB components §6](capabilities/evidence-base/components.md) — select
   realisation refined: *procedure* → *procedure with an optional bounded generative rerank* of

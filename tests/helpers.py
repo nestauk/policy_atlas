@@ -33,6 +33,8 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         chunk_embedding,
         event_log,
         evidence_scope,
+        extraction_result,
+        intervention_outcome_finding,
         project,
         project_source_snapshot,
         runs,
@@ -40,6 +42,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         selection_result,
         source_appraisal_result,
         source_classification_result,
+        source_extraction_record,
         source_screening_result,
         source_snapshot,
         source_tag,
@@ -82,6 +85,17 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
     ))
     conn.execute(delete(annotation).where(annotation.c.block_id.in_(block_ids_subq)))
     conn.execute(delete(addressable_unit).where(addressable_unit.c.block_id.in_(block_ids_subq)))
+    # Task 011 rows first: findings FK onto extraction records, which FK onto
+    # pss/runs; extraction_result FKs onto scope/runs.
+    conn.execute(delete(intervention_outcome_finding).where(
+        intervention_outcome_finding.c.project_id == project_id
+    ))
+    conn.execute(delete(source_extraction_record).where(
+        source_extraction_record.c.project_id == project_id
+    ))
+    conn.execute(delete(extraction_result).where(
+        extraction_result.c.project_id == project_id
+    ))
     # Task 009 rows first: tags/characterisation FK onto pss/runs; embeddings FK onto chunk
     conn.execute(delete(source_tag).where(source_tag.c.project_id == project_id))
     # Task 010 row: same FK class as characterisation_result (scope + runs guards).

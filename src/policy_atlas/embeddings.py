@@ -19,6 +19,7 @@ from typing import Protocol, TypedDict
 
 import structlog
 from openai import OpenAI
+from openai.types.completion_usage import CompletionUsage
 from sqlalchemy import exists, func, select, union
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
@@ -151,6 +152,37 @@ def resolve_openai_client(
     if not resolved_key:
         raise RuntimeError(f"{backend_name} requires OPENAI_API_KEY or an explicit api_key.")
     return OpenAI(api_key=resolved_key, timeout=timeout, max_retries=max_retries)
+
+
+def usage_metadata(usage: CompletionUsage | None) -> dict[str, int | None]:
+    """Token usage as log/span metadata; all-``None`` when the API omitted usage.
+
+    Shared by the live chat backends so the usage shape lives in one place.
+
+    Args:
+        usage: The response's usage block, or ``None``.
+    """
+    if usage is None:
+        return {
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "total_tokens": None,
+        }
+    return {
+        "prompt_tokens": usage.prompt_tokens,
+        "completion_tokens": usage.completion_tokens,
+        "total_tokens": usage.total_tokens,
+    }
+
+
+def log_usage(event: str, usage: CompletionUsage | None) -> None:
+    """Log one model call's token usage (``None``-safe).
+
+    Args:
+        event: The structlog event name.
+        usage: The response's usage block, or ``None``.
+    """
+    log.info(event, **usage_metadata(usage))
 
 
 class OpenAIEmbeddingBackend:

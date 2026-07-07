@@ -298,6 +298,55 @@ def score_summary(
     )
 
 
+def extraction_score_summary(
+    client: Langfuse | None,
+    summary: dict[str, Any],
+    *,
+    root_span: Any = None,
+) -> None:
+    """Attach the extract run's grounding scores to the current Langfuse trace.
+
+    The 009 ``score_summary`` pattern; task 011 rev 1.4 — extraction quality
+    measurable from the first live run.
+
+    Args:
+        client: Langfuse client, or ``None`` for no-op tracing.
+        summary: Extract component summary payload — becomes the trace output.
+        root_span: The ``run:{run_id}`` root span yielded by ``component_span``.
+    """
+    if client is None:
+        return
+    if root_span is not None:
+        root_span.update(
+            input={"component": "extract", "selection_run_id": summary["selection_run_id"]},
+            output=summary,
+        )
+    total = summary["findings"]["total"]
+    if total > 0:
+        client.score_current_trace(
+            name="quote_verified_share",
+            value=1.0 - summary["findings"]["quote_unverified"] / total,
+            data_type="NUMERIC",
+        )
+    selected = summary["counts"]["selected"]
+    if selected > 0:
+        client.score_current_trace(
+            name="no_findings_share",
+            value=summary["counts"]["no_findings"] / selected,
+            data_type="NUMERIC",
+        )
+    client.score_current_trace(
+        name="extraction_failure_count",
+        value=float(summary["counts"]["failed"]),
+        data_type="NUMERIC",
+    )
+    client.score_current_trace(
+        name="dedup_collapsed_count",
+        value=float(summary["findings"]["dedup_collapsed"]),
+        data_type="NUMERIC",
+    )
+
+
 def flush(client: Langfuse | None) -> None:
     """Flush pending Langfuse telemetry when tracing is enabled.
 

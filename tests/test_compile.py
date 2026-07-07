@@ -152,3 +152,32 @@ def test_characterise_valid_without_characterisation_run_id() -> None:
     plan = Plan(component="characterise", evidence_scope_id=scope_id)
     config = compile(plan)
     assert config.characterisation_run_id is None
+
+
+def test_extract_requires_evidence_scope_id_and_selection_run_id() -> None:
+    with pytest.raises(ValidationError):
+        Plan(component="extract")
+
+
+def test_extract_requires_selection_run_id() -> None:
+    with pytest.raises(ValidationError):
+        Plan(component="extract", evidence_scope_id=uuid.uuid4())
+
+
+def test_extract_requires_evidence_scope_id() -> None:
+    with pytest.raises(ValidationError):
+        Plan(component="extract", selection_run_id=uuid.uuid4())
+
+
+def test_extract_valid_with_both() -> None:
+    scope_id = uuid.uuid4()
+    selection_run_id = uuid.uuid4()
+    plan = Plan(
+        component="extract",
+        evidence_scope_id=scope_id,
+        selection_run_id=selection_run_id,
+    )
+    config = compile(plan)
+    assert config.component == "extract"
+    assert config.evidence_scope_id == scope_id
+    assert config.selection_run_id == selection_run_id

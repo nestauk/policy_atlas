@@ -1,10 +1,11 @@
-"""SQLAlchemy Core table metadata — twenty tables, ten alembic migrations.
+"""SQLAlchemy Core table metadata — twenty-three tables, eleven alembic migrations.
 
 No deferred columns (no block/artefact summary, no same_content_as, no lineage key).
 """
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
@@ -18,6 +19,7 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
@@ -561,4 +563,174 @@ source_tag = Table(
     # Widens by a one-line migration when the LLM classify tool's seam opens
     # ("methodological_structural") — no speculative value ships now (decision 10).
     CheckConstraint(f"tag_type IN ('{TOPIC_THEME}')", name="ck_stag_tag_type"),
+)
+
+# --- Extract / findings layer (task 011) ---
+
+EXTRACTION_STATUSES: tuple[str, ...] = ("extracted", "no_findings", "extraction_failed")
+EXTRACTION_BASES: tuple[str, ...] = ("full_text", "abstract_only")
+EFFECT_DIRECTIONS: tuple[str, ...] = ("positive", "negative", "no_effect", "mixed", "unclear")
+ESTIMATE_LEVELS: tuple[str, ...] = ("study", "pooled", "claim")
+CAUSALITY_BY_DESIGN: tuple[str, ...] = (
+    "attributable",
+    "plausibly_causal",
+    "associational",
+    "descriptive",
+)
+
+_EXTRACTION_STATUSES_SQL = ", ".join(f"'{s}'" for s in EXTRACTION_STATUSES)
+_EXTRACTION_BASES_SQL = ", ".join(f"'{b}'" for b in EXTRACTION_BASES)
+_EFFECT_DIRECTIONS_SQL = ", ".join(f"'{d}'" for d in EFFECT_DIRECTIONS)
+_ESTIMATE_LEVELS_SQL = ", ".join(f"'{lv}'" for lv in ESTIMATE_LEVELS)
+_CAUSALITY_SQL = ", ".join(f"'{c}'" for c in CAUSALITY_BY_DESIGN)
+
+# The two memo (success) states — a failed attempt inserts freely as attempt
+# history and never satisfies or blocks the memo lookup (contract rev 1.5).
+MEMO_STATUSES: tuple[str, ...] = ("extracted", "no_findings")
+_MEMO_WHERE_SQL = "status IN ('extracted', 'no_findings')"
+
+source_extraction_record = Table(
+    "source_extraction_record",
+    metadata,
+    Column("extraction_record_id", UUID(as_uuid=True), primary_key=True),
+    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    # The extracted snapshot: the selected pss's full_text_snapshot_id (basis
+    # full_text) or its envelope snapshot (basis abstract_only). source_snapshot
+    # is content-keyed/shared, so the cross-project guard rides the pss link.
+    Column(
+        "source_snapshot_id",
+        UUID(as_uuid=True),
+        ForeignKey("source_snapshot.source_snapshot_id"),
+        nullable=False,
+    ),
+    Column("project_source_snapshot_id", UUID(as_uuid=True), nullable=False),
+    Column("extraction_fingerprint", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("basis", Text, nullable=False),
+    Column("error", Text, nullable=True),  # reason-coded on failure
+    Column("finding_count", Integer, nullable=False, server_default="0"),
+    Column("run_id", UUID(as_uuid=True), nullable=False),  # creating run; assertion provenance
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    # Cross-project FK guards, per the screening-result precedent.
+    ForeignKeyConstraint(
+        ["run_id", "project_id"],
+        ["runs.run_id", "runs.project_id"],
+        name="fk_ser_run_project",
+    ),
+    ForeignKeyConstraint(
+        ["project_source_snapshot_id", "project_id"],
+        [
+            "project_source_snapshot.project_source_snapshot_id",
+            "project_source_snapshot.project_id",
+        ],
+        name="fk_ser_pss_project",
+    ),
+    # Composite unique target for the finding table's cross-project FK guard
+    # (the uq_pss_id_project / uq_runs_run_project parent pattern).
+    UniqueConstraint("extraction_record_id", "project_id", name="uq_ser_id_project"),
+    # The memo key: partial unique over the two success states only, so a failed
+    # attempt never blocks its own retry (contract rev 1.5).
+    Index(
+        "uq_ser_memo",
+        "project_id",
+        "source_snapshot_id",
+        "extraction_fingerprint",
+        unique=True,
+        postgresql_where=text(_MEMO_WHERE_SQL),
+    ),
+    CheckConstraint(f"status IN ({_EXTRACTION_STATUSES_SQL})", name="ck_ser_status"),
+    CheckConstraint(f"basis IN ({_EXTRACTION_BASES_SQL})", name="ck_ser_basis"),
+    # Failure is never silent: failed ⟺ reason-coded (the pss full-text precedent).
+    CheckConstraint(
+        "(status = 'extraction_failed') = (error IS NOT NULL)",
+        name="ck_ser_error_presence",
+    ),
+)
+
+intervention_outcome_finding = Table(
+    "intervention_outcome_finding",
+    metadata,
+    Column("finding_id", UUID(as_uuid=True), primary_key=True),
+    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("extraction_record_id", UUID(as_uuid=True), nullable=False),
+    # Source-named references — never canonical entities (data-model findings layer).
+    Column("intervention", Text, nullable=False),
+    Column("outcome", Text, nullable=False),  # base measure only; qualifiers are stratum
+    Column("population", Text, nullable=True),
+    Column("comparator", Text, nullable=True),
+    Column("effect_direction", Text, nullable=False),  # a reported null result is a finding
+    Column("estimate_level", Text, nullable=True),
+    Column("study_design", Text, nullable=True),
+    # Canonical sorted array of {type, value}; closed type vocabulary (contract rev 1.5).
+    Column("stratum_qualifiers", JSONB, nullable=False),
+    # Reported values only: effect size + type, CI/SE, p-value, N, k, I², τ².
+    Column("statistics", JSONB, nullable=False),
+    Column("causality_by_design", Text, nullable=True),
+    Column("is_primary", Boolean, nullable=True),
+    Column("is_prevalence_only", Boolean, nullable=True),
+    # Per absent nullable field: not_extracted | unclear | not_applicable.
+    Column("field_coverage", JSONB, nullable=False),
+    # Anchors: chunk_id (NULL for abstract basis) · verbatim quote · match status ·
+    # raw char interval when verified (rev 1.3/1.4).
+    Column("grounding", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    ForeignKeyConstraint(
+        ["extraction_record_id", "project_id"],
+        [
+            "source_extraction_record.extraction_record_id",
+            "source_extraction_record.project_id",
+        ],
+        name="fk_iof_record_project",
+    ),
+    CheckConstraint(f"effect_direction IN ({_EFFECT_DIRECTIONS_SQL})", name="ck_iof_direction"),
+    CheckConstraint(
+        f"estimate_level IS NULL OR estimate_level IN ({_ESTIMATE_LEVELS_SQL})",
+        name="ck_iof_estimate_level",
+    ),
+    CheckConstraint(
+        f"causality_by_design IS NULL OR causality_by_design IN ({_CAUSALITY_SQL})",
+        name="ck_iof_causality",
+    ),
+    CheckConstraint("jsonb_typeof(stratum_qualifiers) = 'array'", name="ck_iof_strata_array"),
+    CheckConstraint("jsonb_typeof(grounding) = 'array'", name="ck_iof_grounding_array"),
+    Index("ix_iof_record", "extraction_record_id"),
+)
+
+extraction_result = Table(
+    "extraction_result",
+    metadata,
+    Column("extraction_result_id", UUID(as_uuid=True), primary_key=True),
+    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
+    Column("run_id", UUID(as_uuid=True), nullable=False),
+    Column("selection_run_id", UUID(as_uuid=True), nullable=False),  # the executed reference
+    # Fingerprint + full component map: profile, schema, prompt, model, mode,
+    # field rules, verifier, window params, max output tokens, retry cap, pass count.
+    Column("extraction_provenance", JSONB, nullable=False),
+    # Per doc: pss id, status, basis, finding count, fresh|reused, error reason.
+    Column("docs", JSONB, nullable=False),
+    # Base ladder: selected, extracted, no_findings, failed, fresh, reused,
+    # findings total, quote_unverified, basis shares.
+    Column("counts", JSONB, nullable=False),
+    Column("flags", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    ForeignKeyConstraint(
+        ["evidence_scope_id", "project_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
+        name="fk_exr_scope_project",
+    ),
+    ForeignKeyConstraint(
+        ["run_id", "project_id"],
+        ["runs.run_id", "runs.project_id"],
+        name="fk_exr_run_project",
+    ),
+    # The executed selection must exist for this scope (targets uq_selr_scope_run),
+    # so a roll-up can never reference a selection that was never written.
+    ForeignKeyConstraint(
+        ["evidence_scope_id", "selection_run_id"],
+        ["selection_result.evidence_scope_id", "selection_result.run_id"],
+        name="fk_exr_selection",
+    ),
+    # Run-local roll-up: same-run re-execution is a loud error, retry = new run.
+    UniqueConstraint("evidence_scope_id", "run_id", name="uq_exr_scope_run"),
 )

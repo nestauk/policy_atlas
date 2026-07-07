@@ -4,6 +4,38 @@ Recurring issues encountered during the task cycle. Each entry: what happened, r
 
 ---
 
+## 2026-07-07 — Full `make verify` at every phase commit: ~30 min of low-signal gate time on one build
+
+**Task:** 011-extract (build phase)
+
+**What happened:** The build ran full `make verify` (~5–6 min) at eight points — the
+green-base check, each of the six phase commits, and reruns chasing one transient failure —
+totalling ~35 minutes of wall time. Nearly all of each run is `test_ingest_full_text.py`
+(~2.5 min of real PDF parsing) which the extract slice barely touches; the slice's own 107
+new tests run in ~2 seconds, and the 107 added tests moved the full-suite time by ~10
+seconds. The user flagged the build as feeling long; the live model runs (~40 min, which
+caught two real bugs) were well spent — the repeated full-suite gates were not.
+
+**Root cause:** The task-cycle commit rule was written as "green `make verify` only" with a
+single, undifferentiated gate. It predates the 008 slice that made the full suite expensive
+(committed real-document ingest tests), so the rule silently inherited a 5-minute price per
+checkpoint that no one re-derived. `make test-fast` existed as an inner-loop convenience but
+nothing licensed it as a commit gate.
+
+**Fix (adopted 2026-07-07, installed in Makefile + task-cycle spine § Commits +
+task-cycle-build § Step 5 + harness.md § Verification layer):** a **tiered commit gate**.
+New `make verify-fast` target (test-fast + typecheck + lint, ~30s) gates intermediate build
+sub-phase commits; full `make verify` remains mandatory at the build-open baseline, any
+phase touching **schema or ingest-adjacent code**, and the step-6 exit. The schema carve-out
+is load-bearing, not caution: 011's phase 1 bumped a table-count assertion *inside* the
+excluded `test_ingest_full_text.py` — under test-fast alone that assertion would not run
+until five phases later. Counter-consideration kept explicit: full-suite-only signals
+(ordering-dependent flakes — 011 saw one unreproduced 1-of-427 failure in a full run) now
+surface only at full-verify points; that is the accepted trade. Never-commit-on-red is
+unchanged.
+
+---
+
 ## 2026-07-05 — One `/goal` spanned the whole cycle: review ran in the build conversation, author adjudicated its own findings
 
 **Task:** 007-acquire
@@ -234,3 +266,28 @@ sized to the model's orchestration capability — and the scoping/budget changes
 keep their reviews affordable. Also installed: step-8-scheduled rubric items are named
 in the contract-verifier brief (pending-with-contradiction-check, not MAJOR-unmet —
 same retro).
+
+## 2026-07-07 — Amended migration never re-applied locally; stale test DB masked an FK break that CI caught
+
+**What happened:** The 011 review stack added `fk_exr_selection` by amending the
+branch-local migration `d4e9b2f7a1c5` in place (legitimate pre-merge practice). The dev
+DB was roundtripped (`downgrade -1` → `upgrade head`) — but the **test** DB was not.
+`tests/conftest.py` applies migrations idempotently by revision (`alembic upgrade head`),
+and the test DB was already stamped at that head, so the amended DDL never re-applied
+locally. `make verify` ran green twice; PR #18's CI, building the schema fresh, failed
+one test whose direct insert fabricated a `selection_run_id` the new FK correctly
+rejects.
+
+**Root cause:** Amending an already-applied migration changes the DDL without changing
+the revision id, so every environment stamped at that head silently keeps the old
+schema. Any revision-keyed idempotent migration runner (conftest, dev bring-up) has this
+blind spot; a green local suite after a migration amendment proves nothing about the
+amended DDL.
+
+**Fix:** After amending an applied migration, roundtrip **every** local database that
+has it applied (dev *and* `policy_atlas_test`) before trusting a green suite — the CI
+fresh-build is the arbiter. Applied on 011: test DB roundtripped, the fabricating test
+now seeds a real selection row, and the FK gained a positive rejection test
+(`test_extraction_result_dangling_selection_run_rejected`). If migration amendments
+recur, consider a `make test-db-rebuild` target (drop + fresh `upgrade head`) as the
+standard post-amendment step.

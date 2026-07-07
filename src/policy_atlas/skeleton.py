@@ -4,7 +4,8 @@ Smoke command: python -m policy_atlas.skeleton
 
 Creates a project + run, ingests a synthetic source, creates a screening scope,
 then walks screen → classify → appraise → ingest_full_text → characterise → select
-over the same scope, rendering the landscape and selection summaries and the event log.
+→ extract over the same scope, rendering the landscape, selection and extraction
+summaries and the event log.
 All gates approved; see ADR 0001 and contract.md.
 """
 
@@ -22,6 +23,11 @@ from sqlalchemy.engine import Connection
 from policy_atlas import events, tracing
 from policy_atlas.db import get_engine
 from policy_atlas.embeddings import EmbeddingBackend, OpenAIEmbeddingBackend, StubEmbeddingBackend
+from policy_atlas.extraction_backend import (
+    ExtractionBackend,
+    OpenAIExtractionBackend,
+    StubExtractionBackend,
+)
 from policy_atlas.fixtures import get_source
 from policy_atlas.grouping import GroupingBackend, OpenAIGroupingBackend, StubGroupingBackend
 from policy_atlas.harness import run_harness
@@ -33,6 +39,7 @@ from policy_atlas.ranking import OpenAIRankingBackend, RankingBackend
 from policy_atlas.schema import (
     characterisation_result,
     evidence_scope,
+    extraction_result,
     project,
     project_source_snapshot,
     runs,
@@ -43,6 +50,7 @@ from policy_atlas.schema import (
     source_snapshot,
     source_tag,
 )
+from policy_atlas.select import NON_EVIDENCE_TYPE
 
 log = structlog.get_logger()
 
@@ -75,6 +83,8 @@ def _run_component(
     langfuse_client: Langfuse | None,
     characterisation_run_id: uuid.UUID | None = None,
     ranking_backend: RankingBackend | None = None,
+    selection_run_id: uuid.UUID | None = None,
+    extraction_backend: ExtractionBackend | None = None,
 ) -> uuid.UUID:
     """Create a run, compile and record the plan, and execute one scope component.
 
@@ -90,6 +100,10 @@ def _run_component(
             unused by other components.
         ranking_backend: Ranking backend for ``select``; unused by other
             components.
+        selection_run_id: Explicit selection run for ``extract``; unused by
+            other components.
+        extraction_backend: Extraction backend for ``extract``; unused by
+            other components.
 
     Returns:
         The created run's id.
@@ -113,6 +127,7 @@ def _run_component(
             component=component,
             evidence_scope_id=scope_id,
             characterisation_run_id=characterisation_run_id,
+            selection_run_id=selection_run_id,
         )
     )
     plan_payload: dict[str, Any] = {
@@ -121,6 +136,8 @@ def _run_component(
     }
     if config.characterisation_run_id is not None:
         plan_payload["characterisation_run_id"] = str(config.characterisation_run_id)
+    if config.selection_run_id is not None:
+        plan_payload["selection_run_id"] = str(config.selection_run_id)
     events.append(
         conn,
         project_id=project_id,
@@ -143,6 +160,7 @@ def _run_component(
             embedding_backend=embedding_backend,
             grouping_backend=grouping_backend,
             ranking_backend=ranking_backend,
+            extraction_backend=extraction_backend,
         )
         if component == "characterise" and langfuse_client is not None:
             # Scores and trace I/O must attach while the run's span is still the
@@ -156,6 +174,12 @@ def _run_component(
                 ).scalar_one()
                 tracing.score_summary(
                     langfuse_client, payload, intent=intent, root_span=run_span
+                )
+        if component == "extract" and langfuse_client is not None:
+            payload = _extraction_payload(events.read(conn, project_id), run_id=run_id)
+            if payload is not None:
+                tracing.extraction_score_summary(
+                    langfuse_client, payload, root_span=run_span
                 )
     return run_id
 
@@ -304,6 +328,57 @@ def _render_selection(
         log.info("selection.selected_doc", **fields)
 
 
+def _extraction_payload(
+    log_entries: list[dict[str, Any]], *, run_id: uuid.UUID | None = None
+) -> dict[str, Any] | None:
+    """Return the extract component's completed-event payload, or None if it failed.
+
+    Entries arrive in ascending sequence order, so the search runs newest-first;
+    pass ``run_id`` to pin the payload to one run rather than the latest.
+    """
+    return next(
+        (
+            e["payload"] for e in reversed(log_entries)
+            if e["event_type"] == "component.completed"
+            and e["payload"].get("component") == "extract"
+            and (run_id is None or e["run_id"] == run_id)
+        ),
+        None,
+    )
+
+
+def _render_extraction(log_entries: list[dict[str, Any]]) -> None:
+    """Render the extract summary from the event log, human-readably."""
+    payload = _extraction_payload(log_entries)
+    if payload is None:
+        # the component emitted component.failed — the event log below shows it
+        log.warning("extraction.missing")
+        return
+
+    log.info("extraction.counts", **payload["counts"])
+    log.info("extraction.findings", **payload["findings"])
+    log.info("extraction.basis", **payload["basis"])
+    for doc in payload["docs"]:
+        log.info(
+            "extraction.doc",
+            pss_id=doc["pss_id"],
+            status=doc["status"],
+            basis=doc["basis"],
+            finding_count=doc["finding_count"],
+            reused=doc["reused"],
+            error=doc["error"],
+        )
+    log.info("extraction.flags", flags=payload["flags"])
+    # The full provenance map is in the DB row; only the headline fields here.
+    log.info(
+        "extraction.provenance",
+        fingerprint=payload["provenance"]["fingerprint"],
+        model=payload["provenance"]["model"],
+        prompt=payload["provenance"]["prompt"],
+        mode=payload["provenance"]["mode"],
+    )
+
+
 def main() -> None:
     """Run the walking-skeleton thread end to end and log the result."""
     configure_logging()
@@ -317,12 +392,16 @@ def main() -> None:
     embedding_backend: EmbeddingBackend
     grouping_backend: GroupingBackend
     ranking_backend: RankingBackend | None
+    extraction_backend: ExtractionBackend
     if live:
         embedding_backend = OpenAIEmbeddingBackend()
         grouping_backend = OpenAIGroupingBackend()
         # Tracing lives inside OpenAIRankingBackend itself — no wrapper class,
         # unlike the embedding/grouping backends below.
         ranking_backend = OpenAIRankingBackend(langfuse_client=langfuse_client)
+        # Tracing lives inside OpenAIExtractionBackend itself — no wrapper
+        # class, unlike the embedding/grouping backends below.
+        extraction_backend = OpenAIExtractionBackend(langfuse_client=langfuse_client)
         if langfuse_client is not None:
             embedding_backend = tracing.TracedEmbeddingBackend(
                 embedding_backend, langfuse_client
@@ -334,6 +413,7 @@ def main() -> None:
         embedding_backend = StubEmbeddingBackend()
         grouping_backend = StubGroupingBackend()
         ranking_backend = None
+        extraction_backend = StubExtractionBackend()
     log.info(
         "skeleton.backends",
         mode="live" if live else "stub",
@@ -465,6 +545,56 @@ def main() -> None:
         boost_tag = tag_counts[0].tag if tag_counts else None
         log.info("select.demo_boost_tag", tag=boost_tag)
 
+        # Plan finding 7: budget + tag boost alone can't guarantee the live
+        # extract run sees both bases — pin one full-text and one abstract-only
+        # doc as must-includes, deterministically (min pss_id per basis).
+        basis_pin_rows = conn.execute(
+            select(
+                project_source_snapshot.c.project_source_snapshot_id,
+                project_source_snapshot.c.full_text_status,
+                project_source_snapshot.c.full_text_snapshot_id,
+                source_snapshot.c.metadata,
+            )
+            .select_from(
+                project_source_snapshot
+                .join(
+                    source_snapshot,
+                    project_source_snapshot.c.source_snapshot_id
+                    == source_snapshot.c.source_snapshot_id,
+                )
+                .join(
+                    source_screening_result,
+                    project_source_snapshot.c.project_source_snapshot_id
+                    == source_screening_result.c.project_source_snapshot_id,
+                )
+                .join(
+                    source_classification_result,
+                    project_source_snapshot.c.project_source_snapshot_id
+                    == source_classification_result.c.project_source_snapshot_id,
+                )
+            )
+            .where(project_source_snapshot.c.project_id == project_id)
+            .where(source_screening_result.c.status == "relevant")
+            .where(source_classification_result.c.primary_evidence_type != NON_EVIDENCE_TYPE)
+            .order_by(project_source_snapshot.c.project_source_snapshot_id)
+        ).fetchall()
+
+        ft_pin: uuid.UUID | None = None
+        ab_pin: uuid.UUID | None = None
+        for row in basis_pin_rows:
+            if ft_pin is None and row.full_text_status == "ingested":
+                ft_pin = row.project_source_snapshot_id
+            abstract = row.metadata.get("abstract")
+            if (
+                ab_pin is None
+                and row.full_text_snapshot_id is None
+                and isinstance(abstract, str)
+                and abstract
+            ):
+                ab_pin = row.project_source_snapshot_id
+            if ft_pin is not None and ab_pin is not None:
+                break
+
         # Plan finding 5: the fixture corpus is ~24 docs, so the default budget
         # (25) would leave zero contested strata — pin a small budget and a
         # boost on the chosen tag so reranking has something to do. A tagless
@@ -474,6 +604,15 @@ def main() -> None:
             selection_directive["boosts"] = [
                 {"match": {"tag_type": "topic_theme", "tag": boost_tag}, "weight": 3.0}
             ]
+        if ft_pin is not None and ab_pin is not None:
+            selection_directive["must_include_ids"] = [str(ft_pin), str(ab_pin)]
+            log.info("select.must_include_pins", full_text=str(ft_pin), abstract_only=str(ab_pin))
+        else:
+            log.warning(
+                "select.must_include_pins_incomplete",
+                full_text=str(ft_pin) if ft_pin is not None else None,
+                abstract_only=str(ab_pin) if ab_pin is not None else None,
+            )
         conn.execute(
             evidence_scope.update()
             .where(evidence_scope.c.evidence_scope_id == scope_id)
@@ -481,7 +620,7 @@ def main() -> None:
         )
         log.info("select.directive", budget=8, boost_tag=boost_tag)
 
-        run_component(
+        select_run_id = run_component(
             "select",
             characterisation_run_id=char_run_id,
             ranking_backend=ranking_backend,
@@ -489,6 +628,27 @@ def main() -> None:
 
         selection_row = conn.execute(
             select(selection_result).where(selection_result.c.project_id == project_id)
+        ).one_or_none()
+
+        selected_bases = {
+            record["text_basis"]
+            for record in (selection_row.selected if selection_row is not None else [])
+        }
+        if not {"full_text", "abstract_only"} <= selected_bases:
+            log.error("extract.mixed_basis_missing", bases=sorted(selected_bases))
+            if live:
+                raise RuntimeError(
+                    "live extract run requires both text bases in the selected set"
+                )
+
+        run_component(
+            "extract",
+            selection_run_id=select_run_id,
+            extraction_backend=extraction_backend,
+        )
+
+        extraction_row = conn.execute(
+            select(extraction_result).where(extraction_result.c.project_id == project_id)
         ).one_or_none()
 
         log_entries = events.read(conn, project_id)
@@ -529,6 +689,9 @@ def main() -> None:
         log_entries, selection_row.selected if selection_row is not None else []
     )
     log.info("selection_row", present=selection_row is not None)
+
+    _render_extraction(log_entries)
+    log.info("extraction_row", present=extraction_row is not None)
 
     if live:
         # Finding 5's assert-and-log: a live run that never actually calls the

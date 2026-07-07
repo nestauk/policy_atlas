@@ -45,7 +45,17 @@ changes. An optional `/goal` for this phase is "through step 6: verification.md 
 
 One contract at a time, incrementally. structlog only (no print/stdlib logging in package
 code). Touch only what the contract requires. Land a check before the next sub-phase; each
-plan checkpoint ends with a commit on `task/NNN-slug` (green `make verify` only).
+plan checkpoint ends with a commit on `task/NNN-slug`, gated by the **tiered commit gate**
+(011 retro: eight full-verify gates ≈ 30 min of low-signal wall time on a slice whose own
+tests ran in seconds):
+
+- **Intermediate phase commits**: green `make verify-fast` (test-fast + typecheck + lint).
+- **Full `make verify` is mandatory at**: the build-open baseline (the re-ground above),
+  any phase touching **schema or ingest-adjacent code** (table-count/metadata assertions
+  live inside the excluded `test_ingest_full_text.py` — a schema slice silently skips
+  them under test-fast; 011 phase 1 hit exactly this coupling), and the **step-6 exit**.
+- The tiering changes *which suite runs*, never the rule: any red is still a full stop,
+  and no commit lands on a red gate.
 
 **When building reveals a design problem**, size it before reacting:
 - **Blocking / material** (the contract or a spec is wrong enough to change the design):

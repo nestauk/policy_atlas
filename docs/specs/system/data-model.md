@@ -129,14 +129,23 @@ historical state.**
 - **Where a finding is multidimensional, preserve it as one coherent typed record with its
   dimensions intact and queryable** — never flattened to disconnected fields or prose.
 - **First reusable schema: `intervention_outcome_finding`**. **Grain:** one *(intervention,
-  outcome, effect)* claim grounded in a **single source**; `intervention`, `outcome` and
-  **study population** are **source-named references** (groupable/canonicalisable downstream,
-  not baked-in canonical entities). **Base fields** = what the source reports: effect direction;
-  effect size + type; uncertainty (CI/SE); p-value; study-design/sample metadata (design, N,
-  k, I²); source-named **population**; descriptive **causality-by-design** label;
-  primacy/prevalence flags. **Question-relative judgements** (normalised magnitude, causal
-  *weighting*, is-beneficial) are **analysis enrichment** layered by Impact/VfM — **not base
-  fields** (keeps the record reusable, not pre-committed to one analysis).
+  outcome, effect, stratum)* claim grounded in a **single source**; `intervention`, `outcome`,
+  **study population** and **comparator** are **source-named references** (groupable/
+  canonicalisable downstream, not baked-in canonical entities). **Base fields** = what the
+  source reports: effect direction; effect size + type; uncertainty (CI/SE); p-value;
+  study-design/sample metadata (design, N, k, I², τ²); source-named **population**;
+  source-named nullable **comparator** (an effect direction is *versus something* — reported
+  by the source, so a base field); the **estimate-level discriminator** (`study` | `pooled` |
+  `claim` — a review's pooled estimate and a primary study's own estimate are different
+  evidence shapes sharing one schema); **stratum qualifiers** (timepoint/subgroup/setting as
+  structured qualifiers on the finding — the outcome reference stays the **base measure only**,
+  "BMI", never "BMI at 12 months", which keeps outcome references groupable); descriptive
+  **causality-by-design** label; primacy/prevalence flags. *(Comparator, estimate level,
+  stratum qualifiers and τ² made explicit by the task-011 flow-back — all inside the
+  source-groundability line, surfaced by the V2 extraction autopsy.)* **Question-relative
+  judgements** (normalised magnitude, causal *weighting*, is-beneficial) are **analysis
+  enrichment** layered by Impact/VfM — **not base fields** (keeps the record reusable, not
+  pre-committed to one analysis).
 - ⏸ **`implementation_context_finding`** (mechanisms/barriers/conditions — the "how/why") —
   named, not built. Carries the **same source-named reference vocabulary** so cross-schema
   linkage is **reference-mediated** via `group` (no explicit link objects).

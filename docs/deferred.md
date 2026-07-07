@@ -120,7 +120,10 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   `full_text_status`/`full_text_error`, thin-text guard). Snapshot identity resolved as a
   **new immutable `full_text` snapshot linked at the project-source link** (ADR 0003).
 - **`implementation_context_finding`** — the second reusable finding schema (mechanisms, barriers,
-  implementation conditions); cross-schema linkage is reference-mediated via `group`.
+  implementation conditions); cross-schema linkage is reference-mediated via `group`. Extract-side
+  note (task 011): V2's CFIR implementation-profile field definitions (cost/staffing/complexity +
+  the inner-setting rule) are recorded design input for this schema; no field of it entered
+  `intervention_outcome_finding`.
 - **Saturation-based search stopping** (iterating retrieval↔screen until no new relevant docs);
   `saturated` is not a v3.0 `search_coverage_record` stop value.
 - **Budget cap + lazy vectorisation** for very large relevant sets; the **tiered content peek**
@@ -265,7 +268,10 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   licensing is ever bought). The determinism source-patch
   (`_install_deterministic_column_boxes`) deliberately no-ops if upstream's source changes —
   the fan-out determinism test is the backstop, the pin floor is `>=0.3.4`, and an upstream
-  bug report is filed as follow-up.
+  bug report is filed as follow-up. Task-011 pointer: extraction yield/failure rates on the
+  collapsed-chunk PDFs (extract handles them via deterministic oversize subsegment splitting,
+  so the full-read guarantee holds) are the **first downstream consumer signal** for gating
+  this escalation — the parse-quality eval now has a measurable customer.
 - **Time-budget-aware parser selection** — the user's stated time horizon picks the parser
   (tight → pymupdf4llm, long → ML layout); `parse_profile`-per-snapshot (ADR 0004) is the hook.
 - **Chunk-volume bias controls at the retrieve seam** — full-text documents contribute tens of
@@ -418,6 +424,102 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **Suite-wide socket deny** (010 security-lane note) — per-test socket-deny helpers now
   exist three times (008/009/010 patterns); `pytest-socket` (deny by default, allowlist
   the DB host) is the structural defense-in-depth upgrade.
+
+## Extract / findings layer (task 011 seams)
+
+- **The extraction service + evidence dataset snapshots** — profile resolution against
+  existing records, per-source task objects, capability commits declaring extraction
+  profiles, and pinned point-in-time dataset consumption. 011 shipped the minimal honest
+  form: a per-document extraction record with a partial-unique memo key over the success
+  states, checked before any call; EB's profile is the named constant `eb_iof_base_v1`.
+  `group` will read the run roll-up (`extraction_result` by `extraction_run_id`), not a
+  pinned dataset, until this seam lands.
+- **Extraction-quality evals** — finding-level ground truth over the fixture corpus; the
+  slice's bar was machinery correctness, schema fidelity, honest coverage accounting and
+  verified anchoring — extraction *quality* (right/complete findings) is unmeasurable
+  without this. Gates most seams below; also **unblocks 010's recorded rerank-quality
+  eval seam** (same eval workstream).
+- **Multi-pass recall extraction** (contract rev 1.3) — a second identical-prompt pass
+  raises recall on long documents (LangExtract's recipe: char-interval overlap merge,
+  first-pass-wins recorded at the seam); can't be measured without ground truth →
+  eval-gated. `extraction_provenance.pass_count` records 1 from day one so the seam opens
+  cheaply. One named recall gap for the evals to weigh (011 review, Codex): when a single
+  segment fills a whole window, the greedy windowing must advance without overlap (the
+  no-regress progress guarantee), so a claim spanning the boundary between two
+  window-filling chunks is never seen whole by any one call.
+- **Retrieval-augmented extraction** (contract rev 1.1c) — full read + targeted in-doc
+  retrieval repair / cross-window context assembly (incl. cross-window naming consistency,
+  cut at rev 1.2). Composable and legitimate — the full read licenses coverage — but
+  eval-gated behind `retrieve` + extraction-quality evals showing a field-completeness gap
+  on multi-window documents.
+- **Retrieval-scoped extraction — declined** (contract rev 1.1b) — reading a retrieved
+  subset makes `no_findings`/`not_extracted` unverifiable (a silent new base-ladder rung —
+  false-absence machinery EB exists to prevent) and inverts the recall-critical trade. Any
+  future retrieval scoping must be an explicit, recorded coverage-base rung, never silent.
+- **Generic finding container — declined** (contract rev 1.1a) — typed tables with
+  CHECK-enforced vocabularies won ("coherent typed record, dimensions intact and
+  queryable"); revisit only if a third finding schema is specced.
+- **Reason-then-constrain extraction** (rev 1.3) — draft free-form then bind to schema;
+  demonstrated gains are on small open-weight models and closed-weight API models resist
+  the format tax; eval-gated remedy if judgment-heavy fields show errors.
+- **LangExtract dependency — declined** (rev 1.3) — techniques absorbed (raw-offset span
+  recording, negative rules, pre-flight example validation, multi-pass merge recipe); the
+  library itself is Gemini-first and outside our provenance model.
+- **Per-intervention focused-call decomposition** (rev 1.4) — V2's cross-contamination
+  remedy (one intervention per call); eval-gated remedy if quality evals show cross-finding
+  contamination in the per-doc call. Same trigger family as multi-pass.
+- **Bounded fuzzy quote fallback** (rev 1.4) — LangExtract's coverage+density-gated LCS
+  tier, fuzzy-only-on-failure; adopt only if evals show exact+normalised recall
+  insufficient, and never inside the verified-verbatim guarantee (a fuzzy match can flag,
+  never verify).
+- **Failed-extraction recovery loop** — beyond the in-run window retry, a failed doc
+  re-enters via a new run (the screen_failed precedent); failure rows are attempt history
+  and never block the memo. A dedicated recovery sweep is unbuilt.
+- **Cross-window dedup** — windows are independent; the 1-chunk overlap can in principle
+  yield near-duplicate findings across windows that exact claim-key dedup already collapses
+  when identical; heuristics beyond that are out until observed in practice (the contract's
+  stop condition: bring it back to a plan gate, never grow silently).
+- **Hybrid-indexing of `intervention`/`outcome`** — committed for v3.0; the mechanism is
+  the `retrieve` adapter's second index target and lands with `retrieve`. Columns are
+  filterable now.
+- **Mixed/unclear findings are first-class — requirement carried forward** — V2 extracted
+  `mixed`/`unclear` effect directions and then aggregation silently zeroed them;
+  flag-not-drop must survive the whole deep chain: `group` and `synthesise` must carry
+  these findings, never discard them at aggregation.
+- **Intra-run shared-basis-snapshot memo** — two selected docs whose basis resolves to the
+  *same* content-keyed snapshot (identical full text dedup'd across docs) would both
+  fresh-extract and collide on the memo key (IntegrityError → honest loud failure).
+  Impossible with the current corpus (pss is unique per project+snapshot; full-text
+  snapshots are per-doc); if content-hash full-text dedup ever lands, add an in-run memo
+  update so the second doc reuses the first's record. Same posture for **concurrent
+  extract runs** over the same project/fingerprint (011 review, Codex): the memo read is
+  not atomic with the insert, so two simultaneous runs can both extract fresh and the
+  second fails loudly on `uq_ser_memo` — wasted spend, never corruption; a single-writer
+  operating model makes this a non-path today.
+- **Evidence type is prompt input but not a memo/record key component** (011 review,
+  Codex) — `primary_evidence_type` conditions the extraction prompt, yet the memo keys on
+  (project, basis snapshot, fingerprint) only and the record does not store the evidence
+  type used. Unreachable today: classification is insert-once per (scope, doc) and the
+  skeleton orders classify before extract — the only trigger is a hand-rolled plan that
+  extracts *before* classifying (docs extract as "Unclassified" and memo-reuse after
+  classification lands). If such plans become supported, record the evidence type on
+  `source_extraction_record` and make memo hits require a match.
+- **Per-run window/call ceiling** (011 review, security) — the enforced call budget is
+  `windows × (1 + retry_cap)`, which scales with document length; there is no absolute
+  per-run cap, so a pathological oversized corpus drives spend linearly ("within
+  budget"). Bounded today by `select`'s budget (the designed cost control) and the
+  fixture corpus. If arbitrary corpora land, add an absolute window ceiling as a
+  fingerprint component with a per-doc `window_cap_exceeded` failure reason.
+- **Prompt envelope fencing** (011 review, security) — segment text enters the prompt as
+  id-keyed JSON data records, but the envelope title/abstract are interpolated inline in
+  the user template, so a hostile abstract can structurally spoof the template around
+  them (impact bounded: wrong findings for its own document, quotes still
+  verified-or-flagged). Fence the envelope as a JSON data object at the next
+  `extract_iof_v1` version bump — prompt changes are eval-blind until the
+  extraction-quality evals exist, so this deliberately does not ride the review phase.
+- **`thin_extraction` roll-up flag** — named in the contract "where computed"; no
+  definition was pinned and v1 deliberately does not compute it. Define (e.g. findings per
+  extracted full-text doc below a floor) when a consumer needs it.
 
 ## Data model / evidence
 
