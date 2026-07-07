@@ -29,6 +29,7 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 ## Testing rules
 
 * [Audit sanitized fixtures against the raw recording](sanitized-fixtures-audit-against-raw.md) - key-based sanitizers miss list-inherited keys and rare fields; substring-audit raw vs fixture, with a neutral fake lexicon.
+* [Assert contract-required keys on the written row, not the component summary](assert-on-row-not-summary.md) - summary and row are built separately and drift; downstream readers consume rows — anchor evidence there (task 012 review stack).
 
 ## Invariants (verified)
 
@@ -43,6 +44,7 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [Rubric domain defines appraisability](rubric-domain-defines-appraisability.md) - types absent from `DEFAULT_RUBRIC` are skipped-and-counted, never scored; a domain test against the closed vocabulary makes the lookup infallible.
 * [Full-text chunk hashes are deterministic — via a pymupdf4llm source patch](fulltext-chunk-hash-determinism.md) - same bytes → same chunks in every process; pymupdf4llm 0.3.4's id()-keyed cache breaks this and is patched at import; determinism test is the backstop on any parser bump.
 * [Untrusted directive parsing — malformed fails closed, unknown references flag](directive-parse-malformed-vs-unknown.md) - structural malformation raises `DirectiveError` (bounded strings/collections, static messages); a well-formed unknown column/tag reference matches nothing and surfaces in `unmatched_boosts` (task 010).
+* [Facet grouping is an exhaustive partition with honest residuals](facet-grouping-exhaustive-partition.md) - grouped set == the referenced extraction run's finding set; every finding in exactly one of group/ungrouped/no_value; sum identities (incl. the overall direction spread) re-asserted at write (task 012).
 * [Grounding locations come from the verifier, never the model's claim](grounding-location-from-verification.md) - a model-emitted segment/chunk id is untrusted claim data; every dereferenceable location field derives from the verified spans (task 011, convergent review finding).
 
 ## Integration quirks (model / telemetry providers)

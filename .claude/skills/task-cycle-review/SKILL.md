@@ -142,7 +142,13 @@ Verify-and-clean only — **commits nothing, opens no PR** (2026-07-03, user dec
 `/codex:review` / `/codex:adversarial-review` are user-typed only and diff-shaped. For a
 custom-brief pass the agent routes through the `codex-rescue` agent — ⚠️ state
 **read-only / critique-only** explicitly (rescue defaults to write-capable); ⚠️ rescue is
-async fire-and-forget — its final message is a job id. Retrieve results yourself:
-`node "$CODEX_PLUGIN_ROOT/scripts/codex-companion.mjs" status|result <job-id>` — poll the
-`Phase:` line (not progress lines, which contain the word "completed"), then `result`
-(failure-log, 2026-07-05).
+async fire-and-forget — its final message is **either the findings or a job id**; check
+which before doing anything else. For a job id, retrieve results with the repo shim:
+`scripts/codex_job.sh wait <job-id> [timeout-s]` (or `status`/`result`) — it only
+resolves the companion-script path (the plugin's `${CLAUDE_PLUGIN_ROOT}` is injected
+solely while its user-typed `/codex:*` commands run; no such variable exists in the
+lead's shell — `$CODEX_PLUGIN_ROOT` never existed at all) and delegates waiting to the
+runtime's **native** `status --wait --timeout-ms`. ⚠️ Do not hand-roll a status poll —
+the runtime has one built in, and a grep-filtered background loop turns a hard error
+into a silent spin-to-timeout (failure-log, 2026-07-07; progress-line pitfall
+2026-07-05).

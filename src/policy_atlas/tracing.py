@@ -19,7 +19,7 @@ from langfuse import Langfuse
 
 from policy_atlas import embeddings, grouping
 from policy_atlas.embeddings import EmbeddingBackend
-from policy_atlas.grouping import GroupingBackend, GroupingDoc, Theme
+from policy_atlas.grouping import GroupingDoc, Theme, ThemeGroupingBackend
 
 _ObservationType = Literal["embedding", "generation", "span"]
 
@@ -133,15 +133,15 @@ class TracedEmbeddingBackend:
             return vectors
 
 
-class TracedGroupingBackend:
-    """Langfuse tracing wrapper for a live grouping backend.
+class TracedThemeGroupingBackend:
+    """Langfuse tracing wrapper for a live theme grouping backend.
 
     Args:
-        backend: Inner grouping backend.
+        backend: Inner theme grouping backend.
         client: Langfuse client created by ``get_langfuse``.
     """
 
-    def __init__(self, backend: GroupingBackend, client: Langfuse) -> None:
+    def __init__(self, backend: ThemeGroupingBackend, client: Langfuse) -> None:
         self._backend = backend
         self._client = client
         self._assign_count = 0
@@ -343,6 +343,66 @@ def extraction_score_summary(
     client.score_current_trace(
         name="dedup_collapsed_count",
         value=float(summary["findings"]["dedup_collapsed"]),
+        data_type="NUMERIC",
+    )
+
+
+def grouping_score_summary(
+    client: Langfuse | None,
+    summary: dict[str, Any],
+    *,
+    root_span: Any = None,
+) -> None:
+    """Attach the group run's partition scores to the current Langfuse trace.
+
+    The 009 ``score_summary`` pattern, mirroring ``extraction_score_summary``
+    (task 012).
+
+    Args:
+        client: Langfuse client, or ``None`` for no-op tracing.
+        summary: Group component summary payload — becomes the trace output.
+        root_span: The ``run:{run_id}`` root span yielded by ``component_span``.
+    """
+    if client is None:
+        return
+    if root_span is not None:
+        root_span.update(
+            input={"component": "group", "facet": summary["facet"]},
+            output=summary,
+        )
+    # Reaching component.completed means the partition validated; a failed
+    # partition raises before this point, so 0.0 is unreachable here.
+    client.score_current_trace(
+        name="partition_valid",
+        value=1.0,
+        data_type="NUMERIC",
+    )
+    findings_total = summary["counts"]["findings_total"]
+    if findings_total > 0:
+        client.score_current_trace(
+            name="ungrouped_share",
+            value=summary["counts"]["ungrouped"] / findings_total,
+            data_type="NUMERIC",
+        )
+        client.score_current_trace(
+            name="no_value_share",
+            value=summary["counts"]["no_value"] / findings_total,
+            data_type="NUMERIC",
+        )
+    else:
+        client.score_current_trace(
+            name="ungrouped_share",
+            value=0.0,
+            data_type="NUMERIC",
+        )
+        client.score_current_trace(
+            name="no_value_share",
+            value=0.0,
+            data_type="NUMERIC",
+        )
+    client.score_current_trace(
+        name="group_count",
+        value=float(summary["counts"]["groups"]),
         data_type="NUMERIC",
     )
 

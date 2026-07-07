@@ -181,3 +181,32 @@ def test_extract_valid_with_both() -> None:
     assert config.component == "extract"
     assert config.evidence_scope_id == scope_id
     assert config.selection_run_id == selection_run_id
+
+
+def test_group_requires_evidence_scope_id_and_extraction_run_id() -> None:
+    with pytest.raises(ValidationError):
+        Plan(component="group")
+
+
+def test_group_requires_extraction_run_id() -> None:
+    with pytest.raises(ValidationError):
+        Plan(component="group", evidence_scope_id=uuid.uuid4())
+
+
+def test_group_requires_evidence_scope_id() -> None:
+    with pytest.raises(ValidationError):
+        Plan(component="group", extraction_run_id=uuid.uuid4())
+
+
+def test_group_valid_with_both() -> None:
+    scope_id = uuid.uuid4()
+    extraction_run_id = uuid.uuid4()
+    plan = Plan(
+        component="group",
+        evidence_scope_id=scope_id,
+        extraction_run_id=extraction_run_id,
+    )
+    config = compile(plan)
+    assert config.component == "group"
+    assert config.evidence_scope_id == scope_id
+    assert config.extraction_run_id == extraction_run_id

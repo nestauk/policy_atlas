@@ -21,6 +21,7 @@ from policy_atlas.inference import StubEchoProvider
 from policy_atlas.plan import Plan, compile
 from policy_atlas.ranking import RankedDoc, StubRankingBackend
 from policy_atlas.schema import (
+    DIRECTIVE_STRING_MAX,
     TOPIC_THEME,
     artefact,
     block,
@@ -32,7 +33,6 @@ from policy_atlas.select import (
     DEFAULT_SELECTION_BUDGET,
     DIRECTIVE_BUDGET_MAX,
     DIRECTIVE_LIST_MAX,
-    DIRECTIVE_STRING_MAX,
     DirectiveError,
     SelectContext,
     SelectError,

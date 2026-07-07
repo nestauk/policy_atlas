@@ -27,6 +27,7 @@ from policy_atlas.ranking import (
     validate_ranked,
 )
 from policy_atlas.schema import (
+    DIRECTIVE_STRING_MAX,
     SELECTION_STRATEGIES,
     characterisation_result,
     selection_result,
@@ -50,7 +51,7 @@ BOOST_CLAMP = (0.1, 10.0)
 # Directive input caps (review finding, security lane): the directive is untrusted
 # scope-context JSONB — bound every string and collection so a malformed or hostile
 # directive fails closed at parse time, never late at the DB or in O(n²) matching.
-DIRECTIVE_STRING_MAX = 200
+# DIRECTIVE_STRING_MAX lives in schema.py (shared with the grouping directive).
 DIRECTIVE_BUDGET_MAX = 10_000
 DIRECTIVE_LIST_MAX = 200
 # Publisher ahead-of-print dates legitimately run one year ahead; anything further

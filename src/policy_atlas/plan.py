@@ -19,6 +19,7 @@ COMPONENT_REGISTRY: dict[str, dict[str, list[str]]] = {
     "characterise": {"requires": ["evidence_scope_id"]},
     "select": {"requires": ["evidence_scope_id", "characterisation_run_id"]},
     "extract": {"requires": ["evidence_scope_id", "selection_run_id"]},
+    "group": {"requires": ["evidence_scope_id", "extraction_run_id"]},
 }
 VALID_COMPONENTS = set(COMPONENT_REGISTRY.keys())
 
@@ -33,6 +34,9 @@ class _ValidatedRunSpec(BaseModel):
     # extract reads an explicitly referenced selection — compile fails closed
     # without it; required-by-registry for extract only.
     selection_run_id: uuid.UUID | None = None
+    # group reads an explicitly referenced extraction — compile fails closed
+    # without it; required-by-registry for group only.
+    extraction_run_id: uuid.UUID | None = None
 
     @model_validator(mode="after")
     def validate_fields(self) -> "_ValidatedRunSpec":
@@ -60,4 +64,5 @@ def compile(plan: Plan) -> Config:  # noqa: A001
         evidence_scope_id=plan.evidence_scope_id,
         characterisation_run_id=plan.characterisation_run_id,
         selection_run_id=plan.selection_run_id,
+        extraction_run_id=plan.extraction_run_id,
     )

@@ -132,10 +132,16 @@ Sources are **frozen** — change the *spec*, not the source (ADR 0002).
 through the `codex-rescue` agent instead — same runtime, auto-applies the GPT-5.4 prompt
 shaping. ⚠️ rescue defaults to **write-capable**: every review brief sent through it must
 state **read-only / critique-only** explicitly. ⚠️ rescue is **async fire-and-forget**:
-its final message is a job id, never the findings. Retrieve results yourself:
-`node "$CODEX_PLUGIN_ROOT/scripts/codex-companion.mjs" status|result <job-id>` — poll the
-`Phase:` line (not progress lines, which contain the word "completed") in a background
-shell, then `result` (failure-log, 2026-07-05).
+its final message is **either the findings or a job id** — check which before doing
+anything else. For a job id, retrieve results with the repo shim:
+`scripts/codex_job.sh wait <job-id> [timeout-s]` (or `status`/`result`) — it only
+resolves the companion-script path (the plugin's `${CLAUDE_PLUGIN_ROOT}` is injected
+solely while its user-typed `/codex:*` commands run; no such variable exists in the
+lead's shell — `$CODEX_PLUGIN_ROOT` never existed at all) and delegates waiting to the
+runtime's **native** `status --wait --timeout-ms`. ⚠️ Do not hand-roll a status poll —
+the runtime has one built in, and a grep-filtered background loop turns a hard error
+into a silent spin-to-timeout (failure-log, 2026-07-07; progress-line pitfall
+2026-07-05).
 
 ## Phase exit
 

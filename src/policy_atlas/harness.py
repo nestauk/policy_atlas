@@ -30,8 +30,10 @@ from policy_atlas.classify import ClassifyContext, classify_sources
 from policy_atlas.embeddings import EmbeddingBackend, StubEmbeddingBackend
 from policy_atlas.extract import ExtractContext, extract_scope
 from policy_atlas.extraction_backend import ExtractionBackend, StubExtractionBackend
+from policy_atlas.facet_grouping import FacetGroupingBackend, StubFacetGroupingBackend
 from policy_atlas.grounding import GroundingError, produce_grounded_block
-from policy_atlas.grouping import GroupingBackend, StubGroupingBackend
+from policy_atlas.group import GroupContext, group_findings
+from policy_atlas.grouping import StubThemeGroupingBackend, ThemeGroupingBackend
 from policy_atlas.inference import InferenceProvider
 from policy_atlas.ingest_full_text import (
     DocumentFetcher,
@@ -60,9 +62,10 @@ class HarnessState(TypedDict):
     search_backends: list[SearchBackend]
     document_fetcher: DocumentFetcher
     embedding_backend: EmbeddingBackend
-    grouping_backend: GroupingBackend
+    theme_grouping_backend: ThemeGroupingBackend
     ranking_backend: RankingBackend | None
     extraction_backend: ExtractionBackend
+    facet_grouping_backend: FacetGroupingBackend
     block_ids: dict[str, Any]
     error: str | None
 
@@ -248,6 +251,18 @@ def _run_extract(state: HarnessState) -> HarnessState:
     return _run_scope_component(state, context_cls, sources_fn)
 
 
+def _run_group(state: HarnessState) -> HarnessState:
+    config = state["config"]
+    assert config.extraction_run_id is not None  # registry-enforced at compile
+    context_cls = functools.partial(
+        GroupContext, extraction_run_id=config.extraction_run_id
+    )
+    sources_fn = functools.partial(
+        group_findings, facet_grouping_backend=state["facet_grouping_backend"]
+    )
+    return _run_scope_component(state, context_cls, sources_fn)
+
+
 def _run_characterise(state: HarnessState) -> HarnessState:
     """Characterise node — not routed through ``_run_scope_component``: its generic
     except emits only {component, error}, and a ``CharacteriseFailure`` must carry
@@ -293,7 +308,7 @@ def _run_characterise(state: HarnessState) -> HarnessState:
             project_id=project_id,
             run_id=run_id,
             context=ctx,
-            grouping_backend=state["grouping_backend"],
+            theme_grouping_backend=state["theme_grouping_backend"],
         )
     except CharacteriseFailure as exc:
         events.append(
@@ -376,6 +391,7 @@ def build_graph() -> Any:
     g.add_node("characterise", _run_characterise)
     g.add_node("select", _run_select)
     g.add_node("extract", _run_extract)
+    g.add_node("group", _run_group)
     g.add_node("finish", _finish)
 
     g.set_entry_point("dispatch")
@@ -392,6 +408,7 @@ def build_graph() -> Any:
             "characterise": "characterise",
             "select": "select",
             "extract": "extract",
+            "group": "group",
         },
     )
     g.add_edge("echo", "finish")
@@ -403,6 +420,7 @@ def build_graph() -> Any:
     g.add_edge("characterise", "finish")
     g.add_edge("select", "finish")
     g.add_edge("extract", "finish")
+    g.add_edge("group", "finish")
     g.add_edge("finish", END)
     return g.compile()
 
@@ -417,9 +435,10 @@ def run_harness(
     search_backends: list[SearchBackend] | None = None,
     document_fetcher: DocumentFetcher | None = None,
     embedding_backend: EmbeddingBackend | None = None,
-    grouping_backend: GroupingBackend | None = None,
+    theme_grouping_backend: ThemeGroupingBackend | None = None,
     ranking_backend: RankingBackend | None = None,
     extraction_backend: ExtractionBackend | None = None,
+    facet_grouping_backend: FacetGroupingBackend | None = None,
 ) -> dict[str, Any]:
     """Run the compiled harness graph for one run, persisting its output.
 
@@ -438,8 +457,8 @@ def run_harness(
         embedding_backend: Embedding backend threaded through state; defaults
             to ``StubEmbeddingBackend()`` — no default egress, same injection
             pattern as ``search_backends``.
-        grouping_backend: Grouping backend for the characterise component;
-            defaults to ``StubGroupingBackend()`` — no default egress, same
+        theme_grouping_backend: Theme grouping backend for the characterise component;
+            defaults to ``StubThemeGroupingBackend()`` — no default egress, same
             injection pattern as ``search_backends``.
         ranking_backend: Ranking backend for the select component. This is
             passed straight through to the initial state; no stub is resolved
@@ -448,7 +467,10 @@ def run_harness(
             ``llm_rerank_v1``. No default egress.
         extraction_backend: Extraction backend for the extract component;
             defaults to ``StubExtractionBackend()`` — no default egress, the
-            grouping_backend pattern (approved gated change 2, task 011).
+            theme grouping backend pattern (approved gated change 2, task 011).
+        facet_grouping_backend: Facet grouping backend for the group component;
+            defaults to ``StubFacetGroupingBackend()`` — no default egress,
+            approved gated change 2, task 012.
 
     Returns:
         Persisted IDs; ``artefact_id`` is None for non-echo components that do
@@ -485,16 +507,23 @@ def run_harness(
             document_fetcher if document_fetcher is not None else FixtureFetcher()
         ),
         # Consumed by the acquire/ingest_full_text partials (their embed passes);
-        # characterise reads only grouping_backend.
+        # characterise reads only theme_grouping_backend.
         "embedding_backend": (
             embedding_backend if embedding_backend is not None else StubEmbeddingBackend()
         ),
-        "grouping_backend": (
-            grouping_backend if grouping_backend is not None else StubGroupingBackend()
+        "theme_grouping_backend": (
+            theme_grouping_backend
+            if theme_grouping_backend is not None
+            else StubThemeGroupingBackend()
         ),
         "ranking_backend": ranking_backend,
         "extraction_backend": (
             extraction_backend if extraction_backend is not None else StubExtractionBackend()
+        ),
+        "facet_grouping_backend": (
+            facet_grouping_backend
+            if facet_grouping_backend is not None
+            else StubFacetGroupingBackend()
         ),
         "block_ids": {},
         "error": None,

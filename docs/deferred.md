@@ -339,10 +339,15 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   grounding).
 - **Provider-signal prompt enrichment** — provider topics as per-doc grouping hints;
   taxonomy-bias risk → enters via the eval seam, never as a silent default.
-- **`group`-component inheritance** — v2's theming lessons transfer when `group` (component
-  8, facet grouping over extracted findings) is built: facet decomposition, the two-stage
-  validated shape, and v2's recorded defects to avoid (dead critique stage, silent concept
-  drops, "General Theme" collapse, no scale guard, unseeded runs).
+- **`group`-component inheritance — discharged (task 012)** — v2's theming lessons
+  transferred when `group` was built; each recorded defect closed structurally: dead
+  critique stage → no critique stage built (one schema-constrained partition + one
+  validated repair is the entire call surface); silent concept drops → code-enforced
+  exhaustiveness (counted `ungrouped`/`no_value` residuals, sum identities
+  test-enforced); "General Theme" collapse → exact forbidden-generic-label validation
+  rejects the response (prompt negative rule *and* code check); no scale guard →
+  fail-closed `FACET_VALUE_CAP`; unseeded runs → deterministic sorted value
+  ordering/ids (identical inputs yield identical prompts).
 - **Tag namespace consolidation** — pruning/merging accreted `source_tag` assertions
   (re-runs accrete by design; provenance classes never merge) — an orchestrator-seam
   follow-on once real tag spaces emerge (contract decisions 5, 10). A third search backend
@@ -369,7 +374,7 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **Dual-view coverage** — corpus-view vs evidence-view distributions need the
   source/evidence policy object (contract decision 9); v3.0 ships single-view with the
   explicit `base` ladder and **no absence claims** (test-asserted).
-- **Bedrock routes** — both seams (`EmbeddingBackend`, `GroupingBackend`) swap
+- **Bedrock routes** — both seams (`EmbeddingBackend`, `ThemeGroupingBackend`) swap
   implementations; first pass OpenAI → target Bedrock is the documented v3.0 posture.
 - **Upload audit-event seam** — when the web-app slice gives uploads a real surface they
   get their own audit event + observable processing (incl. embed counts, currently a
@@ -520,6 +525,57 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **`thin_extraction` roll-up flag** — named in the contract "where computed"; no
   definition was pinned and v1 deliberately does not compute it. Define (e.g. findings per
   extracted full-text doc below a floor) when a consumer needs it.
+
+## Group / facet-level theming (task 012 seams)
+
+- **`query-findings` tool — explicit deviation from components §8's tool table** — the
+  spec declares `query-findings` among group's tools; v3.0 group reads the referenced
+  run's findings deterministically (contract decision 9) and the scoped read tool lands
+  with its deliberative consumer, synthesise's agent-loop. Recorded as a deviation from
+  the letter of the tool table, never silently absorbed; no spec change — the tool still
+  lands.
+- **Facet-grouping quality evals** — extends the 009 grouping-quality eval seam:
+  partition coherence/usefulness on real reference sets, negative-rule adherence beyond
+  the shipped unit tests, and **`FACET_VALUE_CAP` calibration** (150 is plan-pinned; the
+  eval owns the real ceiling). The 012 bar was machinery correctness, exhaustiveness
+  invariants, honest residuals and provenance fidelity — grouping *quality* is not
+  asserted by the build.
+- **Large-corpus grouping algorithm** — beyond the fail-closed `FACET_VALUE_CAP`
+  (`value_cap_exceeded`, loud, never a degraded pass): tail-group-capable discovery
+  and/or embedding-assisted value clustering over the landed chunk vectors. Eval-gated —
+  a head sample cannot discover tail-only groups, which is why the sample-discover/assign
+  shape was rejected at contract rev 1.3 and stays rejected until evals exist.
+- **Agent-authored grouping directive** — the same seam as select's agent-authored
+  directives (above): the capability agent authors `context["grouping"]` just-in-time at
+  invocation; the `group` facade signature is already the tool call, so arrival is a
+  parameter-authoring change, zero re-plumbing.
+- **Cross-schema reference-mediated linkage** — activates with
+  `implementation_context_finding` (EB internals entry): the shared source-named
+  vocabulary means a facet group's member values can link findings across schemas by
+  reference. 012 ships the design property (source-named values, run-referenced
+  groupings), no linkage machinery.
+- **Re-grouping / steering UX** — a different facet is simply a new run with a different
+  directive (shipped semantics); mode-governed steer-points around grouping (pause,
+  re-group, facet-switch UX) are plan-as-object machinery at the standing steering seam.
+- **Facet-theme promotion** (012 contract rev 1.2) — canonical/queryable facet groupings
+  for downstream capability agents. The data-model's staged ladder: run-local (shipped —
+  rung 1) → project-scoped persistent → graph datastore, gated on an
+  entity-resolution-quality bar (a facet-group label bundling different sources' strings
+  asserts cross-source identity, often question-relative — never trusted canonically
+  before that bar exists). Options Assessment reads run-referenced groupings by
+  `grouping_run_id` until then.
+- **Shared traced-call helper across OpenAI backends** (012 review, reuse finder) — the
+  "branch on langfuse_client, wrap in `tracing._observation`, update the span" shape is
+  now hand-copied in three backends (`extraction_backend.py`, `ranking.py`,
+  `facet_grouping.py`), with parameterisation already drifting between copies. Factor
+  the traced parse-once shape into `tracing.py` when a fourth backend lands (013's
+  synthesise is the likely trigger) — not worth a cross-slice refactor ride-along now.
+- **Harness failure-event append dies inside an aborted transaction** (012 live check,
+  standing behaviour — predates 012, affects every component): a server-side DB error
+  mid-component leaves the connection's transaction aborted, so `_run_scope_component`'s
+  `component.failed` event INSERT itself fails (`InFailedSqlTransaction`) — the run dies
+  loudly but without its failure event recorded. Fix belongs in the harness (append the
+  failure event on a fresh transaction/rollback first); repo-wide, not group-specific.
 
 ## Data model / evidence
 
