@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — twenty-three tables, eleven alembic migrations.
+"""SQLAlchemy Core table metadata — twenty-four tables, twelve alembic migrations.
 
 No deferred columns (no block/artefact summary, no same_content_as, no lineage key).
 """
@@ -733,4 +733,54 @@ extraction_result = Table(
     ),
     # Run-local roll-up: same-run re-execution is a loud error, retry = new run.
     UniqueConstraint("evidence_scope_id", "run_id", name="uq_exr_scope_run"),
+)
+
+# --- Group / facet-level theming (task 012) ---
+
+GROUPING_FACETS: tuple[str, ...] = ("intervention", "outcome", "population")
+_GROUPING_FACETS_SQL = ", ".join(f"'{f}'" for f in GROUPING_FACETS)
+
+grouping_result = Table(
+    "grouping_result",
+    metadata,
+    Column("grouping_result_id", UUID(as_uuid=True), primary_key=True),
+    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
+    Column("run_id", UUID(as_uuid=True), nullable=False),
+    Column("extraction_run_id", UUID(as_uuid=True), nullable=False),  # the executed reference
+    Column("facet", Text, nullable=False),
+    # Required keys (test-asserted): prompt version, model, mode, facet + source,
+    # call/repair counts, value cap, and the inherited extraction base —
+    # fingerprint + profile, base-ladder counts, finding-set size + sha256,
+    # facet coverage breakdown (contract rev 1.3).
+    Column("grouping_provenance", JSONB, nullable=False),
+    # Per group: label, description, member values, member finding ids, size,
+    # direction spread; plus the ungrouped and no_value residuals, each with its
+    # direction spread — run-local by design (capability.md § Cluster persistence):
+    # memberships never promote to canonical state.
+    Column("groups", JSONB, nullable=False),
+    Column("counts", JSONB, nullable=False),
+    Column("flags", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    # Cross-project FK guards, per the extraction-result precedent.
+    ForeignKeyConstraint(
+        ["evidence_scope_id", "project_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
+        name="fk_grr_scope_project",
+    ),
+    ForeignKeyConstraint(
+        ["run_id", "project_id"],
+        ["runs.run_id", "runs.project_id"],
+        name="fk_grr_run_project",
+    ),
+    # The executed extraction must exist for this scope (targets uq_exr_scope_run),
+    # so a grouping can never reference an extraction that was never written.
+    ForeignKeyConstraint(
+        ["evidence_scope_id", "extraction_run_id"],
+        ["extraction_result.evidence_scope_id", "extraction_result.run_id"],
+        name="fk_grr_extraction",
+    ),
+    # Run-local roll-up: same-run re-execution is a loud error, retry = new run.
+    UniqueConstraint("evidence_scope_id", "run_id", name="uq_grr_scope_run"),
+    CheckConstraint(f"facet IN ({_GROUPING_FACETS_SQL})", name="ck_grr_facet"),
 )
