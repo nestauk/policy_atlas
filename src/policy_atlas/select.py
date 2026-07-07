@@ -32,6 +32,7 @@ from policy_atlas.schema import (
     selection_result,
     source_tag,
 )
+from policy_atlas.tags import has_control_character
 
 log = structlog.get_logger()
 
@@ -46,6 +47,15 @@ DEFAULT_WEIGHTS: dict[str, float] = {
     "origin": 0.15,
 }
 BOOST_CLAMP = (0.1, 10.0)
+# Directive input caps (review finding, security lane): the directive is untrusted
+# scope-context JSONB — bound every string and collection so a malformed or hostile
+# directive fails closed at parse time, never late at the DB or in O(n²) matching.
+DIRECTIVE_STRING_MAX = 200
+DIRECTIVE_BUDGET_MAX = 10_000
+DIRECTIVE_LIST_MAX = 200
+# Publisher ahead-of-print dates legitimately run one year ahead; anything further
+# is bad metadata and reads as a missing signal (flag-not-block), never a boost.
+RECENCY_FUTURE_GRACE_YEARS = 1
 LARGE_STRATUM_SHARE = 0.20
 SUFFICIENT_CONFIDENCE = 0.6
 # Stub constant: screen confidence is 0.9 until the LLM screen tool lands.
@@ -55,7 +65,6 @@ NON_EVIDENCE_TYPE = "Other (Non-evidence documents)"
 
 _DIRECTIVE_KEYS = {"budget", "must_include_ids", "boosts", "weight_emphasis", "priority_strata"}
 _BOOST_KEYS = {"match", "weight"}
-_COLUMN_MATCH_COLUMNS = {"origin", "primary_evidence_type", "text_basis"}
 _REASON_ORDER = ("must_include", "breadth_floor", "ranked")
 
 
@@ -232,6 +241,7 @@ class _RerankStats:
     used: int
     retry_count: int
     fallback_count: int
+    title_only_count: int
 
 
 @dataclass
@@ -268,7 +278,10 @@ def _int_value(value: Any, *, field: str) -> int:
 def _string_value(value: Any, *, field: str) -> str:
     if not isinstance(value, str):
         _fail(f"selection directive {field} must be a string")
-    return cast("str", value)
+    text = cast("str", value)
+    if len(text) > DIRECTIVE_STRING_MAX or has_control_character(text):
+        _fail(f"selection directive {field} must be a bounded string without control characters")
+    return text
 
 
 def _parse_match(match: Any) -> dict[str, Any]:
@@ -284,17 +297,18 @@ def _parse_match(match: Any) -> dict[str, Any]:
     if is_column:
         if keys not in ({"column", "equals"}, {"column", "in"}):
             _fail("selection directive column match has invalid keys")
+        # Unknown columns are legal and match nothing (contract decision 4:
+        # "unknown columns/tags referenced by a directive are flagged in the
+        # rationale, never fatal") — they surface via unmatched_boosts.
         column = _string_value(match["column"], field="boost column")
-        if column not in _COLUMN_MATCH_COLUMNS:
-            _fail("selection directive boost column is unknown")
         if "equals" in match:
             return {
                 "column": column,
                 "equals": _string_value(match["equals"], field="boost equals"),
             }
         in_values = match["in"]
-        if not isinstance(in_values, list) or not in_values:
-            _fail("selection directive boost in must be a non-empty list")
+        if not isinstance(in_values, list) or not in_values or len(in_values) > DIRECTIVE_LIST_MAX:
+            _fail("selection directive boost in must be a non-empty bounded list")
         return {
             "column": column,
             "in": [
@@ -346,12 +360,14 @@ def _parse_directive(raw: Any) -> tuple[SelectionDirective, str]:
         budget = _int_value(raw["budget"], field="budget")
         if budget <= 0:
             _fail("selection directive budget must be positive")
+        if budget > DIRECTIVE_BUDGET_MAX:
+            _fail("selection directive budget exceeds the maximum")
 
     must_include_ids: tuple[uuid.UUID, ...] = ()
     if "must_include_ids" in raw:
         must_raw = raw["must_include_ids"]
-        if not isinstance(must_raw, list):
-            _fail("selection directive must_include_ids must be a list")
+        if not isinstance(must_raw, list) or len(must_raw) > DIRECTIVE_LIST_MAX:
+            _fail("selection directive must_include_ids must be a bounded list")
         parsed_ids: list[uuid.UUID] = []
         for item in must_raw:
             item_string = _string_value(item, field="must_include id")
@@ -366,8 +382,8 @@ def _parse_directive(raw: Any) -> tuple[SelectionDirective, str]:
     boosts: tuple[_Boost, ...] = ()
     if "boosts" in raw:
         boosts_raw = raw["boosts"]
-        if not isinstance(boosts_raw, list):
-            _fail("selection directive boosts must be a list")
+        if not isinstance(boosts_raw, list) or len(boosts_raw) > DIRECTIVE_LIST_MAX:
+            _fail("selection directive boosts must be a bounded list")
         parsed_boosts: list[_Boost] = []
         for index, item in enumerate(boosts_raw):
             if not isinstance(item, dict) or set(item) != _BOOST_KEYS:
@@ -397,8 +413,8 @@ def _parse_directive(raw: Any) -> tuple[SelectionDirective, str]:
     priority_strata: tuple[str, ...] = ()
     if "priority_strata" in raw:
         priority_raw = raw["priority_strata"]
-        if not isinstance(priority_raw, list):
-            _fail("selection directive priority_strata must be a list")
+        if not isinstance(priority_raw, list) or len(priority_raw) > DIRECTIVE_LIST_MAX:
+            _fail("selection directive priority_strata must be a bounded list")
         parsed_priority: list[str] = []
         for item in priority_raw:
             pattern = _string_value(item, field="priority stratum")
@@ -434,16 +450,20 @@ def _year_value(source: ScreenedSource) -> int | None:
     return value
 
 
-def _signal_values(source: ScreenedSource) -> tuple[dict[str, float], list[str]]:
+def _signal_values(
+    source: ScreenedSource, *, reference_year: int
+) -> tuple[dict[str, float], list[str]]:
     signals: dict[str, float] = {}
     missing: list[str] = []
 
     year = _year_value(source)
-    if year is None:
+    if year is None or year > reference_year + RECENCY_FUTURE_GRACE_YEARS:
+        # Absent or implausibly-future year metadata reads neutral and is
+        # flagged — never a recency reward for bad data (flag-not-block).
         signals["recency"] = 0.5
         missing.append("recency")
     else:
-        age_years = max(0, datetime.now(UTC).year - year)
+        age_years = max(0, reference_year - year)
         signals["recency"] = max(0.0, 1 - age_years / 15)
 
     if source.quality_score is None:
@@ -487,7 +507,8 @@ def _column_value(source: ScreenedSource, column: str) -> str | None:
         return source.primary_evidence_type
     if column == "text_basis":
         return source.text_basis
-    raise SelectError(f"unknown boost column {column}")
+    # Unknown column: matches nothing; the boost lands in unmatched_boosts.
+    return None
 
 
 def _boost_matches(candidate: SelectionCandidate, match: dict[str, Any]) -> bool:
@@ -530,6 +551,8 @@ def _boost_multiplier(
 def _signal_docs(
     candidates: Sequence[SelectionCandidate],
     directive: SelectionDirective,
+    *,
+    reference_year: int,
 ) -> tuple[dict[uuid.UUID, _SignalDoc], dict[str, int], list[int], dict[str, float]]:
     effective_weights = _effective_weights(directive)
     match_counts = {boost.index: 0 for boost in directive.boosts}
@@ -537,7 +560,7 @@ def _signal_docs(
     docs: dict[uuid.UUID, _SignalDoc] = {}
 
     for candidate in candidates:
-        signals, missing = _signal_values(candidate.source)
+        signals, missing = _signal_values(candidate.source, reference_year=reference_year)
         for signal in missing:
             signal_availability[signal] += 1
         boost_multiplier = _boost_multiplier(candidate, directive, match_counts)
@@ -718,7 +741,19 @@ def _rerank_infos(
 ) -> tuple[dict[uuid.UUID, _RankInfo], _RerankStats]:
     baseline = math.ceil(len(contested_ids) / RERANK_BATCH_SIZE)
     maximum = baseline * (1 + RERANK_RETRY_CAP)
-    log.info("select.rerank_call_budget", baseline=baseline, maximum=maximum)
+    # Contract decision 10: judging degrades to title-only where the envelope
+    # did — counted here so the degradation is flagged, never silent.
+    title_only_count = sum(
+        1
+        for pss_id in contested_ids
+        if _doc_for_rerank(signal_docs[pss_id])["abstract"] is None
+    )
+    log.info(
+        "select.rerank_call_budget",
+        baseline=baseline,
+        maximum=maximum,
+        title_only=title_only_count,
+    )
     budget = _RerankCallBudget(maximum=maximum)
     rank_infos: dict[uuid.UUID, _RankInfo] = {}
     fallback_count = 0
@@ -779,6 +814,7 @@ def _rerank_infos(
         used=budget.used,
         retry_count=retry_count,
         fallback_count=fallback_count,
+        title_only_count=title_only_count,
     )
 
 
@@ -1026,9 +1062,13 @@ def select_documents(
 
     ordered_strata = _ordered_strata(strata)
     candidate_by_id = {candidate.source.pss_id: candidate for candidate in candidates}
+    # Pinned once per run and recorded in provenance: recency is clock-relative
+    # by definition, so the payload names the year it was computed against.
+    reference_year = datetime.now(UTC).year
     signal_docs, signal_availability, unmatched_boosts, effective_weights = _signal_docs(
         candidates,
         directive,
+        reference_year=reference_year,
     )
     stratum_by_doc = _stratum_doc_map(ordered_strata)
     selectable_ids = set(stratum_by_doc)
@@ -1182,12 +1222,13 @@ def select_documents(
     provenance: dict[str, Any] = {
         "effective_weights": effective_weights,
         "signal_availability": signal_availability,
+        "recency_reference_year": reference_year,
         "unmatched_boosts": unmatched_boosts,
         "unmatched_priority_patterns": unmatched_priority_patterns,
         "backend_mode": backend_mode,
     }
     if strategy == "llm_rerank_v1":
-        stats = rerank_stats or _RerankStats(0, 0, 0, 0, 0)
+        stats = rerank_stats or _RerankStats(0, 0, 0, 0, 0, 0)
         provenance.update({
             "prompt_version": PROMPT_VERSION,
             "model": RERANK_MODEL,
@@ -1199,6 +1240,7 @@ def select_documents(
             },
             "retry_count": stats.retry_count,
             "fallback_count": stats.fallback_count,
+            "title_only_count": stats.title_only_count,
         })
 
     return SelectionOutcome(
@@ -1398,7 +1440,7 @@ def _empty_summary(
     directive_source: str,
     ranking_backend: RankingBackend | None,
 ) -> dict[str, Any]:
-    provenance = {
+    provenance: dict[str, Any] = {
         "strategy_version": strategy,
         "characterisation_run_id": str(characterisation_run_id),
         "directive": directive.normalized(),
@@ -1409,6 +1451,19 @@ def _empty_summary(
         "unmatched_priority_patterns": list(directive.priority_strata),
         "backend_mode": ranking_backend.mode if ranking_backend is not None else "none",
     }
+    if strategy == "llm_rerank_v1":
+        # Same provenance shape as a ranked run — an empty scope spends zero
+        # calls but readers (e.g. the skeleton's rerank-fired check) still see
+        # the call-budget keys (review finding: KeyError on the live path).
+        provenance.update({
+            "prompt_version": PROMPT_VERSION,
+            "model": RERANK_MODEL,
+            "batch_size": RERANK_BATCH_SIZE,
+            "call_budget": {"baseline": 0, "maximum": 0, "used": 0},
+            "retry_count": 0,
+            "fallback_count": 0,
+            "title_only_count": 0,
+        })
     return {
         "strata": [],
         "selected": {"count": 0, "by_reason": {}},

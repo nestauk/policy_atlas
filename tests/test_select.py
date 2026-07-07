@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -18,22 +19,20 @@ from policy_atlas.grouping import GroupingDoc
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.plan import Plan, compile
-from policy_atlas.ranking import RankedDoc
+from policy_atlas.ranking import RankedDoc, StubRankingBackend
 from policy_atlas.schema import (
     TOPIC_THEME,
     artefact,
     block,
-    characterisation_result,
-    project_source_snapshot,
     runs,
     selection_result,
-    source_appraisal_result,
-    source_classification_result,
     source_screening_result,
-    source_snapshot,
 )
 from policy_atlas.select import (
     DEFAULT_SELECTION_BUDGET,
+    DIRECTIVE_BUDGET_MAX,
+    DIRECTIVE_LIST_MAX,
+    DIRECTIVE_STRING_MAX,
     DirectiveError,
     SelectContext,
     SelectError,
@@ -45,132 +44,18 @@ from policy_atlas.select import (
 )
 from policy_atlas.tags import insert_source_tags
 from tests.helpers import (
+    EVIDENCE_TYPE,
     delete_project_data,
     now,
+    run_select,
+    seed_characterisation,
     seed_project_and_run,
     seed_run,
     seed_scope,
-    seed_screening_result,
+    seed_select_doc,
 )
-from tests.helpers import seed_source as helper_seed_source
 
-EVIDENCE_TYPE = "RCTs and Quasi-Experimental Studies"
 NON_EVIDENCE_TYPE = "Other (Non-evidence documents)"
-
-
-def _seed_select_doc(
-    conn: Connection,
-    project_id: uuid.UUID,
-    run_id: uuid.UUID,
-    scope_id: uuid.UUID,
-    *,
-    title: str,
-    evidence_type: str | None = EVIDENCE_TYPE,
-    quality: int | None = 3,
-    year: int = 2026,
-    origin: str = "uploaded",
-    text_basis: str = "full_text",
-) -> uuid.UUID:
-    snap_id, pss_id = helper_seed_source(
-        conn,
-        project_id,
-        meta={"title": title, "abstract": f"Abstract for {title}.", "year": year},
-    )
-    conn.execute(
-        sa.update(project_source_snapshot)
-        .where(project_source_snapshot.c.project_source_snapshot_id == pss_id)
-        .values(origin=origin)
-    )
-    conn.execute(
-        sa.update(source_snapshot)
-        .where(source_snapshot.c.source_snapshot_id == snap_id)
-        .values(text_basis=text_basis)
-    )
-    seed_screening_result(conn, project_id, run_id, scope_id, pss_id, status="relevant")
-    if evidence_type is not None:
-        conn.execute(source_classification_result.insert().values(
-            source_classification_result_id=uuid.uuid4(),
-            evidence_scope_id=scope_id,
-            project_source_snapshot_id=pss_id,
-            project_id=project_id,
-            classified_by_run_id=run_id,
-            primary_evidence_type=evidence_type,
-            classified_at=now(),
-        ))
-    if quality is not None:
-        conn.execute(source_appraisal_result.insert().values(
-            source_appraisal_result_id=uuid.uuid4(),
-            evidence_scope_id=scope_id,
-            project_source_snapshot_id=pss_id,
-            project_id=project_id,
-            appraised_by_run_id=run_id,
-            quality_score=quality,
-            rubric_version="test-rubric",
-            appraised_at=now(),
-        ))
-    return pss_id
-
-
-def _seed_characterisation(
-    conn: Connection,
-    project_id: uuid.UUID,
-    scope_id: uuid.UUID,
-    run_id: uuid.UUID,
-    *,
-    themes: dict[str, list[uuid.UUID]],
-    unclustered: list[uuid.UUID] | None = None,
-) -> None:
-    conn.execute(characterisation_result.insert().values(
-        characterisation_id=uuid.uuid4(),
-        project_id=project_id,
-        evidence_scope_id=scope_id,
-        run_id=run_id,
-        grouping_provenance={"backend_mode": "stub"},
-        coverage={"base": "screened"},
-        themes={
-            "themes": [
-                {
-                    "name": name,
-                    "description": f"{name} documents",
-                    "member_ids": [str(pss_id) for pss_id in ids],
-                    "size": len(ids),
-                }
-                for name, ids in themes.items()
-            ],
-            "unclustered_ids": [str(pss_id) for pss_id in (unclustered or [])],
-        },
-        created_at=now(),
-    ))
-
-
-def _run_select(
-    conn: Connection,
-    project_id: uuid.UUID,
-    scope_id: uuid.UUID,
-    characterisation_run_id: uuid.UUID,
-    *,
-    context: dict[str, Any] | None = None,
-    backend: Any = None,
-) -> tuple[dict[str, Any], Any, uuid.UUID]:
-    run_id = seed_run(conn, project_id)
-    summary = select_scope(
-        conn,
-        project_id=project_id,
-        run_id=run_id,
-        context=SelectContext(
-            scope_id=scope_id,
-            intent="Select the best evidence.",
-            context=context or {},
-            characterisation_run_id=characterisation_run_id,
-        ),
-        ranking_backend=backend,
-    )
-    row = conn.execute(
-        select(selection_result)
-        .where(selection_result.c.project_id == project_id)
-        .where(selection_result.c.run_id == run_id)
-    ).one()
-    return summary, row, run_id
 
 
 def _selection_row_count(conn: Connection, project_id: uuid.UUID) -> int:
@@ -204,7 +89,7 @@ def _docs(
     count: int,
 ) -> list[uuid.UUID]:
     return [
-        _seed_select_doc(conn, project_id, run_id, scope_id, title=f"{prefix}-{index}")
+        seed_select_doc(conn, project_id, run_id, scope_id, title=f"{prefix}-{index}")
         for index in range(count)
     ]
 
@@ -216,7 +101,7 @@ def test_allocation_math_matches_hand_computed_fixture(conn: Connection) -> None
     theme_b = _docs(conn, pid, characterise_run_id, scope_id, "B", 6)
     theme_c = _docs(conn, pid, characterise_run_id, scope_id, "C", 2)
     unclustered = _docs(conn, pid, characterise_run_id, scope_id, "U", 2)
-    _seed_characterisation(
+    seed_characterisation(
         conn,
         pid,
         scope_id,
@@ -225,7 +110,7 @@ def test_allocation_math_matches_hand_computed_fixture(conn: Connection) -> None
         unclustered=unclustered,
     )
 
-    summary, row, _ = _run_select(
+    summary, row, _ = run_select(
         conn,
         pid,
         scope_id,
@@ -268,7 +153,7 @@ def test_budget_below_strata_grants_floors_in_stratum_order(conn: Connection) ->
     theme_b = _docs(conn, pid, characterise_run_id, scope_id, "B", 3)
     theme_c = _docs(conn, pid, characterise_run_id, scope_id, "C", 2)
     theme_d = _docs(conn, pid, characterise_run_id, scope_id, "D", 1)
-    _seed_characterisation(
+    seed_characterisation(
         conn,
         pid,
         scope_id,
@@ -276,7 +161,7 @@ def test_budget_below_strata_grants_floors_in_stratum_order(conn: Connection) ->
         themes={"A": theme_a, "B": theme_b, "C": theme_c, "D": theme_d},
     )
 
-    summary, row, _ = _run_select(
+    summary, row, _ = run_select(
         conn,
         pid,
         scope_id,
@@ -305,7 +190,7 @@ def test_exhausted_stratum_surplus_redistributes(conn: Connection) -> None:
     theme_a = _docs(conn, pid, characterise_run_id, scope_id, "A", 1)
     theme_b = _docs(conn, pid, characterise_run_id, scope_id, "B", 9)
     theme_c = _docs(conn, pid, characterise_run_id, scope_id, "C", 9)
-    _seed_characterisation(
+    seed_characterisation(
         conn,
         pid,
         scope_id,
@@ -313,7 +198,7 @@ def test_exhausted_stratum_surplus_redistributes(conn: Connection) -> None:
         themes={"A": theme_a, "B": theme_b, "C": theme_c},
     )
 
-    summary, _row, _ = _run_select(
+    summary, _row, _ = run_select(
         conn,
         pid,
         scope_id,
@@ -337,7 +222,7 @@ def test_must_include_bypasses_budget_and_conflict_is_notable(conn: Connection) 
     theme_a = _docs(conn, pid, characterise_run_id, scope_id, "A", 3)
     theme_b = _docs(conn, pid, characterise_run_id, scope_id, "B", 3)
     missing_id = uuid.uuid4()
-    _seed_characterisation(
+    seed_characterisation(
         conn,
         pid,
         scope_id,
@@ -345,7 +230,7 @@ def test_must_include_bypasses_budget_and_conflict_is_notable(conn: Connection) 
         themes={"A": theme_a, "B": theme_b},
     )
 
-    summary, row, _ = _run_select(
+    summary, row, _ = run_select(
         conn,
         pid,
         scope_id,
@@ -379,7 +264,7 @@ def test_deterministic_runs_write_identical_payload_columns(conn: Connection) ->
     scope_id = seed_scope(conn, pid)
     theme_a = _docs(conn, pid, characterise_run_id, scope_id, "A", 3)
     theme_b = _docs(conn, pid, characterise_run_id, scope_id, "B", 2)
-    _seed_characterisation(
+    seed_characterisation(
         conn,
         pid,
         scope_id,
@@ -387,8 +272,8 @@ def test_deterministic_runs_write_identical_payload_columns(conn: Connection) ->
         themes={"A": theme_a, "B": theme_b},
     )
 
-    _summary_1, row_1, _ = _run_select(conn, pid, scope_id, characterise_run_id)
-    _summary_2, row_2, _ = _run_select(conn, pid, scope_id, characterise_run_id)
+    _summary_1, row_1, _ = run_select(conn, pid, scope_id, characterise_run_id)
+    _summary_2, row_2, _ = run_select(conn, pid, scope_id, characterise_run_id)
 
     assert json.dumps(_payload_columns(row_1), sort_keys=True) == json.dumps(
         _payload_columns(row_2),
@@ -401,7 +286,7 @@ def test_directive_validation_empty_equivalence_and_boost_reordering(
 ) -> None:
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
-    uploaded = _seed_select_doc(
+    uploaded = seed_select_doc(
         conn,
         pid,
         characterise_run_id,
@@ -410,7 +295,7 @@ def test_directive_validation_empty_equivalence_and_boost_reordering(
         origin="uploaded",
         quality=3,
     )
-    acquired = _seed_select_doc(
+    acquired = seed_select_doc(
         conn,
         pid,
         characterise_run_id,
@@ -419,7 +304,7 @@ def test_directive_validation_empty_equivalence_and_boost_reordering(
         origin="acquired",
         quality=3,
     )
-    _seed_characterisation(
+    seed_characterisation(
         conn,
         pid,
         scope_id,
@@ -428,9 +313,9 @@ def test_directive_validation_empty_equivalence_and_boost_reordering(
     )
 
     with pytest.raises(DirectiveError):
-        _run_select(conn, pid, scope_id, characterise_run_id, context={"selection": {"bad": 1}})
+        run_select(conn, pid, scope_id, characterise_run_id, context={"selection": {"bad": 1}})
     with pytest.raises(DirectiveError):
-        _run_select(
+        run_select(
             conn,
             pid,
             scope_id,
@@ -444,13 +329,13 @@ def test_directive_validation_empty_equivalence_and_boost_reordering(
         )
     assert _selection_row_count(conn, pid) == 0
 
-    _summary_absent, row_absent, _ = _run_select(
+    _summary_absent, row_absent, _ = run_select(
         conn,
         pid,
         scope_id,
         characterise_run_id,
     )
-    _summary_empty, row_empty, _ = _run_select(
+    _summary_empty, row_empty, _ = run_select(
         conn,
         pid,
         scope_id,
@@ -462,14 +347,14 @@ def test_directive_validation_empty_equivalence_and_boost_reordering(
         sort_keys=True,
     )
 
-    _summary_default, row_default, _ = _run_select(
+    _summary_default, row_default, _ = run_select(
         conn,
         pid,
         scope_id,
         characterise_run_id,
         context={"selection": {"budget": 1}},
     )
-    _summary_boost, row_boost, _ = _run_select(
+    _summary_boost, row_boost, _ = run_select(
         conn,
         pid,
         scope_id,
@@ -490,7 +375,7 @@ def test_directive_validation_empty_equivalence_and_boost_reordering(
     # boost multiplies 0.660 by 10, so acquired deterministically wins budget 1.
     assert row_default._mapping["selected"][0]["pss_id"] == str(uploaded)
     assert row_boost._mapping["selected"][0]["pss_id"] == str(acquired)
-    _summary_all, row_all, _ = _run_select(
+    _summary_all, row_all, _ = run_select(
         conn,
         pid,
         scope_id,
@@ -515,10 +400,10 @@ def test_missing_characterisation_empty_scope_and_unclustered_select_all(
 ) -> None:
     pid, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
-    _seed_select_doc(conn, pid, run_id, scope_id, title="missing-char")
+    seed_select_doc(conn, pid, run_id, scope_id, title="missing-char")
 
     with pytest.raises(SelectError, match="run characterise first"):
-        _run_select(conn, pid, scope_id, uuid.uuid4())
+        run_select(conn, pid, scope_id, uuid.uuid4())
     assert _selection_row_count(conn, pid) == 0
 
     empty_scope = seed_scope(conn, pid)
@@ -539,7 +424,7 @@ def test_missing_characterisation_empty_scope_and_unclustered_select_all(
 
     unclustered_scope = seed_scope(conn, pid)
     docs = _docs(conn, pid, run_id, unclustered_scope, "U", 3)
-    _seed_characterisation(
+    seed_characterisation(
         conn,
         pid,
         unclustered_scope,
@@ -547,7 +432,7 @@ def test_missing_characterisation_empty_scope_and_unclustered_select_all(
         themes={},
         unclustered=docs,
     )
-    summary_all, row_all, _ = _run_select(
+    summary_all, row_all, _ = run_select(
         conn,
         pid,
         unclustered_scope,
@@ -573,7 +458,7 @@ def test_non_evidence_and_not_in_characterisation_are_base_counts(conn: Connecti
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
     in_characterisation = _docs(conn, pid, characterise_run_id, scope_id, "A", 2)
-    _seed_select_doc(
+    seed_select_doc(
         conn,
         pid,
         characterise_run_id,
@@ -581,8 +466,8 @@ def test_non_evidence_and_not_in_characterisation_are_base_counts(conn: Connecti
         title="non-evidence",
         evidence_type=NON_EVIDENCE_TYPE,
     )
-    _seed_select_doc(conn, pid, characterise_run_id, scope_id, title="late-eligible")
-    _seed_characterisation(
+    seed_select_doc(conn, pid, characterise_run_id, scope_id, title="late-eligible")
+    seed_characterisation(
         conn,
         pid,
         scope_id,
@@ -590,7 +475,7 @@ def test_non_evidence_and_not_in_characterisation_are_base_counts(conn: Connecti
         themes={"A": in_characterisation},
     )
 
-    summary, row, _ = _run_select(
+    summary, row, _ = run_select(
         conn,
         pid,
         scope_id,
@@ -628,7 +513,7 @@ def test_llm_rerank_contested_scope_and_fallback_ordering(conn: Connection) -> N
     scope_id = seed_scope(conn, pid)
     theme_a = _docs(conn, pid, characterise_run_id, scope_id, "A", 4)
     theme_b = _docs(conn, pid, characterise_run_id, scope_id, "B", 1)
-    _seed_characterisation(
+    seed_characterisation(
         conn,
         pid,
         scope_id,
@@ -637,7 +522,7 @@ def test_llm_rerank_contested_scope_and_fallback_ordering(conn: Connection) -> N
     )
     backend = _PartialRankingBackend()
 
-    summary, row, _ = _run_select(
+    summary, row, _ = run_select(
         conn,
         pid,
         scope_id,
@@ -678,6 +563,39 @@ def test_llm_rerank_contested_scope_and_fallback_ordering(conn: Connection) -> N
     assert provenance["fallback_count"] == 3
 
 
+def test_empty_scope_rerank_provenance_carries_call_budget(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    seed_select_doc(
+        conn, pid, characterise_run_id, scope_id,
+        title="non-evidence", evidence_type=NON_EVIDENCE_TYPE,
+    )
+    run_id = seed_run(conn, pid)
+
+    summary = select_scope(
+        conn,
+        project_id=pid,
+        run_id=run_id,
+        context=SelectContext(
+            scope_id=scope_id,
+            intent="Select the best evidence.",
+            context={},
+            characterisation_run_id=characterise_run_id,
+        ),
+        ranking_backend=StubRankingBackend(),
+    )
+
+    # Every screened-in doc is non-evidence, so the scope is empty before
+    # characterisation is even consulted. The rerank strategy still writes the
+    # full call-budget/model/prompt_version provenance shape (review finding:
+    # KeyError on this live path when those keys were missing), and no
+    # selection row is persisted for an empty scope.
+    assert summary["provenance"]["call_budget"] == {"baseline": 0, "maximum": 0, "used": 0}
+    assert summary["provenance"]["model"] == "gpt-5-mini"
+    assert summary["provenance"]["prompt_version"] == "select_rerank_v1"
+    assert _selection_row_count(conn, pid) == 0
+
+
 # --- Schema constraints ---
 
 
@@ -685,8 +603,8 @@ def test_schema_constraints_reject_bad_rows(conn: Connection) -> None:
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
     docs = _docs(conn, pid, characterise_run_id, scope_id, "A", 2)
-    _seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
-    _summary, row, run_id = _run_select(
+    seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
+    _summary, row, run_id = run_select(
         conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 2}}
     )
     selection_result_id = row._mapping["selection_result_id"]
@@ -749,24 +667,24 @@ def test_schema_constraints_reject_bad_rows(conn: Connection) -> None:
 def test_eligibility_base_ladder_by_evidence_type(conn: Connection) -> None:
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
-    _seed_select_doc(
+    seed_select_doc(
         conn, pid, characterise_run_id, scope_id,
         title="non-evidence", evidence_type=NON_EVIDENCE_TYPE,
     )
-    unknown = _seed_select_doc(
+    unknown = seed_select_doc(
         conn, pid, characterise_run_id, scope_id,
         title="unknown", evidence_type="Unknown / Insufficient information",
     )
-    unclassified = _seed_select_doc(
+    unclassified = seed_select_doc(
         conn, pid, characterise_run_id, scope_id,
         title="unclassified", evidence_type=None,
     )
-    _seed_characterisation(
+    seed_characterisation(
         conn, pid, scope_id, characterise_run_id,
         themes={"A": [unknown, unclassified]},
     )
 
-    summary, row, _ = _run_select(
+    summary, row, _ = run_select(
         conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 5}}
     )
 
@@ -789,18 +707,18 @@ def test_counting_invariants_on_mixed_fixture(conn: Connection) -> None:
     theme_a = _docs(conn, pid, characterise_run_id, scope_id, "A", 5)
     theme_b = _docs(conn, pid, characterise_run_id, scope_id, "B", 4)
     unclustered_docs = _docs(conn, pid, characterise_run_id, scope_id, "U", 1)
-    _seed_select_doc(
+    seed_select_doc(
         conn, pid, characterise_run_id, scope_id,
         title="non-evidence", evidence_type=NON_EVIDENCE_TYPE,
     )
-    _seed_select_doc(conn, pid, characterise_run_id, scope_id, title="late-eligible")
-    _seed_characterisation(
+    seed_select_doc(conn, pid, characterise_run_id, scope_id, title="late-eligible")
+    seed_characterisation(
         conn, pid, scope_id, characterise_run_id,
         themes={"A": theme_a, "B": theme_b},
         unclustered=unclustered_docs,
     )
 
-    summary, row, _ = _run_select(
+    summary, row, _ = run_select(
         conn, pid, scope_id, characterise_run_id,
         context={
             "selection": {"budget": 4, "must_include_ids": [str(theme_b[0])]},
@@ -855,20 +773,20 @@ def test_text_basis_soft_tilt_ranks_full_text_above_but_never_excludes(
 ) -> None:
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
-    full_text_doc = _seed_select_doc(
+    full_text_doc = seed_select_doc(
         conn, pid, characterise_run_id, scope_id,
         title="full", text_basis="full_text", quality=3, year=2026, origin="uploaded",
     )
-    abstract_doc = _seed_select_doc(
+    abstract_doc = seed_select_doc(
         conn, pid, characterise_run_id, scope_id,
         title="abstract", text_basis="abstract_only", quality=3, year=2026, origin="uploaded",
     )
-    _seed_characterisation(
+    seed_characterisation(
         conn, pid, scope_id, characterise_run_id,
         themes={"A": [full_text_doc, abstract_doc]},
     )
 
-    summary, row, _ = _run_select(
+    summary, row, _ = run_select(
         conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 2}}
     )
 
@@ -947,17 +865,56 @@ def test_missing_signals_flag_not_block() -> None:
     assert outcome.provenance["signal_availability"]["origin"] == 0
 
 
+def test_future_year_reads_as_missing_signal(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    current_year = datetime.now(UTC).year
+    future_doc = seed_select_doc(
+        conn, pid, characterise_run_id, scope_id, title="future", year=current_year + 5
+    )
+    grace_doc = seed_select_doc(
+        conn, pid, characterise_run_id, scope_id, title="grace", year=current_year + 1
+    )
+    valid_doc = seed_select_doc(
+        conn, pid, characterise_run_id, scope_id, title="valid", year=current_year
+    )
+    seed_characterisation(
+        conn, pid, scope_id, characterise_run_id,
+        themes={"A": [future_doc, grace_doc, valid_doc]},
+    )
+
+    summary, row, _ = run_select(
+        conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 3}}
+    )
+
+    # current_year + 5 is implausibly far ahead of the RECENCY_FUTURE_GRACE_YEARS=1
+    # grace window, so it reads as missing (flag), never as a recency reward. It
+    # is still selected — flag-not-block, not excluded by bad metadata.
+    records = {record["pss_id"]: record for record in row._mapping["selected"]}
+    future_record = records[str(future_doc)]
+    assert future_record["signals"]["recency"] == 0.5
+    assert "recency" in future_record["missing_signals"]
+    assert summary["selected"]["count"] == 3
+    assert row._mapping["selection_provenance"]["recency_reference_year"] == current_year
+
+    # current_year + 1 is within the ahead-of-print grace window: it must not
+    # be treated as missing, and reads as maximally recent (age clamped to 0).
+    grace_record = records[str(grace_doc)]
+    assert "recency" not in grace_record["missing_signals"]
+    assert grace_record["signals"]["recency"] == 1.0
+
+
 # --- Directive semantics ---
 
 
 def test_directive_tag_boost_reorders_stratum_and_never_excludes(conn: Connection) -> None:
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
-    better = _seed_select_doc(
+    better = seed_select_doc(
         conn, pid, characterise_run_id, scope_id,
         title="better", quality=5, year=2026, origin="uploaded", text_basis="full_text",
     )
-    worse = _seed_select_doc(
+    worse = seed_select_doc(
         conn, pid, characterise_run_id, scope_id,
         title="worse", quality=1, year=2011, origin="acquired", text_basis="abstract_only",
     )
@@ -965,14 +922,14 @@ def test_directive_tag_boost_reorders_stratum_and_never_excludes(conn: Connectio
         conn, project_id=pid, run_id=characterise_run_id, now=now(),
         assertions=[(worse, "boosted", "test")],
     )
-    _seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": [better, worse]})
+    seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": [better, worse]})
 
     # composite_better = .25*1(recency,2026) + .25*1((5-1)/4=1,quality) + .20*1(full_text)
     #                   + .15*.9(screen_confidence) + .15*1(uploaded) = 0.985
     # composite_worse   = .25*0(recency,2011,age15) + .25*0((1-1)/4=0,quality)
     #                   + .20*.25(abstract_only) + .15*.9 + .15*.5(acquired) = 0.26
     # weight 4 x 0.26 = 1.04 > 0.985, so a tag boost of 4 reorders the stratum.
-    _summary_no_boost, row_no_boost, _ = _run_select(
+    _summary_no_boost, row_no_boost, _ = run_select(
         conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 1}}
     )
     assert row_no_boost._mapping["selected"][0]["pss_id"] == str(better)
@@ -983,7 +940,7 @@ def test_directive_tag_boost_reorders_stratum_and_never_excludes(conn: Connectio
             "boosts": [{"match": {"tag_type": TOPIC_THEME, "tag": "boosted"}, "weight": 4}],
         }
     }
-    _summary_boost, row_boost, _ = _run_select(
+    _summary_boost, row_boost, _ = run_select(
         conn, pid, scope_id, characterise_run_id, context=boost_context
     )
     assert row_boost._mapping["selected"][0]["pss_id"] == str(worse)
@@ -996,7 +953,7 @@ def test_directive_tag_boost_reorders_stratum_and_never_excludes(conn: Connectio
             "boosts": [{"match": {"tag_type": TOPIC_THEME, "tag": "boosted"}, "weight": 4}],
         }
     }
-    _summary_all, row_all, _ = _run_select(
+    _summary_all, row_all, _ = run_select(
         conn, pid, scope_id, characterise_run_id, context=all_context
     )
     assert {record["pss_id"] for record in row_all._mapping["selected"]} == {
@@ -1007,19 +964,19 @@ def test_directive_tag_boost_reorders_stratum_and_never_excludes(conn: Connectio
 def test_directive_year_boost_matches_only_in_range_docs(conn: Connection) -> None:
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
-    in_range = _seed_select_doc(conn, pid, characterise_run_id, scope_id, title="in", year=2021)
-    below_range = _seed_select_doc(
+    in_range = seed_select_doc(conn, pid, characterise_run_id, scope_id, title="in", year=2021)
+    below_range = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="below", year=2015
     )
-    above_range = _seed_select_doc(
+    above_range = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="above", year=2025
     )
-    _seed_characterisation(
+    seed_characterisation(
         conn, pid, scope_id, characterise_run_id,
         themes={"A": [in_range, below_range, above_range]},
     )
 
-    summary, row, _ = _run_select(
+    summary, row, _ = run_select(
         conn, pid, scope_id, characterise_run_id,
         context={
             "selection": {
@@ -1046,10 +1003,10 @@ def test_directive_boost_matching_zero_docs_flags_unmatched_and_completes(
 ) -> None:
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
-    doc = _seed_select_doc(conn, pid, characterise_run_id, scope_id, title="doc", origin="uploaded")
-    _seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": [doc]})
+    doc = seed_select_doc(conn, pid, characterise_run_id, scope_id, title="doc", origin="uploaded")
+    seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": [doc]})
 
-    summary, row, _ = _run_select(
+    summary, row, _ = run_select(
         conn, pid, scope_id, characterise_run_id,
         context={
             "selection": {
@@ -1068,10 +1025,10 @@ def test_directive_boost_matching_zero_docs_flags_unmatched_and_completes(
 def test_directive_and_source_recorded_whole_in_provenance(conn: Connection) -> None:
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
-    doc = _seed_select_doc(conn, pid, characterise_run_id, scope_id, title="doc")
-    _seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": [doc]})
+    doc = seed_select_doc(conn, pid, characterise_run_id, scope_id, title="doc")
+    seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": [doc]})
 
-    _summary_default, row_default, _ = _run_select(conn, pid, scope_id, characterise_run_id)
+    _summary_default, row_default, _ = run_select(conn, pid, scope_id, characterise_run_id)
     provenance_default = row_default._mapping["selection_provenance"]
     assert provenance_default["directive_source"] == "default"
     assert provenance_default["directive"] == {
@@ -1082,7 +1039,7 @@ def test_directive_and_source_recorded_whole_in_provenance(conn: Connection) -> 
         "priority_strata": [],
     }
 
-    _summary_ctx, row_ctx, _ = _run_select(
+    _summary_ctx, row_ctx, _ = run_select(
         conn, pid, scope_id, characterise_run_id,
         context={"selection": {"budget": 3, "must_include_ids": [str(doc)]}},
     )
@@ -1097,6 +1054,75 @@ def test_directive_and_source_recorded_whole_in_provenance(conn: Connection) -> 
     }
 
 
+def test_unknown_column_boost_is_flagged_non_fatal(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    doc = seed_select_doc(conn, pid, characterise_run_id, scope_id, title="doc")
+    seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": [doc]})
+
+    _summary_plain, row_plain, _ = run_select(
+        conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 1}}
+    )
+    _summary_boosted, row_boosted, _ = run_select(
+        conn,
+        pid,
+        scope_id,
+        characterise_run_id,
+        context={
+            "selection": {
+                "budget": 1,
+                "boosts": [
+                    {
+                        "match": {"column": "publication_country", "equals": "UK"},
+                        "weight": 2.0,
+                    }
+                ],
+            }
+        },
+    )
+
+    # "publication_country" is not a recognised boost column (contract decision
+    # 4: unknown columns/tags match nothing and are flagged, never fatal). The
+    # run completes, the boost is recorded as unmatched at its list index, and
+    # the selected set is identical to the same run without that boost.
+    assert row_boosted._mapping["selection_provenance"]["unmatched_boosts"] == [0]
+    assert row_boosted._mapping["selected"] == row_plain._mapping["selected"]
+
+
+@pytest.mark.parametrize(
+    "selection_directive",
+    [
+        {"boosts": [{"match": {"tag_type": "topic_theme", "tag": "a\x1bb"}, "weight": 1.0}]},
+        {"priority_strata": ["x" * (DIRECTIVE_STRING_MAX + 1)]},
+        {"budget": DIRECTIVE_BUDGET_MAX + 1},
+        {"must_include_ids": [str(uuid.uuid4()) for _ in range(DIRECTIVE_LIST_MAX + 1)]},
+    ],
+    ids=[
+        "boost_tag_control_character",
+        "priority_stratum_too_long",
+        "budget_over_max",
+        "must_include_ids_over_max",
+    ],
+)
+def test_malformed_directive_shapes_raise(
+    conn: Connection, selection_directive: dict[str, Any]
+) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    doc = seed_select_doc(conn, pid, characterise_run_id, scope_id, title="doc")
+    seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": [doc]})
+
+    with pytest.raises(DirectiveError):
+        run_select(
+            conn,
+            pid,
+            scope_id,
+            characterise_run_id,
+            context={"selection": selection_directive},
+        )
+    assert _selection_row_count(conn, pid) == 0
+
+
 # --- Trigger-flag fixtures ---
 
 
@@ -1105,11 +1131,11 @@ def test_trigger_flag_large_stratum_excluded_detail_payload(conn: Connection) ->
     scope_id = seed_scope(conn, pid)
     theme_a = _docs(conn, pid, characterise_run_id, scope_id, "A", 6)
     theme_b = _docs(conn, pid, characterise_run_id, scope_id, "B", 5)
-    _seed_characterisation(
+    seed_characterisation(
         conn, pid, scope_id, characterise_run_id, themes={"A": theme_a, "B": theme_b}
     )
 
-    summary, row, _ = _run_select(
+    summary, row, _ = run_select(
         conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 1}}
     )
 
@@ -1129,9 +1155,9 @@ def test_trigger_flag_thin_base(conn: Connection) -> None:
         .where(source_screening_result.c.project_source_snapshot_id.in_(docs))
         .values(screen_decision_confidence=0.5)
     )
-    _seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
+    seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
 
-    _summary, row, _ = _run_select(
+    _summary, row, _ = run_select(
         conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 3}}
     )
 
@@ -1143,20 +1169,20 @@ def test_trigger_flag_thin_base(conn: Connection) -> None:
 def test_trigger_flag_thin_full_text(conn: Connection) -> None:
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
-    full = _seed_select_doc(
+    full = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="full", text_basis="full_text"
     )
-    abs1 = _seed_select_doc(
+    abs1 = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="abs1", text_basis="abstract_only"
     )
-    abs2 = _seed_select_doc(
+    abs2 = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="abs2", text_basis="abstract_only"
     )
-    _seed_characterisation(
+    seed_characterisation(
         conn, pid, scope_id, characterise_run_id, themes={"A": [full, abs1, abs2]}
     )
 
-    summary, row, _ = _run_select(
+    summary, row, _ = run_select(
         conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 3}}
     )
 
@@ -1172,9 +1198,9 @@ def test_trigger_flag_negative_case_has_no_flags(conn: Connection) -> None:
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
     docs = _docs(conn, pid, characterise_run_id, scope_id, "A", 12)
-    _seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
+    seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
 
-    summary, row, _ = _run_select(
+    summary, row, _ = run_select(
         conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 12}}
     )
 
@@ -1192,35 +1218,35 @@ def test_rationale_bidirectional_with_hand_computed_full_text_shares(conn: Conne
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
     theme_a_full = [
-        _seed_select_doc(
+        seed_select_doc(
             conn, pid, characterise_run_id, scope_id, title=f"A-full-{i}", text_basis="full_text"
         )
         for i in range(2)
     ]
     theme_a_abs = [
-        _seed_select_doc(
+        seed_select_doc(
             conn, pid, characterise_run_id, scope_id, title=f"A-abs-{i}",
             text_basis="abstract_only",
         )
         for i in range(2)
     ]
     theme_b_full = [
-        _seed_select_doc(
+        seed_select_doc(
             conn, pid, characterise_run_id, scope_id, title="B-full", text_basis="full_text"
         )
     ]
     theme_b_abs = [
-        _seed_select_doc(
+        seed_select_doc(
             conn, pid, characterise_run_id, scope_id, title="B-abs", text_basis="abstract_only"
         )
     ]
     theme_a = theme_a_full + theme_a_abs
     theme_b = theme_b_full + theme_b_abs
-    _seed_characterisation(
+    seed_characterisation(
         conn, pid, scope_id, characterise_run_id, themes={"A": theme_a, "B": theme_b}
     )
 
-    summary, row, _ = _run_select(
+    summary, row, _ = run_select(
         conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 3}}
     )
 
@@ -1270,9 +1296,9 @@ def test_summary_payload_shape_is_frozen(conn: Connection) -> None:
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
     docs = _docs(conn, pid, characterise_run_id, scope_id, "A", 2)
-    _seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
+    seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
 
-    summary, _row, _ = _run_select(
+    summary, _row, _ = run_select(
         conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 2}}
     )
 
@@ -1295,7 +1321,7 @@ def test_harness_select_component_success(conn: Connection) -> None:
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
     docs = _docs(conn, pid, characterise_run_id, scope_id, "A", 2)
-    _seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
+    seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
 
     rid = seed_run(conn, pid)
     plan = Plan(
@@ -1336,7 +1362,7 @@ def test_harness_select_component_success(conn: Connection) -> None:
 def test_harness_select_component_missing_characterisation_fails(conn: Connection) -> None:
     pid, other_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
-    _seed_select_doc(conn, pid, other_run_id, scope_id, title="doc")
+    seed_select_doc(conn, pid, other_run_id, scope_id, title="doc")
 
     rid = seed_run(conn, pid)
     plan = Plan(
@@ -1374,8 +1400,8 @@ def test_delete_project_data_removes_selection_result(conn: Connection) -> None:
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
     docs = _docs(conn, pid, characterise_run_id, scope_id, "A", 2)
-    _seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
-    _run_select(conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 2}})
+    seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
+    run_select(conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 2}})
 
     conn.commit()
     delete_project_data(conn, pid)
@@ -1398,7 +1424,7 @@ def test_select_writes_no_artefact_or_block_and_leaves_screening_untouched(
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
     docs = _docs(conn, pid, characterise_run_id, scope_id, "A", 2)
-    _seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
+    seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": docs})
 
     screening_before = conn.execute(
         select(source_screening_result)
@@ -1406,7 +1432,7 @@ def test_select_writes_no_artefact_or_block_and_leaves_screening_untouched(
         .order_by(source_screening_result.c.project_source_snapshot_id)
     ).fetchall()
 
-    _run_select(conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 2}})
+    run_select(conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 2}})
 
     artefact_count = conn.execute(
         select(sa.func.count()).select_from(artefact).where(artefact.c.project_id == pid)

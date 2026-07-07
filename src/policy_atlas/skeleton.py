@@ -244,20 +244,16 @@ def _render_landscape(log_entries: list[dict[str, Any]]) -> None:
     log.info("landscape.provenance", **payload["provenance"])
 
 
-def _selection_payload(
-    log_entries: list[dict[str, Any]], *, run_id: uuid.UUID | None = None
-) -> dict[str, Any] | None:
+def _selection_payload(log_entries: list[dict[str, Any]]) -> dict[str, Any] | None:
     """Return the select component's completed-event payload, or None if it failed.
 
-    Entries arrive in ascending sequence order, so the search runs newest-first;
-    pass ``run_id`` to pin the payload to one run rather than the latest.
+    Entries arrive in ascending sequence order, so the search runs newest-first.
     """
     return next(
         (
             e["payload"] for e in reversed(log_entries)
             if e["event_type"] == "component.completed"
             and e["payload"].get("component") == "select"
-            and (run_id is None or e["run_id"] == run_id)
         ),
         None,
     )
@@ -455,20 +451,17 @@ def main() -> None:
         # Pick the demo boost tag: most common source_tag.tag for this project
         # not asserted by characterise itself (deterministic order: count desc,
         # tag asc); fall back to any tag if none match.
-        tag_counts = conn.execute(
+        tag_counts_query = (
             select(source_tag.c.tag, func.count())
             .where(source_tag.c.project_id == project_id)
-            .where(source_tag.c.asserted_by != "characterise")
             .group_by(source_tag.c.tag)
             .order_by(func.count().desc(), source_tag.c.tag.asc())
+        )
+        tag_counts = conn.execute(
+            tag_counts_query.where(source_tag.c.asserted_by != "characterise")
         ).fetchall()
         if not tag_counts:
-            tag_counts = conn.execute(
-                select(source_tag.c.tag, func.count())
-                .where(source_tag.c.project_id == project_id)
-                .group_by(source_tag.c.tag)
-                .order_by(func.count().desc(), source_tag.c.tag.asc())
-            ).fetchall()
+            tag_counts = conn.execute(tag_counts_query).fetchall()
         boost_tag = tag_counts[0].tag if tag_counts else None
         log.info("select.demo_boost_tag", tag=boost_tag)
 

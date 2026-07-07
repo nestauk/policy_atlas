@@ -15,6 +15,7 @@ added by the step-7 review stack (fresh conversation).
 | `make build` | pass | sdist + wheel |
 | `make okf-validate` | pass | 23 concepts, 0 violations (one spec flow-back this slice) |
 | migration roundtrip | pass | `alembic upgrade head` → 20 tables (inspector) → `downgrade -1` → 19 → `upgrade head` → 20, clean (revision `c8d4f2e7a3b1`); downgrade drops `selection_result` only |
+| `make verify` (step-7 re-run) | pass | **321 passed** after review-stack fixes (8 covering tests added); typecheck/lint/build/okf green |
 
 Composite-FK note (plan Task 1): both referenced composite uniques
 (`uq_evidence_scope_id_project`, `uq_runs_run_project`) pre-existed from the
@@ -237,18 +238,97 @@ exclusion list is empty for this diff).
 
 ## Review findings
 
-Added after the review stack (step 7) — what each review caught and how it was resolved:
+Step-7 stack (fresh conversation, 2026-07-07): contract-verifier (pinned Opus, read-only) ·
+`agent-skills:security-auditor` · Codex adversarial (read-only rescue brief) ·
+`/code-review medium` (8 lens-scoped finder angles + 1-vote verify). Lead adjudicated;
+fixes applied on-branch; `make verify` re-run green (**321 passed** — 313 + 8 covering
+tests added with the fixes).
 
-- **Contract verifier:**
-- **`/code-review`:**
-- **`/security-review`:**
-- **Adversarial review** (Tier 3):
-- **`/simplify`:**
-- **`/okf validate`** (specs changed): pass at build time (23 concepts, 0 violations).
+- **Contract verifier:** every rubric item HOLDS (7 and 8 pending by schedule); no
+  unapproved gated change; one MAJOR — unknown boost **column** failed closed
+  (`DirectiveError`) against decision 4's "unknown columns/tags … flagged, never
+  fatal" and the matching acceptance-evidence bullet, with no test either way.
+  **Adopted** (convergent with Codex finding 1 — high-confidence): unknown columns
+  now parse, match nothing, and surface via `unmatched_boosts` exactly like unknown
+  tags; structural malformation still fails closed. Covering test added
+  (`test_unknown_column_boost_is_flagged_non_fatal`).
+- **`/code-review medium`** (Claude half of the heterogeneous pair): 11 candidates
+  → 10 verified (1 refuted by the adjudicator: "breadth_floor mislabeling" flags
+  exactly decision 3's mandated reason precedence). Adopted: **live-path KeyError**
+  — `_empty_summary` omitted `call_budget` under `llm_rerank_v1`, crashing the
+  skeleton's rerank-fired check on an empty/all-non-evidence scope (CONFIRMED;
+  fixed — empty summaries now carry the full zeroed rerank provenance;
+  `test_empty_scope_rerank_provenance_carries_call_budget`); **future-year recency
+  reward** — implausibly-future `year` metadata read as maximally recent unflagged
+  (CONFIRMED; fixed — beyond a one-year ahead-of-print grace it reads as a missing
+  signal, flag-not-block; `test_future_year_reads_as_missing_signal`); three
+  confirmed simplifications (`_log_usage` now reuses `_usage_metadata`; skeleton's
+  demo tag query built once with a conditional filter; dead `run_id` parameter
+  dropped from `_selection_payload`); three confirmed test-helper duplications
+  hoisted to `tests/helpers.py` (`seed_select_doc` · `seed_characterisation` ·
+  `run_select`, the established helper precedent). Declined: `_share`/`_batches`
+  duplication (2–3-line private pure helpers; a shared util module costs more than
+  the duplication — revisit via `itertools.batched` if a third copy appears).
+- **Security lane** (`agent-skills:security-auditor`): 0 critical/high/medium; all
+  five focus lanes (prompt-injection posture, key hygiene, egress bounds, data
+  layer, untrusted directive) verified clean except two LOW directive-hardening
+  gaps, **both adopted**: directive strings now screened for control characters and
+  length (`DIRECTIVE_STRING_MAX`), and `budget`/list sizes capped
+  (`DIRECTIVE_BUDGET_MAX`, `DIRECTIVE_LIST_MAX`) — fail-closed at parse, static
+  messages; four covering cases in `test_malformed_directive_shapes_raise`.
+  Info items declined with reasons: harness `assert` (traced fallback is already
+  fail-closed via `SelectError`), f-string CHECK-constraint SQL (code constants),
+  locator-as-title fallback (matches the 009 grouping pattern); suite-wide
+  `pytest-socket` recorded as a deferred hardening note.
+- **Adversarial review** (Codex, read-only; Tier 3 heterogeneous partner):
+  6 findings — allocation arithmetic and scored-before-fallback ordering pressed
+  and **clean**. Adopted: finding 1 (unknown column, convergent — above); finding 6
+  (title-only rerank degradation was unflagged against decision 10's "flagged" —
+  fixed: `title_only_count` recorded in rerank provenance;
+  `test_rerank_title_only_docs_are_counted`); finding 2 **in-part** (wall-clock
+  recency: byte-identity holds per the contract's same-inputs claim, but the
+  reference year is now pinned once per run and recorded as
+  `recency_reference_year` in provenance, so every recency score is attributable).
+  Declined with reasons: finding 3 (identical-duplicate rerank rows are deduped,
+  not fallen back — an identical duplicate is unambiguous; discarding a valid
+  judgment would be strictly worse; conflicting duplicates do fall back, per the
+  recorded deviation); finding 4 (SDK transport retries sit beneath the logical
+  call budget — `max_retries=2` already recorded in Known unverified items; egress
+  stays bounded by a known constant multiplier); finding 5 (per-doc scores for
+  excluded docs — the contract's own schema makes `excluded` aggregate-per-stratum
+  by design; per-doc attribution is for selected docs).
+- **`/simplify`:** skipped with justification — the `/code-review` pass ran the
+  reuse/simplification/efficiency/altitude finder angles and their confirmed fixes
+  were applied above; a separate same-family cleanup pass would duplicate it
+  (efficiency, altitude and conventions angles each returned zero findings).
+- **`/okf validate`** (specs changed): pass at build time and in the post-fix
+  `make verify` re-run (23 concepts, 0 violations).
+
+Convergence note: the one finding found independently by both review families
+(unknown-column fail-closed) was also the stack's most substantive; the
+single-family uniques (live-path KeyError — Claude line-by-line; title-only flag —
+Codex; directive input caps — security lane) each justify their lane.
+
+Token economy (actuals, for the retro): reasoning-class ≈ 239K (contract-verifier
+149K + security 90K; Codex external) — within the ≤250K target. Fast-worker ≈ 725K
+review-side (8 lens-scoped finders 608K + 3 grouped verifiers 117K) — **over the
+≤500K target** despite per-angle pathspec scoping; the 6.4K-line diff dominates
+finder cost even scoped (fix-implementation delegation, 176K, was build work, not
+review). Retro seam: on diffs this size, drop to ~5 finder angles or scope
+correctness angles to `src` subsets.
 
 ## Rubric status
 
-To be completed by the step-7 review stack.
+Completed by the step-7 review stack (2026-07-07). Items 1–6, 9–15 (incl. 11a):
+**hold** — per-item evidence in the contract-verifier report summarized above;
+post-fix `make verify` green (321 passed). Item 7: deferred.md entries ride step 8
+in this PR (the 009 vectorisation entry verified unchanged and uncontradicted).
+Item 8: this review stack — three lanes + heterogeneous pair, sized per the 009
+retro note; findings and adjudications recorded above. Fake-done check on the
+review-phase fixes: no tests relaxed or deleted (8 added, 3 helpers hoisted
+verbatim); no swallowed errors (all new validation fails closed with static
+messages); no stub returns (the empty-summary fix writes honest zeros, not fake
+budget figures).
 
 ## Intent & assumptions
 

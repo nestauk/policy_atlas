@@ -164,15 +164,7 @@ def validate_ranked(batch_ids: set[str], ranked: list[RankedDoc]) -> dict[str, R
 
 
 def _log_usage(event: str, usage: CompletionUsage | None) -> None:
-    if usage is None:
-        log.info(event, prompt_tokens=None, completion_tokens=None, total_tokens=None)
-        return
-    log.info(
-        event,
-        prompt_tokens=usage.prompt_tokens,
-        completion_tokens=usage.completion_tokens,
-        total_tokens=usage.total_tokens,
-    )
+    log.info(event, **_usage_metadata(usage))
 
 
 def _usage_metadata(usage: CompletionUsage | None) -> dict[str, int | None]:

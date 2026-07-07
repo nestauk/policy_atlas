@@ -11,8 +11,7 @@ from threading import Lock
 from typing import Any, cast
 
 import pytest
-import sqlalchemy as sa
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.engine import Connection
 
 from policy_atlas import events, ranking
@@ -29,76 +28,21 @@ from policy_atlas.ranking import (
 )
 from policy_atlas.schema import (
     TOPIC_THEME,
-    characterisation_result,
     event_log,
     project_source_snapshot,
     selection_result,
-    source_appraisal_result,
-    source_classification_result,
     source_snapshot,
     source_tag,
 )
-from policy_atlas.select import SelectContext, select_scope
-from tests.helpers import now, seed_project_and_run, seed_run, seed_scope, seed_screening_result
-from tests.helpers import seed_source as helper_seed_source
-
-EVIDENCE_TYPE = "RCTs and Quasi-Experimental Studies"
-
-
-def _seed_select_doc(
-    conn: Connection,
-    project_id: uuid.UUID,
-    run_id: uuid.UUID,
-    scope_id: uuid.UUID,
-    *,
-    title: str,
-    abstract: str | None = None,
-    quality: int | None = 3,
-    year: int = 2026,
-    origin: str = "uploaded",
-    text_basis: str = "full_text",
-) -> uuid.UUID:
-    snap_id, pss_id = helper_seed_source(
-        conn,
-        project_id,
-        meta={"title": title, "abstract": abstract or f"Abstract for {title}.", "year": year},
-    )
-    conn.execute(
-        sa.update(project_source_snapshot)
-        .where(project_source_snapshot.c.project_source_snapshot_id == pss_id)
-        .values(origin=origin)
-    )
-    conn.execute(
-        sa.update(source_snapshot)
-        .where(source_snapshot.c.source_snapshot_id == snap_id)
-        .values(text_basis=text_basis)
-    )
-    seed_screening_result(conn, project_id, run_id, scope_id, pss_id, status="relevant")
-    conn.execute(
-        source_classification_result.insert().values(
-            source_classification_result_id=uuid.uuid4(),
-            evidence_scope_id=scope_id,
-            project_source_snapshot_id=pss_id,
-            project_id=project_id,
-            classified_by_run_id=run_id,
-            primary_evidence_type=EVIDENCE_TYPE,
-            classified_at=now(),
-        )
-    )
-    if quality is not None:
-        conn.execute(
-            source_appraisal_result.insert().values(
-                source_appraisal_result_id=uuid.uuid4(),
-                evidence_scope_id=scope_id,
-                project_source_snapshot_id=pss_id,
-                project_id=project_id,
-                appraised_by_run_id=run_id,
-                quality_score=quality,
-                rubric_version="test-rubric",
-                appraised_at=now(),
-            )
-        )
-    return pss_id
+from tests.helpers import (
+    now,
+    run_select,
+    seed_characterisation,
+    seed_project_and_run,
+    seed_run,
+    seed_scope,
+    seed_select_doc,
+)
 
 
 def _seed_docs(
@@ -112,7 +56,7 @@ def _seed_docs(
     quality: int | None = 3,
 ) -> list[uuid.UUID]:
     return [
-        _seed_select_doc(
+        seed_select_doc(
             conn,
             project_id,
             run_id,
@@ -122,40 +66,6 @@ def _seed_docs(
         )
         for index in range(count)
     ]
-
-
-def _seed_characterisation(
-    conn: Connection,
-    project_id: uuid.UUID,
-    scope_id: uuid.UUID,
-    run_id: uuid.UUID,
-    *,
-    themes: dict[str, list[uuid.UUID]],
-    unclustered: list[uuid.UUID] | None = None,
-) -> None:
-    conn.execute(
-        characterisation_result.insert().values(
-            characterisation_id=uuid.uuid4(),
-            project_id=project_id,
-            evidence_scope_id=scope_id,
-            run_id=run_id,
-            grouping_provenance={"backend_mode": "stub"},
-            coverage={"base": "screened"},
-            themes={
-                "themes": [
-                    {
-                        "name": name,
-                        "description": f"{name} documents",
-                        "member_ids": [str(pss_id) for pss_id in ids],
-                        "size": len(ids),
-                    }
-                    for name, ids in themes.items()
-                ],
-                "unclustered_ids": [str(pss_id) for pss_id in (unclustered or [])],
-            },
-            created_at=now(),
-        )
-    )
 
 
 def _tag_source(
@@ -180,34 +90,18 @@ def _tag_source(
     )
 
 
-def _run_select(
-    conn: Connection,
-    project_id: uuid.UUID,
-    scope_id: uuid.UUID,
-    characterisation_run_id: uuid.UUID,
-    *,
-    context: dict[str, Any] | None = None,
-    backend: Any = None,
-) -> tuple[dict[str, Any], Any, uuid.UUID]:
-    run_id = seed_run(conn, project_id)
-    summary = select_scope(
-        conn,
-        project_id=project_id,
-        run_id=run_id,
-        context=SelectContext(
-            scope_id=scope_id,
-            intent="Select the best evidence.",
-            context=context or {},
-            characterisation_run_id=characterisation_run_id,
-        ),
-        ranking_backend=backend,
+def _strip_abstract(conn: Connection, pss_id: uuid.UUID) -> None:
+    """Remove the metadata "abstract" key so the doc reranks as title-only."""
+    snap_id_subquery = (
+        select(project_source_snapshot.c.source_snapshot_id)
+        .where(project_source_snapshot.c.project_source_snapshot_id == pss_id)
+        .scalar_subquery()
     )
-    row = conn.execute(
-        select(selection_result)
-        .where(selection_result.c.project_id == project_id)
-        .where(selection_result.c.run_id == run_id)
-    ).one()
-    return summary, row, run_id
+    conn.execute(
+        update(source_snapshot)
+        .where(source_snapshot.c.source_snapshot_id == snap_id_subquery)
+        .values(metadata=source_snapshot.c.metadata.op("-")("abstract"))
+    )
 
 
 def _selected_records_by_id(row: Any) -> dict[str, dict[str, Any]]:
@@ -329,7 +223,7 @@ def test_contested_strata_only_and_call_accounting(conn: Connection) -> None:
     contested = _seed_docs(conn, pid, characterise_run_id, scope_id, "A", 27)
     whole = _seed_docs(conn, pid, characterise_run_id, scope_id, "B", 1)
     must_include = contested[0]
-    _seed_characterisation(
+    seed_characterisation(
         conn,
         pid,
         scope_id,
@@ -338,7 +232,7 @@ def test_contested_strata_only_and_call_accounting(conn: Connection) -> None:
     )
     backend = _CountingRankingBackend()
 
-    _summary, row, _ = _run_select(
+    _summary, row, _ = run_select(
         conn,
         pid,
         scope_id,
@@ -377,7 +271,7 @@ def test_contested_strata_only_and_call_accounting(conn: Connection) -> None:
     pid2, characterise_run_id2 = seed_project_and_run(conn)
     scope_id2 = seed_scope(conn, pid2)
     all_selected = _seed_docs(conn, pid2, characterise_run_id2, scope_id2, "C", 3)
-    _seed_characterisation(
+    seed_characterisation(
         conn,
         pid2,
         scope_id2,
@@ -385,7 +279,7 @@ def test_contested_strata_only_and_call_accounting(conn: Connection) -> None:
         themes={"C": all_selected},
     )
     no_call_backend = _CountingRankingBackend()
-    _run_select(
+    run_select(
         conn,
         pid2,
         scope_id2,
@@ -399,6 +293,48 @@ def test_contested_strata_only_and_call_accounting(conn: Connection) -> None:
     assert no_call_backend.calls == []
 
 
+def test_rerank_title_only_docs_are_counted(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    contested = _seed_docs(conn, pid, characterise_run_id, scope_id, "A", 5)
+    _strip_abstract(conn, contested[0])
+    _strip_abstract(conn, contested[1])
+    seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": contested})
+
+    _summary, row, _ = run_select(
+        conn,
+        pid,
+        scope_id,
+        characterise_run_id,
+        context={"selection": {"budget": 3}},
+        backend=StubRankingBackend(),
+    )
+
+    # Budget 3 over 5 docs contests the one stratum. Two of the five contested
+    # docs had their abstract stripped, so the reranker judges them title-only;
+    # the degradation is counted, never silent.
+    assert row._mapping["selection_provenance"]["title_only_count"] == 2
+
+    pid2, characterise_run_id2 = seed_project_and_run(conn)
+    scope_id2 = seed_scope(conn, pid2)
+    all_abstract = _seed_docs(conn, pid2, characterise_run_id2, scope_id2, "B", 5)
+    seed_characterisation(
+        conn, pid2, scope_id2, characterise_run_id2, themes={"B": all_abstract}
+    )
+
+    _summary2, row2, _ = run_select(
+        conn,
+        pid2,
+        scope_id2,
+        characterise_run_id2,
+        context={"selection": {"budget": 3}},
+        backend=StubRankingBackend(),
+    )
+
+    # Negative case: an equivalently contested all-abstract stratum counts zero.
+    assert row2._mapping["selection_provenance"]["title_only_count"] == 0
+
+
 def test_rerank_call_budget_caps_retries_and_falls_back_to_deterministic(
     conn: Connection,
 ) -> None:
@@ -406,7 +342,7 @@ def test_rerank_call_budget_caps_retries_and_falls_back_to_deterministic(
     scope_id = seed_scope(conn, pid)
     contested = _seed_docs(conn, pid, characterise_run_id, scope_id, "A", 26)
     whole = _seed_docs(conn, pid, characterise_run_id, scope_id, "B", 1)
-    _seed_characterisation(
+    seed_characterisation(
         conn,
         pid,
         scope_id,
@@ -415,7 +351,7 @@ def test_rerank_call_budget_caps_retries_and_falls_back_to_deterministic(
     )
     backend = _RaisingRankingBackend()
 
-    _summary, rerank_row, _ = _run_select(
+    _summary, rerank_row, _ = run_select(
         conn,
         pid,
         scope_id,
@@ -423,7 +359,7 @@ def test_rerank_call_budget_caps_retries_and_falls_back_to_deterministic(
         context={"selection": {"budget": 3}},
         backend=backend,
     )
-    _det_summary, deterministic_row, _ = _run_select(
+    _det_summary, deterministic_row, _ = run_select(
         conn,
         pid,
         scope_id,
@@ -462,25 +398,25 @@ def test_scored_docs_sort_before_fallback_docs_with_composite_tie_breaks(
 ) -> None:
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
-    scored_tie_high = _seed_select_doc(
+    scored_tie_high = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="score-9-high", quality=5
     )
-    scored_tie_low = _seed_select_doc(
+    scored_tie_low = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="score-9-low", quality=3
     )
-    scored_eight = _seed_select_doc(
+    scored_eight = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="score-8", quality=1
     )
-    fallback_high = _seed_select_doc(
+    fallback_high = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="fallback-high", quality=5
     )
-    fallback_mid = _seed_select_doc(
+    fallback_mid = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="fallback-mid", quality=4
     )
-    fallback_low = _seed_select_doc(
+    fallback_low = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="fallback-low", quality=1
     )
-    _seed_characterisation(
+    seed_characterisation(
         conn,
         pid,
         scope_id,
@@ -504,7 +440,7 @@ def test_scored_docs_sort_before_fallback_docs_with_composite_tie_breaks(
         }
     )
 
-    _summary, row, _ = _run_select(
+    _summary, row, _ = run_select(
         conn,
         pid,
         scope_id,
@@ -544,28 +480,28 @@ def test_misbehaving_ranker_falls_back_per_doc_without_dropping_candidates(
 ) -> None:
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
-    valid_high = _seed_select_doc(
+    valid_high = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="valid-high", quality=1
     )
-    valid_zero = _seed_select_doc(
+    valid_zero = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="valid-zero", quality=1
     )
-    out_of_range = _seed_select_doc(
+    out_of_range = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="bad-range", quality=5
     )
-    bool_score = _seed_select_doc(
+    bool_score = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="bad-bool", quality=4
     )
-    conflict = _seed_select_doc(
+    conflict = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="bad-conflict", quality=3
     )
-    missing = _seed_select_doc(
+    missing = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="missing", quality=2
     )
-    extra_omitted = _seed_select_doc(
+    extra_omitted = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="extra-omitted", quality=1
     )
-    _seed_characterisation(
+    seed_characterisation(
         conn,
         pid,
         scope_id,
@@ -590,7 +526,7 @@ def test_misbehaving_ranker_falls_back_per_doc_without_dropping_candidates(
         conflict=str(conflict),
     )
 
-    rerank_summary, rerank_row, _ = _run_select(
+    rerank_summary, rerank_row, _ = run_select(
         conn,
         pid,
         scope_id,
@@ -598,7 +534,7 @@ def test_misbehaving_ranker_falls_back_per_doc_without_dropping_candidates(
         context={"selection": {"budget": 6}},
         backend=backend,
     )
-    deterministic_summary, _deterministic_row, _ = _run_select(
+    deterministic_summary, _deterministic_row, _ = run_select(
         conn,
         pid,
         scope_id,
@@ -628,22 +564,22 @@ def test_rerank_reasons_are_inert_data_and_invalid_reasons_fall_back(
 ) -> None:
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
-    injection_doc = _seed_select_doc(
+    injection_doc = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="injection", quality=1
     )
-    control_doc = _seed_select_doc(
+    control_doc = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="control", quality=5
     )
-    long_doc = _seed_select_doc(
+    long_doc = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="long", quality=4
     )
-    low_scored = _seed_select_doc(
+    low_scored = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="low-scored", quality=1
     )
-    omitted_low = _seed_select_doc(
+    omitted_low = seed_select_doc(
         conn, pid, characterise_run_id, scope_id, title="omitted-low", quality=1
     )
-    _seed_characterisation(
+    seed_characterisation(
         conn,
         pid,
         scope_id,
@@ -666,7 +602,7 @@ def test_rerank_reasons_are_inert_data_and_invalid_reasons_fall_back(
         },
     )
 
-    _summary, row, _ = _run_select(
+    _summary, row, _ = run_select(
         conn,
         pid,
         scope_id,
@@ -716,7 +652,7 @@ def test_socket_deny_select_harness_round_trip(
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid, context={"selection": {"budget": 2}})
     docs = _seed_docs(conn, pid, characterise_run_id, scope_id, "S", 3)
-    _seed_characterisation(
+    seed_characterisation(
         conn,
         pid,
         scope_id,
@@ -768,7 +704,7 @@ def test_openai_key_hygiene_for_select_rerank(
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid, context={"selection": {"budget": 2}})
     docs = _seed_docs(conn, pid, characterise_run_id, scope_id, "K", 3)
-    _seed_characterisation(
+    seed_characterisation(
         conn,
         pid,
         scope_id,
@@ -820,7 +756,7 @@ def test_priority_strata_flags_are_soft_and_match_names_or_tags(
     health = _seed_docs(conn, pid, characterise_run_id, scope_id, "Health", 3)
     housing = _seed_docs(conn, pid, characterise_run_id, scope_id, "Housing", 1)
     _tag_source(conn, pid, characterise_run_id, housing[0], tag="Climate")
-    _seed_characterisation(
+    seed_characterisation(
         conn,
         pid,
         scope_id,
@@ -832,14 +768,14 @@ def test_priority_strata_flags_are_soft_and_match_names_or_tags(
         },
     )
 
-    base_summary, _base_row, _ = _run_select(
+    base_summary, _base_row, _ = run_select(
         conn,
         pid,
         scope_id,
         characterise_run_id,
         context={"selection": {"budget": 2}},
     )
-    priority_summary, priority_row, _ = _run_select(
+    priority_summary, priority_row, _ = run_select(
         conn,
         pid,
         scope_id,
