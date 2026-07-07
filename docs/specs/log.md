@@ -1,5 +1,17 @@
 # Spec update log
 
+## 2026-07-08
+* **Update**: [EB components §9](capabilities/evidence-base/components.md) — the unified
+  interpretive-shape claim type renamed **cluster claims → theme claims** (task 013 gate,
+  user call: policy-maker-facing vocabulary, and the more spec-aligned word — the
+  provenance ladder's soft grade is "thematic clustering", group's component is
+  "facet-level theming"). Semantics unchanged (validated against the referenced
+  clustering: characterise themes / facet groups; softest grade, base-labelled);
+  `cluster` remains the internal tool-registry verb. Recorded in
+  [ADR 0010](../adr/0010-intent-led-synthesis-sections.md) (2026-07-08 amendment),
+  alongside the user's confirmation of the **consensus boundary** as the intended v3.0
+  line (descriptive spread, never a weighted verdict, until the ⏸ consensus seam).
+
 ## 2026-07-07
 * **Update**: [EB capability](capabilities/evidence-base/capability.md), [EB components
   §9](capabilities/evidence-base/components.md) — the **intent-led synthesis refinement**

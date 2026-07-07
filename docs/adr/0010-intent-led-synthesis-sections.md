@@ -283,6 +283,17 @@ Five user probes across two waves; adopted or clarified on the record:
    soft-flagged, never dropped (fabricated chunk quotes excluded and
    counted, as before).
 
+## Amendment (2026-07-08 — Shabeer Rauf)
+
+**The unified claim type is named `theme claim`** (was "cluster claim",
+second amendment item 2) — the policy-maker-facing word and the more
+spec-aligned one (the provenance ladder's soft grade is "thematic
+clustering"; group's component is "facet-level theming"). Semantics
+unchanged; `cluster` remains the internal tool-registry verb. Same round,
+the **consensus boundary was user-confirmed as the intended v3.0 line**
+(descriptive spread, never a weighted verdict, until the ⏸ consensus seam
+lands) — closing the question the task-013 rigidity sweep had raised.
+
 ## Rejected
 
 - **Group-per-block as the artefact structure** (contract rev 2) — an

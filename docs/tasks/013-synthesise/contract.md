@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 7.3) — awaiting contract 🛑.
+> **Status:** drafted (rev 7.4) — awaiting contract 🛑.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
 > ADRs: [0009](../../adr/0009-capability-composes-synthesise-terminus.md)
@@ -112,6 +112,19 @@ specs in [docs/specs/](../../specs/index.md).
 >   file (menu+default proposal pattern; renumber-by-first-appearance as
 >   a composition-seam convention; click-to-highlight affordance
 >   preserved by verified-span citation rows).
+> - **rev 7.4** (2026-07-08, user vocabulary + consensus call):
+>   **cluster claims renamed → theme claims** — the policy-maker-facing
+>   word, and the more spec-aligned one (the provenance ladder's soft
+>   grade is "thematic clustering"; 012's component is "facet-level
+>   theming"). Semantics unchanged: one unified type validated against
+>   the referenced clustering — characterise themes with a
+>   characterisation, facet groups with a grouping; softest interpretive
+>   grade, base-labelled. `cluster` remains the internal spec tool verb
+>   (tool-wiring table untouched). **Consensus boundary confirmed as a
+>   seam** (the rev-7.1 open question, answered): the artefact describes
+>   the spread, never "the evidence supports X", until the ⏸
+>   weighted-consensus seam lands — user-affirmed as the intended v3.0
+>   line.
 
 ## Goal
 
@@ -168,7 +181,7 @@ structural failure. Then:
    - **pattern** (coverage counts with a characterisation; direction
      spreads with extraction/grouping) — counts must equal the computed
      values;
-   - **cluster** (themes with a characterisation; facet groups with a
+   - **theme** (themes with a characterisation; facet groups with a
      grouping) — validated against the referenced clustering row;
      softest interpretive grade, base-labelled;
    - **gap** (always) — graded, coverage-base-carrying (sparsity-grade
@@ -321,7 +334,7 @@ A PR on `task/013-synthesise` → `dev` that:
 slice ships migration 13). The 001 substrate is real: `block` /
 `addressable_unit` / `annotation((block_id, unit_id) composite-FK,
 annotation_type, payload JSONB)` / `citation(chunk_id FK NOT NULL, quote,
-verification_result)` — gap/pattern/cluster/reasoning annotations are new
+verification_result)` — gap/pattern/theme/reasoning annotations are new
 `annotation_type` values riding the payload JSONB; chunk-cited claims
 write ordinary `citation` rows. Upstream rows carry their own upstream
 references (transitive resolution is real): `grouping_result` stores
@@ -379,7 +392,7 @@ registry entry + Config fields → context dataclass →
    one `block` row (claims' prose joined deterministically;
    `content_hash` per 001), one `addressable_unit` per claim, and per
    claim-unit the annotation its type demands: **citation annotation**
-   (finding/chunk), **pattern annotation**, **cluster annotation**,
+   (finding/chunk), **pattern annotation**, **theme annotation**,
    **gap annotation** (grade + coverage base + evidence refs),
    **reasoning annotation** (visible Tier-4 label + strict-routing
    verdict). `citation` rows link cited claim-units to frozen chunks.
@@ -450,7 +463,7 @@ registry entry + Config fields → context dataclass →
    - **pattern** (characterisation for coverage counts;
      extraction/grouping for spreads) — stated counts must equal the
      computed value.
-   - **cluster** (characterisation for themes; grouping for facet
+   - **theme** (characterisation for themes; grouping for facet
      groups) — references the clustering by id, validated against the
      referenced row; softest interpretive grade, base-labelled.
    - **gap** (always) — grade + coverage base required
@@ -480,7 +493,7 @@ registry entry + Config fields → context dataclass →
    per block, single-lane, reading the cited passages
    (`synthesis_envelope_v1` — the cited chunks' full frozen text).
    Judges cited claims (full lane) and reasoning claims (strict-routing
-   only); pattern/cluster/gap claims are deterministically validated,
+   only); pattern/theme/gap claims are deterministically validated,
    not judged. **Maker ≠ checker at the surface level**: the judge has
    its own backend seam and prompt, no tools, no loop — the section loop
    never grades its own homework; the seam permits a heterogeneous judge
@@ -570,7 +583,7 @@ synthesis_result  synthesis_result_id PK · project_id FK→project
                   · blocks JSONB NOT NULL (per section: title/focus,
                       block_id, assigned group ids where present,
                       tool-call count, claim counts by type
-                      [finding|chunk|pattern|cluster|gap|reasoning], tier
+                      [finding|chunk|pattern|theme|gap|reasoning], tier
                       distribution, unsupported/weakly-grounded counts,
                       citation verified/unverified counts, citations by
                       origin (selected | unselected_screened),
@@ -714,7 +727,7 @@ embedding surface.
   supplied ids.
 - **`synthesise_section_v1`** — the section-loop surface (system prompt
   + `search_chunks`/`query_findings`/`lookup` tool schemas, versioned as
-  one unit); typed claims (finding | chunk | pattern | cluster | gap |
+  one unit); typed claims (finding | chunk | pattern | theme | gap |
   reasoning, substrate-gated); negative rules: descriptive only; absence
   only as graded gap claims with their base; spreads/counts as given or
   tool-read, never invented; mixed/unclear reported, never aggregated
@@ -825,8 +838,8 @@ payloads. The judge rubric is lead-only per AGENTS.md.
   naming the cap, no call, no degraded sample**), **substrate gating**
   (chunk claims/`search_chunks` absent without screened-in ingested
   docs; finding claims/`query_findings` absent without an extraction;
-  coverage-pattern, theme-cluster and sparsity-gap claims absent without
-  a characterisation; group-cluster claims absent without a grouping;
+  coverage-pattern, characterise-theme and sparsity-gap claims absent without
+  a characterisation; group-theme claims absent without a grouping;
   unsupported claim types reject),
   **section proposal validation** (caps, bounded non-generic titles,
   real assignments, `groups_unsectioned` counted, malformed directive
@@ -856,7 +869,7 @@ payloads. The judge rubric is lead-only per AGENTS.md.
   non-`inadequate` coverage record → fail-closed degradation, counted;
   sparsity-grade gaps rejected without characterisation coverage;
   acknowledged sparsity validated numerically; inferred labelled; base
-  always present), **cluster-claim discipline** (referenced clustering
+  always present), **theme-claim discipline** (referenced clustering
   ids validated; softest-grade label + base), **reasoning-claim
   discipline** (visibly labelled; strict-routing sentinel flagged;
   per-block count bounded), **claim/unit integrity** (every cited claim
@@ -866,7 +879,7 @@ payloads. The judge rubric is lead-only per AGENTS.md.
   verdict + judge provenance + envelope version persisted; judge input
   includes cited chunk text; the judge surface is distinct from the
   writer surface — maker ≠ checker structural; cited and reasoning
-  claims judged; pattern/cluster/gap not judged), **repair semantics**
+  claims judged; pattern/theme/gap not judged), **repair semantics**
   (bounded exactly as decision 9; budgets test-asserted; exhaustion →
   flags, claims retained except fabricated chunk quotes; **a passing
   claim survives a sibling's repair verbatim** — the V2
@@ -937,7 +950,7 @@ Review focus:
 - **Provenance/honesty (the headline lane)**: co-emitted citations only
   (chunk claims cite only tool-returned ids); presence checks for both
   cited claim kinds; verified spans become citation rows; single-lane
-  verdicts persisted; pattern/cluster/gap values deterministically
+  verdicts persisted; pattern/theme/gap values deterministically
   validated; the gap fail-closed corpus-promotion rule; reasoning claims
   visibly labelled and strict-routed; unsupported/weak/degraded claims
   flagged never dropped; fabricated chunk quotes excluded and counted;

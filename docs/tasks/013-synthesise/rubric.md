@@ -3,7 +3,7 @@
 Core completion criteria. The task is **done only if every box holds** —
 otherwise it is in progress, not done.
 
-1. [ ] Implementation satisfies [contract.md](contract.md) (rev 7.3) — every
+1. [ ] Implementation satisfies [contract.md](contract.md) (rev 7.4) — every
        numbered design decision as approved (or as amended at the gates),
        implementing the spec as refined by ADRs 0009 + 0010 (four
        amendments).
@@ -48,8 +48,8 @@ substrate-conditional flexibility, test- or evidence-enforced):
         structural failure, no artefact, no row); chunk claims and
         `search_chunks` gate on screened-in ingested docs; finding claims
         and `query_findings` on an extraction; coverage-pattern,
-        theme-cluster and sparsity-gap claims on a characterisation;
-        group-cluster claims on a grouping; unsupported claim types
+        characterise-theme and sparsity-gap claims on a characterisation;
+        group-theme claims on a grouping; unsupported claim types
         reject; the substrate profile is recorded in provenance.
 10. [ ] **Retrieval scope + prior are honest**: scope = the screened-in
         corpus always (screened-out or foreign content never returned —
@@ -84,7 +84,7 @@ substrate-conditional flexibility, test- or evidence-enforced):
         ids** with quotes presence-checked against the whole document
         basis, verified spans becoming the citation rows (fabricated →
         reject, one repair, then excluded **and counted**); pattern
-        counts equal computed values; **cluster claims** validated
+        counts equal computed values; **theme claims** validated
         against the referenced clustering, softest-grade-labelled with
         base; **gap claims** carry grade + coverage base, corpus-level
         phrasing fail-closed on a non-`inadequate`
@@ -107,7 +107,7 @@ substrate-conditional flexibility, test- or evidence-enforced):
         version; judge input includes the cited chunks' full frozen text
         (`synthesis_envelope_v1`); the judge surface is distinct from the
         writer surface (maker ≠ checker — structural);
-        pattern/cluster/gap claims deterministically validated, not
+        pattern/theme/gap claims deterministically validated, not
         judged; **judge rationales drive one loop-free reword-down
         regeneration + one re-judge (`REPAIR_ROUND_CAP` = 1,
         test-asserted — no new tool calls on repair; a passing claim

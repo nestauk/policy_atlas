@@ -243,7 +243,7 @@ on what the run produced:
   project-guarded), under a hard per-section turn cap, then emits typed claims.
   **Availability by substrate**: **pattern claims** (coverage counts with a
   characterisation; direction spreads with extraction/grouping — deterministically
-  validated; v2's `effect_consensus` counts as this steer) · **cluster claims**
+  validated; v2's `effect_consensus` counts as this steer) · **theme claims**
   (characterise themes with a characterisation; facet groups with grouping — validated
   against the referenced clustering row; softest interpretive grade, base-labelled) ·
   **gap claims** (always; graded per [provenance.md](provenance.md) with deterministic
@@ -257,7 +257,7 @@ on what the run produced:
   origin; not extraction — so a question outside the intervention–outcome schema is
   served without extract) · **finding claims** (with an **extraction** — cite finding ids resolved to
   extract-verified anchors; the model never authors these quotes). A characterisation-only
-  run is the landscape degenerate case (pattern/cluster/gap/reasoning sections).
+  run is the landscape degenerate case (pattern/theme/gap/reasoning sections).
   **Groups, where present, are input, not structure** (uncovered groups counted, never
   silently dropped). Every cited claim goes through the settled `produce-grounded-block`
   mechanism (deterministic quote-presence + LLM judge; Unsupported/mis-cited a real state)

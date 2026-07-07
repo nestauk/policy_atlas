@@ -59,7 +59,7 @@ chunk claims (screened-in ingested docs: verbatim quotes from tool-returned
 frozen text only — non-intervention-shaped questions need no extract; verified
 spans become the citation rows; per-citation origin recorded [selected |
 unselected_screened]; fabricated quotes rejected → excluded and counted) ·
-pattern claims (counts must equal computed values) · cluster claims (themes with
+pattern claims (counts must equal computed values) · theme claims (themes with
 characterisation, facet groups with grouping; softest interpretive grade) · gap
 claims (always; graded, coverage-base-carrying; corpus-level absence
 fail-closed on a non-`inadequate` `search_coverage_record`, else degraded and
