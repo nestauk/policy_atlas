@@ -196,6 +196,13 @@ gated. See Known gaps.
 ## Verification layer
 
 - `make verify` (okf-validate / test / typecheck / lint / build) — the green bar.
+  **Tiered commit gate** (011 retro, 2026-07-07): intermediate build sub-phase commits
+  gate on `make verify-fast` (test-fast + typecheck + lint, ~30s); full `make verify`
+  (~5–6 min, dominated by the PDF-ingest suite) stays mandatory at the build-open
+  baseline, any schema/ingest-adjacent phase (the table-count/metadata assertions live
+  *inside* the excluded `test_ingest_full_text.py`), and the step-6 exit. Never-commit-
+  on-red is unchanged — the tier picks the suite, not the discipline. Rule lives in
+  task-cycle-build § Step 5.
 - `/goal` — goal-conditioned runs, only when the stop condition is objective (`make verify`
   green, a named test passing — CLAUDE.md's "only when completion is measurable"). Its independent
   checker model grades completion, so the maker doesn't grade its own homework. **Scope: one goal
