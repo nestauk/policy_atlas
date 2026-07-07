@@ -37,7 +37,8 @@ explicit fail-closed references — **all optional** (`characterisation_run_id` 
 the deepest of `selection_run_id` / `extraction_run_id` / `grouping_run_id`,
 upstream resolved transitively and consistency-checked; **≥ 1 groundable
 substrate required**, else structural failure) — and adapts to whatever registry
-subset the plan selected, including a rapid acquire → screen → ingest →
+subset the plan selected, including a rapid acquire → screen → classify →
+appraise → ingest →
 synthesise run. Flow: `synthesise_sections_v1` proposes a validated, capped,
 **intent-led section set** (fail-closed `context["synthesis"]` directive
 override; groups, where present, are input not structure — uncovered groups
@@ -56,7 +57,7 @@ coverage records, clusterings, **and the tag layer**; closed query vocabulary),
 under a hard `SECTION_TURN_CAP` (exhaustion forces emission, flagged). Typed
 claims, **availability gated by substrate**: finding claims (extraction: cite
 finding ids → extract-verified anchors; the model never authors these quotes) ·
-chunk claims (screened-in ingested docs: verbatim quotes from tool-returned
+chunk claims (appraised screened-in docs: verbatim quotes from tool-returned
 frozen text only — non-intervention-shaped questions need no extract; verified
 spans become the citation rows; per-citation origin recorded [selected |
 unselected_screened]; fabricated quotes rejected → excluded and counted) ·

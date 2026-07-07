@@ -224,7 +224,9 @@ on what the run produced:
   gates *extraction cost*, not reading; every chunk citation records its origin
   (selected | unselected_screened) so widening is visible. Scope guarded by a fail-closed
   in-memory retrieval ceiling (beyond it, the index-backed `retrieve` slice is required —
-  loudly, never a degraded pass). A rapid run (acquire → screen → ingest → synthesise)
+  loudly, never a degraded pass). A rapid run (acquire → screen → classify → appraise →
+  ingest → synthesise — appraise precedes chunk-cited claims: produce-grounded-block cites
+  only appraised evidence, and the v3.0 appraise pass is deterministic)
   is fully served; a run without characterise yields an artefact with no landscape — a
   grounded answer, not an evidence report; the plan's legitimate choice. The section set is shaped from the
   user's **intent** (a bounded schema-constrained section proposal over intent + the

@@ -53,7 +53,8 @@ project-killer → recommended as the next slice after 013).
    (zero → structural failure, no artefact). Claim types, tools and
    sectioning inputs are gated by what the referenced runs actually
    produced; a characterise-only run is the landscape degenerate case, a
-   screen-only rapid run a grounded answer. The orchestrator's registry
+   rapid run (no characterise, no deep chain) a grounded answer over
+   appraised screened evidence. The orchestrator's registry
    freedom (ADR 0009) is preserved by construction — e.g. a question
    outside the intervention–outcome schema is served by
    characterise → select → synthesise with **no extract**.
@@ -105,7 +106,9 @@ project-killer → recommended as the next slice after 013).
    emission with whatever was gathered, flagged `turn_cap_hit` — never
    an unbounded loop), per-call and gathered-context budgets, closed
    tool set, no egress verb. Budgets are pre-run **maxima**: generation
-   calls ≤ 2 + `SECTION_CAP` × (`SECTION_TURN_CAP` + 2).
+   calls ≤ 2 + `SECTION_CAP` × (`SECTION_TURN_CAP` + 3) — loop turns
+   incl. the claims emission, the initial judge call, and the bounded
+   repair pair.
 4. **Six typed claims, substrate-gated, each with its own deterministic
    validation** — the spec's full honest-assertion vocabulary:
    **finding** (cite finding ids → extract-verified anchors; the model

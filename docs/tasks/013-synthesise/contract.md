@@ -3,8 +3,10 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **approved** (rev 7.5) — contract-stage adversarial review
-> running; planning next.
+> **Status:** **approved rev 7.5 → adversarial review adjudicated → rev 8**
+> — Codex contract-stage review returned 9 findings (2 blockers · 7
+> majors), 9/9 adopted (two with lead-adapted remedies, flagged ⚑ below
+> for the plan 🛑); planning next.
 > Contract approved (before planning): **2026-07-08 · Shabeer Rauf**
 > (rev 7.5, covering the four gated changes — one run-scoped
 > `synthesis_result` table · the `"synthesise"` registry entry with all
@@ -153,6 +155,46 @@ specs in [docs/specs/](../../specs/index.md).
 >   quality-prior ruling (steerable per-directive, never a baked
 >   default) and is the surface the future source/evidence policy
 >   compiles into.
+> - **rev 8** (2026-07-08, contract-stage adversarial review — Codex, 9
+>   findings: 2 blockers · 7 majors — **9/9 adopted**): **B1: budget
+>   formula corrected** — the initial judge call sat outside both
+>   buckets; per section ≤ `SECTION_TURN_CAP` + 3 generation calls
+>   (loop turns incl. emission · initial judge · repair regeneration ·
+>   re-judge), total ≤ 2 + `SECTION_CAP` × (`SECTION_TURN_CAP` + 3).
+>   **B2 ⚑: citation-span persistence pinned within the approved
+>   schema** — a boundary-spanning verified quote writes **one citation
+>   row per spanned chunk** (same annotation, same quote); exact span
+>   offsets ride the annotation payload (the 011 anchor precedent); the
+>   `citation_chunk` join-table normalisation stays the recorded
+>   deferred seam. **M3: transitive-resolution code-grounding
+>   corrected** — `selection_result` has NO `characterisation_run_id`
+>   column; selection → characterisation resolves from **validated
+>   `selection_provenance` JSONB** (missing/malformed/mismatch →
+>   structural failure); grouping → extraction and extraction →
+>   selection remain real columns. **M4 ⚑: chunk claims require
+>   appraised documents** — execution-orchestration's hard rule
+>   ("produce-grounded-block … citing only **appraised** evidence")
+>   binds; appraise v3.0 is deterministic-by-design (zero marginal
+>   cost), so the rapid profile becomes acquire → screen → classify →
+>   appraise → ingest → synthesise; substrate gating for chunk claims =
+>   screened-in ingested docs **with appraisals**. **M5: the
+>   `context["synthesis"]` directive grammar pinned normatively**
+>   (decision 5 — allowed keys, shapes, caps, clamps,
+>   malformed-vs-unknown semantics). **M6: finding-claim citation scope
+>   defined for all substrates** — cited ids ⊆ (section seed ∪ ids
+>   returned by `query_findings` in that section's loop): co-emission
+>   enforced structurally, extraction-without-grouping covered. **M7:
+>   judge persistence completed to the spec** — per-cited-chunk
+>   `segmentation_policy` + envelope version + judge model/prompt
+>   version + judge I/O reference on the annotation payload. **M8:
+>   corpus-level gap claims carry the required search-adequacy
+>   caveat** — payload gains the search-space boundary (backends/trust
+>   classes) + adequacy verdict from the referenced
+>   `search_coverage_record`; absence is always "absent from the
+>   searched space", never absolute. **M9: content-scan pattern
+>   assertions explicitly prohibited in v1** and recorded as a deferred
+>   seam (the spec's soft pattern rung has no deterministic validator
+>   and no judge lane fit yet; deferral recorded, never silent).
 
 ## Goal
 
@@ -220,7 +262,8 @@ structural failure. Then:
      never gated;
    - **reasoning** (always) — uncited, visibly Tier-4-labelled, bounded
      per block, judge strict-routed, never in strength roll-ups;
-   - **chunk** (with screened-in ingested documents) — verbatim quotes
+   - **chunk** (with appraised, screened-in ingested documents — rev 8
+     M4) — verbatim quotes
      from tool-returned frozen text only; screen's relevance discipline
      bounds them, the selection prior steers them, and each citation
      carries its origin — a question outside the intervention–outcome
@@ -228,7 +271,8 @@ structural failure. Then:
    - **finding** (with an extraction) — cite finding ids →
      extract-verified anchors; the model never authors these quotes.
    A characterisation-only run is the landscape degenerate case; a
-   screen-only run is a grounded answer with no landscape (the plan's
+   rapid run (screen + the cheap per-doc passes, no characterise) is a
+   grounded answer with no landscape (the plan's
    choice, honestly recorded in the substrate profile). **Groups, where
    present, are input, not structure** (`groups_unsectioned` counted).
    **Descriptive always**: no recommendations, no weighted verdicts (⏸
@@ -309,7 +353,7 @@ A PR on `task/013-synthesise` → `dev` that:
   **`grounding_judge_backend`** (stub defaults — no default egress; the
   existing `embedding_backend` serves the retrieval queries).
 - Extends `skeleton.py`: … group → **synthesise** (the terminus live);
-  the live check demonstrates **four substrate profiles** (screen-only
+  the live check demonstrates **four substrate profiles** (rapid
   rapid · characterisation-only · characterisation+selection with no
   extraction · the full chain).
 - **Factors the traced-call helper into `tracing.py`** (the 012-deferred
@@ -364,10 +408,15 @@ slice ships migration 13). The 001 substrate is real: `block` /
 annotation_type, payload JSONB)` / `citation(chunk_id FK NOT NULL, quote,
 verification_result)` — gap/pattern/theme/reasoning annotations are new
 `annotation_type` values riding the payload JSONB; chunk-cited claims
-write ordinary `citation` rows. Upstream rows carry their own upstream
-references (transitive resolution is real): `grouping_result` stores
-`extraction_run_id`; `extraction_result` stores `selection_run_id`;
-`selection_result` stores `characterisation_run_id`. The screened-in set
+write ordinary `citation` rows. Upstream references for transitive
+resolution (corrected rev 8 M3): `grouping_result` stores
+`extraction_run_id` and `extraction_result` stores `selection_run_id`
+as **real columns**; `selection_result` has **no**
+`characterisation_run_id` column — the executed characterisation
+reference lives in its **`selection_provenance` JSONB** (the 010
+contract's recorded shape), so selection → characterisation resolves
+from validated JSONB (missing, malformed, or mismatching an explicitly
+passed reference → structural failure). The screened-in set
 resolves from `source_screening_result` (per scope); full-text ingestion
 is post-screen, so screened docs carry ingested snapshots + embedding
 units. `source_tag` carries the tag layer with assertion provenance
@@ -415,7 +464,8 @@ registry entry + Config fields → context dataclass →
    cap (fail-closed; the index-backed `retrieve` slice is the upgrade —
    never a degraded sample). The orchestrator's component freedom is
    preserved by construction: any coherent registry subset synthesises,
-   including the rapid screen-only run.
+   including the rapid profile (appraise precedes chunk claims — rev 8
+   M4 — and is deterministic in v3.0, so the rapid profile stays cheap).
 3. **Blocks are real information-layer rows at claim grain.** Per block:
    one `block` row (claims' prose joined deterministically;
    `content_hash` per 001), one `addressable_unit` per claim, and per
@@ -448,6 +498,29 @@ registry entry + Config fields → context dataclass →
    future source/evidence policy compiles into (the 010 pin), and the
    plan-as-object's quality-prior ruling honoured: steerable
    per-directive, never a baked default.
+   **Normative directive grammar (rev 8 M5 — binding; exact parse code
+   plan-pinned):** `context["synthesis"]` must be an object; allowed
+   top-level keys exactly `{"sections", "retrieval_boosts"}` — any
+   other top-level key, or a non-object value, is **malformed → fails
+   closed**. `sections`: a list of 1..`SECTION_CAP` objects with keys
+   exactly `{"title", "focus", "group_ids"?}` — `title`/`focus`
+   non-empty strings ≤ 200 chars, control characters rejected,
+   forbidden-generic titles rejected (the 012 label set); `group_ids` a
+   list (≤ 200) of strings validated against the referenced grouping's
+   real group ids (no grouping referenced → the key is malformed).
+   `retrieval_boosts`: an object with keys from exactly
+   `{"columns", "tags", "appraisal_tier"}`; `columns` maps the **closed
+   column set** `{origin, primary_evidence_type, text_basis}` →
+   {value: weight}; `tags` maps tag strings (≤ 200 chars, ≤ 200
+   entries) → weight; `appraisal_tier` maps tier values → weight; every
+   weight a positive number **clamped to [0.1, 10]** (out-of-range
+   clamps; non-numeric is malformed). Semantics split per the 010/012
+   knowledge concept: **structural violations = malformed → fails
+   closed**; **unknown boost *targets*** (a column value, tag or tier
+   matching nothing in the corpus) match nothing and surface via
+   `unmatched_boosts` — never fatal. The executed directive (sections
+   source, boosts as applied, unmatched_boosts) is recorded whole in
+   provenance.
 6. **The section loop: one agent-loop surface, three read-only tools,
    hard caps — sections written serially with a rolling claim ledger.**
    Sections are written **in proposal order** (v3.0 execution is serial
@@ -498,17 +571,32 @@ registry entry + Config fields → context dataclass →
    identity.
 7. **Six claim types, each with its own deterministic validation,
    substrate-gated; the model never authors a finding quote.**
-   - **finding** (extraction referenced) — `cited_finding_ids ⊆ the
-     section's finding set`; code resolves to extract-verified anchors
-     and re-runs the deterministic presence check (abstract-basis
-     re-location; unlocatable/`failed` anchors → no fabricated citation
-     row, `quote_unverified`, weakly-grounded cap, never dropped).
-   - **chunk** (screened-in ingested documents present) — verbatim
-     quote + source chunk record id **from tool-returned results only**
-     (citing
-     an unreturned id rejects — co-emission enforced structurally);
-     claimed location untrusted — `QuoteMatcher` verifies against the
-     whole document basis, verified spans become the citation rows;
+   - **finding** (extraction referenced) — cited ids must come from the
+     **section's citable finding set = the section seed ∪ ids returned
+     by `query_findings` during that section's loop** (rev 8 M6 —
+     co-emission enforced structurally on every substrate: when grouping
+     ran, the seed is the assigned groups' member findings; on
+     extraction-without-grouping the seed is empty and citability flows
+     entirely through tool returns; citing an id never seeded nor
+     returned rejects). Code resolves cited ids to extract-verified
+     anchors and re-runs the deterministic presence check
+     (abstract-basis re-location; unlocatable/`failed` anchors → no
+     fabricated citation row, `quote_unverified`, weakly-grounded cap,
+     never dropped).
+   - **chunk** (screened-in ingested documents **with appraisals** —
+     rev 8 M4: execution-orchestration's hard rule binds,
+     produce-grounded-block cites only appraised evidence; appraise
+     v3.0 is deterministic-by-design, so the rapid profile is
+     acquire → screen → classify → appraise → ingest → synthesise) —
+     verbatim quote + source chunk record id **from tool-returned
+     results only** (citing an unreturned id rejects — co-emission
+     enforced structurally); claimed location untrusted —
+     `QuoteMatcher` verifies against the whole document basis, and
+     **verified spans become citation rows as one row per spanned
+     chunk** (same annotation, same quote; exact span offsets ride the
+     annotation payload — the 011 anchor precedent; the
+     `citation_chunk` join-table normalisation stays the recorded
+     deferred seam — rev 8 B2, within the approved schema);
      presence failure rejects (one repair), still-failing → **excluded
      and counted**.
    - **pattern** (characterisation for coverage counts;
@@ -520,10 +608,22 @@ registry entry + Config fields → context dataclass →
    - **gap** (always) — grade + coverage base required
      (sparsity-grade needs the characterisation coverage); corpus-level
      phrasing fail-closed on a non-`inadequate` `search_coverage_record`
-     (else degraded and counted); inferred gaps visibly labelled;
+     (else degraded and counted), and a corpus-grade gap's annotation
+     payload **must carry the search-adequacy caveat** (rev 8 M8): the
+     search-space boundary (backends / trust classes) + the adequacy
+     verdict and origin, copied from the referenced coverage record —
+     absence is always "absent from the *searched* space", never
+     absolute (the spec's required caveat, structurally present for
+     rendering); inferred gaps visibly labelled;
      `not_selected`/`not_extracted` never license absence.
    - **reasoning** (always) — uncited, visibly Tier-4-labelled, bounded
      per block, judge strict-routed, never in roll-ups.
+   **Content-scan pattern assertions are prohibited in v1** (rev 8
+   M9): the spec's soft pattern rung ("a shape the agent reads across
+   the corpus") has no deterministic validator and no judge-lane fit
+   yet — a claim asserting a cross-corpus shape without computable
+   counts rejects, the prompt says so, and the type is recorded as a
+   deferred seam (never silently absorbed).
    Claims of a type the substrate doesn't support reject (one repair).
    No silent uncited path: every claim is cited, validated, or visibly
    labelled. Two invariants from the V2 synthesis autopsy
@@ -549,8 +649,11 @@ registry entry + Config fields → context dataclass →
    its own backend seam and prompt, no tools, no loop — the section loop
    never grades its own homework; the seam permits a heterogeneous judge
    model at the Bedrock swap. Persistence for eval-readiness on the
-   annotation payload; full I/O on Langfuse; **no calibration_status
-   anywhere**.
+   annotation payload — **the spec's full set** (rev 8 M7): judge model
+   + prompt version, the verdict + rationale, `synthesis_envelope_v1`,
+   **the `segmentation_policy` of every cited chunk**, and a judge I/O
+   reference (the trace id, or a payload hash when telemetry is off) —
+   full I/O on Langfuse; **no calibration_status anywhere**.
 9. **The verify loop rewrites down, bounded by `REPAIR_ROUND_CAP` = 1
    (plan-pinned).** The judge's per-claim rationales are not advisory —
    they drive the rewrite: on validation rejection or any
@@ -562,10 +665,14 @@ registry entry + Config fields → context dataclass →
    *down*. Round-count calibration belongs to the eval seam; still-
    failing claims land soft-flagged (decision 7's one exclusion aside).
    Proposal: one regeneration on validation rejection. Call budget known
-   pre-run as a **maximum**: proposal ≤ 2 · per section ≤
-   `SECTION_TURN_CAP` + 2 generation calls + ≤ `SECTION_TURN_CAP`
-   embedding calls → total ≤ 2 + `SECTION_CAP` × (`SECTION_TURN_CAP` +
-   2). Backend failure after retries fails the component honestly
+   pre-run as a **maximum** (rev 8 B1 — the initial judge call is its
+   own generation call, outside both the loop turns and the repair
+   pair): proposal ≤ 2 · per section ≤ **`SECTION_TURN_CAP` + 3**
+   generation calls (loop turns incl. the claims emission · the initial
+   judge · the repair regeneration · the re-judge) + ≤
+   `SECTION_TURN_CAP` embedding calls → total ≤ 2 + `SECTION_CAP` ×
+   (`SECTION_TURN_CAP` + 3). Backend failure after retries fails the
+   component honestly
    (`component.failed`, no roll-up row); blocks already written remain
    and the failure payload names them.
 10. **Descriptive, never evaluative — absence disciplined, not banned.**
@@ -863,8 +970,9 @@ payloads. The judge rubric is lead-only per AGENTS.md.
   scripted stub loop).
 - **One manual live check, four substrate profiles** (evidence in
   verification.md): skeleton end-to-end with `OPENAI_API_KEY`
-  (+ `LANGFUSE_*`) against the fixture corpus — (a) **screen-only
-  rapid** (no characterise: chunk-grounded answer over the screened-in
+  (+ `LANGFUSE_*`) against the fixture corpus — (a) **rapid** (acquire →
+  screen → classify → appraise → ingest → synthesise; no characterise,
+  no deep chain: a chunk-grounded answer over the appraised screened-in
   set; substrate profile + scope recorded; no landscape, honestly); (b)
   **characterisation-only** (the landscape degenerate case); (c)
   **characterisation + selection, no extraction** (chunk-grounded
@@ -907,7 +1015,9 @@ payloads. The judge rubric is lead-only per AGENTS.md.
   embedding/lexical scoring — test-asserted); **the reranker stage is
   pass-through v1 and recorded** (`reranker: "none"` in provenance; the
   protocol seam exercised by a test-scoped fake)), **substrate gating**
-  (chunk claims/`search_chunks` absent without screened-in ingested
+  (chunk claims absent without APPRAISED screened-in ingested docs —
+  the produce-grounded-block appraised-evidence rule, rev 8 M4;
+  `search_chunks` absent without screened-in ingested
   docs; finding claims/`query_findings` absent without an extraction;
   coverage-pattern, characterise-theme and sparsity-gap claims absent without
   a characterisation; group-theme claims absent without a grouping;
@@ -929,28 +1039,38 @@ payloads. The judge rubric is lead-only per AGENTS.md.
   budgets enforced), **`lookup` discipline** (closed vocabulary — unknown
   query kind rejected; project/run-scoped; side-effect-free; **tag-layer
   queries covered**: tags by doc, docs by tag, aggregates by
-  type/asserter), **finding-claim citation resolution** (ids ⊆ the
-  section's finding set; anchors reused verbatim; abstract-basis
-  re-location; failed/unlocatable anchors → `quote_unverified` +
-  weakly-grounded cap, never dropped), **chunk-claim verification**
-  (quotes only from tool-returned ids; presence-checked against the
-  whole document basis; verified spans become the citation rows;
-  fabricated quote → reject, one repair, then excluded and counted),
-  **gap-claim discipline** (corpus-level phrasing without a
-  non-`inadequate` coverage record → fail-closed degradation, counted;
+  type/asserter), **finding-claim citation resolution** (cited ids ⊆
+  the section seed ∪ `query_findings` returns from that section's loop
+  — rev 8 M6; an id never seeded nor returned rejects, on every
+  substrate incl. extraction-without-grouping; anchors reused verbatim;
+  abstract-basis re-location; failed/unlocatable anchors →
+  `quote_unverified` + weakly-grounded cap, never dropped),
+  **chunk-claim verification** (quotes only from tool-returned ids;
+  presence-checked against the whole document basis; verified spans →
+  **one citation row per spanned chunk**, span offsets in the
+  annotation payload — rev 8 B2; a boundary-spanning quote yields
+  multiple rows, one per chunk, test-asserted; fabricated quote →
+  reject, one repair, then excluded and counted), **gap-claim
+  discipline** (corpus-level phrasing without a non-`inadequate`
+  coverage record → fail-closed degradation, counted; a corpus-grade
+  gap's payload carries the search-space boundary + adequacy verdict
+  from the referenced record — rev 8 M8, required-fields test;
   sparsity-grade gaps rejected without characterisation coverage;
   acknowledged sparsity validated numerically; inferred labelled; base
   always present), **theme-claim discipline** (referenced clustering
   ids validated; softest-grade label + base), **reasoning-claim
   discipline** (visibly labelled; strict-routing sentinel flagged;
-  per-block count bounded), **claim/unit integrity** (every cited claim
+  per-block count bounded), **content-scan prohibition** (rev 8 M9 — a
+  cross-corpus-shape assertion without computable counts rejects; the
+  deferred seam recorded), **claim/unit integrity** (every cited claim
   ≥ 1 citation target; annotations exist iff their claim does, on that
   claim's unit; offsets exact; composite-FK integrity; content_hash
   correct), **judge semantics** (single-lane enum; rationale required;
-  verdict + judge provenance + envelope version persisted; judge input
-  includes cited chunk text; the judge surface is distinct from the
-  writer surface — maker ≠ checker structural; cited and reasoning
-  claims judged; pattern/theme/gap not judged), **repair semantics**
+  verdict + judge provenance + envelope version + **per-cited-chunk
+  segmentation_policy + judge I/O reference** persisted — rev 8 M7;
+  judge input includes cited chunk text; the judge surface is distinct
+  from the writer surface — maker ≠ checker structural; cited and
+  reasoning claims judged; pattern/theme/gap not judged), **repair semantics**
   (bounded exactly as decision 9; budgets test-asserted; exhaustion →
   flags, claims retained except fabricated chunk quotes; **a passing
   claim survives a sibling's repair verbatim** — the V2
@@ -1004,9 +1124,12 @@ payloads. The judge rubric is lead-only per AGENTS.md.
   pass-through; the live Bedrock Rerank backend + its `run_harness`
   injection point land with the Bedrock integration slice, per the
   retrieval contract's inference-trust-boundary line and the 010
-  Cohere-class note) · synthesis/judge/retrieval quality evals
-  (envelope, SECTION_CAP, SECTION_TURN_CAP, top-k, RETRIEVAL_UNIT_CAP,
-  retrieval-boost weights and `lookup`-vocabulary calibration).
+  Cohere-class note) · **content-scan pattern claims** (rev 8 M9 — the
+  spec's soft pattern rung, prohibited in v1 for want of a validator or
+  judge-lane fit; the type arrives with its verification mechanism) ·
+  synthesis/judge/retrieval quality evals (envelope, SECTION_CAP,
+  SECTION_TURN_CAP, top-k, RETRIEVAL_UNIT_CAP, retrieval-boost weights
+  and `lookup`-vocabulary calibration).
 - Diff summary (data files excluded from review diffs per the 007
   retro).
 

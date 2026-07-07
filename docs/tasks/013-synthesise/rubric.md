@@ -3,13 +3,14 @@
 Core completion criteria. The task is **done only if every box holds** —
 otherwise it is in progress, not done.
 
-1. [ ] Implementation satisfies [contract.md](contract.md) (rev 7.5) — every
+1. [ ] Implementation satisfies [contract.md](contract.md) (rev 8) — every
        numbered design decision as approved (or as amended at the gates),
        implementing the spec as refined by ADRs 0009 + 0010 (consolidated
        records).
 2. [ ] `make verify` passes (okf-validate · test · typecheck · lint ·
        build); the declared manual live check ran on **four substrate
-       profiles** (screen-only rapid · characterisation-only ·
+       profiles** (rapid [screen+classify+appraise, no characterise] ·
+       characterisation-only ·
        characterisation+selection with no extraction · full chain) with
        evidence recorded.
 3. [ ] No approval-gated change snuck in unapproved — schema beyond the
@@ -46,7 +47,8 @@ substrate-conditional flexibility, test- or evidence-enforced):
         with explicit-reference consistency (mismatch = structural
         failure); **≥ 1 groundable substrate required** (zero →
         structural failure, no artefact, no row); chunk claims and
-        `search_chunks` gate on screened-in ingested docs; finding claims
+        `search_chunks` gate on appraised screened-in ingested docs (rev
+        8 M4); finding claims
         and `query_findings` on an extraction; coverage-pattern,
         characterise-theme and sparsity-gap claims on a characterisation;
         group-theme claims on a grouping; unsupported claim types
@@ -87,16 +89,21 @@ substrate-conditional flexibility, test- or evidence-enforced):
         ledger records structurally uncitable; determinism unaffected —
         test-asserted).
 13. [ ] **The full claim vocabulary, each type validated**: finding
-        claims cite ids ⊆ their section's finding set (the model never
-        authors a finding quote); chunk claims cite **only tool-returned
-        ids** with quotes presence-checked against the whole document
-        basis, verified spans becoming the citation rows (fabricated →
+        claims cite ids ⊆ the section seed ∪ query_findings returns
+        from that section's loop (rev 8 M6 — the model never authors a
+        finding quote; extraction-without-grouping covered); chunk
+        claims cite **only tool-returned ids** with quotes
+        presence-checked against the whole document basis, verified
+        spans becoming **one citation row per spanned chunk** with span
+        offsets in the annotation payload (rev 8 B2; fabricated →
         reject, one repair, then excluded **and counted**); pattern
         counts equal computed values; **theme claims** validated
         against the referenced clustering, softest-grade-labelled with
         base; **gap claims** carry grade + coverage base, corpus-level
         phrasing fail-closed on a non-`inadequate`
-        `search_coverage_record` (else degraded and counted),
+        `search_coverage_record` (else degraded and counted; corpus-grade
+        payloads carry the search-space boundary + adequacy verdict —
+        rev 8 M8),
         sparsity-grade rejected without characterisation coverage,
         inferred gaps visibly labelled; **reasoning claims** visibly
         Tier-4-labelled, bounded per block, judge strict-routed; no
@@ -112,7 +119,8 @@ substrate-conditional flexibility, test- or evidence-enforced):
         cited claim; exactly one judge verdict from the closed lane
         (Tier 1–4 | unsupported_mis_cited) with a required rationale,
         persisted with judge model + prompt version + envelope policy
-        version; judge input includes the cited chunks' full frozen text
+        version + per-cited-chunk segmentation_policy + a judge I/O
+        reference (rev 8 M7); judge input includes the cited chunks' full frozen text
         (`synthesis_envelope_v1`); the judge surface is distinct from the
         writer surface (maker ≠ checker — structural);
         pattern/theme/gap claims deterministically validated, not
@@ -140,7 +148,8 @@ substrate-conditional flexibility, test- or evidence-enforced):
         injection-shaped labels, quotes, chunk text, lookup results —
         tag labels included — or coverage summaries land as inert data.
 18. [ ] **Bounded budgets that BIND**: generation calls ≤ 2 + SECTION_CAP
-        × (SECTION_TURN_CAP + 2) as a pre-run maximum, test-asserted;
+        × (SECTION_TURN_CAP + 3) as a pre-run maximum (loop turns +
+        initial judge + repair pair — rev 8 B1), test-asserted;
         embedding calls ≤ SECTION_TURN_CAP per section; **the plan-pinned
         constants are the values enforced on the live path — configured
         cap == binding cap (the V2 dead-config lesson)**; a section

@@ -93,7 +93,7 @@ architecture-first:
   (`synthesise_sections_v1`, `synthesise_section_v1`,
   `grounding_judge_v1`). Realisation detail is ADR 0010's.
 - Every synthesise run produces a real artefact from 013 onward
-  (characterise-only runs yield the landscape; screen-only rapid runs a
+  (characterise-only runs yield the landscape; rapid runs a
   grounded answer); the earlier "artefact-composition seam" narrows to
   conventions (summary, key-findings, ordering, versioning) rather than
   composition itself.
