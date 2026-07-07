@@ -36,6 +36,26 @@ specs in [docs/specs/](../../specs/index.md).
 >   for a path the corpus barely exercises — most documents fit in one call;
 >   windowing is the honest rare path, not the norm. Windows stay independent
 >   and parallel; naming consistency across windows rides the eval-gated seam.
+> - **rev 1.3** (2026-07-07, field-research pass — /last30days sweep of current
+>   LLM-extraction practice; raw file
+>   `~/Documents/Last30Days/llm-structured-information-extraction-raw-v3.md`):
+>   three adoptions, none moving a gate. **(a) Verified quotes record their
+>   match location** (chunk id + char interval found by the presence check —
+>   the data-model's "location is the recorded by-product of the verify step";
+>   also localizes anchors inside the 008-known giant-chunk PDFs; LangExtract
+>   convergence). **(b) Deterministic field-rule validation** post-parse
+>   (decision 4): bounds/consistency checks over the stats bundle — violations
+>   flagged `unclear`, counted, never silently accepted ("Valid JSON, Wrong
+>   Answer" — schema validity is the easy part). **(c) Explicit negative rules
+>   in the prompt** (what NOT to extract), per the schema-constrained
+>   biomedical-extraction evidence. Declined/deferred with triggers:
+>   LangExtract as dependency (techniques absorbed, library declined) ·
+>   multi-pass recall extraction (eval-gated; pass count recorded in
+>   provenance now) · reason-then-constrain (eval-gated remedy; closed-weight
+>   API models resist the format tax) · LLM-judge schema-consistency pass
+>   (grounding-tier/eval territory). Findings that confirmed the design
+>   unchanged: grounding-or-flag anchoring, span-level verification as best
+>   practice, mini-class model floor.
 
 ## Goal
 
@@ -214,13 +234,22 @@ internal (`OpenAIRankingBackend`) — either precedent stands.
    normalised string match against the document's frozen text (concatenated
    chunk content, so a boundary-spanning quote isn't a spurious miss — the
    produce-grounded-block presence-check discipline applied at the finding
-   grain). A finding whose quote fails the check after one repair attempt lands
-   **flagged `quote_unverified`, never dropped and never silently kept** — the
-   flag rides the finding row and the roll-up counts it. Field-level coverage:
+   grain). **A verified quote records its match location** (chunk id + char
+   interval the check found — rev 1.3: the recorded by-product of verify, per
+   the data-model; localizes anchors within the coarse-chunk PDFs 008
+   documented). A finding whose quote fails the check after one repair attempt
+   lands **flagged `quote_unverified`, never dropped and never silently kept**
+   — the flag rides the finding row and the roll-up counts it. **Deterministic
+   field-rule validation runs after schema parse** (rev 1.3): bounds and
+   consistency checks over the reported statistics (indicatively: p-value ∈
+   [0,1], CI lower ≤ upper, N a positive integer, closed vocabularies
+   enforced; exact rule set plan-pinned) — a violating field is flagged
+   `unclear` and counted, never silently accepted (schema validity is the easy
+   part; rule checks catch schema-valid nonsense). Field-level coverage:
    nullable base fields carry a per-field coverage map with values
    `not_extracted` (the source does not report it) | `unclear` (reported
-   ambiguously) — the data-model's field-level vocabulary; a null field with a
-   marker is coverage, never a claim.
+   ambiguously, or failed a validation rule) — the data-model's field-level
+   vocabulary; a null field with a marker is coverage, never a claim.
 5. **Extraction mechanics — per-source fan-out, windowed, budgeted, honest.**
    Per document: the basis text enters the prompt as **id-keyed segment records**
    (chunk ids as keys) under the standing data/instructions separation; the
@@ -329,7 +358,9 @@ intervention_outcome_finding
                            · field_coverage JSONB  (per absent field:
                                not_extracted | unclear)
                            · grounding JSONB NOT NULL (anchors: chunk_id NULL for
-                               abstract basis · verbatim quote · quote_verified BOOL)
+                               abstract basis · verbatim quote · quote_verified BOOL
+                               · match location [chunk id + char interval] when
+                               verified — rev 1.3)
                            · created_at
 
 extraction_result          extraction_result_id PK · project_id FK→project
@@ -337,7 +368,9 @@ extraction_result          extraction_result_id PK · project_id FK→project
                            · selection_run_id (the executed reference)
                            · extraction_provenance JSONB NOT NULL (fingerprint,
                                profile id, prompt version, model, backend mode,
-                               window/batch params, call budget, retry counts)
+                               window/batch params, pass count [1 in v1 —
+                               rev 1.3, opens the multi-pass seam cheaply],
+                               call budget, retry counts)
                            · docs JSONB NOT NULL (per doc: pss id, status, basis,
                                finding count, fresh|reused, error reason)
                            · counts JSONB NOT NULL (base ladder: selected,
@@ -435,7 +468,11 @@ a live-run cost note (extraction is the deliberately-expensive Tier-1 step; the
 budget arithmetic must make the cost visible pre-run). → Bedrock at the seam
 swap, unchanged. **Prompt-bearing surface: `extract_iof_v1`** — the repo's third
 product prompt, lead-authored, versioned, recorded in `extraction_provenance`
-and the event payload; the only prompt in the slice.
+and the event payload; the only prompt in the slice. Prompt design carries
+**explicit negative rules** (rev 1.3): it states what must NOT be extracted
+(question-relative judgements, cross-source claims, anything this document
+does not itself report) — actively limiting degrees of freedom, not just
+omitting the ask; enrichment absence stays test-asserted on the schema side.
 
 ## Disciplines binding this slice
 
@@ -504,10 +541,15 @@ and the event payload; the only prompt in the slice.
   docs), quote verification (verbatim hit passes; boundary-spanning quote
   passes; fabricated quote → flagged `quote_unverified`, kept, counted),
   abstract-basis extraction (no chunks; anchors against envelope abstract;
-  basis recorded end-to-end), windowing (multi-window doc: budget arithmetic,
+  basis recorded end-to-end), verified-quote match location recorded (chunk +
+  char interval present on verified anchors, absent on unverified — rev 1.3),
+  field-rule validation (out-of-bounds p-value / inverted CI / non-positive N →
+  field flagged `unclear`, counted, finding kept — rev 1.3), windowing
+  (multi-window doc: budget arithmetic,
   ordered concatenation, window-failure → doc `extraction_failed`, others
   proceed), schema line (enrichment fields absent from schema and prompt,
-  test-asserted), field coverage (absent field → marker, never a fabricated
+  test-asserted; prompt carries explicit negative rules, asserted on the built
+  prompt — rev 1.3), field coverage (absent field → marker, never a fabricated
   value), edge scopes (empty selection honest-skip; missing selection row →
   structural failure; same-run re-execution loud), determinism (two stub runs →
   identical payload columns; parallel-vs-serial write order), injection posture
@@ -529,7 +571,19 @@ and the event payload; the only prompt in the slice.
   explicit, recorded coverage-base rung, never silent) ·
   **retrieval-augmented extraction** (full read + targeted in-doc repair pass /
   cross-window context assembly — eval-gated behind `retrieve` +
-  extraction-quality evals, rev 1.1).
+  extraction-quality evals, rev 1.1) · **multi-pass recall extraction**
+  (rev 1.3 — a second extraction pass raises recall on long documents; can't be
+  measured without ground truth, so eval-gated with the same trigger family;
+  provenance records pass count from day one) · **reason-then-constrain
+  extraction** (rev 1.3 — draft free-form then bind to schema; demonstrated
+  gains are on small open-weight models, closed-weight API models resist the
+  format tax; eval-gated remedy if judgment-heavy fields show errors) ·
+  **LangExtract dependency, declined** (rev 1.3 — techniques absorbed [span
+  recording, negative rules, multi-pass seam]; the library itself is
+  Gemini-first and outside our provenance model) · **parse-quality escalation
+  pointer** (rev 1.3 — extraction yield/failures on the 008-documented
+  collapsed-chunk PDFs become the first downstream consumer signal for the
+  docling ML-escalation seam; note on the existing entry).
 - Diff summary (data files excluded from review diffs per the 007 retro).
 
 ## Risk tier & review focus
