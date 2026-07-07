@@ -445,3 +445,54 @@ def test_uploaded_full_text_doc_extracts_from_envelope_chunks(conn: Connection) 
     ).scalar_one()
     assert grounding[0]["quote_verified"] is True
     assert grounding[0]["chunk_id"] == str(cid)
+
+
+def test_nul_bearing_model_output_is_scrubbed(conn: Connection) -> None:
+    """A model-emitted NUL (\\u0000) is scrubbed at the backend boundary —
+    Postgres rejects it in TEXT/JSONB and it aborted the first live run.
+    Delivered via a misbehaving backend: a NUL can't ride the DB-stored stub
+    sentinel for the same reason."""
+    from policy_atlas.extraction_records import (
+        ExtractionResponse,
+        ExtractionWindowPayload,
+        IOFRecordWire,
+    )
+
+    class _NulBackend:
+        mode = "stub"
+
+        def extract(self, payload: ExtractionWindowPayload) -> ExtractionResponse:
+            record = _record(
+                intervention="free school\x00 meals", outcome="absence rates",
+                quote="Free school meals reduced absence rates",
+                segment_id=payload.segments[0]["segment_id"],
+                population="pupils\x00",
+            )
+            return ExtractionResponse(findings=[IOFRecordWire.model_validate(record)])
+
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    content = "Free school meals reduced absence rates in the trial."
+    pss_id, _ = _seed_full_text_doc(
+        conn, project_id, sel_run, scope_id, title="NUL doc", chunk_content=content,
+    )
+    _seed_selection(conn, project_id, sel_run, scope_id,
+                    [{"pss_id": str(pss_id), "text_basis": "full_text"}])
+
+    run_id = seed_run(conn, project_id)
+    summary = extract_scope(
+        conn, project_id=project_id, run_id=run_id,
+        context=ExtractContext(
+            scope_id=scope_id, intent="unused", context={}, selection_run_id=sel_run
+        ),
+        extraction_backend=_NulBackend(),
+    )
+
+    assert summary["docs"][0]["status"] == "extracted"
+    row = conn.execute(
+        select(intervention_outcome_finding)
+        .where(intervention_outcome_finding.c.project_id == project_id)
+    ).one()
+    assert row.intervention == "free school meals"
+    assert row.population == "pupils"
+    assert "\x00" not in str(row.grounding)

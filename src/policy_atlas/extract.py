@@ -534,6 +534,30 @@ def _apply_memo(
 # --- Fan-out ----------------------------------------------------------------
 
 
+def _scrub_nul(value: Any) -> Any:
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, list):
+        return [_scrub_nul(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _scrub_nul(item) for key, item in value.items()}
+    return value
+
+
+def _scrub_findings(findings: list[IOFRecordWire]) -> list[IOFRecordWire]:
+    """Strip NUL characters from every string in the wire records.
+
+    Model output is untrusted data; Postgres rejects ``\\u0000`` in TEXT and
+    JSONB, so an emitted NUL would abort the whole write transaction (observed
+    on the first live run). Scrubbed at the backend boundary, before
+    validation/verification, like any other encoding hygiene.
+    """
+    return [
+        IOFRecordWire.model_validate(_scrub_nul(record.model_dump()))
+        for record in findings
+    ]
+
+
 def _run_windows(
     docs: list[_Doc],
     *,
@@ -575,7 +599,7 @@ def _run_windows(
         wait([future for _, future in submitted])
         for key, future in submitted:
             try:
-                results[key] = list(future.result().findings)
+                results[key] = _scrub_findings(list(future.result().findings))
             except Exception as exc:  # noqa: BLE001 — reduced to a type name for the record
                 errors[key] = exc
 
@@ -585,7 +609,9 @@ def _run_windows(
             continue
         retry_count += 1
         try:
-            results[key] = list(extraction_backend.extract(payloads[key]).findings)
+            results[key] = _scrub_findings(
+                list(extraction_backend.extract(payloads[key]).findings)
+            )
         except Exception as exc:  # noqa: BLE001
             errors[key] = exc
         else:
