@@ -34,6 +34,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         event_log,
         evidence_scope,
         extraction_result,
+        grouping_result,
         intervention_outcome_finding,
         project,
         project_source_snapshot,
@@ -85,6 +86,10 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
     ))
     conn.execute(delete(annotation).where(annotation.c.block_id.in_(block_ids_subq)))
     conn.execute(delete(addressable_unit).where(addressable_unit.c.block_id.in_(block_ids_subq)))
+    # Task 012 row: FKs onto extraction_result/scope/runs.
+    conn.execute(delete(grouping_result).where(
+        grouping_result.c.project_id == project_id
+    ))
     # Task 011 rows first: findings FK onto extraction records, which FK onto
     # pss/runs; extraction_result FKs onto scope/runs.
     conn.execute(delete(intervention_outcome_finding).where(

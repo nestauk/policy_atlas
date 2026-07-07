@@ -28,6 +28,11 @@ from policy_atlas.extraction_backend import (
     OpenAIExtractionBackend,
     StubExtractionBackend,
 )
+from policy_atlas.facet_grouping import (
+    FacetGroupingBackend,
+    OpenAIFacetGroupingBackend,
+    StubFacetGroupingBackend,
+)
 from policy_atlas.fixtures import get_source
 from policy_atlas.grouping import (
     OpenAIThemeGroupingBackend,
@@ -44,6 +49,7 @@ from policy_atlas.schema import (
     characterisation_result,
     evidence_scope,
     extraction_result,
+    grouping_result,
     project,
     project_source_snapshot,
     runs,
@@ -89,6 +95,8 @@ def _run_component(
     ranking_backend: RankingBackend | None = None,
     selection_run_id: uuid.UUID | None = None,
     extraction_backend: ExtractionBackend | None = None,
+    extraction_run_id: uuid.UUID | None = None,
+    facet_grouping_backend: FacetGroupingBackend | None = None,
 ) -> uuid.UUID:
     """Create a run, compile and record the plan, and execute one scope component.
 
@@ -108,6 +116,10 @@ def _run_component(
             other components.
         extraction_backend: Extraction backend for ``extract``; unused by
             other components.
+        extraction_run_id: Explicit extraction run for ``group``; unused by
+            other components.
+        facet_grouping_backend: Facet grouping backend for ``group``; unused
+            by other components.
 
     Returns:
         The created run's id.
@@ -132,6 +144,7 @@ def _run_component(
             evidence_scope_id=scope_id,
             characterisation_run_id=characterisation_run_id,
             selection_run_id=selection_run_id,
+            extraction_run_id=extraction_run_id,
         )
     )
     plan_payload: dict[str, Any] = {
@@ -142,6 +155,8 @@ def _run_component(
         plan_payload["characterisation_run_id"] = str(config.characterisation_run_id)
     if config.selection_run_id is not None:
         plan_payload["selection_run_id"] = str(config.selection_run_id)
+    if config.extraction_run_id is not None:
+        plan_payload["extraction_run_id"] = str(config.extraction_run_id)
     events.append(
         conn,
         project_id=project_id,
@@ -165,6 +180,7 @@ def _run_component(
             theme_grouping_backend=theme_grouping_backend,
             ranking_backend=ranking_backend,
             extraction_backend=extraction_backend,
+            facet_grouping_backend=facet_grouping_backend,
         )
         if component == "characterise" and langfuse_client is not None:
             # Scores and trace I/O must attach while the run's span is still the
@@ -183,6 +199,12 @@ def _run_component(
             payload = _extraction_payload(events.read(conn, project_id), run_id=run_id)
             if payload is not None:
                 tracing.extraction_score_summary(
+                    langfuse_client, payload, root_span=run_span
+                )
+        if component == "group" and langfuse_client is not None:
+            payload = _grouping_payload(events.read(conn, project_id), run_id=run_id)
+            if payload is not None:
+                tracing.grouping_score_summary(
                     langfuse_client, payload, root_span=run_span
                 )
     return run_id
@@ -383,6 +405,56 @@ def _render_extraction(log_entries: list[dict[str, Any]]) -> None:
     )
 
 
+def _grouping_payload(
+    log_entries: list[dict[str, Any]], *, run_id: uuid.UUID | None = None
+) -> dict[str, Any] | None:
+    """Return the group component's completed-event payload, or None if it failed.
+
+    Entries arrive in ascending sequence order, so the search runs newest-first;
+    pass ``run_id`` to pin the payload to one run rather than the latest.
+    """
+    return next(
+        (
+            e["payload"] for e in reversed(log_entries)
+            if e["event_type"] == "component.completed"
+            and e["payload"].get("component") == "group"
+            and (run_id is None or e["run_id"] == run_id)
+        ),
+        None,
+    )
+
+
+def _render_grouping(log_entries: list[dict[str, Any]], *, run_id: uuid.UUID | None = None) -> None:
+    """Render the group summary from the event log, human-readably."""
+    payload = _grouping_payload(log_entries, run_id=run_id)
+    if payload is None:
+        # the component emitted component.failed — the event log below shows it
+        log.warning("grouping.missing")
+        return
+
+    log.info("grouping.facet", facet=payload["facet"], facet_source=payload["facet_source"])
+    for group in payload["groups"]:
+        log.info(
+            "grouping.group",
+            label=group["label"],
+            size=group["size"],
+            value_count=group["value_count"],
+            direction_spread=group["direction_spread"],
+        )
+    log.info("grouping.residuals", **payload["residuals"])
+    log.info("grouping.overall_direction_spread", **payload["overall_direction_spread"])
+    log.info("grouping.counts", **payload["counts"])
+    log.info("grouping.flags", flags=payload["flags"])
+    # The full provenance map is in the DB row; only the headline fields here.
+    log.info(
+        "grouping.provenance",
+        prompt_version=payload["provenance"]["prompt_version"],
+        model=payload["provenance"]["model"],
+        mode=payload["provenance"]["mode"],
+        facet=payload["provenance"]["facet"],
+    )
+
+
 def main() -> None:
     """Run the walking-skeleton thread end to end and log the result."""
     configure_logging()
@@ -397,6 +469,7 @@ def main() -> None:
     theme_grouping_backend: ThemeGroupingBackend
     ranking_backend: RankingBackend | None
     extraction_backend: ExtractionBackend
+    facet_grouping_backend: FacetGroupingBackend
     if live:
         embedding_backend = OpenAIEmbeddingBackend()
         theme_grouping_backend = OpenAIThemeGroupingBackend()
@@ -406,6 +479,9 @@ def main() -> None:
         # Tracing lives inside OpenAIExtractionBackend itself — no wrapper
         # class, unlike the embedding/grouping backends below.
         extraction_backend = OpenAIExtractionBackend(langfuse_client=langfuse_client)
+        # Tracing lives inside OpenAIFacetGroupingBackend itself — no wrapper
+        # class, unlike the embedding/grouping backends below.
+        facet_grouping_backend = OpenAIFacetGroupingBackend(langfuse_client=langfuse_client)
         if langfuse_client is not None:
             embedding_backend = tracing.TracedEmbeddingBackend(
                 embedding_backend, langfuse_client
@@ -418,6 +494,7 @@ def main() -> None:
         theme_grouping_backend = StubThemeGroupingBackend()
         ranking_backend = None
         extraction_backend = StubExtractionBackend()
+        facet_grouping_backend = StubFacetGroupingBackend()
     log.info(
         "skeleton.backends",
         mode="live" if live else "stub",
@@ -645,7 +722,7 @@ def main() -> None:
                     "live extract run requires both text bases in the selected set"
                 )
 
-        run_component(
+        extract_run_id = run_component(
             "extract",
             selection_run_id=select_run_id,
             extraction_backend=extraction_backend,
@@ -654,6 +731,40 @@ def main() -> None:
         extraction_row = conn.execute(
             select(extraction_result).where(extraction_result.c.project_id == project_id)
         ).one_or_none()
+
+        group_run_id = run_component(
+            "group",
+            extraction_run_id=extract_run_id,
+            facet_grouping_backend=facet_grouping_backend,
+        )
+
+        # Second group run demonstrating the directive path (the selection-
+        # directive update precedent): re-group the same extraction run on an
+        # explicit facet, preserving the existing scope context keys.
+        scope_context = conn.execute(
+            select(evidence_scope.c.context).where(
+                evidence_scope.c.evidence_scope_id == scope_id
+            )
+        ).scalar_one()
+        directed_context = {**scope_context, "grouping": {"facet": "outcome"}}
+        conn.execute(
+            evidence_scope.update()
+            .where(evidence_scope.c.evidence_scope_id == scope_id)
+            .values(context=directed_context)
+        )
+        log.info("group.directive", facet="outcome")
+
+        group_directive_run_id = run_component(
+            "group",
+            extraction_run_id=extract_run_id,
+            facet_grouping_backend=facet_grouping_backend,
+        )
+
+        grouping_rows = conn.execute(
+            select(grouping_result.c.grouping_result_id).where(
+                grouping_result.c.project_id == project_id
+            )
+        ).fetchall()
 
         log_entries = events.read(conn, project_id)
 
@@ -696,6 +807,10 @@ def main() -> None:
 
     _render_extraction(log_entries)
     log.info("extraction_row", present=extraction_row is not None)
+
+    _render_grouping(log_entries, run_id=group_run_id)
+    _render_grouping(log_entries, run_id=group_directive_run_id)
+    log.info("grouping_row_present", present=len(grouping_rows) > 0, count=len(grouping_rows))
 
     if live:
         # Finding 5's assert-and-log: a live run that never actually calls the
