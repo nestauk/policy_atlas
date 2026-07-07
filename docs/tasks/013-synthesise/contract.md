@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 7.2) — awaiting contract 🛑.
+> **Status:** drafted (rev 7.3) — awaiting contract 🛑.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
 > ADRs: [0009](../../adr/0009-capability-composes-synthesise-terminus.md)
@@ -86,6 +86,32 @@ specs in [docs/specs/](../../specs/index.md).
 >   structure-mismatch signals · bounded revision checkpoint) **waits for
 >   the slice to land** — revisit as a seam with evidence if one-shot
 >   structure proves a real problem.
+> - **rev 7.3** (2026-07-07, external validation round): a `/last30days`
+>   field scan (raw file `~/Documents/Last30Days/agentic-rag-grounded-
+>   report-generation-raw-v3.md`) **validated the direction** — retrieval-
+>   as-a-controlled-loop is the 2026 consensus; verification-centric
+>   design, claim-anchored citations and tiered citation UX are where the
+>   field is converging; retrieval (not generation) is the dominant RAG
+>   failure point; step-boundary discipline and judge calibration are the
+>   named production hazards; **the field's loudest warning — shipping
+>   without an eval harness sinks projects — points at our deferred eval
+>   seam: recommended as the named next slice after 013.** A deep-reasoner
+>   **V2 synthesis autopsy** ([v2-synthesis-autopsy.md](v2-synthesis-autopsy.md),
+>   the third V2 recon leg) adjudicated in: **(a) rendering-decomposition
+>   invariant** (V2's deterministic interventions table escaped grounding
+>   entirely — structured renderings decompose into typed claims, no
+>   verification escape hatch; decision 7.i); **(b) verbatim-evidence
+>   invariant** (V2 primed its writer on re-summarised truncated chunks —
+>   citation-bearing evidence is frozen-chunk text / verified anchors
+>   only; decision 7.ii); **(c) named tests**: fabricated quotes never
+>   persisted (V2 kept `is_supported=True` on unfindable quotes and
+>   stored them), caps bind (V2's config caps were dead code) + honest
+>   evidence floors (`uncited_sections` flag; V2 wrote sections on zero
+>   evidence), passing claims survive sibling repair (V2 regenerated
+>   whole sections). Build-phase adoption notes recorded in the autopsy
+>   file (menu+default proposal pattern; renumber-by-first-appearance as
+>   a composition-seam convention; click-to-highlight affordance
+>   preserved by verified-span citation rows).
 
 ## Goal
 
@@ -284,7 +310,12 @@ A PR on `task/013-synthesise` → `dev` that:
   (discharged here).
 - [docs/deferred.md](../../deferred.md) — entries this slice touches
   (incl. the 009 vectors-ahead-of-reader entry, discharged here).
-- The deep-reasoner interrogation memo (conversation A record).
+- The deep-reasoner interrogation memo (conversation A record) and
+  [v2-synthesis-autopsy.md](v2-synthesis-autopsy.md) — the third V2 recon
+  leg (synthesis/generation/verification; theming was 009's, extraction
+  011's): the defects rev 7.3's invariants and named tests close, with
+  V2 file:line anchors, and the build-phase adoption notes (menu+default
+  proposal pattern; citation renumbering as a composition-seam note).
 
 **Code grounding (surveyed 2026-07-07):** 24 tables, 12 migrations (this
 slice ships migration 13). The 001 substrate is real: `block` /
@@ -431,7 +462,19 @@ registry entry + Config fields → context dataclass →
      per block, judge strict-routed, never in roll-ups.
    Claims of a type the substrate doesn't support reject (one repair).
    No silent uncited path: every claim is cited, validated, or visibly
-   labelled.
+   labelled. Two invariants from the V2 synthesis autopsy
+   ([v2-synthesis-autopsy.md](v2-synthesis-autopsy.md), rev 7.3):
+   **(i) renderings never escape verification** — any structured or
+   tabular rendering of block content decomposes into these same typed
+   claims and passes the same per-type verification (V2's
+   deterministically-rendered interventions table bypassed grounding
+   entirely because grounding was prose-regex-based — its single worst
+   defect); **(ii) citation-bearing evidence is verbatim** — the writer
+   cites only frozen-chunk text and extract-verified anchors;
+   model-authored summaries (substrate summaries, group descriptions,
+   ledger entries) inform sectioning and emphasis but never serve as
+   citation evidence (V2 primed its writer on re-summarised truncated
+   chunks — paraphrase-of-paraphrase drift).
 8. **The judge is `grounding_judge_v1` — a separate, single-call,
    schema-constrained surface: verification is non-agentic.** Batched
    per block, single-lane, reading the cited passages
@@ -544,7 +587,10 @@ synthesis_result  synthesis_result_id PK · project_id FK→project
                   · flags JSONB NOT NULL (groups_unsectioned ·
                       unsupported_claims_present · weakly_grounded_present
                       · chunk_claims_rejected · gap_claims_degraded ·
-                      turn_cap_hit · repair_path_taken — where true)
+                      turn_cap_hit · repair_path_taken ·
+                      uncited_sections — where true; the last flags any
+                      section emitted with zero cited claims, the V2
+                      zero-evidence-section lesson)
                   · created_at
                   Composite FKs (evidence_scope_id, project_id),
                   (run_id, project_id) — cross-project guards
@@ -822,7 +868,19 @@ payloads. The judge rubric is lead-only per AGENTS.md.
   writer surface — maker ≠ checker structural; cited and reasoning
   claims judged; pattern/cluster/gap not judged), **repair semantics**
   (bounded exactly as decision 9; budgets test-asserted; exhaustion →
-  flags, claims retained except fabricated chunk quotes),
+  flags, claims retained except fabricated chunk quotes; **a passing
+  claim survives a sibling's repair verbatim** — the V2
+  whole-section-regeneration regression guard), **caps bind + honest
+  evidence floors** (the plan-pinned constants are the values enforced
+  on the live path — configured cap == binding cap, test-asserted; V2's
+  config caps were dead code while a module constant governed; a section
+  emitted with zero cited claims → `uncited_sections` flagged, never
+  silent), **fabricated quotes never persisted** (a chunk-claim quote
+  failing presence produces no citation row and no stored quote anywhere
+  — V2 persisted hallucinated quotes with support intact), **rendering
+  decomposition** (structured/tabular renderings of block content
+  decompose into typed claims through the same verification — no
+  prose-regex escape hatch),
   **flag-not-drop** (unsupported / weakly-grounded / degraded-gap claims
   persist visibly; mixed/unclear visible end-to-end), **descriptive
   posture** (negative rules asserted on all three built surfaces;

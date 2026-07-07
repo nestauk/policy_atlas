@@ -3,7 +3,7 @@
 Core completion criteria. The task is **done only if every box holds** —
 otherwise it is in progress, not done.
 
-1. [ ] Implementation satisfies [contract.md](contract.md) (rev 7.2) — every
+1. [ ] Implementation satisfies [contract.md](contract.md) (rev 7.3) — every
        numbered design decision as approved (or as amended at the gates),
        implementing the spec as refined by ADRs 0009 + 0010 (four
        amendments).
@@ -92,7 +92,13 @@ substrate-conditional flexibility, test- or evidence-enforced):
         sparsity-grade rejected without characterisation coverage,
         inferred gaps visibly labelled; **reasoning claims** visibly
         Tier-4-labelled, bounded per block, judge strict-routed; no
-        silent uncited path.
+        silent uncited path; **structured/tabular renderings decompose
+        into the same typed claims through the same verification** (no
+        escape hatch — the V2 table lesson); **citation-bearing evidence
+        is verbatim frozen-chunk text / verified anchors only**
+        (model-authored summaries never serve as citation evidence);
+        **a fabricated quote is never persisted anywhere** (no citation
+        row, no stored quote).
 14. [ ] **Verify is two-part, non-agentic, and rewrites down**:
         deterministic presence check against frozen chunks for every
         cited claim; exactly one judge verdict from the closed lane
@@ -104,7 +110,9 @@ substrate-conditional flexibility, test- or evidence-enforced):
         pattern/cluster/gap claims deterministically validated, not
         judged; **judge rationales drive one loop-free reword-down
         regeneration + one re-judge (`REPAIR_ROUND_CAP` = 1,
-        test-asserted — no new tool calls on repair)**.
+        test-asserted — no new tool calls on repair; a passing claim
+        survives a sibling's repair verbatim — the V2
+        whole-section-regeneration regression guard)**.
 15. [ ] **Flag, don't drop — everywhere**: failed/unlocatable anchors →
         `quote_unverified` + weakly-grounded cap; unsupported,
         weakly-grounded and degraded-gap claims persist visibly after
@@ -123,10 +131,14 @@ substrate-conditional flexibility, test- or evidence-enforced):
         gap claims, quotes verbatim from tool-returned text only);
         injection-shaped labels, quotes, chunk text, lookup results —
         tag labels included — or coverage summaries land as inert data.
-18. [ ] **Bounded budgets**: generation calls ≤ 2 + SECTION_CAP ×
-        (SECTION_TURN_CAP + 2) as a pre-run maximum, test-asserted;
-        embedding calls ≤ SECTION_TURN_CAP per section; backend failure →
-        `component.failed` with no roll-up row and prior blocks named.
+18. [ ] **Bounded budgets that BIND**: generation calls ≤ 2 + SECTION_CAP
+        × (SECTION_TURN_CAP + 2) as a pre-run maximum, test-asserted;
+        embedding calls ≤ SECTION_TURN_CAP per section; **the plan-pinned
+        constants are the values enforced on the live path — configured
+        cap == binding cap (the V2 dead-config lesson)**; a section
+        emitted with zero cited claims → `uncited_sections` flagged,
+        never silent; backend failure → `component.failed` with no
+        roll-up row and prior blocks named.
 19. [ ] **Provenance fidelity**: `synthesis_provenance` carries all three
         surface versions (tool schemas included), models, modes,
         per-phase call/turn/repair counts, the substrate profile + the
