@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 1) — awaiting contract 🛑.
+> **Status:** drafted (rev 1.1) — awaiting contract 🛑.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ · ADR: due at step 4 (the
 > produce-grounded-block realisation + block-substrate decisions are
@@ -11,6 +11,33 @@ specs in [docs/specs/](../../specs/index.md).
 >
 > **Revision history:**
 > - **rev 1** (2026-07-07): initial draft.
+> - **rev 1.1** (2026-07-07, user challenges at the gate — adjudicated):
+>   **(a) artefact title intent-derived** — the minted artefact row's title
+>   carries the scope's `intent` verbatim (length-bounded, deterministic, no
+>   model call), never a generic placeholder; title semantics finalise at the
+>   composition seam (decision 3). **(b) pattern annotations are
+>   claim-driven, not one-per-block** — claims are typed; a pattern
+>   annotation exists only where a claim asserts the evidence shape, hangs
+>   off that claim's unit per the `(block, unit, type)` annotation key, and
+>   its numbers are validated deterministically against the code-computed
+>   spread (mismatch rejects the response); the authoritative spread lives in
+>   the roll-up regardless (decision 7 reworked). **(c) judge envelope
+>   widened to the cited chunks' full frozen text** — quotes alone cannot
+>   catch quote-mining/omitted caveats; the envelope is deterministic
+>   `lookup`-grade access by chunk_id, pinned `synthesis_envelope_v1`
+>   (decision 5). **(d) retrieval position made explicit** — v3.0 synthesise
+>   is findings-bounded by design (components §9: over the grouped findings;
+>   capability.md: synthesis over EB's *existing* findings); the
+>   retrieval-dependent pieces (re-gather-targeted-evidence repair,
+>   envelope-widening beyond the cited chunk) are named seams landing with
+>   `retrieve` (out-of-scope + deferred lists). **(e) clarity fixes** —
+>   finding ids defined (`intervention_outcome_finding.finding_id`, the 011
+>   durable rows; group memberships already carry them); presence-check
+>   re-run rationale stated (verify asserts what it writes — never trust
+>   inherited from an upstream payload; abstract-basis anchors need locating
+>   anyway; immutable chunks make it cheap); the depth axis stated in the
+>   Goal (synthesise fires only on runs deep enough that group has fired —
+>   the explicit `grouping_run_id` encodes the dependency structurally).
 
 ## Goal
 
@@ -18,6 +45,13 @@ Add **synthesise** — EB component 9, the deep terminus, closing the chain
 `acquire → … → extract → group → synthesise`. Over the **named groups** of an
 explicitly referenced grouping run, **per group produce a grounded block**
 reporting what that group's findings show.
+
+Depth is a gradation *over* the chain (capability.md): a run goes as far down
+as its intent warrants, so synthesise fires **only on runs deep enough that
+select → extract → group have already fired** — a shallow landscape run stops
+at characterise and never invokes it. The explicit `grouping_run_id`
+requirement (compile fails closed) encodes that dependency structurally
+rather than assuming it.
 
 The output is **descriptive**: it surfaces the direction-spread steer ("5 of 7
 findings positive on tenancy, two null" — v2's `effect_consensus` counts as
@@ -185,39 +219,59 @@ stub/live on `OPENAI_API_KEY`.
    group: one `block` row (content = the claims' prose, joined
    deterministically; `content_hash` per the 001 convention), one
    `addressable_unit` per claim (`unit_type="text_span"`, locator = computed
-   char offsets into the block content), one **citation annotation** per
-   claim-unit (payload: cited finding ids, per-citation verification, judge
-   verdict — tier / weakly_grounded / rationale / judge provenance) and one
-   **pattern annotation** per block (the deterministic direction spread —
-   decision 7). `citation` rows link claim-units to the frozen chunks their
-   quotes live in. This is the substrate the artefact-composition seam
+   char offsets into the block content), and per claim-unit the annotation
+   its claim type demands (rev 1.1b): a **citation annotation** for
+   finding-citing claims (payload: cited finding ids, per-citation
+   verification, judge verdict — tier / weakly_grounded / rationale / judge
+   provenance) or a **pattern annotation** for shape-asserting claims (the
+   deterministically validated spread — decision 7). `citation` rows link
+   claim-units to the frozen chunks their quotes live in. This is the substrate the artefact-composition seam
    composes from; no new store, the 001 tables as designed.
-3. **One artefact row per synthesise run as the v3.0 container.**
-   `block.artefact_id` is NOT NULL by design; the echo component already
-   mints its artefact (the standing precedent). Synthesise mints one honestly
-   titled artefact row per run ("Evidence Base synthesis — run …") and
-   attaches its blocks. **Artefact semantics stay deferred**: no sections, no
-   ordering, no artefact summary, no key-findings block, no
-   supersede/lock-on-advance — the composition seam owns all of it
-   (deferred.md, 009 entry). Re-run = new run = new artefact + new blocks;
-   nothing is superseded or mutated.
+3. **One artefact row per synthesise run as the v3.0 container, titled from
+   the scope intent.** `block.artefact_id` is NOT NULL by design; the echo
+   component already mints its artefact (the standing precedent). Synthesise
+   mints one artefact row per run whose **title carries the scope's `intent`
+   verbatim** (length-bounded, control-characters stripped, deterministic —
+   no model call; rev 1.1a — never a generic placeholder) and attaches its
+   blocks. **Artefact semantics stay deferred**: no sections, no ordering, no
+   artefact summary, no key-findings block, no supersede/lock-on-advance —
+   the composition seam owns all of it (deferred.md, 009 entry; title
+   conventions finalise there too — this is the honest interim). Re-run =
+   new run = new artefact + new blocks; nothing is superseded or mutated.
+   Why composition is deferred rather than pulled in: capability.md assigns
+   it to the **orchestrator** ("EB declares little; the orchestrator composes
+   the sections … from intent"), and the deep artefact *contains the
+   landscape* — characterise deliberately writes no blocks (its 009 contract
+   decision), so a composition built now would be one-legged. This slice
+   produces the grounded content composition will arrange.
 4. **Claims cite finding ids; citations resolve to the findings'
-   extract-verified anchors; the model never authors a quote.** The
-   synthesis call receives the group's member findings as **id-keyed data
-   records** (references, direction, statistics, anchor quotes, group
-   label/description — data, never instructions) and returns
-   schema-constrained claims, each carrying `cited_finding_ids ⊆ the group's
-   member set` (co-emitted citations — the claim is generated *from* the
-   finding records). Code then resolves each cited finding to its anchor
-   quotes and chunks and **re-runs the deterministic presence check against
-   the frozen basis chunks** (matches stored passage text, not a snapshot
-   reload). Validation is deterministic and fail-closed: unknown or
-   cross-group finding ids reject the response (one repair); every claim must
-   cite ≥ 1 finding — there is **no uncited-claim path in v3.0 synthesise**
-   (Tier 4 remains a judge *verdict* a claim can land in, visibly flagged —
-   never an authoring mode). This closes the fabricated-quote path
-   structurally: the model can only point at findings whose quotes extract
-   already verified.
+   extract-verified anchors; the model never authors a quote.** *Finding
+   ids* = `intervention_outcome_finding.finding_id` — the primary keys of
+   the durable findings-layer rows task 011 wrote (one row per
+   intervention–outcome–effect–stratum claim, each carrying its verified
+   quote anchors); `grouping_result.groups[]` already lists each group's
+   member finding ids (rev 1.1e). The synthesis call receives the group's
+   member findings as **id-keyed data records** (references, direction,
+   statistics, anchor quotes, group label/description — data, never
+   instructions) and returns schema-constrained claims, each carrying
+   `cited_finding_ids ⊆ the group's member set` (co-emitted citations — the
+   claim is generated *from* the finding records). Code then resolves each
+   cited finding to its anchor quotes and chunks and **re-runs the
+   deterministic presence check against the frozen basis chunks** (matches
+   stored passage text, not a snapshot reload). Why re-run rather than trust
+   extract's `quote_verified`: **verify asserts what it writes** — the
+   citation row's `verification_result` is established by the process
+   writing it, never inherited from an upstream JSONB payload (the
+   assert-on-row-not-summary lesson, same class); abstract-basis anchors
+   carry no `chunk_id` and need locating against the basis snapshot's chunks
+   anyway; and chunks are immutable, so the re-check is a cheap invariant
+   assertion (rev 1.1e). Validation is deterministic and fail-closed:
+   unknown or cross-group finding ids reject the response (one repair);
+   every finding-citing claim must cite ≥ 1 finding — there is **no
+   uncited-claim path in v3.0 synthesise** (Tier 4 remains a judge *verdict*
+   a claim can land in, visibly flagged — never an authoring mode). This
+   closes the fabricated-quote path structurally: the model can only point
+   at findings whose quotes extract already verified.
    **Anchor-inheritance posture:** an anchor with a verified `chunk_id` and a
    passing re-check → a clean `citation` row (`verification_result="pass"`).
    An abstract-basis anchor (`chunk_id` None) is re-located against the basis
@@ -227,21 +281,29 @@ stub/live on `OPENAI_API_KEY`.
    `quote_unverified`, the claim is capped at weakly-grounded, and nothing is
    dropped (flag-don't-drop; extract's honest anchor failures stay honest
    here).
-5. **The judge is `grounding_judge_v1`, batched per block, single-lane.** One
-   call per block judges all its claims: per claim **exactly one** of Tier
-   1–4 / `unsupported_mis_cited` (no separate is_supported), an orthogonal
+5. **The judge is `grounding_judge_v1`, batched per block, single-lane, and
+   reads the cited passages — not just the quotes.** One call per block
+   judges all its claims: per claim **exactly one** of Tier 1–4 /
+   `unsupported_mis_cited` (no separate is_supported), an orthogonal
    `weakly_grounded` flag, and a required free-form grounding rationale.
-   Judge input = claim text + its cited findings' quotes + the finding
-   record's context (references, direction, statistics) — the **evidence
-   envelope**, pinned and versioned as `synthesis_envelope_v1` alongside the
-   chunks' `segmentation_policy` (the spec's judge-drift/envelope-drift
-   requirement). Judge posture in the prompt: permissive about legitimate
-   inference, strict about attribution fidelity (scope, caveats, population,
-   comparator, direction, magnitude, uncertainty); topical relevance ≠
-   support; empirical markers are strict-routing heuristics, not the
-   definition. Persistence for eval-readiness: judge model + prompt version +
-   verdict + rationale on the annotation payload; full I/O on the Langfuse
-   telemetry plane; **no calibration_status field anywhere** (spec).
+   Judge input = claim text + the finding record's context (references,
+   direction, statistics) + **the cited chunks' full frozen text** — the
+   spec's "claim + cited passage(s) + enough surrounding evidence envelope":
+   quotes alone cannot catch quote-mining or omitted caveats (rev 1.1c).
+   This is deterministic `lookup`-grade access by `chunk_id` against the
+   frozen chunk table — **not retrieval machinery**; for abstract-basis
+   findings the envelope is the basis snapshot's chunks. The envelope is
+   pinned and versioned as `synthesis_envelope_v1` (cited chunks, no
+   neighbour-widening in v1) alongside the chunks' `segmentation_policy`
+   (the spec's judge-drift/envelope-drift requirement); widening beyond the
+   cited chunk lands with `retrieve` (a named seam). Judge posture in the
+   prompt: permissive about legitimate inference, strict about attribution
+   fidelity (scope, caveats, population, comparator, direction, magnitude,
+   uncertainty); topical relevance ≠ support; empirical markers are
+   strict-routing heuristics, not the definition. Persistence for
+   eval-readiness: judge model + prompt version + verdict + rationale on the
+   annotation payload; full I/O on the Langfuse telemetry plane; **no
+   calibration_status field anywhere** (spec).
 6. **The repair is bounded and rewords down; exhaustion flags, never drops.**
    If validation rejects a response or the judge lands any claim
    `unsupported_mis_cited`: **one** reword-down regeneration for that block
@@ -257,20 +319,28 @@ stub/live on `OPENAI_API_KEY`.
    blocks already written for earlier groups remain (they are real,
    internally consistent information-layer rows) and the failure payload
    names them — a retry is a new run, new artefact, new blocks.
-7. **Direction spreads stay deterministic — a pattern annotation, not model
-   prose.** The authoritative per-group spread is code-computed (it already
-   sits in `grouping_result.groups[]`); synthesise re-derives it from the
-   loaded findings, cross-checks it against the grouping row (mismatch =
-   structural failure — the referenced grouping must describe the findings
-   read), and writes it as the block's **pattern annotation** with its
+7. **Direction spreads stay deterministic; pattern annotations are
+   claim-driven.** The authoritative per-group spread is code-computed (it
+   already sits in `grouping_result.groups[]`); synthesise re-derives it
+   from the loaded findings and cross-checks it against the grouping row
+   (mismatch = structural failure — the referenced grouping must describe
+   the findings read). The spread always lands in the roll-up. **Claims are
+   typed** (rev 1.1b): a **finding claim** cites finding ids (→ citation
+   annotation, decision 4); a **pattern claim** asserts the evidence shape —
+   its stated counts are **validated deterministically against the
+   code-computed spread** (a wrong count rejects the response; one repair) —
+   and receives a **pattern annotation on its own unit** (annotations key on
+   `(block, unit, type)`; a shape assertion is what a pattern annotation
+   grounds — there is no free-floating one-per-block row). Pattern-annotation
    provenance: finding-query grade (middle — deterministic *given* the
    recorded finding-set/coverage/profile, extraction-dependent, **not
    metadata-grade**), the inherited extraction base, and the grouping run
-   reference. The model receives the spread as data and may restate it in
-   prose; the judge's fidelity posture covers misstatement. **Mixed/unclear
-   findings are first-class throughout** (the carried requirement): they
-   enter the synthesis input, appear in the spread, and the prompt forbids
-   aggregating them away.
+   reference. The model receives the spread as data; the prompt asks for the
+   shape to be reported (so a pattern claim is expected per block), but the
+   annotation follows the claim actually made — a block with no shape claim
+   simply has none. **Mixed/unclear findings are first-class throughout**
+   (the carried requirement): they enter the synthesis input, appear in the
+   spread, and the prompt forbids aggregating them away.
 8. **Descriptive, never evaluative; no absence claims.** Prompt negative
    rules (deterministically assertable on the built prompt): no
    recommendations or should-statements; no weighted/consensus verdicts (the
@@ -394,6 +464,15 @@ the table. `tests/helpers.py` `delete_project_data` gains it in FK-safe order.
   skeleton today, as every component boundary does.
 - **Agent-loop realisation / agent-invoked `query-findings`** — decision 9;
   the capability-run seam.
+- **Retrieval inside synthesise** — v3.0 synthesise is **findings-bounded by
+  design** (components §9: over the grouped findings; capability.md:
+  grounded narrative synthesis over EB's *existing* findings — the evidence
+  was retrieved, selected, extracted and anchored upstream; rev 1.1d). The
+  genuinely retrieval-dependent pieces are named seams landing with
+  `retrieve`: the verify loop's alternative repair (**re-gather targeted
+  evidence** — v3.0 repairs by rewording down only, the spec's primary) and
+  **judge-envelope widening** beyond the cited chunk (v1 envelope =
+  deterministic chunk lookup, decision 5).
 - **`implementation_context_finding`**, cross-schema linkage,
   graph-structured synthesis, hybrid retrieval / `retrieve` — all ⏸,
   untouched.
@@ -555,9 +634,12 @@ The judge rubric is a judge-rubric surface — lead-only per AGENTS.md.
   anchor → no citation row + `quote_unverified` + weakly-grounded cap, never
   dropped), **presence re-check** (a quote absent from the frozen chunks
   fails deterministically — fabricated-quote hard-fail preserved),
-  **claim/unit integrity** (every claim ≥ 1 citation; unit offsets exactly
-  address their claim text in block content; composite-FK annotation
-  integrity; content_hash correct), **judge semantics** (single-lane enum
+  **claim/unit integrity** (every finding claim ≥ 1 citation; a pattern
+  claim's stated counts must equal the code-computed spread — wrong counts
+  reject the response; a pattern annotation exists iff a shape-asserting
+  claim does, on that claim's unit; unit offsets exactly address their claim
+  text in block content; composite-FK annotation integrity; content_hash
+  correct), **judge semantics** (single-lane enum
   enforced; rationale required; verdict + judge provenance persisted on the
   annotation; weakly_grounded orthogonal), **repair semantics** (one
   reword-down + one re-judge, never more; budget ≤ 4 × groups test-asserted;
@@ -583,6 +665,8 @@ The judge rubric is a judge-rubric surface — lead-only per AGENTS.md.
   never-contribute constraint restated) · block summaries + faithfulness
   judging · agent-loop synthesise + agent-invoked `query-findings` (the
   capability-run seam — the 012 deviation entry updated, not closed) ·
+  **retrieval-dependent synthesise pieces** (rev 1.1d — re-gather-targeted-
+  evidence repair + judge-envelope widening; land with `retrieve`) ·
   synthesis/judge quality evals (extends the eval seam; envelope policy
   calibration).
 - Diff summary (data files excluded from review diffs per the 007 retro).

@@ -28,16 +28,18 @@ otherwise it is in progress, not done.
 
 Slice-specific criteria (the trust invariant, test- or evidence-enforced):
 
-9.  [ ] **Co-emitted citations only**: every claim carries ≥ 1 cited finding
-        id from its own group; unknown/cross-group ids reject the response;
-        no code path attaches a citation to prose after generation; the model
-        never authors a quote.
+9.  [ ] **Co-emitted citations only**: every finding claim carries ≥ 1 cited
+        finding id from its own group; unknown/cross-group ids reject the
+        response; no code path attaches a citation to prose after
+        generation; the model never authors a quote; a pattern claim's
+        stated counts equal the code-computed spread (wrong counts reject).
 10. [ ] **Two-part verify holds**: the deterministic presence check runs
         against frozen chunks for every citation (fabricated-quote hard-fail
         preserved); every claim receives exactly one judge verdict from the
         closed lane (Tier 1–4 | unsupported_mis_cited) with a required
         rationale, persisted with judge model + prompt version + envelope
-        policy version.
+        policy version; the judge input includes the cited chunks' full
+        frozen text (`synthesis_envelope_v1`), not quotes alone.
 11. [ ] **Flag, don't drop — everywhere**: failed/unlocatable anchors →
         `quote_unverified` + weakly-grounded cap; unsupported and
         weakly-grounded claims persist visibly after repair exhaustion;
@@ -46,9 +48,11 @@ Slice-specific criteria (the trust invariant, test- or evidence-enforced):
 12. [ ] **Block substrate integrity**: one block per named group of the
         referenced grouping run (exactly — grouping-set fidelity
         test-enforced); claim-grain units with exact offsets; composite-FK
-        annotation integrity; content_hash correct; one deterministic pattern
-        annotation per block cross-checked against the grouping row
-        (mismatch = structural failure).
+        annotation integrity; content_hash correct; the code-computed spread
+        cross-checked against the grouping row (mismatch = structural
+        failure); pattern annotations exist iff a shape-asserting claim
+        does, on that claim's unit; the minted artefact title carries the
+        bounded scope intent.
 13. [ ] **Descriptive posture enforced**: negative rules asserted on both
         built prompts (no recommendations, no consensus verdicts, no absence
         phrasing); injection-shaped labels/quotes land as inert data;
