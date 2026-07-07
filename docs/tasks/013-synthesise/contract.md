@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 7) — awaiting contract 🛑.
+> **Status:** drafted (rev 7.1) — awaiting contract 🛑.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
 > ADRs: [0009](../../adr/0009-capability-composes-synthesise-terminus.md)
@@ -61,6 +61,17 @@ specs in [docs/specs/](../../specs/index.md).
 >   rationales feed one reword-down regeneration then one re-judge —
 >   **`REPAIR_ROUND_CAP` = 1, plan-pinned** (the spec's bounded verify
 >   loop; round-count calibration = eval seam).
+> - **rev 7.1** (2026-07-07, rigidity sweep at the user's direction):
+>   **answer-shaped lead sections made explicitly legal** — the section
+>   proposal's "never verdicts" rule read strictly could have prohibited
+>   a "what the evidence shows on the question" lead section (the most
+>   valuable section for a question-asking policymaker; the spec's
+>   grounded key-findings idea in section form); the rule now targets
+>   **verdict-sections** (evaluative-conclusion premises) only. The sweep
+>   otherwise confirmed the remaining rigidities as deliberate recorded
+>   seams (IOF-only findings layer · the consensus boundary · one-shot
+>   sectioning · per-section independence · composition conventions ·
+>   screened-out unreachable · one-artefact-per-run).
 
 ## Goal
 
@@ -621,8 +632,14 @@ seam swap, unchanged. Tool-query embeddings ride the existing 009
 embedding surface.
 
 - **`synthesise_sections_v1`** — the section proposal; bounded list out;
-  sections name aspects of the question and the evidence, never
-  verdicts; no generic/catch-all sections; assignments only from
+  sections name aspects of the question and the evidence. An
+  **answer-shaped lead section** ("what the evidence shows on the
+  question" — descriptive, fully cited, synthesising across the
+  substrate) is explicitly legal and encouraged where the intent asks a
+  direct question (rev 7.1 — the spec's grounded key-findings idea in
+  section form); what is prohibited is a **verdict-section** (one whose
+  premise is an evaluative conclusion or recommendation — "X is the best
+  option"); no generic/catch-all sections; assignments only from
   supplied ids.
 - **`synthesise_section_v1`** — the section-loop surface (system prompt
   + `search_chunks`/`query_findings`/`lookup` tool schemas, versioned as
