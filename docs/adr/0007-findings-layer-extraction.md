@@ -1,6 +1,6 @@
 # ADR 0007 — Extraction: durable findings layer, memo fingerprint, deterministic quote anchoring
 
-- **Status:** Proposed — pending the task-011 plan 🛑.
+- **Status:** Accepted — 2026-07-07 (Shabeer Rauf, task-011 contract + plan gates).
 - **Date:** 2026-07-07
 - **Context doc:** [task 011 contract, decisions 1–9](../tasks/011-extract/contract.md)
   (revision history records the full decision trail, revs 1–1.5, including the

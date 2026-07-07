@@ -10,7 +10,10 @@ specs in [docs/specs/](../../specs/index.md).
 > full-text generation surface incl. full text in Langfuse traces — the three
 > ⚑ field sharpenings (stratum qualifiers · comparator · estimate level) and
 > the candidate data-model flow-back) ·
-> Plan approved (before implementation): _pending_ · ADR: _due at step 4_.
+> Plan approved (before implementation): **2026-07-07 · Shabeer Rauf** (plan
+> rev 2, plan-stage adversarial findings 10/10 adopted) ·
+> ADR: [0007](../../adr/0007-findings-layer-extraction.md) — Accepted
+> 2026-07-07.
 >
 > **Revision history:**
 > - **rev 1** (2026-07-07): initial draft.

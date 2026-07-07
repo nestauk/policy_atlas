@@ -1,12 +1,11 @@
 # Implementation Plan: 011-extract
 
-> **Status:** drafted (rev 2) — plan-stage adversarial review adjudicated
-> (Codex, 10 findings: 2 blockers · 8 majors, **10/10 adopted** — § Findings &
-> adjudication); awaiting the plan 🛑.
+> **Status:** **confirmed — 2026-07-07 · Shabeer Rauf** (rev 2, after the
+> plan-stage adversarial review was adjudicated: Codex, 10 findings —
+> 2 blockers · 8 majors, 10/10 adopted; § Findings & adjudication).
+> ADR 0007 written and Accepted at this gate (Task 9b).
 > Contract: [contract.md](contract.md) (approved 2026-07-07 · Shabeer Rauf,
 > rev 1.4; contract-stage adversarial findings adjudicated at rev 1.5).
-> ADR 0007 (findings-layer landing) drafted, flips to Accepted at the plan 🛑
-> (Task 9b).
 
 ## Overview
 
