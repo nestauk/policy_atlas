@@ -33,7 +33,7 @@ Companion files: [components.md](components.md) (the skeleton) · [provenance.md
   gradation (they differ in output shape — scan-grounded shape vs source-grounded findings — so
   each is its own component by the I/O test). This is a distinction in **production and grounding
   mode, not presentation** (see [components.md](components.md) and output structure below).
-- **The components are a library the plan selects from** (task 013 flow-back, refining "how far
+- **The components are a registry the plan selects from** (task 013 flow-back, refining "how far
   down the chain a run goes"): which components fire is the orchestrator's plan-time selection
   from intent, adjusted by the lighter/deeper nudge — **data dependencies stay structural**
   (extract needs a selection; group and findings-synthesis need an extraction; the artefact
@@ -55,13 +55,15 @@ Companion files: [components.md](components.md) (the skeleton) · [provenance.md
   decision-relative → a future **Options Assessment** (⏸).
 - EB may answer broader questions through grounded narrative synthesis over its **existing**
   findings, but must **not** add new schemas, structured computations or tools belonging to
-  future capabilities (handoff §7.9). ⏸ **Direct chunk-grounded narrative synthesis** is
-  sanctioned (task 013 flow-back): when a targeted question warrants an answer before the
-  findings chain has run, the artefact may carry narrative prose grounded **directly in frozen
-  chunks** — every claim through the full `produce-grounded-block` bar (quote-presence + judge),
-  visibly chunk-cited rather than findings-mediated (nothing downstream can query such claims
-  as structured findings — an accepted trade). Lands with `retrieve` (its chunk-selection
-  substrate); a deferred seam until then.
+  future capabilities (handoff §7.9). **Direct chunk-grounded narrative synthesis** is
+  sanctioned in two flavours (task 013 flow-back;
+  [ADR 0010](../../../adr/0010-intent-led-synthesis-sections.md)): over the **selected set**,
+  chunk quotes from the already-in-hand frozen text are part of grounded synthesis (no
+  retrieval needed; select's coverage discipline inherited); ⏸ **corpus-wide** — prose grounded
+  in frozen chunks of *unselected* documents for targeted pre-findings answers — every claim
+  through the full `produce-grounded-block` bar, visibly chunk-cited rather than
+  findings-mediated (nothing downstream can query such claims as structured findings — an
+  accepted trade), lands with `retrieve` (its chunk-selection substrate).
 
 ## Component skeleton
 

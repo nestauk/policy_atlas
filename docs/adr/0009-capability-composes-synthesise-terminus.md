@@ -29,9 +29,11 @@ contract gate the user challenged both readings, architecture-first:
    separate composition slice lands; and a **targeted question under a time
    budget** should be answerable from the evidence base as a grounded
    answer, not only as a landscape.
-3. The components are realistically a **library** the orchestrator directs
+3. The components are realistically a **registry** the orchestrator directs
    the EB sub-agent through — some run, some are skipped, per intent — not a
-   fixed ladder with a monotone depth cut-off.
+   fixed ladder with a monotone depth cut-off. ("Registry" deliberately: it
+   matches the code's `COMPONENT_REGISTRY` and the tool-registry vocabulary,
+   and avoids colliding with the deferred `Library` corpus class.)
 
 ## Decision
 
@@ -56,7 +58,7 @@ contract gate the user challenged both readings, architecture-first:
    record (the claim-typing machinery); no source citations at this grade —
    none exist, none are faked. Grounded finding-blocks use the full
    `produce-grounded-block` bar (deterministic quote-presence + LLM judge).
-4. **Components are a library; dependencies are structural, not ordinal.**
+4. **Components are a registry; dependencies are structural, not ordinal.**
    Which components fire is the plan's selection from intent; what a
    component consumes it references explicitly (`*_run_id`, compile
    fails closed). **Breadth and depth are independent parameters** — a
@@ -74,6 +76,12 @@ contract gate the user challenged both readings, architecture-first:
    such claims bypass select's coverage discipline and produce no structured
    findings downstream consumers can query or reuse. **Lands with
    `retrieve`** (its chunk-selection substrate); a ⏸ seam until then.
+   *Amended by [ADR 0010](0010-intent-led-synthesis-sections.md) (same
+   gate, later round): this decision as written covers only the
+   **corpus-wide** flavour, which stays retrieve-gated with the trade above.
+   The **selected-set** flavour — chunk grounding over the selected
+   documents' already-in-hand frozen text — needs no retrieval, inherits
+   select's coverage discipline, and lands in task 013.*
 
 ## Consequences
 

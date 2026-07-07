@@ -2,6 +2,18 @@
 
 ## 2026-07-07
 * **Update**: [EB capability](capabilities/evidence-base/capability.md), [EB components
+  §9](capabilities/evidence-base/components.md) — the **intent-led synthesis refinement**
+  ([ADR 0010](../adr/0010-intent-led-synthesis-sections.md); task 013 contract gate, second
+  round, after an independent deep-reasoner interrogation): deep synthesis is structured as
+  **intent-led sections** (bounded section proposal over intent + group summaries; fail-closed
+  scope-directive override; plan-compile sectioning = the seam), each section **mixing
+  grounding modes** — finding claims (extract-verified anchors), **selected-set chunk claims**
+  (windowed frozen text already in hand; no retrieval needed; select's discipline inherited),
+  pattern claims (deterministically validated). **Groups demoted to input, not structure**
+  (pure intent-led — no rendered backbone, user choice; uncovered groups counted). ADR 0009
+  decision 5 amended: only **corpus-wide** chunk grounding stays retrieve-gated. Supersedes
+  the group-per-block reading of §9's "per group produce a grounded block".
+* **Update**: [EB capability](capabilities/evidence-base/capability.md), [EB components
   §§5/6/9](capabilities/evidence-base/components.md),
   [execution-orchestration.md](system/execution-orchestration.md) — the **terminus
   refinement** (task 013 flow-back, user-decided at the contract gate): (1) the
@@ -11,7 +23,7 @@
   (2) **Synthesise is EB's terminal component at every depth** — landscape rendering always
   (model prose, shape claims deterministically validated against the characterisation
   record), per-group grounded finding-blocks when the deep chain ran, artefact minting +
-  block binding. (3) **Components are a library the plan selects from**; data dependencies
+  block binding. (3) **Components are a registry the plan selects from**; data dependencies
   structural via explicit fail-closed run references; **breadth and depth independent** (a
   targeted question compiles to a narrow-and-deep run). (4) ⏸ **Direct chunk-grounded
   narrative synthesis sanctioned** for pre-findings targeted answers (full

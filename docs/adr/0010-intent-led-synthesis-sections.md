@@ -1,0 +1,127 @@
+# ADR 0010 — Intent-led synthesis sections, mixed grounding modes, selected-set chunk grounding
+
+- **Status:** Accepted — 2026-07-07 (Shabeer Rauf, task-013 contract gate,
+  second round; follows an independent deep-reasoner design interrogation
+  commissioned at the user's direction).
+- **Date:** 2026-07-07
+- **Context doc:** [task 013 contract](../tasks/013-synthesise/contract.md)
+  (rev 3; revision history records the trail) ·
+  [ADR 0009](0009-capability-composes-synthesise-terminus.md) (the terminus
+  architecture this realises; its decision 5 amended by decision 3 below) ·
+  [EB capability § Output structure](../specs/capabilities/evidence-base/capability.md)
+  ("a single section mixes grounding modes freely … composed from intent") ·
+  [provenance-grounding](../specs/system/provenance-grounding.md) ·
+  [spec log, 2026-07-07 entries](../specs/log.md).
+
+## Context
+
+Contract rev 2 realised the deep synthesis as **one grounded block per facet
+group**, with intent absent from the synthesis prompts (inherited from task
+012's deliberate intent-exclusion) and **all** direct chunk-grounded
+narrative deferred behind `retrieve`. The user challenged this as producing
+an artefact shaped by what-was-studied rather than by what-was-asked —
+against v3's founding principles (modularity, flexibility, collaboration) —
+and directed an independent, detached design interrogation (deep-reasoner,
+fresh context, contract-as-proposal-not-authority).
+
+The interrogation confirmed the challenge and sharpened it:
+
+1. **Group-per-block contradicts ADR 0009 itself** — the plan's authority to
+   shape sections from intent had nothing to act on when composition was
+   hardwired to group order; the source spec already says sections are
+   "composed from the user's intent" and "mix grounding modes freely".
+2. **012's intent-exclusion rationale does not transfer** — a facet
+   partition should be question-independent; synthesis's entire job is
+   serving the question. The recomputable unit for synthesis is
+   `(config-including-intent, evidence)`.
+3. **The IOF findings schema is deliberately narrow** (effect structure
+   only), so findings-only prose can never carry mechanisms, implementation
+   context, caveats or qualitative texture — the substance of an
+   intent-relevant answer.
+4. **Chunk-grounded narrative has two flavours the rev-2 contract
+   conflated**: over the **selected set**, the documents' full frozen text
+   is already in hand (extract windows exactly this text today; the
+   `QuoteMatcher` presence machinery already verifies verbatim quotes
+   against frozen chunks) — **no retrieval is needed**, and select's
+   coverage discipline is inherited. Only the **corpus-wide** flavour
+   (quoting unselected documents, pre-findings) genuinely needs `retrieve`.
+
+## Decision
+
+1. **Deep synthesis is structured as intent-led sections.** The section set
+   is intent-shaped: v3.0 derives it via one bounded, schema-constrained
+   section-proposal call (`synthesise_sections_v1` — intent + group
+   summaries in, a validated section list out, capped), overridable by a
+   fail-closed `context["synthesis"]` directive (the standing
+   scope-directive precedent); plan-compile section machinery remains the
+   recorded seam and this directive is its compile target. Intent also
+   enters the writer prompts as emphasis-shaping **data** (id-keyed, never
+   instructions). Intent is orthogonal to grounding: no claim passes verify
+   because of intent — the presence check and the judge ("topical relevance
+   ≠ support") are unchanged.
+2. **Sections mix grounding modes** — per the source spec's own line. A
+   section's typed claims are: **finding claims** (cite finding ids →
+   extract-verified anchors), **chunk claims** (verbatim quote + chunk
+   reference from the *selected set's* windowed frozen text — the texture
+   the IOF schema cannot carry), and **pattern claims** (deterministically
+   validated against computed spreads/records). All cited claims pass the
+   full produce-grounded-block bar (deterministic quote-presence + the
+   single-lane LLM judge + bounded reword-down repair; flag-not-drop).
+3. **Selected-set chunk grounding lands now (task 013), not behind
+   `retrieve`** — amending ADR 0009 decision 5, which had contemplated only
+   the corpus-wide flavour: a section's chunk window is the frozen text of
+   the documents behind its assigned findings (bounded by select's budget
+   and a windowing char budget; deterministic given the assignments), so it
+   inherits select's coverage discipline. **Corpus-wide** chunk-grounded
+   narrative (pre-findings targeted answers over unselected documents)
+   remains the retrieve-gated seam with ADR 0009's recorded risk note.
+4. **Groups are demoted to input, not structure** — and, by explicit user
+   choice, **no descriptive backbone blocks are rendered** (pure intent-led;
+   the hybrid backbone option was offered and declined). Group summaries
+   (labels, descriptions, sizes, spreads) inform the section proposal and
+   the writer prompts as data; the deterministic direction spreads live on
+   in `grouping_result`/`synthesis_result` roll-ups and in validated pattern
+   claims. Recorded trade: the always-visible rendered full-shape check on
+   intent-shaped prose is given up; the guards that remain are pattern-claim
+   validation, the judge lane, the no-absence rule, and honest
+   `groups_unsectioned` accounting (sections need not cover every group —
+   uncovered groups are counted and flagged, never silently dropped).
+5. **The trust machinery of contract rev 2 is retained unchanged** (the
+   interrogation defended it): co-emitted citations only, the model never
+   authors a finding-claim quote, deterministic presence re-check against
+   frozen chunks, single-lane judge verdicts persisted with envelope/prompt
+   versions, bounded repairs, flag-not-drop, no absence claims, the
+   deterministically validated landscape path (now with intent as emphasis
+   input), the intent-derived artefact title, and typed claims per unit —
+   which the interrogation identified as the *enabler* of mixed-mode
+   sections, not a rigidity.
+
+## Consequences
+
+- Task 013 rebuilds its deep path around sections: **four prompt surfaces**
+  (`synthesise_landscape_v1` · `synthesise_sections_v1` ·
+  `synthesise_section_v1` · `grounding_judge_v1`), with windowed
+  selected-document frozen text now entering the writer prompt (the 011
+  source-text egress class, twice over).
+- `synthesis_result` carries section provenance (the section set, its
+  derivation source, unassigned groups) and per-section block entries with
+  claim counts by type including chunk-cited.
+- Budgets stay pre-run-known: landscape ≤ 2 · sections ≤ 2 · per section ≤ 4
+  (write + judge + one repair + one re-judge), sections capped.
+- The 012 recomputability line is scoped in the specs: intent-exclusion was
+  grouping-specific; synthesis determinism tests fix intent as input.
+
+## Rejected
+
+- **Group-per-block as the artefact structure** (contract rev 2) — an
+  evidence *organisation* mistaken for an artefact *structure*; intent-blind
+  and thin by IOF-schema construction.
+- **Hybrid with a rendered group-spread backbone** (the interrogation's and
+  the lead's recommendation) — declined by the user in favour of pure
+  intent-led sections; the trade is recorded in decision 4.
+- **Deferring selected-set chunk grounding to 014 or `retrieve`** — the
+  selected set needs no retrieval and the user directed it land in 013.
+- **Model-authored quotes for finding claims** — unchanged from rev 2:
+  finding claims cite ids and resolve to extract-verified anchors; only
+  chunk claims carry model-emitted quotes, and those face the same
+  deterministic presence check extract's own quotes face.
