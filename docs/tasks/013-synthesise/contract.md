@@ -20,7 +20,9 @@ specs in [docs/specs/](../../specs/index.md).
 > as **consolidated, amendment-free records**; the round-by-round
 > decision trail lives in this revision history.
 >
-> **Revision history:**
+> **Revision history:** *(entries are point-in-time records; the "ADR 0010
+> § Amendment" markers below referenced amendment sections that were later
+> consolidated into the ADRs' main structure — commit 74ab736.)*
 > - **rev 1** (2026-07-07): initial draft — synthesise as deep-only content
 >   producer per the then-current spec reading.
 > - **rev 1.1** (2026-07-07): intent-derived artefact title · claim-driven
