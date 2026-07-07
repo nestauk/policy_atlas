@@ -1,0 +1,188 @@
+"""Extraction backend seam for the extract_iof_v1 IOF extraction call."""
+
+from __future__ import annotations
+
+from typing import Protocol
+
+import structlog
+from langfuse import Langfuse
+from openai.types.completion_usage import CompletionUsage
+
+from policy_atlas import tracing
+from policy_atlas.embeddings import resolve_openai_client
+from policy_atlas.extract_prompt import (
+    EXTRACT_MAX_OUTPUT_TOKENS,
+    EXTRACTION_MODEL,
+    PROMPT_VERSION,
+    build_extract_messages,
+)
+from policy_atlas.extraction_records import ExtractionResponse, ExtractionWindowPayload
+
+log = structlog.get_logger()
+
+
+def _log_usage(event: str, usage: CompletionUsage | None) -> None:
+    log.info(event, **_usage_metadata(usage))
+
+
+def _usage_metadata(usage: CompletionUsage | None) -> dict[str, int | None]:
+    if usage is None:
+        return {
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "total_tokens": None,
+        }
+    return {
+        "prompt_tokens": usage.prompt_tokens,
+        "completion_tokens": usage.completion_tokens,
+        "total_tokens": usage.total_tokens,
+    }
+
+
+class ExtractionBackend(Protocol):
+    """The extraction seam.
+
+    Backends return structurally parsed output only; a transport or parse
+    failure raises so the caller can apply retry and per-document failure
+    policy.
+    """
+
+    @property
+    def mode(self) -> str:
+        """``"live"`` or ``"stub"``; read-only so wrappers can proxy it."""
+        ...
+
+    def extract(self, payload: ExtractionWindowPayload) -> ExtractionResponse:
+        """Extract findings from one window of one document's basis text.
+
+        Args:
+            payload: The window's basis segments plus envelope context.
+
+        Returns:
+            Raw structurally parsed extraction output.
+        """
+        ...
+
+
+class OpenAIExtractionBackend:
+    """Live OpenAI implementation of the extraction seam.
+
+    Args:
+        api_key: Optional OpenAI API key. If omitted, ``OPENAI_API_KEY`` is read
+            from the environment; keys are never read from persistent config.
+        langfuse_client: Optional Langfuse client. When omitted, tracing is a
+            no-op and no Langfuse object is created.
+
+    Raises:
+        RuntimeError: If no OpenAI API key is provided or configured.
+    """
+
+    mode = "live"
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        langfuse_client: Langfuse | None = None,
+    ) -> None:
+        self._client = resolve_openai_client(
+            api_key,
+            backend_name="OpenAIExtractionBackend",
+            timeout=300.0,
+            max_retries=2,
+        )
+        self._langfuse_client = langfuse_client
+
+    def _extract_once(
+        self,
+        payload: ExtractionWindowPayload,
+    ) -> tuple[ExtractionResponse, CompletionUsage | None]:
+        messages = build_extract_messages(payload)
+        response = self._client.chat.completions.parse(
+            model=EXTRACTION_MODEL,
+            messages=messages,
+            response_format=ExtractionResponse,
+            max_completion_tokens=EXTRACT_MAX_OUTPUT_TOKENS,
+        )
+        _log_usage("extraction.extract.usage", response.usage)
+        if not response.choices:
+            raise RuntimeError("OpenAI extraction response had no choices.")
+        parsed = response.choices[0].message.parsed
+        if parsed is None:
+            raise RuntimeError("OpenAI extraction response was not parsed.")
+        parsed_model: ExtractionResponse = parsed
+        return parsed_model, response.usage
+
+    def extract(self, payload: ExtractionWindowPayload) -> ExtractionResponse:
+        """Extract findings through structured OpenAI output.
+
+        Args:
+            payload: The window's basis segments plus envelope context.
+
+        Returns:
+            Raw structurally parsed extraction output.
+
+        Raises:
+            RuntimeError: If the response cannot be parsed into the expected shape.
+        """
+        if self._langfuse_client is None:
+            return self._extract_once(payload)[0]
+
+        with tracing._observation(
+            self._langfuse_client,
+            name=f"extract:{payload.pss_id[:8]}:w{payload.window_index}",
+            as_type="generation",
+        ) as span:
+            response, usage = self._extract_once(payload)
+            span.update(
+                input={"messages": build_extract_messages(payload)},
+                output={"findings": [f.model_dump() for f in response.findings]},
+                model=EXTRACTION_MODEL,
+                metadata={
+                    "prompt_version": PROMPT_VERSION,
+                    "pss_id": payload.pss_id,
+                    "window_index": payload.window_index,
+                    "segment_ids": [s["segment_id"] for s in payload.segments],
+                    "finding_count": len(response.findings),
+                    **_usage_metadata(usage),
+                },
+            )
+            return response
+
+
+class StubExtractionBackend:
+    """Deterministic zero-egress extraction backend for tests and local runs."""
+
+    mode = "stub"
+
+    def extract(self, payload: ExtractionWindowPayload) -> ExtractionResponse:
+        """Return sentinel-driven findings from the payload's envelope metadata.
+
+        Args:
+            payload: The window's basis segments plus envelope context. The
+                ``metadata`` dict (the envelope snapshot metadata) carries the
+                stub's ``_stub_*`` sentinels; it never enters the live prompt.
+
+        Returns:
+            Deterministic extraction output driven by whichever sentinel (if
+            any) is present in ``payload.metadata``.
+
+        Raises:
+            RuntimeError: If ``_stub_extract_failed`` is truthy.
+        """
+        if payload.metadata.get("_stub_extract_failed"):
+            raise RuntimeError("Stub extraction failure sentinel.")
+
+        if "_stub_iof_windows" in payload.metadata:
+            windows = payload.metadata["_stub_iof_windows"]
+            return ExtractionResponse.model_validate(
+                {"findings": windows.get(str(payload.window_index), [])}
+            )
+
+        if "_stub_iof" in payload.metadata:
+            if payload.window_index == 0:
+                return ExtractionResponse.model_validate(
+                    {"findings": payload.metadata["_stub_iof"]}
+                )
+            return ExtractionResponse(findings=[])
+
+        return ExtractionResponse(findings=[])
