@@ -1,5 +1,12 @@
 # Knowledge update log
 
+## 2026-07-07
+* **Creation**: Added
+  [directive-parse-malformed-vs-unknown](directive-parse-malformed-vs-unknown.md) — untrusted
+  execution-bearing JSONB inputs parse fail-closed on structural malformation (bounded
+  strings/collections, static messages) but flag unknown column/tag references non-fatally;
+  the split both 010 review families converged on (task 010).
+
 ## 2026-07-06
 * **Creation**: Added
   [llm-schema-valid-empty-output](llm-schema-valid-empty-output.md) — structured outputs
