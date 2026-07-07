@@ -5,8 +5,8 @@ otherwise it is in progress, not done.
 
 1. [ ] Implementation satisfies [contract.md](contract.md) (rev 7.5) — every
        numbered design decision as approved (or as amended at the gates),
-       implementing the spec as refined by ADRs 0009 + 0010 (five
-       amendments).
+       implementing the spec as refined by ADRs 0009 + 0010 (consolidated
+       records).
 2. [ ] `make verify` passes (okf-validate · test · typecheck · lint ·
        build); the declared manual live check ran on **four substrate
        profiles** (screen-only rapid · characterisation-only ·

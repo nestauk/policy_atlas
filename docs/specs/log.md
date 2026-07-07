@@ -16,10 +16,12 @@
   optional); the selected-set/corpus-wide chunk-grounding binary → **screened-in corpus
   with the selection as a soft prior**, only corpus-scale retrieval (beyond the in-memory
   ceiling, or unscreened content) retrieve-gated; the tool-wiring table row for synthesise
-  → substrate-conditional (+ declares `search_chunks`); ADRs 0009/0010 Consequences
-  sections updated to the as-amended shape (originals noted as interim); ADR 0010 retitled
-  ("…and substrate-conditional grounding"); amendment-count citations corrected
-  everywhere.
+  → substrate-conditional (+ declares `search_chunks`); ADRs 0009/0010 subsequently
+  **consolidated into cohesive, amendment-free records** (user direction: amendments are
+  for shipped ADRs — within one unmerged branch, decisions and justifications belong in
+  the main structure; ADR 0010 retitled "…and substrate-conditional grounding"; the
+  round-by-round decision trail is retained in the task-013 contract's revision history);
+  cross-references updated everywhere.
 * **Update**: [EB components §9](capabilities/evidence-base/components.md) — the unified
   interpretive-shape claim type renamed **cluster claims → theme claims** (task 013 gate,
   user call: policy-maker-facing vocabulary, and the more spec-aligned word — the

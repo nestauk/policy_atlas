@@ -25,9 +25,9 @@
 Implementation — task `013-synthesise`.
 
 Tasks `001-walking-skeleton` through `012-group` are complete (merged). The active
-slice adds **synthesise** — EB component 9 and, per **ADRs 0009 + 0010 (as
-amended)** (spec-flow-backed 2026-07-07/08 across the contract's revision
-history — the contract is the authoritative round count), **EB's terminal
+slice adds **synthesise** — EB component 9 and, per **ADRs 0009 + 0010**
+(consolidated records, spec-flow-backed 2026-07-07/08; the contract's revision
+history is the authoritative decision trail), **EB's terminal
 component: it runs at every depth** and **composes the one EB artefact** — mints
 it (intent-derived bounded title), renders content into grounded blocks, binds
 them in proposal order; the orchestrator shapes sections at plan time only

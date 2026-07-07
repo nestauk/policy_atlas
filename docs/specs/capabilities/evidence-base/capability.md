@@ -37,8 +37,7 @@ Companion files: [components.md](components.md) (the skeleton) · [provenance.md
   down the chain a run goes"): which components fire is the orchestrator's plan-time selection
   from intent, adjusted by the lighter/deeper nudge — **data dependencies stay structural**
   (extract needs a selection; group and finding claims need an extraction; the artefact needs
-  **at least one groundable substrate** — every upstream reference is optional, ADR 0010 as
-  amended), expressed as explicit run references that compile
+  **at least one groundable substrate** — every upstream reference is optional, ADR 0010), expressed as explicit run references that compile
   fail-closed. **Breadth and depth are independent parameters**: a targeted question with a
   small time budget compiles to a *narrow-and-deep* run (small selection budget, few
   extractions, full grounding) — quick never has to mean shallow.
@@ -58,7 +57,7 @@ Companion files: [components.md](components.md) (the skeleton) · [provenance.md
   findings, but must **not** add new schemas, structured computations or tools belonging to
   future capabilities (handoff §7.9). **Direct chunk-grounded narrative synthesis** is
   sanctioned (task 013 flow-back;
-  [ADR 0010](../../../adr/0010-intent-led-synthesis-sections.md) as amended): chunk quotes
+  [ADR 0010](../../../adr/0010-intent-led-synthesis-sections.md)): chunk quotes
   from the **screened-in corpus's** frozen text are part of grounded synthesis — screen is
   the relevance discipline that bounds reading, a referenced selection is a soft ranking
   prior (never a filter), and every claim passes the full `produce-grounded-block` bar,

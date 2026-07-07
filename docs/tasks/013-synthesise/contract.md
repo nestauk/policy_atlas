@@ -12,12 +12,13 @@ specs in [docs/specs/](../../specs/index.md).
 > surfaces + embedding-query use · the repo's first agent loop) ·
 > Plan approved (before implementation): _pending_ ·
 > ADRs: [0009](../../adr/0009-capability-composes-synthesise-terminus.md)
-> (terminus architecture; decision 5 + Consequences as amended) +
+> (capability-composes · terminus at every depth · registry, breadth ⊥
+> depth · chunk-grounding sanction + scale gate) +
 > [0010](../../adr/0010-intent-led-synthesis-sections.md) (intent-led
-> sections; **five dated Amendments** = the rev-4/5/6/7/7.4 rounds; revs
-> 7.1–7.3 and 7.5 are contract-level mechanism refinements recorded in
-> this revision history, deliberately without ADR amendments) — both
-> Accepted 2026-07-07.
+> sections · substrate-conditional grounding · the section loop · six
+> typed claims · non-agentic verify · ledger) — both Accepted 2026-07-08
+> as **consolidated, amendment-free records**; the round-by-round
+> decision trail lives in this revision history.
 >
 > **Revision history:**
 > - **rev 1** (2026-07-07): initial draft — synthesise as deep-only content
@@ -160,7 +161,7 @@ blocks, binds them in proposal order. The orchestrator shapes the artefact
 at plan time; composition is capability expertise and happens here. Depth
 survives as the plan's thoroughness gradation steering which registry
 components fire; **synthesise never hard-wires a component combination —
-it adapts to whatever the plan selected** (ADR 0010, as amended).
+it adapts to whatever the plan selected** (ADR 0010).
 
 **One flow.** Synthesise takes explicit fail-closed run references — **all
 optional**: `characterisation_run_id`, and the deepest available of
@@ -318,10 +319,10 @@ A PR on `task/013-synthesise` → `dev` that:
 
 ## Read first
 
-- [ADR 0010](../../adr/0010-intent-led-synthesis-sections.md) **including
-  all five Amendments** and
+- [ADR 0010](../../adr/0010-intent-led-synthesis-sections.md) (the
+  consolidated synthesis-realisation record) and
   [ADR 0009](../../adr/0009-capability-composes-synthesise-terminus.md)
-  (capability-composes; decision 5 as amended).
+  (capability-composes; the chunk-grounding sanction + scale gate).
 - [EB components §9](../../specs/capabilities/evidence-base/components.md)
   and [EB capability](../../specs/capabilities/evidence-base/capability.md)
   — as refined 2026-07-07 (six rounds); also components §5 (the
@@ -730,7 +731,7 @@ No existing-table changes. Downgrade drops the table. `tests/helpers.py`
    three-tool set, hard turn cap, code-enforced substrate scope). Every
    prior contract declared "no agent loop, no tools" — this contract
    deliberately crosses that line for exactly one surface, per the
-   spec's own declared realisation and ADR 0010's amendments.
+   spec's own declared realisation and ADR 0010.
 
 No new dependency rides this slice (`openai`, `langfuse`, `pydantic`
 cover it; cosine + lexical scoring are stdlib/in-memory).
@@ -740,8 +741,7 @@ exactly one loop surface; no tool writes; no egress verb in the tool set;
 no new dependency; no auth/tenancy/CI change; no existing-table change;
 no new event types; no tag writes; no retrieval index/extension.
 
-**Spec flow-backs: already landed with ADRs 0009 + 0010 (four
-amendments)** — approved in this contract's gate conversation. Remaining
+**Spec flow-backs: already landed with ADRs 0009 + 0010** — approved in this contract's gate conversation. Remaining
 deferrals ride `docs/deferred.md`.
 
 ## Public / private boundary
@@ -1017,7 +1017,7 @@ the trust invariant's landing slice, carrying the full honest-assertion
 vocabulary with bounded agency and full substrate-conditional
 flexibility. Contract- and plan-stage adversarial reviews standard;
 review stack sized per the review-economy notes; the security lane's
-headline target is the loop. ADRs 0009 + 0010 (four amendments) cover
+headline target is the loop. ADRs 0009 + 0010 cover
 the architecture.
 
 Review focus:
