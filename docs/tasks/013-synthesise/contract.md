@@ -12,9 +12,11 @@ specs in [docs/specs/](../../specs/index.md).
 > surfaces + embedding-query use · the repo's first agent loop) ·
 > Plan approved (before implementation): _pending_ ·
 > ADRs: [0009](../../adr/0009-capability-composes-synthesise-terminus.md)
-> (terminus architecture; decision 5 as amended) +
+> (terminus architecture; decision 5 + Consequences as amended) +
 > [0010](../../adr/0010-intent-led-synthesis-sections.md) (intent-led
-> sections; four dated Amendments = the rev-4/5/6/7 rounds) — both
+> sections; **five dated Amendments** = the rev-4/5/6/7/7.4 rounds; revs
+> 7.1–7.3 and 7.5 are contract-level mechanism refinements recorded in
+> this revision history, deliberately without ADR amendments) — both
 > Accepted 2026-07-07.
 >
 > **Revision history:**
@@ -317,7 +319,7 @@ A PR on `task/013-synthesise` → `dev` that:
 ## Read first
 
 - [ADR 0010](../../adr/0010-intent-led-synthesis-sections.md) **including
-  all four Amendments** and
+  all five Amendments** and
   [ADR 0009](../../adr/0009-capability-composes-synthesise-terminus.md)
   (capability-composes; decision 5 as amended).
 - [EB components §9](../../specs/capabilities/evidence-base/components.md)

@@ -22,8 +22,9 @@ acquire → screen → classify → appraise → characterise (landscape content
 
 The components are a **registry the plan selects from** (task 013 flow-back): which fire is the
 orchestrator's plan-time selection from intent; **data dependencies stay structural** (extract
-needs a selection; group and findings-synthesis need an extraction; the artefact needs at least
-characterise's content), expressed as explicit run references compiling fail-closed. Breadth
+needs a selection; group and finding claims need an extraction; the artefact needs **at least
+one groundable substrate** — every upstream reference is optional, ADR 0010 as amended),
+expressed as explicit run references compiling fail-closed. Breadth
 and depth are independent — a targeted question compiles to a *narrow-and-deep* run.
 
 ## Tool wiring (consolidated)
@@ -41,7 +42,7 @@ and depth are independent — a targeted question compiles to a *narrow-and-deep
 | 6 | select | `select` (strategy-parameterised) | `select` | procedure (+ optional bounded generative rerank) |
 | 7 | extract | `extract` → `intervention_outcome_finding` | `extract` | per-source fan-out |
 | 8 | group | `cluster` (facet, over findings) + `query-findings` | `cluster`, `query-findings` | agent |
-| 9 | synthesise | `produce-grounded-block` (reads grouped findings) | `query-findings` | agent-loop |
+| 9 | synthesise | `produce-grounded-block` (intent-led sections over available substrate) | `query-findings`, `search_chunks` (the `retrieve` increment) | agent-loop |
 
 ## 1 — acquire (front edge)
 
@@ -233,9 +234,12 @@ on what the run produced:
   [execution-orchestration](../../system/execution-orchestration.md) declares, running
   *inside* the component per the facade principle (the capability sub-agent invokes
   synthesise as one tool; no second agent) — gathers evidence via **`search_chunks`**
-  (hybrid embedding + lexical, rank-fused with the selection prior where referenced, over
-  the **screened-in corpus's** frozen units, each returned chunk carrying its origin —
-  the 009 vectors' first reader; the `retrieve` seam's first increment),
+  (a staged pipeline: content-only hybrid relevance [embedding + lexical, rank-fused] →
+  arithmetic soft priors [the selection prior where referenced + fail-closed directive
+  boosts over columns/tags/appraisal tier — re-weight, never exclude] → a cross-encoder
+  reranker slot [pass-through until Bedrock Rerank lands] → caps; over the **screened-in
+  corpus's** frozen units, each returned chunk carrying its origin — the 009 vectors'
+  first reader; the `retrieve` seam's first increment),
   **`query-findings`** (present only when an extraction is referenced) and **`lookup`**
   (the universal-core read tool: appraisals, classifications, selection rationale,
   coverage records, characterisation/grouping rows, **and the tag layer** — per its own
@@ -265,11 +269,11 @@ on what the run produced:
   verification ("topical relevance ≠ support"). The source/evidence policy's citable bar
   is applied **flag-not-block** (below-bar support flagged weakly-grounded/below-policy,
   never hidden/dropped).
-- ⏸ **Corpus-wide chunk-grounded narrative** (sanctioned, ADR 0009 as amended by ADR 0010):
-  for targeted questions answered before the findings chain has run — prose grounded directly
-  in frozen chunks of **unselected** documents, full `produce-grounded-block` bar, visibly
-  chunk-cited; needs chunk selection, so it lands with `retrieve`. (The **selected-set**
-  flavour is not deferred — it is part of grounded synthesis above.)
+- ⏸ **Corpus-scale retrieval** (ADR 0009 decision 5 as amended): in-corpus chunk grounding
+  over the **screened-in corpus** is part of grounded synthesis above (a referenced selection
+  is only a soft ranking prior) — what remains gated on the index-backed `retrieve` slice is
+  retrieval **beyond the in-memory ceiling** (`RETRIEVAL_UNIT_CAP`, fail-closed) or over
+  **unscreened** content, with ADR 0009's recorded risk note.
 
 ⏸ **Consensus seam:** the *weighted* verdict (strength-weighted "the evidence supports X at
 strength Y") is deferred to the same roll-up seam; candidate mechanism = the deferred

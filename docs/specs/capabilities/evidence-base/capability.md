@@ -36,8 +36,9 @@ Companion files: [components.md](components.md) (the skeleton) · [provenance.md
 - **The components are a registry the plan selects from** (task 013 flow-back, refining "how far
   down the chain a run goes"): which components fire is the orchestrator's plan-time selection
   from intent, adjusted by the lighter/deeper nudge — **data dependencies stay structural**
-  (extract needs a selection; group and findings-synthesis need an extraction; the artefact
-  needs at least characterise's content), expressed as explicit run references that compile
+  (extract needs a selection; group and finding claims need an extraction; the artefact needs
+  **at least one groundable substrate** — every upstream reference is optional, ADR 0010 as
+  amended), expressed as explicit run references that compile
   fail-closed. **Breadth and depth are independent parameters**: a targeted question with a
   small time budget compiles to a *narrow-and-deep* run (small selection budget, few
   extractions, full grounding) — quick never has to mean shallow.
@@ -56,14 +57,15 @@ Companion files: [components.md](components.md) (the skeleton) · [provenance.md
 - EB may answer broader questions through grounded narrative synthesis over its **existing**
   findings, but must **not** add new schemas, structured computations or tools belonging to
   future capabilities (handoff §7.9). **Direct chunk-grounded narrative synthesis** is
-  sanctioned in two flavours (task 013 flow-back;
-  [ADR 0010](../../../adr/0010-intent-led-synthesis-sections.md)): over the **selected set**,
-  chunk quotes from the already-in-hand frozen text are part of grounded synthesis (no
-  retrieval needed; select's coverage discipline inherited); ⏸ **corpus-wide** — prose grounded
-  in frozen chunks of *unselected* documents for targeted pre-findings answers — every claim
-  through the full `produce-grounded-block` bar, visibly chunk-cited rather than
-  findings-mediated (nothing downstream can query such claims as structured findings — an
-  accepted trade), lands with `retrieve` (its chunk-selection substrate).
+  sanctioned (task 013 flow-back;
+  [ADR 0010](../../../adr/0010-intent-led-synthesis-sections.md) as amended): chunk quotes
+  from the **screened-in corpus's** frozen text are part of grounded synthesis — screen is
+  the relevance discipline that bounds reading, a referenced selection is a soft ranking
+  prior (never a filter), and every claim passes the full `produce-grounded-block` bar,
+  visibly chunk-cited rather than findings-mediated (nothing downstream can query such
+  claims as structured findings — an accepted trade). ⏸ What remains gated on the
+  index-backed `retrieve` slice is **corpus-scale** retrieval — beyond the fail-closed
+  in-memory ceiling, or over unscreened content.
 
 ## Component skeleton
 
@@ -76,9 +78,10 @@ acquire → screen → classify → appraise → characterise (landscape content
 `screen` / `classify` / `appraise` run as **per-document fan-out**. **Full-text ingestion is
 gated post-`screen`** (cheap shared substrate built for *all* screened-in — so even a shallow
 landscape run builds the full-text corpus); **Tier-1 extraction is gated by `select`** (the
-scoped, expensive step). **Synthesise is the terminus at every depth** (task 013 flow-back): a
-shallow run's synthesise composes the landscape artefact from characterise's content; a deep
-run's adds grounded finding-blocks over the grouped findings — the deep artefact contains the
+scoped, expensive step). **Synthesise is the terminus at every depth** (task 013 flow-back): one
+substrate-conditional flow of intent-led sections whose claim types are gated by what the
+run produced — a characterise-only run's artefact is the landscape; a run that also ran the
+deep chain adds finding- and theme-grounded claims, so the deep artefact contains the
 landscape. Per-component detail in [components.md](components.md).
 
 **New shared tools EB introduces** (framework flow-backs, now in the system tool registry):

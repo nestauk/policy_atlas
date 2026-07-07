@@ -1,6 +1,25 @@
 # Spec update log
 
 ## 2026-07-08
+* **Update**: [EB components §9](capabilities/evidence-base/components.md) — `search_chunks`
+  described as its staged pipeline (task 013 contract rev 7.5): content-only hybrid
+  relevance → arithmetic soft priors (selection prior + fail-closed directive boosts over
+  columns/tags/appraisal tier, re-weight-never-exclude — the surface the future
+  source/evidence policy compiles into, honouring plan-as-object's steerable-never-baked
+  quality-prior ruling) → a cross-encoder reranker slot (pass-through until Bedrock Rerank
+  lands, per the retrieval contract's inference-trust-boundary line) → caps.
+* **Coherence pass** (task 013 gate, pre-adversarial-review; fresh-context audit, 18
+  findings, no semantic changes): superseded same-gate wording reconciled to the amended
+  state across [EB capability](capabilities/evidence-base/capability.md) and
+  [EB components](capabilities/evidence-base/components.md) — "artefact needs at least
+  characterise's content" → **≥ 1 groundable substrate** (all upstream references
+  optional); the selected-set/corpus-wide chunk-grounding binary → **screened-in corpus
+  with the selection as a soft prior**, only corpus-scale retrieval (beyond the in-memory
+  ceiling, or unscreened content) retrieve-gated; the tool-wiring table row for synthesise
+  → substrate-conditional (+ declares `search_chunks`); ADRs 0009/0010 Consequences
+  sections updated to the as-amended shape (originals noted as interim); ADR 0010 retitled
+  ("…and substrate-conditional grounding"); amendment-count citations corrected
+  everywhere.
 * **Update**: [EB components §9](capabilities/evidence-base/components.md) — the unified
   interpretive-shape claim type renamed **cluster claims → theme claims** (task 013 gate,
   user call: policy-maker-facing vocabulary, and the more spec-aligned word — the

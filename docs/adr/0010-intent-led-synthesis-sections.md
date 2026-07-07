@@ -1,4 +1,11 @@
-# ADR 0010 — Intent-led synthesis sections, mixed grounding modes, selected-set chunk grounding
+# ADR 0010 — Intent-led synthesis sections and substrate-conditional grounding
+
+*(Title updated 2026-07-08 with the coherence pass — originally
+"…mixed grounding modes, selected-set chunk grounding"; both concepts
+were superseded by this ADR's own amendment chain: the mode split
+dissolved into one substrate-conditional flow, and chunk-grounding scope
+widened to the screened-in corpus with the selection as a soft prior.
+Filename unchanged.)*
 
 - **Status:** Accepted — 2026-07-07 (Shabeer Rauf, task-013 contract gate,
   second round; follows an independent deep-reasoner design interrogation
@@ -67,6 +74,11 @@ The interrogation confirmed the challenge and sharpened it:
    validated against computed spreads/records). All cited claims pass the
    full produce-grounded-block bar (deterministic quote-presence + the
    single-lane LLM judge + bounded reword-down repair; flag-not-drop).
+   *(As amended: windowing → scoped retrieval [third round]; selected-set
+   scope → screened-in corpus with the selection as a soft prior
+   [sixth/seventh rounds]; the vocabulary later completed to six typed
+   claims and the shape-claim type finally named **theme claim**
+   [2026-07-08 round].)*
 3. **Selected-set chunk grounding lands now (task 013), not behind
    `retrieve`** — amending ADR 0009 decision 5, which had contemplated only
    the corpus-wide flavour: a section's chunk window is the frozen text of
@@ -75,6 +87,11 @@ The interrogation confirmed the challenge and sharpened it:
    inherits select's coverage discipline. **Corpus-wide** chunk-grounded
    narrative (pre-findings targeted answers over unselected documents)
    remains the retrieve-gated seam with ADR 0009's recorded risk note.
+   *(As amended: the in-slice scope widened to the **screened-in corpus**
+   — screen bounds reading, the selection is a soft ranking prior, never
+   a filter [sixth/seventh rounds]; only corpus-scale retrieval — beyond
+   `RETRIEVAL_UNIT_CAP` or over unscreened content — remains
+   retrieve-gated.)*
 4. **Groups are demoted to input, not structure** — and, by explicit user
    choice, **no descriptive backbone blocks are rendered** (pure intent-led;
    the hybrid backbone option was offered and declined). Group summaries
@@ -98,16 +115,23 @@ The interrogation confirmed the challenge and sharpened it:
 
 ## Consequences
 
-- Task 013 rebuilds its deep path around sections: **four prompt surfaces**
-  (`synthesise_landscape_v1` · `synthesise_sections_v1` ·
-  `synthesise_section_v1` · `grounding_judge_v1`), with windowed
-  selected-document frozen text now entering the writer prompt (the 011
-  source-text egress class, twice over).
-- `synthesis_result` carries section provenance (the section set, its
-  derivation source, unassigned groups) and per-section block entries with
-  claim counts by type including chunk-cited.
-- Budgets stay pre-run-known: landscape ≤ 2 · sections ≤ 2 · per section ≤ 4
-  (write + judge + one repair + one re-judge), sections capped.
+*(Updated 2026-07-08 to the shape as amended through this ADR's chain;
+the original bullets described the interim rev-3 realisation — four
+surfaces incl. a separate landscape prompt, whole-document windowing,
+per-path budgets.)*
+
+- Task 013 implements one substrate-conditional flow of intent-led
+  sections: **three prompt surfaces** (`synthesise_sections_v1` ·
+  `synthesise_section_v1` — the section loop, multi-turn ·
+  `grounding_judge_v1`), with tool-retrieved screened-corpus frozen text
+  entering the writer turns (the 011 source-text egress class).
+- `synthesis_result` carries the substrate profile, retrieval scope +
+  priors, section provenance (the section set, its derivation source,
+  unassigned groups) and per-section block entries with claim counts by
+  type including chunk-cited.
+- Budgets stay pre-run-known as a maximum: generation calls ≤ 2 +
+  `SECTION_CAP` × (`SECTION_TURN_CAP` + 2); embedding calls ≤
+  `SECTION_TURN_CAP` per section; all caps plan-pinned and binding.
 - The 012 recomputability line is scoped in the specs: intent-exclusion was
   grouping-specific; synthesis determinism tests fix intent as input.
 
@@ -120,7 +144,9 @@ Three user challenges against the rev-3 realisation, all adopted:
    references** — landscape content always, question-led grounded synthesis
    when the run produced findings. No mode is called a "path" or "deep".
 2. **The claim vocabulary is completed to the spec's full set.** Rev 3
-   carried finding/chunk/pattern/theme claims only — an amputation of two
+   carried finding/chunk/pattern claims in sections plus theme claims on
+   the then-separate landscape path (the whole-design vocabulary was
+   those four) — an amputation of two
    assertion types the specs make core: **gap claims** (the absence dual —
    EB's most consequential claim class; three grades with deterministic
    per-grade validation: corpus/coverage gaps require a non-`inadequate`

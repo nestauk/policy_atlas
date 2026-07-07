@@ -77,28 +77,40 @@ contract gate the user challenged both readings, architecture-first:
    findings downstream consumers can query or reuse. **Lands with
    `retrieve`** (its chunk-selection substrate); a ⏸ seam until then.
    *Amended by [ADR 0010](0010-intent-led-synthesis-sections.md) (same
-   gate, later round): this decision as written covers only the
-   **corpus-wide** flavour, which stays retrieve-gated with the trade above.
-   The **selected-set** flavour — chunk grounding over the selected
-   documents' already-in-hand frozen text — needs no retrieval, inherits
-   select's coverage discipline, and lands in task 013.*
+   gate, later rounds): this decision as written covers only the
+   **corpus-scale** flavour — retrieval beyond the in-memory ceiling
+   (`RETRIEVAL_UNIT_CAP`) or over **unscreened** content — which stays
+   retrieve-gated with the trade above. In-corpus chunk grounding lands
+   in task 013 over the **screened-in corpus** (screen is the relevance
+   discipline that bounds reading; a referenced selection is a soft
+   ranking prior, never a filter — ADR 0010's sixth/seventh-round
+   amendment, superseding an interim selected-set-only scoping).*
 
 ## Consequences
 
-- Task 013 implements the terminus component whole: landscape path
-  (`characterisation_run_id` required) + grouped-findings path
-  (`grouping_run_id` optional), artefact minting with an intent-derived
-  title, three prompt surfaces (`synthesise_landscape_v1`,
-  `synthesise_block_v1`, `grounding_judge_v1`).
-- Shallow runs produce real artefacts from 013 onward; the earlier
-  "artefact-composition seam" narrows to conventions (summary, key-findings,
-  ordering, versioning) rather than composition itself.
+*(Updated 2026-07-08 to the shape as amended through the ADR 0010 chain;
+the original bullets described the interim two-path realisation.)*
+
+- Task 013 implements the terminus component whole: **one
+  substrate-conditional flow** — all four upstream run references
+  optional (≥ 1 groundable substrate required), intent-led sections
+  written by a capped tool-calling loop, artefact minting with an
+  intent-derived title, **three prompt surfaces**
+  (`synthesise_sections_v1`, `synthesise_section_v1`,
+  `grounding_judge_v1`).
+- Every synthesise run produces a real artefact from 013 onward
+  (characterise-only runs yield the landscape; screen-only rapid runs a
+  grounded answer); the earlier "artefact-composition seam" narrows to
+  conventions (summary, key-findings, ordering, versioning) rather than
+  composition itself.
 - Specs updated (capability.md, components §§5/6/9,
-  execution-orchestration; spec log 2026-07-07) — the
+  execution-orchestration; spec log 2026-07-07/08) — the
   orchestrator-composes reading and the deep-only-terminus reading are
   superseded.
-- The chunk-grounded mode is a named seam with a recorded risk profile; its
-  arrival is gated on `retrieve`, not on this slice.
+- In-corpus chunk grounding ships in this slice (per the amended
+  decision 5); only **corpus-scale** retrieval (beyond
+  `RETRIEVAL_UNIT_CAP`, or unscreened content) remains gated on
+  `retrieve`, with the recorded risk profile.
 
 ## Rejected
 
