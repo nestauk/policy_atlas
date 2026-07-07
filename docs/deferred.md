@@ -50,7 +50,8 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **Consensus / weighted-strength roll-up** — the strength-weighted verdict ("supports X at
   strength Y") and divided-evidence *direction* verdict (synthesise component 9).
 - **Relative-to-feasible appraisal tier** + the **full two-stage appraisal pass** (richer
-  full-text methods/risk-of-bias on the selected subset) + modifier-tag-driven rubric dimensions
+  full-text methods/risk-of-bias on the selected subset — which exists as of task 010:
+  select's run-scoped `selection_result` row defines it) + modifier-tag-driven rubric dimensions
   (appraise component 4). Typed dimensions (`dimensions` column/bag) arrive with that second
   pass — nothing populates or reads them in v3.0, so no half-built column shipped (task 006).
 - **Steerable / plan-carried appraisal rubric** — the orchestrator compiles a provisional
@@ -357,7 +358,8 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   surface.
 - **Steering modes / landscape→synthesis steer-point pause** — plan-as-object machinery;
   the payload it relays (the structured landscape summary in `component.completed`) ships
-  now (contract decision 8).
+  now (contract decision 8). The deepening-selection steer-point's read surface followed
+  in task 010 (see the Select section).
 - **Dual-view coverage** — corpus-view vs evidence-view distributions need the
   source/evidence policy object (contract decision 9); v3.0 ships single-view with the
   explicit `base` ladder and **no absence claims** (test-asserted).
@@ -369,6 +371,53 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   component (user Q&A at the 009 plan gate). Its tracing rides along: a live upload's
   embed batches currently surface as detached root traces (no surrounding span — wart (b)
   in the Langfuse entry above); the seam wraps them in an upload-scoped span.
+
+## Select (task 010 seams)
+
+- **Deepening-selection steer-point pause** — the mode-governed pause (Frequent/Moderate/
+  Minimal routing, escalation UX) is plan-as-object machinery; its **read surface shipped in
+  010**: the bidirectional rationale (always logged) and the computed trigger flags —
+  `large_stratum_excluded`, `priority_stratum_excluded` (the hardest: a user-nominated
+  stratum with zero selections), `must_include_conflict`, `thin_base` (honestly
+  stub-constant until the LLM screen tool lands), `thin_full_text` (extraction-shaping).
+  The pause slice reads these flags; no new signal computation needed.
+- **Agent-authored directives** — the capability agent authors the `SelectionDirective`
+  **just-in-time at invocation, post-characterise** (plan-as-object § forecast-vs-commit:
+  the up-front plan is a non-compiling forecast, never the executed directive). v3.0
+  sources the directive from `evidence_scope.context["selection"]`; the `select` facade
+  signature is deliberately the tool call the agent will make, so arrival is a
+  parameter-authoring change, zero re-plumbing.
+- **Rerank-quality evals** — deterministic-ranked vs LLM-reranked selections compared on
+  downstream yield once extract gives selection a consequence; the eval-ready Langfuse
+  traces (full I/O, `rank_batch_valid` scores) exist now. **Listwise ordering** (the model
+  emits a ranking, not per-doc scores) is the known-better method with a cross-batch merge
+  cost — it lands at this seam, competing with the shipped pointwise 0–10 +
+  composite-tie-break baseline.
+- **Embedding-relevance for select — declined seam** (010 contract rev 4): by select time
+  the semantic dimension is spent twice (screening judged relevance; stratification grouped
+  semantically), so within-stratum cosine-to-intent discriminates weakly. Revisit **only**
+  if rerank-quality evals show the deterministic composite/fallback needs a semantic leg.
+  The 009 chunk vectors' first reader remains `retrieve`, unchanged.
+- **Cross-encoder relevance models (Cohere-class, available on Bedrock)** — they score
+  query-relevance, not purpose-fit: recorded at the **`retrieve` seam** (retrieval's
+  rerank upgrade), deliberately not select's.
+- **Capability-run entity** — a durable run spanning components (today one run = one
+  component execution; the chain order lives only in `skeleton.py`, the agent's stand-in).
+  The recorded Langfuse detached-trace warts (009's executor threads; 010's `rank:batch`
+  generation spans) are early symptoms of this gap; fix belongs here, not per-component.
+- **Policy soft-prior tilt** — integration shape recorded, not deferred-blind: when the
+  source/evidence policy object lands, it **compiles into directive boosts**
+  (provenance-stamped as policy-sourced), becoming one more directive author beside the
+  user and the capability agent. Select's code is untouched by construction — the boost
+  surface is the ground-up design for it.
+- **Selection-diversity extensions** — publication-country stratification and
+  study-geography/population diversity dimensions: the spec itself marks them rough,
+  cluster-approximated and properly post-extraction.
+- **Second `select` strategies** — Transferability dependency-scoping et al. (other
+  capabilities' problem); the strategy registry validates exactly the two built-ins.
+- **Suite-wide socket deny** (010 security-lane note) — per-test socket-deny helpers now
+  exist three times (008/009/010 patterns); `pytest-socket` (deny by default, allowlist
+  the DB host) is the structural defense-in-depth upgrade.
 
 ## Data model / evidence
 

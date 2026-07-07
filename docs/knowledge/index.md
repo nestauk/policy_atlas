@@ -42,6 +42,7 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [Harness scope lookups must filter by project_id](harness-scope-lookup-project-scoped.md) - an ID-only lookup silently accepts a scope from another project; composite FKs guard writes, not reads.
 * [Rubric domain defines appraisability](rubric-domain-defines-appraisability.md) - types absent from `DEFAULT_RUBRIC` are skipped-and-counted, never scored; a domain test against the closed vocabulary makes the lookup infallible.
 * [Full-text chunk hashes are deterministic — via a pymupdf4llm source patch](fulltext-chunk-hash-determinism.md) - same bytes → same chunks in every process; pymupdf4llm 0.3.4's id()-keyed cache breaks this and is patched at import; determinism test is the backstop on any parser bump.
+* [Untrusted directive parsing — malformed fails closed, unknown references flag](directive-parse-malformed-vs-unknown.md) - structural malformation raises `DirectiveError` (bounded strings/collections, static messages); a well-formed unknown column/tag reference matches nothing and surfaces in `unmatched_boosts` (task 010).
 
 ## Integration quirks (model / telemetry providers)
 

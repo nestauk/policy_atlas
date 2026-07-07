@@ -752,7 +752,7 @@ def test_licence_guard() -> None:
 
 
 def test_migration_roundtrip_and_checks(conn: Connection) -> None:
-    assert len(metadata.tables) == 19
+    assert len(metadata.tables) == 20
     project_id, _ = seed_project_and_run(conn)
     snap_id, pss_id = seed_source(conn, project_id)
 

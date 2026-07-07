@@ -31,7 +31,7 @@ acquire → screen → classify → appraise → characterise (shallow terminus)
 | 3 | classify | `classify` (single-label doc type + open tags) | `classify` | per-doc fan-out |
 | 4 | appraise | `appraise` (steerable rubric → quality tier) | — (core) | per-doc fan-out |
 | 5 | characterise | `cluster` (topic) + deterministic metadata patterns | `cluster` | procedure + agent |
-| 6 | select | `select` (strategy-parameterised) | `select` | procedure |
+| 6 | select | `select` (strategy-parameterised) | `select` | procedure (+ optional bounded generative rerank) |
 | 7 | extract | `extract` → `intervention_outcome_finding` | `extract` | per-source fan-out |
 | 8 | group | `cluster` (facet, over findings) + `query-findings` | `cluster`, `query-findings` | agent |
 | 9 | synthesise | `produce-grounded-block` (reads grouped findings) | `query-findings` | agent-loop |
@@ -150,6 +150,14 @@ no separate broad/narrow mode — stratify across whatever clusters exist; depth
 cluster). Guards against horizon scans collapsing onto a narrow top-k. Realised as the shared
 **`select`** tool (strategy-parameterised: *(candidate set, cheap signals, strategy, budget) →
 chosen subset + rationale*); EB's coverage-aware-stratified-over-clusters is one strategy.
+Strata are the characterisation's clusters plus the counted **`unclustered`** set as a
+first-class stratum (already implied by §5's counted-unclustered and "whatever clusters exist").
+**Realisation: procedure with an optional bounded generative rerank** — stratification, the
+breadth floor, budget arithmetic and the hard rules (must-includes) stay code-side; the rerank
+replaces only the *within-stratum ordering* with schema-constrained per-document purpose-fit
+scores + reasons against the intent. Scores **order, never exclude**; a document the ranker
+misses falls back to the deterministic composite (flagged, never dropped), so the rerank can
+degrade to the fully deterministic strategy, never to a partial or silent state.
 
 **Selection signals (cheap, pre-extract only)**: cluster coverage (breadth skeleton) +
 relevance to intent (embeddings/screening) + recency + origin/upload-priority + light appraisal

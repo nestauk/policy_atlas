@@ -1,0 +1,834 @@
+# Task contract: 010-select
+
+One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
+specs in [docs/specs/](../../specs/index.md).
+
+> **Status:** **approved** (rev 5) — contract-stage adversarial review in progress.
+> Contract approved (before planning): **2026-07-06 · Shabeer Rauf** (rev 5,
+> covering the three gated changes: `selection_result` schema · `"select"`
+> registry entry + `ranking_backend` parameter · the `select_rerank_v1`
+> generation surface — and the components §6 realisation flow-back) ·
+> Plan approved (before implementation): **2026-07-06 · Shabeer Rauf** (plan
+> rev 2, covering the rev-7 amendment: `characterisation_run_id` on
+> `Plan`/`Config`) ·
+> ADR: [0006](../../adr/0006-selection-strategy-directive-rerank.md) —
+> Accepted 2026-07-06.
+>
+> **Revision history:**
+> - **rev 1** (2026-07-06): initial draft — deterministic stratified strategy,
+>   budget + must-includes as scope-context parameters.
+> - **rev 2** (2026-07-06, user-steered): the LLM-vs-deterministic question
+>   adjudicated against the specs (components §6 realisation = *procedure*; the
+>   reasoning belongs to the capability agent's just-in-time **commit**, which
+>   *parameterises* the tool — plan-as-object § forecast-vs-commit). Adopted:
+>   **selection directive** as a first-class facade argument (the future agent's
+>   tool-call surface, designed for the agent-interaction architecture now) ·
+>   **soft boosts/filters over columns + tags** (the scoping vocabulary — what the
+>   tag layer was built for) · seams recorded (agent-authored directive at the
+>   commit layer · `llm_assisted` strategy, eval-gated · the missing
+>   **capability-run entity** spanning components). Rev 2.1 clarified the
+>   directive-authoring seam as invocation-time (just-in-time, post-characterise).
+> - **rev 3** (2026-07-06, user-decided): **generative LLM rerank pulled
+>   in-slice** as `llm_rerank_v1` (decision 10) — 009 made the marginal cost small
+>   (seam pattern, batching/validation/repair, injection posture, tracing all
+>   exist; whole 009 live run ≈ $0.10). Cross-encoder relevance models
+>   (Cohere-class, available on Bedrock) judged **more apt for `retrieve`** than
+>   select — recorded at that seam, not this one. Gates grew (user-confirmed at
+>   this gate): `ranking_backend` parameter · the **second product prompt surface**
+>   (`select_rerank_v1`) + its generation egress · one spec flow-back (components
+>   §6 select realisation: procedure → procedure with bounded generative rerank,
+>   hard rules staying code-side).
+> - **rev 4** (2026-07-06, user challenge: "is cosine matching appropriate here at
+>   all?"): **embedding-cosine relevance cut.** By select time the semantic
+>   dimension is spent twice (screening judged relevance; stratification grouped
+>   semantically) — within-stratum cosine-to-intent discriminates weakly, and its
+>   live role was only the fallback, which recency·tier·origin serves honestly.
+>   The spec's relevance signal reads "embeddings / **screening**" — the screening
+>   leg stands. Cuts with it: the intent-embed call (egress gate shrinks to the
+>   rerank surface only), vector reads + cosine code, the max-over-units bias, and
+>   null-relevance handling. Vectors' first reader reverts to `retrieve` as
+>   designed; embedding-relevance-for-select recorded as a declined seam
+>   (revisit only with rerank-quality evals). Rev 4.1 pinned the rerank basis:
+>   envelope uniformly (title + abstract), never full text; the LLM ranks, never
+>   selects.
+> - **rev 5** (2026-07-06, user-caught gap): **full-text availability joins
+>   select** — extract works on what select chooses, so the selection must know
+>   and say how much of it has full text. `text_basis` enters the deterministic
+>   composite (soft tilt toward `full_text`, flag-not-block — abstract-only docs
+>   stay fully selectable), the bidirectional rationale carries per-doc
+>   `text_basis` + per-stratum full-text shares, and a **`thin_full_text` trigger
+>   flag** joins the steer-point signals (selected set's full-text share below a
+>   floor — extraction-shaping, so the steer-point must see it). The rerank input
+>   stays content-only (title + abstract + intent): metadata and tags are weighed
+>   arithmetically or via directive boosts, never fed to the ranker — signals
+>   stay attributable, never double-counted.
+> - **rev 6** (2026-07-06): contract-stage adversarial review adjudicated
+>   (Codex, 14 findings: 3 blockers · 10 majors · 1 minor — 12 adopted, 1
+>   in-part, 1 declined; § Adversarial review). Blockers: candidate set =
+>   screened-in **eligible** (components §3 `Non-evidence` excluded from
+>   select/extract, counted not silent; `Unknown` stays eligible) · allocator
+>   arithmetic pinned (must-include × breadth-floor interaction, budget < strata,
+>   exhausted-stratum redistribution, reason precedence) · rerank score
+>   commensurability pinned (scored-then-fallback ordering, bounded integer
+>   scores, deterministic ties). Also: `priority_strata` directive field + the
+>   `priority_stratum_excluded` trigger (the spec's user-nominated-**cluster**
+>   escalation, hardest) · directive semantics pinned in-contract · `thin_base`
+>   defined over sufficiently-confident docs · reasons acknowledged as
+>   source-derived text · determinism defined over payload columns · schema
+>   subsection added · same-run re-run semantics stated · strategy-count and
+>   stale-verification wording fixed. Declined: a no-op policy field (spec's
+>   tilt is conditional on a policy object that doesn't exist; the 009 dual-view
+>   precedent defers identically). **Rev 6.1** (user follow-ups): LLM score
+>   scale 0–100 → **0–10** (coarse judgment levels; composite breaks ties —
+>   fine granularity was false precision across batches) · the policy
+>   integration path pinned (policy compiles into directive boosts when its
+>   slice lands — the boost surface is the ground-up design; select code
+>   untouched by construction) · listwise ordering noted at the rerank-quality
+>   eval seam.
+> - **rev 7** (2026-07-06, plan-stage adversarial finding 1): "same run's
+>   characterisation row" → **explicit `characterisation_run_id`** on
+>   `Plan`/`Config`, required for select at compile (fails closed), recorded in
+>   provenance + summary. The shared-run reading contradicted the as-built run
+>   lifecycle (terminal events + trace root per `run_harness` call) and this
+>   contract's own capability-run deferral; explicit reference preserves the
+>   never-silently-reused intent. **Gate 2 grows by this one compile-surface
+>   field** — approved with the plan 🛑.
+
+## Goal
+
+Add **select** — EB component 6, the gate that opens the deep terminus. After
+characterise has measured the corpus shape, select chooses the subset for Tier-1
+extraction: **coverage-aware stratified selection over the run's characterisation
+strata**, breadth-adaptive (the landscape has already measured breadth — stratify
+across whatever strata exist; the budget sets how deep per stratum), guarding against
+horizon scans collapsing onto a narrow top-k.
+
+The slice ships **two strategies over one code-owned structure**. The structure —
+stratification, breadth floor, budget arithmetic, must-include bypass — is
+deterministic and identical under both. **`coverage_stratified_v1`** (the default and
+the suite's path) is deterministic end-to-end: same inputs → byte-identical selection,
+test-enforced. **`llm_rerank_v1`** (decision 10; the live skeleton path) replaces only
+the *within-stratum ordering* with bounded, batched, schema-constrained judgment calls
+— purpose-sensitive ranking with per-doc reasons, the repo's **second product prompt
+surface** — degrading per-document to the deterministic composite (flagged, never
+failed). No new dependencies; generation egress grows by this one bounded surface
+(user-confirmed, rev 3).
+
+The judgment select *does* need — which emphases matter for this intent and this
+synthesis purpose — enters through the **selection directive**: a first-class,
+declarative parameter surface (budget, must-includes, soft boosts/filters over
+columns + tags, signal-weight emphasis) that steers the deterministic scan. This is
+the spec's own split (plan-as-object § forecast-vs-commit): the **capability agent**
+reasons and authors the directive at commit time; the **tool** executes it as an
+auditable procedure. The agent layer doesn't exist yet — v3.0 sources the directive
+from the scope context — but the facade signature is designed as the tool call that
+agent will make, so its arrival is a parameter-authoring change, not a re-plumb.
+
+Select writes **content, not presentation**: one run-scoped selection record carrying
+the directive it executed and the **bidirectional rationale** the spec makes
+mandatory — what was selected (why, per document) and what was not (aggregate
+exclusion reasons + notable flagged exclusions). That rationale is exactly what the
+pre-declared **deepening-selection steer-point** reads; this slice computes its
+escalation-trigger *signals* now (as flags in the rationale and summary payload)
+while the mode-governed *pause* machinery stays a recorded seam (plan-as-object).
+
+## Deliverable
+
+A PR on `task/010-select` → `dev` that:
+
+- Ships `select.py`: the shared strategy-parameterised `select` function
+  (*(candidates, signals, strategy, directive) → chosen subset + bidirectional
+  rationale*, per the spec's tool contract) with two strategies —
+  **`coverage_stratified_v1`** (deterministic, default) and **`llm_rerank_v1`**
+  (decision 10); the **`SelectionDirective`** (first-class facade argument —
+  budget, must-includes, column/tag soft boosts, weight emphasis);
+  `SelectContext`; `select_scope(...)` — directive resolution → signal assembly →
+  stratification → allocation → ranking → rationale → the `selection_result` row →
+  the selection summary in `component.completed`.
+- Ships the `RankingBackend` seam (mirroring `GroupingBackend`): protocol +
+  `OpenAIRankingBackend` (batched structured scoring) + deterministic stub, and
+  the **`select_rerank_v1` prompt** (lead-authored, versioned, recorded in
+  provenance) — the slice's only prompt-bearing surface.
+- Adds **one table — `selection_result`** — via one Alembic migration (gated
+  change 1; table count 19 → 20), project-scope-guarded per repo discipline.
+- Registers `"select"` in `COMPONENT_REGISTRY` (requires `evidence_scope_id` +
+  `characterisation_run_id`, rev 7); wires
+  `_run_select`; `run_harness` gains one optional **`ranking_backend`** parameter
+  (defaults to the stub — no default egress; gated change 2). No embeddings use
+  (rev 4).
+- Extends `skeleton.py`: … characterise → **select**, rendering the selection
+  summary (strata, per-stratum picks, exclusion aggregates, trigger flags).
+- Records the deferred seams in `docs/deferred.md`; updates `tests/helpers.py`
+  delete order for the new table.
+- Passes `make verify` — all green, deterministic, egress-free.
+
+## Read first
+
+- [EB components §6 — select](../../specs/capabilities/evidence-base/components.md)
+  — the component contract: stratified-over-clusters, breadth-adaptive, the signal
+  list, must-includes as the one hard rule, bidirectional rationale, the shared-tool
+  realisation. Also §5's cluster double-duty note (corpus shape *and* stratification
+  basis) and §4's Tier-1 gating (extraction is gated by select).
+- [EB capability](../../specs/capabilities/evidence-base/capability.md) — the
+  deepening-selection steer-point (always log the rationale; escalation triggers;
+  the strongest surface even in Minimal) and the cluster-persistence rule
+  (clusters are **run-local** — select reads the *same run's* characterisation row).
+- [EB provenance](../../specs/capabilities/evidence-base/provenance.md) +
+  [system provenance-grounding](../../specs/system/provenance-grounding.md) — the
+  gap-provenance ladder: `not_selected` **never** licenses an absence claim; the gap
+  select creates must stay visible as coverage, not silence.
+- [System data-model](../../specs/system/data-model.md) — coverage states as gap
+  provenance (`not_selected` is doc-level, screened-in-but-not-chosen); scoping as
+  soft prior; origin drives default priority via scoping, not hidden re-weights.
+- [System execution-orchestration](../../specs/system/execution-orchestration.md) —
+  component realisation classes (select is pure "procedure"); `search` stays the
+  only agent-invocable egress verb (select adds none).
+- [docs/deferred.md](../../deferred.md) — the 009 seams this slice touches:
+  steer-point pause (stays deferred), unclustered-as-stratum (lands here);
+  pgvector/retrieval and the chunk vectors untouched (retrieve stays their first
+  reader, rev 4).
+- [009-characterise contract](../009-characterise/contract.md) — pattern precedent
+  (run-scoped result row, project-scoped composite FKs, component wiring,
+  edge-scope handling, honest failure).
+
+**Code grounding (surveyed 2026-07-06):** 19 tables. `characterisation_result` is
+per `(evidence_scope_id, run_id)` with `themes` JSONB (`themes[]` = name /
+description / member_ids / size + `unclustered_ids`) and `coverage` JSONB carrying
+base counts — select's stratification input, same-run. Cheap Tier-0 signals in
+place: `origin`, metadata year, `source_appraisal_result` quality tier, screen
+confidence, `text_basis`/`full_text_status`; titles + abstracts for the rerank ride
+the same envelope reads characterise uses. `run_harness(conn, *, config, project_id, run_id,
+provider, search_backends, document_fetcher, embedding_backend, grouping_backend)` —
+`embedding_backend` already threads through `HarnessState`. Component wiring pattern:
+registry entry → context dataclass `(scope_id, intent, context)` → `_run_scope_component`
+→ `component.started/completed/failed`. The skeleton chain ends at characterise.
+
+## Scope
+
+### Design decisions embedded here (approve or flip at this gate)
+
+1. **The selection structure is procedure — hard rules never leave code.**
+   Stratification, the breadth floor, budget arithmetic, must-include bypass,
+   exhaustive accounting: all deterministic, identical under both strategies, with
+   stable ordering and deterministic tie-breaks (snapshot id). Under the default
+   `coverage_stratified_v1` the whole component is deterministic end-to-end —
+   same input → **byte-identical payload columns** (`strategy`, `budget`,
+   `selection_provenance`, `selected`, `excluded`, `flags`; the surrogate PK and
+   `created_at` are excluded from the claim — adversarial finding 11),
+   test-enforced; this is the suite's path. `llm_rerank_v1` (decision 10) bounds its judgment to within-stratum
+   *ordering* only, inside that structure — a spec flow-back records the
+   realisation refinement (components §6: procedure → procedure with bounded
+   generative rerank). Every signal stays cheap and **pre-extract** (titles +
+   abstracts at most — never full text; that's extraction's side of the line).
+
+2. **Relevance signal = the screening leg; embedding-cosine declined** (rev 4).
+   The spec names relevance-to-intent via "embeddings / screening" — the
+   **screening leg** lands: screened-in status is the base relevance judgment
+   (it defines the candidate set) and screen confidence folds into the composite
+   (honestly stub-constant today; it becomes discriminating when the LLM screen
+   tool lands at its own seam).
+   - **Embedding-cosine relevance was drafted (revs 1–3) and cut at the gate**:
+     by select time the semantic dimension is already spent twice — screening
+     judged every candidate relevant, and stratification grouped them
+     semantically (the themes are the LLM's semantic read against the intent) —
+     so within-stratum cosine-to-intent compares already-similar,
+     already-relevant documents and discriminates weakly. Purpose-fit, the
+     judgment that *does* discriminate there, is `llm_rerank_v1`'s job
+     (decision 10). Cutting it also cuts the intent-embed call (the egress gate
+     shrinks to the rerank surface), the vector-read/cosine code, its
+     full-text-vs-abstract-only bias, and null-relevance handling.
+   - The 009 chunk vectors stay untouched and unread here; their first reader
+     remains `retrieve`, as designed (the ahead-of-reader exception stands
+     unchanged). **Embedding-relevance-for-select is a declined seam** —
+     recorded in `docs/deferred.md`, revisited only if rerank-quality evals show
+     the fallback/deterministic ordering needs a semantic leg.
+3. **Strategy mechanics: `coverage_stratified_v1` — breadth floor, proportional
+   remainder, weighted within-stratum ranking.**
+   - **Candidates = the scope's screened-in *eligible* set** (adversarial
+     finding 1): screened-in minus `primary_evidence_type = "Non-evidence"` —
+     components §3 makes `Non-evidence` a landscape label that **excludes from
+     select/extract**, while `Unknown` is **kept-and-eligible**. The exclusion
+     is a **counted base-ladder line** in the rationale (`non_evidence: N`),
+     never a silent drop; the accounting invariant runs over the eligible set
+     (decision 8).
+   - **Strata = the referenced characterisation's themes + `unclustered`** (a
+     partition — assignment is single-theme-or-unclustered; the 009 contract
+     pre-committed unclustered to "form their own stratum when select lands").
+     **Rev 7 (plan-stage finding 1):** the reference is an **explicit
+     `characterisation_run_id`** on `Plan`/`Config`, required-by-registry for
+     select — compile fails closed without it, and it is recorded in
+     `selection_provenance` and the summary. (Rev 5's "same run's row" wording
+     assumed a shared run; as-built, every `run_harness` call is its own run
+     with terminal events and a trace root, and the capability-run entity is
+     this contract's own deferred seam. Explicit reference preserves the rule's
+     intent exactly: clusters stay run-local and **a grouping is never silently
+     reused** — the caller names which one, attributably.) No row for
+     `(scope, characterisation_run_id)` → honest failure.
+   - **Allocation — exact arithmetic** (adversarial finding 2), in order:
+     1. **Must-includes** selected first, outside the budget (decision 4);
+        reason `must_include`. A stratum containing a must-include **counts as
+        covered** for the breadth floor (the floor's purpose — every stratum
+        represented — is already met there).
+     2. **Breadth floor**: each non-empty stratum not yet covered gets one slot
+        from the budget, in deterministic stratum order (candidate count
+        descending, then stratum name); reason `breadth_floor`. If
+        **budget < uncovered strata**, floors are granted in that order until
+        the budget is exhausted — unfloored strata end with zero selections and
+        are exactly what `large_stratum_excluded` / `priority_stratum_excluded`
+        watch (decision 6).
+     3. **Proportional remainder**: remaining budget allocated across strata
+        proportionally to **remaining candidate count** (largest-remainder
+        method: floor the quotas, distribute leftovers by largest fractional
+        part, ties by stratum order) — deterministic, sums exactly to the
+        remaining budget, and never allocates a stratum more than it has
+        (surplus from capped strata re-enters the same largest-remainder pass
+        over the uncapped ones); reason `ranked`.
+     4. **Reason precedence** per doc: `must_include` > `breadth_floor` >
+        `ranked` (a must-include is never relabelled; the top-ranked doc that
+        satisfies a floor carries `breadth_floor`).
+     Budget ≥ eligible candidates → select all (each doc still carries its
+     reason and the rationale still records the full arithmetic).
+   - **Within-stratum ranking (the deterministic composite):** a weighted
+     composite over the normalised cheap signals — recency (year, bounded decay) ·
+     light appraisal tier · origin/upload priority (`uploaded` favoured, per the
+     spec's default-priority-via-scoping posture) · screen confidence (the
+     relevance leg, decision 2) · **full-text availability** (`text_basis`, a
+     soft tilt toward `full_text` — extract works on what select chooses;
+     abstract-only docs stay fully selectable, flag-not-block, rev 5) — plus the
+     directive's **soft boosts**
+     (decision 4), folded into the same composite. Default weights are named
+     constants pinned at the plan gate; the effective weights (defaults ⊕
+     directive emphasis) are recorded in `selection_provenance`. Ties break on
+     snapshot id. This composite is `coverage_stratified_v1`'s ordering **and**
+     `llm_rerank_v1`'s per-document fallback (decision 10) — it always exists.
+   - Publication-country stratification and study-geography/population diversity:
+     **not built** — the spec itself marks them rough/cluster-approximated and
+     properly post-extraction; recorded as the selection-diversity seam.
+4. **The selection directive — the agent-facing parameter surface, designed for
+   the orchestrator/sub-agent architecture now** (user-steered, rev 2). The
+   reasoning select needs is intent- and purpose-dependent; the spec locates it in
+   the capability agent's just-in-time **commit**, which *parameterises* the tool
+   (plan-as-object § forecast-vs-commit; the facade principle). So the directive
+   is a **first-class field of `SelectContext` / argument of the `select` facade**
+   — the exact tool-call signature the future agent will author — not buried
+   configuration. A declarative object (exact schema plan-pinned):
+   - **`budget`** — Tier-1 slot count; default a named constant.
+   - **`must_include_ids`** — the one **hard** rule: hard-includes bypassing the
+     budget, never counted against it, never displaced; validated against the
+     scope's screened-in set (an id outside it is a flagged, non-fatal rationale
+     entry — `must_include_not_in_scope` — honest, not silently obeyed or dropped).
+   - **Soft boosts/filters over columns + tags** — the data-model's **scoping
+     vocabulary** ("queries over columns + tags alike; a soft retrieval prior"),
+     which is what the tag layer was built for: predicates over Tier-0 columns
+     (e.g. `primary_evidence_type`, `origin`, year ranges) and tag assertions
+     (by `tag_type` / `tag` / optionally `asserted_by`), each carrying a weight.
+     **Soft means flag-not-block**: a boost re-weights within the composite score,
+     never excludes; a directive cannot manufacture a hard gate (must-includes
+     stay the only hard rule). Unknown columns/tags referenced by a directive are
+     flagged in the rationale, never fatal. Provider tags (009) give boosts real,
+     live data to act on today.
+   - **Signal-weight emphasis** — optional multipliers over the default weights
+     (e.g. recency-heavy for a "latest evidence" intent).
+   - **`priority_strata`** (adversarial finding 4) — the spec's escalation
+     triggers are **cluster**-level ("large / high-priority / **user-nominated**
+     cluster"; the nominated-cluster drop escalates hardest), and doc-level
+     must-includes can't express them. Optional patterns (case-insensitive
+     substring/tag match against discovered stratum names and the scope's tag
+     layer — strata don't exist until characterise runs, so nomination is by
+     topic, resolved at invocation). Priority is **soft for selection**
+     (it never forces slots) but **hard for escalation**: a priority stratum
+     with zero selections fires `priority_stratum_excluded`, the hardest flag
+     (decision 6). Unmatched patterns are flagged, non-fatal.
+   **Directive semantics pinned here** (adversarial finding 5; the exact JSON
+   schema stays plan-pinned): all weights and multipliers are **positive,
+   bounded** (multiplicative fold into the composite; caps as named constants —
+   indicatively [0.1, 10]); multiple matching boosts **multiply, then clamp**;
+   a boost on the stratifying dimension itself (a theme-tag boost) is legal —
+   it re-weights within strata and cannot alter allocation; year predicates are
+   closed ranges `{gte, lte}`; tag predicates match `(tag_type, tag[,
+   asserted_by])` exactly; malformed directives are a **caught error, never a
+   silent run** (plan-as-object's compile posture applied to the one
+   execution-bearing input this component takes).
+   An **empty directive is the default**: the plain stratified scan. In v3.0 the
+   directive is *sourced* from the evidence-scope `context` JSONB (user/plan
+   authored; the skeleton demonstrates one) — no new `run_harness` parameter, no
+   schema column — and when the capability-agent layer lands, the agent authors it
+   directly at commit time: a parameter-authoring change, zero re-plumbing. The
+   executed directive is recorded whole in `selection_provenance` (decision 5).
+   The source/evidence **policy** signal (soft prior, never a gate) structurally
+   cannot fire — no policy object exists in v3.0; recorded seam, not built. (An
+   adversarial finding proposed a no-op policy field or a spec flow-back:
+   **declined** — the spec's tilt is conditional on a supplied policy, exactly
+   like characterise's dual-view coverage, which 009 deferred the same way
+   without a spec change; an inert field is what data-model Principle 10
+   forbids.) **The policy's integration path is designed, not deferred-blind**
+   (user question, rev 6.1): "tilts but never gates" is mechanically a set of
+   soft boosts — so when the policy slice lands, the policy **compiles into
+   directive boosts** (provenance-stamped as policy-sourced), becoming one more
+   directive author alongside the user and the capability agent. Select's code
+   is untouched by construction; the boost surface *is* the ground-up design
+   for it. Recorded in `docs/deferred.md` with this shape.
+5. **Persistence: one run-scoped `selection_result` row — selection is run-local.**
+   Mirrors `characterisation_result`: one row per `(evidence_scope_id, run_id)`,
+   recomputable, superseded by the next run, never canonical corpus state. Extract
+   (the next slice) reads its run's row. `not_selected` remains **derivable**
+   coverage state (screened-in minus selected) — no doc-level status column, no
+   status writes; the findings-layer coverage vocabulary arrives with extract.
+   Row: `strategy` · `budget` · `selection_provenance` JSONB (strategy version,
+   the **executed directive recorded whole** + its source, effective weights,
+   signal availability, rerank provenance where applicable — prompt version,
+   model, batch size, fallback/retry counts) ·
+   `selected` JSONB (per doc: pss id, stratum, signal scores, `text_basis`,
+   selection reason — `must_include` | `breadth_floor` | `ranked`) · `excluded`
+   JSONB (aggregate per stratum: counts by reason class — `budget_exhausted`,
+   `ranked_below_cut` — plus **notable flagged exclusions** by name) · `flags`
+   JSONB (the escalation triggers, decision 6) · `created_at`.
+6. **The steer-point's trigger signals are computed now; the pause is not.** The
+   capability spec pre-declares deepening selection as EB's one conditional
+   steer-point. This slice lands its read surface: the bidirectional rationale
+   (always logged) and the computed **trigger flags** — `large_stratum_excluded`
+   (a stratum with zero selections above a size share),
+   `priority_stratum_excluded` (a `priority_strata`-matched stratum with zero
+   selections — the spec's user-nominated-cluster drop, **the hardest flag**,
+   surfacing even in Minimal when modes land; adversarial finding 4),
+   `must_include_conflict` (decision 4's validation flag; doc-level nomination
+   integrity), `thin_base` (too few **sufficiently-confident** relevant docs —
+   the screen thin-base trigger's own definition, components §2, read at
+   selection time; confidence threshold + floor are plan-pinned named constants,
+   honestly noted stub-constant until the LLM screen tool lands; adversarial
+   finding 7), and `thin_full_text` (the **selected set's** full-text share
+   below a floor — extraction-shaping, rev 5: downstream extraction must know
+   whether it works from full text or abstracts before it starts).
+   The policy-unmeetable trigger cannot fire (no policy object).
+   Thresholds are named constants pinned at the plan gate. The mode-governed pause
+   (Frequent/Moderate/Minimal routing, escalation UX) is plan-as-object machinery —
+   already a recorded seam, unchanged here. No new event types; the
+   `component.completed` payload (selection summary: per-stratum picks/exclusions
+   with **full-text shares per stratum, selected vs candidate**, reason
+   aggregates, flags) is the surface, mirroring 009's landscape summary.
+7. **The shared tool is a function, not a framework — and its signature is the
+   future agent's tool call.** The spec fixes the verb's contract — *(candidate
+   set, cheap signals, strategy, directive) → chosen subset + rationale* — and
+   that lands as a pure function with a `strategy` parameter validated against
+   the registry of **two built-in strategies** (`coverage_stratified_v1` ·
+   `llm_rerank_v1`; adversarial finding 10 fixed the stale "exactly one"). No
+   protocol class, no plugin machinery — future *non-EB* strategies
+   (Transferability's dependency-scoping) are that capability's problem,
+   ⏸ deferred. The seam is the signature — deliberately
+   shaped as the facade the capability agent invokes as one tool. Recorded seams
+   sitting on it: **agent-authored directives** (the capability agent authors the
+   directive **just-in-time at invocation, once the characterisation row exists**
+   — reading this run's landscape + the intent; per plan-as-object the up-front
+   plan is a non-compiling *forecast*, never the executed directive — the LLM
+   reasoning over selection, at the seam the spec built for it); the
+   **rerank-quality eval seam** (decision 10 — deterministic-ranked vs
+   LLM-reranked on downstream consequence, once extract exists); and the **capability-run
+   entity** (today a run = one component execution and the chain order lives only
+   in `skeleton.py`, the agent's stand-in; the agent layer needs a durable run
+   spanning components — the recorded Langfuse detached-trace warts are early
+   symptoms).
+8. **Component wiring mirrors 004–009.** `"select"` in `COMPONENT_REGISTRY`
+   requiring `evidence_scope_id`; `SelectContext(scope_id, intent, context)`;
+   `_run_select` via `_run_scope_component`; conditional-edge wiring;
+   `component.started/completed/failed`. Invariants:
+   `screened_in == non_evidence + eligible` and
+   `eligible == selected + not_selected` (the base ladder visible — finding 1;
+   must-includes ⊆ selected; each selected doc in exactly one stratum bucket);
+   `selected == must_include + breadth_floor + ranked`; one selection row per
+   `(scope, run)`. Skeleton chain extends to select and renders the summary.
+9. **Edge scopes and failure semantics — honest, tested.** `n = 0` → skip honestly
+   (`empty_scope` flag, no selection row pretending otherwise); missing
+   characterisation row → `component.failed` with a structural error (run
+   characterise first — the chain owns ordering, the component owns honesty);
+   budget ≥ n → select-all with rationale; unclustered-only grouping (zero themes)
+   → one stratum, still stratified formally; all-must-include scopes → budget
+   untouched, flagged if that exhausts the scope. Under `coverage_stratified_v1`
+   there are no retries and no partial writes. **Re-run semantics** (adversarial
+   finding 13): the row is written once, at success, inside the component's
+   transaction — a failed run persists nothing, so retrying is a **new run**
+   (new `run_id`, new row); same-run re-execution is not a supported operation
+   and the `UNIQUE (evidence_scope_id, run_id)` constraint makes it a loud
+   error, never a silent overwrite (the 009 characterisation-row pattern).
+10. **`llm_rerank_v1` — purpose-sensitive within-stratum ordering, in-slice**
+    (user-decided, rev 3). The generative judgment layer, bounded to the one thing
+    arithmetic can't do: weighing candidates against the intent (and the synthesis
+    purpose it implies) — preferring the systematic review for an overview intent,
+    recognising the pivotal document similarity can't express.
+    - **Contested strata only**: strata whose allocation < stratum size. Wholly
+      selected strata need no ranking — no calls spent on them (test-asserted).
+    - **Mechanics — 009's assignment stage transplanted**: batched concurrent
+      calls on a judgment-capable model; each batch = id-keyed
+      `(id, title, abstract)` data records + the intent + the fixed scoring
+      instruction; output **schema-constrained to per-doc
+      `(doc_id, score, reason)`** — no tools, no free text acting on the world.
+      **The judged basis is the envelope, uniformly**: title + abstract (the
+      surface the grouping calls read; degrading to title-only where the
+      envelope did, flagged) — never full-text chunks, which sit on extraction's
+      side of the pre-extract line. Uniform basis = abstract-only and full-text
+      documents compete fairly. The LLM **ranks; it never selects**: strata,
+      budget, must-includes and the breadth floor are code — the ranker only
+      orders candidates within contested strata.
+      Call budget known pre-run: `ceil(contested/batch) × (1 + retry_cap)`
+      (caps plan-pinned), checked before any live call.
+    - **Fallback, never failure — exhaustiveness in code**: a doc the ranker
+      misses, duplicates or mangles falls back to its deterministic-composite
+      score, flagged `rank_fallback` and counted in the rationale; an entire
+      failed batch falls back the same way. The rerank can degrade to exactly
+      `coverage_stratified_v1`, never to a partial or silent state. LLM scores
+      order candidates; they never exclude (the structure of decision 1 is
+      untouched).
+    - **Score semantics — LLM and composite scores are never mixed in one
+      comparison** (adversarial finding 3). LLM scores are **coarse bounded
+      integers 0–10** (schema-enforced; rev 6.1 — user challenge held: 0–100
+      was false precision; LLM pointwise scores are poorly calibrated and a
+      stratum's candidates can span batches, so cross-call noise would do the
+      ordering at fine granularity). The within-stratum ordering under
+      `llm_rerank_v1` is: **LLM-scored docs first** (score desc → **ties by
+      composite desc** → pss id), **then fallback docs** (composite desc →
+      pss id), each block internally deterministic. Ties are the designed
+      handoff: the LLM expresses ~10 levels of purpose-fit judgment; the
+      deterministic composite refines within a level. Whole-stratum fallback ≡
+      the deterministic composite ordering exactly. The two scales are never
+      interleaved (incommensurable — a defined scored-before-fallback rule is
+      honest, deterministic, and collapses to the right limit in both
+      directions). Both scores are recorded per doc either way. (Listwise
+      ordering — the model emitting a ranking, not scores — is the known-better
+      method with a cross-batch merge cost: recorded at the rerank-quality eval
+      seam.)
+    - **`RankingBackend` seam** mirroring `GroupingBackend`:
+      `rank(batch, intent) -> scores+reasons` + `mode`; `OpenAIRankingBackend`
+      (structured outputs) + deterministic stub for the suite. `run_harness
+      ranking_backend` parameter, stub default.
+    - **The `select_rerank_v1` prompt** — the repo's **second product prompt
+      surface**, lead-authored, versioned, recorded in `selection_provenance` and
+      the event payload. Injection posture identical to 009's (the standing
+      rules): corpus text enters as id-keyed data records under data/instructions
+      separation; **reasons are untrusted model output** (length/charset
+      constraints, stored and rendered as data, re-enter prompts only as data);
+      a hijacked model can at worst mis-order within a stratum, bounded by the
+      code-owned structure.
+    - **Model route**: a mini-class judgment model, plan-pinned — 009's recorded
+      lesson applies (nano-class emits schema-valid empty output on batched
+      structured tasks; start at gpt-5-mini-class).
+    - **Honest softness**: reranked ordering is interpretive — recorded per doc
+      (LLM score, reason, fallback flag) alongside the deterministic scores, so
+      the rationale carries both and every ordering is attributable
+      (`selection_provenance`: prompt version, model, batch size, fallback/retry
+      counts). Rerank *quality* is eval territory once extract gives selection a
+      consequence (the promoted eval seam: compare deterministic-ranked vs
+      LLM-reranked selections on downstream yield, using the eval-ready traces).
+    - **Strategy routing**: suite and library default = `coverage_stratified_v1`
+      (stub, deterministic); the skeleton uses `llm_rerank_v1` on a configured
+      key (egress is the product — the rev-6.1 posture). Cross-encoder relevance
+      models (Cohere-class, on Bedrock) were considered and routed to the
+      **`retrieve` seam** instead — they score query-relevance, not
+      purpose-fit; recorded there, not here.
+
+### Contract-stage adversarial review — findings & adjudication (Codex, 2026-07-06)
+
+Fourteen findings against rev 5 (3 blockers · 10 majors · 1 minor); none
+challenged the user-settled directions. Adjudicated by the lead — 12 adopted,
+1 in-part, 1 declined:
+
+1. Candidate set ignored components §3 `Non-evidence` exclusion (blocker):
+   **adopted** — eligible set defined, counted base-ladder line, invariants
+   updated (decisions 3, 8).
+2. Allocator arithmetic underspecified — must-include × breadth-floor
+   interaction, budget < strata, exhausted strata, reason precedence (blocker):
+   **adopted** — exact ordered arithmetic in decision 3.
+3. LLM and composite scores incommensurable in one ordering (blocker):
+   **adopted** — bounded integer scores, scored-before-fallback rule,
+   deterministic ties (decision 10).
+4. Spec's user-nominated escalation is **cluster**-level; contract had doc-level
+   only: **adopted** — `priority_strata` directive field +
+   `priority_stratum_excluded`, the hardest flag (decisions 4, 6).
+5. Directive semantics too open for a fresh implementer: **adopted-in-part** —
+   merge arithmetic, bounds, predicate forms and fail-closed validation pinned
+   in-contract; the exact JSON schema stays plan-pinned.
+6. Policy tilt needs a no-op field or spec flow-back: **declined** — the spec's
+   tilt is conditional on a policy object that doesn't exist; 009's dual-view
+   precedent defers identically; an inert field violates Principle 10.
+7. `thin_base` diverged from the spec's sufficiently-confident definition:
+   **adopted** (decision 6).
+8. Reason strings may quote source text vs the "no source text" claim:
+   **adopted** — boundary corrected; rationale rows inherit corpus sensitivity.
+9. Verification's "intent string only" stale from rev 4: **adopted** — fixed.
+10. Decision 7's "exactly one strategy" contradicted the two-strategy
+    deliverable: **adopted** — fixed.
+11. Byte-identity claim false over PK/timestamp: **adopted** — determinism
+    defined over payload columns.
+12. No schema subsection (009 precedent): **adopted** — added.
+13. `UNIQUE(scope, run)` vs "re-running is clean" ambiguity: **adopted** —
+    same-run re-execution unsupported and loud; retry = new run (decision 9).
+14. Rubric still required the dropped vectorisation-entry update (minor):
+    **adopted** — rubric corrected.
+
+### Schema
+
+**Gated change 1 — one new table** (one migration; table count 19 → 20; the 009
+precedent's shape — adversarial finding 12):
+
+```
+selection_result   selection_result_id PK · project_id FK→project
+                   · evidence_scope_id · run_id
+                   · strategy TEXT CHECK (strategy IN
+                       ('coverage_stratified_v1', 'llm_rerank_v1'))
+                   · budget INT NOT NULL CHECK (budget > 0)
+                   · selection_provenance JSONB NOT NULL (required keys,
+                       test-asserted: strategy version, executed directive +
+                       source, effective weights, signal availability; under
+                       llm_rerank_v1 additionally: prompt_version, model,
+                       batch_size, retry/fallback counts)
+                   · selected JSONB NOT NULL   (per doc: pss id, stratum,
+                       signal scores [+ llm score/reason where ranked],
+                       text_basis, reason)
+                   · excluded JSONB NOT NULL   (per stratum: counts by reason
+                       class + notable flagged exclusions; base-ladder counts
+                       incl. non_evidence)
+                   · flags JSONB NOT NULL      (the decision-6 triggers)
+                   · created_at
+                   Composite FKs (evidence_scope_id, project_id),
+                   (run_id, project_id) — cross-project guard
+                   UNIQUE (evidence_scope_id, run_id)   -- run-local by design
+```
+
+Downgrade drops the table. `tests/helpers.py` `delete_project_data` gains it in
+FK-safe order.
+
+### Out of scope
+
+- **`extract` and everything deeper** — select's consumer; subsequent slices.
+- **Agent-authored directives** — the capability-agent commit layer (an LLM
+  reading intent + landscape summary and authoring the `SelectionDirective`) is
+  the agent-layer slice; this slice ships the surface it will drive (decision 4).
+- **Rerank-quality evals** — machinery correctness is this slice's bar
+  (decision 10); ranked-vs-reranked comparison on downstream yield needs extract.
+- **Cross-encoder relevance models** (Cohere-class rerank, on Bedrock) — routed
+  to the `retrieve` seam (query-relevance scoring, retrieval's upgrade — not
+  select's purpose-fit judgment).
+- **The capability-run entity** (a durable run spanning components) — recorded
+  seam (decision 7); this slice keeps the one-run-per-component model.
+- **The steer-point pause** (steering modes, escalation UX) — plan-as-object seam;
+  the flags it will read ship now (decision 6).
+- **`retrieve` / pgvector / hybrid retrieval** — still the vectors' committed
+  first reader (rev 4 restored the clean line: select reads no vectors).
+- **Source/evidence policy object** (the soft-prior tilt) and **dual-view
+  coverage** — the policy trigger and tilt are structurally inert until it exists.
+- **Selection-diversity extensions** — publication-country stratification,
+  abstract-inferred population/intervention tags (spec: flagged, not baked).
+- **Full appraisal pass on the selected subset** (the appraisal-improvement seam) —
+  select creates the subset it will run on; the pass stays deferred.
+- **Second `select` strategies** (Transferability dependency-scoping et al.).
+- **EB artefact composition** — unchanged from 009; select writes no blocks.
+
+## Constraints & approval gates
+
+**Three gated changes (approval needed at this gate):**
+
+1. **Schema** — one new table (`selection_result`, project-scope-guarded: composite
+   FKs `(evidence_scope_id, project_id)` and `(run_id, project_id)`, UNIQUE
+   `(evidence_scope_id, run_id)`). One migration; table count 19 → 20. No
+   existing-table changes.
+2. **Public interface** — the `"select"` `COMPONENT_REGISTRY` entry (compile
+   surface widens) + `run_harness` gains optional `ranking_backend` (stub default —
+   no default egress; the `grouping_backend` precedent) + **`Plan`/`Config` gain
+   `characterisation_run_id`** (required for select by the registry; rev 7,
+   plan-stage finding 1 — flagged, not silently folded). The selection directive
+   rides the evidence-scope context (a first-class facade argument internally, not
+   a harness signature change).
+3. **Runtime egress — one new generation surface (user-confirmed, rev 3):** the
+   `select_rerank_v1` calls send titles + abstracts (+ the scope intent) to the
+   chat API under the repo's **second product prompt** (the 009-approved
+   generation front, one new bounded surface on it: schema-constrained scores +
+   reasons, contested strata only, pre-run call budget, fallback-not-failure).
+   Traced by the existing Langfuse wiring. No embeddings call — the intent-embed
+   site was cut at rev 4. Suite and library defaults stay stub + socket-deny;
+   `make verify` remains egress-free.
+
+No new dependency rides this slice (`openai` and `langfuse` land it all).
+
+**Explicitly not crossed:** exactly one prompt-bearing surface (the
+`select_rerank_v1` prompt — no agent loop, no free text acting on the world, no
+directive-authoring generation); no new dependency; no auth/tenancy/CI change; no
+pgvector/extension; no doc-level status column; no artefact/block writes; no new
+event types.
+
+**One spec flow-back approved with this contract** (user-decided, rev 3):
+components §6 select realisation — "procedure" refined to *procedure with an
+optional bounded generative rerank of within-stratum ordering* (stratification,
+budget and hard rules stay code-side; scores order, never exclude; fallback to the
+deterministic composite). `log.md` entry rides the slice. A second candidate
+clarification — naming `unclustered` a first-class stratum — folds into the same
+edit (it's already implied by §5's counted-unclustered + §6's "whatever clusters
+exist").
+
+## Public / private boundary
+
+- No credentials beyond the existing env keys. On the live path, what leaves:
+  the scope intent string and titles + abstracts of contested-strata candidates
+  (the rerank calls) — the same text class and posture as 009's grouping calls;
+  fixture-corpus content is openly licensed, so live verification sends only
+  committable text. Full-I/O traces to the user-operated Langfuse instances,
+  per the 009 posture.
+- Committed artifacts (strategy names, weights, prompt text, table/column names,
+  verification counts, rationale shapes) are public-safe. Selection rationale
+  contains ids, scores, reason enums and the ranker's short reason strings —
+  and reason strings are **potentially source-derived text** (a model
+  paraphrasing or quoting the abstract it judged; length-capped and stored as
+  data, but not quote-free by construction — adversarial finding 8). The
+  `selection_result` row therefore inherits the corpus's sensitivity class:
+  public-safe for the openly-licensed fixture corpus, private-by-default for
+  arbitrary corpora (same class as the characterisation row's theme
+  descriptions).
+
+## Model route
+
+**Rerank**: a mini-class judgment model behind the `RankingBackend` seam (exact pin
+at the plan gate; gpt-5-mini-class per 009's nano lesson; → Bedrock at the seam
+swap). **Prompt-bearing surface: `select_rerank_v1`** — the repo's second product
+prompt, lead-authored, versioned, recorded in `selection_provenance` and the event
+payload; the only prompt in the slice. No embeddings use (rev 4).
+
+## Disciplines binding this slice
+
+- **Deterministic where claimed, honestly soft where not** — under
+  `coverage_stratified_v1`: same corpus, same characterisation row, same
+  parameters → byte-identical payload columns (PK/timestamp excluded),
+  test-enforced (the 009 two-run determinism check). The structure (strata, allocation, budget, hard rules) is
+  deterministic under *both* strategies; `llm_rerank_v1`'s ordering is
+  interpretive by design and fully attributable (prompt version, model, per-doc
+  scores + fallbacks recorded). Neither live path is inside `make verify`.
+- **Flag, don't drop** — no signal gates: missing appraisal or unknown year
+  lower a score or flag a doc, never exclude it; directive boosts
+  re-weight, never exclude; ranker misses fall back to the deterministic
+  composite, flagged `rank_fallback`, never dropped; must-includes are the only
+  hard rule and they *include*.
+- **Exactly one prompt-bearing surface** — the `select_rerank_v1` prompt,
+  lead-authored; no other generation exists in the slice.
+- **Honest absence** — `not_selected` is coverage, never silence: the bidirectional
+  rationale makes every exclusion countable, and nothing in the payload phrases an
+  exclusion as corpus absence.
+- **Run-local means run-local** — selection lives in its run's row; nothing
+  promotes it to canonical state; no cross-run reuse of groupings.
+- **Model only what behaves** — no policy fields, no diversity dimensions the
+  strategy doesn't read, no second-strategy machinery.
+- **Never silent, never fake** — out-of-scope must-includes flagged; empty scopes
+  skipped loudly; missing upstream state fails, not improvises.
+
+## Stop conditions
+
+- Any gated change (schema · public interface · egress) not yet approved, or any
+  change beyond the gated items (existing-table change, new dependency, a second
+  prompt surface beyond `select_rerank_v1`, doc-level status writes).
+- Any *suite or library-default* code path would perform network I/O.
+- The strategy needs a signal that isn't cheaply pre-extract (full text, anything
+  requiring extraction) — that's the next component's side of the line; halt,
+  don't reach.
+- The rerank needs capabilities beyond per-doc scores + reasons (tool use, free
+  text, multi-turn, excluding documents) — a different design; halt.
+- The directive surface tempts a generation call (authoring directives from
+  intent) or a hard exclude — the former is the agent-layer slice, the latter a
+  design violation; halt, don't grow either.
+- Extract-shaped scope creep (reading full text, writing findings, coverage-state
+  vocabulary) — the next slice, not this one.
+- `make verify` red with unclear root cause; or the turn/token budget is spent.
+
+## Acceptance checks
+
+- `make verify` (test · typecheck · lint · build) — green, deterministic, zero
+  egress (socket-deny covers a select round-trip; the suite runs on stubs only).
+- **One manual live check** (evidence in verification.md): skeleton end-to-end with
+  `OPENAI_API_KEY` (+ `LANGFUSE_*`) against the fixture corpus — **real
+  `llm_rerank_v1` calls on the contested strata** (scores + reasons + any
+  fallbacks recorded), selection summary rendered, rerank calls visible in
+  the dev Langfuse trace (prompt version, tokens/cost); per-run counts and an
+  honest cost note recorded; keys absent from captured output.
+- Deterministic vs AI eval: all suite checks are deterministic tests (stub
+  ranker; `coverage_stratified_v1` byte-identity). Rerank
+  *quality* (are the right docs ranked up?) is eval territory once extract gives
+  it a consequence; this slice's bar is machinery correctness + honest rationale.
+
+## Verification evidence expected
+
+`verification.md` must include:
+- `make verify` table with pass counts; socket-deny result named.
+- Migration roundtrip clean; table count 20.
+- Named test results: stratified-allocation math (hand-computed fixture,
+  including exhausted-stratum redistribution and budget < strata),
+  breadth-floor anti-top-k case (a dominant stratum cannot starve the rest),
+  must-include bypass + out-of-scope flag + must-include-satisfies-floor,
+  non-evidence exclusion (counted, Unknown stays eligible), counting invariants
+  (eligible-set based), determinism
+  (two-run byte-identical payload columns), edge scopes (n=0, missing characterisation row,
+  budget ≥ n, unclustered-only), missing-signal flag-not-block, text-basis tilt
+  (soft — an abstract-only doc still selectable; hand-computed weight effect),
+  trigger flags (large-stratum-excluded and thin-full-text fixtures), rationale
+  bidirectionality (selected + excluded
+  aggregates present and summing), directive semantics (a tag/column boost
+  deterministically reorders a stratum · a boost can never exclude — the boosted-
+  against doc still selectable · unknown column/tag in a directive flagged,
+  non-fatal · empty directive = default scan, byte-identical to the no-directive
+  path · executed directive + source recorded in `selection_provenance` ·
+  malformed directive fails closed · priority-strata match + the
+  `priority_stratum_excluded` fixture), rerank
+  semantics (contested-strata-only calls asserted against a counting double ·
+  scored-before-fallback ordering with both scores recorded ·
+  call-budget maximum enforced pre-call · per-doc fallback on missing/invalid
+  scores, flagged and counted, batch fallback on batch failure — selection always
+  completes · LLM scores order but never exclude · reasons length/charset
+  constrained, injection-shaped reason stored as inert data · prompt hygiene:
+  id-keyed data records under data/instructions separation, asserted structurally
+  on the built prompt · provenance keys — prompt version, model, fallback counts —
+  present on row and event payload).
+- Live-run evidence per the manual check above.
+- Public-safety confirmation (no credentials; live path sent the scope intent
+  plus titles + abstracts of contested-strata candidates — openly-licensed
+  fixture text only; adversarial finding 9 corrected the earlier "intent string
+  only" wording, stale from rev 4).
+- Deferred seams recorded in `docs/deferred.md` (steer-point pause reading the
+  flags · **agent-authored directives at the commit layer** · **rerank-quality
+  evals** (ranked vs reranked on downstream yield, once extract exists) ·
+  **cross-encoder relevance models (Cohere-class, Bedrock) at the `retrieve`
+  seam** · **capability-run entity spanning components** · **embedding-relevance
+  for select, declined** (rev 4 — revisit only via rerank-quality evals) ·
+  selection-diversity extensions · policy soft-prior tilt (integration shape
+  recorded: the policy compiles into directive boosts, provenance-stamped —
+  select untouched) · listwise rerank ordering · second strategies ·
+  full appraisal on the selected subset — pointer updates where 009 entries
+  already exist). The 009 "ahead of its first reader" vectorisation entry stands
+  unchanged (retrieve remains the first reader).
+- Diff summary (data files excluded from review diffs per the 007 retro).
+
+## Risk tier & review focus
+
+**Tier 3** — schema is a hard gate (one new table), the component sits on the
+gap-provenance trust path (`not_selected` must never masquerade as absence), and
+rev 3 adds the repo's second product prompt surface (generation egress + the
+injection posture's second exercise). Still a markedly smaller slice than 009 (one
+table, one prompt, no new dependency) — size the review stack accordingly (the 009
+retro note applies: fewer finder angles on the smaller diff). ADR 0006 (selection
+strategy · directive · rerank seam · rationale record) due at step 4; contract-
+and plan-stage adversarial reviews standard.
+
+Review focus:
+- **Provenance/honesty (the headline lane)**: the bidirectional rationale
+  complete and countable; `not_selected` derivable and never phrased as absence;
+  flag-not-block on every signal; run-local selection not leaking canonical;
+  trigger flags computed from the right bases; LLM scores/reasons attributable
+  and never load-bearing for exclusion.
+- **Security / prompt surface**: `select_rerank_v1` injection posture (id-keyed
+  data records, schema-constrained scores+reasons, no tools; reasons as untrusted
+  data); key hygiene unchanged; egress bounded (contested strata only, pre-run
+  budget, socket-deny on suite paths).
+- **Correctness**: largest-remainder allocation (sums to budget, deterministic);
+  breadth floor under adversarial size distributions; must-include bypass
+  arithmetic; directive semantics (boosts fold into scores and can never exclude;
+  no directive shape can manufacture a hard gate; unknown references flagged);
+  rerank fallback semantics (every contested doc scored or flagged, budget
+  enforced pre-call); counting invariants; edge scopes.
+- **Determinism**: stable orderings everywhere; two-run byte-identity; no
+  set/dict-iteration-order leaks into the row.
+- **Schema**: migration roundtrip; composite FKs; FK-safe deletes; unique
+  constraint.
+- **Scope**: no extract reach-through, no status columns, no policy machinery, no
+  second strategy, suite egress-free.

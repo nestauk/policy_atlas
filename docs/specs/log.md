@@ -1,6 +1,13 @@
 # Spec update log
 
 ## 2026-07-06
+* **Update**: [EB components §6](capabilities/evidence-base/components.md) — select
+  realisation refined: *procedure* → *procedure with an optional bounded generative rerank* of
+  within-stratum ordering (stratification, breadth floor, budget arithmetic and must-includes
+  stay code-side; schema-constrained per-doc scores + reasons; scores order, never exclude;
+  per-doc fallback to the deterministic composite). `unclustered` named a first-class stratum
+  (folding in what §5's counted-unclustered already implied). Approved with the task 010
+  contract per the spec-refinement flow (rev 3).
 * **Update**: [EB components §5](capabilities/evidence-base/components.md) — clarified
   content-vs-artefact: characterise produces the landscape *content* (run-scoped
   characterisation record + topic/theme tags); the single EB artefact is composed once at the

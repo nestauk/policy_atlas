@@ -17,6 +17,7 @@ COMPONENT_REGISTRY: dict[str, dict[str, list[str]]] = {
     "appraise": {"requires": ["evidence_scope_id"]},
     "ingest_full_text": {"requires": ["evidence_scope_id"]},
     "characterise": {"requires": ["evidence_scope_id"]},
+    "select": {"requires": ["evidence_scope_id", "characterisation_run_id"]},
 }
 VALID_COMPONENTS = set(COMPONENT_REGISTRY.keys())
 
@@ -25,6 +26,9 @@ class _ValidatedRunSpec(BaseModel):
     component: str
     source_snapshot_id: uuid.UUID | None = None
     evidence_scope_id: uuid.UUID | None = None
+    # select stratifies over an explicitly referenced characterisation — compile
+    # fails closed without it; required-by-registry for select only.
+    characterisation_run_id: uuid.UUID | None = None
 
     @model_validator(mode="after")
     def validate_fields(self) -> "_ValidatedRunSpec":
@@ -50,4 +54,5 @@ def compile(plan: Plan) -> Config:  # noqa: A001
         component=plan.component,
         source_snapshot_id=plan.source_snapshot_id,
         evidence_scope_id=plan.evidence_scope_id,
+        characterisation_run_id=plan.characterisation_run_id,
     )

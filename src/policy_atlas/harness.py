@@ -38,8 +38,10 @@ from policy_atlas.ingest_full_text import (
     ingest_full_text_sources,
 )
 from policy_atlas.plan import Config
+from policy_atlas.ranking import RankingBackend
 from policy_atlas.schema import artefact, evidence_scope, runs
 from policy_atlas.screen import ScreenContext, screen_sources
+from policy_atlas.select import SelectContext, select_scope
 
 log = structlog.get_logger()
 
@@ -57,6 +59,7 @@ class HarnessState(TypedDict):
     document_fetcher: DocumentFetcher
     embedding_backend: EmbeddingBackend
     grouping_backend: GroupingBackend
+    ranking_backend: RankingBackend | None
     block_ids: dict[str, Any]
     error: str | None
 
@@ -129,7 +132,7 @@ def _run_echo(state: HarnessState) -> HarnessState:
 
 def _run_scope_component(
     state: HarnessState,
-    context_cls: type,
+    context_cls: Callable[..., Any],
     sources_fn: Callable[..., dict[str, Any]],
 ) -> HarnessState:
     """Shared implementation for the scope-driven harness nodes (screen/classify/appraise)."""
@@ -216,6 +219,18 @@ def _run_ingest_full_text(state: HarnessState) -> HarnessState:
         embedder=state["embedding_backend"],
     )
     return _run_scope_component(state, IngestFullTextContext, sources_fn)
+
+
+def _run_select(state: HarnessState) -> HarnessState:
+    config = state["config"]
+    assert config.characterisation_run_id is not None  # registry-enforced at compile
+    context_cls = functools.partial(
+        SelectContext, characterisation_run_id=config.characterisation_run_id
+    )
+    sources_fn = functools.partial(
+        select_scope, ranking_backend=state["ranking_backend"]
+    )
+    return _run_scope_component(state, context_cls, sources_fn)
 
 
 def _run_characterise(state: HarnessState) -> HarnessState:
@@ -344,6 +359,7 @@ def build_graph() -> Any:
     g.add_node("appraise", _run_appraise)
     g.add_node("ingest_full_text", _run_ingest_full_text)
     g.add_node("characterise", _run_characterise)
+    g.add_node("select", _run_select)
     g.add_node("finish", _finish)
 
     g.set_entry_point("dispatch")
@@ -358,6 +374,7 @@ def build_graph() -> Any:
             "appraise": "appraise",
             "ingest_full_text": "ingest_full_text",
             "characterise": "characterise",
+            "select": "select",
         },
     )
     g.add_edge("echo", "finish")
@@ -367,6 +384,7 @@ def build_graph() -> Any:
     g.add_edge("appraise", "finish")
     g.add_edge("ingest_full_text", "finish")
     g.add_edge("characterise", "finish")
+    g.add_edge("select", "finish")
     g.add_edge("finish", END)
     return g.compile()
 
@@ -382,6 +400,7 @@ def run_harness(
     document_fetcher: DocumentFetcher | None = None,
     embedding_backend: EmbeddingBackend | None = None,
     grouping_backend: GroupingBackend | None = None,
+    ranking_backend: RankingBackend | None = None,
 ) -> dict[str, Any]:
     """Run the compiled harness graph for one run, persisting its output.
 
@@ -403,6 +422,11 @@ def run_harness(
         grouping_backend: Grouping backend for the characterise component;
             defaults to ``StubGroupingBackend()`` — no default egress, same
             injection pattern as ``search_backends``.
+        ranking_backend: Ranking backend for the select component. This is
+            passed straight through to the initial state; no stub is resolved
+            here. ``None`` IS the deterministic ``coverage_stratified_v1``
+            routing and stays ``None``; passing a backend selects
+            ``llm_rerank_v1``. No default egress.
 
     Returns:
         Persisted IDs; ``artefact_id`` is None for non-echo components that do
@@ -446,6 +470,7 @@ def run_harness(
         "grouping_backend": (
             grouping_backend if grouping_backend is not None else StubGroupingBackend()
         ),
+        "ranking_backend": ranking_backend,
         "block_ids": {},
         "error": None,
     }

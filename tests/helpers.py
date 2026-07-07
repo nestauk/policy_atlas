@@ -4,8 +4,10 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.engine import Connection
+
+EVIDENCE_TYPE = "RCTs and Quasi-Experimental Studies"
 
 
 def now() -> datetime:
@@ -35,6 +37,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         project_source_snapshot,
         runs,
         search_coverage_record,
+        selection_result,
         source_appraisal_result,
         source_classification_result,
         source_screening_result,
@@ -81,6 +84,10 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
     conn.execute(delete(addressable_unit).where(addressable_unit.c.block_id.in_(block_ids_subq)))
     # Task 009 rows first: tags/characterisation FK onto pss/runs; embeddings FK onto chunk
     conn.execute(delete(source_tag).where(source_tag.c.project_id == project_id))
+    # Task 010 row: same FK class as characterisation_result (scope + runs guards).
+    conn.execute(delete(selection_result).where(
+        selection_result.c.project_id == project_id
+    ))
     conn.execute(delete(characterisation_result).where(
         characterisation_result.c.project_id == project_id
     ))
@@ -225,3 +232,134 @@ def seed_run(conn: Connection, project_id: uuid.UUID) -> uuid.UUID:
         )
     )
     return rid
+
+
+def seed_select_doc(
+    conn: Connection,
+    project_id: uuid.UUID,
+    run_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    *,
+    title: str,
+    evidence_type: str | None = EVIDENCE_TYPE,
+    abstract: str | None = None,
+    quality: int | None = 3,
+    year: int = 2026,
+    origin: str = "uploaded",
+    text_basis: str = "full_text",
+) -> uuid.UUID:
+    """Insert a screened-relevant source ready for select, with optional classification."""
+    from policy_atlas.schema import (
+        project_source_snapshot,
+        source_appraisal_result,
+        source_classification_result,
+        source_snapshot,
+    )
+
+    snap_id, pss_id = seed_source(
+        conn,
+        project_id,
+        meta={"title": title, "abstract": abstract or f"Abstract for {title}.", "year": year},
+    )
+    conn.execute(
+        update(project_source_snapshot)
+        .where(project_source_snapshot.c.project_source_snapshot_id == pss_id)
+        .values(origin=origin)
+    )
+    conn.execute(
+        update(source_snapshot)
+        .where(source_snapshot.c.source_snapshot_id == snap_id)
+        .values(text_basis=text_basis)
+    )
+    seed_screening_result(conn, project_id, run_id, scope_id, pss_id, status="relevant")
+    if evidence_type is not None:
+        conn.execute(source_classification_result.insert().values(
+            source_classification_result_id=uuid.uuid4(),
+            evidence_scope_id=scope_id,
+            project_source_snapshot_id=pss_id,
+            project_id=project_id,
+            classified_by_run_id=run_id,
+            primary_evidence_type=evidence_type,
+            classified_at=now(),
+        ))
+    if quality is not None:
+        conn.execute(source_appraisal_result.insert().values(
+            source_appraisal_result_id=uuid.uuid4(),
+            evidence_scope_id=scope_id,
+            project_source_snapshot_id=pss_id,
+            project_id=project_id,
+            appraised_by_run_id=run_id,
+            quality_score=quality,
+            rubric_version="test-rubric",
+            appraised_at=now(),
+        ))
+    return pss_id
+
+
+def seed_characterisation(
+    conn: Connection,
+    project_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    run_id: uuid.UUID,
+    *,
+    themes: dict[str, list[uuid.UUID]],
+    unclustered: list[uuid.UUID] | None = None,
+) -> None:
+    """Insert a characterisation_result row with the given theme membership."""
+    from policy_atlas.schema import characterisation_result
+
+    conn.execute(characterisation_result.insert().values(
+        characterisation_id=uuid.uuid4(),
+        project_id=project_id,
+        evidence_scope_id=scope_id,
+        run_id=run_id,
+        grouping_provenance={"backend_mode": "stub"},
+        coverage={"base": "screened"},
+        themes={
+            "themes": [
+                {
+                    "name": name,
+                    "description": f"{name} documents",
+                    "member_ids": [str(pss_id) for pss_id in ids],
+                    "size": len(ids),
+                }
+                for name, ids in themes.items()
+            ],
+            "unclustered_ids": [str(pss_id) for pss_id in (unclustered or [])],
+        },
+        created_at=now(),
+    ))
+
+
+def run_select(
+    conn: Connection,
+    project_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    characterisation_run_id: uuid.UUID,
+    *,
+    context: dict[str, Any] | None = None,
+    backend: Any = None,
+) -> tuple[dict[str, Any], Any, uuid.UUID]:
+    """Seed a fresh run and execute select_scope; return (summary, persisted row, run_id)."""
+    from policy_atlas.schema import selection_result
+    from policy_atlas.select import SelectContext, select_scope
+
+    run_id = seed_run(conn, project_id)
+    summary = select_scope(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        context=SelectContext(
+            scope_id=scope_id,
+            intent="Select the best evidence.",
+            context=context or {},
+            characterisation_run_id=characterisation_run_id,
+        ),
+        ranking_backend=backend,
+    )
+    row = conn.execute(
+        select(selection_result)
+        .where(selection_result.c.project_id == project_id)
+        .where(selection_result.c.run_id == run_id)
+    ).one()
+    return summary, row, run_id

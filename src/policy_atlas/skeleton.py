@@ -3,8 +3,8 @@
 Smoke command: python -m policy_atlas.skeleton
 
 Creates a project + run, ingests a synthetic source, creates a screening scope,
-then walks screen → classify → appraise → ingest_full_text → characterise over
-the same scope, rendering the landscape summary and the event log.
+then walks screen → classify → appraise → ingest_full_text → characterise → select
+over the same scope, rendering the landscape and selection summaries and the event log.
 All gates approved; see ADR 0001 and contract.md.
 """
 
@@ -29,16 +29,19 @@ from policy_atlas.inference import StubEchoProvider
 from policy_atlas.ingest import ingest_upload
 from policy_atlas.logging import configure_logging
 from policy_atlas.plan import Plan, compile
+from policy_atlas.ranking import OpenAIRankingBackend, RankingBackend
 from policy_atlas.schema import (
     characterisation_result,
     evidence_scope,
     project,
     project_source_snapshot,
     runs,
+    selection_result,
     source_appraisal_result,
     source_classification_result,
     source_screening_result,
     source_snapshot,
+    source_tag,
 )
 
 log = structlog.get_logger()
@@ -70,8 +73,27 @@ def _run_component(
     embedding_backend: EmbeddingBackend,
     grouping_backend: GroupingBackend,
     langfuse_client: Langfuse | None,
-) -> None:
-    """Create a run, compile and record the plan, and execute one scope component."""
+    characterisation_run_id: uuid.UUID | None = None,
+    ranking_backend: RankingBackend | None = None,
+) -> uuid.UUID:
+    """Create a run, compile and record the plan, and execute one scope component.
+
+    Args:
+        conn: Open database connection; all writes use its active transaction.
+        project_id: Owning project.
+        scope_id: Evidence scope the component runs over.
+        component: Component name, dispatched by the harness.
+        embedding_backend: Embedding backend threaded into the harness.
+        grouping_backend: Grouping backend threaded into the harness.
+        langfuse_client: Optional tracing client for the component span.
+        characterisation_run_id: Explicit characterisation run for ``select``;
+            unused by other components.
+        ranking_backend: Ranking backend for ``select``; unused by other
+            components.
+
+    Returns:
+        The created run's id.
+    """
     run_id = uuid.uuid4()
     conn.execute(
         runs.insert().values(
@@ -86,16 +108,25 @@ def _run_component(
     )
     log.info("run.started", run_id=str(run_id), component=component)
 
-    config = compile(Plan(component=component, evidence_scope_id=scope_id))
+    config = compile(
+        Plan(
+            component=component,
+            evidence_scope_id=scope_id,
+            characterisation_run_id=characterisation_run_id,
+        )
+    )
+    plan_payload: dict[str, Any] = {
+        "component": config.component,
+        "evidence_scope_id": str(config.evidence_scope_id),
+    }
+    if config.characterisation_run_id is not None:
+        plan_payload["characterisation_run_id"] = str(config.characterisation_run_id)
     events.append(
         conn,
         project_id=project_id,
         run_id=run_id,
         event_type="plan.compiled",
-        payload={
-            "component": config.component,
-            "evidence_scope_id": str(config.evidence_scope_id),
-        },
+        payload=plan_payload,
     )
     log.info("plan.compiled", component=config.component)
 
@@ -111,6 +142,7 @@ def _run_component(
             provider=StubEchoProvider(),
             embedding_backend=embedding_backend,
             grouping_backend=grouping_backend,
+            ranking_backend=ranking_backend,
         )
         if component == "characterise" and langfuse_client is not None:
             # Scores and trace I/O must attach while the run's span is still the
@@ -125,6 +157,7 @@ def _run_component(
                 tracing.score_summary(
                     langfuse_client, payload, intent=intent, root_span=run_span
                 )
+    return run_id
 
 
 def _text_basis_distribution(conn: Connection, project_id: uuid.UUID) -> dict[str, int]:
@@ -211,6 +244,66 @@ def _render_landscape(log_entries: list[dict[str, Any]]) -> None:
     log.info("landscape.provenance", **payload["provenance"])
 
 
+def _selection_payload(log_entries: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Return the select component's completed-event payload, or None if it failed.
+
+    Entries arrive in ascending sequence order, so the search runs newest-first.
+    """
+    return next(
+        (
+            e["payload"] for e in reversed(log_entries)
+            if e["event_type"] == "component.completed"
+            and e["payload"].get("component") == "select"
+        ),
+        None,
+    )
+
+
+def _render_selection(
+    log_entries: list[dict[str, Any]], selected: list[dict[str, Any]]
+) -> None:
+    """Render the select summary from the event log and the persisted selection row.
+
+    Args:
+        log_entries: Full project event log.
+        selected: The persisted ``selection_result.selected`` rationale records
+            (per-doc detail the event payload only summarizes).
+    """
+    payload = _selection_payload(log_entries)
+    if payload is None:
+        # the component emitted component.failed — the event log below shows it
+        log.warning("selection.missing")
+        return
+
+    log.info("selection.base", **payload["base"])
+    for stratum in payload["strata"]:
+        log.info(
+            "selection.stratum",
+            name=stratum["name"],
+            candidate_count=stratum["candidate_count"],
+            allocated_count=stratum["allocated_count"],
+            selected_count=stratum["selected_count"],
+            full_text_share_candidates=stratum["full_text_share_candidates"],
+            full_text_share_selected=stratum["full_text_share_selected"],
+        )
+    log.info("selection.selected", **payload["selected"])
+    log.info("selection.excluded", **payload["excluded"])
+    log.info("selection.flags", flags=payload["flags"])
+    log.info("selection.provenance", **payload["provenance"])
+
+    for record in selected:
+        fields: dict[str, Any] = {
+            "pss_id": record["pss_id"],
+            "stratum": record["stratum"],
+            "reason": record["reason"],
+            "composite": record["composite"],
+        }
+        for key in ("llm_score", "llm_reason", "rank_fallback"):
+            if key in record:
+                fields[key] = record[key]
+        log.info("selection.selected_doc", **fields)
+
+
 def main() -> None:
     """Run the walking-skeleton thread end to end and log the result."""
     configure_logging()
@@ -223,9 +316,13 @@ def main() -> None:
     langfuse_client = tracing.get_langfuse() if live else None
     embedding_backend: EmbeddingBackend
     grouping_backend: GroupingBackend
+    ranking_backend: RankingBackend | None
     if live:
         embedding_backend = OpenAIEmbeddingBackend()
         grouping_backend = OpenAIGroupingBackend()
+        # Tracing lives inside OpenAIRankingBackend itself — no wrapper class,
+        # unlike the embedding/grouping backends below.
+        ranking_backend = OpenAIRankingBackend(langfuse_client=langfuse_client)
         if langfuse_client is not None:
             embedding_backend = tracing.TracedEmbeddingBackend(
                 embedding_backend, langfuse_client
@@ -236,8 +333,12 @@ def main() -> None:
     else:
         embedding_backend = StubEmbeddingBackend()
         grouping_backend = StubGroupingBackend()
+        ranking_backend = None
     log.info(
-        "skeleton.backends", mode="live" if live else "stub", traced=langfuse_client is not None
+        "skeleton.backends",
+        mode="live" if live else "stub",
+        traced=langfuse_client is not None,
+        ranking="llm_rerank_v1" if live else "coverage_stratified_v1",
     )
 
     engine = get_engine()
@@ -339,12 +440,55 @@ def main() -> None:
             **_text_basis_distribution(conn, project_id),
         )
 
-        run_component("characterise")
+        char_run_id = run_component("characterise")
 
         char_row = conn.execute(
             select(characterisation_result).where(
                 characterisation_result.c.project_id == project_id
             )
+        ).one_or_none()
+
+        # Pick the demo boost tag: most common source_tag.tag for this project
+        # not asserted by characterise itself (deterministic order: count desc,
+        # tag asc); fall back to any tag if none match.
+        tag_counts_query = (
+            select(source_tag.c.tag, func.count())
+            .where(source_tag.c.project_id == project_id)
+            .group_by(source_tag.c.tag)
+            .order_by(func.count().desc(), source_tag.c.tag.asc())
+        )
+        tag_counts = conn.execute(
+            tag_counts_query.where(source_tag.c.asserted_by != "characterise")
+        ).fetchall()
+        if not tag_counts:
+            tag_counts = conn.execute(tag_counts_query).fetchall()
+        boost_tag = tag_counts[0].tag if tag_counts else None
+        log.info("select.demo_boost_tag", tag=boost_tag)
+
+        # Plan finding 5: the fixture corpus is ~24 docs, so the default budget
+        # (25) would leave zero contested strata — pin a small budget and a
+        # boost on the chosen tag so reranking has something to do. A tagless
+        # corpus gets the budget only (a None tag would fail the directive closed).
+        selection_directive: dict[str, Any] = {"budget": 8}
+        if boost_tag is not None:
+            selection_directive["boosts"] = [
+                {"match": {"tag_type": "topic_theme", "tag": boost_tag}, "weight": 3.0}
+            ]
+        conn.execute(
+            evidence_scope.update()
+            .where(evidence_scope.c.evidence_scope_id == scope_id)
+            .values(context={"theme": "housing", "selection": selection_directive})
+        )
+        log.info("select.directive", budget=8, boost_tag=boost_tag)
+
+        run_component(
+            "select",
+            characterisation_run_id=char_run_id,
+            ranking_backend=ranking_backend,
+        )
+
+        selection_row = conn.execute(
+            select(selection_result).where(selection_result.c.project_id == project_id)
         ).one_or_none()
 
         log_entries = events.read(conn, project_id)
@@ -380,6 +524,24 @@ def main() -> None:
 
     _render_landscape(log_entries)
     log.info("characterisation_row", present=char_row is not None)
+
+    _render_selection(
+        log_entries, selection_row.selected if selection_row is not None else []
+    )
+    log.info("selection_row", present=selection_row is not None)
+
+    if live:
+        # Finding 5's assert-and-log: a live run that never actually calls the
+        # ranking backend (e.g. no contested strata) is a silent regression.
+        selection_payload = _selection_payload(log_entries)
+        if selection_payload is None:
+            log.warning("select.rerank_check_skipped")
+        else:
+            used = selection_payload["provenance"]["call_budget"]["used"]
+            if used == 0:
+                log.error("select.rerank_never_fired", used=used)
+            else:
+                log.info("select.rerank_fired", used=used)
 
     # Scores attach inside the characterise run's span (_run_component); only flush here.
     tracing.flush(langfuse_client)

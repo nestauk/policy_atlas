@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — nineteen tables, nine alembic migrations.
+"""SQLAlchemy Core table metadata — twenty tables, ten alembic migrations.
 
 No deferred columns (no block/artefact summary, no same_content_as, no lineage key).
 """
@@ -475,6 +475,53 @@ characterisation_result = Table(
         name="fk_char_run_project",
     ),
     UniqueConstraint("evidence_scope_id", "run_id", name="uq_char_scope_run"),
+)
+
+# --- Select model (task 010) ---
+
+SELECTION_STRATEGIES: tuple[str, ...] = ("coverage_stratified_v1", "llm_rerank_v1")
+_SELECTION_STRATEGIES_SQL_LIST = ", ".join(f"'{s}'" for s in SELECTION_STRATEGIES)
+
+selection_result = Table(
+    "selection_result",
+    metadata,
+    Column("selection_result_id", UUID(as_uuid=True), primary_key=True),
+    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
+    Column("run_id", UUID(as_uuid=True), nullable=False),
+    Column("strategy", Text, nullable=False),
+    Column("budget", Integer, nullable=False),
+    # Required keys (test-asserted): strategy version, executed directive + source,
+    # effective weights, signal availability; under llm_rerank_v1 additionally
+    # prompt_version, model, batch_size, retry/fallback counts.
+    Column("selection_provenance", JSONB, nullable=False),
+    # Per doc: pss id, stratum, signal scores (+ llm score/reason where ranked),
+    # text_basis, reason (must_include | breadth_floor | ranked).
+    Column("selected", JSONB, nullable=False),
+    # Per stratum: counts by reason class + notable flagged exclusions;
+    # base-ladder counts incl. non_evidence. not_selected stays derivable
+    # coverage state — never a doc-level status column.
+    Column("excluded", JSONB, nullable=False),
+    Column("flags", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    # Cross-project FK guards, per the characterisation-result precedent.
+    ForeignKeyConstraint(
+        ["evidence_scope_id", "project_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
+        name="fk_selr_scope_project",
+    ),
+    ForeignKeyConstraint(
+        ["run_id", "project_id"],
+        ["runs.run_id", "runs.project_id"],
+        name="fk_selr_run_project",
+    ),
+    # Run-local by design: same-run re-execution is a loud error, retry = new run.
+    UniqueConstraint("evidence_scope_id", "run_id", name="uq_selr_scope_run"),
+    CheckConstraint(
+        f"strategy IN ({_SELECTION_STRATEGIES_SQL_LIST})",
+        name="ck_selr_strategy",
+    ),
+    CheckConstraint("budget > 0", name="ck_selr_budget_positive"),
 )
 
 # The only shipped tag_type (decision 10); writers import it via policy_atlas.tags.
