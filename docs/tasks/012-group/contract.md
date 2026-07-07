@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 1.1) — awaiting contract approval.
+> **Status:** drafted (rev 1.2) — awaiting contract approval.
 > Contract approved (before planning): _date · who_ ·
 > Plan approved (before implementation): _date · who_ · ADR: _due at step 4 if a
 > design decision is made or changed_.
@@ -11,17 +11,8 @@ specs in [docs/specs/](../../specs/index.md).
 > **Revision history:**
 > - **rev 1** (2026-07-07): initial draft.
 > - **rev 1.1** (2026-07-07, user challenges at the gate — adjudicated):
->   **(a) run-local persistence held, rationale recorded** — the asymmetry with
->   characterise is smaller than it looks: characterise's *memberships* are
->   run-local too; only its theme labels persist, and they do so by being
->   absorbed into the open **tag layer** (doc-level descriptive metadata with
->   standing consumers). Group's labels have no v3.0 reader outside their run
->   (synthesise reads the roll-up row), so persisting them is an inert write —
->   and, sharper, a persisted facet-group label is a **cross-source identity
->   assertion over source-named references** (proto-canonicalisation), exactly
->   what the data-model defers ("groupable/canonicalisable *downstream*") and
->   capability.md walls off (option resolution → Options Assessment; the
->   rejected persistent findings-KG). Decision 1 unchanged.
+>   **(a) run-local persistence held** (rationale as first stated — superseded
+>   by the corrected rev 1.2 rationale below).
 >   **(b) same-tool framing adopted** — the spec already models characterise
 >   and group as wrappers over the one shared **`cluster`** tool (tool-wiring
 >   table: "`cluster` (topic)" vs "`cluster` (facet, over findings)"); the
@@ -37,6 +28,36 @@ specs in [docs/specs/](../../specs/index.md).
 >   matching its own `Theme`/`discover_themes` vocabulary) and
 >   **`FacetGroupingBackend`**; `run_harness(grouping_backend=…)` renames to
 >   `theme_grouping_backend` — a public-interface change riding gate 2.
+> - **rev 1.2** (2026-07-07, second round of user challenges — the rev 1.1a
+>   rationale corrected against the code; decision 1 still held):
+>   **(a) conceded:** characterise's memberships DO persist — `characterise.py`
+>   writes one `source_tag` row per (doc, theme) assignment, so each doc↔theme
+>   edge lands durably in the tag layer; only the grouping-as-a-structure
+>   (descriptions, sizes, the unclustered set) is run-row-only. The asymmetry
+>   argument is therefore **not** "characterise doesn't persist memberships";
+>   it is: **(i) the persistence target exists there and not here** — a topic
+>   tag is a claim *about a document* and documents have a standing accreting
+>   annotation layer built for that; group's members are findings/reference
+>   values, which have no analogous layer — persisting would mean new
+>   information-layer machinery; **(ii) the claim differs in kind** — a
+>   facet-group label bundling "Housing First" / "HF programme" / "supported
+>   housing" asserts that different sources' strings name the same thing — an
+>   entity-resolution judgment, often question-relative — which made canonical
+>   becomes ground truth downstream capabilities silently trust before any
+>   quality bar for it exists. **(b) future readers affirmed, and already
+>   staged:** run-local ≠ ephemeral — the `grouping_result` row is durable,
+>   run-referenced, provenance-complete, and the artefact-composition seam
+>   reflects groups into durable blocks; Options Assessment is the named
+>   future consumer ("resolves descriptive intervention clusters into named,
+>   comparable options") and reads a *specific* grouping by reference. What
+>   stays deferred is only **canonical promotion**, for which the data-model
+>   pins the exact ladder this slice is rung 1 of: *run-local → project-scoped
+>   persistent → graph datastore, gated on an entity-resolution-quality bar*.
+>   Research-workflow check (user ask): published intervention typologies are
+>   reusable outputs, but reuse is deliberate adoption of a specific published
+>   taxonomy versioned with its review — reference-mediated reuse mirrors
+>   that; a silently-maintained living taxonomy would not. Recorded in the
+>   deferred-seams list as the facet-theme promotion seam.
 
 ## Goal
 
@@ -170,11 +191,19 @@ fail-closed with input caps (untrusted JSONB).
    no group entity table — a group's identity lives and dies with its run
    (recomputable interpretive shape). Synthesise will reference this row by
    `grouping_run_id`, exactly as group references `extraction_run_id`.
-   (Rationale vs characterise's tag persistence recorded at rev 1.1a: the
-   labels persisting there are the tag layer's doc-level metadata with
-   standing consumers; a persisted facet-group label would be an unread write
-   *and* a cross-source identity assertion over source-named references —
-   canonicalisation territory, deferred by the data-model.)
+   Run-local ≠ ephemeral: the row is durable, run-referenced and
+   provenance-complete — downstream capabilities (Options Assessment is the
+   named one) interrogate a *specific* grouping by reference, and the
+   artefact-composition seam reflects groups into durable blocks. What is
+   deferred is only **canonical promotion** — a project-level taxonomy trusted
+   without a reference — because a facet-group label is an entity-resolution
+   judgment over different sources' own vocabularies (often
+   question-relative), and the data-model stages its promotion explicitly:
+   *run-local → project-scoped persistent → graph datastore, gated on an
+   entity-resolution-quality bar*. This slice is rung 1 of that ladder
+   (rev 1.2; the asymmetry with characterise's tag persistence is that doc
+   topics have a standing annotation layer to land in — findings/reference
+   values do not).
 2. **Group over distinct facet values; membership derives deterministically.**
    Components §8 allows `cluster` over "finding records / dimension values" —
    this slice clusters the **values**: the distinct source-named strings of the
@@ -483,7 +512,12 @@ explicitly-ungroupable list is a legal, expected answer.
   agent-authored grouping directive (same seam as select's) · cross-schema
   reference-mediated linkage (activates with `implementation_context_finding`)
   · embedding-assisted value clustering at scale (the very-large-corpus
-  cousin) · grouping-run steering/re-grouping UX (mode-governed steer-points).
+  cousin) · grouping-run steering/re-grouping UX (mode-governed steer-points)
+  · **facet-theme promotion** (rev 1.2 — canonical/queryable facet groupings
+  for downstream capability agents; the data-model's staged ladder run-local →
+  project-scoped persistent → graph datastore, gated on the
+  entity-resolution-quality bar; Options Assessment reads run-referenced
+  groupings until then).
 - Diff summary (data files excluded from review diffs per the 007 retro).
 
 ## Risk tier & review focus
