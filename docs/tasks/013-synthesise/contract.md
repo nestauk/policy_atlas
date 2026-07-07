@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 7.1) — awaiting contract 🛑.
+> **Status:** drafted (rev 7.2) — awaiting contract 🛑.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
 > ADRs: [0009](../../adr/0009-capability-composes-synthesise-terminus.md)
@@ -72,6 +72,20 @@ specs in [docs/specs/](../../specs/index.md).
 >   seams (IOF-only findings layer · the consensus boundary · one-shot
 >   sectioning · per-section independence · composition conventions ·
 >   screened-out unreachable · one-artefact-per-run).
+> - **rev 7.2** (2026-07-07, coherence/discovery brainstorm — user
+>   adjudicated): **rolling claim ledger adopted** — sections written
+>   serially in proposal order, each loop seeded with prior sections'
+>   typed claims as **context-never-evidence** (since block content is
+>   the claims' texts joined, the ledger *is* the sections as written,
+>   plus structure; sibling-content citation impossible by construction).
+>   **Declined/deferred with reasons**: evidence pre-allocation (inverts
+>   relevance-driven selection — rejected outright); the coherence pass
+>   stays at its **original spec home** — regeneration-time artefact
+>   coherence (the data-model seam), not a write-time pass; the
+>   structure-discovery bundle (recon-informed proposal ·
+>   structure-mismatch signals · bounded revision checkpoint) **waits for
+>   the slice to land** — revisit as a seam with evidence if one-shot
+>   structure proves a real problem.
 
 ## Goal
 
@@ -351,11 +365,22 @@ registry entry + Config fields → context dataclass →
    → `groups_unsectioned`). The fail-closed **`context["synthesis"]`
    directive** can supply the list; executed source recorded.
 6. **The section loop: one agent-loop surface, three read-only tools,
-   hard caps.** Per section, `synthesise_section_v1` (system prompt +
-   tool schemas, one versioned unit) runs the bounded tool-calling loop
-   seeded with (id-keyed data): intent, section spec, available
-   substrate summaries and — when extraction ran — the section's member
-   findings + computed spread. Tools per decision 2's gating:
+   hard caps — sections written serially with a rolling claim ledger.**
+   Sections are written **in proposal order** (v3.0 execution is serial
+   by spec, so this costs nothing). Per section,
+   `synthesise_section_v1` (system prompt + tool schemas, one versioned
+   unit) runs the bounded tool-calling loop seeded with (id-keyed
+   data): intent, section spec, available substrate summaries, — when
+   extraction ran — the section's member findings + computed spread,
+   and the **rolling claim ledger**: the typed claims of every prior
+   section (claim text, type, cited ids, flags — which, since block
+   content is the claims' texts joined, *is* the sections as written,
+   in structured form), marked **context, never evidence** (rev 7.2):
+   prompt rules say don't re-make a claim already made, connect rather
+   than repeat; ledger records are not citable — cited ids must be
+   finding/chunk ids, structurally, so sibling-content citation is
+   impossible by construction (the citation-scope rule). Tools per
+   decision 2's gating:
    `search_chunks` (hybrid cosine+lexical rank-fused **with the
    selection prior where referenced**, plan-pinned `SYNTH_CHUNK_TOP_K` /
    `SYNTH_CHUNK_CHAR_BUDGET`, id-keyed frozen chunk records out **with
@@ -765,7 +790,11 @@ payloads. The judge rubric is lead-only per AGENTS.md.
   out-of-scope content never returned, test-enforced; per-call and
   gathered-context budgets enforced; tool-call counts + gathered-id hash
   in provenance; scripted stub sequences drive the real runner; repair
-  is loop-free — no new tool calls, test-asserted), **`search_chunks`
+  is loop-free — no new tool calls, test-asserted), **the rolling claim
+  ledger** (sections written in proposal order; section N's seed carries
+  sections 1..N-1's typed claims marked context-never-evidence; ledger
+  records are structurally uncitable — cited ids must be finding/chunk
+  ids; determinism unaffected, test-asserted), **`search_chunks`
   ranking** (hybrid fusion deterministic on stub vectors; top-k and char
   budgets enforced), **`lookup` discipline** (closed vocabulary — unknown
   query kind rejected; project/run-scoped; side-effect-free; **tag-layer
@@ -822,8 +851,14 @@ payloads. The judge rubric is lead-only per AGENTS.md.
   policy-conditioned citable-bar flagging · consensus roll-up
   (never-contribute constraints restated incl. gaps + reasoning) · block
   summaries + faithfulness judging · judge-envelope widening +
-  re-gather repair (with `retrieve`) · synthesis/judge/retrieval quality
-  evals (envelope, SECTION_CAP, SECTION_TURN_CAP, top-k,
+  re-gather repair (with `retrieve`) · **synthesis structure discovery**
+  (rev 7.2 — recon-informed proposal, structure-mismatch signals, the
+  bounded revision checkpoint: revisit with evidence after the slice
+  lands, if one-shot structure proves a real problem) · **regeneration-
+  time coherence** (the data-model's original seam — a coherence pass
+  when blocks regenerate; deliberately not a write-time pass, the
+  rolling ledger owns write-time coherence) · synthesis/judge/retrieval
+  quality evals (envelope, SECTION_CAP, SECTION_TURN_CAP, top-k,
   RETRIEVAL_UNIT_CAP and `lookup`-vocabulary calibration).
 - Diff summary (data files excluded from review diffs per the 007
   retro).

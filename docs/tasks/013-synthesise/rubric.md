@@ -3,7 +3,7 @@
 Core completion criteria. The task is **done only if every box holds** —
 otherwise it is in progress, not done.
 
-1. [ ] Implementation satisfies [contract.md](contract.md) (rev 7) — every
+1. [ ] Implementation satisfies [contract.md](contract.md) (rev 7.2) — every
        numbered design decision as approved (or as amended at the gates),
        implementing the spec as refined by ADRs 0009 + 0010 (four
        amendments).
@@ -73,7 +73,11 @@ substrate-conditional flexibility, test- or evidence-enforced):
         type/asserter); per-call and gathered-context budgets enforced;
         hybrid ranking deterministic on stub vectors; tool-call counts +
         gathered-id hash in provenance; scripted stub sequences drive the
-        **real** loop runner.
+        **real** loop runner; **sections written serially in proposal
+        order with the rolling claim ledger** (section N's seed carries
+        prior sections' typed claims marked context-never-evidence;
+        ledger records structurally uncitable; determinism unaffected —
+        test-asserted).
 13. [ ] **The full claim vocabulary, each type validated**: finding
         claims cite ids ⊆ their section's finding set (the model never
         authors a finding quote); chunk claims cite **only tool-returned
