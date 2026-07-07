@@ -209,45 +209,49 @@ dimension values + `query-findings`.
 at plan time (capability-composes; see [capability.md](capability.md)). What it renders depends
 on what the run produced:
 
-- **Landscape synthesis (always — the minimum content an artefact needs, and itself
-  intent-led):** model-written prose over the referenced characterisation record (coverage,
-  themes), intent as emphasis input. Typed claims are **deterministically validated against
-  the record** — pattern claims (counts), cluster claims (the characterise themes; softest
-  interpretive grade) and graded gap claims over the screened base; no source citations —
-  there is nothing chunk-anchored to cite at this grade, and none is faked.
-- **Findings-grounded synthesis (when the referenced chain includes extract → group) —
-  intent-led sections, the full grounding-mode vocabulary, an agentic writer**
-  ([ADR 0010](../../../adr/0010-intent-led-synthesis-sections.md), as amended — both modes
-  are intent-led; "findings" = the findings *layer*, which exists once the select-gated
-  `extract` has run): the section set is shaped from the user's **intent** (v3.0: a bounded
-  schema-constrained section proposal over intent + group summaries, overridable by a
-  fail-closed scope directive; plan-compile section machinery is the recorded seam). The
-  **section writer is a capped agent-loop over scoped read-only tools** — the realisation
-  [execution-orchestration](../../system/execution-orchestration.md) declares: it gathers
-  evidence iteratively via **`search_chunks`** (hybrid embedding + lexical, rank-fused, over
-  the **selected set's** frozen units — the 009 vectors' first reader; the `retrieve` seam's
-  first increment) and **`query-findings`**, under a hard per-section turn cap, then emits
-  typed claims spanning the honest assertion types: **finding claims** (cite finding ids,
-  resolved to extract-verified anchors — the model never authors these quotes), **chunk
-  claims** (verbatim quotes from retrieved selected-set frozen text — select's coverage
-  discipline inherited; the mechanisms/context/caveat texture the narrow IOF schema cannot
-  carry), **pattern claims** (counts deterministically validated against computed spreads —
-  the direction-spread steer; v2's `effect_consensus` counts as this steer), **cluster
-  claims** (the clustering shape — facet groups here, characterise themes at landscape
-  grain — validated against the referenced clustering row; the softest interpretive grade,
-  base-labelled), **gap claims** (graded per [provenance.md](provenance.md) with
+- **One substrate-conditional flow — intent-led sections whose claim types are gated by
+  what the run produced** ([ADR 0010](../../../adr/0010-intent-led-synthesis-sections.md),
+  as amended twice): synthesise takes explicit fail-closed references
+  (characterisation required; the deepest available of selection / extraction / grouping
+  optional, upstream references resolved transitively from the referenced rows and
+  cross-checked) and never hard-wires a component combination — the orchestrator selects
+  any coherent registry subset and synthesise adapts. The section set is shaped from the
+  user's **intent** (a bounded schema-constrained section proposal over intent + the
+  available substrate summaries, overridable by a fail-closed scope directive; plan-compile
+  section machinery is the recorded seam). Per section, **the section loop** — a capped
+  agent-loop over scoped read-only tools, the realisation
+  [execution-orchestration](../../system/execution-orchestration.md) declares, running
+  *inside* the component per the facade principle (the capability sub-agent invokes
+  synthesise as one tool; no second agent) — gathers evidence via **`search_chunks`**
+  (hybrid embedding + lexical, rank-fused, over the **selected set's** frozen units — the
+  009 vectors' first reader; the `retrieve` seam's first increment; present only when a
+  selection is referenced), **`query-findings`** (present only when an extraction is
+  referenced) and **`lookup`** (the universal-core read tool: appraisals, classifications,
+  selection rationale, coverage records, characterisation/grouping rows — closed query
+  vocabulary, project-guarded), under a hard per-section turn cap, then emits typed claims.
+  **Availability by substrate**: **pattern claims** (coverage counts always; direction
+  spreads with extraction/grouping — deterministically validated; v2's `effect_consensus`
+  counts as this steer) · **cluster claims** (characterise themes always; facet groups with
+  grouping — validated against the referenced clustering row; softest interpretive grade,
+  base-labelled) · **gap claims** (always; graded per [provenance.md](provenance.md) with
   deterministic per-grade validation and the required coverage base — base-labelled to the
-  **selected/extracted base**, promoted to corpus absence only on a non-`inadequate`
-  `search_coverage_record`, else fail-closed degraded; the shallow landscape is the
-  structural check), and **reasoning claims** (visibly-labelled Tier 4 authoring; the
-  judge's strict-routing rule keeps empirical content out; never counts toward strength
-  roll-ups). **Groups are input, not structure**: summaries inform sectioning and emphasis;
-  uncovered groups counted (`groups_unsectioned`), never silently dropped. Every cited claim
-  goes through the settled `produce-grounded-block` mechanism (deterministic quote-presence
-  + LLM judge; Unsupported/mis-cited a real state) — *not* v2's permissive post-hoc fuzzy
-  matching. Intent shapes emphasis, never verification ("topical relevance ≠ support"). The
-  source/evidence policy's citable bar is applied **flag-not-block** (below-bar support
-  flagged weakly-grounded/below-policy, never hidden/dropped).
+  narrowest base the substrate supports, promoted to corpus absence only on a
+  non-`inadequate` `search_coverage_record`, else fail-closed degraded) · **reasoning
+  claims** (always; visibly-labelled Tier 4 authoring; judge strict-routing keeps empirical
+  content out; never counts toward strength roll-ups) · **chunk claims** (with a
+  **selection** — verbatim quotes from retrieved selected-set frozen text; select's
+  coverage discipline, not extraction, is what bounds them — so a question outside the
+  intervention–outcome schema is served by characterise → select → synthesise with no
+  extract) · **finding claims** (with an **extraction** — cite finding ids resolved to
+  extract-verified anchors; the model never authors these quotes). A characterisation-only
+  run is the degenerate case (pattern/cluster/gap/reasoning sections — the landscape).
+  **Groups, where present, are input, not structure** (uncovered groups counted, never
+  silently dropped). Every cited claim goes through the settled `produce-grounded-block`
+  mechanism (deterministic quote-presence + LLM judge; Unsupported/mis-cited a real state)
+  — *not* v2's permissive post-hoc fuzzy matching. Intent shapes emphasis, never
+  verification ("topical relevance ≠ support"). The source/evidence policy's citable bar
+  is applied **flag-not-block** (below-bar support flagged weakly-grounded/below-policy,
+  never hidden/dropped).
 - ⏸ **Corpus-wide chunk-grounded narrative** (sanctioned, ADR 0009 as amended by ADR 0010):
   for targeted questions answered before the findings chain has run — prose grounded directly
   in frozen chunks of **unselected** documents, full `produce-grounded-block` bar, visibly

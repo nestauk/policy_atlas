@@ -27,7 +27,16 @@
   plan's thoroughness gradation, not a fork; the section writer realised as a **capped
   agent-loop over scoped read-only tools** (`search_chunks` hybrid + `query-findings`) —
   execution-orchestration's declared realisation, the repo's first agent loop, discharging
-  the 012 `query-findings` deferral in full.
+  the 012 `query-findings` deferral in full. **Fifth-round amendment (same day, ADR 0010
+  § third Amendment):** the mode split itself dissolved into **one substrate-conditional
+  flow** — claim types gated by what the referenced runs produced (chunk claims need only a
+  **selection**, not extraction — non-intervention-shaped questions run
+  characterise → select → synthesise; finding claims need an extraction; pattern/cluster/
+  gap/reasoning per available substrate); the separate landscape prompt dies (**three**
+  prompt surfaces); the loop gains **`lookup`** (the universal-core canonical-state read —
+  appraisals, classifications, selection rationale, coverage records, clusterings); "writer
+  agent" corrected to **the section loop** (component-internal realisation per the facade
+  principle — no second agent; the capability sub-agent remains the capability-run seam).
 * **Update**: [EB capability](capabilities/evidence-base/capability.md), [EB components
   §§5/6/9](capabilities/evidence-base/components.md),
   [execution-orchestration.md](system/execution-orchestration.md) — the **terminus

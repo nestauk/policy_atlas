@@ -193,6 +193,47 @@ Four user probes, all adopted:
    becomes a known pre-run *maximum* (turn-capped) rather than an exact
    count — an accepted, recorded loosening.
 
+## Amendment (2026-07-07, fifth gate round — Shabeer Rauf)
+
+Three user challenges, all adopted; net effect is a **simplification**:
+
+1. **Modes dissolved into substrate-conditional synthesis.** The
+   landscape/findings-grounded mode split was the last vestige of the
+   retired fork: it hard-wired component combinations (chunk claims
+   demanded extract → group) and so constrained the orchestrator's
+   registry freedom. The extract component is deliberately narrow
+   (intervention–outcome schema); a question that is not
+   intervention-shaped must be servable by e.g. characterise → select →
+   synthesise, grounding sections **directly in the selected set's
+   chunks with no extraction** — select's coverage discipline, not
+   extraction, is what bounds chunk claims. Rev 6: **one synthesise
+   flow** — intent-led section proposal, then per-section loops — whose
+   **claim types are gated by available substrate**: pattern (coverage
+   always; spreads with extraction/grouping) · cluster (themes always;
+   facet groups with grouping) · gap + reasoning (always) · **chunk
+   (with a selection)** · **finding (with an extraction)**. References:
+   `characterisation_run_id` required; the deepest available of
+   `selection_run_id` / `extraction_run_id` / `grouping_run_id` optional,
+   upstream references resolved transitively from the referenced rows'
+   own provenance and cross-checked fail-closed. The separate landscape
+   prompt dies — a characterisation-only run is the degenerate case of
+   sections claiming pattern/cluster/gap/reasoning only. **Prompt
+   surfaces: four → three** (`synthesise_sections_v1` ·
+   `synthesise_section_v1` · `grounding_judge_v1`).
+2. **The loop's tool set gains `lookup`** — the universal-core read tool
+   the spec already defines (deterministic, identifier/filter-addressed,
+   side-effect-free access to canonical project state): appraisal tiers,
+   classifications, selection rationale, coverage records,
+   characterisation and grouping rows are agent-queryable, not lost and
+   not all pre-seeded. Three read-only scoped tools total:
+   `search_chunks` · `query_findings` · `lookup` (closed query
+   vocabulary v1, project-guarded).
+3. **"Writer agent" naming corrected** — there is no second agent: the
+   loop is the synthesise **component's internal realisation** (the
+   facade principle — the capability sub-agent invokes synthesise as one
+   tool; that sub-agent is the standing capability-run seam, with the
+   skeleton standing in today). Renamed "the section loop" throughout.
+
 ## Rejected
 
 - **Group-per-block as the artefact structure** (contract rev 2) — an
