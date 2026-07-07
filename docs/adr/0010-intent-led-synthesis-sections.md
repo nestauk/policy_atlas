@@ -147,6 +147,52 @@ Three user challenges against the rev-3 realisation, all adopted:
    slice (index-backed, hybrid, corpus-wide); corpus-wide chunk claims
    remain gated on that slice.
 
+## Amendment (2026-07-07, fourth gate round — Shabeer Rauf)
+
+Four user probes, all adopted:
+
+1. **Mode names fixed** — "question-led grounded synthesis (when the run
+   produced findings)" misled twice: both modes are intent-led, and
+   "findings" means the findings *layer* (`intervention_outcome_finding`
+   rows, which exist only once the select-gated `extract` has run), not
+   results colloquially. The modes are now **landscape synthesis** and
+   **findings-grounded synthesis**. A targeted question typically runs
+   narrow-and-deep (small selection, real extraction), so most
+   intent-answering runs carry findings; landscape-only is the broad-scan
+   case.
+2. **Cluster claims unified** — the rev-4 "theme claim" was a cluster
+   claim restricted to the landscape's characterise themes, leaving a
+   findings-grounded section unable to assert the facet-cluster shape
+   (012's groups). One **cluster claim** type now spans both modes,
+   validated against the referenced clustering (themes at landscape grain;
+   facet groups in sections), always labelled the softest interpretive
+   grade with its inherited base — the soft end of the spec's pattern
+   ladder, distinct from numeric **pattern claims** at the hard end.
+3. **Depth clarified, not deleted** — retiring the shallow/deep *fork*
+   does not retire depth: it survives as the plan's thoroughness
+   **gradation** (plan-as-object — orchestrator-inferred from intent,
+   lighter/deeper nudge, never a user-entered absolute), steering which
+   registry components are selected, at the orchestrator's / sub-agent's
+   discretion within structural data dependencies.
+4. **The section writer is realised as a capped agent-loop (agentic
+   retrieval)** — replacing the third-round amendment's deterministic
+   top-k assembly. This is execution-orchestration's own declared
+   realisation for synthesise ("agent-loop over scoped tools") and the
+   exact consumer 012's `query-findings` deferral named. The writer
+   iteratively gathers evidence through **two read-only, selected-set-
+   scoped tools** — `search_chunks` (hybrid embedding-cosine + lexical,
+   rank-fused, over the selected documents' units; the 009 vectors' first
+   reader; the `retrieve` seam's first increment) and `query_findings` —
+   under a **hard per-section turn cap**, then emits its typed claims.
+   Trust properties unchanged: tools are read-only over frozen in-corpus
+   text; every claim still faces per-type validation, the presence check
+   and the judge; the repair regeneration is loop-free (one call over the
+   already-gathered evidence). **This is the repo's first agent loop** —
+   exactly one such surface (the section writer); the landscape, section
+   proposal and judge calls stay single-call schema-constrained. Budget
+   becomes a known pre-run *maximum* (turn-capped) rather than an exact
+   count — an accepted, recorded loosening.
+
 ## Rejected
 
 - **Group-per-block as the artefact structure** (contract rev 2) — an

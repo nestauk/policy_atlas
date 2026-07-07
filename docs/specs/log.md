@@ -20,6 +20,14 @@
   judge strict-routing guard) join finding/chunk/pattern/theme; whole-document windowing
   replaced by **scoped retrieval** (anchor chunks + top-k embedding-relevant selected-set
   chunks — the 009 unit vectors' first reader; the `retrieve` seam's first increment).
+  **Fourth-round amendment (same day, ADR 0010 § second Amendment):** modes renamed
+  (**landscape synthesis** / **findings-grounded synthesis** — both intent-led; "findings" =
+  the findings layer); theme claims generalised to **cluster claims** across both modes
+  (validated against the referenced clustering; softest grade); depth clarified as the
+  plan's thoroughness gradation, not a fork; the section writer realised as a **capped
+  agent-loop over scoped read-only tools** (`search_chunks` hybrid + `query-findings`) —
+  execution-orchestration's declared realisation, the repo's first agent loop, discharging
+  the 012 `query-findings` deferral in full.
 * **Update**: [EB capability](capabilities/evidence-base/capability.md), [EB components
   §§5/6/9](capabilities/evidence-base/components.md),
   [execution-orchestration.md](system/execution-orchestration.md) — the **terminus
