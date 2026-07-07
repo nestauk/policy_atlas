@@ -3,9 +3,32 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 1) — awaiting human approval before planning.
+> **Status:** drafted (rev 1.1) — awaiting human approval before planning.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ · ADR: _due at step 4_.
+>
+> **Revision history:**
+> - **rev 1** (2026-07-07): initial draft.
+> - **rev 1.1** (2026-07-07, user challenges at the gate — both adjudicated,
+>   decisions held, seams sharpened): **(a) table-per-schema held** — the
+>   data-model's "coherent typed record, dimensions intact and queryable" +
+>   the build spec's "related-but-distinct, never blended" evidence kinds favour
+>   typed tables with CHECK-enforced vocabularies (repo discipline); cross-schema
+>   linkage is reference-mediated via `group`, never a SQL join; the schema set
+>   grows at spec-level pace (exactly one further schema named). *Generic finding
+>   container declined* — recorded seam, revisit trigger = a third finding schema
+>   specced. **(b) full-text extraction held; retrieval-scoped extraction
+>   declined** — reading a retrieved subset makes `no_findings`/`not_extracted`
+>   unverifiable (a silent new base-ladder rung — the false-absence machinery EB
+>   exists to prevent), inverts the recall-critical trade ("false negatives are
+>   the dangerous failure mode"), re-treads v2's truncation anti-pattern, and
+>   would pull the unbuilt `retrieve` seam in-slice; `select` is the designed
+>   cost control. **(c) retrieval-*augmented* extraction (full read + targeted
+>   in-doc retrieval repair / cross-window context assembly) acknowledged as
+>   composable and legitimate** — the full read licenses coverage; deferred as an
+>   eval-gated seam (needs `retrieve` + extraction-quality evals showing a
+>   field-completeness gap on multi-window docs). The cheap in-slice mitigation
+>   lands instead: the **cross-window document-context header** (decision 5).
 
 ## Goal
 
@@ -197,7 +220,13 @@ internal (`OpenAIRankingBackend`) — either precedent stands.
    model returns schema-constrained findings, each naming its supporting segment
    id(s) + quote. Documents whose basis exceeds the per-call token budget are
    **windowed** (ordered segment windows, per-window calls, findings
-   concatenated; window overlap and size plan-pinned); the call budget is known
+   concatenated; window overlap and size plan-pinned). Every window after the
+   first carries a deterministic **document-context header** — title, abstract,
+   and the running list of intervention/outcome names extracted from earlier
+   windows (rev 1.1) — so cross-window evidence dispersal (effect in results,
+   design/N in methods) degrades gracefully without retrieval machinery; the
+   header is assembled by code, recorded in provenance, and is context, never
+   instruction. The call budget is known
    pre-run — `Σ_docs ceil(segments/window) × (1 + retry_cap)` — and enforced by
    the existing call-budget pattern before any live call. Failure semantics:
    per-window retry once; a window still failing fails the **document**
@@ -482,7 +511,14 @@ and the event payload; the only prompt in the slice.
   seam · `implementation_context_finding` (pointer exists — extend with the
   extract-side note) · extraction-quality evals (finding-level ground truth;
   also unblocks 010's recorded rerank-quality eval seam — note the pointer) ·
-  failed-extraction recovery loop · cross-window dedup if observed in practice.
+  failed-extraction recovery loop · cross-window dedup if observed in practice ·
+  **generic finding container, declined** (rev 1.1 — revisit only if a third
+  finding schema is specced) · **retrieval-scoped extraction, declined**
+  (rev 1.1 — coverage-honesty violation; any future retrieval scoping must be an
+  explicit, recorded coverage-base rung, never silent) ·
+  **retrieval-augmented extraction** (full read + targeted in-doc repair pass /
+  cross-window context assembly — eval-gated behind `retrieve` +
+  extraction-quality evals, rev 1.1).
 - Diff summary (data files excluded from review diffs per the 007 retro).
 
 ## Risk tier & review focus
