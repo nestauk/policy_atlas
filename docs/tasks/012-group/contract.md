@@ -3,13 +3,40 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 1) — awaiting contract approval.
+> **Status:** drafted (rev 1.1) — awaiting contract approval.
 > Contract approved (before planning): _date · who_ ·
 > Plan approved (before implementation): _date · who_ · ADR: _due at step 4 if a
 > design decision is made or changed_.
 >
 > **Revision history:**
 > - **rev 1** (2026-07-07): initial draft.
+> - **rev 1.1** (2026-07-07, user challenges at the gate — adjudicated):
+>   **(a) run-local persistence held, rationale recorded** — the asymmetry with
+>   characterise is smaller than it looks: characterise's *memberships* are
+>   run-local too; only its theme labels persist, and they do so by being
+>   absorbed into the open **tag layer** (doc-level descriptive metadata with
+>   standing consumers). Group's labels have no v3.0 reader outside their run
+>   (synthesise reads the roll-up row), so persisting them is an inert write —
+>   and, sharper, a persisted facet-group label is a **cross-source identity
+>   assertion over source-named references** (proto-canonicalisation), exactly
+>   what the data-model defers ("groupable/canonicalisable *downstream*") and
+>   capability.md walls off (option resolution → Options Assessment; the
+>   rejected persistent findings-KG). Decision 1 unchanged.
+>   **(b) same-tool framing adopted** — the spec already models characterise
+>   and group as wrappers over the one shared **`cluster`** tool (tool-wiring
+>   table: "`cluster` (topic)" vs "`cluster` (facet, over findings)"); the
+>   difference is the component wrapper (input record grain, what the output
+>   feeds, persistence policy). Build leaning recorded in decision 6: the
+>   deterministic skeleton (id-keyed records → schema-constrained call →
+>   validation → one targeted repair → counted residual, pre-run budget) is
+>   the shared cluster core, factored with 009's `grouping.py` where the code
+>   genuinely coincides — exact factoring plan-pinned; no forced generic
+>   protocol across the two I/O shapes.
+>   **(c) naming adopted** — `GroupingBackend` vs `FacetGroupingBackend` is
+>   confusing; the pair becomes **`ThemeGroupingBackend`** (rename of 009's,
+>   matching its own `Theme`/`discover_themes` vocabulary) and
+>   **`FacetGroupingBackend`**; `run_harness(grouping_backend=…)` renames to
+>   `theme_grouping_backend` — a public-interface change riding gate 2.
 
 ## Goal
 
@@ -53,7 +80,12 @@ A PR on `task/012-group` → `dev` that:
   `OpenAIFacetGroupingBackend` (schema-constrained structured outputs, id-keyed
   value records, caller-owned retry/budget) + deterministic sentinel-driven stub
   for the suite, and the **`group_facet_v1` prompt** (lead-authored, versioned,
-  recorded in provenance) — the slice's only prompt-bearing surface.
+  recorded in provenance) — the slice's only prompt-bearing surface. Both
+  clusterers are wrappers over the one shared `cluster` tool (rev 1.1): 009's
+  `GroupingBackend` renames to **`ThemeGroupingBackend`** (and the `run_harness`
+  kwarg to `theme_grouping_backend`) so the pair is symmetric, and the shared
+  deterministic skeleton is factored with `grouping.py` where it genuinely
+  coincides.
 - Adds **one table — `grouping_result`** — via one Alembic migration (gated
   change 1; table count 23 → 24), project-scope-guarded per repo discipline.
 - Registers `"group"` in `COMPONENT_REGISTRY` (requires `evidence_scope_id` +
@@ -138,6 +170,11 @@ fail-closed with input caps (untrusted JSONB).
    no group entity table — a group's identity lives and dies with its run
    (recomputable interpretive shape). Synthesise will reference this row by
    `grouping_run_id`, exactly as group references `extraction_run_id`.
+   (Rationale vs characterise's tag persistence recorded at rev 1.1a: the
+   labels persisting there are the tag layer's doc-level metadata with
+   standing consumers; a persisted facet-group label would be an unread write
+   *and* a cross-source identity assertion over source-named references —
+   canonicalisation territory, deferred by the data-model.)
 2. **Group over distinct facet values; membership derives deterministically.**
    Components §8 allows `cluster` over "finding records / dimension values" —
    this slice clusters the **values**: the distinct source-named strings of the
@@ -197,6 +234,14 @@ fail-closed with input caps (untrusted JSONB).
    failure after retries fails the component honestly (`component.failed`) —
    grouping has no deterministic fallback strategy and a partial grouping is
    worse than none; the extraction run is untouched and a retry is a new run.
+   **Shared cluster core** (rev 1.1b): this skeleton — id-keyed records in,
+   schema-constrained call, validation, one targeted repair, counted residual,
+   pre-run budget — is the same shape 009's `grouping.py` runs; both backends
+   are wrappers over the spec's one shared `cluster` tool, so the build
+   factors the deterministic skeleton with `grouping.py` where the code
+   genuinely coincides (exact factoring plan-pinned; prompts and record
+   grains stay per-surface, and no generic protocol is forced over the two
+   different I/O shapes).
 7. **Component wiring mirrors 004–011.** `"group"` in `COMPONENT_REGISTRY`
    requiring `evidence_scope_id` + **`extraction_run_id`** (compile-fails-closed
    without it; no `extraction_result` row for `(scope, extraction_run_id)` →
@@ -291,7 +336,11 @@ FK-safe order (before `extraction_result`).
 2. **Public interface** — the `"group"` `COMPONENT_REGISTRY` entry +
    `Plan`/`Config` gain `extraction_run_id` (required for group, compile fails
    closed) + `run_harness` gains optional `facet_grouping_backend` (stub
-   default — no default egress).
+   default — no default egress) + **the symmetry rename** (rev 1.1c):
+   `run_harness(grouping_backend=…)` → `theme_grouping_backend`
+   (`GroupingBackend` → `ThemeGroupingBackend` internally) — no behaviour
+   change, no back-compat shim (pre-release repo, `skeleton.py`/tests are the
+   only callers).
 3. **Runtime egress — one new generation surface:** `group_facet_v1` sends the
    distinct **source-named facet values** of the referenced run's findings
    (+ per-value counterpart reference names and counts) to the chat API — the
