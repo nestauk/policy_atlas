@@ -3,8 +3,13 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 7.5) — awaiting contract 🛑.
-> Contract approved (before planning): _pending_ ·
+> **Status:** **approved** (rev 7.5) — contract-stage adversarial review
+> running; planning next.
+> Contract approved (before planning): **2026-07-08 · Shabeer Rauf**
+> (rev 7.5, covering the four gated changes — one run-scoped
+> `synthesis_result` table · the `"synthesise"` registry entry with all
+> four run references optional + two backend kwargs · three generation
+> surfaces + embedding-query use · the repo's first agent loop) ·
 > Plan approved (before implementation): _pending_ ·
 > ADRs: [0009](../../adr/0009-capability-composes-synthesise-terminus.md)
 > (terminus architecture; decision 5 as amended) +
