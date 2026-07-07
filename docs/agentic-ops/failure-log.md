@@ -266,3 +266,28 @@ sized to the model's orchestration capability — and the scoping/budget changes
 keep their reviews affordable. Also installed: step-8-scheduled rubric items are named
 in the contract-verifier brief (pending-with-contradiction-check, not MAJOR-unmet —
 same retro).
+
+## 2026-07-07 — Amended migration never re-applied locally; stale test DB masked an FK break that CI caught
+
+**What happened:** The 011 review stack added `fk_exr_selection` by amending the
+branch-local migration `d4e9b2f7a1c5` in place (legitimate pre-merge practice). The dev
+DB was roundtripped (`downgrade -1` → `upgrade head`) — but the **test** DB was not.
+`tests/conftest.py` applies migrations idempotently by revision (`alembic upgrade head`),
+and the test DB was already stamped at that head, so the amended DDL never re-applied
+locally. `make verify` ran green twice; PR #18's CI, building the schema fresh, failed
+one test whose direct insert fabricated a `selection_run_id` the new FK correctly
+rejects.
+
+**Root cause:** Amending an already-applied migration changes the DDL without changing
+the revision id, so every environment stamped at that head silently keeps the old
+schema. Any revision-keyed idempotent migration runner (conftest, dev bring-up) has this
+blind spot; a green local suite after a migration amendment proves nothing about the
+amended DDL.
+
+**Fix:** After amending an applied migration, roundtrip **every** local database that
+has it applied (dev *and* `policy_atlas_test`) before trusting a green suite — the CI
+fresh-build is the arbiter. Applied on 011: test DB roundtripped, the fabricating test
+now seeds a real selection row, and the FK gained a positive rejection test
+(`test_extraction_result_dangling_selection_run_rejected`). If migration amendments
+recur, consider a `make test-db-rebuild` target (drop + fresh `upgrade head`) as the
+standard post-amendment step.

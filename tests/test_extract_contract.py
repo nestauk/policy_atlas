@@ -358,12 +358,26 @@ def test_extraction_result_unique_scope_run_rejected(conn: Connection) -> None:
     """A second ``extraction_result`` row for the same (scope, run) is rejected."""
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
+    # fk_exr_selection requires the referenced selection to exist for the scope.
+    _seed_selection(conn, project_id, run_id, scope_id, [])
     conn.execute(extraction_result.insert().values(
         extraction_result_id=uuid.uuid4(), project_id=project_id, evidence_scope_id=scope_id,
-        run_id=run_id, selection_run_id=uuid.uuid4(), extraction_provenance={},
+        run_id=run_id, selection_run_id=run_id, extraction_provenance={},
         docs=[], counts={}, flags=[], created_at=now(),
     ))
     with pytest.raises(IntegrityError, match="uq_exr_scope_run"), conn.begin_nested():
+        conn.execute(extraction_result.insert().values(
+            extraction_result_id=uuid.uuid4(), project_id=project_id, evidence_scope_id=scope_id,
+            run_id=run_id, selection_run_id=run_id, extraction_provenance={},
+            docs=[], counts={}, flags=[], created_at=now(),
+        ))
+
+
+def test_extraction_result_dangling_selection_run_rejected(conn: Connection) -> None:
+    """fk_exr_selection: a roll-up whose selection run has no selection_result row is rejected."""
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    with pytest.raises(IntegrityError, match="fk_exr_selection"), conn.begin_nested():
         conn.execute(extraction_result.insert().values(
             extraction_result_id=uuid.uuid4(), project_id=project_id, evidence_scope_id=scope_id,
             run_id=run_id, selection_run_id=uuid.uuid4(), extraction_provenance={},

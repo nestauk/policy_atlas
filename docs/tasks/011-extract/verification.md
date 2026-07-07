@@ -421,15 +421,28 @@ the fabricated-quote test gained assertions and one test was added (428 → 429)
 no swallowed errors introduced; all fixes are real code changes, not renames;
 `make verify` re-run green after fixes.
 
+**PR CI catch (post-open):** CI failed on
+`test_extraction_result_unique_scope_run_rejected` — the test fabricated a
+`selection_run_id`, which the new `fk_exr_selection` correctly rejects. It
+passed locally because the test DB was already stamped at head `d4e9b2f7a1c5`
+from before the branch-local amendment, so conftest's idempotent
+`alembic upgrade head` never re-applied the FK — a stale-test-DB blind spot
+whenever a migration is amended in place. Fixed: the test now seeds a real
+selection row; the FK gained its own positive test
+(`test_extraction_result_dangling_selection_run_rejected`); the local test DB
+was roundtripped to match CI (429 → 430 tests). Lesson recorded: after
+amending an already-applied migration, roundtrip **every** local DB (dev and
+test) before trusting a green suite.
+
 ## Rubric status
 
 Completed at step 7 (2026-07-07), post-fix:
 
 1. ☑ Contract satisfied — contract-verifier lane: HOLDS, six deviations
    correctly classified within contract vocabulary.
-2. ☑ `make verify` green post-fixes (429 passed); live check evidence above
-   (3 runs, memo reuse demonstrated). The one transient unattributed failure
-   stays flagged under Known unverified.
+2. ☑ `make verify` green post-fixes (430 passed, incl. the post-open CI catch
+   below); live check evidence above (3 runs, memo reuse demonstrated). The
+   one transient unattributed failure stays flagged under Known unverified.
 3. ☑ No unapproved gated change — the diff carries exactly the three approved
    gates; the review-phase FK is a pattern-conforming constraint inside the
    approved table shape (branch-local migration amendment, roundtrip re-run).
