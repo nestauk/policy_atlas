@@ -1,6 +1,21 @@
 # Spec update log
 
 ## 2026-07-07
+* **Update**: [EB capability](capabilities/evidence-base/capability.md), [EB components
+  §§5/6/9](capabilities/evidence-base/components.md),
+  [execution-orchestration.md](system/execution-orchestration.md) — the **terminus
+  refinement** (task 013 flow-back, user-decided at the contract gate): (1) the
+  **capability-composes rule** — every capability sub-agent composes its own artefact at its
+  run terminus; the orchestrator shapes sections at plan time and owns no runtime content
+  machinery (supersedes the orchestrator-composes reading; characterise §5 note updated).
+  (2) **Synthesise is EB's terminal component at every depth** — landscape rendering always
+  (model prose, shape claims deterministically validated against the characterisation
+  record), per-group grounded finding-blocks when the deep chain ran, artefact minting +
+  block binding. (3) **Components are a library the plan selects from**; data dependencies
+  structural via explicit fail-closed run references; **breadth and depth independent** (a
+  targeted question compiles to a narrow-and-deep run). (4) ⏸ **Direct chunk-grounded
+  narrative synthesis sanctioned** for pre-findings targeted answers (full
+  produce-grounded-block bar, visibly chunk-cited; lands with `retrieve`). ADR 0009.
 * **Update**: [data-model.md](system/data-model.md) — findings-layer base-field list made
   explicit with three source-groundable sharpenings surfaced by the task-011 V2 extraction
   autopsy, all inside the spec's own "what the source reports" line: **stratum qualifiers**

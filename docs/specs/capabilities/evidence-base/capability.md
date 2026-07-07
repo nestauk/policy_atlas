@@ -33,9 +33,14 @@ Companion files: [components.md](components.md) (the skeleton) · [provenance.md
   gradation (they differ in output shape — scan-grounded shape vs source-grounded findings — so
   each is its own component by the I/O test). This is a distinction in **production and grounding
   mode, not presentation** (see [components.md](components.md) and output structure below).
-- **Depth is a §5 gradation *over* the component chain** — how far down it a run goes —
-  orchestrator-inferred from intent, surfaced as concrete scope, adjusted by the lighter/deeper
-  nudge. Gradation governs *which components fire*; the components are genuine structure.
+- **The components are a library the plan selects from** (task 013 flow-back, refining "how far
+  down the chain a run goes"): which components fire is the orchestrator's plan-time selection
+  from intent, adjusted by the lighter/deeper nudge — **data dependencies stay structural**
+  (extract needs a selection; group and findings-synthesis need an extraction; the artefact
+  needs at least characterise's content), expressed as explicit run references that compile
+  fail-closed. **Breadth and depth are independent parameters**: a targeted question with a
+  small time budget compiles to a *narrow-and-deep* run (small selection budget, few
+  extractions, full grounding) — quick never has to mean shallow.
 - **EB owns evidence assembly** — unlike analysis capabilities that start downstream of an
   existing selection, assembling the corpus broadly *is* EB's distinctive job, so its skeleton
   **includes the assembly components** and **`search` egress originates from inside the EB run**.
@@ -50,20 +55,29 @@ Companion files: [components.md](components.md) (the skeleton) · [provenance.md
   decision-relative → a future **Options Assessment** (⏸).
 - EB may answer broader questions through grounded narrative synthesis over its **existing**
   findings, but must **not** add new schemas, structured computations or tools belonging to
-  future capabilities (handoff §7.9).
+  future capabilities (handoff §7.9). ⏸ **Direct chunk-grounded narrative synthesis** is
+  sanctioned (task 013 flow-back): when a targeted question warrants an answer before the
+  findings chain has run, the artefact may carry narrative prose grounded **directly in frozen
+  chunks** — every claim through the full `produce-grounded-block` bar (quote-presence + judge),
+  visibly chunk-cited rather than findings-mediated (nothing downstream can query such claims
+  as structured findings — an accepted trade). Lands with `retrieve` (its chunk-selection
+  substrate); a deferred seam until then.
 
 ## Component skeleton
 
 ```
-acquire → screen → classify → appraise → characterise (shallow terminus)
-        → select → extract → group → synthesise (deep terminus)
+acquire → screen → classify → appraise → characterise (landscape content)
+        → [select → extract → group]   (the deep chain, plan-selected)
+        → synthesise (run terminus — composes the artefact at any depth)
 ```
 
 `screen` / `classify` / `appraise` run as **per-document fan-out**. **Full-text ingestion is
 gated post-`screen`** (cheap shared substrate built for *all* screened-in — so even a shallow
 landscape run builds the full-text corpus); **Tier-1 extraction is gated by `select`** (the
-scoped, expensive step). Depth (§5) sets how far down the chain a run goes: shallow terminus =
-the landscape, deep terminus = the synthesis. Per-component detail in [components.md](components.md).
+scoped, expensive step). **Synthesise is the terminus at every depth** (task 013 flow-back): a
+shallow run's synthesise composes the landscape artefact from characterise's content; a deep
+run's adds grounded finding-blocks over the grouped findings — the deep artefact contains the
+landscape. Per-component detail in [components.md](components.md).
 
 **New shared tools EB introduces** (framework flow-backs, now in the system tool registry):
 `screen`, `classify`, `select`.
@@ -74,9 +88,12 @@ the landscape, deep terminus = the synthesis. Per-component detail in [component
   addressable units are the substrate. **Grounding is a per-unit property**, so a single section
   **mixes grounding modes freely** (a pattern, a cited finding and a gap in one paragraph). The
   characterise/synthesise split is about **production, not presentation**.
-- **EB declares little; the orchestrator composes the sections** (how many, around what facets,
-  in what order) from intent. "Synthesis" is therefore **multiple sections** (typically one per
-  facet/intervention family), not one.
+- **EB declares little; the orchestrator *shapes* the sections at plan time** (how many, around
+  what facets, in what order — compiled plan parameters derived from intent); **EB's synthesise
+  component composes the artefact at the run terminus** (task 013 flow-back — the
+  capability-composes rule: every capability sub-agent composes its own artefact; the
+  orchestrator owns no runtime content machinery). "Synthesis" is therefore **multiple
+  sections** (typically one per facet/intervention family), not one.
 - EB fixes only that the artefact carries:
   - an **artefact summary** — citation-free navigation, faithfulness-checked, **outside the
     grounding economy** (deliberately *not* "key findings"); and

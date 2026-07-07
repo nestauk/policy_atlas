@@ -15,9 +15,16 @@ shared tools and findings schema are owned by
 [../../system/data-model.md](../../system/data-model.md).
 
 ```
-acquire → screen → classify → appraise → characterise (shallow terminus)
-        → select → extract → group → synthesise (deep terminus)
+acquire → screen → classify → appraise → characterise (landscape content)
+        → [select → extract → group]   (the deep chain, plan-selected)
+        → synthesise (run terminus — composes the artefact at any depth)
 ```
+
+The components are a **library the plan selects from** (task 013 flow-back): which fire is the
+orchestrator's plan-time selection from intent; **data dependencies stay structural** (extract
+needs a selection; group and findings-synthesis need an extraction; the artefact needs at least
+characterise's content), expressed as explicit run references compiling fail-closed. Breadth
+and depth are independent — a targeted question compiles to a *narrow-and-deep* run.
 
 ## Tool wiring (consolidated)
 
@@ -109,13 +116,13 @@ the immutable canonical chunks — units attach alongside; chunks are never re-s
 unit stamped with the embedding profile (the substrate-key leg for embedding-model version). ⏸
 budget cap + lazy vectorisation for very large relevant sets is a possible later refinement.
 
-## 5 — characterise (shallow terminus)
+## 5 — characterise (landscape content)
 
 Produces the evidence-landscape **content, not presentation**: a run-scoped characterisation
 record + topic/theme tags (task 009 clarification, decision 7). Characterise does **not** mint
-an artefact or blocks — EB produces **one** artefact, composed once at the run terminus by the
-orchestrator (see [capability.md](capability.md)); the artefact-composition step is a recorded
-seam. Two parts:
+an artefact or blocks — EB produces **one** artefact, composed once at the run terminus **by
+synthesise** (task 013 flow-back, superseding the earlier orchestrator-composes reading; the
+orchestrator shapes sections at plan time — see [capability.md](capability.md)). Two parts:
 - **Coverage / patterns over metadata** — deterministic distributions and gaps over Tier-0
   columns (study-type, geography, recency, population, category). **Source/evidence policy is
   flag-not-block here** — EB reads and counts *all* relevant in-corpus evidence, so coverage/gaps
@@ -141,7 +148,7 @@ seam. Two parts:
 Facet-level thematic grouping is a **deeper product** (component 8 `group`), not part of the
 shallow terminus.
 
-## 6 — select (deep terminus opens)
+## 6 — select (the deep chain opens)
 
 Chooses the subset for Tier-1 extraction — a clean departure from v2 (which had **no** select
 step and extracted the whole screened set). **Coverage-aware stratified selection over the
@@ -195,16 +202,32 @@ four. Mechanisms/barriers/conditions stay **landscape-only** until the
 at characterise; facet-level over extracted findings here) — via `cluster` over finding records /
 dimension values + `query-findings`.
 
-## 9 — synthesise (deep terminus)
+## 9 — synthesise (run terminus)
 
-Over the **grouped** findings, **per group produce a grounded block** reporting what the findings
-show. **Descriptive**, surfacing the direction-spread ("5 of 7 findings positive on tenancy, two
-null") — v2's `effect_consensus` counts as the descriptive steer. Each claim grounded via the
-settled `produce-grounded-block` mechanism (deterministic quote-presence + LLM judge;
-Unsupported/mis-cited a real state) — *not* v2's permissive post-hoc fuzzy matching. The
-source/evidence policy's citable bar is applied **flag-not-block** (below-bar support flagged
-weakly-grounded/below-policy, never hidden/dropped). Deep "gaps" rest on the **selected/extracted
-base**, **base-labelled, never promoted to corpus absence** — the shallow landscape is the check
-(see [provenance.md](provenance.md)). ⏸ **Consensus seam:** the *weighted* verdict
-(strength-weighted "the evidence supports X at strength Y") is deferred to the same roll-up seam;
-candidate mechanism = the deferred graph-structured synthesis.
+**EB's terminal component at every depth** (task 013 flow-back): it **composes the one artefact**
+— mints it, renders content into blocks, binds them — with the orchestrator shaping the sections
+at plan time (capability-composes; see [capability.md](capability.md)). What it renders depends
+on what the run produced:
+
+- **Landscape (always — the minimum content an artefact needs):** model-written prose over the
+  referenced characterisation record (coverage, themes). Shape-asserting claims are
+  **deterministically validated against the record** (pattern-grounded — the metadata-grade and
+  interpretive-shape grades of [provenance.md](provenance.md)); no source citations — there is
+  nothing chunk-anchored to cite at this grade, and none is faked.
+- **Grounded findings synthesis (when the deep chain ran):** over the **grouped** findings,
+  **per group produce a grounded block** reporting what the findings show. **Descriptive**,
+  surfacing the direction-spread ("5 of 7 findings positive on tenancy, two null") — v2's
+  `effect_consensus` counts as the descriptive steer. Each claim grounded via the settled
+  `produce-grounded-block` mechanism (deterministic quote-presence + LLM judge;
+  Unsupported/mis-cited a real state) — *not* v2's permissive post-hoc fuzzy matching. The
+  source/evidence policy's citable bar is applied **flag-not-block** (below-bar support flagged
+  weakly-grounded/below-policy, never hidden/dropped). Deep "gaps" rest on the
+  **selected/extracted base**, **base-labelled, never promoted to corpus absence** — the shallow
+  landscape is the check (see [provenance.md](provenance.md)).
+- ⏸ **Direct chunk-grounded narrative** (sanctioned, task 013 flow-back): for targeted questions
+  answered before the findings chain has run — narrative prose grounded directly in frozen
+  chunks, full `produce-grounded-block` bar, visibly chunk-cited; lands with `retrieve`.
+
+⏸ **Consensus seam:** the *weighted* verdict (strength-weighted "the evidence supports X at
+strength Y") is deferred to the same roll-up seam; candidate mechanism = the deferred
+graph-structured synthesis.
