@@ -1,10 +1,12 @@
 # Implementation Plan: 011-extract
 
-> **Status:** drafted (rev 1) — plan-stage adversarial review pending, then the
-> plan 🛑.
+> **Status:** drafted (rev 2) — plan-stage adversarial review adjudicated
+> (Codex, 10 findings: 2 blockers · 8 majors, **10/10 adopted** — § Findings &
+> adjudication); awaiting the plan 🛑.
 > Contract: [contract.md](contract.md) (approved 2026-07-07 · Shabeer Rauf,
 > rev 1.4; contract-stage adversarial findings adjudicated at rev 1.5).
-> ADR 0007 (findings-layer landing) due at the plan 🛑 (Task 8b).
+> ADR 0007 (findings-layer landing) drafted, flips to Accepted at the plan 🛑
+> (Task 9b).
 
 ## Overview
 
@@ -57,19 +59,30 @@ failing the brief test at build time is a plan deviation to flag.
 - **Windowing**: `WINDOW_CHAR_BUDGET = 150_000` chars of segment content per
   call (~37K tokens — nearly every fixture document is a single call; the
   10 real full-text docs range well under this); windows are ordered chunk runs
-  with **overlap = 1 chunk** (the previous window's last chunk repeats);
+  with **overlap = 1 chunk** (the previous window's last chunk repeats).
+  **Oversize-segment policy** (adversarial finding 8 — 008 recorded PDFs
+  collapsing to 2–3 giant chunks): a single chunk exceeding the window budget
+  is **deterministically char-split into subsegments** carrying the original
+  `chunk_id` plus a part index (`{chunk_id}#p{i}`) and local offsets — the
+  full-read guarantee holds (never `extraction_failed` merely for parser
+  chunking); quote verification is unaffected (it runs against chunk content
+  + the offset map, not window payload ids); fixture required. Overlap
+  between subsegments of one giant chunk = `1_000` chars;
   `EXTRACT_MAX_OUTPUT_TOKENS = 8192` (explicit — V2's uncapped calls truncated
   mid-JSON); `EXTRACT_RETRY_CAP = 1` per window; `MAX_CONCURRENT_EXTRACT = 4`
   (global executor across docs and windows; **writes in selected-set order in
   the parent**, the ingest determinism pattern). Call budget: baseline
   `Σ_docs ceil(windows)`, enforced max `baseline × (1 + retry_cap)`, checked
   before any live call.
-- **Fingerprint**: `sha256` hex over the canonical JSON of
-  `{profile: "eb_iof_base_v1", schema: "iof_v1", prompt: "extract_iof_v1",
-  model, mode, field_rules: "iof_rules_v1", verifier: "qv_v1",
-  window: {char_budget, overlap}}` — truncated to 16 hex chars for the column;
-  the full component map recorded in `extraction_provenance`. Any
-  output-affecting change bumps a component version and thus the digest.
+- **Fingerprint**: **full** `sha256` hex over the canonical JSON of
+  `{profile: "eb_iof_base_v1", schema: "iof_v1" (covers wire AND stored
+  models), prompt: "extract_iof_v1", model, mode, field_rules: "iof_rules_v1",
+  verifier: "qv_v1", window: {char_budget, overlap, oversize_policy},
+  max_output_tokens, retry_cap}` (adversarial finding 3: every
+  output-affecting knob, no truncation — the column is TEXT); the full
+  component map recorded in `extraction_provenance`, and a test asserts each
+  component version appears there. Any output-affecting change bumps a
+  component version and thus the digest.
 - **Quote verifier (`qv_v1`)**: normalisation = casefold · collapse whitespace
   runs to one space · fold `""''` → straight quotes · `–—` → `-` · NBSP →
   space · strip soft hyphens. Matching runs on a normalised copy carrying an
@@ -86,8 +99,14 @@ failing the brief test at build time is a plan deviation to flag.
   effect size finite · estimate-level coherence (pooled ⇢ k expected, study ⇢ N
   expected — the *incoherent* field flags `unclear`) · null-like strings
   (`{"null","none","n/a","na","unknown",""}`, case-insensitive) in nullable
-  text/numeric fields → real null + `not_extracted`; **closed enums exempt**.
+  text/numeric fields → real null + coverage marker; **closed enums exempt**.
   Violations flag the field `unclear`, never reject the finding.
+  **`not_applicable` rules** (adversarial finding 4): `estimate_level=study` →
+  absent {k, i_squared, tau2} mark `not_applicable`;
+  `estimate_level=claim` → all absent numeric statistics mark
+  `not_applicable`; every other absent nullable field marks `not_extracted`
+  (present-but-incoherent stays `unclear` per the coherence rule). Fixtures
+  for all three estimate levels required.
 - **Stratum canonicalisation**: closed type vocabulary `timepoint` |
   `subgroup` | `setting`; values stored as emitted (whitespace-normalised);
   canonical comparison form = sorted `(type, casefold(value))` pairs — used by
@@ -97,16 +116,28 @@ failing the brief test at build time is a plan deviation to flag.
   effect_size, effect_size_type, comparator, estimate_level, canonical
   stratum). Identical → one finding, anchors concatenated in emission order,
   collapse counted per doc in the roll-up.
-- **Record model set** (Task 2; `extra="forbid"` everywhere):
+- **Record model set — wire vs stored split** (Task 2; `extra="forbid"`
+  everywhere; adversarial finding 1, blocker): strict structured outputs
+  enforce the wire schema at the API, which would make the contract's
+  null-coercion and invalid-candidate rules **unreachable** if the wire model
+  were the final shape. So two model layers, one truth chain:
+  - **Wire** (`IOFRecordWire` etc., drives `response_format`): grain fields
+    (`intervention`, `outcome`) **nullable**, numeric statistics as
+    `float | str | None` unions (so "null"-strings and unparseable values
+    arrive and are *coerced/flagged by our rules*, not silently rejected or
+    model-conformed), enums closed at the wire (exempt from coercion by
+    construction), anchors as emitted.
+  - **Stored** (`IOFRecord` etc.): the final typed shape after grain
+    validation + `iof_rules_v1` — NOT NULLs enforced, numerics real.
   `IOFStatistics` (effect_size, effect_size_type, ci_lower, ci_upper,
-  standard_error, p_value, n, k, i_squared, tau2 — all nullable),
-  `IOFAnchor` (segment_id nullable, quote), `IOFRecord` (intervention, outcome,
-  population, comparator, effect_direction, estimate_level, study_design,
+  standard_error, p_value, n, k, i_squared, tau2), `IOFAnchor` (segment_id
+  nullable, quote), `IOFRecord` (intervention, outcome, population,
+  comparator, effect_direction, estimate_level, study_design,
   stratum_qualifiers, statistics, causality_by_design, is_primary,
   is_prevalence_only, anchors ≥ 1), `ExtractionResponse` (findings list —
-  possibly empty, explicitly legal). The API `response_format` derives from
-  these models; the prompt's field documentation is generated from the same
-  models (single source of truth).
+  possibly empty, explicitly legal). The prompt's field documentation is
+  generated from the wire models; the schema fingerprint component covers
+  both layers.
 - **`causality_by_design` closed set**: `attributable` | `plausibly_causal` |
   `associational` | `descriptive` (derived from the reported design; the
   prompt maps design families to values; `unclear` handled by field coverage,
@@ -130,6 +161,22 @@ failing the brief test at build time is a plan deviation to flag.
   findings (`no_findings` path). Fixture records' quotes must genuinely occur
   in their seeded chunk text so the verification path runs for real. Stub mode
   string `"stub"` enters the fingerprint.
+- **Document loader** (adversarial finding 6 — `selection_result.selected`
+  records carry `pss_id` + `text_basis` but **not** `primary_evidence_type`):
+  extract's loader query joins selected `pss_id`s → `project_source_snapshot`
+  → envelope snapshot metadata (title/abstract) + `full_text_snapshot_id` →
+  `chunk`s, **and** `source_classification_result` for
+  `primary_evidence_type` (the `screened_sources` join precedent,
+  characterise.py:188–220). Null/unclassified → the prompt receives
+  `"Unclassified"` and the generic guidance branch (no SR/study conditioning);
+  prompt-payload test asserts the joined value lands in the built prompt.
+  **Basis rules** (adversarial findings 9–10): basis full_text ⇢ chunks of
+  `full_text_snapshot_id`; abstract_only ⇢ envelope abstract; the selected
+  record's `text_basis` vs current pss state mismatch → **structural
+  per-doc failure, loud** (`extraction_failed(basis_mismatch)`); an empty
+  basis (no abstract text, or an ingested snapshot with zero chunks) →
+  **`extraction_failed(empty_basis)`, never `no_findings`** (a false absence
+  otherwise — screen explicitly admits title-only documents).
 - **Memo semantics**: lookup `(project_id, source_snapshot_id, fingerprint)`
   with `status IN ('extracted','no_findings')` (matching the partial unique
   index); hit → no call, no new rows, roll-up `docs[]` entry carries
@@ -143,11 +190,14 @@ failing the brief test at build time is a plan deviation to flag.
   its reference). `UNIQUE (evidence_scope_id, run_id)` makes same-run re-runs
   loud.
 - **Extraction summary shape** (frozen in Task 5, asserted by the payload
-  test): `{docs: {selected, extracted, no_findings, failed, fresh, reused},
-  findings: {total, quote_unverified, dedup_collapsed, invalid_dropped},
-  basis: {full_text, abstract_only, shares}, field_coverage: {per-field
-  marker counts}, selection_run_id, flags: [...], provenance: {fingerprint,
-  components…}}`.
+  test; adversarial finding 2 — per-doc statuses, not just aggregates):
+  `{docs: [{pss_id, status, basis, finding_count, reused, error,
+  extraction_record_id}], counts: {selected, extracted, no_findings, failed,
+  fresh, reused}, findings: {total, quote_unverified, dedup_collapsed,
+  invalid_dropped}, basis: {full_text, abstract_only, shares},
+  field_coverage: {per-field marker counts}, selection_run_id, flags: [...],
+  provenance: {fingerprint, components…}}` — the per-doc list makes the
+  exact-coverage invariant checkable at the payload boundary.
 - **Langfuse**: generation spans open **inside `OpenAIExtractionBackend`**
   (usage lives there — the 010 finding-8 precedent), named
   `extract:{pss_short}:w{j}`; metadata = doc/window ids, model, prompt
@@ -161,8 +211,12 @@ failing the brief test at build time is a plan deviation to flag.
   `characterisation_run_id` thread-through precedent, skeleton.py:443–488);
   live backend iff `OPENAI_API_KEY`; logs the call budget before live calls;
   renders the extraction summary. The demo directive's budget 8 (010) keeps
-  the live extract run at ~8 docs + must-includes — an honest full-mix sample
-  (full-text and abstract-only both present; assert both bases occur).
+  the live extract run at ~8 docs — and to **guarantee** the mixed-basis
+  live check (adversarial finding 7: budget + tag boost alone can't), the
+  skeleton pins `must_include_ids` to one known full-text and one known
+  abstract-only fixture doc (resolved by backend record id at seed time),
+  then asserts both bases occur in the selected set before the live extract
+  step.
 - **`ExtractContext`** carries `(scope_id, intent, context, selection_run_id)`
   for wiring uniformity — **`intent` is not consumed by extraction** (contract
   rev 1.5; a code comment states this so no reviewer re-flags it).
@@ -212,7 +266,11 @@ Task 1 (schema + migration 11)
   (partial unique index `(project_id, source_snapshot_id,
   extraction_fingerprint) WHERE status IN ('extracted','no_findings')`;
   composite FKs `(run_id, project_id)`, `(project_source_snapshot_id,
-  project_id)`; CHECKs on status/basis), `intervention_outcome_finding`
+  project_id)`; **plus `UniqueConstraint("extraction_record_id",
+  "project_id", name="uq_ser_id_project")` — the composite-FK target for the
+  finding table, per the repo's parent pattern (adversarial finding 5:
+  `uq_runs_run_project`/`uq_pss_id_project`/`uq_evidence_scope_id_project`
+  precedents)**; CHECKs on status/basis), `intervention_outcome_finding`
   (NOT NULLs per DDL; CHECKs on effect_direction/estimate_level; composite FK
   `(extraction_record_id, project_id)`), `extraction_result` (composite FKs,
   `UNIQUE (evidence_scope_id, run_id)`, NOT NULL JSONBs). FK targets verified
@@ -254,8 +312,8 @@ failure/stub-determinism/no-keys-no-op tests. Scope: S–M.
 ### Task 5: `extract.py` — `codex`
 
 Selection-row load by `(scope, selection_run_id)` (missing → structured
-failure) → per-doc basis assembly (pss → full-text chunks ordered by sequence,
-or envelope abstract; basis + snapshot-consistency rule enforced) → memo
+failure) → per-doc loading via the pinned **document loader** (classification
+join; basis rules; `basis_mismatch`/`empty_basis` per-doc failures) → memo
 lookup → window assembly (char budget, 1-chunk overlap) → budget check →
 fan-out (bounded executor; parent-ordered writes) → parse → within-doc
 pipeline: grain validation (invalid-candidate rules) → field rules → dedup →
@@ -293,7 +351,12 @@ verification (verbatim, boundary-spanning, fabricated → flagged) ·
 abstract-basis end-to-end · match-location fidelity · field rules (each rule +
 coercion + enum exemption) · claim-keyed dedup + distinct-effect split ·
 doc-status rules · windowing (multi-window fixture; budget arithmetic;
-window-failure → doc failed, others proceed) · schema line (enrichment absent;
+window-failure → doc failed, others proceed; **oversize-chunk subsegment
+fixture** — finding 8) · basis rules (full-text ⇢ full_text_snapshot chunks;
+abstract ⇢ envelope; **basis-mismatch loud** · **empty basis →
+`extraction_failed(empty_basis)`, never `no_findings`** — findings 9–10;
+title-only and zero-chunk fixtures) · `not_applicable` markers per estimate
+level (finding 4 fixtures) · schema line (enrichment absent;
 negative rules asserted on the built prompt) · field coverage markers · edge
 scopes (empty selection row + flag; missing selection row; same-run loud) ·
 determinism (two stub runs byte-identical payload columns; parallel-vs-serial
@@ -303,11 +366,15 @@ write order) · delete-order integrity · summary payload shape.
 
 Injection double (a prompt-injection-shaped chunk lands as inert data — no
 instruction-following, asserted on output) · prompt-structure assertion
-(id-keyed records; envelope/evidence-type under data; **no intent anywhere in
-the built prompt**) · counting double asserting exactly the selected fresh
+(id-keyed records; envelope/evidence-type under data — including the
+classification-join value; **no intent anywhere in the built prompt**) ·
+counting double asserting exactly the selected fresh
 docs are sent (reused/memo docs never) · misbehaving backend doubles
-(duplicate findings → dedup; grain-invalid records → status rules; oversized
-output) · repeated-quote cursor fixture (same sentence quoted twice →
+(duplicate findings → dedup; grain-invalid wire records → status rules —
+reachable through the tolerant wire model, finding 1; null-string numerics
+coerced; oversized output) · fingerprint completeness (every pinned component
+version present in provenance; two configs differing in any one component →
+distinct fingerprints) · repeated-quote cursor fixture (same sentence quoted twice →
 successive occurrences) · pre-flight example validation (a doctored
 non-verbatim example fails at import) · socket-deny around an extract
 round-trip · key hygiene against captured output. Scope: M–L. **Commit**
@@ -370,6 +437,39 @@ scoping, per the 010 retro).
 | Concurrent windows + DB writes nondeterminism | Flaky suite | All writes in the parent, selected-set order (ingest pattern); parallel-vs-serial determinism test |
 | Cost runaway on live run | Spend | Pre-call enforced budget; demo selection ≈ 8 docs; cost note required in verification.md |
 | Injection via full document text | Hijacked extraction output | Schema-constrained output, no tools; negative rules; injection-double test; a hijacked model can at worst emit wrong findings for its own document — flagged-or-verified data |
+
+## Plan-phase adversarial review — findings & adjudication (Codex, 2026-07-07)
+
+Ten findings, verified against the repo before adoption; **10/10 adopted**:
+
+1. Strict structured outputs make the contract's coercion/invalid-candidate
+   rules unreachable (blocker): **adopted** — wire vs stored model split;
+   grain fields nullable and numerics string-tolerant on the wire, final shape
+   enforced post-rules (Task 2 pin).
+2. Summary `docs` was aggregate-only vs the contract's per-doc statuses:
+   **adopted** — per-doc list + `counts` object (payload-boundary invariant).
+3. Fingerprint omitted max-output-tokens/retry/oversize policy and truncated
+   the digest: **adopted** — full sha256 hex, all output-affecting knobs in
+   the canonical map, completeness test.
+4. `not_applicable` rules unpinned/untested: **adopted** — per-estimate-level
+   rules + fixtures.
+5. Composite-FK target missing its composite unique on
+   `source_extraction_record` (blocker): **adopted** — `uq_ser_id_project`
+   per the repo's parent pattern.
+6. `primary_evidence_type` not on selection records; loader join unpinned:
+   **adopted** — document-loader pin (classification join, `"Unclassified"`
+   null policy, prompt-payload test).
+7. Budget-8 directive can't guarantee the mixed-basis live check: **adopted**
+   — demo `must_include_ids` pin one full-text + one abstract-only fixture
+   doc; skeleton asserts both bases pre-extract.
+8. Oversize single chunk (the 008 giant-chunk PDFs) undefined vs the window
+   budget: **adopted** — deterministic subsegment split (`{chunk_id}#p{i}`,
+   1K-char overlap), full-read guarantee preserved, fixture required.
+9. Snapshot-consistency rule untested: **adopted** — basis-rule tests incl.
+   `basis_mismatch` loud failure.
+10. Empty basis (no abstract / zero chunks) could read as `no_findings`
+    (false absence): **adopted** — `extraction_failed(empty_basis)`, never
+    `no_findings`; title-only and zero-chunk fixtures.
 
 ## Open questions
 
