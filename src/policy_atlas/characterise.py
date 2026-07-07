@@ -17,10 +17,10 @@ from policy_atlas import grouping
 from policy_atlas.embeddings import EMBEDDING_PROFILE, UNIT_POLICY
 from policy_atlas.grouping import (
     UNCLUSTERED,
-    GroupingBackend,
     GroupingDoc,
     InvalidDiscoveryOutput,
     Theme,
+    ThemeGroupingBackend,
     validate_themes,
 )
 from policy_atlas.schema import (
@@ -459,7 +459,7 @@ def _call_budget(n: int) -> tuple[int, int, int]:
 
 def _discover_themes(
     *,
-    backend: GroupingBackend,
+    backend: ThemeGroupingBackend,
     docs: list[GroupingDoc],
     intent: str,
     min_themes: int,
@@ -540,7 +540,7 @@ def _validate_assignments(
 
 def _run_first_assignment_round(
     *,
-    backend: GroupingBackend,
+    backend: ThemeGroupingBackend,
     batches: list[list[GroupingDoc]],
     themes: list[Theme],
     budget: _CallBudget,
@@ -589,7 +589,7 @@ def _run_first_assignment_round(
 
 def _resolve_assignment_batch(
     *,
-    backend: GroupingBackend,
+    backend: ThemeGroupingBackend,
     attempt: _AssignmentAttempt,
     themes: list[Theme],
     theme_names: set[str],
@@ -644,7 +644,7 @@ def _resolve_assignment_batch(
 
 def _assign_docs(
     *,
-    backend: GroupingBackend,
+    backend: ThemeGroupingBackend,
     docs: list[GroupingDoc],
     themes: list[Theme],
     budget: _CallBudget,
@@ -673,7 +673,7 @@ def _assign_docs(
 
 def _grouping_provenance(
     *,
-    backend: GroupingBackend,
+    backend: ThemeGroupingBackend,
     discovery_retries_used: int,
     repair_calls_used: int,
 ) -> dict[str, Any]:
@@ -769,14 +769,14 @@ def characterise_scope(
     project_id: uuid.UUID,
     run_id: uuid.UUID,
     context: CharacteriseContext,
-    grouping_backend: GroupingBackend,
+    theme_grouping_backend: ThemeGroupingBackend,
 ) -> dict[str, Any]:
     """Characterise a screened evidence scope.
 
     Deterministic coverage is always computed first. The thematic grouping stage
     then discovers themes and assigns documents with code-owned validation and one
     targeted repair call per invalid batch. Duplicate-same-theme assignments are
-    handled at the ``GroupingBackend.assign`` seam before this caller receives the
+    handled at the ``ThemeGroupingBackend.assign`` seam before this caller receives the
     mapping. No tags or characterisation row are written until grouping fully
     succeeds; on grouping failure, ``CharacteriseFailure`` carries the coverage.
 
@@ -785,7 +785,7 @@ def characterise_scope(
         project_id: Owning project.
         run_id: Run writing the characterisation.
         context: Scope-level characterise input.
-        grouping_backend: The live or stub grouping backend.
+        theme_grouping_backend: The live or stub theme grouping backend.
 
     Returns:
         Landscape summary payload for ``component.completed``.
@@ -811,7 +811,7 @@ def characterise_scope(
         log.info("characterise.call_budget", baseline=baseline, maximum=maximum)
         budget = _CallBudget(maximum=maximum, coverage=coverage)
         themes, discovery_retries_used = _discover_themes(
-            backend=grouping_backend,
+            backend=theme_grouping_backend,
             docs=docs,
             intent=context.intent,
             min_themes=min_themes,
@@ -819,7 +819,7 @@ def characterise_scope(
             budget=budget,
         )
         assignments, repair_calls_used = _assign_docs(
-            backend=grouping_backend,
+            backend=theme_grouping_backend,
             docs=docs,
             themes=themes,
             budget=budget,
@@ -839,7 +839,7 @@ def characterise_scope(
         )
 
     provenance = _grouping_provenance(
-        backend=grouping_backend,
+        backend=theme_grouping_backend,
         discovery_retries_used=discovery_retries_used,
         repair_calls_used=repair_calls_used,
     )

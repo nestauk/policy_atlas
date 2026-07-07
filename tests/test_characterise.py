@@ -27,7 +27,12 @@ from policy_atlas.characterise import (
 )
 from policy_atlas.classify import ClassifyContext, classify_sources
 from policy_atlas.embeddings import OpenAIEmbeddingBackend
-from policy_atlas.grouping import GroupingDoc, OpenAIGroupingBackend, StubGroupingBackend, Theme
+from policy_atlas.grouping import (
+    GroupingDoc,
+    OpenAIThemeGroupingBackend,
+    StubThemeGroupingBackend,
+    Theme,
+)
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.ingest import ingest_upload
@@ -136,7 +141,11 @@ def test_coverage_distributions_match_hand_computed(conn: Connection) -> None:
 
     ctx = CharacteriseContext(scope_id=scope_id, intent="Housing evidence", context={})
     summary = characterise_scope(
-        conn, project_id=pid, run_id=rid, context=ctx, grouping_backend=StubGroupingBackend(),
+        conn,
+        project_id=pid,
+        run_id=rid,
+        context=ctx,
+        theme_grouping_backend=StubThemeGroupingBackend(),
     )
     coverage = summary["coverage"]
 
@@ -193,7 +202,11 @@ def test_coverage_tag_distribution_keeps_asserters_separate(conn: Connection) ->
 
     ctx = CharacteriseContext(scope_id=scope_id, intent="Test", context={})
     summary = characterise_scope(
-        conn, project_id=pid, run_id=rid, context=ctx, grouping_backend=StubGroupingBackend(),
+        conn,
+        project_id=pid,
+        run_id=rid,
+        context=ctx,
+        theme_grouping_backend=StubThemeGroupingBackend(),
     )
     tags = summary["coverage"]["distributions"]["tags"]
     # Two asserters, same tag: two distinct distribution keys, never merged.
@@ -317,7 +330,11 @@ def test_grouping_happy_path_themes_and_unclustered(conn: Connection) -> None:
 
     ctx = CharacteriseContext(scope_id=scope_id, intent="Test", context={})
     summary = characterise_scope(
-        conn, project_id=pid, run_id=rid, context=ctx, grouping_backend=StubGroupingBackend(),
+        conn,
+        project_id=pid,
+        run_id=rid,
+        context=ctx,
+        theme_grouping_backend=StubThemeGroupingBackend(),
     )
 
     assert {theme["name"] for theme in summary["themes"]} == set(theme_docs)
@@ -362,7 +379,11 @@ def test_theme_tags_persist_accrete_and_scope_run_is_unique(conn: Connection) ->
 
     ctx = CharacteriseContext(scope_id=scope_id, intent="Test", context={})
     characterise_scope(
-        conn, project_id=pid, run_id=rid1, context=ctx, grouping_backend=StubGroupingBackend(),
+        conn,
+        project_id=pid,
+        run_id=rid1,
+        context=ctx,
+        theme_grouping_backend=StubThemeGroupingBackend(),
     )
 
     tag_rows = conn.execute(
@@ -386,7 +407,11 @@ def test_theme_tags_persist_accrete_and_scope_run_is_unique(conn: Connection) ->
     # same theme and does not duplicate the tag row.
     rid2 = seed_run(conn, pid)
     characterise_scope(
-        conn, project_id=pid, run_id=rid2, context=ctx, grouping_backend=StubGroupingBackend(),
+        conn,
+        project_id=pid,
+        run_id=rid2,
+        context=ctx,
+        theme_grouping_backend=StubThemeGroupingBackend(),
     )
 
     tag_rows_after = conn.execute(
@@ -429,7 +454,11 @@ def test_edge_scope_n_zero_skips_grouping_honestly(conn: Connection) -> None:
 
     ctx = CharacteriseContext(scope_id=scope_id, intent="Test", context={})
     summary = characterise_scope(
-        conn, project_id=pid, run_id=rid, context=ctx, grouping_backend=StubGroupingBackend(),
+        conn,
+        project_id=pid,
+        run_id=rid,
+        context=ctx,
+        theme_grouping_backend=StubThemeGroupingBackend(),
     )
 
     assert "empty_scope" in summary["flags"]
@@ -452,7 +481,11 @@ def test_edge_scope_n_one_honours_theme_bounds(conn: Connection) -> None:
 
     ctx = CharacteriseContext(scope_id=scope_id, intent="Test", context={})
     summary = characterise_scope(
-        conn, project_id=pid, run_id=rid, context=ctx, grouping_backend=StubGroupingBackend(),
+        conn,
+        project_id=pid,
+        run_id=rid,
+        context=ctx,
+        theme_grouping_backend=StubThemeGroupingBackend(),
     )
 
     assert len(summary["themes"]) == 1
@@ -472,7 +505,11 @@ def test_edge_scope_n_less_than_batch_is_one_batch(conn: Connection) -> None:
 
     ctx = CharacteriseContext(scope_id=scope_id, intent="Test", context={})
     summary = characterise_scope(
-        conn, project_id=pid, run_id=rid, context=ctx, grouping_backend=StubGroupingBackend(),
+        conn,
+        project_id=pid,
+        run_id=rid,
+        context=ctx,
+        theme_grouping_backend=StubThemeGroupingBackend(),
     )
 
     assert len(summary["themes"]) == 3
@@ -491,7 +528,7 @@ def test_discovery_failure_raises_with_coverage_and_persists_nothing(conn: Conne
     with pytest.raises(CharacteriseFailure) as exc_info:
         characterise_scope(
             conn, project_id=pid, run_id=rid, context=ctx,
-            grouping_backend=_RaisingDiscoverBackend(),
+            theme_grouping_backend=_RaisingDiscoverBackend(),
         )
 
     assert set(exc_info.value.coverage.keys()) == {
@@ -524,7 +561,11 @@ def test_landscape_summary_structure(conn: Connection) -> None:
 
     ctx = CharacteriseContext(scope_id=scope_id, intent="Test", context={})
     summary = characterise_scope(
-        conn, project_id=pid, run_id=rid, context=ctx, grouping_backend=StubGroupingBackend(),
+        conn,
+        project_id=pid,
+        run_id=rid,
+        context=ctx,
+        theme_grouping_backend=StubThemeGroupingBackend(),
     )
 
     assert set(summary.keys()) == {"coverage", "themes", "unclustered", "flags", "provenance"}
@@ -550,7 +591,7 @@ def test_harness_characterise_component_success(conn: Connection) -> None:
     config = compile(plan)
     run_harness(
         conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider(),
-        grouping_backend=StubGroupingBackend(),
+        theme_grouping_backend=StubThemeGroupingBackend(),
     )
 
     rows = conn.execute(
@@ -588,7 +629,7 @@ def test_harness_characterise_component_failure_payload_has_coverage(conn: Conne
     config = compile(plan)
     run_harness(
         conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider(),
-        grouping_backend=_RaisingDiscoverBackend(),
+        theme_grouping_backend=_RaisingDiscoverBackend(),
     )
 
     log_entries = events.read(conn, pid)
@@ -613,7 +654,11 @@ def test_delete_project_data_removes_characterisation_and_tags(conn: Connection)
 
     ctx = CharacteriseContext(scope_id=scope_id, intent="Test", context={})
     characterise_scope(
-        conn, project_id=pid, run_id=rid, context=ctx, grouping_backend=StubGroupingBackend(),
+        conn,
+        project_id=pid,
+        run_id=rid,
+        context=ctx,
+        theme_grouping_backend=StubThemeGroupingBackend(),
     )
 
     conn.commit()
@@ -664,7 +709,11 @@ def test_downstream_outputs_unchanged_by_characterise(conn: Connection) -> None:
     before = _counts()
     ctx = CharacteriseContext(scope_id=scope_id, intent="Test", context={})
     characterise_scope(
-        conn, project_id=pid, run_id=rid, context=ctx, grouping_backend=StubGroupingBackend(),
+        conn,
+        project_id=pid,
+        run_id=rid,
+        context=ctx,
+        theme_grouping_backend=StubThemeGroupingBackend(),
     )
     after = _counts()
     assert before == after
@@ -930,7 +979,7 @@ def test_judgment_invented_assignment_ids_are_dropped_without_repair(
         project_id=pid,
         run_id=rid,
         context=CharacteriseContext(scope_id=scope_id, intent="Test", context={}),
-        grouping_backend=backend,
+        theme_grouping_backend=backend,
     )
 
     assert len(backend.assign_batches) == 1
@@ -966,7 +1015,7 @@ def test_judgment_missing_and_unknown_theme_residue_repaired(conn: Connection) -
         project_id=pid,
         run_id=rid,
         context=CharacteriseContext(scope_id=scope_id, intent="Test", context={}),
-        grouping_backend=backend,
+        theme_grouping_backend=backend,
     )
 
     first_batch = backend.assign_batches[0]
@@ -995,7 +1044,7 @@ def test_judgment_repair_exhausted_fails_honestly_without_persistence(
             project_id=pid,
             run_id=rid,
             context=CharacteriseContext(scope_id=scope_id, intent="Test", context={}),
-            grouping_backend=_RepairExhaustedBackend(),
+            theme_grouping_backend=_RepairExhaustedBackend(),
         )
 
     assert set(exc_info.value.coverage) == {"base", "base_counts", "distributions", "rates"}
@@ -1025,7 +1074,7 @@ def test_judgment_invalid_discovery_retried_once(conn: Connection) -> None:
         project_id=pid,
         run_id=rid,
         context=CharacteriseContext(scope_id=scope_id, intent="Test", context={}),
-        grouping_backend=backend,
+        theme_grouping_backend=backend,
     )
 
     assert backend.discover_calls == 2
@@ -1041,7 +1090,7 @@ def test_judgment_invalid_discovery_retried_once(conn: Connection) -> None:
             project_id=pid2,
             run_id=rid2,
             context=CharacteriseContext(scope_id=scope_id2, intent="Test", context={}),
-            grouping_backend=always_invalid,
+            theme_grouping_backend=always_invalid,
         )
     assert always_invalid.discover_calls == 2
 
@@ -1049,7 +1098,7 @@ def test_judgment_invalid_discovery_retried_once(conn: Connection) -> None:
 def test_judgment_duplicate_same_theme_deduped_at_openai_grouping_seam(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    backend = OpenAIGroupingBackend(api_key="test-key-not-real")
+    backend = OpenAIThemeGroupingBackend(api_key="test-key-not-real")
     calls: list[dict[str, Any]] = []
 
     def fake_parse(*args: Any, **kwargs: Any) -> _ParsedResponse:
@@ -1085,7 +1134,7 @@ def test_judgment_call_budget_maximum_and_guard(conn: Connection) -> None:
         project_id=pid,
         run_id=rid,
         context=CharacteriseContext(scope_id=scope_id, intent="Test", context={}),
-        grouping_backend=backend,
+        theme_grouping_backend=backend,
     )
 
     assert backend.total_calls == 4
@@ -1110,7 +1159,7 @@ def test_judgment_injection_shaped_abstract_flows_as_data(conn: Connection) -> N
         project_id=pid,
         run_id=rid,
         context=CharacteriseContext(scope_id=scope_id, intent="Test", context={}),
-        grouping_backend=StubGroupingBackend(),
+        theme_grouping_backend=StubThemeGroupingBackend(),
     )
 
     assert {theme["name"] for theme in summary["themes"]} == {"Housing"}
@@ -1185,7 +1234,7 @@ def test_judgment_theme_name_constraints_fail_after_retry(
             project_id=pid,
             run_id=rid,
             context=CharacteriseContext(scope_id=scope_id, intent="Test", context={}),
-            grouping_backend=backend,
+            theme_grouping_backend=backend,
         )
     assert backend.discover_calls == 2
 
@@ -1203,7 +1252,7 @@ def test_judgment_instruction_shaped_theme_name_is_stored_as_data(
         project_id=pid,
         run_id=rid,
         context=CharacteriseContext(scope_id=scope_id, intent="Test", context={}),
-        grouping_backend=_InstructionThemeBackend(theme_name),
+        theme_grouping_backend=_InstructionThemeBackend(theme_name),
     )
 
     assert summary["themes"][0]["name"] == theme_name
@@ -1235,7 +1284,7 @@ def test_judgment_socket_deny_characterise_harness_round_trip(
             project_id=pid,
             run_id=rid,
             provider=StubEchoProvider(),
-            grouping_backend=StubGroupingBackend(),
+            theme_grouping_backend=StubThemeGroupingBackend(),
         )
     finally:
         monkeypatch.undo()
@@ -1279,7 +1328,7 @@ def test_judgment_openai_key_hygiene(
     canary = "sk-test-hygiene-canary-12345"
     monkeypatch.setenv("OPENAI_API_KEY", canary)
     OpenAIEmbeddingBackend()
-    OpenAIGroupingBackend()
+    OpenAIThemeGroupingBackend()
 
     pid, rid_screen = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
@@ -1291,7 +1340,7 @@ def test_judgment_openai_key_hygiene(
         project_id=pid,
         run_id=rid,
         provider=StubEchoProvider(),
-        grouping_backend=StubGroupingBackend(),
+        theme_grouping_backend=StubThemeGroupingBackend(),
     )
 
     payloads = conn.execute(
@@ -1325,7 +1374,7 @@ def test_stub_runs_byte_identical(conn: Connection) -> None:
         project_id=pid,
         run_id=rid1,
         context=ctx,
-        grouping_backend=StubGroupingBackend(),
+        theme_grouping_backend=StubThemeGroupingBackend(),
     )
     rid2 = seed_run(conn, pid)
     characterise_scope(
@@ -1333,7 +1382,7 @@ def test_stub_runs_byte_identical(conn: Connection) -> None:
         project_id=pid,
         run_id=rid2,
         context=ctx,
-        grouping_backend=StubGroupingBackend(),
+        theme_grouping_backend=StubThemeGroupingBackend(),
     )
     rows = conn.execute(
         select(

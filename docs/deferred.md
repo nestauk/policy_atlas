@@ -369,7 +369,7 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **Dual-view coverage** — corpus-view vs evidence-view distributions need the
   source/evidence policy object (contract decision 9); v3.0 ships single-view with the
   explicit `base` ladder and **no absence claims** (test-asserted).
-- **Bedrock routes** — both seams (`EmbeddingBackend`, `GroupingBackend`) swap
+- **Bedrock routes** — both seams (`EmbeddingBackend`, `ThemeGroupingBackend`) swap
   implementations; first pass OpenAI → target Bedrock is the documented v3.0 posture.
 - **Upload audit-event seam** — when the web-app slice gives uploads a real surface they
   get their own audit event + observable processing (incl. embed counts, currently a

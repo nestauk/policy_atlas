@@ -1,4 +1,4 @@
-"""Grouping backend seam for characterise thematic discovery and assignment."""
+"""Theme grouping backend seam for characterise thematic discovery and assignment."""
 
 from __future__ import annotations
 
@@ -234,8 +234,8 @@ def _log_usage(event: str, usage: CompletionUsage | None) -> None:
     )
 
 
-class GroupingBackend(Protocol):
-    """The thematic grouping seam.
+class ThemeGroupingBackend(Protocol):
+    """The theme grouping seam.
 
     Backends perform provider calls or deterministic fixture-like work and return
     raw model output after structural parsing only. Callers own semantic
@@ -281,8 +281,8 @@ class GroupingBackend(Protocol):
         ...
 
 
-class OpenAIGroupingBackend:
-    """Live OpenAI implementation of the grouping seam.
+class OpenAIThemeGroupingBackend:
+    """Live OpenAI implementation of the theme grouping seam.
 
     Args:
         api_key: Optional OpenAI API key. If omitted, ``OPENAI_API_KEY`` is read
@@ -299,7 +299,7 @@ class OpenAIGroupingBackend:
         # the SDK additionally retries transient 429/5xx failures, so the HTTP
         # attempt ceiling is (1 + max_retries) x the logical budget maximum.
         self._client = resolve_openai_client(
-            api_key, backend_name="OpenAIGroupingBackend", timeout=60.0, max_retries=2
+            api_key, backend_name="OpenAIThemeGroupingBackend", timeout=60.0, max_retries=2
         )
 
     def discover(
@@ -439,8 +439,8 @@ def _append_distinct(values: list[str], value: str | None, seen: set[str]) -> No
     values.append(value)
 
 
-class StubGroupingBackend:
-    """Deterministic zero-egress grouping backend for tests and local runs."""
+class StubThemeGroupingBackend:
+    """Deterministic zero-egress theme grouping backend for tests and local runs."""
 
     mode = "stub"
 

@@ -29,7 +29,11 @@ from policy_atlas.extraction_backend import (
     StubExtractionBackend,
 )
 from policy_atlas.fixtures import get_source
-from policy_atlas.grouping import GroupingBackend, OpenAIGroupingBackend, StubGroupingBackend
+from policy_atlas.grouping import (
+    OpenAIThemeGroupingBackend,
+    StubThemeGroupingBackend,
+    ThemeGroupingBackend,
+)
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.ingest import ingest_upload
@@ -79,7 +83,7 @@ def _run_component(
     component: str,
     *,
     embedding_backend: EmbeddingBackend,
-    grouping_backend: GroupingBackend,
+    theme_grouping_backend: ThemeGroupingBackend,
     langfuse_client: Langfuse | None,
     characterisation_run_id: uuid.UUID | None = None,
     ranking_backend: RankingBackend | None = None,
@@ -94,7 +98,7 @@ def _run_component(
         scope_id: Evidence scope the component runs over.
         component: Component name, dispatched by the harness.
         embedding_backend: Embedding backend threaded into the harness.
-        grouping_backend: Grouping backend threaded into the harness.
+        theme_grouping_backend: Theme grouping backend threaded into the harness.
         langfuse_client: Optional tracing client for the component span.
         characterisation_run_id: Explicit characterisation run for ``select``;
             unused by other components.
@@ -158,7 +162,7 @@ def _run_component(
             run_id=run_id,
             provider=StubEchoProvider(),
             embedding_backend=embedding_backend,
-            grouping_backend=grouping_backend,
+            theme_grouping_backend=theme_grouping_backend,
             ranking_backend=ranking_backend,
             extraction_backend=extraction_backend,
         )
@@ -390,12 +394,12 @@ def main() -> None:
     live = bool(os.environ.get("OPENAI_API_KEY"))
     langfuse_client = tracing.get_langfuse() if live else None
     embedding_backend: EmbeddingBackend
-    grouping_backend: GroupingBackend
+    theme_grouping_backend: ThemeGroupingBackend
     ranking_backend: RankingBackend | None
     extraction_backend: ExtractionBackend
     if live:
         embedding_backend = OpenAIEmbeddingBackend()
-        grouping_backend = OpenAIGroupingBackend()
+        theme_grouping_backend = OpenAIThemeGroupingBackend()
         # Tracing lives inside OpenAIRankingBackend itself — no wrapper class,
         # unlike the embedding/grouping backends below.
         ranking_backend = OpenAIRankingBackend(langfuse_client=langfuse_client)
@@ -406,12 +410,12 @@ def main() -> None:
             embedding_backend = tracing.TracedEmbeddingBackend(
                 embedding_backend, langfuse_client
             )
-            grouping_backend = tracing.TracedGroupingBackend(
-                grouping_backend, langfuse_client
+            theme_grouping_backend = tracing.TracedThemeGroupingBackend(
+                theme_grouping_backend, langfuse_client
             )
     else:
         embedding_backend = StubEmbeddingBackend()
-        grouping_backend = StubGroupingBackend()
+        theme_grouping_backend = StubThemeGroupingBackend()
         ranking_backend = None
         extraction_backend = StubExtractionBackend()
     log.info(
@@ -473,7 +477,7 @@ def main() -> None:
             project_id,
             scope_id,
             embedding_backend=embedding_backend,
-            grouping_backend=grouping_backend,
+            theme_grouping_backend=theme_grouping_backend,
             langfuse_client=langfuse_client,
         )
 

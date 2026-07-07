@@ -47,7 +47,7 @@ Gated changes riding this slice: schema (one run-scoped table —
 `grouping_result`; table count 23 → 24) · public interface (`"group"` registry
 entry requiring an explicit `extraction_run_id` Plan/Config field,
 compile-fails-closed + `run_harness facet_grouping_backend`, stub default, +
-the symmetry rename `grouping_backend` → `theme_grouping_backend`) ·
+the symmetry rename to `theme_grouping_backend`) ·
 **runtime egress: the `group_facet_v1` generation surface — the repo's fourth
 product prompt**, over source-named facet values (source-derived text; fixture
 corpus openly licensed). `make verify` stays deterministic and egress-free (stub

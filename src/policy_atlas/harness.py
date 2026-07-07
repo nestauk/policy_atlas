@@ -31,7 +31,7 @@ from policy_atlas.embeddings import EmbeddingBackend, StubEmbeddingBackend
 from policy_atlas.extract import ExtractContext, extract_scope
 from policy_atlas.extraction_backend import ExtractionBackend, StubExtractionBackend
 from policy_atlas.grounding import GroundingError, produce_grounded_block
-from policy_atlas.grouping import GroupingBackend, StubGroupingBackend
+from policy_atlas.grouping import StubThemeGroupingBackend, ThemeGroupingBackend
 from policy_atlas.inference import InferenceProvider
 from policy_atlas.ingest_full_text import (
     DocumentFetcher,
@@ -60,7 +60,7 @@ class HarnessState(TypedDict):
     search_backends: list[SearchBackend]
     document_fetcher: DocumentFetcher
     embedding_backend: EmbeddingBackend
-    grouping_backend: GroupingBackend
+    theme_grouping_backend: ThemeGroupingBackend
     ranking_backend: RankingBackend | None
     extraction_backend: ExtractionBackend
     block_ids: dict[str, Any]
@@ -293,7 +293,7 @@ def _run_characterise(state: HarnessState) -> HarnessState:
             project_id=project_id,
             run_id=run_id,
             context=ctx,
-            grouping_backend=state["grouping_backend"],
+            theme_grouping_backend=state["theme_grouping_backend"],
         )
     except CharacteriseFailure as exc:
         events.append(
@@ -417,7 +417,7 @@ def run_harness(
     search_backends: list[SearchBackend] | None = None,
     document_fetcher: DocumentFetcher | None = None,
     embedding_backend: EmbeddingBackend | None = None,
-    grouping_backend: GroupingBackend | None = None,
+    theme_grouping_backend: ThemeGroupingBackend | None = None,
     ranking_backend: RankingBackend | None = None,
     extraction_backend: ExtractionBackend | None = None,
 ) -> dict[str, Any]:
@@ -438,8 +438,8 @@ def run_harness(
         embedding_backend: Embedding backend threaded through state; defaults
             to ``StubEmbeddingBackend()`` — no default egress, same injection
             pattern as ``search_backends``.
-        grouping_backend: Grouping backend for the characterise component;
-            defaults to ``StubGroupingBackend()`` — no default egress, same
+        theme_grouping_backend: Theme grouping backend for the characterise component;
+            defaults to ``StubThemeGroupingBackend()`` — no default egress, same
             injection pattern as ``search_backends``.
         ranking_backend: Ranking backend for the select component. This is
             passed straight through to the initial state; no stub is resolved
@@ -448,7 +448,7 @@ def run_harness(
             ``llm_rerank_v1``. No default egress.
         extraction_backend: Extraction backend for the extract component;
             defaults to ``StubExtractionBackend()`` — no default egress, the
-            grouping_backend pattern (approved gated change 2, task 011).
+            theme grouping backend pattern (approved gated change 2, task 011).
 
     Returns:
         Persisted IDs; ``artefact_id`` is None for non-echo components that do
@@ -485,12 +485,14 @@ def run_harness(
             document_fetcher if document_fetcher is not None else FixtureFetcher()
         ),
         # Consumed by the acquire/ingest_full_text partials (their embed passes);
-        # characterise reads only grouping_backend.
+        # characterise reads only theme_grouping_backend.
         "embedding_backend": (
             embedding_backend if embedding_backend is not None else StubEmbeddingBackend()
         ),
-        "grouping_backend": (
-            grouping_backend if grouping_backend is not None else StubGroupingBackend()
+        "theme_grouping_backend": (
+            theme_grouping_backend
+            if theme_grouping_backend is not None
+            else StubThemeGroupingBackend()
         ),
         "ranking_backend": ranking_backend,
         "extraction_backend": (

@@ -19,7 +19,7 @@ from langfuse import Langfuse
 
 from policy_atlas import embeddings, grouping
 from policy_atlas.embeddings import EmbeddingBackend
-from policy_atlas.grouping import GroupingBackend, GroupingDoc, Theme
+from policy_atlas.grouping import GroupingDoc, Theme, ThemeGroupingBackend
 
 _ObservationType = Literal["embedding", "generation", "span"]
 
@@ -133,15 +133,15 @@ class TracedEmbeddingBackend:
             return vectors
 
 
-class TracedGroupingBackend:
-    """Langfuse tracing wrapper for a live grouping backend.
+class TracedThemeGroupingBackend:
+    """Langfuse tracing wrapper for a live theme grouping backend.
 
     Args:
-        backend: Inner grouping backend.
+        backend: Inner theme grouping backend.
         client: Langfuse client created by ``get_langfuse``.
     """
 
-    def __init__(self, backend: GroupingBackend, client: Langfuse) -> None:
+    def __init__(self, backend: ThemeGroupingBackend, client: Langfuse) -> None:
         self._backend = backend
         self._client = client
         self._assign_count = 0
