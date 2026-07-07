@@ -3,7 +3,10 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **approved** (rev 1.2) — adversarial review next; planning follows.
+> **Status:** **approved** (rev 1.3) — contract-stage adversarial review
+> adjudicated (10/10 adopted, none flipping a user-settled decision; the one
+> behaviour-shaping adoption — fail-closed scale cap — flagged for the plan 🛑);
+> planning next.
 > Contract approved (before planning): **2026-07-07 · Shabeer Rauf** (rev 1.2,
 > covering the three gated changes — one run-scoped `grouping_result` table ·
 > `"group"` registry entry + `extraction_run_id` + `facet_grouping_backend` +
@@ -63,6 +66,38 @@ specs in [docs/specs/](../../specs/index.md).
 >   taxonomy versioned with its review — reference-mediated reuse mirrors
 >   that; a silently-maintained living taxonomy would not. Recorded in the
 >   deferred-seams list as the facet-theme promotion seam.
+> - **rev 1.3** (2026-07-07): contract-stage adversarial review adjudicated
+>   (Codex, 10 findings: 1 blocker · 7 majors · 2 minors — 10/10 adopted; none
+>   contradicted a user-settled decision). Blocker: **finding-set resolution
+>   re-pinned to the roll-up's `docs[].extraction_record_id`** (extract
+>   already records it per doc, fresh and reused; memo-key re-resolution was
+>   ambiguous for failed rows) with an integrity cross-check against
+>   `counts.findings_total`. Majors: **partition vocabulary fixed** — the
+>   partition = named groups + `ungrouped` + `no_value`; direction spreads
+>   recorded per group, per residual bucket, and overall (rubric item 9
+>   reworded: first-class *in the partition*) · **scale guard = fail closed**
+>   — above `FACET_VALUE_CAP` the component fails structurally
+>   (`value_cap_exceeded`), never a degraded sample-discover/assign pass
+>   (tail-only groups can't be discovered from a head sample — silent
+>   `ungrouped` inflation; the real scale algorithm is an eval-gated seam) ·
+>   **deterministic label/description validation** added beyond prompt rules
+>   (the 009 `validate_themes` precedent): nonempty, length caps, control
+>   chars, duplicate labels, exact forbidden generic labels — violations
+>   reject the response (one repair), never accepted · **labels/descriptions
+>   pinned as untrusted model output**: bounded/validated, rendered escaped,
+>   and a carried-forward requirement on synthesise — group labels enter
+>   downstream prompts as data, never instructions · **`query-findings`
+>   deferral recorded as an explicit spec deviation** (components §8 declares
+>   it; "implemented as written" softened accordingly) · **rename ripple
+>   corrected** — references span harness/tracing/skeleton/characterise +
+>   tests (grep-verified), acceptance is a grep-driven sweep; historical
+>   task-docs/ADRs exempt · **inherited provenance payload pinned**:
+>   extraction fingerprint + profile, referenced run id, base-ladder counts,
+>   finding-set size + sha256 hash over sorted finding ids, and the facet's
+>   field-coverage/no-value breakdown. Minors: directive parsing rules
+>   inlined (object-only, allowed keys `{"facet"}`, string cap, no control
+>   chars, closed enum, unknown keys fail closed) · code-grounding corrected
+>   (11 migrations, not 12 — this slice ships migration 12).
 
 ## Goal
 
@@ -163,16 +198,21 @@ A PR on `task/012-group` → `dev` that:
   reference-mediated via group — the seam this slice leaves open, not builds);
   graph-structured synthesis (⏸, never an ingestion-time KG).
 
-**Code grounding (surveyed 2026-07-07):** 23 tables, 12 migrations. Findings:
+**Code grounding (surveyed 2026-07-07; corrected rev 1.3):** 23 tables, 11
+migrations (this slice ships migration 12). Findings:
 `intervention_outcome_finding` rows carry `intervention`/`outcome` (NOT NULL),
 `population`/`comparator` (nullable), `effect_direction` (closed set incl.
 `mixed`/`unclear`), `stratum_qualifiers`, `statistics`, `grounding` — FK to
 `source_extraction_record (extraction_record_id, project_id)`. The extraction
 roll-up: `extraction_result` `UNIQUE (evidence_scope_id, run_id)`, `docs` JSONB
 (per doc: pss id, status, basis, finding count, fresh|reused),
-`extraction_provenance` carries the executed fingerprint — a run's finding set
-resolves deterministically via its docs' snapshots × the run fingerprint →
-`source_extraction_record` memo rows → findings. Backend pattern: protocol +
+`extraction_provenance` carries the executed fingerprint — and each `docs[]`
+entry records its **`extraction_record_id`** (fresh and reused alike,
+extract.py:803), so a run's finding set resolves directly:
+`docs[].extraction_record_id` → findings by FK, project-guarded (rev 1.3
+blocker fix — never re-derived via the memo key, which failed rows make
+ambiguous); resolved count cross-checked against `counts.findings_total`,
+mismatch = structural failure. Backend pattern: protocol +
 stub + OpenAI class with pydantic `response_format`, module-constant prompts +
 `PROMPT_VERSION`, caller-owned budget, validation separated from the call
 (`gpt-5-mini` floor — the 009 nano lesson). The 009 grouping precedent
@@ -221,14 +261,21 @@ fail-closed with input caps (untrusted JSONB).
    finding-exhaustiveness structural (every finding has a value or lands in
    `no_value`), and sends only reference strings — never quotes, stats or full
    findings — over the wire.
-3. **Exhaustiveness is code-enforced; the residual is honest.** Every distinct
-   value is assigned to exactly one group or explicitly returned as
-   ungroupable; validation (the 009 shape) checks the partition — unknown ids,
-   missing ids, duplicate assignment all fail the response; one targeted repair
-   pass re-asks only the missing values; still-missing values land in a counted
-   **`ungrouped`** bucket, never silently dropped and never forced into a
-   catch-all (a "General Theme"-shaped group label is a prompt negative rule —
-   v2's collapse defect; `ungrouped` is the honest residual, not a theme).
+3. **Exhaustiveness is code-enforced; the residual is honest.** The
+   **partition** = named groups + `ungrouped` + `no_value` (rev 1.3
+   vocabulary). Every distinct value is assigned to exactly one group or
+   explicitly returned as ungroupable; validation (the 009 shape) checks the
+   partition — unknown ids, missing ids, duplicate assignment all fail the
+   response; one targeted repair pass re-asks only the missing values;
+   still-missing values land in a counted **`ungrouped`** bucket, never
+   silently dropped and never forced into a catch-all. **Validation is
+   deterministic output-checking, not just prompt rules** (rev 1.3, the 009
+   `validate_themes` precedent): labels/descriptions checked for nonemptiness,
+   length caps, control characters, duplicate labels, and an exact
+   case-insensitive forbidden-generic-label set ("general", "miscellaneous",
+   "other", "misc" — v2's collapse defect closed in code); a violating
+   response is rejected (one repair), never accepted. Broader label *quality*
+   stays at the eval seam.
    Findings whose facet value is NULL (population is nullable) land in a
    counted **`no_value`** bucket — coverage, not a group. Empty edge scopes are
    honest skips: an extraction run with zero findings → roll-up row with zero
@@ -237,9 +284,11 @@ fail-closed with input caps (untrusted JSONB).
 4. **Mixed/unclear findings are first-class members** (the 011 carried-forward
    requirement, binding here): the grouped set is **exactly** the referenced
    run's finding set — memo-reused findings included, every effect direction
-   included. Per group the roll-up records the **direction spread**
-   (deterministic counts by `effect_direction`, `mixed` and `unclear` as
-   visible classes) — descriptive counts for synthesise's "5 of 7 positive,
+   included. The roll-up records the **direction spread** per group, **per
+   residual bucket (`ungrouped`, `no_value`) and overall** (rev 1.3 — a mixed
+   finding in a residual is as visible as one in a group): deterministic
+   counts by `effect_direction`, `mixed` and `unclear` as visible classes —
+   descriptive counts for synthesise's "5 of 7 positive,
    two null" steer, never a verdict (the weighted consensus roll-up stays ⏸).
    Test-enforced invariants: grouped finding ids == the run's finding set;
    every finding in exactly one group or `ungrouped`-via-value or `no_value`;
@@ -247,8 +296,13 @@ fail-closed with input caps (untrusted JSONB).
    sums equal group sizes.
 5. **The facet is intent-derived, explicitly sourced, fail-closed.** v3.0
    sources it from `evidence_scope.context["grouping"]` (the selection-directive
-   precedent): optional `{"facet": "intervention" | "outcome" | "population"}`,
-   parsed with the select-style input caps; a malformed directive fails closed.
+   precedent): optional `{"facet": "intervention" | "outcome" | "population"}`.
+   Parsing rules inline (rev 1.3, the select precedent made explicit): the
+   `"grouping"` value must be an object; allowed keys exactly `{"facet"}` —
+   unknown keys fail closed; the facet string is capped (≤ 200 chars), control
+   characters rejected, and validated against the closed enum; absent/empty
+   directive → the default. Any violation raises the directive error — the
+   component fails closed, never guesses.
    Default facet: **`intervention`** (capability.md: synthesis sections are
    "typically one per facet/intervention family"). The executed facet + its
    source (`default` | `scope_context`) are recorded in provenance and the
@@ -258,10 +312,14 @@ fail-closed with input caps (untrusted JSONB).
    distinct values enter one schema-constrained call as **id-keyed data
    records** (the standing data/instructions separation; values are
    source-derived untrusted text). Call budget known pre-run:
-   `1 + repair_cap` (repair_cap = 1) at fixture scale; a **scale guard**
-   (plan-pinned value cap) switches to the 009 two-stage shape (discover groups
-   from a sample, batch-assign the rest: `1 + ceil(n/batch) × (1 + repair_cap)`)
-   rather than degrading silently — v2's no-scale-guard defect closed. Value
+   `1 + repair_cap` (repair_cap = 1), always. **Scale guard = fail closed**
+   (rev 1.3, replacing the rev-1 sample-discover/assign idea — a head sample
+   cannot discover tail-only groups, so rare concepts would silently inflate
+   `ungrouped`): distinct values above a plan-pinned **`FACET_VALUE_CAP`**
+   fail the component structurally (`value_cap_exceeded`, loud, naming the
+   cap) — v2's no-scale-guard defect closed by an explicit ceiling, never a
+   degraded pass; the real large-corpus algorithm is an eval-gated seam, and
+   the fixture corpus sits far under the cap by construction. Value
    ordering into the prompt is deterministic (sorted), so identical inputs
    yield identical prompts (v2's unseeded-runs defect closed at the boundary we
    control; the model call itself stays interpretive-by-nature). Backend
@@ -315,13 +373,19 @@ grouping_result   grouping_result_id PK · project_id FK→project
                   · grouping_provenance JSONB NOT NULL (prompt version, model,
                       backend mode, facet source [default|scope_context],
                       call/repair counts, value cap, and the inherited
-                      extraction base: extraction fingerprint + the run's
-                      base-ladder counts — the (finding-set, coverage-state,
+                      extraction base — pinned rev 1.3: extraction fingerprint
+                      + profile id, the referenced extraction_run_id, the
+                      run's base-ladder counts (selected/extracted/
+                      no_findings/failed/findings_total), finding-set size +
+                      sha256 over the sorted finding ids, and the facet's
+                      coverage breakdown (values with findings vs no_value
+                      count) — the (finding-set, coverage-state,
                       extraction-profile) provenance the spec requires)
                   · groups JSONB NOT NULL (per group: label, description,
                       member values, member finding ids, size, direction
                       spread; plus the ungrouped value/finding sets and the
-                      no_value finding set — run-local by design)
+                      no_value finding set, each with its direction spread —
+                      rev 1.3; run-local by design)
                   · counts JSONB NOT NULL (findings total, grouped, ungrouped,
                       no_value, distinct values, groups)
                   · flags JSONB NOT NULL (empty_findings · all_no_value ·
@@ -372,9 +436,13 @@ FK-safe order (before `extraction_result`).
    closed) + `run_harness` gains optional `facet_grouping_backend` (stub
    default — no default egress) + **the symmetry rename** (rev 1.1c):
    `run_harness(grouping_backend=…)` → `theme_grouping_backend`
-   (`GroupingBackend` → `ThemeGroupingBackend` internally) — no behaviour
-   change, no back-compat shim (pre-release repo, `skeleton.py`/tests are the
-   only callers).
+   (`GroupingBackend` and its `OpenAI`/`Stub`/`Traced` forms → `Theme…`
+   internally) — no behaviour change, no back-compat shim (pre-release repo).
+   Ripple corrected rev 1.3: references span `harness.py` (kwarg + state),
+   `tracing.py`, `skeleton.py`, `characterise.py` and `test_characterise.py`
+   (grep-verified); acceptance is a grep-driven sweep over code, tests and
+   current docs — historical task-docs/ADRs exempt; stored-data vocabulary
+   (`characterise_grouping_v1`, payload keys) unchanged.
 3. **Runtime egress — one new generation surface:** `group_facet_v1` sends the
    distinct **source-named facet values** of the referenced run's findings
    (+ per-value counterpart reference names and counts) to the chat API — the
@@ -394,9 +462,14 @@ all).
 world); no new dependency; no auth/tenancy/CI change; no existing-table change;
 no artefact/block writes; no new event types; no tag writes.
 
-**Spec flow-backs:** none anticipated — components §8 is implemented as
-written; decision 9's realisation note follows the standing skeleton-as-agent
-posture, not a spec change. Deferrals ride `docs/deferred.md` as entries.
+**Spec flow-backs:** none — but one **explicit recorded deviation** (rev 1.3):
+components §8 declares `query-findings` among group's tools, and this slice
+defers it to synthesise (decision 9) — that is a deviation from the letter of
+the tool table, recorded as such in `docs/deferred.md` (not silently absorbed
+into "implemented as written"; no spec change — the tool still lands, with its
+deliberative consumer). Decision 9's realisation note follows the standing
+skeleton-as-agent posture, not a spec change. Other deferrals ride
+`docs/deferred.md` as entries.
 
 ## Public / private boundary
 
@@ -408,7 +481,11 @@ posture, not a spec change. Deferrals ride `docs/deferred.md` as entries.
 - Committed artifacts (schema, prompt text, roll-up shapes, verification
   counts) are public-safe. Group labels/descriptions are **model-generated text
   over source-derived input** — same class as 009's theme labels: public-safe
-  for the fixture corpus, private-by-default otherwise.
+  for the fixture corpus, private-by-default otherwise. They are also
+  **untrusted model output as data** (rev 1.3): bounded and validated at write
+  (decision 3), rendered escaped, never executed — and a carried-forward
+  requirement on synthesise (013): group labels/descriptions enter downstream
+  prompts as data records, never as instructions.
 
 ## Model route
 
@@ -461,8 +538,9 @@ explicitly-ungroupable list is a legal, expected answer.
   halt.
 - The backend wants capabilities beyond one schema-constrained partition
   (tools, multi-turn, free text acting on the world) — halt.
-- Scale-guard or repair complexity grows past the 009 two-stage shape — stop
-  and bring the design back to the plan gate rather than growing it silently.
+- The value set exceeds the cap and any pressure exists to "just batch it" —
+  the cap is fail-closed by design; a scale algorithm is a plan-gate decision,
+  never grown silently.
 - `make verify` red with unclear root cause; or the turn/token budget is spent.
 
 ## Acceptance checks
@@ -491,33 +569,47 @@ explicitly-ungroupable list is a legal, expected answer.
 - `make verify` table with pass counts; socket-deny result named.
 - Migration roundtrip clean; table count 24.
 - Named test results: finding-set resolution (grouped set == the referenced
-  run's findings, memo-reused included; a foreign run's findings never enter),
+  run's findings via `docs[].extraction_record_id`, memo-reused included;
+  failed/`no_findings` docs contribute zero; a foreign run's findings never
+  enter; integrity cross-check mismatch → structural failure — rev 1.3),
   exhaustiveness invariants (every finding in exactly one of
-  group/ungrouped/no_value; sum identities; direction-spread sums), validation
+  group/ungrouped/no_value; sum identities; direction-spread sums per group,
+  per residual bucket and overall — rev 1.3), validation
   + repair (missing value ids → one repair; still-missing → counted
-  `ungrouped`; unknown/duplicate ids → response rejected), no-catch-all
-  (generic-label negative rule asserted on the built prompt), null-facet
+  `ungrouped`; unknown/duplicate ids → response rejected), label/description
+  validation (empty, over-length, control-char, duplicate and
+  forbidden-generic labels → response rejected, one repair — rev 1.3;
+  negative rules additionally asserted on the built prompt), scale cap
+  (distinct values > `FACET_VALUE_CAP` → `value_cap_exceeded` structural
+  failure, no call — rev 1.3), null-facet
   handling (population facet with null populations → counted `no_value`),
-  facet directive (default `intervention`; scope-context override; malformed
-  directive fails closed; facet + source recorded), mixed/unclear first-class
+  facet directive (default `intervention`; scope-context override; malformed/
+  unknown-key/control-char directive fails closed; facet + source recorded),
+  mixed/unclear first-class
   (fixture findings with `mixed`/`unclear` directions appear in groups and
-  spreads), edge scopes (zero-findings run → honest skip flag; missing
+  spreads, including residual spreads), edge scopes (zero-findings run →
+  honest skip flag; missing
   extraction row → structural failure; same-run re-execution loud), backend
   failure → `component.failed`, no partial row; determinism (two stub runs →
   identical payload columns; sorted value ordering), injection posture
   (id-keyed value records under data/instructions separation asserted on the
   built prompt; an injection-shaped facet value lands as inert data, never
-  instruction-following), delete-order integrity.
+  instruction-following), provenance required keys (incl. the inherited base:
+  fingerprint, profile, base-ladder counts, finding-set size + hash — rev
+  1.3), delete-order integrity.
 - Live-run evidence per the manual check above.
 - Public-safety confirmation (egress was fixture-corpus reference strings
   only; traces on the user-operated instance; keys clean).
-- Deferred seams recorded in `docs/deferred.md`: `query-findings` tool (lands
-  with synthesise's agent-loop) · facet-grouping quality evals (extends the
-  009 grouping-quality eval seam; also the scale-guard cap's calibration) ·
+- Deferred seams recorded in `docs/deferred.md`: `query-findings` tool —
+  recorded as an **explicit deviation from components §8's tool table**
+  (rev 1.3; lands with synthesise's agent-loop) · facet-grouping quality evals
+  (extends the 009 grouping-quality eval seam; also the cap's calibration) ·
+  **large-corpus grouping algorithm** (rev 1.3 — beyond the fail-closed
+  `FACET_VALUE_CAP`: tail-group-capable discovery, embedding-assisted value
+  clustering; eval-gated) ·
   agent-authored grouping directive (same seam as select's) · cross-schema
   reference-mediated linkage (activates with `implementation_context_finding`)
-  · embedding-assisted value clustering at scale (the very-large-corpus
-  cousin) · grouping-run steering/re-grouping UX (mode-governed steer-points)
+  · grouping-run steering/re-grouping UX (mode-governed steer-points)
   · **facet-theme promotion** (rev 1.2 — canonical/queryable facet groupings
   for downstream capability agents; the data-model's staged ladder run-local →
   project-scoped persistent → graph datastore, gated on the
@@ -545,7 +637,11 @@ Review focus:
   values are untrusted source-derived (and model-extracted) text; id-keyed
   data records, schema-constrained output, no tools; a hijacked partition can
   at worst mis-group — validation bounds it, and nothing it emits is executed
-  or cited as fact. Key hygiene; egress bounded (reference strings only,
+  or cited as fact. **Output posture** (rev 1.3): labels/descriptions are
+  untrusted model output — deterministically validated at write, stored and
+  rendered as data (escaped), with the data-not-instruction requirement
+  carried forward onto synthesise's prompts. Key hygiene; egress bounded
+  (reference strings only,
   pre-run call budget, socket-deny on suite paths).
 - **Correctness**: finding-set resolution across fresh/reused records;
   membership derivation; invariant sums; repair-path semantics; FK and delete

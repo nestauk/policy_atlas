@@ -20,11 +20,13 @@ otherwise it is in progress, not done.
        skipped with written justification — findings in
        [verification.md](verification.md).
 9. [ ] Grouping integrity holds as specced: the grouped set is exactly the
-       referenced extraction run's finding set (memo-reused included);
-       mixed/unclear findings are first-class members of groups and direction
-       spreads; residuals (`ungrouped`, `no_value`) are counted, never dropped,
-       never forced into a catch-all group; the exhaustiveness sum identities
-       are test-enforced.
+       referenced extraction run's finding set (resolved via
+       `docs[].extraction_record_id`, memo-reused included, integrity
+       cross-check enforced); mixed/unclear findings are first-class **in the
+       partition** (named groups + `ungrouped` + `no_value`), with direction
+       spreads recorded per group, per residual bucket and overall; residuals
+       are counted, never dropped, never forced into a catch-all group; the
+       exhaustiveness sum identities are test-enforced.
 10. [ ] The grouping stays run-local and descriptive: one `grouping_result`
        roll-up row per run; no group entities, tags, finding mutations or
        consensus/evaluative fields anywhere — direction spreads are counts,
@@ -35,4 +37,7 @@ otherwise it is in progress, not done.
        versioned, recorded in provenance; facet values enter prompts only as
        id-keyed data records under the data/instructions separation; the prompt
        carries the no-catch-all and descriptive-labels negative rules,
-       test-asserted on the built prompt.
+       test-asserted on the built prompt — **and** labels/descriptions are
+       treated as untrusted model output: deterministically validated at write
+       (empty/length/control-char/duplicate/forbidden-generic checks), stored
+       and rendered as data, never executed.

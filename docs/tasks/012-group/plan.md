@@ -1,14 +1,16 @@
 # Implementation Plan: 012-group
 
-> **Status:** drafted (rev 1) — plan-stage adversarial review pending; 🛑 human
+> **Status:** drafted (rev 2) — updated for the contract-stage adversarial
+> adjudication (rev 1.3); plan-stage adversarial review pending; 🛑 human
 > confirmation after adjudication.
 > Contract: [contract.md](contract.md) (approved 2026-07-07 · Shabeer Rauf,
-> rev 1.2; contract-stage adversarial review adjudication recorded there).
+> rev 1.2; contract-stage adversarial findings adjudicated at rev 1.3 —
+> notably the fail-closed scale cap, flagged for this gate).
 
 ## Overview
 
 One component, the findings layer's first reader, on `task/012-group`:
-1. **Schema** — `grouping_result` (migration 13; tables 23 → 24).
+1. **Schema** — `grouping_result` (migration 12; tables 23 → 24).
 2. **Facet clustering layer** — `FacetGroupingBackend` seam (protocol + live
    OpenAI structured outputs + sentinel stub), the lead-authored
    `group_facet_v1` prompt, and the **theme/facet symmetry rename**
@@ -28,7 +30,7 @@ path is the skeleton with `OPENAI_API_KEY`.
 
 | Task | Executor | Why |
 |---|---|---|
-| 1 (schema + migration 13) | `lead` | gated surface; FK target verified against as-built `uq_exr_scope_run` |
+| 1 (schema + migration 12) | `lead` | gated surface; FK target verified against as-built `uq_exr_scope_run` |
 | 2 (`group_facet_v1` prompt + wire models) | `lead` | prompt-bearing — lead-only per AGENTS.md |
 | 3 (`facet_values.py`: value normalisation/identity, id assignment, membership derivation, invariant checks — pure functions) | `codex` | subtle deterministic logic with exact pass conditions; done = the value/membership/invariant test blocks |
 | 4 (`facet_grouping.py`: protocol + OpenAI + stub + tracing; the theme rename + shared-core factoring in `grouping.py`) | `codex` | implementation of a lead-designed seam against schema-constrained I/O (the `ThemeGroupingBackend`/`RankingBackend` pattern); done = backend construction/stub/validation/repair tests |
@@ -62,19 +64,21 @@ path is the skeleton with `OPENAI_API_KEY`.
   unknown id, duplicate id, or a group with zero members rejects the response;
   **missing ids** trigger one targeted **repair call** (only the missing value
   records, against the already-discovered group list + `ungroupable`);
-  still-missing → counted `ungrouped`. Labels/descriptions are stored as
-  emitted (untrusted model text — rendered, never executed); the
-  no-catch-all rule is a prompt negative rule asserted on the built prompt
-  (label-quality enforcement is the eval seam, not build-time string police).
-- **Scale guard**: `FACET_VALUE_CAP = 150` distinct values for the single
-  partition call. Beyond the cap: the 009 two-stage shape — **discover**
-  groups from the top-`150` values by finding count (deterministic sample),
-  then **batch-assign** the remainder against the fixed group list +
-  `ungroupable` (`ASSIGN_BATCH_SIZE = 40`, one repair per batch). Budget:
-  single-call `1 + repair ≤ 2`; two-stage
-  `1 + ceil((n-cap)/batch) × (1 + repair_cap) + repair`. Known pre-run,
-  enforced by the standing call-budget pattern before any live call.
-  Fixture corpus is single-call by construction.
+  still-missing → counted `ungrouped`. **Label/description validation**
+  (contract rev 1.3, the 009 `validate_themes` precedent): label nonempty ·
+  `LABEL_MAX = 80` chars · `DESCRIPTION_MAX = 500` chars · no control
+  characters · no duplicate labels (casefolded) · forbidden generic labels
+  (casefolded exact set `{"general", "miscellaneous", "other", "misc",
+  "general theme", "uncategorised", "uncategorized"}`) · description nonempty
+  — a violating response is rejected and repaired once, never accepted.
+  Labels/descriptions are stored as data, rendered escaped, never executed;
+  broader label quality is the eval seam.
+- **Scale guard — fail closed** (contract rev 1.3): `FACET_VALUE_CAP = 150`
+  distinct values. Above the cap the component fails structurally before any
+  call (`GroupError`, reason `value_cap_exceeded`, message naming the cap and
+  the deferred large-corpus seam) — no degraded sample/assign pass. Budget is
+  therefore always `1 + repair_cap ≤ 2`, known pre-run, enforced by the
+  standing call-budget pattern. Fixture corpus sits far under the cap.
 - **Finding-set resolution**: the referenced roll-up's
   `docs[].extraction_record_id` (written by extract for every doc, fresh and
   reused — extract.py:803) → `intervention_outcome_finding` rows by
@@ -104,14 +108,17 @@ path is the skeleton with `OPENAI_API_KEY`.
   `groups` JSONB shape frozen in Task 5 and asserted by the payload test:
   `{groups: [{label, description, member_values: [surface forms],
   member_finding_ids, size, direction_spread}], ungrouped: {values,
-  finding_ids}, no_value: {finding_ids}}`.
+  finding_ids, direction_spread}, no_value: {finding_ids,
+  direction_spread}}` (residual spreads — contract rev 1.3).
 - **Provenance** (`grouping_provenance`, required keys test-asserted):
-  `prompt_version, model, mode, facet, facet_source, value_cap, batch_size,
+  `prompt_version, model, mode, facet, facet_source, value_cap,
   call/repair counts, distinct_value_count, extraction_run_id` + the inherited
-  base: `extraction_fingerprint` (copied from the referenced roll-up's
-  provenance) and the run's base-ladder counts (selected/extracted/
-  no_findings/failed/findings_total) — the *(finding-set, coverage-state,
-  extraction-profile)* provenance the spec requires.
+  base pinned at contract rev 1.3: `extraction_fingerprint` + `profile` (from
+  the referenced roll-up's provenance), the run's base-ladder counts
+  (selected/extracted/no_findings/failed/findings_total), `finding_set:
+  {size, sha256 over sorted finding ids}`, and the facet coverage breakdown
+  (`values_with_findings`, `no_value_count`) — the *(finding-set,
+  coverage-state, extraction-profile)* provenance the spec requires.
 - **Prompt shape** (`group_facet_v1`, lead-authored): system = role ("group
   source-named {facet} references from research findings into coherent
   descriptive families") + the negative rules (no catch-all/generic labels —
@@ -137,7 +144,7 @@ path is the skeleton with `OPENAI_API_KEY`.
   **no roll-up row, no partial state** (the roll-up is written once, at
   success, as the last statement — the 010/011 pattern).
 - **Langfuse**: generation spans inside `OpenAIFacetGroupingBackend`
-  (`group:partition`, `group:assign:b{n}`, `group:repair`); metadata = facet,
+  (`group:partition`, `group:repair`); metadata = facet,
   value counts, model, prompt version, token counts, parse outcome. Run-level
   scores via the 009 `score_summary` pattern: `partition_valid`,
   `ungrouped_share`, `no_value_share`, `group_count`. No-op without keys; the
@@ -146,7 +153,11 @@ path is the skeleton with `OPENAI_API_KEY`.
   `GroupingBackend`/`OpenAIGroupingBackend`/`StubGroupingBackend`/
   `TracedGroupingBackend` → `Theme…` forms; `run_harness(grouping_backend=…)`
   → `theme_grouping_backend`; `HarnessState` key; `skeleton.py`;
-  `characterise.py` type hints/docstrings; test suite references. No
+  `tracing.py` (`TracedGroupingBackend` and imports); `characterise.py` type
+  hints/docstrings; `test_characterise.py` and other suite references.
+  **Acceptance = grep-driven**: `grep -rn "GroupingBackend\|grouping_backend"`
+  over `src/ tests/` returns only `Theme…`/`theme_…` and `Facet…`/`facet_…`
+  forms (historical task-docs/ADRs exempt). No
   back-compat shim (pre-release; `skeleton.py`/tests are the only callers —
   verified). `characterisation_result` payloads and `PROMPT_VERSION =
   "characterise_grouping_v1"` are **unchanged** (stored-data vocabulary is not
@@ -163,8 +174,10 @@ path is the skeleton with `OPENAI_API_KEY`.
   gate 3; code comment states it, the 011 precedent).
 - **Summary payload shape** (frozen in Task 5, asserted):
   `{facet, facet_source, groups: [{label, size, value_count,
-  direction_spread}], counts: {findings_total, grouped, ungrouped, no_value,
-  distinct_values, groups}, extraction_run_id, flags, provenance}`.
+  direction_spread}], residuals: {ungrouped: {…, direction_spread},
+  no_value: {…, direction_spread}}, overall_direction_spread,
+  counts: {findings_total, grouped, ungrouped, no_value, distinct_values,
+  groups}, extraction_run_id, flags, provenance}`.
 - **Delete order** (`tests/helpers.py`): `grouping_result` first (before
   `intervention_outcome_finding` → `source_extraction_record` →
   `extraction_result`).
@@ -184,7 +197,7 @@ path is the skeleton with `OPENAI_API_KEY`.
 ## Dependency graph
 
 ```
-Task 1 (schema + migration 13)
+Task 1 (schema + migration 12)
    ├─→ Task 2 (prompt + wire models, lead)
    │        └─→ Task 4 (facet_grouping.py + theme rename)  ←─ Task 3 (facet_values.py)
    │                 └─→ Task 5 (group.py)
@@ -196,11 +209,11 @@ Task 1 (schema + migration 13)
 
 ## Phase 1 — Schema (separable commit)
 
-### Task 1: `grouping_result` + migration 13 — `lead`
+### Task 1: `grouping_result` + migration 12 — `lead`
 
-**Files:** `src/policy_atlas/schema.py`, `alembic/versions/<hash>_group.py`.
+**Files:** `src/policy_atlas/schema.py`, `alembic/versions/<hash>_group.py (migration 12)`.
 Per the pinned DDL; FK targets verified against as-built uniques. Module
-docstring: "twenty-four tables, thirteen alembic migrations". No dependency
+docstring: "twenty-four tables, twelve alembic migrations". No dependency
 changes (assert, don't add).
 
 **Acceptance:** migration roundtrips 23→24→23→24; `make verify` green.
@@ -219,14 +232,17 @@ example pre-flight-validated at import.
 
 Value normalisation/identity, surface-form election, deterministic id
 assignment, counterpart assembly (caps), membership derivation, invariant
-checks (partition property, sum identities), directive parsing. Pure
+checks (partition property, sum identities, spreads per group/residual/
+overall), directive parsing (object-only, allowed keys, caps, control-char
+rejection, closed enum), label/description validation rules. Pure
 functions, no I/O. Done = the value/membership/invariant/directive unit-test
 blocks. Scope: S–M.
 
 ### Task 4: `facet_grouping.py` + theme rename — `codex`
 
-`FacetGroupingBackend` protocol (`partition(values) -> PartitionResult`,
-`assign_batch(values, groups)` for the scale path, `mode`) ·
+`FacetGroupingBackend` protocol (`partition(values) -> PartitionResult` +
+`repair(missing_values, groups)`, `mode`; no scale path — the cap fails
+closed) ·
 `OpenAIFacetGroupingBackend` (structured outputs, timeout, internal Langfuse
 spans per the pinned spec) · `StubFacetGroupingBackend` per the pinned spec ·
 the `Theme…` rename in `grouping.py` + shared-core factoring **only where the
@@ -288,11 +304,12 @@ summary payload shape · provenance required keys.
 
 Injection double (an injection-shaped facet value lands as inert id-keyed
 data — no instruction-following, asserted on output and on the built prompt;
-**no intent anywhere in the built prompt**) · scale-guard double (>cap values
-→ two-stage path, budget arithmetic, batch repair semantics) · counting
+**no intent anywhere in the built prompt**) · cap-exceeded double (>cap
+values → `value_cap_exceeded` structural failure, zero calls) · counting
 double (partition called once; repair only on missing ids; no call on
 empty/all-null) · misbehaving-backend doubles (duplicate ids across groups;
-unknown ids; empty groups; oversized label — validation rejects; repair
+unknown ids; empty groups; empty/oversized/control-char/duplicate/forbidden
+labels — validation rejects then repairs once; repair
 still-missing → ungrouped) · socket-deny around a group round-trip · key
 hygiene against captured output. Scope: M. **Commit** (tests).
 
@@ -300,10 +317,13 @@ hygiene against captured output. Scope: M. **Commit** (tests).
 
 ### Task 9: deferred.md — `lead`
 
-The contract's seam list: `query-findings` with synthesise · facet-grouping
-quality evals (extends the 009 seam; scale-cap calibration) · agent-authored
-grouping directive · cross-schema reference-mediated linkage · embedding-
-assisted value clustering at scale · re-grouping/steering UX ·
+The contract's seam list: `query-findings` with synthesise — recorded as an
+explicit deviation from components §8's tool table (contract rev 1.3) ·
+facet-grouping quality evals (extends the 009 seam; cap calibration) ·
+large-corpus grouping algorithm (beyond the fail-closed cap: tail-capable
+discovery, embedding-assisted value clustering; eval-gated) · agent-authored
+grouping directive · cross-schema reference-mediated linkage ·
+re-grouping/steering UX ·
 **facet-theme promotion** (the staged ladder; Options Assessment reads
 run-referenced groupings until then). Discharge note on the 009
 "`group`-component inheritance" entry (the five v2 defects: dead critique
@@ -346,7 +366,8 @@ src-subset scoping).
 | Facet values too terse for coherent grouping (name-only clustering) | Poor groups | Counterpart context (capped) gives the pairing signal; quality is the eval seam, machinery correctness is this slice's bar |
 | Value normalisation merges genuinely distinct references ("housing" vs "Housing") | Wrong memberships | Identity is deliberately conservative (casefold + whitespace only — no stemming/fuzzy); surface forms retained per group; fuzzier identity is the promotion/eval seam |
 | Model returns near-partition (missing/duplicated ids) | Broken invariants | Structural validation + one targeted repair + honest `ungrouped`; invariants re-checked in code after derivation |
-| Repair loop divergence at scale | Budget overrun | Pre-run enforced budget; one repair per call, hard; still-missing → ungrouped, never re-asked |
+| Repair loop divergence | Budget overrun | Pre-run enforced budget; one repair, hard; still-missing → ungrouped, never re-asked |
+| Real corpus exceeds the value cap | Component unusable at scale | Fail-closed by design (`value_cap_exceeded` names the cap + seam); the large-corpus algorithm is the recorded eval-gated seam |
 | Rename ripple breaks 009 suite | Red verify | Task 4 runs the full 009 grouping suite under the rename before the component lands; mechanical sweep is one commit |
 | Direction spread read as consensus | Trust leak | Counts keyed by raw `effect_direction` only; no verdict field representable; rubric item 10 |
 | Cost runaway on live run | Spend | Single partition call at fixture scale; pre-call budget; cost note required |
