@@ -273,7 +273,8 @@ fail-closed with input caps (untrusted JSONB).
    `validate_themes` precedent): labels/descriptions checked for nonemptiness,
    length caps, control characters, duplicate labels, and an exact
    case-insensitive forbidden-generic-label set ("general", "miscellaneous",
-   "other", "misc" — v2's collapse defect closed in code); a violating
+   "other", "misc", "general theme", "uncategorised", "uncategorized" —
+   plan-review alignment, minor fold; v2's collapse defect closed in code); a violating
    response is rejected (one repair), never accepted. Broader label *quality*
    stays at the eval seam.
    Findings whose facet value is NULL (population is nullable) land in a

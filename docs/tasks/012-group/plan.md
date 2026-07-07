@@ -1,8 +1,8 @@
 # Implementation Plan: 012-group
 
-> **Status:** drafted (rev 2) — updated for the contract-stage adversarial
-> adjudication (rev 1.3); plan-stage adversarial review pending; 🛑 human
-> confirmation after adjudication.
+> **Status:** drafted (rev 3) — plan-stage adversarial review adjudicated
+> (Codex, 9 findings: 1 blocker · 8 majors — 9/9 adopted; § Findings &
+> adjudication). 🛑 awaiting human confirmation.
 > Contract: [contract.md](contract.md) (approved 2026-07-07 · Shabeer Rauf,
 > rev 1.2; contract-stage adversarial findings adjudicated at rev 1.3 —
 > notably the fail-closed scale cap, flagged for this gate).
@@ -31,11 +31,11 @@ path is the skeleton with `OPENAI_API_KEY`.
 | Task | Executor | Why |
 |---|---|---|
 | 1 (schema + migration 12) | `lead` | gated surface; FK target verified against as-built `uq_exr_scope_run` |
-| 2 (`group_facet_v1` prompt + wire models) | `lead` | prompt-bearing — lead-only per AGENTS.md |
+| 2 (`group_facet_v1` prompt + wire models + `FacetGroupingBackend` protocol) | `lead` | prompt-bearing + seam design (signatures/semantics) — lead-only per AGENTS.md and the routing ladder |
 | 3 (`facet_values.py`: value normalisation/identity, id assignment, membership derivation, invariant checks — pure functions) | `codex` | subtle deterministic logic with exact pass conditions; done = the value/membership/invariant test blocks |
-| 4 (`facet_grouping.py`: protocol + OpenAI + stub + tracing; the theme rename + shared-core factoring in `grouping.py`) | `codex` | implementation of a lead-designed seam against schema-constrained I/O (the `ThemeGroupingBackend`/`RankingBackend` pattern); done = backend construction/stub/validation/repair tests |
+| 4 (`facet_grouping.py`: OpenAI + stub implementations of the Task-2 protocol; the complete theme-rename ripple; shared-core factoring) | `codex` | implementation of a lead-designed seam against schema-constrained I/O (the `ThemeGroupingBackend`/`RankingBackend` pattern); done = backend construction/stub/validation/repair tests + suite green under the rename |
 | 5 (`group.py`: roll-up load → resolution → partition → derivation → write → summary) | `codex` | judgment-bearing execution with a fully pinned spec; done = the invariant/edge-scope test blocks |
-| 6 (registry/harness/skeleton/helpers wiring + the rename ripple sweep) | `fast-worker` | mechanical from the 004–011 precedent + the exact spec below |
+| 6 (registry/harness/skeleton/helpers wiring) | `fast-worker` | mechanical from the 004–011 precedent + the exact spec below |
 | 7 (test suite: contract bulk) | `fast-worker` | transcription of the contract's named-test list |
 | 8 (test suite: judgment cases — injection double, repair semantics, resolution edge fixtures, socket-deny) | `codex` | subtle-but-specified; each has an exact pass condition |
 | 9 (deferred.md entries) | `lead` | living-doc text, user-approved wording |
@@ -62,9 +62,12 @@ path is the skeleton with `OPENAI_API_KEY`.
   output `{groups: [{label, description, member_ids}], ungroupable: [ids]}`.
   **Validation (structural, code-enforced)**: every id in exactly one place —
   unknown id, duplicate id, or a group with zero members rejects the response;
-  **missing ids** trigger one targeted **repair call** (only the missing value
-  records, against the already-discovered group list + `ungroupable`);
-  still-missing → counted `ungrouped`. **Label/description validation**
+  **missing ids** trigger one targeted **repair call** — which **reuses
+  `group_facet_v1` verbatim** (same version constant, same system prompt, same
+  response schema; the user message carries only the missing value records +
+  the already-accepted groups as data) — there is exactly ONE prompt-bearing
+  surface, test-asserted (a single `PROMPT_VERSION` across partition and
+  repair; plan-review blocker fix). Still-missing → counted `ungrouped`. **Label/description validation**
   (contract rev 1.3, the 009 `validate_themes` precedent): label nonempty ·
   `LABEL_MAX = 80` chars · `DESCRIPTION_MAX = 500` chars · no control
   characters · no duplicate labels (casefolded) · forbidden generic labels
@@ -84,8 +87,10 @@ path is the skeleton with `OPENAI_API_KEY`.
   reused — extract.py:803) → `intervention_outcome_finding` rows by
   `extraction_record_id` (project-guarded). Failed/`no_findings` docs
   contribute zero findings by construction. **Integrity cross-check**: resolved
-  count must equal the extraction roll-up's `counts.findings_total` — mismatch
-  is a **structural failure** (corrupt reference), not a flag.
+  count must equal the extraction roll-up's `counts["findings"]["total"]`
+  (the as-built nested key, extract.py:847/1041) — mismatch
+  is a **structural failure** (corrupt reference), not a flag; provenance's
+  `findings_total` derives from the same key.
 - **Membership derivation**: finding → normalised facet value → the value's
   group (or `ungrouped`); facet field NULL → `no_value`. Pure function over
   (findings, partition); property: partitions the finding set exactly.
@@ -139,8 +144,8 @@ path is the skeleton with `OPENAI_API_KEY`.
   intervention/outcome values with shared leading tokens so multi-member
   groups, singletons and the ungroupable path are all exercised for real.
   Stub mode string `"stub"` recorded in provenance.
-- **Backend failure semantics**: partition (or any assign batch) failing after
-  its retry → `GroupError` → `component.failed` via `_run_scope_component`;
+- **Backend failure semantics**: the partition (or its one repair) failing →
+  `GroupError` → `component.failed` via `_run_scope_component`;
   **no roll-up row, no partial state** (the roll-up is written once, at
   success, as the last statement — the 010/011 pattern).
 - **Langfuse**: generation spans inside `OpenAIFacetGroupingBackend`
@@ -156,8 +161,10 @@ path is the skeleton with `OPENAI_API_KEY`.
   `tracing.py` (`TracedGroupingBackend` and imports); `characterise.py` type
   hints/docstrings; `test_characterise.py` and other suite references.
   **Acceptance = grep-driven**: `grep -rn "GroupingBackend\|grouping_backend"`
-  over `src/ tests/` returns only `Theme…`/`theme_…` and `Facet…`/`facet_…`
-  forms (historical task-docs/ADRs exempt). No
+  over `src/ tests/ docs/` returns only `Theme…`/`theme_…` and
+  `Facet…`/`facet_…` forms — exempting historical records only
+  (`docs/tasks/0*`, `docs/adr/`, spec `log.md` entries); living docs
+  (AGENTS.md, deferred.md, specs) are in scope. No
   back-compat shim (pre-release; `skeleton.py`/tests are the only callers —
   verified). `characterisation_result` payloads and `PROMPT_VERSION =
   "characterise_grouping_v1"` are **unchanged** (stored-data vocabulary is not
@@ -221,12 +228,17 @@ changes (assert, don't add).
 
 ## Phase 2 — Prompt, values, backend
 
-### Task 2: `group_facet_v1` + wire models — `lead` (prompt-bearing)
+### Task 2: `group_facet_v1` + wire models + the backend protocol — `lead` (prompt-bearing + seam design)
 
 The pinned prompt shape + pydantic wire models (`extra="forbid"`;
 `_GroupModel{label, description, member_ids}`, `_PartitionModel{groups,
 ungroupable}`), committed as constants with the version string; the few-shot
-example pre-flight-validated at import.
+example pre-flight-validated at import. **Plus the `FacetGroupingBackend`
+protocol itself** (plan-review finding 5 — signatures and semantics are seam
+design, lead-owned): `partition(values) -> PartitionResult`,
+`repair(missing_values, accepted_groups) -> PartitionResult` (reusing
+`group_facet_v1` — the one prompt surface), `mode`; failure semantics as
+pinned. Task 4 implements against this, never redesigns it.
 
 ### Task 3: `facet_values.py` — `codex`
 
@@ -238,18 +250,22 @@ rejection, closed enum), label/description validation rules. Pure
 functions, no I/O. Done = the value/membership/invariant/directive unit-test
 blocks. Scope: S–M.
 
-### Task 4: `facet_grouping.py` + theme rename — `codex`
+### Task 4: `facet_grouping.py` + the complete theme-rename ripple — `codex`
 
-`FacetGroupingBackend` protocol (`partition(values) -> PartitionResult` +
-`repair(missing_values, groups)`, `mode`; no scale path — the cap fails
-closed) ·
+Implements the Task-2 protocol (no redesign):
 `OpenAIFacetGroupingBackend` (structured outputs, timeout, internal Langfuse
 spans per the pinned spec) · `StubFacetGroupingBackend` per the pinned spec ·
-the `Theme…` rename in `grouping.py` + shared-core factoring **only where the
+shared-core factoring with `grouping.py` **only where the
 code genuinely coincides** (candidates: the id-validation/repair loop and the
-records-JSON assembly; do not force a generic protocol). Done = construction/
-stub-determinism/validation/repair/no-keys-no-op tests + the existing 009
-suite green under the rename. Scope: M. **Commit** after Phase 2 verify green.
+records-JSON assembly; do not force a generic protocol). **The rename ripple
+lands whole in this task's commit** (plan-review finding 4 — a partial rename
+breaks harness/skeleton/tracing imports): `grouping.py` classes + every
+reference (`harness.py` kwarg/state, `tracing.py`, `skeleton.py`,
+`characterise.py`, `test_characterise.py`, living docs) in one sweep, the
+grep acceptance run then. Done = construction/
+stub-determinism/validation/repair/no-keys-no-op tests + the full existing
+suite green under the rename + the grep sweep clean. Scope: M. **Commit**
+after Phase 2 verify green.
 
 ## Phase 3 — The component
 
@@ -257,7 +273,7 @@ suite green under the rename. Scope: M. **Commit** after Phase 2 verify green.
 
 Roll-up load by `(scope, extraction_run_id)` (missing → structural failure) →
 finding-set resolution + integrity cross-check → facet-value extraction →
-scale-guard branch → budget check → partition (+ repair / assign batches) →
+cap check (fail closed) → budget check → partition (+ one repair) →
 membership derivation → invariants → roll-up row **last** → summary in
 `component.completed`. Edge scopes: zero findings → `empty_findings` flag,
 zero-group row, **no backend call**; all-null facet → everything `no_value`,
@@ -267,7 +283,7 @@ invariant/edge-scope/failure-semantics test blocks. Scope: M (~250 lines).
 
 ## Phase 4 — Wiring
 
-### Task 6: Registry/harness/skeleton/helpers + rename sweep — `fast-worker`
+### Task 6: Registry/harness/skeleton/helpers wiring — `fast-worker` (rename already landed in Task 4)
 
 - `plan.py`: `"group": {"requires": ["evidence_scope_id",
   "extraction_run_id"]}`; `Plan`/`_ValidatedRunSpec`/`Config` gain optional
@@ -276,10 +292,10 @@ invariant/edge-scope/failure-semantics test blocks. Scope: M (~250 lines).
 - `harness.py`: `facet_grouping_backend` param (stub resolved inside),
   `HarnessState`, `_run_group` via `_run_scope_component` with
   `functools.partial(GroupContext, extraction_run_id=…)`; node + conditional
-  edge + edge to finish; **the `theme_grouping_backend` rename**.
-- `skeleton.py`: group step after extract per the pinned spec; rename ripple.
-- `tests/helpers.py`: delete order; `test_compile.py`: registry case; suite
-  rename sweep. Scope: S–M. **Commit** with Phase 4.
+  edge + edge to finish.
+- `skeleton.py`: group step after extract per the pinned spec.
+- `tests/helpers.py`: delete order; `test_compile.py`: registry case.
+  Scope: S–M. **Commit** with Phase 4.
 
 ## Phase 5 — Tests
 
@@ -287,7 +303,15 @@ invariant/edge-scope/failure-semantics test blocks. Scope: M (~250 lines).
 
 Migration roundtrip + 24 tables + constraint/CHECK/FK rejections ·
 finding-set resolution (exact set, memo-reused included; foreign-run findings
-never enter; integrity cross-check failure) · exhaustiveness invariants (sum
+never enter; integrity cross-check failure; **a mixed-status referenced run —
+extracted + `no_findings` + failed docs — contributes findings from extracted
+records only**, plan-review finding 7) · **no-side-effects invariants**
+(plan-review finding 8: grouping writes only `grouping_result`; `source_tag`
+and `intervention_outcome_finding` rows byte-identical before/after; no
+consensus/verdict/evaluative keys anywhere in the row or payload,
+key-name-asserted) · **single prompt surface** (one `PROMPT_VERSION`; the
+repair call's built prompt carries the same system prompt + schema,
+asserted) · exhaustiveness invariants (sum
 identities; direction-spread sums; every finding exactly once) · validation +
 repair (missing → repair → ungrouped; unknown/duplicate → rejected) ·
 value identity (casefold/whitespace collapse; surface-form election) ·
@@ -373,9 +397,34 @@ src-subset scoping).
 | Cost runaway on live run | Spend | Single partition call at fixture scale; pre-call budget; cost note required |
 | Injection via facet values | Hijacked labels | Values are id-keyed data; schema-constrained output; labels stored as data, rendered never executed; injection double |
 
-## Plan-phase adversarial review — findings & adjudication
+## Plan-phase adversarial review — findings & adjudication (Codex, 2026-07-07)
 
-_Pending — run before the 🛑; findings recorded here._
+Nine findings, verified against the repo before adoption; **9/9 adopted**:
+
+1. Rename grep acceptance narrower than the contract (src/tests only):
+   **adopted** — sweep covers `src/ tests/ docs/`, exempting historical
+   records only.
+2. Forbidden-label set drift (plan's seven vs contract's four): **adopted** —
+   contract amended to the plan's seven-label set (minor fold, noted in the
+   contract).
+3. Integrity cross-check pinned to a non-existent flat key: **adopted** —
+   `counts["findings"]["total"]` (as-built nested shape).
+4. Task-4 rename left importers broken until Task 6 (sequencing): **adopted**
+   — the whole rename ripple lands in Task 4's commit; Task 6 is wiring only.
+5. Backend protocol design routed to codex (seam design is lead work):
+   **adopted** — protocol signatures/semantics move to Task 2 (lead); Task 4
+   implements.
+6. Repair call risked a second prompt-bearing surface (blocker): **adopted**
+   — repair reuses `group_facet_v1` verbatim (same version/system
+   prompt/schema, missing records as data); single-prompt-surface
+   test-asserted.
+7. No test for mixed-status referenced runs (failed/`no_findings` docs):
+   **adopted** — fixture + assertion added to Task 7.
+8. Rubric item 10's no-side-effects claims untested: **adopted** —
+   before/after invariants on `source_tag` and IOF rows + no-evaluative-keys
+   assertion added.
+9. Stray "assign batch" language survived the rev-2 scale-guard change:
+   **adopted** — removed; partition + one repair is the entire call surface.
 
 ## Open questions
 
