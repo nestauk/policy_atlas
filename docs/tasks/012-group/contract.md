@@ -13,8 +13,10 @@ specs in [docs/specs/](../../specs/index.md).
 > the `grouping_backend` → `theme_grouping_backend` symmetry rename · the
 > `group_facet_v1` generation surface incl. facet-value strings in Langfuse
 > traces) ·
-> Plan approved (before implementation): _date · who_ · ADR: _due at step 4 if a
-> design decision is made or changed_.
+> Plan approved (before implementation): **2026-07-07 · Shabeer Rauf** (plan
+> rev 3, plan-stage adversarial findings 9/9 adopted) ·
+> ADR: [0008](../../adr/0008-facet-grouping-run-local.md) — Accepted
+> 2026-07-07.
 >
 > **Revision history:**
 > - **rev 1** (2026-07-07): initial draft.

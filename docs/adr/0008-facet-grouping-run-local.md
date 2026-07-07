@@ -1,6 +1,6 @@
 # ADR 0008 — Group: run-local facet grouping, value-grain clustering, fail-closed scale cap
 
-- **Status:** Proposed — flips to Accepted at the task-012 plan 🛑.
+- **Status:** Accepted — 2026-07-07 (Shabeer Rauf, task-012 contract + plan gates).
 - **Date:** 2026-07-07
 - **Context doc:** [task 012 contract, decisions 1–9](../tasks/012-group/contract.md)
   (revision history records the full decision trail, revs 1–1.3, including

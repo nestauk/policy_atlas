@@ -1,8 +1,9 @@
 # Implementation Plan: 012-group
 
-> **Status:** drafted (rev 3) — plan-stage adversarial review adjudicated
-> (Codex, 9 findings: 1 blocker · 8 majors — 9/9 adopted; § Findings &
-> adjudication). 🛑 awaiting human confirmation.
+> **Status:** **confirmed — 2026-07-07 · Shabeer Rauf** (rev 3, after the
+> plan-stage adversarial review was adjudicated: Codex, 9 findings —
+> 1 blocker · 8 majors, 9/9 adopted; § Findings & adjudication).
+> ADR 0008 Accepted at this gate (Task 9b).
 > Contract: [contract.md](contract.md) (approved 2026-07-07 · Shabeer Rauf,
 > rev 1.2; contract-stage adversarial findings adjudicated at rev 1.3 —
 > notably the fail-closed scale cap, flagged for this gate).
