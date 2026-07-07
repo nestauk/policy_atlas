@@ -22,35 +22,34 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `011-extract`.
+Implementation — task `012-group`.
 
-Tasks `001-walking-skeleton` through `010-select` are complete (merged). The active
-slice adds **extract** — EB component 7, Tier-1 extraction, the step `select` gates:
-per selected document, extract **`intervention_outcome_finding`** records — the
-framework's first reusable findings-layer schema. Grain: one *(intervention, outcome,
-effect)* claim grounded in a **single source**; intervention/outcome/population are
-**source-named references**, never canonical entities. **Base fields only** (what the
-source reports — effect direction/size/type, uncertainty, p-value, design/N/k/I²,
-population, causality-by-design, primacy/prevalence); question-relative judgements
-(normalised magnitude, causal weighting, is-beneficial) are Impact/VfM enrichment and
-stay out. Findings are **durable information-layer records** (unlike run-local
-characterisation/selection rows), memoised by *(source snapshot, extraction
-fingerprint)* — reuse checked before any call; the extraction *service* and evidence
-dataset snapshots stay recorded seams. Every finding **anchors to frozen source
-text** (verbatim quote + chunk reference, deterministically checked at write,
-flagged-not-dropped on failure); `abstract_only` docs are extracted from the envelope
-abstract, basis-flagged, never skipped. Per-source fan-out with windowed id-keyed
-segment records, pre-run call budget, per-doc honest failure
-(`extraction_failed`, reason-coded — never partial, never silent); doc-level statuses
-`extracted | no_findings | extraction_failed` cover exactly the selected set
-(invariants test-enforced); coverage states are never phrased as absence. Gated
-changes riding this slice: schema (three tables — `source_extraction_record` ·
-`intervention_outcome_finding` · `extraction_result`, project-scope-guarded; table
-count 20 → 23) · public interface (`"extract"` registry entry requiring an explicit
-`selection_run_id` Plan/Config field, compile-fails-closed + `run_harness
-extraction_backend`, stub default) · **runtime egress: the `extract_iof_v1`
-generation surface — the repo's third product prompt and its first over full document
-text** (frozen chunks, windowed; fixture corpus is openly licensed). `make verify`
-stays deterministic and egress-free (stub backend, sentinel-driven). Build per
-`docs/tasks/011-extract/contract.md`. Stay within the contract's scope and stop
-conditions; all other capabilities and seams remain deferred (`docs/deferred.md`).
+Tasks `001-walking-skeleton` through `011-extract` are complete (merged). The active
+slice adds **group** — EB component 8, facet-level theming, the step between extract
+and synthesise: over the findings of an explicitly referenced extraction run, group
+on the **intent-derived facet** — in v3.0 one of the schema's source-named
+references (**intervention | outcome | population**), never v2's fixed four;
+mechanisms/barriers stay landscape-only until the `implementation_context_finding`
+seam lands. This is the chain's **second clustering** (topic-level at characterise;
+facet-level over extracted findings here) and, like the first, an **interpretive
+shape, not a count** — softest provenance grade, additionally inheriting the
+extraction dependency. Groups are **run-local execution state** (capability.md §
+Cluster persistence): one run-scoped `grouping_result` roll-up row; memberships
+never promote to canonical state, findings are never mutated, no tags written.
+Mechanically: the LLM partitions the **distinct facet values** (id-keyed data
+records, schema-constrained), membership then derives deterministically
+value → findings; exhaustiveness is code-enforced with a counted `ungrouped`
+residual (plus `no_value` for null-facet findings) — no catch-all label, nothing
+silently dropped; **mixed/unclear findings are first-class members** (the carried
+011 requirement). Every group is countable against its base: the grouped set is
+exactly the referenced run's finding set (memo-reused included), test-enforced.
+Gated changes riding this slice: schema (one run-scoped table —
+`grouping_result`; table count 23 → 24) · public interface (`"group"` registry
+entry requiring an explicit `extraction_run_id` Plan/Config field,
+compile-fails-closed + `run_harness facet_grouping_backend`, stub default) ·
+**runtime egress: the `group_facet_v1` generation surface — the repo's fourth
+product prompt**, over source-named facet values (source-derived text; fixture
+corpus openly licensed). `make verify` stays deterministic and egress-free (stub
+backend, sentinel-driven). Build per `docs/tasks/012-group/contract.md`. Stay
+within the contract's scope and stop conditions; all other capabilities and seams
+remain deferred (`docs/deferred.md`).
