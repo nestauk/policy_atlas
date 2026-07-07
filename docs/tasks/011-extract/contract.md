@@ -3,8 +3,13 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 1.1) — awaiting human approval before planning.
-> Contract approved (before planning): _pending_ ·
+> **Status:** **approved** (rev 1.4) — contract-stage adversarial review next.
+> Contract approved (before planning): **2026-07-07 · Shabeer Rauf** (rev 1.4,
+> covering the three gated changes — three-table schema · `"extract"` registry
+> entry + `selection_run_id` + `extraction_backend` · the `extract_iof_v1`
+> full-text generation surface incl. full text in Langfuse traces — the three
+> ⚑ field sharpenings (stratum qualifiers · comparator · estimate level) and
+> the candidate data-model flow-back) ·
 > Plan approved (before implementation): _pending_ · ADR: _due at step 4_.
 >
 > **Revision history:**
