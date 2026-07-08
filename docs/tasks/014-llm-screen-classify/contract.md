@@ -204,6 +204,13 @@ PR landing:
    relevant one; 0.5 is the unique zero-directional-evidence value.
    The rev-1.1 unsure→relevant mapping lives in the VOTE leg only
    (recall device); the probability leg honours unsure's neutrality.
+   (iii) *Display seam (user, 2026-07-08 — observed V2 failure mode):*
+   decision confidence on `not_relevant` rows must never be rendered
+   alongside relevant rows' confidence as if one column of "relevance
+   scores" — V2's documents table does exactly this and users misread
+   exclusion confidence as a relevance score. Recorded for the
+   front-end/web-app seam (deferred.md at step 8); no v3.0 surface
+   renders it yet.
    Vote and probability may legally diverge
    (two weak relevants against one high-conviction dissenter →
    `relevant` at confidence < 0.5): that is the honest recall-first
