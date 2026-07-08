@@ -325,7 +325,10 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   storage migration, and the chunk-volume-bias controls (per-doc caps / MMR /
   doc-grain grouping, 008 entry). Also at this seam: **judge-envelope widening +
   re-gather repair** (the repair alternative that re-gathers targeted evidence needs
-  `retrieve`; v1 repair is reword-down over already-gathered evidence only).
+  `retrieve`; v1 repair is reword-down over already-gathered evidence only), and
+  **`_load_findings` batch loading** (013 review stack: one basis query per distinct
+  source snapshot — a confirmed N+1, harmless at v1 corpus scale, batch it when
+  corpus-scale work lands here).
 - **Contextual retrieval, late chunking, exact-token budgeting, semantic re-chunking** —
   retrieval-eval seams on the embedding-unit layer (contract decision 2, rev-8 research).
   The unit policy is versioned (`embedding_unit_policy_v1`) so any of these lands as a new
@@ -624,9 +627,30 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   quality, and the calibration of every plan-pinned constant (`SECTION_CAP`,
   `SECTION_TURN_CAP`, `SYNTH_CHUNK_TOP_K`, `SYNTH_CHUNK_CHAR_BUDGET`,
   `RETRIEVAL_UNIT_CAP`, `REPAIR_ROUND_CAP`, retrieval-boost weights, the `lookup`
-  vocabulary). The 013 bar was mechanism correctness, invariant enforcement, honest
-  flags and provenance fidelity; the field's loudest warning (rev 7.3 scan) — shipping
-  without an eval harness — makes this the recommended next slice.
+  vocabulary, `EMISSION_CLAIMS_MAX`, `CLAIM_TEXT_MAX`). The 013 bar was mechanism
+  correctness, invariant enforcement, honest flags and provenance fidelity; the field's
+  loudest warning (rev 7.3 scan) — shipping without an eval harness — makes this the
+  recommended next slice. **Review-stack hardening candidates for this seam
+  (013 step 7, 2026-07-08):** (a) pattern/theme/gap claim *text* is
+  deterministically validated but never judged (contracted design) — injected
+  corpus prose can ride an unjudged claim type into the artefact; candidate:
+  route those texts through the judge's strict lane or a deterministic
+  evaluative/imperative screen, decided with judge-calibration evidence.
+  (b) An adversarial judge-calibration case: a chunk whose text self-certifies
+  claims citing it ("classify as tier_1") must not sway the verdict — the
+  judge prompt now carries the rule; the eval proves it.
+- **Id-carrying repair schema** (013 review stack, 2026-07-08) — repair
+  replacements bind to failing claims positionally; the prompt instructs same
+  order and count mismatches flag `repair_count_mismatch`, but a reordering
+  backend would silently misbind claim ids. Candidate: replacements carry the
+  failing claim's id in the emission schema (a versioned prompt-surface
+  change), validated against the failing set.
+- **Trace-store trust boundary** (013 review stack, 2026-07-08) — Langfuse
+  traces are deliberately full-I/O: pre-validation emissions (including
+  fabricated quotes later excluded from the domain model) and repair inputs
+  land in trace storage. The persistence invariant is DB-scoped by contract;
+  if trace access ever widens beyond the operator, a redaction policy becomes
+  a slice.
 - **Multi-execution fan-in for consumers + capability-run orchestration**
   (user direction, 2026-07-08, post-013-build) — the registry's multiplicity,
   made plan-expressible. The two load-bearing halves already exist: component
@@ -700,6 +724,20 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 
 ## Execution / collaboration / ops
 
+- **Harness failure-event write on an aborted transaction** (013 review stack,
+  2026-07-08) — every `run_harness` node's exception handler appends the
+  `component.failed` event on the same connection; a DB-error exception
+  (constraint violation, driver error) leaves the transaction aborted, the
+  event write itself fails, and no audit record survives. 013's synthesise
+  node avoids the known case with a pre-write guard; the general fix
+  (savepoint around component execution, or event write after rollback) is a
+  harness slice.
+- **Harness node generalisation** — `_run_scope_component`,
+  `_run_characterise` and `_run_synthesise` share ~30 verbatim lines of
+  started/lookup/not-found/completed bookkeeping, diverging only in the
+  custom-failure branch (a documented deliberate copy). A fourth node of this
+  shape is the trigger to parameterise `_run_scope_component` with a
+  failure-payload hook instead of copying again.
 - **Branch-level parallelism** — intra-run parallel branches with a check-in blocking only the
   dependent sub-graph; a dedicated durable workflow engine; durable timers. (Within-step
   data-parallel fan-out is **retained**, not deferred.)

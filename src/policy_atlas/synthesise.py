@@ -379,6 +379,8 @@ class SectionAccounting:
     turns_used: int
     turn_cap_hit: bool
     repair_taken: bool = False
+    repair_count_mismatch: bool = False
+    repair_unparseable: bool = False
     chunk_claims_rejected: int = 0
     claims_rejected_structural: int = 0
     gap_claims_degraded: int = 0
@@ -438,6 +440,7 @@ def validate_claims(
     claim_ids: Sequence[str] | None = None,
     claim_indices: Sequence[int] | None = None,
     available_claim_types: set[str] | None = None,
+    reasoning_count_start: int = 0,
 ) -> ClaimValidationBatch:
     """Validate emitted claims against an in-memory substrate view.
 
@@ -452,6 +455,9 @@ def validate_claims(
         claim_indices: Optional original slot indices, used for repair ordering.
         available_claim_types: Optional claim-type gate. When omitted, it is
             computed from the substrate.
+        reasoning_count_start: Reasoning claims already accepted for this
+            section outside this batch, so the per-section cap binds across
+            the initial and repair passes together.
 
     Returns:
         Validated drafts and rejected claims.
@@ -459,7 +465,7 @@ def validate_claims(
     available = available_claim_types or available_claim_types_for_substrate(substrate)
     drafts: list[ClaimDraft] = []
     rejected: list[RejectedClaim] = []
-    reasoning_count = 0
+    reasoning_count = reasoning_count_start
     for offset, claim in enumerate(claims):
         claim_id = (
             claim_ids[offset]
@@ -607,8 +613,10 @@ def _resolve_references(
         resolved_extraction = cast("uuid.UUID", grouping_row["extraction_run_id"])
         if extraction_run_id is not None and extraction_run_id != resolved_extraction:
             raise SynthesiseFailure("reference_mismatch: extraction_run_id")
+        how["extraction"] = (
+            "explicit" if extraction_run_id is not None else "transitive:grouping"
+        )
         extraction_run_id = resolved_extraction
-        how["extraction"] = "transitive:grouping"
 
     if extraction_run_id is not None:
         extraction_row = _load_result_row(
@@ -623,8 +631,10 @@ def _resolve_references(
         resolved_selection = cast("uuid.UUID", extraction_row["selection_run_id"])
         if selection_run_id is not None and selection_run_id != resolved_selection:
             raise SynthesiseFailure("reference_mismatch: selection_run_id")
+        how["selection"] = (
+            "explicit" if selection_run_id is not None else "transitive:extraction"
+        )
         selection_run_id = resolved_selection
-        how["selection"] = "transitive:extraction"
 
     if selection_run_id is not None:
         selection_row = _load_result_row(
@@ -642,8 +652,10 @@ def _resolve_references(
             and characterisation_run_id != resolved_characterisation
         ):
             raise SynthesiseFailure("reference_mismatch: characterisation_run_id")
+        how["characterisation"] = (
+            "explicit" if characterisation_run_id is not None else "transitive:selection"
+        )
         characterisation_run_id = resolved_characterisation
-        how["characterisation"] = "transitive:selection"
 
     if characterisation_run_id is not None:
         characterisation_row = _load_result_row(
@@ -1304,6 +1316,54 @@ def _validate_claim(
     )
 
 
+def _spans_to_citations(
+    match: Any,
+    quote: str,
+    substrate: SubstrateView,
+    *,
+    with_origin: bool,
+) -> tuple[list[dict[str, Any]], list[CitationDraft], set[str]]:
+    """Turn verified quote spans into citation rows, one per spanned chunk.
+
+    Args:
+        match: Quote match result with verified spans.
+        quote: The verified quote text.
+        substrate: In-memory substrate view.
+        with_origin: Whether span records carry the spanned chunk's origin.
+
+    Returns:
+        Span records, citation drafts and the spanned chunk ids.
+    """
+    span_records: list[dict[str, Any]] = []
+    citation_rows: list[CitationDraft] = []
+    chunk_ids: set[str] = set()
+    for span in match.spans:
+        if span.chunk_id is None:
+            continue
+        spanned_chunk = substrate.chunk_by_id.get(span.chunk_id)
+        if spanned_chunk is None:
+            continue
+        chunk_ids.add(span.chunk_id)
+        record: dict[str, Any] = {
+            "chunk_id": span.chunk_id,
+            "start": span.start,
+            "end": span.end,
+        }
+        if with_origin:
+            record["origin"] = spanned_chunk.origin
+        span_records.append(record)
+        citation_rows.append(
+            CitationDraft(
+                chunk_id=span.chunk_id,
+                quote=quote,
+                origin=spanned_chunk.origin,
+                match_status=match.status,
+                spans=[record],
+            )
+        )
+    return span_records, citation_rows, chunk_ids
+
+
 def _validate_finding_claim(
     claim: ClaimWire,
     *,
@@ -1367,6 +1427,18 @@ def _validate_finding_claim(
                 reason="finding_basis_missing",
             )
         matcher = QuoteMatcher(basis)
+        if not finding.grounding:
+            # An extraction row with no grounding is the extreme anchor
+            # failure: nothing to verify, so the claim is weakly grounded.
+            flags.append("quote_unverified")
+            anchors_payload.append(
+                {
+                    "finding_id": finding_id,
+                    "quote": None,
+                    "match_status": "failed",
+                    "spans": [],
+                }
+            )
         for grounding in finding.grounding:
             quote = grounding.get("quote")
             if not isinstance(quote, str) or not quote:
@@ -1395,24 +1467,11 @@ def _validate_finding_claim(
                 flags.append("quote_unverified")
                 anchors_payload.append(anchor_record)
                 continue
-            for span in match.spans:
-                if span.chunk_id is None:
-                    continue
-                chunk = substrate.chunk_by_id.get(span.chunk_id)
-                if chunk is None:
-                    continue
-                judge_chunk_ids.add(span.chunk_id)
-                citation_rows.append(
-                    CitationDraft(
-                        chunk_id=span.chunk_id,
-                        quote=quote,
-                        origin=chunk.origin,
-                        match_status=match.status,
-                        spans=[
-                            {"chunk_id": span.chunk_id, "start": span.start, "end": span.end}
-                        ],
-                    )
-                )
+            _, span_rows, span_chunk_ids = _spans_to_citations(
+                match, quote, substrate, with_origin=False
+            )
+            citation_rows.extend(span_rows)
+            judge_chunk_ids.update(span_chunk_ids)
             anchors_payload.append(anchor_record)
     payload["anchors"] = anchors_payload
     if "quote_unverified" in flags:
@@ -1498,15 +1557,14 @@ def _validate_chunk_claim(
                 reason="empty_quote",
                 chunk_quote_failed=True,
             )
-        chunks = substrate.chunks_by_pss_id.get(chunk.pss_id, [])
-        if not chunks:
+        basis = substrate.basis_by_snapshot_id.get(chunk.source_snapshot_id)
+        if basis is None:
             return _reject(
                 claim,
                 claim_id=claim_id,
                 claim_index=claim_index,
                 reason="chunk_basis_missing",
             )
-        basis = build_basis([(item.chunk_id, item.content) for item in chunks])
         match = QuoteMatcher(basis).find(quote)
         if match.status == "failed" or not match.spans:
             return _reject(
@@ -1517,30 +1575,11 @@ def _validate_chunk_claim(
                 structural=False,
                 chunk_quote_failed=True,
             )
-        span_records: list[dict[str, Any]] = []
-        for span in match.spans:
-            if span.chunk_id is None:
-                continue
-            spanned_chunk = substrate.chunk_by_id.get(span.chunk_id)
-            if spanned_chunk is None:
-                continue
-            judge_chunk_ids.add(span.chunk_id)
-            span_payload = {
-                "chunk_id": span.chunk_id,
-                "start": span.start,
-                "end": span.end,
-                "origin": spanned_chunk.origin,
-            }
-            span_records.append(span_payload)
-            citation_rows.append(
-                CitationDraft(
-                    chunk_id=span.chunk_id,
-                    quote=quote,
-                    origin=spanned_chunk.origin,
-                    match_status=match.status,
-                    spans=[span_payload],
-                )
-            )
+        span_records, span_rows, span_chunk_ids = _spans_to_citations(
+            match, quote, substrate, with_origin=True
+        )
+        citation_rows.extend(span_rows)
+        judge_chunk_ids.update(span_chunk_ids)
         if not span_records:
             return _reject(
                 claim,
@@ -1916,7 +1955,11 @@ def _replacement_validation(
     citable_finding_ids: set[str],
     citable_chunk_ids: set[str],
     available_claim_types: set[str],
+    reasoning_count_start: int,
 ) -> ClaimValidationBatch:
+    # ponytail: replacements bind to failing slots positionally — the repair
+    # prompt instructs same order; an id-carrying repair schema is a recorded
+    # deferred seam. Count mismatches are flagged by the caller.
     claim_ids = [str(item["claim_id"]) for item in failing]
     claim_indices = [int(item["claim_index"]) for item in failing]
     return validate_claims(
@@ -1929,6 +1972,7 @@ def _replacement_validation(
         claim_ids=claim_ids,
         claim_indices=claim_indices,
         available_claim_types=available_claim_types,
+        reasoning_count_start=reasoning_count_start,
     )
 
 
@@ -2014,9 +2058,21 @@ def _section_claims(
             # The one repair call produced structurally unparseable output —
             # the repair is loop-free and unrepeatable, so the failing claims
             # land per the exhaustion rules (soft-flagged / the counted
-            # exclusions), never a whole-component failure.
+            # exclusions), never a whole-component failure. Flagged so a
+            # systematically malforming backend is distinguishable from
+            # honest sparsity in the roll-up.
+            accounting.repair_unparseable = True
             repair_claims = None
         if repair_claims is not None:
+            if len(repair_claims.claims) != len(failing):
+                accounting.repair_count_mismatch = True
+            failing_index_set = {int(item["claim_index"]) for item in failing}
+            surviving_reasoning = sum(
+                1
+                for draft in initial.drafts
+                if draft.claim_type == "reasoning"
+                and draft.claim_index not in failing_index_set
+            )
             replacements = _replacement_validation(
                 repair_claims,
                 failing=failing,
@@ -2026,6 +2082,7 @@ def _section_claims(
                 citable_finding_ids=citable_finding_ids,
                 citable_chunk_ids=citable_chunk_ids,
                 available_claim_types=available_claim_types,
+                reasoning_count_start=surviving_reasoning,
             )
             call_counts["rejudge"] += _judge_claims(
                 claims=replacements.drafts,
@@ -2119,6 +2176,9 @@ def _write_section(
         )
     )
     offset = 0
+    unit_rows: list[dict[str, Any]] = []
+    annotation_rows: list[dict[str, Any]] = []
+    citation_rows: list[dict[str, Any]] = []
     for index, claim in enumerate(claims):
         if index > 0:
             offset += 2
@@ -2127,37 +2187,42 @@ def _write_section(
         offset = end
         unit_id = uuid.uuid4()
         annotation_id = uuid.uuid4()
-        conn.execute(
-            addressable_unit.insert().values(
-                unit_id=unit_id,
-                block_id=block_id,
-                unit_type="text_span",
-                locator={"start": start, "end": end},
-                content=claim.text,
-                created_at=created_at,
-            )
+        unit_rows.append(
+            {
+                "unit_id": unit_id,
+                "block_id": block_id,
+                "unit_type": "text_span",
+                "locator": {"start": start, "end": end},
+                "content": claim.text,
+                "created_at": created_at,
+            }
         )
-        conn.execute(
-            annotation.insert().values(
-                annotation_id=annotation_id,
-                block_id=block_id,
-                unit_id=unit_id,
-                annotation_type=claim.annotation_type,
-                payload=_annotation_payload(claim, substrate),
-                created_at=created_at,
-            )
+        annotation_rows.append(
+            {
+                "annotation_id": annotation_id,
+                "block_id": block_id,
+                "unit_id": unit_id,
+                "annotation_type": claim.annotation_type,
+                "payload": _annotation_payload(claim, substrate),
+                "created_at": created_at,
+            }
         )
-        for citation in claim.citation_rows:
-            conn.execute(
-                citation_table.insert().values(
-                    citation_id=uuid.uuid4(),
-                    annotation_id=annotation_id,
-                    chunk_id=uuid.UUID(citation.chunk_id),
-                    quote=citation.quote,
-                    verification_result="pass",
-                    created_at=created_at,
-                )
-            )
+        citation_rows.extend(
+            {
+                "citation_id": uuid.uuid4(),
+                "annotation_id": annotation_id,
+                "chunk_id": uuid.UUID(citation.chunk_id),
+                "quote": citation.quote,
+                "verification_result": "pass",
+                "created_at": created_at,
+            }
+            for citation in claim.citation_rows
+        )
+    if unit_rows:
+        conn.execute(addressable_unit.insert(), unit_rows)
+        conn.execute(annotation.insert(), annotation_rows)
+    if citation_rows:
+        conn.execute(citation_table.insert(), citation_rows)
     return str(block_id)
 
 
@@ -2259,6 +2324,25 @@ def _inherited_chain_base(refs: ResolvedReferences) -> dict[str, Any]:
     return result
 
 
+def _anchor_counts(claims: Sequence[ClaimDraft]) -> tuple[int, int]:
+    """Count verified and failed quote anchors across claims, per anchor.
+
+    Finding-claim anchors carry a ``match_status``; chunk-claim citations only
+    persist when verified (failures reject instead), so every persisted chunk
+    citation counts as verified. Both operands share the per-anchor unit.
+    """
+    verified = 0
+    failed = 0
+    for claim in claims:
+        for anchor in claim.payload.get("anchors", []):
+            if anchor.get("match_status") == "failed":
+                failed += 1
+            else:
+                verified += 1
+        verified += len(claim.payload.get("citations", []))
+    return verified, failed
+
+
 def _blocks_rollup(
     *,
     section: SectionSpec,
@@ -2282,8 +2366,11 @@ def _blocks_rollup(
         "citations_unverified": unverified,
         "citations_by_origin": origin_counts,
         "chunk_claims_rejected": accounting.chunk_claims_rejected,
+        "claims_rejected_structural": accounting.claims_rejected_structural,
         "gap_claims_degraded": accounting.gap_claims_degraded,
         "repair_taken": accounting.repair_taken,
+        "repair_count_mismatch": accounting.repair_count_mismatch,
+        "repair_unparseable": accounting.repair_unparseable,
         "turn_cap_hit": accounting.turn_cap_hit,
     }
 
@@ -2296,6 +2383,7 @@ def _rollup_counts(
     substrate: SubstrateView,
     groups_unsectioned: int | None,
     chunk_claims_rejected: int,
+    claims_rejected_structural: int,
     gap_claims_degraded: int,
     tool_calls_total: int,
 ) -> dict[str, Any]:
@@ -2304,6 +2392,7 @@ def _rollup_counts(
         if claim.verdict is not None:
             verdict_counts[claim.verdict] += 1
     origin_counts = _citation_counts_by_origin(all_claims)
+    anchors_verified, anchors_unverified = _anchor_counts(all_claims)
     finding_ids = {
         cited_id
         for claim in all_claims
@@ -2319,8 +2408,11 @@ def _rollup_counts(
         "citations_unverified": sum(
             1 for claim in all_claims if "quote_unverified" in claim.flags
         ),
+        "anchors_verified": anchors_verified,
+        "anchors_unverified": anchors_unverified,
         "citations_from_unselected": origin_counts["unselected_screened"],
         "chunk_claims_rejected": chunk_claims_rejected,
+        "claims_rejected_structural": claims_rejected_structural,
         "gap_claims_degraded": gap_claims_degraded,
         "tool_calls_total": tool_calls_total,
         "findings_cited_distinct": len(finding_ids),
@@ -2339,9 +2431,12 @@ def _rollup_flags(
     all_claims: Sequence[ClaimDraft],
     section_blocks: Sequence[dict[str, Any]],
     chunk_claims_rejected: int,
+    claims_rejected_structural: int,
     gap_claims_degraded: int,
     turn_cap_hit: bool,
     repair_path_taken: bool,
+    repair_count_mismatch: bool,
+    repair_unparseable: bool,
 ) -> dict[str, bool]:
     flags: dict[str, bool] = {}
     if groups_unsectioned:
@@ -2352,12 +2447,18 @@ def _rollup_flags(
         flags["weakly_grounded_present"] = True
     if chunk_claims_rejected:
         flags["chunk_claims_rejected"] = True
+    if claims_rejected_structural:
+        flags["claims_rejected_structural"] = True
     if gap_claims_degraded:
         flags["gap_claims_degraded"] = True
     if turn_cap_hit:
         flags["turn_cap_hit"] = True
     if repair_path_taken:
         flags["repair_path_taken"] = True
+    if repair_count_mismatch:
+        flags["repair_count_mismatch"] = True
+    if repair_unparseable:
+        flags["repair_unparseable"] = True
     if any(block["citations_verified"] == 0 for block in section_blocks):
         flags["uncited_sections"] = True
     return flags
@@ -2403,6 +2504,20 @@ def synthesise_scope(
         SynthesiseFailure: Structural/backend failure. Roll-up is never written
             on failure; post-block failures carry already-written block ids.
     """
+    # Loud before any write: a same-run re-execution must fail while the
+    # transaction is still healthy so the failure event can persist. The
+    # uq_synr_scope_run unique stays as the concurrent-writer backstop.
+    existing_rollup = conn.execute(
+        sa_select(synthesis_result.c.run_id).where(
+            synthesis_result.c.evidence_scope_id == context.scope_id,
+            synthesis_result.c.run_id == run_id,
+        )
+    ).first()
+    if existing_rollup is not None:
+        raise SynthesiseFailure(
+            f"same_run_reexecution: synthesis_result already exists for "
+            f"scope {context.scope_id} run {run_id}"
+        )
     reranker = chunk_reranker if chunk_reranker is not None else PassThroughChunkReranker()
     blocks_written: list[str] = []
     call_counts = {
@@ -2575,10 +2690,13 @@ def synthesise_scope(
     section_rollups: list[dict[str, Any]] = []
     section_provenance: list[dict[str, Any]] = []
     total_chunk_rejections = 0
+    total_structural_rejections = 0
     total_gap_degraded = 0
     total_tool_calls = 0
     turn_cap_hit_any = False
     repair_path_taken = False
+    repair_count_mismatch_any = False
+    repair_unparseable_any = False
 
     for section_index, section in enumerate(sections):
         member_findings = _group_member_findings(section, substrate=substrate)
@@ -2671,10 +2789,15 @@ def synthesise_scope(
         )
         blocks_written.append(block_id)
         total_chunk_rejections += accounting.chunk_claims_rejected
+        total_structural_rejections += accounting.claims_rejected_structural
         total_gap_degraded += accounting.gap_claims_degraded
         total_tool_calls += accounting.tool_call_count
         turn_cap_hit_any = turn_cap_hit_any or accounting.turn_cap_hit
         repair_path_taken = repair_path_taken or accounting.repair_taken
+        repair_count_mismatch_any = (
+            repair_count_mismatch_any or accounting.repair_count_mismatch
+        )
+        repair_unparseable_any = repair_unparseable_any or accounting.repair_unparseable
         section_rollups.append(
             _blocks_rollup(
                 section=section,
@@ -2763,6 +2886,7 @@ def synthesise_scope(
         substrate=substrate,
         groups_unsectioned=groups_unsectioned,
         chunk_claims_rejected=total_chunk_rejections,
+        claims_rejected_structural=total_structural_rejections,
         gap_claims_degraded=total_gap_degraded,
         tool_calls_total=total_tool_calls,
     )
@@ -2771,9 +2895,12 @@ def synthesise_scope(
         all_claims=all_claims,
         section_blocks=section_rollups,
         chunk_claims_rejected=total_chunk_rejections,
+        claims_rejected_structural=total_structural_rejections,
         gap_claims_degraded=total_gap_degraded,
         turn_cap_hit=turn_cap_hit_any,
         repair_path_taken=repair_path_taken,
+        repair_count_mismatch=repair_count_mismatch_any,
+        repair_unparseable=repair_unparseable_any,
     )
 
     conn.execute(

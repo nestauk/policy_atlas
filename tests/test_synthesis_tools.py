@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 import pytest
+from sqlalchemy.engine import Connection
 
 from policy_atlas.embeddings import EMBEDDING_DIMENSIONS
 from policy_atlas.synthesis_backend import SectionClaimsWire
@@ -26,8 +28,16 @@ from policy_atlas.synthesis_tools import (
     ToolValidationError,
     build_section_tools,
     gathered_ids,
+    make_lookup_reader,
     parse_synthesis_directive,
     run_section_loop,
+)
+from tests.helpers import (
+    now,
+    seed_project_and_run,
+    seed_scope,
+    seed_screening_result,
+    seed_select_doc,
 )
 
 
@@ -681,3 +691,51 @@ def test_loop_runner_malformed_emission_consumes_turn_and_recovers() -> None:
 
     with pytest.raises(RuntimeError, match="forced final turn"):
         run_section_loop(_AlwaysMalformed(), seed={}, tools={})
+
+
+def test_lookup_excludes_screened_out_doc_from_tag_reads(conn: Connection) -> None:
+    """A doc screened OUT of this scope must not surface via the tag-lookup
+    kinds — the lookup read boundary follows screen, the same as retrieval."""
+    from policy_atlas.schema import TOPIC_THEME, source_screening_result, source_tag
+
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="screened out doc")
+    # Override the relevant screening seeded by seed_select_doc with not_relevant.
+    conn.execute(
+        source_screening_result.delete().where(
+            source_screening_result.c.project_source_snapshot_id == pss_id
+        )
+    )
+    seed_screening_result(conn, project_id, run_id, scope_id, pss_id, status="not_relevant")
+    conn.execute(
+        source_tag.insert().values(
+            source_tag_id=uuid.uuid4(),
+            project_id=project_id,
+            project_source_snapshot_id=pss_id,
+            tag="housing",
+            tag_type=TOPIC_THEME,
+            asserted_by="characterise",
+            created_by_run_id=run_id,
+            created_at=now(),
+        )
+    )
+
+    reader = make_lookup_reader(
+        conn,
+        project_id=project_id,
+        scope_id=scope_id,
+        characterisation_run_id=None,
+        selection_run_id=None,
+        extraction_run_id=None,
+        grouping_run_id=None,
+    )
+
+    docs = reader({"kind": "docs_by_tag", "tag": "housing"})
+    assert docs["result"] == []
+
+    aggregate = reader({"kind": "tag_aggregate", "by": "type"})
+    assert TOPIC_THEME not in aggregate["result"]
+
+    with pytest.raises(ToolValidationError, match="doc_id is unknown"):
+        reader({"kind": "tags_by_doc", "doc_id": str(pss_id)})

@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.embeddings import EMBEDDING_PROFILE, UNIT_POLICY, StubEmbeddingBackend
+from policy_atlas.embeddings import StubEmbeddingBackend
 from policy_atlas.grounding import content_hash
 from policy_atlas.grounding_judge import StubGroundingJudgeBackend
 from policy_atlas.schema import (
@@ -21,16 +21,12 @@ from policy_atlas.schema import (
     annotation,
     artefact,
     block,
-    chunk_embedding,
     citation,
     extraction_result,
     grouping_result,
-    project_source_snapshot,
     search_coverage_record,
-    source_snapshot,
     synthesis_result,
 )
-from policy_atlas.schema import chunk as chunk_table
 from policy_atlas.synthesis_backend import (
     ChunkCitationWire,
     ClaimWire,
@@ -49,6 +45,7 @@ from tests.helpers import (
     now,
     run_select,
     seed_characterisation,
+    seed_ingested_full_text,
     seed_project_and_run,
     seed_run,
     seed_scope,
@@ -145,59 +142,6 @@ def _run_synthesise(
     )
 
 
-def _seed_ingested_full_text(
-    conn: Connection,
-    *,
-    pss_id: uuid.UUID,
-    chunks: list[str],
-) -> uuid.UUID:
-    full_snapshot_id = uuid.uuid4()
-    conn.execute(
-        source_snapshot.insert().values(
-            source_snapshot_id=full_snapshot_id,
-            content_hash=content_hash("\n".join(chunks)),
-            text_basis="full_text",
-            source_locator=f"full-text-{full_snapshot_id}",
-            metadata={"title": "Full text fixture", "abstract": "Full text abstract."},
-            created_at=now(),
-        )
-    )
-    conn.execute(
-        project_source_snapshot.update()
-        .where(project_source_snapshot.c.project_source_snapshot_id == pss_id)
-        .values(full_text_snapshot_id=full_snapshot_id, full_text_status="ingested")
-    )
-    embedder = StubEmbeddingBackend()
-    vectors = embedder.embed_texts(chunks)
-    for index, content in enumerate(chunks):
-        chunk_id = uuid.uuid4()
-        conn.execute(
-            chunk_table.insert().values(
-                chunk_id=chunk_id,
-                source_snapshot_id=full_snapshot_id,
-                sequence=index,
-                content=content,
-                content_hash=content_hash(content),
-                locator={},
-                segmentation_policy="manual_v1",
-                created_at=now(),
-            )
-        )
-        conn.execute(
-            chunk_embedding.insert().values(
-                chunk_embedding_id=uuid.uuid4(),
-                chunk_id=chunk_id,
-                embedding_profile=EMBEDDING_PROFILE,
-                unit_policy=UNIT_POLICY,
-                unit_index=0,
-                unit_locator={"start": 0, "end": len(content)},
-                vector=vectors[index],
-                created_at=now(),
-            )
-        )
-    return full_snapshot_id
-
-
 def test_transitive_resolution_from_grouping_reference(conn: Connection) -> None:
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
@@ -285,7 +229,7 @@ def test_unmatched_retrieval_boost_recorded_never_fatal(conn: Connection) -> Non
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="Boost doc")
-    _seed_ingested_full_text(
+    seed_ingested_full_text(
         conn,
         pss_id=pss_id,
         chunks=["Boost doc evidence chunk one.", "Boost doc evidence chunk two."],
@@ -515,7 +459,7 @@ def test_boundary_spanning_quote_writes_row_per_chunk(conn: Connection) -> None:
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="Boundary doc")
-    _seed_ingested_full_text(
+    seed_ingested_full_text(
         conn,
         pss_id=pss_id,
         chunks=["The rate fell sharply after", "the programme began in 2019."],
@@ -577,7 +521,7 @@ def test_judge_persistence_keys_on_cited_claims_only(conn: Connection) -> None:
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="Judge doc")
-    _seed_ingested_full_text(
+    seed_ingested_full_text(
         conn,
         pss_id=pss_id,
         chunks=[
@@ -679,7 +623,7 @@ def test_delete_project_data_after_synthesise(conn: Connection) -> None:
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="Delete-safe doc")
-    _seed_ingested_full_text(
+    seed_ingested_full_text(
         conn,
         pss_id=pss_id,
         chunks=[

@@ -33,7 +33,13 @@ from openai.types.completion_usage import CompletionUsage
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from policy_atlas import tracing
-from policy_atlas.embeddings import log_usage, resolve_openai_client, usage_metadata
+from policy_atlas.embeddings import (
+    log_usage,
+    require_parsed,
+    require_single_tool_call,
+    resolve_openai_client,
+    usage_metadata,
+)
 from policy_atlas.facet_grouping import FORBIDDEN_GROUP_LABELS
 from policy_atlas.synthesis_tools import (
     REASONING_CLAIMS_MAX,
@@ -68,6 +74,13 @@ FORBIDDEN_SECTION_TITLES = FORBIDDEN_GROUP_LABELS | frozenset(
 
 CLAIM_TYPES = ("finding", "chunk", "pattern", "theme", "gap", "reasoning")
 GAP_GRADES = ("corpus_absence", "acknowledged_sparsity", "inferred")
+
+# Per-emission bounds, enforced at salvage: turn/section/budget caps bound
+# the loop, but nothing bounded one emission's claim count or text length —
+# the one hole in the cap discipline (review-stack finding). Overflow counts
+# into claims_rejected_structural, never silently.
+EMISSION_CLAIMS_MAX = 50
+CLAIM_TEXT_MAX = 5000
 
 
 # --- Response models (the schema-constrained wire shapes) ---
@@ -731,9 +744,32 @@ def _salvage_claims(arguments: str) -> tuple[SectionClaimsWire, int]:
         raise MalformedEmissionError(
             "emit_claims arguments must be an object with a 'claims' list"
         )
+    raw_claims = payload["claims"]
     valid: list[ClaimWire] = []
     malformed = 0
-    for index, raw_claim in enumerate(payload["claims"]):
+    if len(raw_claims) > EMISSION_CLAIMS_MAX:
+        # No cap bound a single emission's claim count — one oversized
+        # emission drives O(claims) writes and ledger/prompt growth.
+        malformed += len(raw_claims) - EMISSION_CLAIMS_MAX
+        log.warning(
+            "synthesis.emission_overflow",
+            claims_emitted=len(raw_claims),
+            cap=EMISSION_CLAIMS_MAX,
+        )
+        raw_claims = raw_claims[:EMISSION_CLAIMS_MAX]
+    for index, raw_claim in enumerate(raw_claims):
+        if (
+            isinstance(raw_claim, dict)
+            and isinstance(raw_claim.get("text"), str)
+            and len(raw_claim["text"]) > CLAIM_TEXT_MAX
+        ):
+            malformed += 1
+            log.warning(
+                "synthesis.claim_malformed",
+                claim_index=index,
+                error=f"claim text exceeds {CLAIM_TEXT_MAX} chars",
+            )
+            continue
         try:
             valid.append(ClaimWire.model_validate(raw_claim))
         except ValidationError as exc:
@@ -815,26 +851,25 @@ def _section_group_ids(seed: dict[str, Any]) -> list[str]:
     return [group_id for group_id in group_ids if isinstance(group_id, str)]
 
 
-def _transcript_chunks(transcript: list[ToolExchange]) -> list[dict[str, Any]]:
-    chunks: list[dict[str, Any]] = []
+def _transcript_records(
+    transcript: list[ToolExchange], *, tool: str, key: str
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
     for exchange in transcript:
-        if exchange["tool"] != "search_chunks":
+        if exchange["tool"] != tool:
             continue
-        raw_chunks = exchange["result"].get("chunks", [])
-        if isinstance(raw_chunks, list):
-            chunks.extend(chunk for chunk in raw_chunks if isinstance(chunk, dict))
-    return chunks
+        raw = exchange["result"].get(key, [])
+        if isinstance(raw, list):
+            records.extend(record for record in raw if isinstance(record, dict))
+    return records
+
+
+def _transcript_chunks(transcript: list[ToolExchange]) -> list[dict[str, Any]]:
+    return _transcript_records(transcript, tool="search_chunks", key="chunks")
 
 
 def _transcript_findings(transcript: list[ToolExchange]) -> list[dict[str, Any]]:
-    findings: list[dict[str, Any]] = []
-    for exchange in transcript:
-        if exchange["tool"] != "query_findings":
-            continue
-        raw_findings = exchange["result"].get("findings", [])
-        if isinstance(raw_findings, list):
-            findings.extend(finding for finding in raw_findings if isinstance(finding, dict))
-    return findings
+    return _transcript_records(transcript, tool="query_findings", key="findings")
 
 
 def _chunk_content_by_id(transcript: list[ToolExchange]) -> dict[str, str]:
@@ -932,12 +967,9 @@ class OpenAISynthesisBackend:
             response_format=SectionProposalWire,
         )
         log_usage("synthesis.proposal.usage", response.usage)
-        if not response.choices:
-            raise RuntimeError("OpenAI synthesis section proposal response had no choices.")
-        parsed = response.choices[0].message.parsed
-        if parsed is None:
-            raise RuntimeError("OpenAI synthesis section proposal response was not parsed.")
-        parsed_model: SectionProposalWire = parsed
+        parsed_model: SectionProposalWire = require_parsed(
+            response, label="synthesis section proposal"
+        )
         return parsed_model, response.usage
 
     def propose_sections(
@@ -1009,14 +1041,9 @@ class OpenAISynthesisBackend:
             tool_choice=tool_choice,
         )
         log_usage("synthesis.section_turn.usage", response.usage)
-        if not response.choices:
-            raise RuntimeError("OpenAI synthesis section turn response had no choices.")
-        tool_calls = response.choices[0].message.tool_calls or []
-        if not tool_calls:
-            raise RuntimeError("OpenAI synthesis section turn response had no tool call.")
-        if len(tool_calls) != 1:
-            raise RuntimeError("OpenAI synthesis section turn response had multiple tool calls.")
-        function = tool_calls[0].function
+        function = require_single_tool_call(
+            response, label="synthesis section turn"
+        ).function
         name = function.name
         arguments = function.arguments
         if not isinstance(name, str) or not name:
@@ -1092,14 +1119,7 @@ class OpenAISynthesisBackend:
             tool_choice={"type": "function", "function": {"name": "emit_claims"}},
         )
         log_usage("synthesis.repair.usage", response.usage)
-        if not response.choices:
-            raise RuntimeError("OpenAI synthesis repair response had no choices.")
-        tool_calls = response.choices[0].message.tool_calls or []
-        if not tool_calls:
-            raise RuntimeError("OpenAI synthesis repair response had no tool call.")
-        if len(tool_calls) != 1:
-            raise RuntimeError("OpenAI synthesis repair response had multiple tool calls.")
-        function = tool_calls[0].function
+        function = require_single_tool_call(response, label="synthesis repair").function
         if function.name != "emit_claims":
             raise RuntimeError("OpenAI synthesis repair response did not emit claims.")
         arguments = function.arguments

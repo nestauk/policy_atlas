@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from types import TracebackType
 from typing import Any, Literal, cast
 
@@ -10,12 +11,15 @@ import pytest
 from policy_atlas import tracing
 from policy_atlas.grounding_judge import StubGroundingJudgeBackend, build_envelope
 from policy_atlas.synthesis_backend import (
+    CLAIM_TEXT_MAX,
+    EMISSION_CLAIMS_MAX,
     ClaimWire,
     GapPayloadWire,
     SectionClaimsWire,
     SectionProposalWire,
     SectionTurn,
     StubSynthesisBackend,
+    _salvage_claims,
 )
 from policy_atlas.synthesis_tools import ToolExchange, run_section_loop
 
@@ -389,3 +393,38 @@ def test_traced_call_after_hook_runs_inside_span() -> None:
     assert events == [("update", False), ("after", False)]
     assert fake_client.spans[0][0:2] == ("generated", "generation")
     assert fake_client.spans[0][2].closed is True
+
+
+def test_salvage_claims_caps_emission_at_max() -> None:
+    """One oversized emission must not drive unbounded writes: overflow claims
+    beyond EMISSION_CLAIMS_MAX are salvaged as malformed, never validated."""
+    overflow = 7
+    total = EMISSION_CLAIMS_MAX + overflow
+    arguments = json.dumps({
+        "claims": [
+            {"claim_type": "reasoning", "text": f"Reasoning claim {index}."}
+            for index in range(total)
+        ]
+    })
+
+    claims, malformed = _salvage_claims(arguments)
+
+    assert len(claims.claims) == EMISSION_CLAIMS_MAX
+    assert malformed == overflow
+
+
+def test_salvage_claims_rejects_oversized_claim_text() -> None:
+    """A claim whose text exceeds CLAIM_TEXT_MAX is counted malformed and
+    dropped, not returned as a valid claim."""
+    long_text = "x" * (CLAIM_TEXT_MAX + 1)
+    arguments = json.dumps({
+        "claims": [
+            {"claim_type": "reasoning", "text": "Short claim."},
+            {"claim_type": "reasoning", "text": long_text},
+        ]
+    })
+
+    claims, malformed = _salvage_claims(arguments)
+
+    assert [claim.text for claim in claims.claims] == ["Short claim."]
+    assert malformed == 1

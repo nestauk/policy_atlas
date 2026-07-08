@@ -868,6 +868,11 @@ class ChunkRetriever:
         self._directive = directive
         self._reranker = reranker
         self._query_vectors: dict[str, list[float]] = {}
+        # Unit text is frozen for the retriever's lifetime — tokenize once,
+        # not on every search() call.
+        self._unit_tokens: list[set[str]] = [
+            _tokens(cast("str", unit["text"])) for unit in scope.units
+        ]
         self._executed_boosts: dict[str, Any] = {}
         self._unmatched_boosts: dict[str, Any] = {}
         self._has_selected_docs = any(
@@ -892,11 +897,10 @@ class ChunkRetriever:
         ])
         lexical_pool = _ranked_pool([
             (
-                len(query_tokens & _tokens(cast("str", unit["text"])))
-                / max(1, len(query_tokens)),
+                len(query_tokens & unit_tokens) / max(1, len(query_tokens)),
                 unit,
             )
-            for unit in self._scope.units
+            for unit, unit_tokens in zip(self._scope.units, self._unit_tokens, strict=True)
         ])
 
         fused_by_unit: dict[str, tuple[float, dict[str, Any]]] = {}
@@ -1326,8 +1330,22 @@ def _ensure_kind(arguments: dict[str, Any]) -> str:
     return kind
 
 
-def _doc_id_for_project(
-    conn: Connection, *, project_id: uuid.UUID, arguments: dict[str, Any]
+def _screened_in_doc_ids(project_id: uuid.UUID, scope_id: uuid.UUID) -> Any:
+    """Select of this scope's screened-in doc ids — the lookup read boundary."""
+    return (
+        sa_select(source_screening_result.c.project_source_snapshot_id)
+        .where(source_screening_result.c.project_id == project_id)
+        .where(source_screening_result.c.evidence_scope_id == scope_id)
+        .where(source_screening_result.c.status == "relevant")
+    )
+
+
+def _doc_id_for_scope(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    arguments: dict[str, Any],
 ) -> uuid.UUID:
     raw_doc_id = _tool_string(arguments, field="doc_id", max_length=100, required=True)
     assert raw_doc_id is not None
@@ -1336,6 +1354,11 @@ def _doc_id_for_project(
         sa_select(project_source_snapshot.c.project_source_snapshot_id)
         .where(project_source_snapshot.c.project_id == project_id)
         .where(project_source_snapshot.c.project_source_snapshot_id == doc_id)
+        .where(
+            project_source_snapshot.c.project_source_snapshot_id.in_(
+                _screened_in_doc_ids(project_id, scope_id)
+            )
+        )
     ).first()
     if exists is None:
         _tool_fail("doc_id is unknown")
@@ -1446,7 +1469,9 @@ def make_lookup_reader(
     def reader(arguments: dict[str, Any]) -> dict[str, Any]:
         kind = _ensure_kind(arguments)
         if kind in {"appraisal_by_doc", "classification_by_doc", "tags_by_doc"}:
-            doc_id = _doc_id_for_project(conn, project_id=project_id, arguments=arguments)
+            doc_id = _doc_id_for_scope(
+                conn, project_id=project_id, scope_id=scope_id, arguments=arguments
+            )
             result: Any
             if kind == "appraisal_by_doc":
                 row = conn.execute(
@@ -1583,6 +1608,11 @@ def make_lookup_reader(
                 sa_select(source_tag.c.project_source_snapshot_id)
                 .where(source_tag.c.project_id == project_id)
                 .where(source_tag.c.tag == tag)
+                .where(
+                    source_tag.c.project_source_snapshot_id.in_(
+                        _screened_in_doc_ids(project_id, scope_id)
+                    )
+                )
                 .order_by(source_tag.c.project_source_snapshot_id)
             ).fetchall()
             return {
@@ -1598,6 +1628,11 @@ def make_lookup_reader(
             rows = conn.execute(
                 sa_select(column.label("value"), func.count().label("tag_count"))
                 .where(source_tag.c.project_id == project_id)
+                .where(
+                    source_tag.c.project_source_snapshot_id.in_(
+                        _screened_in_doc_ids(project_id, scope_id)
+                    )
+                )
                 .group_by(column)
                 .order_by(column)
             ).fetchall()

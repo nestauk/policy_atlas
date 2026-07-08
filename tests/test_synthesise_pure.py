@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from policy_atlas.quote_verify import build_basis
@@ -12,7 +13,12 @@ from policy_atlas.synthesis_backend import (
     SparsitySignalWire,
     ThemePayloadWire,
 )
-from policy_atlas.synthesis_tools import ARTEFACT_TITLE_MAX, SECTION_CAP, SECTION_TURN_CAP
+from policy_atlas.synthesis_tools import (
+    ARTEFACT_TITLE_MAX,
+    REASONING_CLAIMS_MAX,
+    SECTION_CAP,
+    SECTION_TURN_CAP,
+)
 from policy_atlas.synthesise import (
     ChunkInfo,
     ClaimDraft,
@@ -20,6 +26,7 @@ from policy_atlas.synthesise import (
     CoverageRecord,
     FindingInfo,
     SubstrateView,
+    _anchor_counts,
     build_ledger,
     derive_artefact_title,
     generation_budget_max,
@@ -371,3 +378,104 @@ def test_gap_degradation_and_caveat_payloads() -> None:
         "adequacy_verdict": "adequate",
         "verdict_origin": "model",
     }
+
+
+def test_reasoning_cap_binds_across_repair() -> None:
+    """The per-section reasoning cap must bind across the initial and repair
+    passes together, so ``reasoning_count_start`` (accepted claims from
+    outside this batch) counts toward the cap."""
+    claim = _claim({"claim_type": "reasoning", "text": "Reasoning claim."})
+
+    at_cap = validate_claims(
+        [claim],
+        substrate=_substrate(),
+        section_index=0,
+        section_group_ids={"group-1"},
+        citable_finding_ids={"finding-1"},
+        citable_chunk_ids={"11111111-1111-1111-1111-111111111111"},
+        reasoning_count_start=REASONING_CLAIMS_MAX,
+    )
+    assert not at_cap.drafts
+    assert [rejection.reason for rejection in at_cap.rejected] == ["reasoning_over_cap"]
+
+    fresh = validate_claims(
+        [claim],
+        substrate=_substrate(),
+        section_index=0,
+        section_group_ids={"group-1"},
+        citable_finding_ids={"finding-1"},
+        citable_chunk_ids={"11111111-1111-1111-1111-111111111111"},
+        reasoning_count_start=0,
+    )
+    assert not fresh.rejected
+    assert len(fresh.drafts) == 1
+
+
+def test_finding_claim_with_empty_grounding_is_weakly_grounded() -> None:
+    """A finding with zero grounding entries is the extreme anchor failure:
+    nothing to verify, so the claim is flagged weakly grounded rather than
+    rejected."""
+    substrate = _substrate()
+    finding = substrate.finding_by_id["finding-1"]
+    empty_finding = replace(finding, grounding=[])
+    substrate = replace(substrate, finding_by_id={"finding-1": empty_finding})
+
+    batch = validate_claims(
+        [
+            _claim(
+                {
+                    "claim_type": "finding",
+                    "text": "Finding claim.",
+                    "cited_finding_ids": ["finding-1"],
+                }
+            )
+        ],
+        substrate=substrate,
+        section_index=0,
+        section_group_ids={"group-1"},
+        citable_finding_ids={"finding-1"},
+        citable_chunk_ids={"11111111-1111-1111-1111-111111111111"},
+    )
+    assert not batch.rejected
+    draft = batch.drafts[0]
+    assert draft.weakly_grounded is True
+    assert "quote_unverified" in draft.flags
+    assert draft.payload["anchors"] == [
+        {"finding_id": "finding-1", "quote": None, "match_status": "failed", "spans": []}
+    ]
+    assert draft.citation_rows == []
+
+
+def test_anchor_counts_tallies_verified_and_failed_anchors() -> None:
+    claim_with_anchors = ClaimDraft(
+        claim_id="s0c0",
+        claim_index=0,
+        claim_type="finding",
+        text="Finding claim.",
+        annotation_type="citation",
+        payload={
+            "anchors": [
+                {
+                    "finding_id": "finding-1",
+                    "quote": None,
+                    "match_status": "failed",
+                    "spans": [],
+                },
+                {
+                    "finding_id": "finding-1",
+                    "quote": "finding anchor quote",
+                    "match_status": "exact",
+                    "spans": [{"chunk_id": "chunk-1", "start": 0, "end": 20}],
+                },
+            ]
+        },
+    )
+    claim_with_citation = ClaimDraft(
+        claim_id="s0c1",
+        claim_index=1,
+        claim_type="chunk",
+        text="Chunk claim.",
+        annotation_type="citation",
+        payload={"citations": [{"chunk_id": "chunk-1"}]},
+    )
+    assert _anchor_counts([claim_with_anchors, claim_with_citation]) == (2, 1)

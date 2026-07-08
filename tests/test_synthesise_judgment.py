@@ -15,11 +15,10 @@ import uuid
 from typing import Any
 
 import pytest
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.embeddings import EMBEDDING_PROFILE, UNIT_POLICY, StubEmbeddingBackend
-from policy_atlas.grounding import content_hash
+from policy_atlas.embeddings import StubEmbeddingBackend
 from policy_atlas.grounding_judge import (
     ClaimVerdictWire,
     JudgeResponseWire,
@@ -31,14 +30,10 @@ from policy_atlas.schema import (
     annotation,
     artefact,
     block,
-    chunk_embedding,
     citation,
-    project_source_snapshot,
-    source_snapshot,
     source_tag,
     synthesis_result,
 )
-from policy_atlas.schema import chunk as chunk_table
 from policy_atlas.synthesis_backend import (
     ChunkCitationWire,
     ClaimWire,
@@ -68,6 +63,7 @@ from policy_atlas.synthesise import (
 from tests.helpers import (
     now,
     seed_characterisation,
+    seed_ingested_full_text,
     seed_project_and_run,
     seed_run,
     seed_scope,
@@ -150,59 +146,6 @@ def _run_synthesise(
         grounding_judge_backend=judge_backend or StubGroundingJudgeBackend(),
         embedding_backend=StubEmbeddingBackend(),
     )
-
-
-def _seed_ingested_full_text(
-    conn: Connection,
-    *,
-    pss_id: uuid.UUID,
-    chunks: list[str],
-) -> uuid.UUID:
-    full_snapshot_id = uuid.uuid4()
-    conn.execute(
-        source_snapshot.insert().values(
-            source_snapshot_id=full_snapshot_id,
-            content_hash=content_hash("\n".join(chunks)),
-            text_basis="full_text",
-            source_locator=f"full-text-{full_snapshot_id}",
-            metadata={"title": "Full text fixture", "abstract": "Full text abstract."},
-            created_at=now(),
-        )
-    )
-    conn.execute(
-        update(project_source_snapshot)
-        .where(project_source_snapshot.c.project_source_snapshot_id == pss_id)
-        .values(full_text_snapshot_id=full_snapshot_id, full_text_status="ingested")
-    )
-    embedder = StubEmbeddingBackend()
-    vectors = embedder.embed_texts(chunks)
-    for index, content in enumerate(chunks):
-        chunk_id = uuid.uuid4()
-        conn.execute(
-            chunk_table.insert().values(
-                chunk_id=chunk_id,
-                source_snapshot_id=full_snapshot_id,
-                sequence=index,
-                content=content,
-                content_hash=content_hash(content),
-                locator={},
-                segmentation_policy="manual_v1",
-                created_at=now(),
-            )
-        )
-        conn.execute(
-            chunk_embedding.insert().values(
-                chunk_embedding_id=uuid.uuid4(),
-                chunk_id=chunk_id,
-                embedding_profile=EMBEDDING_PROFILE,
-                unit_policy=UNIT_POLICY,
-                unit_index=0,
-                unit_locator={"start": 0, "end": len(content)},
-                vector=vectors[index],
-                created_at=now(),
-            )
-        )
-    return full_snapshot_id
 
 
 # --- Test 1: caps bind ---
@@ -396,7 +339,7 @@ def test_sibling_repair_guard(conn: Connection) -> None:
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="rough sleeping evidence")
-    _seed_ingested_full_text(
+    seed_ingested_full_text(
         conn,
         pss_id=pss_id,
         chunks=["The programme reduced rough sleeping by a third over two years."],
@@ -477,7 +420,7 @@ def test_injection_shaped_chunk_and_tag_land_inert(conn: Connection) -> None:
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="injection fixture")
-    _seed_ingested_full_text(
+    seed_ingested_full_text(
         conn,
         pss_id=pss_id,
         chunks=[
@@ -518,12 +461,12 @@ def test_foreign_project_scope_guard(conn: Connection) -> None:
     project_a, run_a = seed_project_and_run(conn)
     scope_a = seed_scope(conn, project_a)
     pss_a = seed_select_doc(conn, project_a, run_a, scope_a, title="project A doc")
-    _seed_ingested_full_text(conn, pss_id=pss_a, chunks=["Alpha corpus evidence chunk."])
+    seed_ingested_full_text(conn, pss_id=pss_a, chunks=["Alpha corpus evidence chunk."])
 
     project_b, run_b = seed_project_and_run(conn)
     scope_b = seed_scope(conn, project_b)
     pss_b = seed_select_doc(conn, project_b, run_b, scope_b, title="project B doc")
-    _seed_ingested_full_text(conn, pss_id=pss_b, chunks=["Beta corpus evidence chunk."])
+    seed_ingested_full_text(conn, pss_id=pss_b, chunks=["Beta corpus evidence chunk."])
 
     scope = build_retrieval_scope(
         conn, project_id=project_a, scope_id=scope_a, selected_pss_ids=set()
@@ -562,7 +505,7 @@ def test_screened_out_doc_unreachable(conn: Connection) -> None:
         )
     )
     seed_screening_result(conn, project_id, run_id, scope_id, pss_id, status="not_relevant")
-    _seed_ingested_full_text(conn, pss_id=pss_id, chunks=["Unreachable screened-out text."])
+    seed_ingested_full_text(conn, pss_id=pss_id, chunks=["Unreachable screened-out text."])
 
     scope = build_retrieval_scope(
         conn, project_id=project_id, scope_id=scope_id, selected_pss_ids=set()
@@ -661,7 +604,7 @@ def test_ledger_cross_section_citation_rejected(conn: Connection) -> None:
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="cross section corpus")
-    _seed_ingested_full_text(
+    seed_ingested_full_text(
         conn,
         pss_id=pss_id,
         chunks=["Cross-section evidence appears verbatim here."],
@@ -687,6 +630,38 @@ def test_ledger_cross_section_citation_rejected(conn: Connection) -> None:
     # cross-section claim, and section 1 ends with no verified citation.
     assert row.flags.get("repair_path_taken") is True
     assert row.flags.get("uncited_sections") is True
+
+
+def test_structural_rejection_is_counted_and_flagged(conn: Connection) -> None:
+    """A claim that fails validation for a non-quote reason (here: citing a
+    chunk id not returned to this section — 'unreturned_chunk_id') and
+    survives repair unrepaired lands as a counted, visible
+    claims_rejected_structural, never a silent drop. Also checks the
+    anchors_verified/anchors_unverified keys land on any completed run."""
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="cross section corpus")
+    seed_ingested_full_text(
+        conn,
+        pss_id=pss_id,
+        chunks=["Cross-section evidence appears verbatim here."],
+    )
+
+    _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        backend=_CrossSectionBackend(),
+    )
+
+    row = conn.execute(
+        select(synthesis_result).where(synthesis_result.c.project_id == project_id)
+    ).one()
+    assert row.counts["claims_rejected_structural"] > 0
+    assert row.flags.get("claims_rejected_structural") is True
+    assert "anchors_verified" in row.counts
+    assert "anchors_unverified" in row.counts
 
 
 # --- Test 8: socket-deny round trip through run_harness (zero egress) ---
@@ -818,7 +793,7 @@ def test_judge_coverage_violation_fails_honestly(conn: Connection) -> None:
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="judge coverage corpus")
-    _seed_ingested_full_text(
+    seed_ingested_full_text(
         conn,
         pss_id=pss_id,
         chunks=["Judge coverage evidence appears verbatim in this chunk."],

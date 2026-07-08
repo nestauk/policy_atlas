@@ -390,7 +390,7 @@ def _run_synthesise(state: HarnessState) -> HarnessState:
         characterisation_run_id=config.characterisation_run_id,
         selection_run_id=config.selection_run_id,
         extraction_run_id=config.extraction_run_id,
-        grouping_run_id=getattr(config, "grouping_run_id", None),
+        grouping_run_id=config.grouping_run_id,
     )
 
     try:
@@ -417,7 +417,9 @@ def _run_synthesise(state: HarnessState) -> HarnessState:
         )
         return {**state, "error": exc.error}
     except Exception as exc:
-        err = str(exc)
+        # Bounded: unexpected exceptions can carry provider/request detail
+        # that must not land in the durable event log verbatim.
+        err = f"{type(exc).__name__}: {str(exc)[:200]}"
         events.append(
             conn,
             project_id=project_id,

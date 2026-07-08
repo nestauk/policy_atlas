@@ -11,9 +11,8 @@ import uuid
 from typing import Any
 
 import pytest
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
-from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.embeddings import EMBEDDING_PROFILE, UNIT_POLICY, StubEmbeddingBackend
 from policy_atlas.grounding import content_hash
@@ -25,8 +24,9 @@ from policy_atlas.schema import (
     block,
     chunk_embedding,
     citation,
+    extraction_result,
+    grouping_result,
     project_source_snapshot,
-    source_snapshot,
     synthesis_result,
 )
 from policy_atlas.schema import chunk as chunk_table
@@ -36,6 +36,7 @@ from tests.helpers import (
     now,
     run_select,
     seed_characterisation,
+    seed_ingested_full_text,
     seed_project_and_run,
     seed_run,
     seed_scope,
@@ -131,59 +132,6 @@ def _run_synthesise(
     )
 
 
-def _seed_ingested_full_text(
-    conn: Connection,
-    *,
-    pss_id: uuid.UUID,
-    chunks: list[str],
-) -> uuid.UUID:
-    full_snapshot_id = uuid.uuid4()
-    conn.execute(
-        source_snapshot.insert().values(
-            source_snapshot_id=full_snapshot_id,
-            content_hash=content_hash("\n".join(chunks)),
-            text_basis="full_text",
-            source_locator=f"full-text-{full_snapshot_id}",
-            metadata={"title": "Full text fixture", "abstract": "Full text abstract."},
-            created_at=now(),
-        )
-    )
-    conn.execute(
-        update(project_source_snapshot)
-        .where(project_source_snapshot.c.project_source_snapshot_id == pss_id)
-        .values(full_text_snapshot_id=full_snapshot_id, full_text_status="ingested")
-    )
-    embedder = StubEmbeddingBackend()
-    vectors = embedder.embed_texts(chunks)
-    for index, content in enumerate(chunks):
-        chunk_id = uuid.uuid4()
-        conn.execute(
-            chunk_table.insert().values(
-                chunk_id=chunk_id,
-                source_snapshot_id=full_snapshot_id,
-                sequence=index,
-                content=content,
-                content_hash=content_hash(content),
-                locator={},
-                segmentation_policy="manual_v1",
-                created_at=now(),
-            )
-        )
-        conn.execute(
-            chunk_embedding.insert().values(
-                chunk_embedding_id=uuid.uuid4(),
-                chunk_id=chunk_id,
-                embedding_profile=EMBEDDING_PROFILE,
-                unit_policy=UNIT_POLICY,
-                unit_index=0,
-                unit_locator={"start": 0, "end": len(content)},
-                vector=vectors[index],
-                created_at=now(),
-            )
-        )
-    return full_snapshot_id
-
-
 def test_zero_substrate_fails_without_artefact_or_rollup(conn: Connection) -> None:
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
@@ -239,7 +187,7 @@ def test_chunk_substrate_writes_verified_unselected_citations(conn: Connection) 
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="Test intent evidence")
-    _seed_ingested_full_text(
+    seed_ingested_full_text(
         conn,
         pss_id=pss_id,
         chunks=[
@@ -308,7 +256,7 @@ def test_fabricated_chunk_quote_is_excluded_and_never_persisted(conn: Connection
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="stubfabricate")
-    _seed_ingested_full_text(
+    seed_ingested_full_text(
         conn,
         pss_id=pss_id,
         chunks=["stubfabricate evidence text is real but contains no fabricated quote."],
@@ -364,7 +312,8 @@ def test_same_run_reexecution_is_loud(conn: Connection) -> None:
         scope_id=scope_id,
         characterisation_run_id=characterisation_run_id,
     )
-    with pytest.raises(IntegrityError):
+    artefacts_before = _count(conn, artefact, project_id)
+    with pytest.raises(SynthesiseFailure, match="same_run_reexecution"):
         _run_synthesise(
             conn,
             project_id=project_id,
@@ -372,6 +321,78 @@ def test_same_run_reexecution_is_loud(conn: Connection) -> None:
             scope_id=scope_id,
             characterisation_run_id=characterisation_run_id,
         )
+    # The guard fires before any write: no orphan artefact, transaction
+    # still healthy for the failure event.
+    assert _count(conn, artefact, project_id) == artefacts_before
+    assert conn.execute(select(func.count()).select_from(artefact)).scalar() is not None
+
+
+def test_how_resolved_records_explicit_extraction_not_transitive(conn: Connection) -> None:
+    """Supplying BOTH grouping_run_id and its matching extraction_run_id
+    explicitly must record 'explicit' for extraction in how_resolved, not
+    'transitive:grouping' — the honesty fix for reference provenance."""
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="Grouping doc")
+    characterisation_run_id = seed_run(conn, project_id)
+    seed_characterisation(
+        conn,
+        project_id,
+        scope_id,
+        characterisation_run_id,
+        themes={"theme-a": [pss_id]},
+    )
+    _, _, selection_run_id = run_select(conn, project_id, scope_id, characterisation_run_id)
+
+    extraction_run_id = seed_run(conn, project_id)
+    conn.execute(
+        extraction_result.insert().values(
+            extraction_result_id=uuid.uuid4(),
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            run_id=extraction_run_id,
+            selection_run_id=selection_run_id,
+            extraction_provenance={"fingerprint": "t"},
+            docs=[],
+            counts={"findings": {"total": 0}},
+            flags={},
+            created_at=now(),
+        )
+    )
+    grouping_run_id = seed_run(conn, project_id)
+    conn.execute(
+        grouping_result.insert().values(
+            grouping_result_id=uuid.uuid4(),
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            run_id=grouping_run_id,
+            extraction_run_id=extraction_run_id,
+            facet="intervention",
+            grouping_provenance={},
+            groups={"groups": [], "ungrouped": {}, "no_value": {}},
+            counts={},
+            flags={},
+            created_at=now(),
+        )
+    )
+
+    _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        grouping_run_id=grouping_run_id,
+        extraction_run_id=extraction_run_id,
+    )
+
+    row = conn.execute(
+        select(synthesis_result).where(synthesis_result.c.project_id == project_id)
+    ).one()
+    how_resolved = row.synthesis_provenance["resolved_references"]["how_resolved"]
+    assert how_resolved["grouping"] == "explicit"
+    assert how_resolved["extraction"] == "explicit"
+    assert how_resolved["selection"] == "transitive:extraction"
+    assert how_resolved["characterisation"] == "transitive:selection"
 
 
 def test_backend_failure_writes_no_rollup(conn: Connection) -> None:

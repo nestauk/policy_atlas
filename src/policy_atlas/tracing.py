@@ -492,13 +492,16 @@ def synthesis_score_summary(
             value=0.0,
             data_type="NUMERIC",
         )
-    citations_verified = counts["citations_verified"]
-    citations_unverified = counts["citations_unverified"]
-    citations_seen = citations_verified + citations_unverified
-    if citations_seen > 0:
+    # Per-anchor counts on both sides — citations_verified (citation rows)
+    # and citations_unverified (flagged claims) count different units and
+    # cannot form an honest ratio.
+    anchors_verified = counts.get("anchors_verified", 0)
+    anchors_unverified = counts.get("anchors_unverified", 0)
+    anchors_seen = anchors_verified + anchors_unverified
+    if anchors_seen > 0:
         client.score_current_trace(
             name="citation_verified_share",
-            value=citations_verified / citations_seen,
+            value=anchors_verified / anchors_seen,
             data_type="NUMERIC",
         )
     else:

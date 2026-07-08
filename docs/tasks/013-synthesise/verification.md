@@ -5,9 +5,10 @@ first agent loop). Public-safe — no secrets, no raw source text, no unredacted
 traces. Filled at step 6; **Review findings** + **Rubric status** follow the
 review stack (step 7).
 
-> **Status: step 6 complete (2026-07-08).** `make verify` fully green at the
-> exit; four-profile live check recorded below. Review findings + rubric
-> status follow the review stack (step 7, fresh conversation).
+> **Status: step 7 complete (2026-07-08).** `make verify` fully green at the
+> step-6 exit and again after the review-stack fixes (629 tests); four-profile
+> live check recorded below. Review findings + rubric status recorded in
+> § Review findings.
 
 ## Commands run
 
@@ -289,6 +290,123 @@ by the live check, each root-caused and regression-covered):
   Langfuse only; keys env-only and absent from all captured output
   (_confirmed at the live check_).
 
+## Review findings (step 7, 2026-07-08 — fresh conversation)
+
+Tier-3 stack as contracted: **contract verifier** (pinned fresh reviewer,
+read-only) · **`/code-review` medium** (8 lens-scoped finder angles → 14
+candidates → 1-vote verify: 13 CONFIRMED / 1 PLAUSIBLE / 0 refuted) · **one
+security lane** (headline: the agent loop) · **Codex adversarial** (read-only
+brief; 7 claims, each independently verified — 2 refuted as
+intended-by-contract, 5 confirmed) · `/simplify` **skipped with
+justification** (the `/code-review` reuse/simplification/efficiency/altitude
+angles ran and their adopted fixes were applied in this phase; a second
+same-family cleanup pass would duplicate them).
+
+**Headline outcomes:** the contract verifier found **no violated rubric
+items** (all satisfied except the two step-8-pending ones) and no
+documented-but-not-built claims. The security lane found **no critical or
+high** issues — closed tool dispatch, binding caps, parameterised SQL, no
+citation escape, clean egress/keys all held under adversarial review.
+
+**Convergent findings (multi-lane, high confidence), all adopted:**
+
+- **`lookup` tag reads were project-wide, not screened-scope** (security ·
+  Codex · contract verifier): `docs_by_tag` / `tag_aggregate` /
+  `tags_by_doc` now join through this scope's screened-in set
+  (`_screened_in_doc_ids`); regression-tested.
+- **Reasoning-claim cap could leak by one on a type-changing repair**
+  (`/code-review` · contract verifier): `validate_claims` now takes
+  `reasoning_count_start` seeded with the surviving initial batch;
+  regression-tested.
+
+**Unique-lane findings adopted (each justifies its lane):**
+
+- **Codex:** `claims_rejected_structural` was counted in memory but never
+  reached the persisted roll-up — contradicting this document's own
+  "counted, never silent" claim (doc-vs-code catch). Now in per-block
+  roll-ups, run counts and flags. · **Same-run re-execution wrote an orphan
+  artefact + blocks before failing at the roll-up UNIQUE, and the harness's
+  failure-event write then died on the aborted transaction** (no audit
+  event, cascading driver error): a pre-write existence check now fails loud
+  before any write; UNIQUE stays as the concurrent backstop; harness-level
+  regression test added. · **A finding claim citing a finding with an empty
+  grounding array passed unflagged** (the one anchor-failure shape that
+  skipped the flagging branch): now `quote_unverified` + weakly-grounded
+  cap; regression-tested.
+- **`/code-review`:** `citation_verified_share` divided mixed units
+  (citation rows ÷ rows+flagged-claims) — new per-anchor
+  `anchors_verified`/`anchors_unverified` counts feed the trace score. ·
+  `how_resolved` mislabelled an explicitly-supplied-and-consistent reference
+  as `transitive:*` — now records `explicit`; regression-tested. · Repair
+  replacements bind positionally with no count check — mismatches now flag
+  `repair_count_mismatch` (id-carrying repair schema → deferred.md). ·
+  Efficiency: chunk-claim validation reuses the cached per-document basis;
+  retriever unit tokens memoised; section persistence uses bulk inserts. ·
+  Cleanup: shared `_spans_to_citations` / `require_parsed` /
+  `require_single_tool_call` / `_transcript_records` helpers; the test-suite
+  `seed_ingested_full_text` fixture moved to `tests/helpers.py`; the
+  defensive `getattr(config, "grouping_run_id")` replaced with the direct,
+  fail-loud attribute.
+- **Security:** per-emission bounds (`EMISSION_CLAIMS_MAX`=50,
+  `CLAIM_TEXT_MAX`=5000, enforced at salvage, overflow counted structural —
+  closing the one hole in the cap discipline) · `repair_unparseable`
+  roll-up flag (systematic backend malformation now distinguishable from
+  honest sparsity) · bounded harness catch-all error strings (type name +
+  200 chars; raw exception text no longer lands in durable events) · one
+  adversarial line in the judge prompt (chunk text discussing
+  verdicts/tiers/reviewers is evidence of nothing).
+
+**Declined / deferred, with reasons:**
+
+- **Pattern/theme/gap claim text is never judged** (security MEDIUM + Codex
+  HIGH, convergent): contract-mandated — `JUDGED_TYPES` is the approved
+  design (deterministic validation, not judgment, for computed-payload
+  types). Real residual (injected prose can ride an unjudged claim type into
+  the artefact); recorded as a hardening candidate on the quality-evals
+  seam, not silently dropped.
+- **Fabricated quotes appear in Langfuse traces** (Codex): the contract's
+  operative invariant ("no citation row, no stored quote") is
+  domain-model-scoped and holds; traces are deliberately full-I/O on the
+  operator's own instance. Adjudicated as in-contract; the rubric's
+  "persisted anywhere" phrasing is clarified as DB-scoped here. Trace-store
+  trust boundary noted in deferred.md.
+- **`_load_findings` per-snapshot N+1** (`/code-review` efficiency):
+  premature at current corpus scale; folded into the existing
+  corpus-scale-retrieval deferred entry.
+- **Harness node triplication** (`_run_scope_component` /
+  `_run_characterise` / `_run_synthesise` share ~30 boilerplate lines;
+  `/code-review` altitude): author-documented deliberate choice; a
+  mid-review refactor of shared 011-landed infrastructure is worse than the
+  duplication. Deferred-cleanup entry instead.
+- **Second exclusion class ratified** (contract verifier finding A): the
+  lead ratifies `claims_rejected_structural` as the narrow second exclusion
+  beyond fabricated quotes — a claim whose *type* has no validator after its
+  one repair has no honest persistence path — now that it is visible in the
+  persisted roll-up (the fix above made this document's claim true).
+- **Block ordering lives in the roll-up JSONB, not an ordering column**
+  (contract verifier, INFO): consistent with the deferred
+  composition-conventions seam; no change.
+
+**Fake-done check on this phase's fixes:** no test deleted/weakened (the
+same-run test was *strengthened*: SynthesiseFailure + no-orphan-writes +
+harness-event assertions replaced a bare IntegrityError expectation); no
+swallowed errors introduced (the new guards fail loud); all fixes carry
+regression tests (629 total, was 620).
+
+**Budget actuals (cost proxy, split by class):** reasoning-class ≈ **356K**
+(contract verifier 169K · security 164K · Codex 23K) vs the ≤250K routine
+target; fast-worker ≈ **1.05M** (finders 488K · candidate verifiers 186K ·
+Codex-claim verifiers 173K · test batch 202K) vs ≤500K. Overrun is the slice
+size (13.9K added lines, ~3× a routine slice — sized deliberately, 008
+retro) plus the two-stage verification of Codex's claims, which refuted two
+"critical" findings before they cost adjudication churn. Per-angle diff
+scoping was applied; no data files needed excluding.
+
+**Rubric status:** items 1–7 and 9–19 SATISFIED (contract-verifier report,
+file:line + named-test evidence; two overlap-verified here); item 8
+satisfied by this section. The step-8 records (deferred.md seam updates from
+this review, knowledge/agentic-ops entries) ride in the PR.
+
 ## Deferred work
 
 Recorded/updated in [docs/deferred.md](../../deferred.md) — the task-013
@@ -297,4 +415,8 @@ claims, policy-conditioned citable-bar flagging, block summaries, structure
 discovery, regeneration-time coherence, quality evals, artefact
 discriminator), the narrowed `retrieve`/composition entries, and the closed
 entries (`query-findings` discharged; traced-call helper factored; the 009
-vectors' first reader landed).
+vectors' first reader landed). The review stack added: the id-carrying
+repair-schema seam, the harness event-write-on-aborted-transaction seam, the
+unjudged-claim-text hardening candidate (quality-evals entry), the trace-store
+trust boundary note, `_load_findings` batching (corpus-scale entry), and the
+harness-node generalisation cleanup.
