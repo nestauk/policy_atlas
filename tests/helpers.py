@@ -47,6 +47,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         source_screening_result,
         source_snapshot,
         source_tag,
+        synthesis_result,
     )
     from policy_atlas.schema import (
         chunk as chunk_table,
@@ -80,6 +81,11 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         annotation.c.block_id.in_(block_ids_subq)
     )
 
+    # Task 013 row first: FKs onto artefact and all four upstream result tables
+    # (characterisation/selection/extraction/grouping) plus scope/runs.
+    conn.execute(delete(synthesis_result).where(
+        synthesis_result.c.project_id == project_id
+    ))
     # citation → annotation → addressable_unit → block (then event_log, artefact, runs)
     conn.execute(delete(citation_table).where(
         citation_table.c.annotation_id.in_(annotation_ids_subq)

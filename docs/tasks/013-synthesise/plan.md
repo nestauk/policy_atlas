@@ -1,10 +1,11 @@
 # Implementation Plan: 013-synthesise
 
-> **Status:** drafted (rev 2) — plan-stage adversarial review adjudicated
+> **Status:** **approved rev 2** (2026-07-08 · Shabeer Rauf — approval
+> given as the explicit build directive opening conversation B) —
+> plan-stage adversarial review adjudicated
 > (5 majors · 5 minors, 0 blockers — 9 adopted, 1 adopted-as-clarification
 > [m7: `chunk.segmentation_policy` exists in the as-built schema; the
-> reviewer's premise was wrong — the source is now pinned]); awaiting the
-> plan 🛑.
+> reviewer's premise was wrong — the source is now pinned]).
 > **Lane deviation, recorded:** the Codex adversarial lane was capped at
 > this gate (session limit, resets 05:30) and its rescue agent died before
 > registering a job; the review ran on the **fresh-context deep-reasoner

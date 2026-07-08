@@ -13,7 +13,8 @@ specs in [docs/specs/](../../specs/index.md).
 > `synthesis_result` table · the `"synthesise"` registry entry with all
 > four run references optional + two backend kwargs · three generation
 > surfaces + embedding-query use · the repo's first agent loop) ·
-> Plan approved (before implementation): _pending_ ·
+> Plan approved (before implementation): **2026-07-08 · Shabeer Rauf**
+> (rev 2, via the explicit build directive opening conversation B) ·
 > ADRs: [0009](../../adr/0009-capability-composes-synthesise-terminus.md)
 > (capability-composes · terminus at every depth · registry, breadth ⊥
 > depth · chunk-grounding sanction + scale gate) +
