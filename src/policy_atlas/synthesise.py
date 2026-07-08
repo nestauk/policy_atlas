@@ -1102,8 +1102,20 @@ def _validate_sections(
     proposal: SectionProposalWire,
     *,
     grouping_group_ids: set[str] | None,
-) -> tuple[list[SectionSpec], list[str]]:
+) -> tuple[list[SectionSpec], list[str], list[str]]:
+    """Validate a section proposal into specs.
+
+    Returns ``(sections, reasons, normalisations)``. Integrity rules reject
+    (``reasons`` drive the one bounded repair — instructive sentences, fed
+    back verbatim as data, or the repair repeats the mistake). Two live model
+    slips are instead **normalised and recorded** (the rev 8 M5
+    clamp-over-reject posture — they annotate, they are not evidence-bearing):
+    overlong titles/foci truncate to their bound with an ellipsis, and
+    group_ids on a run with no grouping are stripped. ``normalisations`` is
+    recorded in provenance, never silent.
+    """
     reasons: list[str] = []
+    normalisations: list[str] = []
     sections = proposal.sections
     if not 1 <= len(sections) <= SECTION_CAP:
         reasons.append(f"section_count_out_of_range: 1..{SECTION_CAP}")
@@ -1113,11 +1125,16 @@ def _validate_sections(
     for index, section in enumerate(sections):
         title = section.title
         focus = section.focus
-        if not title or len(title) > SECTION_TITLE_MAX or has_control_character(title):
+        if len(title) > SECTION_TITLE_MAX:
+            title = title[: SECTION_TITLE_MAX - 1] + "…"
+            normalisations.append(f"sections[{index}].title_truncated")
+        if len(focus) > SECTION_FOCUS_MAX:
+            focus = focus[: SECTION_FOCUS_MAX - 1] + "…"
+            normalisations.append(f"sections[{index}].focus_truncated")
+        if not title or has_control_character(title):
             reasons.append(
                 f"sections[{index}].title_invalid: title must be a non-empty "
-                f"string of at most {SECTION_TITLE_MAX} characters with no "
-                "control characters"
+                "string with no control characters"
             )
         if title.casefold() in forbidden:
             reasons.append(
@@ -1132,23 +1149,15 @@ def _validate_sections(
                 "be distinct"
             )
         seen_titles.add(folded)
-        if not focus or len(focus) > SECTION_FOCUS_MAX or has_control_character(focus):
+        if not focus or has_control_character(focus):
             reasons.append(
                 f"sections[{index}].focus_invalid: focus must be a non-empty "
-                f"string of at most {SECTION_FOCUS_MAX} characters with no "
-                "control characters — shorten it"
+                "string with no control characters"
             )
         group_ids = list(section.group_ids)
-        # Reasons are the repair call's instructions (fed back verbatim as
-        # data) — instructive sentences, not bare codes, or the repair repeats
-        # the mistake.
         if grouping_group_ids is None and group_ids:
-            reasons.append(
-                f"sections[{index}].group_ids_without_grouping: no facet "
-                "grouping is referenced on this run, so group_ids must be "
-                "omitted entirely (an empty list); characterisation theme ids "
-                "are not group ids"
-            )
+            group_ids = []
+            normalisations.append(f"sections[{index}].group_ids_stripped_no_grouping")
         elif grouping_group_ids is not None:
             unknown = sorted(set(group_ids) - grouping_group_ids)
             if unknown:
@@ -1158,7 +1167,7 @@ def _validate_sections(
                     "grouping records, or omit group_ids"
                 )
         parsed.append(SectionSpec(title=title, focus=focus, group_ids=group_ids))
-    return parsed, reasons
+    return parsed, reasons, normalisations
 
 
 def _sections_from_directive(sections: list[dict[str, Any]]) -> list[SectionSpec]:
@@ -2483,6 +2492,7 @@ def synthesise_scope(
         )
     )
 
+    proposal_normalisations: list[str] = []
     if directive.sections is not None:
         sections = _sections_from_directive(directive.sections)
         section_source = "scope_context"
@@ -2493,9 +2503,17 @@ def synthesise_scope(
                 intent=context.intent, substrate=summaries
             )
         except RuntimeError as exc:
-            raise SynthesiseFailure(type(exc).__name__, blocks_written=blocks_written) from exc
+            raise SynthesiseFailure(
+                # Our own RuntimeError messages are bounded and reduced by
+                # construction (never raw response bodies) — carry them: the
+                # failure event is the only diagnosable record.
+                f"{type(exc).__name__}: {str(exc)[:200]}",
+                blocks_written=blocks_written,
+            ) from exc
         grouping_group_ids = substrate.grouping_group_ids if substrate.grouping else None
-        sections, reasons = _validate_sections(proposal, grouping_group_ids=grouping_group_ids)
+        sections, reasons, proposal_normalisations = _validate_sections(
+            proposal, grouping_group_ids=grouping_group_ids
+        )
         if reasons:
             try:
                 _reserve_generation(call_counts, "proposal_repair")
@@ -2504,9 +2522,10 @@ def synthesise_scope(
                 )
             except RuntimeError as exc:
                 raise SynthesiseFailure(
-                    type(exc).__name__, blocks_written=blocks_written
+                    f"{type(exc).__name__}: {str(exc)[:200]}",
+                    blocks_written=blocks_written,
                 ) from exc
-            sections, reasons = _validate_sections(
+            sections, reasons, proposal_normalisations = _validate_sections(
                 repaired,
                 grouping_group_ids=substrate.grouping_group_ids if substrate.grouping else None,
             )
@@ -2518,6 +2537,11 @@ def synthesise_scope(
                     "section_proposal_invalid: " + "; ".join(reasons)[:600],
                     blocks_written=blocks_written,
                 )
+        if proposal_normalisations:
+            log.info(
+                "synthesise.proposal_normalised",
+                normalisations=proposal_normalisations,
+            )
         section_source = "proposal"
 
     assigned_groups = {group_id for section in sections for group_id in section.group_ids}
@@ -2712,6 +2736,10 @@ def synthesise_scope(
             "source": section_source,
             "sections": [section.as_seed() for section in sections],
             "groups_unsectioned": groups_unsectioned,
+            # Deterministic proposal normalisations (visible, never silent):
+            # overlong title/focus truncation; group_ids stripped when no
+            # grouping is referenced (the rev 8 M5 clamp-over-reject posture).
+            "proposal_normalisations": proposal_normalisations,
         },
         "caps": {
             "SECTION_CAP": SECTION_CAP,
