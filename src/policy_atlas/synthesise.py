@@ -1123,12 +1123,24 @@ def _validate_sections(
         if not focus or len(focus) > SECTION_FOCUS_MAX or has_control_character(focus):
             reasons.append(f"sections[{index}].focus_invalid")
         group_ids = list(section.group_ids)
+        # Reasons are the repair call's instructions (fed back verbatim as
+        # data) — instructive sentences, not bare codes, or the repair repeats
+        # the mistake.
         if grouping_group_ids is None and group_ids:
-            reasons.append(f"sections[{index}].group_ids_without_grouping")
+            reasons.append(
+                f"sections[{index}].group_ids_without_grouping: no facet "
+                "grouping is referenced on this run, so group_ids must be "
+                "omitted entirely (an empty list); characterisation theme ids "
+                "are not group ids"
+            )
         elif grouping_group_ids is not None:
             unknown = sorted(set(group_ids) - grouping_group_ids)
             if unknown:
-                reasons.append(f"sections[{index}].group_ids_unknown")
+                reasons.append(
+                    f"sections[{index}].group_ids_unknown: {unknown[:5]} are "
+                    "not supplied facet group ids — copy ids exactly from the "
+                    "grouping records, or omit group_ids"
+                )
         parsed.append(SectionSpec(title=title, focus=focus, group_ids=group_ids))
     return parsed, reasons
 

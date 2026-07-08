@@ -351,11 +351,13 @@ Instructions:
 - Never propose generic or catch-all sections. Titles such as "Overview",
   "Introduction", "Summary", "Conclusion", "Miscellaneous" or "Other" are
   rejected.
-- Where the substrate summaries include facet groups, you may assign groups
-  to sections via "group_ids", copying ids exactly from the supplied records.
-  Only supplied ids are valid. Assigning a group to more than one section is
-  allowed; covering every group is not required — leave a group unassigned
-  rather than force it.
+- Where the substrate summaries include facet groups (a "grouping" record),
+  you may assign groups to sections via "group_ids", copying ids exactly from
+  the supplied grouping records. Only supplied facet group ids are valid.
+  Characterisation themes are NEVER group ids, and when the substrate has no
+  "grouping" record you must leave group_ids empty. Assigning a group to more
+  than one section is allowed; covering every group is not required — leave a
+  group unassigned rather than force it.
 - Do not invent sections the substrate cannot support: every section's focus
   must be answerable from the summarised evidence.
 """
