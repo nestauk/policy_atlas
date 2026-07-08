@@ -150,7 +150,10 @@ PR landing:
    - **In-call:** one retry (cap 1) per document on both components
      before any failure outcome is recorded.
    - **Screen:** call failure (post-retry) → `status='failed'`
-     persisted. `uq_ssr_scope_source` becomes a **partial unique index
+     persisted. `uq_ssr_scope_source` — `source_screening_result`'s
+     unique constraint over (evidence_scope_id,
+     project_source_snapshot_id), i.e. "one screening result per doc
+     per scope" — becomes a **partial unique index
      excluding `status='failed'`** (the 011 extraction-memo precedent:
      "failures never block retry"), and the NOT-EXISTS candidate guard
      becomes "no **non-failed** result exists" — a subsequent run
