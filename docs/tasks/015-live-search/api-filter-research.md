@@ -33,6 +33,30 @@ adjudication into the directive grammar is contract rev 3.1
 
 ---
 
+## Addendum — design-stage OpenAlex select/shape probe (2026-07-09, lead; 9 calls)
+
+Run with the user-supplied `OPENALEX_API_KEY` (env-only, redacted from
+all output) to pin retention-candidate shapes and `select=` behavior
+for the rev-3.5 persistence adjudication:
+
+- **`grants` is NOT a valid `select` field** (400 with an explicit
+  valid-field list) — retaining it would force full-work fetches,
+  forfeiting the decision-6 credit-efficiency design. Excluded.
+- **Selectable and shape-pinned**: `indexed_in` (array of index names —
+  `["crossref"]`, `["crossref","doaj"]` observed) · `publication_date`
+  (full ISO date) · `keywords` (objects with `display_name`) ·
+  `primary_location` / `open_access` (nested blocks return whole —
+  `select` is root-level, so the retained nested fields
+  `source.is_core`, `source.is_in_doaj`, `oa_status`,
+  `any_repository_has_fulltext` all arrive within their blocks ✓).
+- **OpenAlex `keywords` are noisy** — wrong-sense disambiguation
+  artifacts observed directly: "Government (linguistics)",
+  "State (computer science)", "Stock (firearms)", "Argument (complex
+  analysis)" — legacy concept-linking noise. Verdict: keep the existing
+  `provider_fields` retention (honest point-in-time record), **never
+  promote to the tag layer** (they would pollute `source_tag` with
+  absurd labels beside the clean topic/SDG tags).
+
 ## Report 1 — OpenAlex Works filter catalog (deep-reasoner, live-verified 2026-07-09)
 
 Verification basis: canonical docs source `github.com/ourresearch/openalex-docs` (docs.openalex.org → developers.openalex.org); closed vocabularies re-verified against the live API (`group_by`) on 2026-07-09.

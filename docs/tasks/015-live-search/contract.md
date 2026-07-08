@@ -3,14 +3,33 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted rev 3.4 — awaiting contract approval (the 🛑 is
-> open; revs 2–3.4 shaped at the gate in user deliberation).
+> **Status:** drafted rev 3.5 — awaiting contract approval (the 🛑 is
+> open; revs 2–3.5 shaped at the gate in user deliberation).
 > Contract approved (before planning): _date · who_ ·
 > Plan approved (before implementation): _date · who_ · ADR: _expected:
 > one_ (depth-graded agentic search adoption — the Arm-B fold is a
 > consequential design decision; drafted at step 4).
 >
 > **Revision history:**
+> - **rev 3.5** (2026-07-09, user direction: re-adjudicate source
+>   persistence + the tags layer on the now-known live shapes; one
+>   OpenAlex select/shape probe added — see the api-filter-research.md
+>   addendum). **New decision 20** — retention + tag deltas, all
+>   zero-schema: retain Overton `overton_policy_document_series` ·
+>   `translated_title` · `pdf_document_id` · `keyed_other_identifiers`
+>   and OpenAlex `indexed_in` · `publication_date`; tag Overton
+>   `source_tags` (`asserted_by='overton'`, existing bounds). **Declined
+>   with evidence**: OpenAlex `keywords` → tags (probe showed
+>   wrong-sense disambiguation noise — "Stock (firearms)"); `grants`
+>   retention (not a valid `select` field — would force full-work
+>   fetches). Newly-understood existing riches noted for consumers:
+>   Overton `source.region` carries group memberships (OECD/G7/G20/…,
+>   already retained via the `source` block); `sdgcategories` carries
+>   target-level labels ("SDG Target 11.1") already flowing to tags.
+>   Classify-allowlist widening for the new priors
+>   (`overton_policy_document_series` · `indexed_in`) is a recorded
+>   seam on the 014 surface — retention now, consumption via its own
+>   prompt-version bump.
 > - **rev 3.4** (2026-07-09, residual pinning probes run — user:
 >   "finish off the live check"; +4 calls, 21 total; record updated in
 >   [overton-param-pinning.md](overton-param-pinning.md)). **Zero
@@ -697,6 +716,47 @@ PR landing:
     live-check evidence. Seeded RNG makes loop tests deterministic;
     live runs use per-run entropy.
 
+20. **Source-persistence + tag-layer deltas, live-shape-informed**
+    *(new, rev 3.5 — user direction; zero schema change: JSONB
+    retention constants + the existing `source_tag` machinery)*. A
+    snapshot is a point-in-time record and live data makes loss
+    permanent (the 007 rationale, now sharper), so the retain sets
+    grow where the probes showed value:
+    - **Overton retains** (added to `_OVERTON_RETAIN_KEYS`):
+      `overton_policy_document_series` (document-series/type —
+      "Working paper" · "Clinical guidance" · "White paper" — a
+      classify prior and landscape axis) · `translated_title`
+      (non-English support; already the title fallback, now persisted
+      when both titles exist) · `pdf_document_id` (the second half of
+      the two-level identity; 016/multi-PDF seam) ·
+      `keyed_other_identifiers` (cross-reference identity beyond the
+      consumed DOI).
+    - **OpenAlex retains** (added to `_OPENALEX_RETAIN_KEYS`, both
+      select-probe-verified as `select`-able): `indexed_in`
+      (crossref/doaj/pubmed/arxiv — a cheap discipline/OA prior) ·
+      `publication_date` (full ISO date; the envelope keeps year-grain,
+      recency analysis gets day-grain from provider_fields).
+    - **Tags gain Overton `source_tags`** (publisher-curated subject
+      headings — "HOUSING POLICY", committee names) via the existing
+      `_provider_tags` path, `asserted_by='overton'`, under the
+      standing caps and control-character bounds; sanitized fixtures
+      already carry the field.
+    - **Declined, with evidence**: OpenAlex `keywords` → tags (the
+      shape probe surfaced wrong-sense disambiguation noise —
+      "Government (linguistics)", "Stock (firearms)" — which would
+      pollute the tag layer; retention in provider_fields stands,
+      promotion is refused and test-pinned) · `grants` retention (not
+      `select`-able — would force full-work fetches against
+      decision 6).
+    - **Consumption stays gated**: the new priors join classify's
+      *retained* substrate, but widening classify's closed input
+      allowlist (014 decisions 4/7) is a prompt-surface change on an
+      approved egress surface — recorded as a seam riding the next
+      `classify_v1` version bump, never silently folded in here.
+      Overton `source.region`'s group memberships (OECD/G7/G20 —
+      already retained inside the `source` block) are noted for
+      characterise's landscape axes the same way.
+
 ## Scope / Out of scope
 
 - **In:** live transport module (decisions 1–10) · depth directive +
@@ -707,7 +767,9 @@ PR landing:
   protocol growth + fixture-backed verbs (16) · screen-informed
   stopping + the rapid-thin escalation (17) · pagination +
   `scope_filters` vocabulary + backend-scope Plan/Config field (18) ·
-  budgets/counts (19) · one `stop_condition` CHECK migration · skeleton
+  budgets/counts (19) · retention + tag deltas in the mapping layer
+  (20 — retain-key constants, `_provider_tags`, tests incl. the
+  keywords-never-tagged pin) · one `stop_condition` CHECK migration · skeleton
   wiring (depth profiles, round sequencing, escalation) · components
   §1 + §2 flow-back · tests + `verification.md` · `deferred.md` +
   knowledge updates.
@@ -814,8 +876,12 @@ in-contract fix (halt and report — don't quietly raise the budgets).
   on every request · retry-then-honest-failure (429/5xx/timeout) ·
   response-shape validation (+ `next_page_url: false` tolerance) ·
   redacted-HTTP-error key test (both backends) · `select=` superset
-  test · no-citation-floor test · mapper-consumable live records
-  (transport stub over a raw fixture page) · zero-egress guard
+  test (covering decision 20's two new OpenAlex keys) ·
+  no-citation-floor test · mapper-consumable live records
+  (transport stub over a raw fixture page) · retention/tag deltas
+  (decision 20: new retain keys present on mapped fixtures; Overton
+  `source_tags` materialised within bounds; OpenAlex `keywords` never
+  tagged — the deliberate-refusal pin) · zero-egress guard
   extension.
 - Capability tests (revs 2–3): depth directive fail-closed (unknown
   depth → structural failure) · rapid fan-out (n queries × variants,
