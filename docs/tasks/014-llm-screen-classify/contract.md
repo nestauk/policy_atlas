@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 1.4), awaiting contract 🛑.
+> **Status:** drafted (rev 1.5), awaiting contract 🛑.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ · ADR: _expected — first
 > product read of third-party corpus text; injection posture enforcement._
@@ -82,6 +82,30 @@ specs in [docs/specs/](../../specs/index.md).
 >   at 0.5 naturally). Vote/probability divergence explicitly legal
 >   (relevant at < 0.5 = kept-in-but-shaky, borderline-review
 >   surfaced). Decision 3 rewritten.
+> - **rev 1.5** (2026-07-08, V2 autopsy adjudicated — deep-reasoner
+>   recon of `../discovery_policy_atlas`, fourth in the series; full
+>   record [v2-screen-classify-autopsy.md](v2-screen-classify-autopsy.md)).
+>   **Contradiction held → decision 8 rewritten to a split model
+>   route**: V2's human-labelled eval measured mini-class ≈ 50% vs
+>   gpt-5.2 ≈ 76% top-1 on the identical 9-value taxonomy, and V2
+>   shipped gpt-5.2 for classify as its remedy — classify moves to the
+>   judgment-class model (single-pass, gates appraisal coverage, a
+>   coherent wrong label passes not-all-Unknown); screen stays mini ×3
+>   reps; eval-slice swap-down recorded (priors may close the gap).
+>   **Adopted**: classify wire gains `confidence` (payload/trace only,
+>   no column — V2 found classify confidence positively correlated
+>   with correctness + strength-gating precedent); `screen_v1`
+>   prompt-authoring note (holistic probability, never V2's additive
+>   facet rubric — root cause of FP 0.880 ≈ TP 0.904 miscalibration);
+>   classify face-validity spot-check in the live check. **Citations
+>   added in place**: silent-exclusion fix (dec 5 — V2 defaulted
+>   failed screens to not-relevant), consensus precedent (dec 10 —
+>   V2 `SCREENING_RUNS=5` tooling + recall 0.400 worst-corpus), display
+>   conflation anchors (dec 3iii — `PapersTable.tsx:261-278`). **New
+>   seams**: classify-confidence threshold-gating · V2 screening-eval
+>   baseline seeds the eval slice (incl. hard corpora) · heat_pump
+>   study re-scoped to 015/016 (search recall, not screening
+>   accuracy).
 
 ## Goal
 
@@ -204,13 +228,23 @@ PR landing:
    relevant one; 0.5 is the unique zero-directional-evidence value.
    The rev-1.1 unsure→relevant mapping lives in the VOTE leg only
    (recall device); the probability leg honours unsure's neutrality.
-   (iii) *Display seam (user, 2026-07-08 — observed V2 failure mode):*
-   decision confidence on `not_relevant` rows must never be rendered
-   alongside relevant rows' confidence as if one column of "relevance
-   scores" — V2's documents table does exactly this and users misread
-   exclusion confidence as a relevance score. Recorded for the
-   front-end/web-app seam (deferred.md at step 8); no v3.0 surface
-   renders it yet.
+   (iii) *Display seam (user, 2026-07-08 — observed V2 failure mode;
+   anchors confirmed by the V2 autopsy):* decision confidence on
+   `not_relevant` rows must never be rendered alongside relevant
+   rows' confidence as if one column of "relevance scores" — V2's
+   documents table does exactly this (`PapersTable.tsx:261-278`:
+   column headed "Relevance", renders `relevance_confidence*100` for
+   every row, default-sorted descending; same conflation in the CSV
+   export, V2 `projects.py:1848-1850`) and users misread exclusion
+   confidence as a relevance score. Recorded for the front-end/
+   web-app seam (deferred.md at step 8); no v3.0 surface renders it
+   yet. (iv) *Prompt-authoring note (rev 1.5, V2 root cause):* V2's
+   screen confidence was an additive +0.2-per-facet rubric (V2
+   `prompts.py:122-124`) — a coverage score, not a probability — and
+   was measurably uncalibrated (FP mean 0.880 ≈ TP mean 0.904;
+   committed eval `backend/testing/evals/screening/results/
+   20251120_135440/`). `screen_v1` must elicit a holistic probability
+   judgment, never an additive facet rubric.
    Vote and probability may legally diverge
    (two weak relevants against one high-conviction dissenter →
    `relevant` at confidence < 0.5): that is the honest recall-first
@@ -241,9 +275,16 @@ PR landing:
    document, not the question (the 011 precedent: intent was removed
    from `extract_iof_v1` for the same reason). The model returns a
    schema-constrained single choice over the closed 9-value
-   `EVIDENCE_TYPES` list plus bounded tag proposals **and a `reason`
-   field** (same bounds and event/trace-only handling as screen's, rev
-   1.2). Structured provider priors enter as data fields —
+   `EVIDENCE_TYPES` list plus bounded tag proposals, a `reason`
+   field (same bounds and event/trace-only handling as screen's, rev
+   1.2), **and a `confidence`** *(rev 1.5)* — event payload + trace
+   only, NO column ("model only what behaves": nothing reads it in
+   v3.0; the column arrives with its first reader). V2 precedent for
+   keeping it: classifier confidence was the one confidence V2 found
+   *positively correlated with correctness*, and downstream strength
+   scoring hard-gated on it (V2 `strength.py:456-461`) — the
+   threshold-gating pattern is a recorded seam for when a consumer
+   lands. Structured provider priors enter as data fields —
    `record_type`, Overton `source.type` / `organisation_type`, provider
    topic labels — to cut `Unknown`s on acquired documents
    (classification quality gates appraisal coverage).
@@ -281,6 +322,12 @@ PR landing:
      (changed from the stub-era fallback): `Unknown` is a
      classification claim and an API failure is not one; the NOT
      EXISTS guard makes the next run retry exactly those docs.
+   - *V2 evidence for this decision (rev 1.5):* V2 did the opposite
+     on both components and both failures were silent — failed screen
+     calls defaulted to `is_relevant=False` (**silent exclusion**, V2
+     `relevance.py:194-197`) and failed classify calls left a NaN
+     category (V2 `category.py:348-364`). Never-silent failure is the
+     direct fix.
    - Failures are counted in both component summaries, never silent.
    - **Read-path adjustment (named):** counts over screening rows must
      become failure-attempt-aware — `classify_sources`' `skipped`
@@ -307,9 +354,27 @@ PR landing:
    (instruction text inside an abstract must not steer the decision
    vocabulary) rides the judgment suite.
 
-8. **Model: `gpt-5-mini` on both surfaces** (the 009 nano lesson —
-   nano emits schema-valid empty output on realistic batches; every
-   live per-doc judgment surface since runs mini).
+8. **Model: split route** *(rewritten rev 1.5 — V2 autopsy
+   contradiction held)*. **Screen = `gpt-5-mini`** (compact-model
+   screening sensitivity is literature-validated, and the 3-rep
+   consensus adds redundancy; the 009 nano lesson still floors us at
+   mini). **Classify = the judgment-class model (`gpt-5.2`; plan pins
+   the exact id)**: V2's own human-labelled eval measured mini-class
+   at ≈ 50% vs gpt-5.2 at ≈ 76% top-1 on the IDENTICAL 9-value
+   taxonomy (three Argilla gold sets; narrative record
+   `EVIDENCE_CATEGORISATION_PLAN.md:396-431` — machine outputs
+   gitignored, so evidence grade is moderate), and V2 shipped exactly
+   this remedy (`EVIDENCE_CATEGORY_MODEL = "gpt-5.2"` "needs higher
+   accuracy", V2 `config.py:136-138`, while screen ran mini-class).
+   A 9-way closed-label discrimination is the harder judgment, it is
+   single-pass by design (rev 1.3), and classification quality gates
+   appraisal coverage — a coherent wrong label passes the
+   "not-all-Unknown" check, so model quality is the only line of
+   defence this slice has. Cost stays trivial at envelope grain.
+   **Eval-slice re-adjudication recorded**: V3's classify adds
+   structured provider priors V2 never had — if the eval slice shows
+   mini + priors closes the gap, the swap-down is a one-constant
+   change.
 
 9. **`make verify` stays deterministic and egress-free.** Stub backends
    default everywhere; the skeleton extends its existing
@@ -332,7 +397,14 @@ PR landing:
     screen only — classify stays single-call (a 9-label vote
     splinters; tie-breaks would inflate `Unknown`s);
     classify-consensus and heterogeneous-model ensembles are recorded
-    eval-gated seams.
+    eval-gated seams. *V2 evidence (rev 1.5):* single-pass mini
+    screening is not uniformly recall-safe (V2 committed eval: 3ie
+    overall recall 0.727, worst corpus 0.400 with 1,352 false
+    negatives), and V2's own blueprint eval already tooled multi-run
+    screening (`SCREENING_RUNS=5`,
+    `blueprint_comparison/screening/evaluate_screening.py`) — the
+    consensus adoption has V2 precedent on both the problem and the
+    remedy.
 
 ## Scope / Out of scope
 
@@ -359,7 +431,16 @@ PR landing:
   intent-as-data is the v3.0 surface). These seams + the
   LLM4SCREENLIT eval-metric pointers (full confusion matrix ·
   lost-evidence/recall · WMCC · the deterministic stub as the non-LLM
-  baseline) land as `deferred.md` entries at step 8.
+  baseline) land as `deferred.md` entries at step 8, joined by the
+  rev-1.5 V2-autopsy seams: classify-confidence threshold-gating
+  (V2 `strength.py:456-461` precedent — arrives with its first
+  consumer) · the V2 screening eval baseline as eval-slice seed
+  (13,740 docs, recall 0.836 / precision 0.634 / WSS@95 0.187 —
+  committed results in V2 `backend/testing/evals/screening/`; the
+  eval must include hard corpora, where V2 recall fell to 0.400) ·
+  the heat_pump manual-vs-automated study re-scoped as
+  search/coverage-recall evidence for 015/016 (it measures document
+  identity, not screening accuracy).
 
 ## Constraints & approval gates
 
@@ -388,9 +469,12 @@ never committed. Keys env-only; grep audit before PR.
 
 ## Model route
 
-OpenAI `gpt-5-mini` via the existing client resolution
-(`resolve_openai_client`), Bedrock swap remains the routing seam.
-Prompt-bearing work (`screen_v1`, `classify_v1`) is lead-authored.
+OpenAI via the existing client resolution (`resolve_openai_client`);
+**split route (rev 1.5)**: `gpt-5-mini` for `screen_v1` (×3 reps),
+the judgment-class model (`gpt-5.2`; plan pins the exact id) for
+`classify_v1` — see decision 8. Bedrock swap remains the routing
+seam. Prompt-bearing work (`screen_v1`, `classify_v1`) is
+lead-authored.
 
 ## Disciplines binding this slice
 
@@ -432,7 +516,11 @@ halt and report — don't tune the prompt to the fixtures.
   distribution reported** (share unanimous · 2/3 · tie-broken —
   standing variance evidence) and the **borderline review**
   (lowest-confidence band + all non-unanimous docs read with
-  `reason`s; reasons must be coherent with the decisions).
+  `reason`s; reasons must be coherent with the decisions). Plus (rev
+  1.5): a **classify face-validity spot-check** — ~10 sampled labels
+  reviewed against their envelopes; "not all `Unknown`" is necessary
+  but insufficient (a coherent wrong label passes it — the V2 eval
+  showed mini-class getting half of them wrong).
 
 ## Verification evidence expected
 
