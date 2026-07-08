@@ -271,10 +271,14 @@ by the live check, each root-caused and regression-covered):
   runs survived at a max label of 78 chars (two under the cliff), which is
   why 012's own live check passed. Systematic driver: intervention values
   are long compound policy phrases, and the prompt's own
-  ground-labels-in-member-vocabulary rule pushes labels long. Fix belongs in
-  012's `facet_values.py` (per-group rejection for text-rule violations, or
-  the 013 M5 clamp posture) — recorded in deferred.md; note also that the
-  rejection *reason* lives only in the trace, never in grouping provenance.
+  ground-labels-in-member-vocabulary rule pushes labels long. **FIXED in
+  this PR (user decision, 2026-07-08):** `validate_partition` now rejects
+  label/description violations at group grain (members flow to the repair;
+  id-integrity violations stay whole-response), and rejection reasons
+  persist into `grouping_provenance.rejection_reasons` + a `groups_rejected`
+  flag — the reason previously existed only in the trace. Regression tests
+  replay the live shape; the task-cycle-review skill gained a structural
+  live-trace content-review lane from the same lesson.
 - **Writer under-uses finding claims** — with an extraction referenced and
   `query_findings` returning records, the live writer emitted no finding-type
   claims; synthesis-quality eval seam (prompt emphasis), not a gate.

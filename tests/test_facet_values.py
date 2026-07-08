@@ -9,6 +9,7 @@ from policy_atlas.facet_grouping import (
     FORBIDDEN_GROUP_LABELS,
     LABEL_MAX,
     PartitionResult,
+    ProposedGroup,
 )
 from policy_atlas.facet_values import (
     COUNTERPART_CAP,
@@ -220,43 +221,6 @@ def test_validate_partition_accepts_strips_and_returns_missing_ids() -> None:
             "groups": [{"label": "A", "description": "B", "member_ids": ["v1"]}],
             "ungroupable": ["v1"],
         },
-        {
-            "groups": [{"label": "A", "description": "B", "member_ids": []}],
-            "ungroupable": [],
-        },
-        {
-            "groups": [{"label": "  ", "description": "B", "member_ids": ["v1"]}],
-            "ungroupable": [],
-        },
-        {
-            "groups": [{"label": "A", "description": "  ", "member_ids": ["v1"]}],
-            "ungroupable": [],
-        },
-        {
-            "groups": [{"label": "x" * (LABEL_MAX + 1), "description": "B", "member_ids": ["v1"]}],
-            "ungroupable": [],
-        },
-        {
-            "groups": [
-                {
-                    "label": "A",
-                    "description": "x" * (DESCRIPTION_MAX + 1),
-                    "member_ids": ["v1"],
-                }
-            ],
-            "ungroupable": [],
-        },
-        {
-            "groups": [{"label": "Bad\nLabel", "description": "B", "member_ids": ["v1"]}],
-            "ungroupable": [],
-        },
-        {
-            "groups": [
-                {"label": "A", "description": "B", "member_ids": ["v1"]},
-                {"label": "a", "description": "C", "member_ids": ["v2"]},
-            ],
-            "ungroupable": [],
-        },
     ],
 )
 def test_validate_partition_rejects_invalid_output(result: PartitionResult) -> None:
@@ -264,16 +228,103 @@ def test_validate_partition_rejects_invalid_output(result: PartitionResult) -> N
         validate_partition(result, value_ids={"v1", "v2", "v3"})
 
 
-@pytest.mark.parametrize("label", sorted(FORBIDDEN_GROUP_LABELS) + ["General", "OTHER"])
-def test_validate_partition_rejects_forbidden_labels(label: str) -> None:
+@pytest.mark.parametrize(
+    "group",
+    [
+        {"label": "A", "description": "B", "member_ids": []},
+        {"label": "  ", "description": "B", "member_ids": ["v1"]},
+        {"label": "A", "description": "  ", "member_ids": ["v1"]},
+        {"label": "x" * (LABEL_MAX + 1), "description": "B", "member_ids": ["v1"]},
+        {"label": "A", "description": "x" * (DESCRIPTION_MAX + 1), "member_ids": ["v1"]},
+        {"label": "Bad\nLabel", "description": "B", "member_ids": ["v1"]},
+    ],
+)
+def test_validate_partition_rejects_violating_group_only(group: ProposedGroup) -> None:
+    # Group-grain rejection: the violating group never lands, its members
+    # flow to missing_ids for the repair, the healthy sibling survives —
+    # never the whole-response loss that zeroed the 013 live grouping.
+    sibling: ProposedGroup = {
+        "label": "Healthy sibling",
+        "description": "Fine.",
+        "member_ids": ["v2"],
+    }
+    validated = validate_partition(
+        {"groups": [group, sibling], "ungroupable": []},
+        value_ids={"v1", "v2", "v3"},
+    )
+    assert [g.label for g in validated.groups] == ["Healthy sibling"]
+    assert set(group["member_ids"]) <= validated.missing_ids
+    assert len(validated.rejected_reasons) == 1
+
+
+def test_validate_partition_rejects_second_duplicate_label_group_only() -> None:
+    validated = validate_partition(
+        {
+            "groups": [
+                {"label": "A", "description": "B", "member_ids": ["v1"]},
+                {"label": "a", "description": "C", "member_ids": ["v2"]},
+            ],
+            "ungroupable": [],
+        },
+        value_ids={"v1", "v2"},
+    )
+    assert [g.label for g in validated.groups] == ["A"]
+    assert validated.missing_ids == frozenset({"v2"})
+    assert validated.rejected_reasons == ("duplicate group label: a",)
+
+
+def test_validate_partition_rejected_group_ids_keep_integrity_checks() -> None:
+    # A text-rejected group's ids still count for id integrity: assigning
+    # one of them again elsewhere is whole-response corruption.
     with pytest.raises(InvalidPartitionOutput):
         validate_partition(
             {
-                "groups": [{"label": label, "description": "B", "member_ids": ["v1"]}],
+                "groups": [
+                    {"label": "x" * (LABEL_MAX + 1), "description": "B", "member_ids": ["v1"]},
+                    {"label": "A", "description": "B", "member_ids": ["v1"]},
+                ],
                 "ungroupable": [],
             },
             value_ids={"v1"},
         )
+
+
+def test_validate_partition_one_long_label_keeps_other_groups() -> None:
+    # The 013 live shape: 16 coherent groups, one label over the cap —
+    # previously the whole partition was lost, twice, landing 0 groups.
+    long_label = (
+        "Healthy food financial incentive programs "
+        "(Health/Philly Food Bucks, Green Carts, SNAP use)"
+    )
+    assert len(long_label) > LABEL_MAX
+    groups: list[ProposedGroup] = [
+        {"label": f"Group {i}", "description": "Fine.", "member_ids": [f"v{i}"]}
+        for i in range(15)
+    ]
+    groups.append({"label": long_label, "description": "Fine.", "member_ids": ["v15", "v16"]})
+    validated = validate_partition(
+        {"groups": groups, "ungroupable": []},
+        value_ids={f"v{i}" for i in range(17)},
+    )
+    assert len(validated.groups) == 15
+    assert validated.missing_ids == frozenset({"v15", "v16"})
+    assert validated.rejected_reasons == (
+        f"group 15 label exceeds {LABEL_MAX} chars",
+    )
+
+
+@pytest.mark.parametrize("label", sorted(FORBIDDEN_GROUP_LABELS) + ["General", "OTHER"])
+def test_validate_partition_rejects_forbidden_label_group(label: str) -> None:
+    validated = validate_partition(
+        {
+            "groups": [{"label": label, "description": "B", "member_ids": ["v1"]}],
+            "ungroupable": [],
+        },
+        value_ids={"v1"},
+    )
+    assert validated.groups == ()
+    assert validated.missing_ids == frozenset({"v1"})
+    assert validated.rejected_reasons and "forbidden label" in validated.rejected_reasons[0]
 
 
 def test_merge_repair_merges_casefold_label_matches_and_appends_new_groups() -> None:

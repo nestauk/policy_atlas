@@ -310,6 +310,47 @@ def _assert_repaired_from_invalid_first_response(
     assert (provenance["call_count"], provenance["repair_count"]) == (1, 1)
 
 
+def _assert_bad_group_repaired_at_group_grain(
+    conn: Connection,
+    first_response: PartitionResult,
+) -> None:
+    project_id, _ = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    seeded = _seed_three_value_extraction(conn, project_id, scope_id)
+    backend = _SequencedFacetGroupingBackend(
+        first_response,
+        repair_result={
+            "groups": [
+                {"label": "Repaired group", "description": "R.", "member_ids": ["v1"]}
+            ],
+            "ungroupable": [],
+        },
+    )
+
+    summary, group_run_id = _run_group(
+        conn, project_id, scope_id, seeded.run_id, backend=backend
+    )
+    row = _group_row(conn, project_id, group_run_id)
+
+    assert backend.partition_calls == 1
+    assert backend.repair_calls == 1
+    # Only the rejected group's member re-enters the repair; the explicit
+    # ungroupables stand as the counted residual.
+    assert _value_ids(backend.repair_payloads[0]) == ["v1"]
+    assert backend.repair_accepted_groups == [[]]
+    assert [group["label"] for group in summary["groups"]] == ["Repaired group"]
+    assert summary["counts"]["grouped"] == 1
+    assert summary["counts"]["ungrouped"] == 2
+    assert "repair_path_taken" in row["flags"]
+    assert "groups_rejected" in row["flags"]
+    provenance = cast("dict[str, Any]", row["grouping_provenance"])
+    assert len(provenance["rejection_reasons"]) == 1
+    assert provenance["rejection_reasons"][0].startswith("partition: ")
+    assert _payload_finding_ids(cast("dict[str, Any]", row["groups"])) == {
+        str(finding_id) for finding_id in seeded.finding_ids
+    }
+
+
 # --- 1. Injection double ----------------------------------------------------
 
 
@@ -513,86 +554,101 @@ def test_counting_missing_ids_get_one_repair_then_honest_ungrouped_residual(
                 "ungroupable": [],
             },
         ),
-        (
-            "empty label",
-            {
-                "groups": [{"label": " ", "description": "A.", "member_ids": ["v1"]}],
-                "ungroupable": ["v2", "v3"],
-            },
-        ),
-        (
-            "overlong label",
-            {
-                "groups": [
-                    {
-                        "label": "x" * (LABEL_MAX + 1),
-                        "description": "A.",
-                        "member_ids": ["v1"],
-                    }
-                ],
-                "ungroupable": ["v2", "v3"],
-            },
-        ),
-        (
-            "control-char label",
-            {
-                "groups": [
-                    {"label": "Bad\nLabel", "description": "A.", "member_ids": ["v1"]}
-                ],
-                "ungroupable": ["v2", "v3"],
-            },
-        ),
-        (
-            "duplicate casefolded labels",
-            {
-                "groups": [
-                    {"label": "Alpha", "description": "A.", "member_ids": ["v1"]},
-                    {"label": "alpha", "description": "B.", "member_ids": ["v2"]},
-                ],
-                "ungroupable": ["v3"],
-            },
-        ),
-        (
-            "empty description",
-            {
-                "groups": [{"label": "Alpha", "description": " ", "member_ids": ["v1"]}],
-                "ungroupable": ["v2", "v3"],
-            },
-        ),
-        (
-            "overlong description",
-            {
-                "groups": [
-                    {
-                        "label": "Alpha",
-                        "description": "x" * (DESCRIPTION_MAX + 1),
-                        "member_ids": ["v1"],
-                    }
-                ],
-                "ungroupable": ["v2", "v3"],
-            },
-        ),
     ],
     ids=lambda value: value if isinstance(value, str) else None,
 )
 def test_misbehaving_first_response_rejects_then_repairs(
     conn: Connection, case_name: str, first_response: PartitionResult
 ) -> None:
+    # Id-integrity corruption (and an all-values-missing response) still
+    # rejects whole-response: the repair re-asks for every value.
     del case_name
     _assert_repaired_from_invalid_first_response(conn, first_response)
 
 
+@pytest.mark.parametrize(
+    ("case_name", "bad_group"),
+    [
+        ("empty label", {"label": " ", "description": "A.", "member_ids": ["v1"]}),
+        (
+            "overlong label",
+            {"label": "x" * (LABEL_MAX + 1), "description": "A.", "member_ids": ["v1"]},
+        ),
+        (
+            "control-char label",
+            {"label": "Bad\nLabel", "description": "A.", "member_ids": ["v1"]},
+        ),
+        ("empty description", {"label": "Alpha", "description": " ", "member_ids": ["v1"]}),
+        (
+            "overlong description",
+            {
+                "label": "Alpha",
+                "description": "x" * (DESCRIPTION_MAX + 1),
+                "member_ids": ["v1"],
+            },
+        ),
+    ],
+    ids=lambda value: value if isinstance(value, str) else None,
+)
+def test_misbehaving_bad_group_repairs_at_group_grain(
+    conn: Connection, case_name: str, bad_group: ProposedGroup
+) -> None:
+    # Group-grain rejection (013 review stack): only the violating group's
+    # members go back to the repair; explicit ungroupables stand.
+    del case_name
+    _assert_bad_group_repaired_at_group_grain(
+        conn,
+        {"groups": [bad_group], "ungroupable": ["v2", "v3"]},
+    )
+
+
 @pytest.mark.parametrize("label", ["General", *sorted(FORBIDDEN_GROUP_LABELS)])
-def test_misbehaving_forbidden_generic_label_rejects_then_repairs(
+def test_misbehaving_forbidden_generic_label_repairs_at_group_grain(
     conn: Connection, label: str
 ) -> None:
-    _assert_repaired_from_invalid_first_response(
+    _assert_bad_group_repaired_at_group_grain(
         conn,
         {
             "groups": [{"label": label, "description": "A.", "member_ids": ["v1"]}],
             "ungroupable": ["v2", "v3"],
         },
     )
+
+
+def test_misbehaving_duplicate_casefolded_label_keeps_first_group(
+    conn: Connection,
+) -> None:
+    project_id, _ = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    seeded = _seed_three_value_extraction(conn, project_id, scope_id)
+    backend = _SequencedFacetGroupingBackend(
+        {
+            "groups": [
+                {"label": "Alpha", "description": "A.", "member_ids": ["v1"]},
+                {"label": "alpha", "description": "B.", "member_ids": ["v2"]},
+            ],
+            "ungroupable": ["v3"],
+        },
+        repair_result={
+            "groups": [{"label": "Beta", "description": "B.", "member_ids": ["v2"]}],
+            "ungroupable": [],
+        },
+    )
+
+    summary, group_run_id = _run_group(
+        conn, project_id, scope_id, seeded.run_id, backend=backend
+    )
+    row = _group_row(conn, project_id, group_run_id)
+
+    assert backend.repair_calls == 1
+    assert _value_ids(backend.repair_payloads[0]) == ["v2"]
+    assert [group["label"] for group in summary["groups"]] == ["Alpha", "Beta"]
+    assert "groups_rejected" in row["flags"]
+    provenance = cast("dict[str, Any]", row["grouping_provenance"])
+    assert provenance["rejection_reasons"] == ["partition: duplicate group label: alpha"]
+    assert _payload_finding_ids(cast("dict[str, Any]", row["groups"])) == {
+        str(finding_id) for finding_id in seeded.finding_ids
+    }
 
 
 def test_invalid_repair_is_discarded_to_ungrouped_residual(conn: Connection) -> None:
@@ -618,7 +674,8 @@ def test_invalid_repair_is_discarded_to_ungrouped_residual(conn: Connection) -> 
 
     assert backend.partition_calls == 1
     assert backend.repair_calls == 1
-    assert _value_ids(backend.repair_payloads[0]) == ["v1", "v2", "v3"]
+    # Group-grain: only the forbidden group's member re-enters the repair.
+    assert _value_ids(backend.repair_payloads[0]) == ["v1"]
     assert summary["groups"] == []
     assert cast("list[dict[str, Any]]", payload["groups"]) == []
     assert summary["counts"]["grouped"] == 0

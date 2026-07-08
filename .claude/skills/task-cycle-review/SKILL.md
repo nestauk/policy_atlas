@@ -81,6 +81,17 @@ The lanes:
   two heterogeneous reviewers are this Codex pass plus `/code-review medium` (family
   diversity, not reviewer count). Add `agent-skills:test-engineer` only when a coverage
   gap is suspected, not by default.
+- **Live-trace content review** — whenever the slice's verification evidence includes
+  live runs (013 lesson, 2026-07-08): the lead reads the actual traces for **content**,
+  not just cost/key hygiene — model I/O sanity per phase, validator/judge behaviour on
+  real outputs, and every anomaly the build flagged. The persisted roll-up is not the
+  evidence; on 013 the zero-group anomaly's cause (`validate_partition` losing 16
+  coherent groups to one over-long label) existed **only** in the trace — the DB row
+  showed counts with no reason, and the build's write-up guessed wrong (model drift).
+  Method that worked: pull the failing call's exact input/output from the trace and
+  **replay it through the real validator** to get the true rejection. Corollary: when a
+  component persists a rejection/repair decision, the *reason* must persist too — a
+  decision diagnosable only from traces is a finding.
 - **OKF bundle check** — mechanical: `make okf-validate` (runs inside `make verify`).
 - **`/simplify`** — last, cleanup only (after `ponytail-review`'s what-to-cut pass). If
   `/code-review` already ran reuse/simplification/efficiency/altitude finder angles and
@@ -100,7 +111,10 @@ during this phase* introduced one.
 defer to `docs/deferred.md` with a note), applies fixes, re-runs `make verify`, and
 records what each lane caught in `verification.md` § Review findings. Convergent findings
 across families are high-confidence; unique-to-one-lane findings justify that lane's
-existence — note both.
+existence — note both. **An anomaly the build flagged "for the review stack" is a
+step-7 work item, not a note to carry forward** — root-cause it in-stack (the trace
+lane above) before adjudication closes; "flagged for review" that survives review
+unexamined is the fake-done shape of this phase (013, 2026-07-08).
 
 ## Step 8 — Durable records + PR
 

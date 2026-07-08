@@ -53,7 +53,8 @@ LABEL_MAX = 80
 DESCRIPTION_MAX = 500
 
 # Exact casefolded forbidden set: v2's "General Theme" collapse defect closed in
-# code — a catch-all label rejects the response; the ungroupable path exists.
+# code — a catch-all label rejects that group (members flow to the repair);
+# the ungroupable path exists.
 FORBIDDEN_GROUP_LABELS = frozenset(
     {"general", "miscellaneous", "other", "misc", "general theme",
      "uncategorised", "uncategorized"}

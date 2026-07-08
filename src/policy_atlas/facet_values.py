@@ -31,7 +31,15 @@ class FacetDirectiveError(ValueError):
 
 
 class InvalidPartitionOutput(ValueError):
-    """Backend partition output violated code-enforced constraints."""
+    """Backend partition output violated id-integrity constraints.
+
+    Raised only for unknown or double-assigned value ids — corruption that
+    poisons the whole response. Label/description rule violations reject at
+    group grain instead (the violating group's members flow to the repair):
+    the 013 review stack found both live intervention-facet runs losing 16
+    coherent groups to one over-long label under the previous
+    whole-response semantics.
+    """
 
 
 @dataclass(frozen=True)
@@ -92,12 +100,17 @@ class ValidatedPartition:
     Attributes:
         groups: Accepted non-empty groups.
         ungroupable_ids: Explicitly ungroupable ids in response order.
-        missing_ids: Value ids never mentioned by the response.
+        missing_ids: Value ids never mentioned by the response, plus the
+            members of groups rejected at group grain — both flow to the
+            repair.
+        rejected_reasons: One bounded reason per group rejected at group
+            grain; persisted into grouping provenance by the caller.
     """
 
     groups: tuple[AcceptedGroup, ...]
     ungroupable_ids: tuple[str, ...]
     missing_ids: frozenset[str]
+    rejected_reasons: tuple[str, ...] = ()
 
 
 def normalize_value(raw: str) -> str:
@@ -229,34 +242,45 @@ def validate_partition(
         value_ids: All admissible value ids for the current partition call.
 
     Returns:
-        Accepted groups, explicit ungroupable ids and ids omitted by the output.
+        Accepted groups, explicit ungroupable ids, ids omitted by the output
+        or freed by group-grain rejections, and the rejection reasons.
 
     Raises:
-        InvalidPartitionOutput: If an id, duplicate, label or description
-            constraint is violated.
+        InvalidPartitionOutput: If an unknown or double-assigned value id is
+            found anywhere in the response (id integrity is all-or-nothing;
+            label/description violations reject only the offending group).
     """
     allowed_ids = set(value_ids)
     seen_ids: set[str] = set()
     seen_labels: set[str] = set()
     accepted_groups: list[AcceptedGroup] = []
+    rejected_member_ids: set[str] = set()
+    rejected_reasons: list[str] = []
 
     for index, group in enumerate(result["groups"]):
         member_ids = group["member_ids"]
-        if not member_ids:
-            raise InvalidPartitionOutput(f"group {index} has zero member ids")
-
         label = group["label"].strip()
         description = group["description"].strip()
-        _validate_group_text(index, label, description)
 
+        rejection = _group_text_violation(index, label, description)
         label_key = label.casefold()
-        if label_key in FORBIDDEN_GROUP_LABELS:
-            raise InvalidPartitionOutput(f"group {index} uses forbidden label: {label}")
-        if label_key in seen_labels:
-            raise InvalidPartitionOutput(f"duplicate group label: {label}")
-        seen_labels.add(label_key)
+        if rejection is None and label_key in FORBIDDEN_GROUP_LABELS:
+            rejection = f"group {index} uses forbidden label: {label}"
+        if rejection is None and label_key in seen_labels:
+            rejection = f"duplicate group label: {label}"
+        if rejection is None and not member_ids:
+            rejection = f"group {index} has zero member ids"
 
+        # Id integrity is checked for every group, rejected or not — an
+        # unknown or double-assigned id still poisons the whole response.
         _mark_seen_ids(member_ids, allowed_ids=allowed_ids, seen_ids=seen_ids)
+
+        if rejection is not None:
+            rejected_reasons.append(rejection)
+            rejected_member_ids.update(member_ids)
+            continue
+
+        seen_labels.add(label_key)
         accepted_groups.append(
             AcceptedGroup(
                 label=label,
@@ -273,7 +297,8 @@ def validate_partition(
     return ValidatedPartition(
         groups=tuple(accepted_groups),
         ungroupable_ids=tuple(ungroupable_ids),
-        missing_ids=frozenset(allowed_ids - seen_ids),
+        missing_ids=frozenset(allowed_ids - seen_ids) | frozenset(rejected_member_ids),
+        rejected_reasons=tuple(rejected_reasons),
     )
 
 
@@ -504,23 +529,20 @@ def _elect_counterparts(raw_values: Sequence[str]) -> tuple[str, ...]:
     return tuple(surface for _, surface in ranked[:COUNTERPART_CAP])
 
 
-def _validate_group_text(index: int, label: str, description: str) -> None:
+def _group_text_violation(index: int, label: str, description: str) -> str | None:
     if not label:
-        raise InvalidPartitionOutput(f"group {index} has empty label")
+        return f"group {index} has empty label"
     if len(label) > LABEL_MAX:
-        raise InvalidPartitionOutput(f"group {index} label exceeds {LABEL_MAX} chars")
+        return f"group {index} label exceeds {LABEL_MAX} chars"
     if has_control_character(label):
-        raise InvalidPartitionOutput(f"group {index} label contains a control character")
+        return f"group {index} label contains a control character"
     if not description:
-        raise InvalidPartitionOutput(f"group {index} has empty description")
+        return f"group {index} has empty description"
     if len(description) > DESCRIPTION_MAX:
-        raise InvalidPartitionOutput(
-            f"group {index} description exceeds {DESCRIPTION_MAX} chars"
-        )
+        return f"group {index} description exceeds {DESCRIPTION_MAX} chars"
     if has_control_character(description):
-        raise InvalidPartitionOutput(
-            f"group {index} description contains a control character"
-        )
+        return f"group {index} description contains a control character"
+    return None
 
 
 def _mark_seen_ids(
