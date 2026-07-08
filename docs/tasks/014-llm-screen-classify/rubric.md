@@ -17,7 +17,9 @@ otherwise it is in progress, not done.
 6. [ ] Verification evidence recorded ([verification.md](verification.md)),
        including the live e2e run: relevance spread, classification
        distribution not-all-`Unknown`, non-English record handled, tag
-       samples within bounds, Langfuse trace ids + scores, cost.
+       samples within bounds, Langfuse trace ids + scores, cost, the
+       decision-10 variance probe (flip rate), and the borderline
+       review (lowest-confidence band with coherent `reason`s).
 7. [ ] Known gaps and deferred seams listed (gap →
        [docs/deferred.md](../../deferred.md)); the discharged
        LLM-screen/classify seam entries updated, the seams this slice

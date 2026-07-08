@@ -26,6 +26,35 @@ specs in [docs/specs/](../../specs/index.md).
 >   index excluding `failed` (the 011 extraction-memo precedent), so
 >   re-runs retry failed docs as new rows with attempt history preserved
 >   (decision 5, amended; schema gate grows within the same migration).
+> - **rev 1.2** (2026-07-08, external validation round — /last30days field
+>   scan, raw file `~/Documents/Last30Days/llm-abstract-screening-and-
+>   document-classification-for-evidence-synthesis-raw-v3.md`).
+>   **Validated as designed, no change** (citations added in place):
+>   recall-first posture + accuracy-misleads-at-screening
+>   (LLM4SCREENLIT, arXiv 2511.12635); **unsure → referred-back positive
+>   is the published recommendation verbatim** (same paper — the rev-1.1
+>   mapping is field-endorsed); confidence stored-never-trusted, single-
+>   model calibration consistently weak (OLIVER, arXiv 2512.20022);
+>   mini-class models validated for screening sensitivity (PMC12873614);
+>   closed single-label + honest Unknown matches observed per-element
+>   accuracy variance (PMC12407223); prompt wording is a control surface
+>   (MDPI Info 16(5):378 — reinforces PROMPT_VERSION discipline).
+>   **Adopted**: (a) **wire-level `reason` field** on both components
+>   (≤ 240 chars, the select-rerank bound) — recorded in event payload +
+>   Langfuse trace, NOT a column; enables the borderline review below
+>   and Mäntylä-style disagreement autopsies (decision 3/4 amended);
+>   (b) **live-check variance probe + borderline review** — screening's
+>   decision variance measured (second run over the same corpus, flip
+>   rate reported) and the lowest-confidence band read with reasons
+>   (Mäntylä: focus validation on borderline cases) (decision 10, new).
+>   **Recorded as seams, not built**: screening consensus/ensemble
+>   voting (majority-vote N-reps / dual-model — eval-gated: measure
+>   single-pass variance first; cost ×N unjustified before evidence);
+>   structured inclusion-criteria screening directive (plan-compile
+>   seam, mirrors select's directive pattern); LLM4SCREENLIT eval
+>   metrics (full confusion matrix · lost-evidence/recall · WMCC ·
+>   stub-as-non-LLM-baseline) flow to the eval slice's screening
+>   dataset.
 
 ## Goal
 
@@ -104,14 +133,20 @@ PR landing:
    cross-document leakage, and the cost profile at mini-class over
    envelope text is trivial.
 
-3. **Screen semantics** *(amended rev 1.1)*. The model returns a
-   schema-constrained `{decision, confidence}` where decision is
+3. **Screen semantics** *(amended revs 1.1, 1.2)*. The model returns a
+   schema-constrained `{decision, confidence, reason}` where decision is
    **three-way on the wire**: `relevant` | `not_relevant` | `unsure` —
    forcing a binary answer invites overconfident exclusion, exactly the
-   failure a recall-oriented filter must not have. Code maps `unsure` →
+   failure a recall-oriented filter must not have. `reason` (≤ 240
+   chars, the select-rerank bound) is untrusted model text recorded in
+   the event payload + trace only — never a column, never rendered as
+   instruction — enabling borderline review and disagreement autopsies
+   (rev 1.2; Mäntylä 2606.17588). Code maps `unsure` →
    `status='relevant'` at capped-low confidence
    (`min(model_confidence, UNSURE_CONFIDENCE_CAP)`) so uncertainty is
-   recall-preserving **by construction**; the wire decision is recorded
+   recall-preserving **by construction** — the published recommendation
+   verbatim ("treat unclassifiable outputs as referred-back positives",
+   LLM4SCREENLIT 2511.12635); the wire decision is recorded
    in the `source.screened` event payload and counted (`unsure`) in the
    component summary. `unsure` is deliberately **not** a status value:
    every downstream reader filters on `status='relevant'`, so a third
@@ -135,12 +170,16 @@ PR landing:
    document, not the question (the 011 precedent: intent was removed
    from `extract_iof_v1` for the same reason). The model returns a
    schema-constrained single choice over the closed 9-value
-   `EVIDENCE_TYPES` list plus bounded tag proposals. Structured
-   provider priors enter as data fields — `record_type`, Overton
-   `source.type` / `organisation_type`, provider topic labels — to cut
-   `Unknown`s on acquired documents (classification quality gates
-   appraisal coverage). `Unknown / Insufficient information` remains a
-   legal, honest model output.
+   `EVIDENCE_TYPES` list plus bounded tag proposals **and a `reason`
+   field** (same bounds and event/trace-only handling as screen's, rev
+   1.2). Structured provider priors enter as data fields —
+   `record_type`, Overton `source.type` / `organisation_type`, provider
+   topic labels — to cut `Unknown`s on acquired documents
+   (classification quality gates appraisal coverage).
+   `Unknown / Insufficient information` remains a legal, honest model
+   output — per-element accuracy variance in the field (PMC12407223)
+   says a closed single label with an honest Unknown is the right
+   grain.
 
 5. **Live failure semantics: failures never block retry** *(amended
    rev 1.1)*. The deferred `screen_failed`-recovery entry's own
@@ -199,6 +238,20 @@ PR landing:
    default everywhere; the skeleton extends its existing
    `live = bool(OPENAI_API_KEY)` pattern to the two new backends.
 
+10. **Variance made visible; consensus deferred** *(new, rev 1.2)*.
+    Single-pass LLM screening has unmeasured decision variance (the
+    field's current worry: majority-vote `--reps` consensus PRs,
+    dual-model ensembles reaching near-perfect sensitivity, Mäntylä's
+    run-multiple-LLMs recommendation). This slice does **not** buy
+    consensus voting — ×N cost before evidence of variance is
+    unjustified — but it must **measure** it: the live check runs the
+    screen twice over the same corpus (second run on a fresh scope)
+    and reports the decision flip rate in `verification.md`, and the
+    lowest-confidence band is read with its `reason`s (borderline
+    review). Consensus/ensemble screening is a recorded eval-gated
+    seam; the flip-rate number is the evidence that opens or closes
+    it.
+
 ## Scope / Out of scope
 
 - **In:** `screen.py`, `classify.py` (fan-out loops take a backend),
@@ -215,7 +268,14 @@ PR landing:
   different seam) · `Unknown` full-text resolution · grey-lit category
   split · appraise changes (its
   coverage improves for free as `Unknown`s drop) · eval harness ·
-  consensus roll-up · multi-execution fan-in.
+  consensus roll-up · multi-execution fan-in · **screening
+  consensus/ensemble voting** (rev 1.2 — eval-gated on the decision-10
+  flip-rate evidence) · **structured inclusion-criteria screening
+  directive** (rev 1.2 — plan-compile seam mirroring select's
+  directive pattern; intent-as-data is the v3.0 surface). The rev-1.2
+  seams + the LLM4SCREENLIT eval-metric pointers (full confusion
+  matrix · lost-evidence/recall · WMCC · the deterministic stub as the
+  non-LLM baseline) land as `deferred.md` entries at step 8.
 
 ## Constraints & approval gates
 
@@ -278,7 +338,10 @@ halt and report — don't tune the prompt to the fixtures.
   demo-blocking failure this slice exists to remove), the non-English
   fixture record classified, open tags written within bounds, Langfuse
   traces + in-span scores verified via the public API, cost recorded,
-  key grep audit clean.
+  key grep audit clean. Plus (rev 1.2, decision 10): the **variance
+  probe** (second screening run, flip rate reported) and the
+  **borderline review** (lowest-confidence band read with `reason`s;
+  reasons must be coherent with the decisions).
 
 ## Verification evidence expected
 
