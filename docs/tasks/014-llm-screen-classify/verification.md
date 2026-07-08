@@ -36,7 +36,9 @@ Intermediate phases committed on green `make verify-fast` (011-retro tiering).
     structural prompt-hygiene assertions (M9); wire-model closed vocabulary,
     backend confidence-range rejection, sanitizer NUL/cap tests (M10).
   - `tests/test_classify_judgment.py` (6 tests): Unknown-vs-Other boundary
-    (M3) with select-eligibility values, payload-only confidence/reason (no
+    (M3) at the persistence layer (both labels' rows asserted; select
+    eligibility itself is exercised in `test_select.py` — step-7 wording
+    correction), payload-only confidence/reason (no
     columns — inspector-asserted), no-row-on-failure + next-run retry
     (decision 5), classify injection inertness, provider-prior allowlist
     caps/control-strip (M10), ClassifyWire closed vocabulary.
@@ -115,7 +117,9 @@ unanimity rule (B2) flipped it to `relevant` at consensus probability
 the recall-first design.
 
 **Borderline review** (band: bottom ceil(10%) incl. ties ∪ all
-non-unanimous = 9 docs, every rep reason read): all reasons coherent with
+non-unanimous = 8 distinct docs — the build's roll-up said 9, double-counting
+the flipped doc present in both sets (step-7 correction); every rep reason
+read): all reasons coherent with
 their decisions — sanitized (word-salad) titles judged "no topical signal"
 → unsure→relevant at 0.5 for title-only docs; nonsense title+abstract docs
 excluded with high-conviction reasons; the two dissent cases are honest
@@ -251,9 +255,12 @@ per task-cycle-build; none is silent drift):
   single-rep self-report) — recorded eval-seam question (rev 1.10).
 - **Live-run wrapper incident** (process hygiene, no code impact): the
   first live run's wrapper lacked the `__main__` guard, so multiprocessing
-  spawn re-ran the chain in two worker processes (three projects; the
-  documented parent chain `7f071ea8` completed 15/15; one sibling died on
-  the spawn-bootstrap error, one completed). Cost impact ≈ 2× extra
+  spawn re-ran the chain in two worker processes (three projects created per
+  the run log; the documented parent chain `7f071ea8` completed 15/15; sibling
+  `0ff42a22…` completed 14/15 with one ingest run failed on the spawn-bootstrap
+  error — payload verified verbatim at step 7; sibling `d872292e…` died at
+  creation and persisted no DB rows, so the DB retains two of the three).
+  Cost impact ≈ 2× extra
   fixture-scale spend (~$0.4 total across all components). The documented
   command above carries the guard.
 
@@ -353,13 +360,196 @@ the amendment (the step-6 exit claim below holds for the amended tree).
   security lane — headline: first third-party text into product prompts,
   contract-verifier Opus, Codex adversarial; ≤250K reasoning / ≤500K fast-worker).
 
-## Review findings
+## Review findings (step 7, 2026-07-08, fresh conversation C)
 
-*(to be filled by conversation C — the review stack.)*
+Lanes run (Tier 3): contract verifier (pinned Opus, read-only) · security
+auditor (`agent-skills:security-auditor`) · Codex adversarial (read-only
+rescue brief, family-flipped onto the Claude/lead-written surfaces) ·
+`/code-review medium` (8 finder angles with per-angle pathspecs anchored on
+the Codex-written surfaces, 1-vote verify) · live-trace content review
+(lead: dev-DB event payloads + build-time Langfuse evidence) ·
+`make verify` green before any lane ran and re-run green after fixes.
+`/simplify` skipped with justification: `/code-review`'s reuse/
+simplification/efficiency/altitude angles ran and their adopted fixes were
+applied — a separate same-family cleanup pass would duplicate it.
+`make okf-validate` runs inside `make verify` (mechanical lane).
 
-## Rubric status
+**Adopted (fixed in this phase):**
 
-*(to be filled at step 7 against `rubric.md`.)*
+1. **Stage-2 title entered the prompt raw, not JSON-encoded** (security,
+   MEDIUM — the slice's one breach of the contracted id-keyed-data rule;
+   lead-confirmed against `screen_prompt.py` before adoption). A multi-line
+   provider title could fabricate template structure (a spoofed intent
+   record). Fixed: title now enters as a JSON record like every other field;
+   new structural test `test_stage2_prompt_structural_injection_inertness`
+   covers the exact spoof plus segment injection (also closes the security
+   lane's "no stage-2 paired fixture" gap).
+2. **`appraise.appraisable_rows` was not effective-grained** (Codex
+   adversarial, MAJOR — convergent with the reader-sweep rubric item;
+   lead-confirmed). A doc classified while relevant then stage-2-demoted
+   would gain an appraisal on an appraise rerun. Fixed: the write path joins
+   through `effective_screen_rows()` (status='relevant'); the exclusion is
+   counted (`skipped_demoted`, keeping the counts an exact partition);
+   regression `test_classified_then_demoted_not_appraised_on_rerun`;
+   `_seed_classified` now seeds the production precondition (stage-1
+   relevant row). This was also a "documented but not built" gap versus this
+   file's reader-sweep claim — the audit counts were effective-grained, the
+   write path was not.
+3. **Classify priors trusted caller sanitization at assembly** (Codex
+   adversarial, MAJOR as defence-in-depth). `build_classify_messages` now
+   re-validates `payload.priors` against the closed allowlist (keys, caps,
+   control-strip) regardless of caller; test
+   `test_priors_revalidated_at_prompt_assembly`.
+4. **Vocabulary checks used `assert`** (security, LOW): both replaced with
+   explicit raises (`classify.py`, `classify_prompt.py`) — survive
+   `python -O`.
+5. **Langfuse host accepted plaintext `http://`** (security, LOW): https now
+   required (localhost exempt) — full-I/O traces never over plaintext.
+6. **Backend hygiene duplicated** (`/code-review` reuse+simplification+
+   altitude convergent): `_scrub_nul`/`_confidence_is_valid` were defined
+   verbatim in both backends; consolidated into `prompt_fields.py`
+   (`scrub_nul`/`confidence_is_valid`).
+7. **Dead `if error else "RuntimeError"` branch ×2** (`/code-review`
+   simplification, verifier-CONFIRMED unreachable): simplified to direct
+   `errors[key]` indexing in both rep-runners.
+8. **Docs accuracy** (contract verifier MINOR ×2 + live-trace lane):
+   rubric item 3's stale "two generation surfaces" corrected to the
+   rev-1.7-approved three; the Unknown-vs-Other test description no longer
+   claims select-eligibility coverage it doesn't exercise; borderline band
+   corrected to 8 distinct docs (build roll-up double-counted the flipped
+   doc); wrapper-incident project accounting made precise (see § Known
+   unverified items).
+
+**Declined (recorded reasons):**
+
+- *Codex "BLOCKER": partial unique index not SQLite-safe.* No SQLite exists
+  anywhere in src/tests/alembic/Makefile/pyproject — the project is
+  Postgres-only (dev + test both Postgres). Not a shipping configuration;
+  `sqlite_where` would be dead flexibility. Revisit only if SQLite is ever
+  introduced.
+- *Codex: wire-model `Field(ge/le, max_length)` bounds.* Enforcement already
+  exists at the right layers — backends raise on out-of-range confidence
+  (rep fails, quorum handles it) and tag caps are enforced at the write path
+  (`_bounded_tags`) — and numeric/array JSON-schema keywords risk OpenAI
+  strict-mode structured-output compatibility for zero behavioural gain.
+- *Codex: `screen_fulltext_v1` "calls one window full text / demotes on
+  absence".* Already mitigated in the shipped prompt: the Rules paragraph
+  states "You see one window of the document's text, not necessarily all of
+  it. Absence of the topic from this window alone is weak evidence", and
+  `not_relevant` requires the document's substance to be about something
+  else (positive evidence). First-window-only is the contract's explicit
+  ponytail ceiling; residual long-document risk is the recorded 11 iv-b
+  demotion-asymmetry seam. Both live demotions were positively grounded.
+- *Codex MINOR: migration downgrade preflight checks.* Downgrade is a
+  dev-only path whose data precondition the migration already documents;
+  add preflights when a shared/staging DB exists.
+- *Efficiency (2 lanes convergent, incl. security INFO): stage-2 loads all
+  candidate chunks then keeps only the first window; `effective_screen_rows()`
+  subquery rebuilt 3× in classify.* Real only at real-corpus scale; v3.0 is
+  single-process fixture-scale with upstream char caps and a per-call budget.
+  Noted for the 015/016 real-data slices (see § Deferred work).
+- *Reuse/simplification remainder:* `_metadata`/`_text_value` twin helpers
+  (screen/classify) and test-local `_script_key`/stub-wrapper twins — 2–4-line
+  helpers whose consolidation buys coupling, not clarity; `_count_effective_
+  skipped` outer-join form is tested and correct. Declined as churn.
+- *Line-by-line/removed-behaviour candidates all REFUTED by 1-vote verify:*
+  stage-2 budget baseline (STAGE2_REPS=1 by design), `exists()` correlation
+  (compiled SQL verified correct), stage-2 missing basis counts (no consumer
+  indexes them; stage-2 basis is `full_text` by design), float-cast hazard
+  (wire model types confidence as float at parse).
+
+**Lane value notes:** convergent-across-families findings (backend hygiene
+duplication; windowing scale cost) were adopted/recorded with high
+confidence. Unique catches justifying each lane: security → the stage-2
+title breach (the slice's headline surface); Codex adversarial → the
+appraise write-path grain gap (on a Claude-written surface, vindicating the
+family flip); contract verifier → the stale rubric wording + test-claim
+overstatement; live-trace lane → the band double-count and the verified
+spawn-bootstrap failure payload. `/code-review medium`'s correctness angles
+produced no surviving findings on the Codex-written surfaces (its cleanup
+angles produced #6/#7) — consistent with those surfaces having had the
+heaviest build-time test investment.
+
+**Adjudication of the build's handoff items:**
+
+- *Five flagged minor deviations* — all five confirmed as-is (contract
+  verifier re-checked each against code; the zero-chunk-failure and
+  clamp-reason rationales hold; the input caps are generous and tested; the
+  directive-test correction is right — top-level `stage` keys are not
+  screening directives).
+- *Rev 1.11 amendment* — code/prompt/tests match the amended contract:
+  B2 affirmative-dissent veto at `screen.py` with the exact live case pinned
+  as a regression; the inverted doubt rule verbatim in `classify_v1`'s
+  boundary paragraph; § Live-run evidence read as pre-amendment narrative.
+- *Sanitized-corpus face-validity ceiling* — confirmed as a scope statement:
+  the live evidence demonstrates structural correctness + honest behaviour
+  on degenerate envelopes; semantic quality claims wait for 015/016 + eval
+  slice. Reviewed, not closable here.
+- *Wrapper incident* — root-caused in-stack: the sibling's failed run's
+  event payload is verbatim the multiprocessing spawn-bootstrap error; the
+  run log shows all three project creations; `d872292e…` persisted nothing.
+  Genuine process-hygiene artifact, no code impact, documented command
+  carries the guard.
+
+**Fake-done check on this phase's fixes:** no test deleted/weakened —
+`_seed_classified` strengthens the fixture to the production precondition;
+the mixed-rerun invariant assertion was extended (not relaxed) with
+`skipped_demoted`; all other changes add tests or tighten runtime checks.
+`make verify` re-run green after all fixes.
+
+**Live re-probe note for step 9:** fixes 1 and 3 change assembled prompt
+*structure* (stage-2 title record; validated priors JSON) with intended
+semantic no-op. The deterministic suites pin the structure; a ~6-call scoped
+live probe (re-run the two stage-2 demotions + the confirmation + one
+classify with priors) would close the loop on live-model behaviour —
+operator-run, recommended before merge but not blocking (rev-1.11 lever).
+
+**Review economy:** reasoning-class ≈ 295K tokens (contract verifier 162K +
+security 119K + rescue wrapper 14K; Codex itself runs outside the Claude
+budget) vs the ≤250K target — the overshoot is the Opus contract verifier
+running the full 677-test suite itself; next slice, hand it the lead's
+verify evidence instead. Fast-worker ≈ 720K vs ≤500K — eight finder angles
+plus 1-vote verifiers over a 4.1K-line anchor diff; the per-angle pathspecs
+were applied, but angle C (cross-file tracer) alone cost 104K for zero
+findings; consider dropping it to targeted seams next time. Recorded for
+the harness economy log.
+
+## Rubric status (step 7)
+
+1. **HOLDS** — contract verifier: implementation matches rev 1.11 across all
+   decisions; no scope creep (every changed module contract-named).
+2. **HOLDS** — 677 passed with all keys unset (verifier re-ran independently);
+   `make verify` green pre- and post-fixes; live checks documented above.
+3. **HOLDS** — migration carries exactly the four approved changes;
+   `run_harness` gains exactly the two params (rubric wording corrected,
+   see finding 8).
+4. **HOLDS** — key grep clean (test fakes only); no generated files edited.
+5. **HOLDS** — no tests deleted/weakened; rewritten-in-place tests assert the
+   new contracted semantics; `approx(0.7)` justification stands.
+6. **HOLDS** — this file: spread, agreement distribution, borderline review
+   (8 docs), demotion review, by_type, non-English, tags, traces + scores,
+   cost, live paired probe.
+7. **PENDING → step 8** — deferred.md entries ride the PR (list in
+   § Deferred work, extended by review: live-model injection
+   semantic-invariance eval; stage-2 windowing scale efficiency).
+8. **HOLDS** — this section: five lanes run, findings adjudicated with
+   recorded reasons, fixes verified green.
+9. **HOLDS (strengthened)** — posture confirmed by the security lane
+   (allowlists, caps, control/NUL strip, id-keyed records, closed
+   vocabularies, schema-constrained outputs) and the one breach found
+   (stage-2 title) fixed + tested; note the deterministic paired fixtures
+   pin *structural* inertness — *semantic* invariance evidence is the live
+   paired probe (passed) and a standing eval-seam item.
+10. **HOLDS** — full consensus/failure matrix verified per-item by the
+    contract verifier (quorum, tie, unsure, 2/3-vs-3/3, divergence,
+    title-only B2 as amended, attempt history, counts).
+11. **HOLDS** — caps enforced + tested, provenance columns asserted,
+    migration roundtrip green (test DB automated; dev DB manual claim
+    stands).
+12. **HOLDS (strengthened)** — write invariant, fail-closed directive,
+    effective-grain reader sweep (now including appraise's write path —
+    finding 2), availability predicate, provenance on rows/events, profile
+    gating all verified.
 
 ## Deferred work
 
@@ -372,3 +562,9 @@ concurrent-run hardening (M8 partial-index race) · LLM4SCREENLIT eval
 metrics + V2 screening-eval baseline + stage-pair eval dataset pointer ·
 classify-confidence threshold-gating · 013 `lookup` vocabulary widening ·
 demotion-asymmetry survivorship measurement (11 iv-b).
+
+Review-added (step 7): live-model injection semantic-invariance eval (the
+deterministic paired fixtures pin prompt structure; live behaviour is
+probe-only today — fold into the eval slice's injection metrics) · stage-2
+chunk-fetch/windowing efficiency at real-corpus scale (load only the first
+window's chunks; 015/016 territory).

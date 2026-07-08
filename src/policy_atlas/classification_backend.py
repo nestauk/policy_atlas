@@ -19,6 +19,7 @@ from policy_atlas.classify_prompt import (
     build_classify_messages,
 )
 from policy_atlas.embeddings import log_usage, resolve_openai_client, usage_metadata
+from policy_atlas.prompt_fields import confidence_is_valid, scrub_nul
 
 
 class ClassificationBackend(Protocol):
@@ -49,21 +50,13 @@ class ClassificationBackend(Protocol):
         ...
 
 
-def _scrub_nul(value: str) -> str:
-    return value.replace("\x00", "")
-
-
 def _scrub_classification(wire: ClassifyWire) -> ClassifyWire:
     return wire.model_copy(
         update={
-            "reason": _scrub_nul(wire.reason),
-            "tags": [_scrub_nul(tag) for tag in wire.tags],
+            "reason": scrub_nul(wire.reason),
+            "tags": [scrub_nul(tag) for tag in wire.tags],
         }
     )
-
-
-def _confidence_is_valid(confidence: float) -> bool:
-    return 0.0 <= confidence <= 1.0
 
 
 class OpenAIClassificationBackend:
@@ -155,7 +148,7 @@ class OpenAIClassificationBackend:
             confidence = float(wire.confidence)
             langfuse_client.score_current_trace(
                 name="classify_valid",
-                value=1.0 if _confidence_is_valid(confidence) else 0.0,
+                value=1.0 if confidence_is_valid(confidence) else 0.0,
                 data_type="NUMERIC",
             )
             langfuse_client.score_current_trace(
@@ -172,7 +165,7 @@ class OpenAIClassificationBackend:
             update=_update,
             after=_score_trace,
         )
-        if not _confidence_is_valid(wire.confidence):
+        if not confidence_is_valid(wire.confidence):
             raise RuntimeError(
                 "OpenAI classification response confidence out of range "
                 f"for pss_id={payload.pss_id!r}: {wire.confidence}."

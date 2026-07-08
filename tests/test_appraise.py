@@ -45,8 +45,16 @@ def _seed_classified(
     scope_id: uuid.UUID,
     evidence_type: str,
 ) -> tuple[uuid.UUID, uuid.UUID]:
-    """Seed a source + classification row directly; return (source_snapshot_id, pss_id)."""
+    """Seed a source + stage-1 relevant screening + classification row directly.
+
+    The screening row mirrors the production precondition: classify only ever
+    classifies effective-relevant docs, and appraise's write path requires
+    that effective-relevant row (014 review finding).
+
+    Returns (source_snapshot_id, pss_id).
+    """
     snap_id, pss_id = seed_source(conn, project_id)
+    seed_screening_result(conn, project_id, run_id, scope_id, pss_id)
     conn.execute(source_classification_result.insert().values(
         source_classification_result_id=uuid.uuid4(),
         evidence_scope_id=scope_id,
@@ -189,6 +197,35 @@ def test_demoted_doc_not_counted_unclassified(conn: Connection) -> None:
     assert _appraisal_rows(conn, pid) == []
 
 
+def test_classified_then_demoted_not_appraised_on_rerun(conn: Connection) -> None:
+    """A doc classified while effective-relevant, then stage-2 demoted, must
+    not gain an appraisal on a later appraise run (014 review finding: the
+    appraise WRITE path is effective-grained too, not just the audit counts);
+    the exclusion is counted, never silent."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _, pss_id = _seed_classified(conn, pid, rid, scope_id, "Systematic Review and Meta-Analysis")
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="not_relevant", screen_stage=2)
+
+    counts = appraise_sources(conn, project_id=pid, run_id=rid, context=_ctx(scope_id))
+
+    assert counts["appraised"] == 0
+    assert counts["skipped_demoted"] == 1
+    assert _appraisal_rows(conn, pid) == []
+
+    # An earlier-appraised doc that is demoted later counts once (already_appraised),
+    # never twice.
+    _, pss_second = _seed_classified(conn, pid, rid, scope_id, "Observational Research Studies")
+    counts = appraise_sources(conn, project_id=pid, run_id=rid, context=_ctx(scope_id))
+    assert counts["appraised"] == 1
+    seed_screening_result(
+        conn, pid, rid, scope_id, pss_second, status="not_relevant", screen_stage=2
+    )
+    counts = appraise_sources(conn, project_id=pid, run_id=rid, context=_ctx(scope_id))
+    assert counts["already_appraised"] == 1
+    assert counts["skipped_demoted"] == 1
+
+
 def test_appraise_sources_idempotent_rerun(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
@@ -228,6 +265,7 @@ def test_mixed_rerun_skip_counts_stable_and_invariant_holds(conn: Connection) ->
         assert (
             counts["appraised"] + counts["already_appraised"]
             + counts["skipped_non_evidence"] + counts["skipped_unknown"]
+            + counts["skipped_demoted"]
             == classification_rows
         )
 

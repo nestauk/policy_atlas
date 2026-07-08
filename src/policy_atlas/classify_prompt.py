@@ -65,8 +65,10 @@ EvidenceType = Literal[
 ]
 
 # The Literal type IS the schema CHECK vocabulary — drift fails at import
-# (the extraction_records pattern).
-assert get_args(EvidenceType) == EVIDENCE_TYPES
+# (the extraction_records pattern). Explicit raise, not assert: the check
+# must survive `python -O`.
+if get_args(EvidenceType) != EVIDENCE_TYPES:
+    raise RuntimeError("EvidenceType literal has drifted from schema EVIDENCE_TYPES")
 
 
 class ClassifyWire(BaseModel):
@@ -278,14 +280,41 @@ incomplete or wrong):
 """
 
 
+def _validated_priors(priors: dict[str, Any]) -> dict[str, Any]:
+    """Re-apply the closed prior allowlist at assembly (M10 defence in depth).
+
+    ``provider_priors`` is the only in-repo producer, but the closed-allowlist
+    invariant must hold at the prompt boundary, not by caller discipline:
+    unknown keys are dropped, scalars and labels re-sanitized and re-capped.
+    """
+    validated: dict[str, Any] = {}
+    for key in ("record_type", "source_type", "organisation_type"):
+        if (value := _prior_str(priors.get(key))) is not None:
+            validated[key] = value
+    labels = priors.get("topic_labels")
+    if isinstance(labels, list):
+        clean = [
+            sanitized
+            for item in labels
+            if isinstance(item, str) and item.strip()
+            if (sanitized := sanitize_prompt_field(
+                item.strip(), max_chars=PRIOR_TOPIC_LABEL_CHARS_MAX
+            ))
+        ]
+        if clean:
+            validated["topic_labels"] = clean[:PRIOR_TOPIC_LABELS_MAX]
+    return validated
+
+
 def build_classify_messages(
     payload: ClassifyEnvelopePayload,
 ) -> list[ChatCompletionMessageParam]:
     """Assemble the two-message prompt for one classify call.
 
     Every untrusted field is sanitized at assembly (contract M10); provider
-    priors enter only through the ``provider_priors`` allowlist. No scope
-    intent enters the prompt (decision 4 — classification is intent-free).
+    priors are re-validated against the closed allowlist here, whatever the
+    caller passed. No scope intent enters the prompt (decision 4 —
+    classification is intent-free).
 
     Args:
         payload: The document's envelope fields plus sanitized priors.
@@ -307,7 +336,7 @@ def build_classify_messages(
             "role": "user",
             "content": CLASSIFY_USER_TEMPLATE.format(
                 document_json=json.dumps(document, ensure_ascii=False),
-                priors_json=json.dumps(payload.priors, ensure_ascii=False),
+                priors_json=json.dumps(_validated_priors(payload.priors), ensure_ascii=False),
             ),
         },
     ]

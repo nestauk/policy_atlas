@@ -7,8 +7,10 @@ otherwise it is in progress, not done.
 2. [ ] `make verify` passes deterministically with **zero egress** (stub
        backends default everywhere); declared manual/live checks pass.
 3. [ ] No approval-gated change snuck in unapproved beyond the three the
-       contract names (two generation surfaces [mini screen ×3 reps ·
-       judgment-class classify] · two `run_harness` params · one
+       contract names (three generation surfaces [mini screen ×3 reps ·
+       mini full-text stage-2 · judgment-class classify] — wording
+       corrected at step 7: this line predated rev 1.7's approved
+       `screen_fulltext_v1` · two `run_harness` params · one
        migration carrying BOTH schema changes: the `ck_stag_tag_type`
        CHECK widen AND the `uq_ssr_scope_source` partial unique
        index).

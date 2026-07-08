@@ -10,6 +10,7 @@ from openai.types.completion_usage import CompletionUsage
 
 from policy_atlas import tracing
 from policy_atlas.embeddings import log_usage, resolve_openai_client, usage_metadata
+from policy_atlas.prompt_fields import confidence_is_valid, scrub_nul
 from policy_atlas.screen_prompt import (
     SCREEN_FULLTEXT_PROMPT_VERSION,
     SCREEN_MAX_OUTPUT_TOKENS,
@@ -71,16 +72,8 @@ class ScreeningBackend(Protocol):
         ...
 
 
-def _scrub_nul(value: str) -> str:
-    return value.replace("\x00", "")
-
-
 def _scrub_rep(rep: ScreenRepWire) -> ScreenRepWire:
-    return rep.model_copy(update={"reason": _scrub_nul(rep.reason)})
-
-
-def _confidence_is_valid(confidence: float) -> bool:
-    return 0.0 <= confidence <= 1.0
+    return rep.model_copy(update={"reason": scrub_nul(rep.reason)})
 
 
 class OpenAIScreeningBackend:
@@ -180,7 +173,7 @@ class OpenAIScreeningBackend:
             confidence = float(rep.confidence)
             langfuse_client.score_current_trace(
                 name="screen_rep_valid",
-                value=1.0 if _confidence_is_valid(confidence) else 0.0,
+                value=1.0 if confidence_is_valid(confidence) else 0.0,
                 data_type="NUMERIC",
             )
             langfuse_client.score_current_trace(
@@ -200,7 +193,7 @@ class OpenAIScreeningBackend:
             update=_update,
             after=_score_trace,
         )
-        if not _confidence_is_valid(rep.confidence):
+        if not confidence_is_valid(rep.confidence):
             raise RuntimeError(
                 "OpenAI screening response confidence out of range "
                 f"for pss_id={payload.pss_id!r}, rep_index={rep_index}: {rep.confidence}."
@@ -249,7 +242,7 @@ class OpenAIScreeningBackend:
             confidence = float(rep.confidence)
             langfuse_client.score_current_trace(
                 name="screen_rep_valid",
-                value=1.0 if _confidence_is_valid(confidence) else 0.0,
+                value=1.0 if confidence_is_valid(confidence) else 0.0,
                 data_type="NUMERIC",
             )
             langfuse_client.score_current_trace(
@@ -269,7 +262,7 @@ class OpenAIScreeningBackend:
             update=_update,
             after=_score_trace,
         )
-        if not _confidence_is_valid(rep.confidence):
+        if not confidence_is_valid(rep.confidence):
             raise RuntimeError(
                 "OpenAI full-text screening response confidence out of range "
                 f"for pss_id={payload.pss_id!r}, window_index={payload.window_index}: "

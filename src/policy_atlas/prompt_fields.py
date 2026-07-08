@@ -5,6 +5,9 @@ M10): every provider-derived field crosses into a prompt only through
 ``sanitize_prompt_field`` — length-capped and control-character-stripped at
 prompt assembly. The caps are generous enough never to bite legitimate
 envelopes; they bound adversarial payloads, not content.
+
+Also hosts the wire-output hygiene shared by both LLM backends (NUL scrub,
+confidence range) so the two seams cannot silently diverge.
 """
 
 from __future__ import annotations
@@ -37,6 +40,16 @@ def sanitize_prompt_field(value: str, *, max_chars: int) -> str:
         if char == "\n" or not unicodedata.category(char).startswith("C")
     )
     return stripped[:max_chars]
+
+
+def scrub_nul(value: str) -> str:
+    """Strip NUL bytes from one model-returned string (backend boundary)."""
+    return value.replace("\x00", "")
+
+
+def confidence_is_valid(confidence: float) -> bool:
+    """Whether a model-returned confidence is in the persistable [0, 1] range."""
+    return 0.0 <= confidence <= 1.0
 
 
 def clamp_reason(reason: str) -> str:

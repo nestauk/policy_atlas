@@ -53,6 +53,15 @@ def get_langfuse() -> Langfuse | None:
             "LANGFUSE_BASE_URL): refusing to fall back to the SDK's SaaS cloud "
             "default for full-I/O traces. Set the user-operated instance host."
         )
+    # Traces carry full prompt I/O (acquired third-party text): never over
+    # plaintext HTTP except to the local machine.
+    if not host.startswith("https://") and not host.startswith(
+        ("http://localhost", "http://127.0.0.1")
+    ):
+        raise RuntimeError(
+            f"Langfuse host must be https:// (or http://localhost): got {host!r}. "
+            "Full-I/O traces must not travel over plaintext HTTP."
+        )
     return Langfuse(host=host)
 
 

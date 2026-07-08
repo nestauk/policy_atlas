@@ -388,9 +388,10 @@ def _run_stage1_reps(
             if key in results:
                 by_doc[doc_index].append(_RepOutcome(rep=results[key]))
             else:
-                error = errors.get(key)
+                # Every key missing from results has an errors entry by
+                # construction (budget denial or captured exception).
                 by_doc[doc_index].append(
-                    _RepOutcome(error_type=type(error).__name__ if error else "RuntimeError")
+                    _RepOutcome(error_type=type(errors[key]).__name__)
                 )
     return by_doc, retry_count
 
@@ -691,9 +692,10 @@ def _run_stage2_reps(
         if doc_index in results:
             outcomes[doc_index] = _RepOutcome(rep=results[doc_index])
         else:
-            error = errors.get(doc_index)
+            # Every index missing from results has an errors entry by
+            # construction (budget denial or captured exception).
             outcomes[doc_index] = _RepOutcome(
-                error_type=type(error).__name__ if error else "RuntimeError"
+                error_type=type(errors[doc_index]).__name__
             )
     return outcomes, retry_count
 

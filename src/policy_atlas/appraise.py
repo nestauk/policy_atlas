@@ -108,10 +108,12 @@ def appraise_sources(
     Returns:
         Counts: ``appraised`` (rows inserted this call), ``by_score`` (sparse,
         int-keyed), ``skipped_non_evidence`` / ``skipped_unknown`` /
-        ``unclassified`` (recomputed from current state every call), and
-        ``already_appraised`` (pre-existing appraisal rows for the scope).
+        ``unclassified`` (recomputed from current state every call),
+        ``skipped_demoted`` (rubric-domain classifications whose doc is no
+        longer effective-relevant, e.g. stage-2 demoted — never appraised),
+        and ``already_appraised`` (pre-existing appraisal rows for the scope).
         Invariant: appraised + already_appraised + skipped_non_evidence +
-        skipped_unknown = classification rows for the scope.
+        skipped_unknown + skipped_demoted = classification rows for the scope.
     """
     scoped_classifications = (
         (source_classification_result.c.evidence_scope_id == context.scope_id)
@@ -163,6 +165,9 @@ def appraise_sources(
         )
     ).scalar_one()
 
+    # The write path is effective-grained too: a doc classified before a
+    # stage-2 demotion must not gain an appraisal on a rerun (014 review
+    # finding). The exclusion is counted below (skipped_demoted), never silent.
     appraisable_rows = conn.execute(
         select(
             project_source_snapshot.c.project_source_snapshot_id,
@@ -177,6 +182,14 @@ def appraise_sources(
             & (source_classification_result.c.project_id
                == project_source_snapshot.c.project_id),
         )
+        .join(
+            effective,
+            (effective.c.project_source_snapshot_id
+             == project_source_snapshot.c.project_source_snapshot_id)
+            & (effective.c.project_id == project_source_snapshot.c.project_id),
+        )
+        .where(effective.c.evidence_scope_id == context.scope_id)
+        .where(effective.c.status == "relevant")
         .where(scoped_classifications)
         .where(source_classification_result.c.primary_evidence_type.in_(list(DEFAULT_RUBRIC)))
         .where(
@@ -188,6 +201,35 @@ def appraise_sources(
             )
         )
     ).fetchall()
+
+    # Rubric-domain classifications whose doc is no longer effective-relevant
+    # (stage-2 demoted): excluded from the write path above, reported here.
+    # Already-appraised docs are excluded so the returned counts stay an exact
+    # partition of the scope's classification rows (see Returns invariant).
+    skipped_demoted = conn.execute(
+        select(func.count())
+        .select_from(source_classification_result)
+        .where(scoped_classifications)
+        .where(source_classification_result.c.primary_evidence_type.in_(list(DEFAULT_RUBRIC)))
+        .where(
+            ~exists()
+            .where(effective.c.evidence_scope_id == context.scope_id)
+            .where(effective.c.project_id == project_id)
+            .where(
+                effective.c.project_source_snapshot_id
+                == source_classification_result.c.project_source_snapshot_id
+            )
+            .where(effective.c.status == "relevant")
+        )
+        .where(
+            ~exists().where(
+                (source_appraisal_result.c.evidence_scope_id == context.scope_id)
+                & (source_appraisal_result.c.project_id == project_id)
+                & (source_appraisal_result.c.project_source_snapshot_id
+                   == source_classification_result.c.project_source_snapshot_id)
+            )
+        )
+    ).scalar_one()
 
     by_score: dict[int, int] = {}
 
@@ -231,6 +273,7 @@ def appraise_sources(
         "by_score": by_score,
         "skipped_non_evidence": skip_counts.get(_NON_EVIDENCE_TYPE, 0),
         "skipped_unknown": skip_counts.get(_UNKNOWN_TYPE, 0),
+        "skipped_demoted": skipped_demoted,
         "already_appraised": already_appraised,
         "unclassified": unclassified,
     }

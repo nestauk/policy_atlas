@@ -303,7 +303,10 @@ def classify_sources(
 
         wire = results[doc_index]
         evidence_type = wire.primary_evidence_type
-        assert evidence_type in EVIDENCE_TYPES
+        # Explicit raise, not assert: the closed-vocabulary check must
+        # survive `python -O`.
+        if evidence_type not in EVIDENCE_TYPES:
+            raise RuntimeError(f"classify returned out-of-vocabulary type: {evidence_type!r}")
 
         written_tags, rejected = _bounded_tags(list(wire.tags))
         if rejected:
