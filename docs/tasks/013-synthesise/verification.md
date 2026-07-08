@@ -5,17 +5,26 @@ first agent loop). Public-safe — no secrets, no raw source text, no unredacted
 traces. Filled at step 6; **Review findings** + **Rubric status** follow the
 review stack (step 7).
 
-> **Status: DRAFT — being filled during step 6.** The `make verify` table and
-> live-run evidence are completed at the step-6 exit.
+> **Status: step 6 complete (2026-07-08).** `make verify` fully green at the
+> exit; four-profile live check recorded below. Review findings + rubric
+> status follow the review stack (step 7, fresh conversation).
 
 ## Commands run
 
+Step-6 exit (`make verify`, 2026-07-08):
+
 | Command | Result | Notes |
 |---|---:|---|
-| `make test` | _pending step-6 exit_ | |
-| `make typecheck` | _pending step-6 exit_ | |
-| `make lint` | _pending step-6 exit_ | |
-| `make build` | _pending step-6 exit_ | |
+| `make okf-validate` | pass | |
+| `make test` | pass | **620 passed**, 0 failed (full suite incl. the ingest integration tests) |
+| `make typecheck` | pass | mypy, 72 source files, no issues |
+| `make lint` | pass | ruff, all checks passed |
+| `make build` | pass | sdist + wheel built |
+
+Socket-deny: `test_socket_deny_synthesise_harness_round_trip` (judgment
+suite) covers the synthesise harness round-trip with `socket.socket` denied —
+zero egress on the suite path; the pre-existing select/extract socket-deny
+tests stay green alongside.
 
 Migration roundtrip: **clean on both DBs** (dev and test): 24 → 25 → 24 → 25
 tables (`alembic downgrade -1` / `upgrade head`, table counts asserted;
@@ -77,15 +86,67 @@ OPENAI_API_KEY= LANGFUSE_PUBLIC_KEY= LANGFUSE_SECRET_KEY= LANGFUSE_HOST= LANGFUS
 uv run policy-atlas-skeleton
 ```
 
-Live mode (the contract's manual check; keys from the operator's `.env`):
+Live mode (the contract's manual check; keys from the operator's `.env` via
+the app's own dotenv path — the wrapper only sets a default `DATABASE_URL`):
 
 ```bash
-_pending — filled with the live-run evidence below_
+uv run python - <<'EOF'
+import os
+from dotenv import load_dotenv
+load_dotenv("/Users/shabeer.rauf/repos/policy_atlas/.env")
+os.environ.setdefault("DATABASE_URL",
+    "postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas")
+from policy_atlas.skeleton import main
+main()
+EOF
 ```
 
-## Live-run evidence (four substrate profiles)
+(Run as a file, not stdin — the full-text parse workers use multiprocessing
+spawn and must re-import a real `__main__` path.)
 
-_pending the live check._
+## Live-run evidence (four substrate profiles, 2026-07-08)
+
+The full skeleton chain live (`mode=live`, `traced=True` — full-I/O traces on
+the user-operated dev Langfuse; `llm_rerank_v1` selection), then the four
+synthesise profiles over the same scope. All four completed; every profile's
+roll-up row persisted with the full provenance key set.
+
+| Profile | Sections | Claims (by type) | Citations verified | Citations from unselected | Verdict lanes | Flags |
+|---|---:|---|---:|---:|---|---|
+| rapid (no refs) | 8 | chunk 8 · gap 7 · reasoning 7 | 8 | 8 (no selection referenced — all `unselected_screened`, honestly) | tier_1 ×8, tier_4 ×7 | uncited_sections, repair_path_taken |
+| characterisation_only | 6 | chunk 5 · theme 3 · pattern 7 · gap 5 · reasoning 4 | 5 | 5 | tier_1 ×5, tier_4 ×4 | uncited_sections, repair_path_taken |
+| characterisation + selection (no extract) | 7 | chunk 6 · theme 3 · pattern 3 · gap 3 · reasoning 5 | 6 | **0** — the selection prior visibly steered every citation into the selected set | tier_1 ×6, tier_4 ×5 | uncited_sections, repair_path_taken |
+| full_chain (grouping ref; transitive resolution) | 6 | chunk 4 · theme 2 · pattern 6 · gap 7 · reasoning 4 | 4 | 0 | tier_1 ×4, tier_4 ×4 | uncited_sections, repair_path_taken |
+
+Honest notes:
+- **finding claims are 0 on the full chain** because the live extraction
+  legitimately produced zero intervention–outcome findings on this fixture
+  corpus (`no_findings` ×10) — the substrate profile records extraction
+  present, findings absent; nothing invented.
+- **The repair path was exercised on every profile** (`repair_path_taken`);
+  per-claim salvage caught structurally malformed live emissions (e.g.
+  `gap.sparsity` emitted as a float; `citations: null`) — counted into
+  `claims_rejected_structural`, logged bounded, never silent, never fatal.
+- **Proposal normalisations** fired and were recorded in provenance
+  (`group_ids_stripped_no_grouping`, `focus_truncated`) — the rev 8 M5
+  clamp-over-reject posture; integrity rules still reject.
+- `uncited_sections` flags honestly: some proposed sections (e.g. gap-focused
+  ones) carried only gap/reasoning claims.
+- The rapid profile's chunk-groundable substrate is the sentinel-classified,
+  appraised uploaded review (`syn-002`) — the acquired fixture docs classify
+  Unknown under the stub classifier and are never appraised, so their chunks
+  are readable but honestly uncitable (the M4 rule, visible per-chunk via
+  `appraised`).
+
+**Cost (honest actuals):** the synthesise-bearing live run = 136 generation
+calls, ~1.31M prompt + ~0.27M completion tokens at `gpt-5-mini`
+(≈ $0.9); the build's full live-check cycle (five runs while three
+live-robustness defects were found and fixed) ≈ $3–4 total, plus embedding
+calls on `text-embedding-3-small` (negligible). Well inside the plan's
+single-digit-dollar budget.
+
+**Key hygiene:** no `sk-` material in any captured log (grep-audited); keys
+env-only; traces on the user-operated instance.
 
 ## Diff summary
 
@@ -119,6 +180,19 @@ One slice, seven phase commits on `task/013-synthesise`:
 8. **Phase 6 test suites + this document** — final commits.
 
 Data files are excluded from review diffs per the 007 retro.
+
+Build-time live-robustness fixes (commits 467b45e, c4db451, 20ca351 — found
+by the live check, each root-caused and regression-covered):
+
+- **Section-proposal group_ids discipline** — with a characterisation present
+  the live writer stuffed theme ids into `group_ids`; prompt rule tightened,
+  validation reasons made instructive (they are the repair call's
+  instructions).
+- **Malformed live emission is recoverable** — `MalformedEmissionError` is a
+  turn-consuming error exchange (structural failure on the forced final
+  turn); a malformed repair emission means the repair produced nothing.
+- **Per-claim salvage** — live emissions malform at claim grain; valid claims
+  salvage, malformed ones count into `claims_rejected_structural`.
 
 ### Minor deviations, resolved within the contract's vocabulary (flagged, not silent)
 
