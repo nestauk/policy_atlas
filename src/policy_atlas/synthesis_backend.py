@@ -29,7 +29,7 @@ from typing import Any, Literal, Protocol, TypedDict
 
 from langfuse import Langfuse
 from openai.types.completion_usage import CompletionUsage
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from policy_atlas import tracing
 from policy_atlas.embeddings import log_usage, resolve_openai_client, usage_metadata
@@ -37,6 +37,7 @@ from policy_atlas.facet_grouping import FORBIDDEN_GROUP_LABELS
 from policy_atlas.synthesis_tools import (
     REASONING_CLAIMS_MAX,
     SECTION_CAP,
+    MalformedEmissionError,
     ToolCallRequest,
     ToolExchange,
 )
@@ -50,8 +51,11 @@ SYNTHESIS_MODEL = "gpt-5-mini"
 
 # Bounds on proposal output (deterministic output-checking beyond prompt
 # rules — the 009 validate_themes precedent; enforced by the Task-5 validator).
+# Focus is roomier than the 200-char directive-grammar bound: live writers
+# routinely produce two-sentence foci and the proposal bound is ours to set
+# (the directive grammar's 200 is contract-pinned and unchanged).
 SECTION_TITLE_MAX = 200
-SECTION_FOCUS_MAX = 200
+SECTION_FOCUS_MAX = 300
 
 # Forbidden generic section titles — the 012 label set, shared verbatim
 # (contract rev 8 M5), plus the section-shaped catch-alls of the same kind.
@@ -302,6 +306,11 @@ LOOKUP_TOOL_SCHEMA: dict[str, Any] = {
     },
 }
 
+# Note on strict-mode constrained decoding: rejected — OpenAI strict tool
+# schemas forbid typed additionalProperties, which the pattern claim's
+# {label: count} map needs. A malformed live emission is instead a
+# turn-consuming, recoverable loop event (MalformedEmissionError → an error
+# exchange the model reads as data and corrects), inside the turn budget.
 EMIT_CLAIMS_TOOL_SCHEMA: dict[str, Any] = {
     "type": "function",
     "function": {
@@ -966,7 +975,10 @@ class OpenAISynthesisBackend:
         if not isinstance(arguments, str):
             arguments = "{}"
         if name == "emit_claims":
-            claims = SectionClaimsWire.model_validate_json(arguments)
+            try:
+                claims = SectionClaimsWire.model_validate_json(arguments)
+            except ValidationError as exc:
+                raise MalformedEmissionError(str(exc)[:500]) from exc
             return {"tool_calls": [], "claims": claims}, response.usage
         return {
             "tool_calls": [{"tool": name, "arguments": _json_object_or_empty(arguments)}],
@@ -1044,7 +1056,14 @@ class OpenAISynthesisBackend:
         arguments = function.arguments
         if not isinstance(arguments, str):
             arguments = "{}"
-        claims = SectionClaimsWire.model_validate_json(arguments)
+        try:
+            claims = SectionClaimsWire.model_validate_json(arguments)
+        except ValidationError as exc:
+            # The repair is loop-free and unrepeatable — a malformed repair
+            # emission means the repair produced nothing; the caller lands the
+            # failing claims per the exhaustion rules (soft-flag / the counted
+            # exclusions), never a whole-component failure.
+            raise MalformedEmissionError(str(exc)[:500]) from exc
         return claims, response.usage
 
     def repair_section(

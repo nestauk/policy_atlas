@@ -75,6 +75,7 @@ from policy_atlas.synthesis_tools import (
     SYNTH_CHUNK_CHAR_BUDGET,
     SYNTH_CHUNK_TOP_K,
     ChunkRetriever,
+    MalformedEmissionError,
     PassThroughChunkReranker,
     RetrievalUnitCapError,
     SynthesisDirectiveError,
@@ -1113,15 +1114,30 @@ def _validate_sections(
         title = section.title
         focus = section.focus
         if not title or len(title) > SECTION_TITLE_MAX or has_control_character(title):
-            reasons.append(f"sections[{index}].title_invalid")
+            reasons.append(
+                f"sections[{index}].title_invalid: title must be a non-empty "
+                f"string of at most {SECTION_TITLE_MAX} characters with no "
+                "control characters"
+            )
         if title.casefold() in forbidden:
-            reasons.append(f"sections[{index}].title_forbidden")
+            reasons.append(
+                f"sections[{index}].title_forbidden: generic or catch-all "
+                "titles are rejected — name the specific aspect of the "
+                "question or evidence"
+            )
         folded = title.casefold()
         if folded in seen_titles:
-            reasons.append(f"sections[{index}].title_duplicate")
+            reasons.append(
+                f"sections[{index}].title_duplicate: every section title must "
+                "be distinct"
+            )
         seen_titles.add(folded)
         if not focus or len(focus) > SECTION_FOCUS_MAX or has_control_character(focus):
-            reasons.append(f"sections[{index}].focus_invalid")
+            reasons.append(
+                f"sections[{index}].focus_invalid: focus must be a non-empty "
+                f"string of at most {SECTION_FOCUS_MAX} characters with no "
+                "control characters — shorten it"
+            )
         group_ids = list(section.group_ids)
         # Reasons are the repair call's instructions (fed back verbatim as
         # data) — instructive sentences, not bare codes, or the repair repeats
@@ -1981,22 +1997,32 @@ def _section_claims(
     if failing:
         accounting.repair_taken = True
         call_counts["repair"] += 1
-        repair_claims = synthesis_backend.repair_section(seed, transcript, failing=failing)
-        replacements = _replacement_validation(
-            repair_claims,
-            failing=failing,
-            substrate=substrate,
-            section_index=section_index,
-            section_group_ids=section_group_ids,
-            citable_finding_ids=citable_finding_ids,
-            citable_chunk_ids=citable_chunk_ids,
-            available_claim_types=available_claim_types,
-        )
-        call_counts["rejudge"] += _judge_claims(
-            claims=replacements.drafts,
-            substrate=substrate,
-            grounding_judge_backend=grounding_judge_backend,
-        )
+        try:
+            repair_claims = synthesis_backend.repair_section(
+                seed, transcript, failing=failing
+            )
+        except MalformedEmissionError:
+            # The one repair call produced structurally unparseable output —
+            # the repair is loop-free and unrepeatable, so the failing claims
+            # land per the exhaustion rules (soft-flagged / the counted
+            # exclusions), never a whole-component failure.
+            repair_claims = None
+        if repair_claims is not None:
+            replacements = _replacement_validation(
+                repair_claims,
+                failing=failing,
+                substrate=substrate,
+                section_index=section_index,
+                section_group_ids=section_group_ids,
+                citable_finding_ids=citable_finding_ids,
+                citable_chunk_ids=citable_chunk_ids,
+                available_claim_types=available_claim_types,
+            )
+            call_counts["rejudge"] += _judge_claims(
+                claims=replacements.drafts,
+                substrate=substrate,
+                grounding_judge_backend=grounding_judge_backend,
+            )
     final = _finalize_claims(
         initial=initial,
         replacements=replacements,
@@ -2486,7 +2512,11 @@ def synthesise_scope(
             )
             if reasons:
                 raise SynthesiseFailure(
-                    "section_proposal_invalid", blocks_written=blocks_written
+                    # Name the surviving rejection reasons (bounded) — the
+                    # failure event is the only diagnosable record of WHY the
+                    # bounded repair could not converge.
+                    "section_proposal_invalid: " + "; ".join(reasons)[:600],
+                    blocks_written=blocks_written,
                 )
         section_source = "proposal"
 

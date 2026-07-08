@@ -303,6 +303,18 @@ class ToolValidationError(Exception):
     """A bounded tool argument validation failure."""
 
 
+class MalformedEmissionError(Exception):
+    """A claims emission whose arguments failed structural validation.
+
+    Raised by live backends when the provider's ``emit_claims`` arguments do
+    not parse into the wire models (strict constrained decoding is unavailable
+    for the pattern claim's counts map). The loop runner treats it as a
+    turn-consuming error exchange — the model reads the bounded validation
+    error as data and re-emits — so recovery stays inside the turn budget; on
+    the forced final turn it is a structural failure (never an extension).
+    """
+
+
 class SectionLoopResult(TypedDict):
     """Outcome of one bounded section tool-calling loop."""
 
@@ -1627,7 +1639,20 @@ def run_section_loop(
 
     for turn in range(1, turn_cap + 1):
         force_emit = turn == turn_cap
-        result = backend.section_turn(seed, transcript, force_emit=force_emit)
+        try:
+            result = backend.section_turn(seed, transcript, force_emit=force_emit)
+        except MalformedEmissionError as exc:
+            if force_emit:
+                raise RuntimeError(
+                    "malformed claims emission on the forced final turn"
+                ) from exc
+            transcript.append({
+                "tool": "emit_claims",
+                "arguments": {},
+                "result": {"error": f"emit_claims arguments invalid: {exc}"},
+            })
+            rejected_tool_calls += 1
+            continue
         claims = result.get("claims")
         tool_calls = result.get("tool_calls", [])
         if claims is not None:

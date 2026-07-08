@@ -632,3 +632,52 @@ def test_retriever_candidate_pool_cap_prevents_boost_only_surface() -> None:
     )
     ids = [result["chunk_record_id"] for result in retriever.search("content")]
     assert f"chunk-{CANDIDATE_POOL_PER_LEG:03d}" not in ids
+
+
+def test_loop_runner_malformed_emission_consumes_turn_and_recovers() -> None:
+    """A MalformedEmissionError is a turn-consuming error exchange (the model
+    reads the bounded error as data and re-emits); on the forced final turn it
+    is a structural failure, never an extension."""
+    from policy_atlas.synthesis_backend import SectionClaimsWire
+    from policy_atlas.synthesis_tools import (
+        MalformedEmissionError,
+        run_section_loop,
+    )
+
+    class _Backend:
+        mode = "stub"
+
+        def section_turn(
+            self,
+            seed: dict[str, Any],
+            transcript: list[ToolExchange],
+            *,
+            force_emit: bool,
+        ) -> Any:
+            del seed
+            if not transcript:
+                raise MalformedEmissionError("gap.sparsity: Input should be an object")
+            assert transcript[0]["tool"] == "emit_claims"
+            assert "invalid" in transcript[0]["result"]["error"]
+            return {"tool_calls": [], "claims": SectionClaimsWire(claims=[])}
+
+    result = run_section_loop(_Backend(), seed={}, tools={})
+    assert result["claims"] is not None
+    assert result["turns_used"] == 2
+    assert result["rejected_tool_calls"] == 1
+
+    class _AlwaysMalformed:
+        mode = "stub"
+
+        def section_turn(
+            self,
+            seed: dict[str, Any],
+            transcript: list[ToolExchange],
+            *,
+            force_emit: bool,
+        ) -> Any:
+            del seed, transcript, force_emit
+            raise MalformedEmissionError("still malformed")
+
+    with pytest.raises(RuntimeError, match="forced final turn"):
+        run_section_loop(_AlwaysMalformed(), seed={}, tools={})
