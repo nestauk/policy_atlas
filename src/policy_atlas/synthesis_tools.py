@@ -24,7 +24,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, TypedDict, cast
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
@@ -614,11 +614,22 @@ def build_retrieval_scope(
             :data:`RETRIEVAL_UNIT_CAP`.
         ValueError: If a persisted vector or unit locator is malformed.
     """
+    # The text-bearing snapshot per document: the fetched full-text snapshot when
+    # the fetch pipeline ingested one, else the envelope snapshot when it carries
+    # full text itself (uploads — chunked at upload ingest). full_text_status is
+    # fetch-pipeline state, never text availability (schema comment).
+    text_snapshot_id = case(
+        (
+            project_source_snapshot.c.full_text_status == "ingested",
+            project_source_snapshot.c.full_text_snapshot_id,
+        ),
+        else_=project_source_snapshot.c.source_snapshot_id,
+    ).label("text_snapshot_id")
     screened_docs = (
         sa_select(
             project_source_snapshot.c.project_source_snapshot_id.label("pss_id"),
             project_source_snapshot.c.source_snapshot_id.label("envelope_snapshot_id"),
-            project_source_snapshot.c.full_text_snapshot_id,
+            text_snapshot_id,
             project_source_snapshot.c.origin,
             source_snapshot.c.metadata,
             source_snapshot.c.text_basis,
@@ -659,8 +670,10 @@ def build_retrieval_scope(
         .where(source_screening_result.c.project_id == project_id)
         .where(source_screening_result.c.evidence_scope_id == scope_id)
         .where(source_screening_result.c.status == "relevant")
-        .where(project_source_snapshot.c.full_text_status == "ingested")
-        .where(project_source_snapshot.c.full_text_snapshot_id.is_not(None))
+        .where(
+            (project_source_snapshot.c.full_text_status == "ingested")
+            | (source_snapshot.c.text_basis == "full_text")
+        )
         .subquery()
     )
     unit_count = int(
@@ -669,7 +682,7 @@ def build_retrieval_scope(
             .select_from(chunk_embedding)
             .join(chunk_table, chunk_table.c.chunk_id == chunk_embedding.c.chunk_id)
             .where(chunk_table.c.source_snapshot_id.in_(
-                sa_select(screened_docs.c.full_text_snapshot_id)
+                sa_select(screened_docs.c.text_snapshot_id)
             ))
             .where(chunk_embedding.c.embedding_profile == EMBEDDING_PROFILE)
             .where(chunk_embedding.c.unit_policy == UNIT_POLICY)
@@ -724,7 +737,7 @@ def build_retrieval_scope(
         .join(chunk_table, chunk_table.c.chunk_id == chunk_embedding.c.chunk_id)
         .join(
             screened_docs,
-            screened_docs.c.full_text_snapshot_id == chunk_table.c.source_snapshot_id,
+            screened_docs.c.text_snapshot_id == chunk_table.c.source_snapshot_id,
         )
         .where(chunk_embedding.c.embedding_profile == EMBEDDING_PROFILE)
         .where(chunk_embedding.c.unit_policy == UNIT_POLICY)

@@ -397,3 +397,61 @@ def test_backend_failure_writes_no_rollup(conn: Connection) -> None:
         )
 
     assert _count(conn, synthesis_result, project_id) == 0
+
+
+def test_uploaded_full_text_doc_feeds_chunk_lane(conn: Connection) -> None:
+    """An uploaded document carries its full text on the ENVELOPE snapshot
+    (full_text_status stays 'not_attempted' — that column is fetch-pipeline
+    state, never text availability). Its chunks must be retrievable and its
+    appraised status must open the chunk lane (the skeleton's designed rapid
+    substrate)."""
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="Uploaded evidence")
+    # Chunk + embed the ENVELOPE snapshot (the upload-ingest shape), leaving
+    # full_text_status='not_attempted' and no full_text_snapshot_id.
+    envelope_snapshot_id = conn.execute(
+        select(project_source_snapshot.c.source_snapshot_id).where(
+            project_source_snapshot.c.project_source_snapshot_id == pss_id
+        )
+    ).scalar_one()
+    embedder = StubEmbeddingBackend()
+    content = "Uploaded evidence says alpha quoted evidence appears here."
+    chunk_id = uuid.uuid4()
+    conn.execute(
+        chunk_table.insert().values(
+            chunk_id=chunk_id,
+            source_snapshot_id=envelope_snapshot_id,
+            sequence=0,
+            content=content,
+            content_hash=content_hash(content),
+            locator={},
+            segmentation_policy="manual_v1",
+            created_at=now(),
+        )
+    )
+    conn.execute(
+        chunk_embedding.insert().values(
+            chunk_embedding_id=uuid.uuid4(),
+            chunk_id=chunk_id,
+            embedding_profile=EMBEDDING_PROFILE,
+            unit_policy=UNIT_POLICY,
+            unit_index=0,
+            unit_locator={"start": 0, "end": len(content)},
+            vector=embedder.embed_texts([content])[0],
+            created_at=now(),
+        )
+    )
+
+    _run_synthesise(
+        conn, project_id=project_id, run_id=run_id, scope_id=scope_id,
+        intent="Uploaded evidence",
+    )
+
+    row = conn.execute(
+        select(synthesis_result).where(synthesis_result.c.project_id == project_id)
+    ).one()
+    assert row.synthesis_provenance["substrate_profile"]["ingested_docs"] == 1
+    assert row.synthesis_provenance["retrieval_scope"]["unit_count"] == 1
+    assert row.counts["claims_total"]["chunk"] > 0
+    assert _count(conn, citation, project_id) > 0

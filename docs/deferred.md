@@ -48,7 +48,12 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 ## Evidence Base internals
 
 - **Consensus / weighted-strength roll-up** — the strength-weighted verdict ("supports X at
-  strength Y") and divided-evidence *direction* verdict (synthesise component 9).
+  strength Y") and divided-evidence *direction* verdict (synthesise component 9). Task 013
+  confirms the boundary as the intended v3.0 line (contract rev 7.4, user-affirmed): the
+  artefact describes the spread, never "the evidence supports X", until this seam lands.
+  Never-contribute constraints restated for the eventual roll-up: Unsupported/mis-cited and
+  Tier-4 **reasoning claims** never contribute positively; weakly-grounded only at a
+  discount; **gap claims** never contribute (absence is coverage, not strength).
 - **Relative-to-feasible appraisal tier** + the **full two-stage appraisal pass** (richer
   full-text methods/risk-of-bias on the selected subset — which exists as of task 010:
   select's run-scoped `selection_result` row defines it) + modifier-tag-driven rubric dimensions
@@ -303,15 +308,24 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 
 ## Characterise / embeddings / telemetry (task 009 seams)
 
-- **EB artefact composition** — characterise writes *content* (run-scoped
-  characterisation row + provenance-stamped tags), never an artefact: EB produces **one**
-  artefact, composed at the run terminus by the orchestrator (capability.md; contract
-  decision 7). The composition slice owns landscape blocks, summary/key-findings
-  conventions and supersede + lock-on-advance versioning.
-- **`retrieve` / pgvector / hybrid retrieval** — the first *reader* of the landed
-  `chunk_embedding` rows. Vectors ship as JSONB by design (no extension gate crossed);
-  this slice decides pgvector vs alternatives, migrates storage if needed, and inherits
-  the chunk-volume-bias controls (per-doc caps / MMR / doc-grain grouping, 008 entry).
+- **EB artefact composition — LANDED with revised ownership (task 013, ADRs 0009 + 0010).**
+  Synthesise (not the orchestrator) composes the one EB artefact at the run terminus —
+  capability-composes; the orchestrator shapes sections at plan time. What remains
+  deferred is the **composition-conventions** seam (block ordering/summary/key-findings
+  conventions beyond proposal-order binding; citation renumbering-by-first-appearance —
+  the V2-autopsy composition-seam note) and supersede + lock-on-advance versioning
+  (blocks ship at `version=1`).
+- **`retrieve` / pgvector / hybrid retrieval — first increment LANDED (task 013).**
+  The 009 vectors' first reader is synthesise's scoped `search_chunks` tool: in-memory
+  hybrid (cosine + lexical, RRF-fused) over JSONB vectors, guarded by a fail-closed
+  `RETRIEVAL_UNIT_CAP` (20k units — beyond it the component fails structurally naming
+  the cap, never a degraded sample), behind a swappable helper seam. Still deferred:
+  **corpus-scale retrieval** (beyond the cap, or over unscreened content) and the full
+  index-backed `retrieve` tool — pgvector-vs-alternatives, retrieval profiles,
+  storage migration, and the chunk-volume-bias controls (per-doc caps / MMR /
+  doc-grain grouping, 008 entry). Also at this seam: **judge-envelope widening +
+  re-gather repair** (the repair alternative that re-gathers targeted evidence needs
+  `retrieve`; v1 repair is reword-down over already-gathered evidence only).
 - **Contextual retrieval, late chunking, exact-token budgeting, semantic re-chunking** —
   retrieval-eval seams on the embedding-unit layer (contract decision 2, rev-8 research).
   The unit policy is versioned (`embedding_unit_policy_v1`) so any of these lands as a new
@@ -528,12 +542,11 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 
 ## Group / facet-level theming (task 012 seams)
 
-- **`query-findings` tool — explicit deviation from components §8's tool table** — the
-  spec declares `query-findings` among group's tools; v3.0 group reads the referenced
-  run's findings deterministically (contract decision 9) and the scoped read tool lands
-  with its deliberative consumer, synthesise's agent-loop. Recorded as a deviation from
-  the letter of the tool table, never silently absorbed; no spec change — the tool still
-  lands.
+- **`query-findings` tool — DISCHARGED in full (task 013).** The scoped read tool landed
+  with its deliberative consumer exactly as recorded: agent-invoked in synthesise's
+  section loop (`make_findings_reader` behind the closed tool set), deterministic and
+  project/run-scoped. Group's deterministic read stands unchanged; the 012 deviation
+  from components §8's tool table is closed.
 - **Facet-grouping quality evals** — extends the 009 grouping-quality eval seam:
   partition coherence/usefulness on real reference sets, negative-rule adherence beyond
   the shipped unit tests, and **`FACET_VALUE_CAP` calibration** (150 is plan-pinned; the
@@ -564,18 +577,60 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   asserts cross-source identity, often question-relative — never trusted canonically
   before that bar exists). Options Assessment reads run-referenced groupings by
   `grouping_run_id` until then.
-- **Shared traced-call helper across OpenAI backends** (012 review, reuse finder) — the
-  "branch on langfuse_client, wrap in `tracing._observation`, update the span" shape is
-  now hand-copied in three backends (`extraction_backend.py`, `ranking.py`,
-  `facet_grouping.py`), with parameterisation already drifting between copies. Factor
-  the traced parse-once shape into `tracing.py` when a fourth backend lands (013's
-  synthesise is the likely trigger) — not worth a cross-slice refactor ride-along now.
+- **Shared traced-call helper across OpenAI backends — DISCHARGED (task 013).** The
+  recorded trigger fired: `tracing.traced_call` factors the shape and all five OpenAI
+  backends (`extraction_backend.py`, `ranking.py`, `facet_grouping.py`,
+  `synthesis_backend.py`, `grounding_judge.py`) ride it, heterogeneous call-sites
+  preserved (ranking's in-span trace score via the `after` hook).
 - **Harness failure-event append dies inside an aborted transaction** (012 live check,
   standing behaviour — predates 012, affects every component): a server-side DB error
   mid-component leaves the connection's transaction aborted, so `_run_scope_component`'s
   `component.failed` event INSERT itself fails (`InFailedSqlTransaction`) — the run dies
   loudly but without its failure event recorded. Fix belongs in the harness (append the
   failure event on a fresh transaction/rollback first); repo-wide, not group-specific.
+
+## Synthesise (task 013 seams)
+
+- **Plan-compile section machinery** — the fail-closed `context["synthesis"]` directive
+  (sections + retrieval_boosts, normative grammar per contract rev 8 M5) is the compile
+  target the future plan-shaped-sections machinery and the source/evidence policy compile
+  into (the 010 pin); nothing compiles into it yet.
+- **Cross-encoder chunk reranking** — the `ChunkRerankerBackend` stage ships pass-through
+  (`reranker: "none"` recorded in provenance); the live Bedrock Rerank backend + its
+  `run_harness` injection point land with the Bedrock integration slice (the retrieval
+  contract's inference-trust-boundary line; the 010 Cohere-class note). No public kwarg
+  ships while nothing live exists — the V2 dead-config lesson.
+- **Content-scan pattern claims** (contract rev 8 M9) — the spec's soft pattern rung ("a
+  shape the agent reads across the corpus") is prohibited in v1: no deterministic
+  validator and no judge-lane fit exists yet; a cross-corpus-shape assertion without
+  computable counts rejects, and the prompt says so. The type arrives with its
+  verification mechanism, never silently absorbed.
+- **Policy-conditioned citable-bar flagging** — the source/evidence policy's citable bar
+  applies flag-not-block; v1 honours the rule through the weakly-grounded mechanism only.
+  Policy-conditioned flagging (below-policy support visibly flagged as such) lands with
+  the policy surface.
+- **Block summaries / artefact summary / faithfulness judging** — the navigation layer
+  (provenance-grounding § Summaries): co-versioned block summary column, the artefact
+  summary field, flat faithfulness judging. Blocks ship summary-free at `version=1`.
+- **Synthesis structure discovery** (contract rev 7.2 — declined-for-now bundle):
+  recon-informed section proposal, structure-mismatch signals, a bounded revision
+  checkpoint. Revisit with evidence if one-shot sectioning proves a real problem on live
+  corpora.
+- **Regeneration-time coherence** — the data-model's original seam: a coherence pass when
+  blocks regenerate. Deliberately not a write-time pass — the rolling claim ledger owns
+  write-time coherence (rev 7.2).
+- **Synthesis / judge / retrieval quality evals** — the eval workstream owns judge
+  calibration (clean/weak line, repair round count), section/prose quality, retrieval
+  quality, and the calibration of every plan-pinned constant (`SECTION_CAP`,
+  `SECTION_TURN_CAP`, `SYNTH_CHUNK_TOP_K`, `SYNTH_CHUNK_CHAR_BUDGET`,
+  `RETRIEVAL_UNIT_CAP`, `REPAIR_ROUND_CAP`, retrieval-boost weights, the `lookup`
+  vocabulary). The 013 bar was mechanism correctness, invariant enforcement, honest
+  flags and provenance fidelity; the field's loudest warning (rev 7.3 scan) — shipping
+  without an eval harness — makes this the recommended next slice.
+- **Artefact capability-discriminator + versioning grain** — `synthesis_result` is the
+  run-scoped roll-up pointing at its artefact; future capabilities mint artefacts into
+  the same 001 substrate with their own roll-ups. The discriminator column and the
+  versioning grain arrive with their first readers.
 
 ## Data model / evidence
 
@@ -593,9 +648,12 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **LLM-as-judge grounding tier on `citation`** — `citation.verification_result` is set by the
   deterministic verbatim quote-presence check only; the full grounding tier classification
   (confident / uncertain / fabricated) is deferred to when a real inference provider lands.
-- **Boundary-spanning quote → `citation_chunk` join table** — when a verified quote spans two
-  chunks the current implementation assigns `citation.chunk_id` to the first matching chunk or falls
-  back to `chunk_ids[0]`; replace with a `citation_chunk` join table when a real provider lands.
+- **Boundary-spanning quote → `citation_chunk` join table** — task 013 pins the interim
+  shape within the approved schema (contract rev 8 B2): a boundary-spanning verified quote
+  writes **one citation row per spanned chunk** (same annotation, same quote; exact span
+  offsets on the annotation payload — the 011 anchor precedent). The join-table
+  normalisation remains the recorded seam. (The 001 echo path's first-matching-chunk
+  behaviour stands until that path is retired.)
 
 - **`Library`** (curated cross-project collection: per-user → team/org) and **`Connected`**
   (auth'd departmental-repository ingest) — the public/acquired dedup slice is *un*-deferred; the

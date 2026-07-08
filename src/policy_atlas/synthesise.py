@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 import structlog
+from sqlalchemy import case as sa_case
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
@@ -677,6 +678,7 @@ def _load_corpus_profile(
         sa_select(
             project_source_snapshot.c.project_source_snapshot_id,
             project_source_snapshot.c.full_text_status,
+            source_snapshot.c.text_basis,
             source_appraisal_result.c.source_appraisal_result_id,
         )
         .select_from(source_screening_result)
@@ -687,6 +689,11 @@ def _load_corpus_profile(
                 == source_screening_result.c.project_source_snapshot_id
             )
             & (project_source_snapshot.c.project_id == source_screening_result.c.project_id),
+        )
+        .join(
+            source_snapshot,
+            source_snapshot.c.source_snapshot_id
+            == project_source_snapshot.c.source_snapshot_id,
         )
         .outerjoin(
             source_appraisal_result,
@@ -709,7 +716,11 @@ def _load_corpus_profile(
         appraised = row.source_appraisal_result_id is not None
         if appraised:
             appraised_pss_ids.add(str(row.project_source_snapshot_id))
-        if row.full_text_status == "ingested":
+        # Text availability, not fetch-pipeline state: full_text_status describes
+        # the fetch pipeline only (schema comment) — an uploaded document carries
+        # its full text on the envelope snapshot (text_basis='full_text', chunked
+        # at upload ingest) and is equally "screened-in ingested".
+        if row.full_text_status == "ingested" or row.text_basis == "full_text":
             ingested_docs += 1
             if appraised:
                 appraised_ingested += 1
@@ -747,10 +758,20 @@ def _load_screened_chunks(
     selected_pss_ids: set[str],
     appraised_pss_ids: set[str],
 ) -> tuple[dict[str, ChunkInfo], dict[str, list[ChunkInfo]], dict[str, BasisText]]:
+    # The text-bearing snapshot per document: the fetched full-text snapshot when
+    # the fetch pipeline ingested one, else the envelope snapshot when it carries
+    # full text itself (uploads — chunked at upload ingest). full_text_status is
+    # fetch-pipeline state, never text availability (schema comment).
+    text_snapshot_id = sa_case(
+        (
+            project_source_snapshot.c.full_text_status == "ingested",
+            project_source_snapshot.c.full_text_snapshot_id,
+        ),
+        else_=project_source_snapshot.c.source_snapshot_id,
+    )
     rows = conn.execute(
         sa_select(
             project_source_snapshot.c.project_source_snapshot_id,
-            project_source_snapshot.c.full_text_snapshot_id,
             chunk_table.c.chunk_id,
             chunk_table.c.source_snapshot_id,
             chunk_table.c.sequence,
@@ -767,13 +788,18 @@ def _load_screened_chunks(
             & (project_source_snapshot.c.project_id == source_screening_result.c.project_id),
         )
         .join(
-            chunk_table,
-            chunk_table.c.source_snapshot_id == project_source_snapshot.c.full_text_snapshot_id,
+            source_snapshot,
+            source_snapshot.c.source_snapshot_id
+            == project_source_snapshot.c.source_snapshot_id,
         )
+        .join(chunk_table, chunk_table.c.source_snapshot_id == text_snapshot_id)
         .where(source_screening_result.c.project_id == project_id)
         .where(source_screening_result.c.evidence_scope_id == scope_id)
         .where(source_screening_result.c.status == "relevant")
-        .where(project_source_snapshot.c.full_text_status == "ingested")
+        .where(
+            (project_source_snapshot.c.full_text_status == "ingested")
+            | (source_snapshot.c.text_basis == "full_text")
+        )
         .order_by(
             project_source_snapshot.c.project_source_snapshot_id,
             chunk_table.c.sequence,
