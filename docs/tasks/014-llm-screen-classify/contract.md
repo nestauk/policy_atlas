@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 1), awaiting contract 🛑.
+> **Status:** drafted (rev 1.1), awaiting contract 🛑.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ · ADR: _expected — first
 > product read of third-party corpus text; injection posture enforcement._
@@ -15,6 +15,17 @@ specs in [docs/specs/](../../specs/index.md).
 >   fetch/ingest → 017 demo dress-rehearsal → eval slice (measuring the
 >   real pipeline, not the stubs). The 011-era condition ("stub-swap waits
 >   for a live-demo milestone") has fired.
+> - **rev 1.1** (2026-07-08, user gate challenges): **(a) three-way wire
+>   vocabulary for screen** — the model may answer `unsure`; code maps it
+>   to `relevant` at capped-low confidence (recall-preserving by
+>   construction), counted + event-recorded; `unsure` is deliberately NOT
+>   a status value (decision 3, amended). **(b) screen-failure retry
+>   semantics pulled in-slice** — the deferred "recovery loop" entry's own
+>   condition ("until a real inference provider makes failure transient")
+>   fires in this slice; `uq_ssr_scope_source` becomes a partial unique
+>   index excluding `failed` (the 011 extraction-memo precedent), so
+>   re-runs retry failed docs as new rows with attempt history preserved
+>   (decision 5, amended; schema gate grows within the same migration).
 
 ## Goal
 
@@ -93,19 +104,32 @@ PR landing:
    cross-document leakage, and the cost profile at mini-class over
    envelope text is trivial.
 
-3. **Screen semantics.** The model returns a schema-constrained
-   `{decision, confidence}`; code maps decision → `relevant` /
-   `not_relevant`. `screen_basis` is computed **in code** from abstract
-   presence (`title_abstract` | `title_only`) exactly as today — the
-   fail-open rule ("no abstract must never behave like not-relevant")
-   is structural, not prompted. The prompt is recall-oriented (the
-   dangerous failure is the false negative; borderline → relevant with
-   low confidence). Confidence is stored as-is; calibration belongs to
-   the eval seam. `abstract_source` is passed as a data field so
-   provider-LLM summaries (Overton `llm_description`) are visible to
-   the model as secondhand text. Screen relevance is judged **against
-   the scope intent** — intent enters the prompt as an id-keyed data
-   record, never instructions (011/012 carried requirement).
+3. **Screen semantics** *(amended rev 1.1)*. The model returns a
+   schema-constrained `{decision, confidence}` where decision is
+   **three-way on the wire**: `relevant` | `not_relevant` | `unsure` —
+   forcing a binary answer invites overconfident exclusion, exactly the
+   failure a recall-oriented filter must not have. Code maps `unsure` →
+   `status='relevant'` at capped-low confidence
+   (`min(model_confidence, UNSURE_CONFIDENCE_CAP)`) so uncertainty is
+   recall-preserving **by construction**; the wire decision is recorded
+   in the `source.screened` event payload and counted (`unsure`) in the
+   component summary. `unsure` is deliberately **not** a status value:
+   every downstream reader filters on `status='relevant'`, so a third
+   status would silently behave as exclusion — the one thing the spec
+   forbids ("confidence … never a hard exclusion cutoff"); the durable
+   representation of "unsure" IS relevant-at-low-confidence, which
+   feeds `thin_base` and select's composite as designed.
+   `screen_basis` is computed **in code** from abstract presence
+   (`title_abstract` | `title_only`) exactly as today — the fail-open
+   rule ("no abstract must never behave like not-relevant") is
+   structural, not prompted. The prompt is recall-oriented (the
+   dangerous failure is the false negative). Confidence is stored
+   as-is; calibration belongs to the eval seam. `abstract_source` is
+   passed as a data field so provider-LLM summaries (Overton
+   `llm_description`) are visible to the model as secondhand text.
+   Screen relevance is judged **against the scope intent** — intent
+   enters the prompt as an id-keyed data record, never instructions
+   (011/012 carried requirement).
 
 4. **Classify is intent-free.** Classification is a property of the
    document, not the question (the 011 precedent: intent was removed
@@ -118,16 +142,33 @@ PR landing:
    appraisal coverage). `Unknown / Insufficient information` remains a
    legal, honest model output.
 
-5. **Live failure semantics differ per component, matching their
-   schemas.** Screen call failure → `status='failed'` persisted (the
-   existing closed value — attempt history; `failed` rows are excluded
-   from re-processing by the NOT EXISTS guard, so the retry/recovery
-   loop stays the recorded deferred seam, unchanged). Classify call
-   failure → **no row written** (changed from the stub-era fallback):
-   `Unknown` is a classification claim and an API failure is not one;
-   the NOT EXISTS guard makes the next run retry exactly those docs.
-   Failures are counted in the component summary, never silent. One
-   in-call retry (cap 1) before either outcome.
+5. **Live failure semantics: failures never block retry** *(amended
+   rev 1.1)*. The deferred `screen_failed`-recovery entry's own
+   condition — "until a real inference provider makes failure
+   transient" — fires in this slice, so retry semantics land with the
+   live backends rather than as a follow-on:
+   - **In-call:** one retry (cap 1) per document on both components
+     before any failure outcome is recorded.
+   - **Screen:** call failure (post-retry) → `status='failed'`
+     persisted. `uq_ssr_scope_source` becomes a **partial unique index
+     excluding `status='failed'`** (the 011 extraction-memo precedent:
+     "failures never block retry"), and the NOT-EXISTS candidate guard
+     becomes "no **non-failed** result exists" — a subsequent run
+     re-attempts failed docs as a **new row**, preserving failed rows
+     as attempt history. At most one non-failed row per
+     (scope, source) still holds; re-screening of *successful* results
+     remains the deferred seam.
+   - **Classify:** call failure (post-retry) → **no row written**
+     (changed from the stub-era fallback): `Unknown` is a
+     classification claim and an API failure is not one; the NOT
+     EXISTS guard makes the next run retry exactly those docs.
+   - Failures are counted in both component summaries, never silent.
+   - **Read-path adjustment (named):** counts over screening rows must
+     become failure-attempt-aware — `classify_sources`' `skipped`
+     count (`classify.py:109`) counts `failed` rows and would inflate
+     with attempt history; count docs whose **latest/only effective
+     status** is failed (distinct-source grain), not raw failed rows.
+     The plan enumerates every reader of `status='failed'` rows.
 
 6. **Open tags land, bounded and untrusted.** Tag proposals are
    untrusted model output: per-record cap, per-tag length cap,
@@ -166,8 +207,10 @@ PR landing:
   the thin-base **re-search trigger** (needs live search; note: live
   screen confidence makes select's `thin_base` flag meaningful
   automatically — no code change here) · tiered content peek ·
-  re-screening + `screen_failed` recovery loop · `Unknown` full-text
-  resolution · grey-lit category split · appraise changes (its
+  re-screening of **successful** results (the failed-row retry landed
+  in-slice, rev 1.1; superseding a relevant/not_relevant decision is a
+  different seam) · `Unknown` full-text resolution · grey-lit category
+  split · appraise changes (its
   coverage improves for free as `Unknown`s drop) · eval harness ·
   consensus roll-up · multi-execution fan-in.
 
@@ -182,8 +225,11 @@ contract 🛑**:
 2. **Public interface:** `run_harness` gains `screening_backend` +
    `classification_backend` (stub defaults; no behaviour change when
    omitted).
-3. **Schema:** one migration widening `ck_stag_tag_type` to admit
-   `'methodological_structural'`. No new tables, no new columns.
+3. **Schema:** one migration carrying two changes *(rev 1.1)*:
+   widening `ck_stag_tag_type` to admit `'methodological_structural'`,
+   and replacing `uq_ssr_scope_source` with a partial unique index
+   excluding `status='failed'` (retry semantics, decision 5). No new
+   tables, no new columns.
 4. **Dependencies:** none.
 
 ## Public / private boundary
@@ -215,8 +261,11 @@ halt and report — don't tune the prompt to the fixtures.
 
 - `make verify` green — deterministic, zero egress (stub backends).
 - Bulk tests: fan-out loops against both stub backends, idempotency,
-  failure isolation (both semantics of decision 5), tag bounds,
-  CHECK-widen roundtrip.
+  failure isolation (both semantics of decision 5, including a
+  failed-then-retried screen doc producing a new row with attempt
+  history intact, and failure-attempt-aware counts), unsure→relevant
+  mapping + event/summaries, tag bounds, migration roundtrip (CHECK
+  widen + partial unique index) on both DBs.
 - Judgment tests (live-shaped, stub-driven): schema-constrained output
   parsing, closed-vocabulary validation, injection fixture, NUL scrub.
 - **Live manual check** (operator-run, keys env-only): skeleton e2e over

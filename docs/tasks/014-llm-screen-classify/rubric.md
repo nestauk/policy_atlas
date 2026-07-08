@@ -33,10 +33,14 @@ otherwise it is in progress, not done.
        enter prompts as id-keyed data records; outputs
        schema-constrained and code-validated against closed
        vocabularies; NUL scrub at the backend boundary.
-10. [ ] Both live-failure semantics of contract decision 5 are
-        test-covered: screen failure persists `status='failed'`;
+10. [ ] The rev-1.1 failure/uncertainty semantics are test-covered:
+        screen failure persists `status='failed'` and a re-run
+        re-attempts the doc as a new row (partial unique index;
+        attempt history preserved; counts failure-attempt-aware);
         classify failure writes no row and re-runs retry exactly the
-        unwritten docs; both counted in summaries.
+        unwritten docs; wire-level `unsure` maps to relevant at
+        capped-low confidence and is event-recorded + counted; all
+        failure paths counted in summaries.
 11. [ ] Open-tag output bounded and provenance-clean: per-record and
         per-tag caps enforced, `asserted_by='classify'` ·
         `tag_type='methodological_structural'`, all writes through
