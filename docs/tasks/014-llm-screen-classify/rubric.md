@@ -77,8 +77,9 @@ otherwise it is in progress, not done.
         standing; every reader resolves through the shared
         effective-screen helper (no raw `status='relevant'` join
         survives — demoted docs excluded, confirmed docs read once);
-        select reads stage-1 confidence only (composite + thin_base)
-        with stage-2 biting via status; availability predicate =
+        select reads the effective row wholesale (status +
+        confidence, `screen_stage` carried into the rationale — the
+        rev-1.10 stage-3-cascade rule); availability predicate =
         text availability (ingested OR envelope full_text);
         `screen_stage` provenance on every row and event; effective
         result = highest-stage non-failed everywhere (reader sweep

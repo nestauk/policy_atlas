@@ -139,6 +139,15 @@ specs in [docs/specs/](../../specs/index.md).
 >   Classify Unknown resolution + two-stage appraisal stay seams
 >   (adjudicated: heaviest, unsettled rubric design). Rubric + plan
 >   rev 3 amended; scoped Codex delta review before re-approval.
+> - **rev 1.10** (2026-07-08, user gate call): **select reads the
+>   effective row wholesale** — status AND confidence from the one
+>   effective-screen helper row, replacing rev 1.9's stage-1-only
+>   confidence rule (which made select the sole hybrid reader).
+>   User frame: select = stage-3 of the screening cascade; rank on
+>   the most-informed per-doc judgment, with `screen_stage` carried
+>   + rationale-recorded (never-mix satisfied WITH provenance, not
+>   by avoidance). Estimator-difference calibration note → eval
+>   seam. Decision 11(iv) rewritten; plan rev 5 ripple.
 > - **rev 1.9** (2026-07-08, scoped delta review adjudicated — Codex
 >   on the rev-1.7/1.8 amendment: 2 blockers · 7 majors, **9/9
 >   adopted** into decision 11's hardening block): B-reader-matrix —
@@ -636,13 +645,23 @@ PR landing:
       structurally wrong under two-stage rows (demoted docs leak in;
       confirmed docs double-read); the rev-2 reader table's
       "relevant-only = safe" class is abolished. (iv) *select is
-      stage-aware by simplification*: `ScreenedSource` carries
-      `screen_stage`; the composite's `screen_confidence` leg and
-      `thin_base` read **stage-1 confidence uniformly** (every doc
-      has stage 1 — single measurement regime guaranteed); stage 2
-      affects select via **status only** (demotions leave the
-      candidate set). A mixed-regime/stage-aware composite is an
-      eval-seam design. (v) *windowing is extracted, not borrowed*:
+      stage-aware, reading the effective row wholesale* *(rev 1.10,
+      user call replacing rev 1.9's stage-1-only rule, which made
+      select the sole hybrid reader — effective status + a
+      different row's confidence)*: candidate set, status AND
+      confidence all come from the one effective-screen helper row —
+      the same uniform read rule as every other consumer. Conceptual
+      frame (user): **select is stage-3 of the screening cascade** —
+      each stage ranks on the most-informed per-doc judgment. The
+      never-mix rule is satisfied WITH provenance rather than by
+      avoidance: `ScreenedSource` carries `screen_stage`, recorded
+      in the selection rationale, so the composite compares informed
+      estimates transparently. Recorded eval note: stage-1
+      confidence is a consensus probability, stage-2 a single rep's
+      self-report — different estimators; whether the mix distorts
+      marginal ranking is a calibration question the eval slice
+      answers from the per-doc stage pairs it gets free.
+      (v) *windowing is extracted, not borrowed*:
       a generic chunk-window helper (explicit budget/overlap params)
       with a `ScreenFullTextPayload`; extraction keeps its wrapper,
       behaviour test-pinned unchanged. (vi) *spec flow-back rides

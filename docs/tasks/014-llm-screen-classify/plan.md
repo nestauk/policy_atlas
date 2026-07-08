@@ -73,10 +73,11 @@ delegate; every `lead` mark carries a justification.
 - Stage-2 availability predicate (rev 4, 013 text-availability
   lesson): `full_text_status = 'ingested'` OR envelope
   `text_basis = 'full_text'`
-- Select stage rule (rev 4): `ScreenedSource.screen_stage` carried;
-  composite `screen_confidence` leg + `thin_base` read **stage-1
-  confidence only**; stage 2 affects select via status (demotions
-  leave the candidate set); stage-aware composite = eval seam
+- Select stage rule (rev 5, user call): select reads the **effective
+  row wholesale** — candidate set, status AND confidence from the one
+  effective-screen helper row (select = stage-3 of the cascade);
+  `ScreenedSource.screen_stage` carried + recorded in the selection
+  rationale; estimator-difference calibration → eval seam
 - Migration 14 (rev 4 fix — FOUR changes): `screen_stage` column
   (1|2, NOT NULL default 1) · `screen_basis` CHECK gains `full_text` ·
   partial unique over (scope, source, stage) WHERE status<>'failed' ·
@@ -104,7 +105,7 @@ failed-then-retried cases each):
 | `screen.py` NOT-EXISTS guards | stage-1: no non-failed stage-1 row; stage-2: candidate = effective stage-1 relevant + text-available + no non-failed stage-2 row (task 5/5b) |
 | `classify.py` relevant join + `total_relevant` + `skipped` | effective-relevant join; effective-status distinct-source counts (task 6) |
 | `characterise.py` `_base_counts` + relevant join | effective-stage-and-status (task 7) |
-| `select.py` `ScreenedSource` (l.484-488, l.972-981, l.1509) | effective-relevant candidate set + `screen_stage` carried; **stage-1 confidence only** in composite/thin_base (task 7 + task 8 wiring) |
+| `select.py` `ScreenedSource` (l.484-488, l.972-981, l.1509) | effective row wholesale (status + confidence) + `screen_stage` carried into rationale (rev 5; task 7 + task 8 wiring) |
 | `synthesise.py` (l.720-723) + `synthesis_tools.py` (l.691-697) screened-in scope | effective-relevant (task 7) |
 | `ingest_full_text.py` relevant read | effective stage-1 relevant (stage 2 runs post-ingestion — fetch must not consult stage-2 rows; task 7) |
 | `skeleton.py` summaries (l.660, l.750-752, l.949) | effective-stage-and-status distinct-source; attempt/stage history split into its own log line (task 7) |
@@ -210,8 +211,9 @@ failed-then-retried cases each):
     records · agreement count · `aggregation_flags` · **`screen_stage`
     on every screened event (rev 4)** · classify
     confidence/reason present, no columns), select stage-tests
-    (stage-1-only confidence in composite/thin_base; demotion removes
-    from candidate set), no-rescue invariant test, wire-model
+    (effective-row confidence in composite/thin_base with
+    `screen_stage` in rationale; demotion removes from candidate
+    set), no-rescue invariant test, wire-model
     validation/NUL/oversize-field cases. — **codex**
 
 **Phase 7 — records + live check**
