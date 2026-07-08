@@ -230,7 +230,8 @@ The closed list, with boundaries:
 - Other (Non-evidence documents): genuinely non-evidence artefacts — news
   items, press releases, editorials without substantive expert argument,
   website scraps, tables of contents, adverts, administrative pages. Choose
-  this only when the document is not an evidence document at all.
+  this only when you positively recognise such an artefact from what the
+  envelope shows — never merely because the envelope is uninformative.
 - Unknown / Insufficient information: the document looks evidence-like, but
   the envelope does not carry enough methodological information to support
   one confident choice among the types above.
@@ -238,8 +239,10 @@ The closed list, with boundaries:
 The Unknown-versus-Other boundary matters downstream, so apply it exactly:
 an evidence-like document with insufficient methodological information is
 Unknown (it stays in the corpus); a genuinely non-evidence artefact is Other
-(it leaves the evidence pipeline). When in doubt between them, ask whether
-the document plausibly reports or synthesises evidence at all.
+(it leaves the evidence pipeline). An envelope you cannot make sense of —
+uninformative, garbled, or too sparse to characterise — is Unknown, not
+Other: absence of information is never itself evidence that a document is
+non-evidence. When in doubt between them, choose Unknown.
 
 Also propose open tags: short methodological/structural descriptors the
 primary type does not already capture (study design detail, document

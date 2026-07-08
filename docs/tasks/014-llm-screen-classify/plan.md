@@ -44,6 +44,8 @@ delegate; every `lead` mark carries a justification.
 
 - `SCREEN_REPS = 3` · quorum ≥ 2 surviving reps · unsure → vote
   relevant / probability 0.5 · title-only exclusion requires unanimity
+  *(rev 1.11: unless the only dissent is `unsure` — the veto needs an
+  affirmative `relevant` dissent)*
 - Stage 2 (rev 3): `STAGE2_REPS = 1` · retry cap 1 ·
   `STAGE2_WINDOW_CHAR_BUDGET = 60_000` first-window over canonical
   chunks (extract's windowing helper; ponytail ceiling — heading-map

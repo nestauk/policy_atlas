@@ -3,8 +3,11 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **APPROVED rev 1.10** (design phase complete; build =
-> conversation B).
+> **Status:** **APPROVED rev 1.10 · amended rev 1.11 post-build**
+> (2026-07-08, user adjudication of the live-run evidence at the build
+> 🛑 — B2 narrowed to affirmative-relevant dissent; Unknown-vs-Other
+> doubt rule inverted to positive identification; unsure-band 0.5
+> confirmed with calibration recorded at the eval seam).
 > Contract approved (before planning): **2026-07-08 · Shabeer Rauf**
 > (rev 1.5.1) · **re-approved 2026-07-08 · Shabeer Rauf (rev 1.10**,
 > after the material rev-1.7 stage-2 amendment, covering the full
@@ -21,6 +24,28 @@ specs in [docs/specs/](../../specs/index.md).
 > [0011](../../adr/0011-two-stage-consensus-screening.md) Accepted.
 >
 > **Revision history:**
+> - **rev 1.11** (2026-07-08, POST-BUILD — user adjudication of the
+>   live-run evidence; spec-refinement flow-back at the build 🛑):
+>   **(a) B2 narrowed** — the title-only unanimity veto now requires an
+>   **affirmative `relevant` dissent**; a lone `unsure` no longer flips
+>   a not_relevant majority (it lowers confidence only). Trigger: the
+>   live corpus flipped a [not_relevant 0.88 · not_relevant 0.85 ·
+>   unsure 0.85] title-only doc to relevant at 0.257 — keeping a doc
+>   the consensus excluded reads wrong to a user; the original rule
+>   stacked two recall devices (unsure already votes relevant AND
+>   vetoed exclusion). [nr, nr, relevant] still flips (a rep
+>   affirmatively saw relevance). **(b) Unknown-vs-Other doubt rule
+>   inverted** — `Other` requires POSITIVE recognition of a
+>   non-evidence artefact kind; an unintelligible/uninformative
+>   envelope is `Unknown`; doubt resolves to Unknown, never to
+>   exclusion-by-Other (the live run sent word-salad envelopes to
+>   Other on absence-of-evidence-of-evidence — the same failure shape
+>   B2 guards at screen). **(c) unsure at 0.5 CONFIRMED** (kept: 0.5 is
+>   the zero-directional-information point on the p(relevant) scale
+>   consumers see; downstream already treats it as no-signal) — the
+>   user's calibration question (should a unanimous-unsure doc sit at
+>   the corpus base rate rather than 0.5?) is recorded as the eval
+>   seam's first calibration target.
 > - **rev 1** (2026-07-08): initial draft. Sequencing context: the post-013
 >   design conversation adjudicated the live-demo path ahead of the eval
 >   slice — 014 LLM screen+classify → 015 live search → 016 live
@@ -312,10 +337,17 @@ PR landing:
    fabricate neutrality; and a decision requires a **quorum of ≥ 2
    surviving reps** — 0 or 1 survivors → `status='failed'`
    (retryable), so no single-rep decision can ever persist under a
-   consensus contract. *(rev 1.6, B2 — fail-open made structural)*:
-   for `title_only` docs (no abstract), exclusion requires a
-   **unanimous** not_relevant among surviving reps — any dissent →
-   `relevant`, flagged; and `screen_v1` pins the rule "a missing
+   consensus contract. *(rev 1.6, B2 — fail-open made structural;
+   NARROWED rev 1.11)*: for `title_only` docs (no abstract), exclusion
+   requires a **unanimous** not_relevant among surviving reps *unless
+   the only dissent is `unsure`* — an **affirmative `relevant`
+   dissent** → `relevant`, flagged; a lone `unsure` against a
+   not_relevant majority no longer vetoes the exclusion, it lowers
+   the exclusion's confidence through the probability leg instead
+   (rev 1.11: the original any-dissent veto stacked two recall
+   devices — unsure already votes relevant — and flipped a consensus
+   exclusion to relevant at 0.257 on the live corpus); and
+   `screen_v1` pins the rule "a missing
    abstract is never evidence of irrelevance; if the title alone
    cannot support a judgment, answer `unsure`" — together these make
    the spec's fail-open a code property, not a hope.
@@ -415,6 +447,16 @@ PR landing:
    evidence-like doc with insufficient methodological info →
    `Unknown`, genuinely non-evidence artefact (editorial, news item,
    website scrap) → `Other` — with fixtures testing each side.
+   *(rev 1.11 — doubt rule inverted, user call on live evidence)*:
+   `Other` requires **positively recognising** a non-evidence artefact
+   kind from what the envelope shows; an unintelligible or
+   uninformative envelope is `Unknown` — doubt resolves to Unknown,
+   never to exclusion-by-Other (absence of evidence of evidence is
+   not evidence of non-evidence; the same fail-open shape as screen's
+   missing-abstract rule). NB the distinction's downstream bite is
+   gradation-dependent: appraise's rubric domain excludes BOTH Other
+   and Unknown, so on light runs (no select/extract) the label choice
+   is inert — it gates eligibility only where select/extract run.
 
 5. **Live failure semantics: failures never block retry** *(amended
    rev 1.1)*. The deferred `screen_failed`-recovery entry's own

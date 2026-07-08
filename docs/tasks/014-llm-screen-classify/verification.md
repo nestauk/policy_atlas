@@ -268,6 +268,42 @@ per task-cycle-build; none is silent drift):
 - Fixture corpus remains sanitized records + openly-licensed synthetic
   uploads; nothing acquired-and-unlicensed is committed.
 
+## Post-build amendment (contract rev 1.11, 2026-07-08 — user adjudication of the live evidence)
+
+The user reviewed the live-run evidence above and reopened two contract
+decisions at the build 🛑 (spec-refinement flow-back); one questioned
+behaviour was confirmed correct. All three adjudicated in-conversation:
+
+1. **B2 narrowed** (decision 3): the title-only unanimity veto now requires
+   an **affirmative `relevant` dissent** — a lone `unsure` no longer flips a
+   not_relevant majority (the live flip at 0.257 above would now persist
+   `not_relevant` @ ~0.743). `[nr, nr, relevant]` still flips, flagged.
+   One-condition change in `screen.py`; the exact live case is now a pinned
+   regression in `test_title_only_not_relevant_requires_unanimity_to_exclude`.
+2. **Unknown-vs-Other doubt rule inverted** (decision 4/M3): `Other` requires
+   positively recognising a non-evidence artefact kind; an unintelligible or
+   uninformative envelope is `Unknown` (`classify_v1` boundary paragraph —
+   prompt content unchanged elsewhere). NB: appraise's rubric domain excludes
+   BOTH labels, so on light-gradation runs (no select/extract) the choice is
+   inert — it gates eligibility only on deep runs.
+3. **Unsure-at-0.5 confirmed**: 0.5 is the zero-directional-information point
+   on the p(relevant) scale consumers see; downstream already treats it as
+   no-signal (same value as missing confidence; outside `thin_base`'s
+   confident count; always in the borderline band). The user's calibration
+   question — should a no-information doc sit at the corpus base rate
+   instead? — is recorded as the **eval seam's first calibration target**
+   (rides deferred.md at step 8 with the estimator-difference note).
+
+**Scoped live probe** (the new live-check lever — 21 live calls, no skeleton
+run): both live-run word-salad `Other` cases now classify
+`Unknown / Insufficient information` (0.95 / 0.98); a press-release-shaped
+envelope and a table-of-contents scrap still positively classify `Other`
+(0.99 / 0.98); a genuine systematic-review abstract still lands
+`Systematic Review and Meta-Analysis` (0.99); title-only screen sanity on
+real titles: on-topic → 3× relevant ≥0.90, off-topic → 3× not_relevant
+≥0.92 (unanimous — no flip involved). Full `make verify` re-run green after
+the amendment (the step-6 exit claim below holds for the amended tree).
+
 ## Review handoff (step-7 inputs — read before dispatching any lane)
 
 - **Adjudication items from this build** (each confirmed or contested explicitly,
@@ -276,6 +312,10 @@ per task-cycle-build; none is silent drift):
   2. Known unverified items below — in particular the sanitized-corpus
      face-validity ceiling (a *scope* statement the review should sanity-check,
      not try to close).
+  3. The rev 1.11 post-build amendment above (user-adjudicated at the build 🛑;
+     the review verifies code/prompt/tests match the amended contract, and that
+     the § Live-run evidence narrative is read AS AMENDED — the unanimity-flip
+     "showcase" there predates rev 1.11).
 - **Executor provenance (family-flip anchoring is per surface):**
   - *Codex-written* → Claude lanes anchor: `screening_backend.py`,
     `classification_backend.py`, `screen.py` (+ `windowing.py`, the `extract.py`

@@ -475,6 +475,9 @@ def test_title_only_not_relevant_requires_unanimity_to_exclude(conn: Connection)
     scope_id = seed_scope(conn, project_id)
     _, mixed = seed_source(conn, project_id, meta=_metadata("mixed", abstract=None))
     _, unanimous = seed_source(conn, project_id, meta=_metadata("unanimous", abstract=None))
+    _, unsure_dissent = seed_source(
+        conn, project_id, meta=_metadata("unsure_dissent", abstract=None)
+    )
 
     screen_sources(
         conn,
@@ -493,12 +496,21 @@ def test_title_only_not_relevant_requires_unanimity_to_exclude(conn: Connection)
                     _rep("not_relevant", 0.9),
                     _rep("not_relevant", 0.9),
                 ],
+                # Rev 1.11: a lone unsure dissent no longer vetoes a
+                # not_relevant majority — the veto needs an affirmative
+                # relevant dissent (the mixed doc above).
+                "unsure_dissent": [
+                    _rep("not_relevant", 0.88),
+                    _rep("not_relevant", 0.85),
+                    _rep("unsure", 0.85),
+                ],
             }
         ),
     )
 
     mixed_row = _screen_row(conn, project_id, mixed)
     unanimous_row = _screen_row(conn, project_id, unanimous)
+    unsure_dissent_row = _screen_row(conn, project_id, unsure_dissent)
     payloads = {
         payload["project_source_snapshot_id"]: payload
         for payload in _screened_payloads(conn, project_id)
@@ -508,6 +520,13 @@ def test_title_only_not_relevant_requires_unanimity_to_exclude(conn: Connection)
     assert payloads[str(mixed)]["aggregation_flags"] == ["title_only_unanimity_applied"]
     assert unanimous_row.status == "not_relevant"
     assert payloads[str(unanimous)]["aggregation_flags"] == []
+    # The exact live case that triggered rev 1.11: [nr .88, nr .85, unsure .85]
+    # excludes at 1 - mean(0.12, 0.15, 0.5) ≈ 0.743, no flip, no flag.
+    assert unsure_dissent_row.status == "not_relevant"
+    assert unsure_dissent_row.screen_decision_confidence == pytest.approx(
+        1 - (0.12 + 0.15 + 0.5) / 3
+    )
+    assert payloads[str(unsure_dissent)]["aggregation_flags"] == []
 
 
 def test_event_payload_shape_records_reps_agreement_flags_and_stage(

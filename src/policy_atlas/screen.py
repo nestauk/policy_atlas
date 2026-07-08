@@ -450,10 +450,13 @@ def _run_stage1(
             else:
                 status = "not_relevant"
 
+            # Rev 1.11: the veto needs an AFFIRMATIVE relevant dissent — a lone
+            # unsure against a not_relevant majority lowers confidence through
+            # the probability leg but no longer flips a consensus exclusion.
             if (
                 doc.basis == "title_only"
                 and status == "not_relevant"
-                and any(rep.decision != "not_relevant" for rep in survivors)
+                and any(rep.decision == "relevant" for rep in survivors)
             ):
                 status = "relevant"
                 flags.append("title_only_unanimity_applied")
