@@ -190,7 +190,21 @@ PR landing:
    `screen_decision_confidence` = confidence in the recorded decision
    (mean p for `relevant` rows, 1 − mean p for `not_relevant` rows),
    keeping the column's semantics stable for its readers (select's
-   composite, `thin_base`). Vote and probability may legally diverge
+   composite, `thin_base`). *Clarity notes (2026-07-08, user
+   deliberation):* (i) every current downstream reader consumes only
+   `relevant` rows, where decision confidence ≡ p(relevant) — so the
+   value consumers see is always relevance confidence; the 1 − p flip
+   affects only `not_relevant` rows (no current reader; kept so an
+   inspected excluded row reads honestly, matching stub semantics).
+   (ii) `unsure`'s 0.5 is not a discarded confidence: `unsure` is a
+   first-class wire answer, not a threshold over some underlying
+   relevance score, and its attached confidence is conviction that
+   the doc is *undecidable* — direction-less. Using it as p(relevant)
+   would let a 0.9-confident-unsure rep outvote an 0.8-confident-
+   relevant one; 0.5 is the unique zero-directional-evidence value.
+   The rev-1.1 unsure→relevant mapping lives in the VOTE leg only
+   (recall device); the probability leg honours unsure's neutrality.
+   Vote and probability may legally diverge
    (two weak relevants against one high-conviction dissenter →
    `relevant` at confidence < 0.5): that is the honest recall-first
    outcome — kept in, marked shaky — surfaced to the borderline
