@@ -18,7 +18,12 @@ from __future__ import annotations
 import json
 from typing import Any, Literal, Protocol
 
+from langfuse import Langfuse
+from openai.types.completion_usage import CompletionUsage
 from pydantic import BaseModel, ConfigDict
+
+from policy_atlas import tracing
+from policy_atlas.embeddings import log_usage, resolve_openai_client, usage_metadata
 
 JUDGE_PROMPT_VERSION = "grounding_judge_v1"
 ENVELOPE_VERSION = "synthesis_envelope_v1"
@@ -182,3 +187,181 @@ class GroundingJudgeBackend(Protocol):
             Raw structurally parsed verdicts.
         """
         ...
+
+
+class OpenAIGroundingJudgeBackend:
+    """Live OpenAI implementation of the grounding judge seam.
+
+    Args:
+        api_key: Optional OpenAI API key. If omitted, ``OPENAI_API_KEY`` is read
+            from the environment.
+        langfuse_client: Optional Langfuse client. When omitted, tracing is a
+            no-op and no Langfuse object is created.
+
+    Raises:
+        RuntimeError: If no OpenAI API key is provided or configured.
+    """
+
+    mode = "live"
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        langfuse_client: Langfuse | None = None,
+    ) -> None:
+        """Create a live grounding judge backend.
+
+        Args:
+            api_key: Optional OpenAI API key.
+            langfuse_client: Optional Langfuse client for the judge span.
+        """
+        self._client = resolve_openai_client(
+            api_key,
+            backend_name="OpenAIGroundingJudgeBackend",
+            timeout=120.0,
+            max_retries=2,
+        )
+        self._langfuse_client = langfuse_client
+
+    def _judge_once(
+        self,
+        messages: list[dict[str, Any]],
+    ) -> tuple[JudgeResponseWire, CompletionUsage | None]:
+        completions: Any = self._client.chat.completions
+        response = completions.parse(
+            model=JUDGE_MODEL,
+            messages=messages,
+            response_format=JudgeResponseWire,
+        )
+        log_usage("grounding_judge.judge.usage", response.usage)
+        if not response.choices:
+            raise RuntimeError("OpenAI grounding judge response had no choices.")
+        parsed = response.choices[0].message.parsed
+        if parsed is None:
+            raise RuntimeError("OpenAI grounding judge response was not parsed.")
+        parsed_model: JudgeResponseWire = parsed
+        return parsed_model, response.usage
+
+    def judge_block(self, envelope: dict[str, Any]) -> JudgeResponseWire:
+        """Judge one envelope through structured OpenAI output.
+
+        Args:
+            envelope: The ``synthesis_envelope_v1`` payload.
+
+        Returns:
+            Raw structurally parsed judge verdicts.
+
+        Raises:
+            RuntimeError: If the response cannot be parsed into the expected shape.
+        """
+        messages = build_judge_messages(envelope)
+
+        def _update(
+            span: Any, result: tuple[JudgeResponseWire, CompletionUsage | None]
+        ) -> None:
+            verdicts, usage = result
+            span.update(
+                input={"messages": messages},
+                output=verdicts.model_dump(),
+                model=JUDGE_MODEL,
+                metadata={
+                    "prompt_version": JUDGE_PROMPT_VERSION,
+                    **usage_metadata(usage),
+                },
+            )
+
+        verdicts, _usage = tracing.traced_call(
+            self._langfuse_client,
+            name="synthesise:judge",
+            as_type="generation",
+            call=lambda: self._judge_once(messages),
+            update=_update,
+        )
+        return verdicts
+
+
+class StubGroundingJudgeBackend:
+    """Deterministic zero-egress grounding judge backend for tests and local runs."""
+
+    mode = "stub"
+
+    def __init__(self, fail: bool = False) -> None:
+        """Create a stub grounding judge backend.
+
+        Args:
+            fail: When true, calls raise the failure sentinel.
+        """
+        self._fail = fail
+
+    def judge_block(self, envelope: dict[str, Any]) -> JudgeResponseWire:
+        """Return deterministic verdicts for the envelope's claims.
+
+        Args:
+            envelope: The ``synthesis_envelope_v1`` payload.
+
+        Returns:
+            Verdicts for exactly the supplied claim ids in order.
+
+        Raises:
+            RuntimeError: If the failure sentinel is enabled.
+        """
+        if self._fail:
+            raise RuntimeError("Stub grounding judge failure sentinel.")
+
+        verdicts: list[ClaimVerdictWire] = []
+        raw_claims = envelope.get("claims", [])
+        claims = raw_claims if isinstance(raw_claims, list) else []
+        for claim in claims:
+            if not isinstance(claim, dict):
+                continue
+            claim_id = str(claim.get("claim_id", ""))
+            claim_type = claim.get("claim_type")
+            text = claim.get("text")
+            text_value = text if isinstance(text, str) else ""
+            citations = claim.get("citations", [])
+            has_fabricated_quote = False
+            has_chunk_citation = False
+            if isinstance(citations, list):
+                for citation in citations:
+                    if not isinstance(citation, dict):
+                        continue
+                    has_chunk_citation = True
+                    quote = citation.get("quote")
+                    if isinstance(quote, str) and "fabricated" in quote.casefold():
+                        has_fabricated_quote = True
+
+            cited_findings = claim.get("cited_finding_ids", [])
+            has_cited_findings = isinstance(cited_findings, list) and len(cited_findings) > 0
+
+            verdict: Literal[
+                "tier_1",
+                "tier_2",
+                "tier_3",
+                "tier_4",
+                "unsupported_mis_cited",
+            ]
+            if "stubunsupported" in text_value or has_fabricated_quote:
+                verdict = "unsupported_mis_cited"
+            elif claim_type == "reasoning":
+                verdict = (
+                    "unsupported_mis_cited"
+                    if "stubsmuggle" in text_value
+                    else "tier_4"
+                )
+            elif has_chunk_citation:
+                verdict = "tier_1"
+            elif has_cited_findings:
+                verdict = "tier_2"
+            else:
+                verdict = "tier_3"
+
+            verdicts.append(
+                ClaimVerdictWire(
+                    claim_id=claim_id,
+                    verdict=verdict,
+                    weakly_grounded="stubweak" in text_value,
+                    rationale=f"Stub verdict for {claim_id}.",
+                )
+            )
+
+        return JudgeResponseWire(verdicts=verdicts)

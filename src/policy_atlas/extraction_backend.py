@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any, Protocol
 
 import structlog
 from langfuse import Langfuse
@@ -106,15 +106,10 @@ class OpenAIExtractionBackend:
         Raises:
             RuntimeError: If the response cannot be parsed into the expected shape.
         """
-        if self._langfuse_client is None:
-            return self._extract_once(payload)[0]
-
-        with tracing._observation(
-            self._langfuse_client,
-            name=f"extract:{payload.pss_id[:8]}:w{payload.window_index}",
-            as_type="generation",
-        ) as span:
-            response, usage = self._extract_once(payload)
+        def _update(
+            span: Any, result: tuple[ExtractionResponse, CompletionUsage | None]
+        ) -> None:
+            response, usage = result
             span.update(
                 input={"messages": build_extract_messages(payload)},
                 output={"findings": [f.model_dump() for f in response.findings]},
@@ -128,7 +123,15 @@ class OpenAIExtractionBackend:
                     **usage_metadata(usage),
                 },
             )
-            return response
+
+        response, _usage = tracing.traced_call(
+            self._langfuse_client,
+            name=f"extract:{payload.pss_id[:8]}:w{payload.window_index}",
+            as_type="generation",
+            call=lambda: self._extract_once(payload),
+            update=_update,
+        )
+        return response
 
 
 class StubExtractionBackend:

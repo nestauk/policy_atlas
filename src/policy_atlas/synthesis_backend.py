@@ -24,10 +24,15 @@ emission, never extends the loop).
 from __future__ import annotations
 
 import json
+from threading import Lock
 from typing import Any, Literal, Protocol, TypedDict
 
+from langfuse import Langfuse
+from openai.types.completion_usage import CompletionUsage
 from pydantic import BaseModel, ConfigDict
 
+from policy_atlas import tracing
+from policy_atlas.embeddings import log_usage, resolve_openai_client, usage_metadata
 from policy_atlas.facet_grouping import FORBIDDEN_GROUP_LABELS
 from policy_atlas.synthesis_tools import (
     REASONING_CLAIMS_MAX,
@@ -676,3 +681,701 @@ class SynthesisBackend(Protocol):
             passing siblings survive verbatim; enforced by the caller).
         """
         ...
+
+
+def _json_object_or_empty(arguments: str) -> dict[str, Any]:
+    try:
+        parsed = json.loads(arguments)
+    except json.JSONDecodeError:
+        return {}
+    if isinstance(parsed, dict):
+        return parsed
+    return {}
+
+
+def _strip_control_chars(text: str) -> str:
+    return "".join(ch for ch in text if ord(ch) >= 32 and ord(ch) != 127)
+
+
+def _record_id(record: Any, *keys: str) -> str | None:
+    if isinstance(record, str):
+        return record
+    if not isinstance(record, dict):
+        return None
+    for key in keys:
+        value = record.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def _group_ids_from_substrate(substrate: dict[str, Any]) -> list[str]:
+    grouping = substrate.get("grouping", {})
+    if not isinstance(grouping, dict):
+        return []
+    groups = grouping.get("groups", [])
+    if not isinstance(groups, list):
+        return []
+    group_ids: list[str] = []
+    for group in groups:
+        group_id = _record_id(group, "group_id", "id")
+        if group_id is not None:
+            group_ids.append(group_id)
+    return group_ids
+
+
+def _section_title(seed: dict[str, Any]) -> str:
+    section = seed.get("section", {})
+    if isinstance(section, dict):
+        title = section.get("title")
+        if isinstance(title, str):
+            return title
+    return "Section"
+
+
+def _section_focus(seed: dict[str, Any]) -> str:
+    section = seed.get("section", {})
+    if isinstance(section, dict):
+        focus = section.get("focus")
+        if isinstance(focus, str):
+            return focus
+    return ""
+
+
+def _section_group_ids(seed: dict[str, Any]) -> list[str]:
+    section = seed.get("section", {})
+    if not isinstance(section, dict):
+        return []
+    group_ids = section.get("group_ids", [])
+    if not isinstance(group_ids, list):
+        return []
+    return [group_id for group_id in group_ids if isinstance(group_id, str)]
+
+
+def _transcript_chunks(transcript: list[ToolExchange]) -> list[dict[str, Any]]:
+    chunks: list[dict[str, Any]] = []
+    for exchange in transcript:
+        if exchange["tool"] != "search_chunks":
+            continue
+        raw_chunks = exchange["result"].get("chunks", [])
+        if isinstance(raw_chunks, list):
+            chunks.extend(chunk for chunk in raw_chunks if isinstance(chunk, dict))
+    return chunks
+
+
+def _transcript_findings(transcript: list[ToolExchange]) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+    for exchange in transcript:
+        if exchange["tool"] != "query_findings":
+            continue
+        raw_findings = exchange["result"].get("findings", [])
+        if isinstance(raw_findings, list):
+            findings.extend(finding for finding in raw_findings if isinstance(finding, dict))
+    return findings
+
+
+def _chunk_content_by_id(transcript: list[ToolExchange]) -> dict[str, str]:
+    content_by_id: dict[str, str] = {}
+    for chunk in _transcript_chunks(transcript):
+        chunk_id = _record_id(chunk, "chunk_record_id", "id")
+        content = chunk.get("content")
+        if chunk_id is not None and isinstance(content, str):
+            content_by_id[chunk_id] = content
+    return content_by_id
+
+
+def _first_theme_reference(
+    seed: dict[str, Any],
+) -> tuple[Literal["characterisation", "grouping"], str] | None:
+    substrate = seed.get("substrate", {})
+    if not isinstance(substrate, dict):
+        return None
+    characterisation = substrate.get("characterisation", {})
+    if isinstance(characterisation, dict):
+        themes = characterisation.get("themes", [])
+        if isinstance(themes, list):
+            for theme in themes:
+                theme_id = _record_id(theme, "theme_id", "id")
+                if theme_id is not None:
+                    return "characterisation", theme_id
+    grouping = substrate.get("grouping", {})
+    if isinstance(grouping, dict):
+        groups = grouping.get("groups", [])
+        if isinstance(groups, list):
+            for group in groups:
+                group_id = _record_id(group, "group_id", "id")
+                if group_id is not None:
+                    return "grouping", group_id
+    return None
+
+
+def _turn_output(turn: SectionTurn) -> dict[str, Any]:
+    claims = turn["claims"]
+    return {
+        "tool_calls": turn["tool_calls"],
+        "claims": claims.model_dump() if claims is not None else None,
+    }
+
+
+class OpenAISynthesisBackend:
+    """Live OpenAI implementation of the section proposal and section loop seams.
+
+    Args:
+        api_key: Optional OpenAI API key. If omitted, ``OPENAI_API_KEY`` is read
+            from the environment.
+        langfuse_client: Optional Langfuse client. When omitted, tracing is a
+            no-op and no Langfuse object is created.
+
+    Raises:
+        RuntimeError: If no OpenAI API key is provided or configured.
+    """
+
+    mode = "live"
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        langfuse_client: Langfuse | None = None,
+    ) -> None:
+        """Create a live synthesis backend.
+
+        Args:
+            api_key: Optional OpenAI API key.
+            langfuse_client: Optional Langfuse client for generation spans.
+        """
+        self._client = resolve_openai_client(
+            api_key,
+            backend_name="OpenAISynthesisBackend",
+            timeout=120.0,
+            max_retries=2,
+        )
+        self._langfuse_client = langfuse_client
+        self._turn_count = 0
+        self._lock = Lock()
+
+    def _next_turn_index(self) -> int:
+        with self._lock:
+            self._turn_count += 1
+            return self._turn_count
+
+    def _parse_proposal_once(
+        self,
+        messages: list[dict[str, Any]],
+    ) -> tuple[SectionProposalWire, CompletionUsage | None]:
+        completions: Any = self._client.chat.completions
+        response = completions.parse(
+            model=SYNTHESIS_MODEL,
+            messages=messages,
+            response_format=SectionProposalWire,
+        )
+        log_usage("synthesis.proposal.usage", response.usage)
+        if not response.choices:
+            raise RuntimeError("OpenAI synthesis section proposal response had no choices.")
+        parsed = response.choices[0].message.parsed
+        if parsed is None:
+            raise RuntimeError("OpenAI synthesis section proposal response was not parsed.")
+        parsed_model: SectionProposalWire = parsed
+        return parsed_model, response.usage
+
+    def propose_sections(
+        self,
+        *,
+        intent: str,
+        substrate: dict[str, Any],
+        rejection: list[str] | None = None,
+    ) -> SectionProposalWire:
+        """Propose sections through structured OpenAI output.
+
+        Args:
+            intent: Evidence-scope intent.
+            substrate: Available substrate summaries.
+            rejection: Optional rejected-proposal reasons for the bounded repair call.
+
+        Returns:
+            Raw structurally parsed section proposal.
+
+        Raises:
+            RuntimeError: If the provider response is empty or unparsed.
+        """
+        messages = build_sections_messages(
+            intent=intent,
+            substrate=substrate,
+            rejection=rejection,
+        )
+
+        def _update(
+            span: Any, result: tuple[SectionProposalWire, CompletionUsage | None]
+        ) -> None:
+            proposal, usage = result
+            span.update(
+                input={"messages": messages},
+                output=proposal.model_dump(),
+                model=SYNTHESIS_MODEL,
+                metadata={
+                    "prompt_version": SECTIONS_PROMPT_VERSION,
+                    **usage_metadata(usage),
+                },
+            )
+
+        proposal, _usage = tracing.traced_call(
+            self._langfuse_client,
+            name="synthesise:proposal",
+            as_type="generation",
+            call=lambda: self._parse_proposal_once(messages),
+            update=_update,
+        )
+        return proposal
+
+    def _create_section_turn_once(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        force_emit: bool,
+    ) -> tuple[SectionTurn, CompletionUsage | None]:
+        tool_choice: str | dict[str, dict[str, str] | str]
+        if force_emit:
+            tool_choice = {"type": "function", "function": {"name": "emit_claims"}}
+        else:
+            tool_choice = "required"
+        completions: Any = self._client.chat.completions
+        response = completions.create(
+            model=SYNTHESIS_MODEL,
+            messages=messages,
+            tools=SECTION_TOOL_SCHEMAS,
+            parallel_tool_calls=False,
+            tool_choice=tool_choice,
+        )
+        log_usage("synthesis.section_turn.usage", response.usage)
+        if not response.choices:
+            raise RuntimeError("OpenAI synthesis section turn response had no choices.")
+        tool_calls = response.choices[0].message.tool_calls or []
+        if not tool_calls:
+            raise RuntimeError("OpenAI synthesis section turn response had no tool call.")
+        if len(tool_calls) != 1:
+            raise RuntimeError("OpenAI synthesis section turn response had multiple tool calls.")
+        function = tool_calls[0].function
+        name = function.name
+        arguments = function.arguments
+        if not isinstance(name, str) or not name:
+            raise RuntimeError("OpenAI synthesis section turn returned an unnamed tool call.")
+        if not isinstance(arguments, str):
+            arguments = "{}"
+        if name == "emit_claims":
+            claims = SectionClaimsWire.model_validate_json(arguments)
+            return {"tool_calls": [], "claims": claims}, response.usage
+        return {
+            "tool_calls": [{"tool": name, "arguments": _json_object_or_empty(arguments)}],
+            "claims": None,
+        }, response.usage
+
+    def section_turn(
+        self,
+        seed: dict[str, Any],
+        transcript: list[ToolExchange],
+        *,
+        force_emit: bool,
+    ) -> SectionTurn:
+        """Produce one OpenAI tool-forced section-loop turn.
+
+        Args:
+            seed: Section seed record.
+            transcript: Executed tool exchanges so far.
+            force_emit: Whether this is the final forced-emission turn.
+
+        Returns:
+            One tool call request or a claims emission.
+
+        Raises:
+            RuntimeError: If the provider response violates the one-tool-call protocol.
+        """
+        messages = build_section_messages(seed, transcript, force_emit=force_emit)
+        turn_index = self._next_turn_index() if self._langfuse_client is not None else 0
+
+        def _update(span: Any, result: tuple[SectionTurn, CompletionUsage | None]) -> None:
+            turn, usage = result
+            span.update(
+                input={"messages": messages},
+                output=_turn_output(turn),
+                model=SYNTHESIS_MODEL,
+                metadata={
+                    "prompt_version": SECTION_PROMPT_VERSION,
+                    "force_emit": force_emit,
+                    "transcript_length": len(transcript),
+                    **usage_metadata(usage),
+                },
+            )
+
+        turn, _usage = tracing.traced_call(
+            self._langfuse_client,
+            name=f"synthesise:section_turn{turn_index}",
+            as_type="generation",
+            call=lambda: self._create_section_turn_once(messages, force_emit=force_emit),
+            update=_update,
+        )
+        return turn
+
+    def _repair_once(
+        self,
+        messages: list[dict[str, Any]],
+    ) -> tuple[SectionClaimsWire, CompletionUsage | None]:
+        completions: Any = self._client.chat.completions
+        response = completions.create(
+            model=SYNTHESIS_MODEL,
+            messages=messages,
+            tools=[EMIT_CLAIMS_TOOL_SCHEMA],
+            tool_choice={"type": "function", "function": {"name": "emit_claims"}},
+        )
+        log_usage("synthesis.repair.usage", response.usage)
+        if not response.choices:
+            raise RuntimeError("OpenAI synthesis repair response had no choices.")
+        tool_calls = response.choices[0].message.tool_calls or []
+        if not tool_calls:
+            raise RuntimeError("OpenAI synthesis repair response had no tool call.")
+        if len(tool_calls) != 1:
+            raise RuntimeError("OpenAI synthesis repair response had multiple tool calls.")
+        function = tool_calls[0].function
+        if function.name != "emit_claims":
+            raise RuntimeError("OpenAI synthesis repair response did not emit claims.")
+        arguments = function.arguments
+        if not isinstance(arguments, str):
+            arguments = "{}"
+        claims = SectionClaimsWire.model_validate_json(arguments)
+        return claims, response.usage
+
+    def repair_section(
+        self,
+        seed: dict[str, Any],
+        transcript: list[ToolExchange],
+        *,
+        failing: list[dict[str, Any]],
+    ) -> SectionClaimsWire:
+        """Repair failing claims through one emit-forced OpenAI call.
+
+        Args:
+            seed: Section seed record.
+            transcript: Executed tool exchanges from the original section loop.
+            failing: Failing claim records with rationales.
+
+        Returns:
+            Replacement claims for the failing records.
+
+        Raises:
+            RuntimeError: If the provider response does not emit claims.
+        """
+        messages = build_section_repair_messages(seed, transcript, failing=failing)
+
+        def _update(
+            span: Any, result: tuple[SectionClaimsWire, CompletionUsage | None]
+        ) -> None:
+            claims, usage = result
+            span.update(
+                input={"messages": messages},
+                output=claims.model_dump(),
+                model=SYNTHESIS_MODEL,
+                metadata={
+                    "prompt_version": SECTION_PROMPT_VERSION,
+                    "failing_count": len(failing),
+                    **usage_metadata(usage),
+                },
+            )
+
+        claims, _usage = tracing.traced_call(
+            self._langfuse_client,
+            name="synthesise:repair",
+            as_type="generation",
+            call=lambda: self._repair_once(messages),
+            update=_update,
+        )
+        return claims
+
+
+class StubSynthesisBackend:
+    """Deterministic zero-egress synthesis backend for tests and local runs."""
+
+    mode = "stub"
+
+    def __init__(
+        self,
+        *,
+        script: list[list[SectionTurn]] | None = None,
+        proposal: SectionProposalWire | None = None,
+        repair_claims: SectionClaimsWire | None = None,
+        fail: bool = False,
+    ) -> None:
+        """Create a stub synthesis backend.
+
+        Args:
+            script: Optional stateless per-section turn script.
+            proposal: Optional fixed section proposal.
+            repair_claims: Optional fixed repair response.
+            fail: When true, every method raises the failure sentinel.
+        """
+        self._script = script
+        self._proposal = proposal
+        self._repair_claims = repair_claims
+        self._fail = fail
+
+    def _raise_if_failed(self) -> None:
+        if self._fail:
+            raise RuntimeError("Stub synthesis failure sentinel.")
+
+    def propose_sections(
+        self,
+        *,
+        intent: str,
+        substrate: dict[str, Any],
+        rejection: list[str] | None = None,
+    ) -> SectionProposalWire:
+        """Return a fixed or deterministic two-section proposal.
+
+        Args:
+            intent: Evidence-scope intent.
+            substrate: Available substrate summaries.
+            rejection: Ignored by the deterministic stub.
+
+        Returns:
+            The configured proposal, or the default two-section proposal.
+
+        Raises:
+            RuntimeError: If the failure sentinel is enabled.
+        """
+        self._raise_if_failed()
+        del rejection
+        if self._proposal is not None:
+            return self._proposal
+
+        bounded_intent = _strip_control_chars(intent[:80])
+        group_ids = _group_ids_from_substrate(substrate)
+        return SectionProposalWire(
+            sections=[
+                SectionWire(
+                    title=f"Evidence on: {bounded_intent}",
+                    focus=f"What the assembled evidence says about: {bounded_intent}",
+                    group_ids=group_ids,
+                ),
+                SectionWire(
+                    title="Coverage and gaps in the assembled evidence",
+                    focus="The corpus's shape, spread and absences.",
+                ),
+            ]
+        )
+
+    def _scripted_turn(
+        self,
+        seed: dict[str, Any],
+        transcript: list[ToolExchange],
+        *,
+        force_emit: bool,
+    ) -> SectionTurn | None:
+        if self._script is None:
+            return None
+        section_index = seed.get("section_index", 0)
+        if not isinstance(section_index, int):
+            section_index = 0
+        if section_index >= len(self._script) or section_index < 0:
+            return None
+        section_script = self._script[section_index]
+        turn_index = len(transcript)
+        if turn_index >= len(section_script):
+            return None
+        scripted = section_script[turn_index]
+        if force_emit and scripted["claims"] is None and scripted["tool_calls"]:
+            return None
+        return scripted
+
+    def section_turn(
+        self,
+        seed: dict[str, Any],
+        transcript: list[ToolExchange],
+        *,
+        force_emit: bool,
+    ) -> SectionTurn:
+        """Return the next scripted turn, default tool call, or deterministic claims.
+
+        Args:
+            seed: Section seed record.
+            transcript: Executed tool exchanges so far.
+            force_emit: Whether this is the final forced-emission turn.
+
+        Returns:
+            One tool call request or a deterministic claims emission.
+
+        Raises:
+            RuntimeError: If the failure sentinel is enabled.
+        """
+        self._raise_if_failed()
+        scripted = self._scripted_turn(seed, transcript, force_emit=force_emit)
+        if scripted is not None:
+            return scripted
+
+        available_tools = [
+            tool
+            for tool in ("search_chunks", "query_findings", "lookup")
+            if tool in seed.get("available_tools", [])
+        ]
+        if not force_emit and len(transcript) < len(available_tools):
+            tool_name = available_tools[len(transcript)]
+            if tool_name == "search_chunks":
+                arguments = {"query": _section_title(seed)}
+            elif tool_name == "query_findings":
+                arguments = {}
+            elif "characterisation" in seed.get("substrate", {}):
+                arguments = {"kind": "characterisation_summary"}
+            else:
+                arguments = {"kind": "coverage_records"}
+            return {"tool_calls": [{"tool": tool_name, "arguments": arguments}], "claims": None}
+
+        return {"tool_calls": [], "claims": self._emit_claims(seed, transcript)}
+
+    def _emit_claims(
+        self,
+        seed: dict[str, Any],
+        transcript: list[ToolExchange],
+    ) -> SectionClaimsWire:
+        available_claim_types = set(seed.get("available_claim_types", []))
+        claims: list[ClaimWire] = []
+
+        chunks = _transcript_chunks(transcript)
+        if "chunk" in available_claim_types and chunks:
+            chunk = chunks[0]
+            chunk_id = _record_id(chunk, "chunk_record_id", "id")
+            content = chunk.get("content")
+            if chunk_id is not None and isinstance(content, str):
+                quote = content[:120]
+                intent_or_focus = f"{seed.get('intent', '')} {_section_focus(seed)}"
+                if "stubfabricate" in intent_or_focus:
+                    quote = "This quote is fabricated entirely and appears nowhere."
+                claims.append(
+                    ClaimWire(
+                        claim_type="chunk",
+                        text="The corpus states this directly (stub).",
+                        citations=[
+                            ChunkCitationWire(chunk_record_id=chunk_id, quote=quote)
+                        ],
+                    )
+                )
+
+        findings = _transcript_findings(transcript)
+        if "finding" in available_claim_types and findings:
+            finding_ids = [
+                finding_id
+                for finding in findings[:2]
+                if (finding_id := _record_id(finding, "finding_id", "id")) is not None
+            ]
+            if finding_ids:
+                claims.append(
+                    ClaimWire(
+                        claim_type="finding",
+                        text="Extracted findings report on this (stub).",
+                        cited_finding_ids=finding_ids,
+                    )
+                )
+
+        computed_spread = seed.get("computed_spread")
+        if "pattern" in available_claim_types and isinstance(computed_spread, dict):
+            group_ids = _section_group_ids(seed)
+            claims.append(
+                ClaimWire(
+                    claim_type="pattern",
+                    text="The extracted direction spread is computed directly (stub).",
+                    pattern=PatternPayloadWire(
+                        kind="direction_spread",
+                        computed_from=(
+                            "group_direction_spread"
+                            if group_ids
+                            else "extraction_direction_spread"
+                        ),
+                        group_id=group_ids[0] if group_ids else None,
+                        stated={
+                            str(direction): int(count)
+                            for direction, count in computed_spread.items()
+                        },
+                        base="extracted",
+                    ),
+                )
+            )
+
+        theme_reference = _first_theme_reference(seed)
+        if "theme" in available_claim_types and theme_reference is not None:
+            source, referenced_id = theme_reference
+            claims.append(
+                ClaimWire(
+                    claim_type="theme",
+                    text="The substrate clustering identifies this theme (stub).",
+                    theme=ThemePayloadWire(
+                        source=source,
+                        referenced_ids=[referenced_id],
+                        base="screened",
+                    ),
+                )
+            )
+
+        if "gap" in available_claim_types:
+            claims.append(
+                ClaimWire(
+                    claim_type="gap",
+                    text="Evidence on adjacent questions is thin here (stub inference).",
+                    gap=GapPayloadWire(grade="inferred", coverage_base="screened"),
+                )
+            )
+
+        if "reasoning" in available_claim_types:
+            claims.append(
+                ClaimWire(
+                    claim_type="reasoning",
+                    text="Background context, labelled as reasoning (stub).",
+                )
+            )
+
+        return SectionClaimsWire(claims=claims)
+
+    def repair_section(
+        self,
+        seed: dict[str, Any],
+        transcript: list[ToolExchange],
+        *,
+        failing: list[dict[str, Any]],
+    ) -> SectionClaimsWire:
+        """Return fixed repair claims or deterministic reworded replacements.
+
+        Args:
+            seed: Section seed record.
+            transcript: Executed tool exchanges from the original section loop.
+            failing: Failing claim records with rationales.
+
+        Returns:
+            The configured repair claims, or deterministic reworded claims.
+
+        Raises:
+            RuntimeError: If the failure sentinel is enabled.
+        """
+        self._raise_if_failed()
+        if self._repair_claims is not None:
+            return self._repair_claims
+
+        content_by_id = _chunk_content_by_id(transcript)
+        repaired: list[ClaimWire] = []
+        claim_fields = set(ClaimWire.model_fields)
+        for record in failing:
+            raw_claim_value = record.get("claim")
+            raw_claim = raw_claim_value if isinstance(raw_claim_value, dict) else record
+            claim_data = {key: value for key, value in raw_claim.items() if key in claim_fields}
+            claim = ClaimWire.model_validate(claim_data)
+            updated = claim.model_dump()
+            updated["text"] = f"Reworded down: {claim.text}"
+            if claim.claim_type == "chunk":
+                updated_citations: list[dict[str, str]] = []
+                for citation in claim.citations:
+                    quote = citation.quote
+                    content = content_by_id.get(citation.chunk_record_id)
+                    fabricated = "fabricated" in quote.casefold()
+                    repairable = "stubrepairable" in str(seed.get("intent", ""))
+                    if content is not None and (not fabricated or repairable):
+                        quote = content[:60]
+                    updated_citations.append({
+                        "chunk_record_id": citation.chunk_record_id,
+                        "quote": quote,
+                    })
+                updated["citations"] = updated_citations
+            repaired.append(ClaimWire.model_validate(updated))
+        return SectionClaimsWire(claims=repaired)

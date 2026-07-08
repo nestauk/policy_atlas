@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from threading import Lock
 from typing import Any, Literal
@@ -75,6 +75,43 @@ def _observation(client: Langfuse, *, name: str, as_type: _ObservationType) -> I
             raise
     else:
         manager.__exit__(None, None, None)
+
+
+def traced_call[T](
+    client: Langfuse | None,
+    *,
+    name: str,
+    as_type: _ObservationType,
+    call: Callable[[], T],
+    update: Callable[[Any, T], None] | None = None,
+    after: Callable[[Any, T], None] | None = None,
+) -> T:
+    """Run a provider call under an optional Langfuse observation.
+
+    Args:
+        client: Langfuse client, or ``None`` for the no-tracing fast path.
+        name: Observation name. Callers may compute this before invocation.
+        as_type: Langfuse observation type.
+        call: Zero-argument function that performs the provider call and returns
+            the parsed site-specific result.
+        update: Optional callback that records input/output/model/metadata on
+            the open observation.
+        after: Optional callback for extra work that must run before the
+            observation closes, such as trace scoring derived from the result.
+
+    Returns:
+        The value returned by ``call``.
+    """
+    if client is None:
+        return call()
+
+    with _observation(client, name=name, as_type=as_type) as span:
+        result = call()
+        if update is not None:
+            update(span, result)
+        if after is not None:
+            after(span, result)
+        return result
 
 
 class TracedEmbeddingBackend:
