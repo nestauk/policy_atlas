@@ -661,6 +661,16 @@ PR landing:
       self-report — different estimators; whether the mix distorts
       marginal ranking is a calibration question the eval slice
       answers from the per-doc stage pairs it gets free.
+      (iv-b) *asymmetric demotion risk — recorded for the eval seam
+      (user observation, 2026-07-08)*: only text-available docs face
+      stage 2, so a deep run's surviving screened-in set is (vetted
+      full-text) ∪ (unvetted abstract-only) — the junk proportion
+      among abstract-only survivors is systematically higher.
+      Standing counterweights: select's `text_basis` composite leg
+      (0.20 soft tilt, the 010 rev-5 design) + `thin_full_text`
+      flag + `screen_stage` in the rationale. Whether the tilt
+      counteracts ENOUGH is a survivorship measurement for the eval
+      slice (it has per-doc stage + basis + selection outcomes).
       (v) *windowing is extracted, not borrowed*:
       a generic chunk-window helper (explicit budget/overlap params)
       with a `ScreenFullTextPayload`; extraction keeps its wrapper,
