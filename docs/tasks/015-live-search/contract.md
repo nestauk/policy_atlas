@@ -3,14 +3,38 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted rev 3.1 — awaiting contract approval (the 🛑 is
-> open; revs 2–3.1 shaped at the gate in user deliberation).
+> **Status:** drafted rev 3.3 — awaiting contract approval (the 🛑 is
+> open; revs 2–3.3 shaped at the gate in user deliberation).
 > Contract approved (before planning): _date · who_ ·
 > Plan approved (before implementation): _date · who_ · ADR: _expected:
 > one_ (depth-graded agentic search adoption — the Arm-B fold is a
 > consequential design decision; drafted at step 4).
 >
 > **Revision history:**
+> - **rev 3.3** (2026-07-09, **Overton param-pinning session run at the
+>   design stage** — user supplied the API key for exactly this; 17
+>   rate-limited probes, findings verified against returned records;
+>   full record [overton-param-pinning.md](overton-param-pinning.md)).
+>   The rev-3.1 pinning contingency is **discharged before build**:
+>   every Overton directive key is live and composes with `squery`
+>   (combined-filter probe held). Grammar deltas: **Overton keys are
+>   single-valued** (no multi-value OR form exists — pipe/comma/
+>   repeated-key/array all zero-match or last-one-wins; V2's `safe='|'`
+>   assumption is false here); `languages` = three-letter codes
+>   (`fre`, `eng`, …); `sdgs` on Overton = full-label constants
+>   (`SDG 11: Sustainable Cities and Communities` — bare numbers
+>   silently zero-match); `source_type` tokens `government`/`think
+>   tank` pinned (`igo`/`other` facet-observed, one live-check
+>   confirmation each). Client rules pinned: semantic-mode
+>   `total_results` is the PRE-filter pool (never read it as the
+>   filtered count — count returned records); the semantic candidate
+>   pool caps at 1000; default page size is 50 and `pp` works;
+>   `next_page_url` key-echo CONFIRMED (decision 9's redaction now
+>   evidence-backed); unknown params silently ignored (the fail-closed
+>   grammar rationale, empirically validated). Facet bonus recorded at
+>   the seams: hierarchical source types, named region groups
+>   (`OECD members`, `G20` — friendlier than V2's `_:` codes), rich
+>   cites-family facets.
 > - **rev 3.2** (2026-07-09, user design note on the geography-trap
 >   finding): **study geography is extraction-owned — recorded as a
 >   named seam with the V2 precedent.** Because no search API supplies
@@ -601,18 +625,28 @@ PR landing:
         filter expresses study geography** — that signal is
         extraction-owned (the recorded study-geography extraction seam;
         V2 precedent).
-      - **overton** (every key **contingent on the param-pinning
-        session** — see Acceptance checks; unpinnable keys drop to the
-        seam loudly, never ship on inferred spellings):
-        `publisher_types` (government / IGO / think tank / NGO →
-        `source_type`, tokens as pinned) · `publisher_countries`
-        (country *names*, not ISO — the pinned form) · `languages`
-        (wire format pinned at the session).
+      - **overton** (*pinned at the design stage, rev 3.3 —
+        [overton-param-pinning.md](overton-param-pinning.md); every key
+        verified live against returned records, composing with
+        `squery`*): `publisher_type` (**single-valued** →
+        `source_type`; pinned tokens `government` · `think tank`;
+        `igo` · `other` facet-observed, confirmed at the live check) ·
+        `publisher_country` (**single-valued** → `source_country`;
+        country *names* — `UK`, `USA`, … — incl. hierarchical
+        sub-national forms and `IGO`) · `language` (**single-valued**;
+        three-letter codes — `eng`, `fre`, …) · `sdgs` map to
+        full-label constants on this backend (bare numbers silently
+        zero-match).
       Validation is fail-closed at plan compile: unknown keys, unknown
       enum values, or a key in a backend block the run's backend scope
-      doesn't include → structural failure. Multi-value keys map to the
-      providers' OR forms (OpenAlex `|`, ≤100 values documented;
-      Overton `|` per V2, confirmed at pinning). Executed wire params
+      doesn't include → structural failure. Multi-value keys map to
+      OpenAlex's documented `|` OR (≤100 values); **Overton keys are
+      single-valued** (rev 3.3: no multi-value OR form exists on the
+      wire — pipe/comma/repeated-key/array all zero-match or
+      last-one-wins; multi-value-as-fan-out is a plan-time option, not
+      grammar). Client rule (rev 3.3): Overton's semantic-mode
+      `total_results` is the pre-filter pool — counts come from
+      returned records, never from it. Executed wire params
       land per backend on the coverage record's `scope_filters`
       (non-`{}` for the first time) and in every `search.executed`
       payload. **Excluded from the grammar** (research T3): citation
@@ -783,17 +817,14 @@ in-contract fix (halt and report — don't quietly raise the budgets).
   injection fixture (instruction-shaped metadata in reformulation/
   suggestion inputs must not steer output structure; screen's own
   injection posture is 014-tested).
-- **Overton param-pinning session** *(rev 3.1 — a dev-time,
-  operator-run build prerequisite; the public API doc does not
-  enumerate filter params)*: authenticated "Generate API call" exports
-  for each decision-18 Overton key + a `show_search_facets=true` facet
-  dump to pin exact param spellings and value vocabularies
-  (`source_type` tokens · country-name forms · language format · the
-  `squery`+filter co-behavior check · `pp`-vs-`next_page_url`
-  confirmation). Results recorded in a grounding note in this task
-  directory; keys env-only, exports key-redacted before committing.
-  **Unpinnable keys drop to the seam loudly** — nothing ships on
-  inferred spellings.
+- **Overton param-pinning session — DISCHARGED at the design stage**
+  *(rev 3.1 requirement; run rev 3.3, 2026-07-09, user-sanctioned key
+  use; record: [overton-param-pinning.md](overton-param-pinning.md))*:
+  17 rate-limited probes pinned every decision-18 Overton key's wire
+  spelling, value vocabulary and `squery` co-behavior, verified against
+  returned records; key redacted from all persisted output. Residual
+  live-check items only: one confirmation each for `source_type`
+  tokens `igo`/`other`, one derived SDG label spot-check.
 - **Live manual check** — exactly the decision-11 pin (rapid run ·
   dedup re-run · limiter + key hygiene · comparative result-count
   probe · deep run with wall-clock/cost vs budgets · escalation

@@ -64,12 +64,14 @@ if every box holds** — otherwise it is in progress, not done.
         one filtered rapid run with wire params visible in events +
         coverage record · rapid-profile chain smoke; no deep-chain
         e2e) — evidence in [verification.md](verification.md).
-12b. [ ] The Overton **param-pinning session** ran before build
-        (rev 3.1): every shipped Overton filter key's wire spelling +
-        vocabulary pinned from authenticated "Generate API call"
-        exports / facet dump, recorded in a key-redacted grounding
-        note in the task directory; unpinnable keys dropped to the
-        seam with a written note — none shipped on inferred spellings.
+12b. [ ] Every shipped Overton filter key matches the design-stage
+        param-pinning record (rev 3.3,
+        [overton-param-pinning.md](overton-param-pinning.md)) — wire
+        spellings, single-valued keys, three-letter language codes,
+        full-label SDGs, the never-read-semantic-`total_results` client
+        rule — and the two residual live-check confirmations
+        (`igo`/`other` tokens, one derived SDG label) are recorded in
+        [verification.md](verification.md).
 13. [ ] Known gaps and deferred seams recorded — live-`SearchBackend`,
         Arm-B and thin-base-trigger entries in
         [docs/deferred.md](../../deferred.md) marked discharged; the
