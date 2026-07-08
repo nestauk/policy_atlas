@@ -22,6 +22,10 @@ timestamp: 2026-07-05
   **only** through `clarify` / `escalate`: it **parks** on a durable signal and the orchestrator
   relays the request into the thread, **attributed to the capability**, collects the response,
   resumes the sub-agent. N capabilities, **not** N chatbots.
+- **Every capability sub-agent composes its own artefact at its run terminus** (task 013
+  flow-back): composition is capability expertise, so the orchestrator *shapes* the artefact at
+  plan time (sections, facets, depth — compiled parameters) and owns **no runtime content
+  machinery**. EB's instance is its `synthesise` terminal component.
 - **Plan-time authority, not runtime.** Flexibility lives at plan time (cheap, human-gated,
   logged); execution follows the agreed plan. The capability agent's only runtime discretion is
   the bounded **escape hatches** (e.g. evidence thin → extra search, provided it flags/logs).

@@ -47,6 +47,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         source_screening_result,
         source_snapshot,
         source_tag,
+        synthesis_result,
     )
     from policy_atlas.schema import (
         chunk as chunk_table,
@@ -80,6 +81,11 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         annotation.c.block_id.in_(block_ids_subq)
     )
 
+    # Task 013 row first: FKs onto artefact and all four upstream result tables
+    # (characterisation/selection/extraction/grouping) plus scope/runs.
+    conn.execute(delete(synthesis_result).where(
+        synthesis_result.c.project_id == project_id
+    ))
     # citation → annotation → addressable_unit → block (then event_log, artefact, runs)
     conn.execute(delete(citation_table).where(
         citation_table.c.annotation_id.in_(annotation_ids_subq)
@@ -155,6 +161,68 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         ))
     conn.execute(delete(evidence_scope).where(evidence_scope.c.project_id == project_id))
     conn.execute(delete(project).where(project.c.project_id == project_id))
+
+
+def seed_ingested_full_text(
+    conn: Connection,
+    *,
+    pss_id: uuid.UUID,
+    chunks: list[str],
+) -> uuid.UUID:
+    """Insert an ingested full-text snapshot with chunks + embeddings; link it to ``pss_id``.
+
+    Returns the full-text snapshot id.
+    """
+    from policy_atlas.embeddings import EMBEDDING_PROFILE, UNIT_POLICY, StubEmbeddingBackend
+    from policy_atlas.grounding import content_hash
+    from policy_atlas.schema import chunk as chunk_table
+    from policy_atlas.schema import chunk_embedding, project_source_snapshot, source_snapshot
+
+    full_snapshot_id = uuid.uuid4()
+    conn.execute(
+        source_snapshot.insert().values(
+            source_snapshot_id=full_snapshot_id,
+            content_hash=content_hash("\n".join(chunks)),
+            text_basis="full_text",
+            source_locator=f"full-text-{full_snapshot_id}",
+            metadata={"title": "Full text fixture", "abstract": "Full text abstract."},
+            created_at=now(),
+        )
+    )
+    conn.execute(
+        update(project_source_snapshot)
+        .where(project_source_snapshot.c.project_source_snapshot_id == pss_id)
+        .values(full_text_snapshot_id=full_snapshot_id, full_text_status="ingested")
+    )
+    embedder = StubEmbeddingBackend()
+    vectors = embedder.embed_texts(chunks)
+    for index, content in enumerate(chunks):
+        chunk_id = uuid.uuid4()
+        conn.execute(
+            chunk_table.insert().values(
+                chunk_id=chunk_id,
+                source_snapshot_id=full_snapshot_id,
+                sequence=index,
+                content=content,
+                content_hash=content_hash(content),
+                locator={},
+                segmentation_policy="manual_v1",
+                created_at=now(),
+            )
+        )
+        conn.execute(
+            chunk_embedding.insert().values(
+                chunk_embedding_id=uuid.uuid4(),
+                chunk_id=chunk_id,
+                embedding_profile=EMBEDDING_PROFILE,
+                unit_policy=UNIT_POLICY,
+                unit_index=0,
+                unit_locator={"start": 0, "end": len(content)},
+                vector=vectors[index],
+                created_at=now(),
+            )
+        )
+    return full_snapshot_id
 
 
 def seed_source(

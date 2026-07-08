@@ -15,7 +15,7 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Protocol, TypedDict
+from typing import Any, Protocol, TypedDict
 
 import structlog
 from openai import OpenAI
@@ -183,6 +183,48 @@ def log_usage(event: str, usage: CompletionUsage | None) -> None:
         usage: The response's usage block, or ``None``.
     """
     log.info(event, **usage_metadata(usage))
+
+
+def require_parsed(response: Any, *, label: str) -> Any:
+    """Return the response's parsed structured output or fail loud.
+
+    Shared by the live chat backends so the empty/unparsed-response checks
+    live in one place.
+
+    Args:
+        response: A chat-completions ``parse`` response.
+        label: Human-readable call label for the error message.
+
+    Raises:
+        RuntimeError: If the response has no choices or was not parsed.
+    """
+    if not response.choices:
+        raise RuntimeError(f"OpenAI {label} response had no choices.")
+    parsed = response.choices[0].message.parsed
+    if parsed is None:
+        raise RuntimeError(f"OpenAI {label} response was not parsed.")
+    return parsed
+
+
+def require_single_tool_call(response: Any, *, label: str) -> Any:
+    """Return the response's single tool call or fail loud.
+
+    Args:
+        response: A chat-completions ``create`` response.
+        label: Human-readable call label for the error message.
+
+    Raises:
+        RuntimeError: If the response has no choices, no tool call, or more
+            than one tool call.
+    """
+    if not response.choices:
+        raise RuntimeError(f"OpenAI {label} response had no choices.")
+    tool_calls = response.choices[0].message.tool_calls or []
+    if not tool_calls:
+        raise RuntimeError(f"OpenAI {label} response had no tool call.")
+    if len(tool_calls) != 1:
+        raise RuntimeError(f"OpenAI {label} response had multiple tool calls.")
+    return tool_calls[0]
 
 
 class OpenAIEmbeddingBackend:

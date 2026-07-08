@@ -1,6 +1,104 @@
 # Spec update log
 
+## 2026-07-08
+* **Update**: [EB components §9](capabilities/evidence-base/components.md) — `search_chunks`
+  described as its staged pipeline (task 013 contract rev 7.5): content-only hybrid
+  relevance → arithmetic soft priors (selection prior + fail-closed directive boosts over
+  columns/tags/appraisal tier, re-weight-never-exclude — the surface the future
+  source/evidence policy compiles into, honouring plan-as-object's steerable-never-baked
+  quality-prior ruling) → a cross-encoder reranker slot (pass-through until Bedrock Rerank
+  lands, per the retrieval contract's inference-trust-boundary line) → caps.
+* **Coherence pass** (task 013 gate, pre-adversarial-review; fresh-context audit, 18
+  findings, no semantic changes): superseded same-gate wording reconciled to the amended
+  state across [EB capability](capabilities/evidence-base/capability.md) and
+  [EB components](capabilities/evidence-base/components.md) — "artefact needs at least
+  characterise's content" → **≥ 1 groundable substrate** (all upstream references
+  optional); the selected-set/corpus-wide chunk-grounding binary → **screened-in corpus
+  with the selection as a soft prior**, only corpus-scale retrieval (beyond the in-memory
+  ceiling, or unscreened content) retrieve-gated; the tool-wiring table row for synthesise
+  → substrate-conditional (+ declares `search_chunks`); ADRs 0009/0010 subsequently
+  **consolidated into cohesive, amendment-free records** (user direction: amendments are
+  for shipped ADRs — within one unmerged branch, decisions and justifications belong in
+  the main structure; ADR 0010 retitled "…and substrate-conditional grounding"; the
+  round-by-round decision trail is retained in the task-013 contract's revision history);
+  cross-references updated everywhere.
+* **Update**: [EB components §9](capabilities/evidence-base/components.md) — the unified
+  interpretive-shape claim type renamed **cluster claims → theme claims** (task 013 gate,
+  user call: policy-maker-facing vocabulary, and the more spec-aligned word — the
+  provenance ladder's soft grade is "thematic clustering", group's component is
+  "facet-level theming"). Semantics unchanged (validated against the referenced
+  clustering: characterise themes / facet groups; softest grade, base-labelled);
+  `cluster` remains the internal tool-registry verb. Recorded in
+  [ADR 0010](../adr/0010-intent-led-synthesis-sections.md) (2026-07-08 amendment),
+  alongside the user's confirmation of the **consensus boundary** as the intended v3.0
+  line (descriptive spread, never a weighted verdict, until the ⏸ consensus seam).
+
 ## 2026-07-07
+* **Update**: [EB capability](capabilities/evidence-base/capability.md), [EB components
+  §9](capabilities/evidence-base/components.md) — the **intent-led synthesis refinement**
+  ([ADR 0010](../adr/0010-intent-led-synthesis-sections.md); task 013 contract gate, second
+  round, after an independent deep-reasoner interrogation): deep synthesis is structured as
+  **intent-led sections** (bounded section proposal over intent + group summaries; fail-closed
+  scope-directive override; plan-compile sectioning = the seam), each section **mixing
+  grounding modes** — finding claims (extract-verified anchors), **selected-set chunk claims**
+  (windowed frozen text already in hand; no retrieval needed; select's discipline inherited),
+  pattern claims (deterministically validated). **Groups demoted to input, not structure**
+  (pure intent-led — no rendered backbone, user choice; uncovered groups counted). ADR 0009
+  decision 5 amended: only **corpus-wide** chunk grounding stays retrieve-gated. Supersedes
+  the group-per-block reading of §9's "per group produce a grounded block". **Third-round
+  amendment (same day, ADR 0010 § Amendment):** "deep path" terminology retired (content
+  modes by available references); the claim vocabulary completed to the spec's full set —
+  **gap claims** (graded, coverage-base-carrying, fail-closed corpus-promotion via
+  `search_coverage_record`) and **reasoning claims** (visibly-labelled Tier-4 authoring,
+  judge strict-routing guard) join finding/chunk/pattern/theme; whole-document windowing
+  replaced by **scoped retrieval** (anchor chunks + top-k embedding-relevant selected-set
+  chunks — the 009 unit vectors' first reader; the `retrieve` seam's first increment).
+  **Fourth-round amendment (same day, ADR 0010 § second Amendment):** modes renamed
+  (**landscape synthesis** / **findings-grounded synthesis** — both intent-led; "findings" =
+  the findings layer); theme claims generalised to **cluster claims** across both modes
+  (validated against the referenced clustering; softest grade); depth clarified as the
+  plan's thoroughness gradation, not a fork; the section writer realised as a **capped
+  agent-loop over scoped read-only tools** (`search_chunks` hybrid + `query-findings`) —
+  execution-orchestration's declared realisation, the repo's first agent loop, discharging
+  the 012 `query-findings` deferral in full. **Fifth-round amendment (same day, ADR 0010
+  § third Amendment):** the mode split itself dissolved into **one substrate-conditional
+  flow** — claim types gated by what the referenced runs produced (chunk claims need only a
+  **selection**, not extraction — non-intervention-shaped questions run
+  characterise → select → synthesise; finding claims need an extraction; pattern/cluster/
+  gap/reasoning per available substrate); the separate landscape prompt dies (**three**
+  prompt surfaces); the loop gains **`lookup`** (the universal-core canonical-state read —
+  appraisals, classifications, selection rationale, coverage records, clusterings); "writer
+  agent" corrected to **the section loop** (component-internal realisation per the facade
+  principle — no second agent; the capability sub-agent remains the capability-run seam).
+  **Sixth/seventh-round amendment (same day, ADR 0010 § fourth Amendment):** **all
+  references optional** — characterisation joins the substrate-conditional logic
+  (requirement = ≥ 1 groundable substrate; a rapid acquire → screen → ingest → synthesise
+  run is fully served); **select is a soft prior, never a reading boundary** — retrieval
+  scope = the screened-in corpus always (the data-model's agents-are-never-penned-in
+  scoping principle; select gates extraction cost), a referenced selection contributes a
+  recorded look-here-first rank boost, every chunk citation records its origin
+  (selected | unselected_screened); fail-closed in-memory retrieval ceiling
+  (`RETRIEVAL_UNIT_CAP`), beyond which the index-backed `retrieve` slice is required;
+  `lookup` explicitly covers the **tag layer** (per its universal-core definition);
+  clarified on the record: verification is non-agentic — deterministic code legs + a
+  separate single-call judge surface (maker ≠ checker at the surface level) — and the
+  verify loop's rewrite step is explicit (judge rationales → one reword-down regeneration
+  → one re-judge; `REPAIR_ROUND_CAP` = 1, plan-pinned).
+* **Update**: [EB capability](capabilities/evidence-base/capability.md), [EB components
+  §§5/6/9](capabilities/evidence-base/components.md),
+  [execution-orchestration.md](system/execution-orchestration.md) — the **terminus
+  refinement** (task 013 flow-back, user-decided at the contract gate): (1) the
+  **capability-composes rule** — every capability sub-agent composes its own artefact at its
+  run terminus; the orchestrator shapes sections at plan time and owns no runtime content
+  machinery (supersedes the orchestrator-composes reading; characterise §5 note updated).
+  (2) **Synthesise is EB's terminal component at every depth** — landscape rendering always
+  (model prose, shape claims deterministically validated against the characterisation
+  record), per-group grounded finding-blocks when the deep chain ran, artefact minting +
+  block binding. (3) **Components are a registry the plan selects from**; data dependencies
+  structural via explicit fail-closed run references; **breadth and depth independent** (a
+  targeted question compiles to a narrow-and-deep run). (4) ⏸ **Direct chunk-grounded
+  narrative synthesis sanctioned** for pre-findings targeted answers (full
+  produce-grounded-block bar, visibly chunk-cited; lands with `retrieve`). ADR 0009.
 * **Update**: [data-model.md](system/data-model.md) — findings-layer base-field list made
   explicit with three source-groundable sharpenings surfaced by the task-011 V2 extraction
   autopsy, all inside the spec's own "what the source reports" line: **stratum qualifiers**

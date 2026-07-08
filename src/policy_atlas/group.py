@@ -52,6 +52,10 @@ from policy_atlas.schema import (
 
 log = structlog.get_logger()
 
+# Rejection reasons persist into grouping provenance bounded (013 review
+# stack: the live zero-group defect was only diagnosable from traces).
+REJECTION_REASON_CAP = 20
+
 
 class GroupError(Exception):
     """Structural group failure — missing/corrupt upstream reference or invariant violation.
@@ -132,6 +136,7 @@ def group_findings(
     ungrouped_value_ids: set[str] = set()
     call_count = 0
     repair_count = 0
+    rejection_reasons: list[str] = []
     flags: list[str] = []
 
     if not views:
@@ -156,10 +161,12 @@ def group_findings(
 
         log.info("group.call_budget", baseline=1, maximum=1 + REPAIR_CAP)
         records = value_records(values)
-        final_groups, ungrouped_value_ids, call_count, repair_count = _partition_values(
-            records,
-            facet=facet,
-            facet_grouping_backend=facet_grouping_backend,
+        final_groups, ungrouped_value_ids, call_count, repair_count, rejection_reasons = (
+            _partition_values(
+                records,
+                facet=facet,
+                facet_grouping_backend=facet_grouping_backend,
+            )
         )
 
     payload = _build_valid_payload(
@@ -177,6 +184,8 @@ def group_findings(
         flags.append("ungrouped_values")
     if repair_count:
         flags.append("repair_path_taken")
+    if rejection_reasons:
+        flags.append("groups_rejected")
 
     provenance = _build_provenance(
         backend=facet_grouping_backend,
@@ -184,6 +193,7 @@ def group_findings(
         facet_source=facet_source,
         call_count=call_count,
         repair_count=repair_count,
+        rejection_reasons=rejection_reasons,
         distinct_value_count=len(values),
         extraction_run_id=context.extraction_run_id,
         extraction_counts=extraction_counts,
@@ -338,10 +348,11 @@ def _partition_values(
     *,
     facet: str,
     facet_grouping_backend: FacetGroupingBackend,
-) -> tuple[list[AcceptedGroup], set[str], int, int]:
+) -> tuple[list[AcceptedGroup], set[str], int, int, list[str]]:
     call_count = 0
     repair_count = 0
     all_value_ids = [record["id"] for record in records]
+    rejection_reasons: list[str] = []
 
     try:
         call_count += 1
@@ -357,12 +368,16 @@ def _partition_values(
 
     try:
         validated = validate_partition(raw, value_ids=all_value_ids)
-    except InvalidPartitionOutput:
+    except InvalidPartitionOutput as exc:
+        rejection_reasons.append(f"partition: {exc}")
         accepted = []
         ungroupable_ids = set()
         repair_records = records
         repair_value_ids = set(all_value_ids)
     else:
+        rejection_reasons.extend(
+            f"partition: {reason}" for reason in validated.rejected_reasons
+        )
         accepted = list(validated.groups)
         ungroupable_ids = set(validated.ungroupable_ids)
         if validated.missing_ids:
@@ -385,15 +400,20 @@ def _partition_values(
 
         try:
             repair_validated = validate_partition(repair_raw, value_ids=repair_value_ids)
-        except InvalidPartitionOutput:
+        except InvalidPartitionOutput as exc:
+            rejection_reasons.append(f"repair: {exc}")
             still_missing_ids = set(repair_value_ids)
         else:
+            rejection_reasons.extend(
+                f"repair: {reason}" for reason in repair_validated.rejected_reasons
+            )
             accepted = merge_repair(accepted, repair_validated.groups)
             ungroupable_ids.update(repair_validated.ungroupable_ids)
             still_missing_ids = set(repair_validated.missing_ids)
         ungroupable_ids.update(still_missing_ids)
 
-    return accepted, ungroupable_ids, call_count, repair_count
+    bounded_reasons = [reason[:200] for reason in rejection_reasons[:REJECTION_REASON_CAP]]
+    return accepted, ungroupable_ids, call_count, repair_count, bounded_reasons
 
 
 def _proposed_groups(groups: Sequence[AcceptedGroup]) -> list[ProposedGroup]:
@@ -453,6 +473,7 @@ def _build_provenance(
     facet_source: str,
     call_count: int,
     repair_count: int,
+    rejection_reasons: Sequence[str],
     distinct_value_count: int,
     extraction_run_id: uuid.UUID,
     extraction_counts: dict[str, Any],
@@ -472,6 +493,7 @@ def _build_provenance(
         "value_cap": FACET_VALUE_CAP,
         "call_count": call_count,
         "repair_count": repair_count,
+        "rejection_reasons": list(rejection_reasons),
         "distinct_value_count": distinct_value_count,
         "extraction_run_id": str(extraction_run_id),
         "extraction_base": {

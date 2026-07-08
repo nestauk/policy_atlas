@@ -34,6 +34,11 @@ from policy_atlas.facet_grouping import (
     StubFacetGroupingBackend,
 )
 from policy_atlas.fixtures import get_source
+from policy_atlas.grounding_judge import (
+    GroundingJudgeBackend,
+    OpenAIGroundingJudgeBackend,
+    StubGroundingJudgeBackend,
+)
 from policy_atlas.grouping import (
     OpenAIThemeGroupingBackend,
     StubThemeGroupingBackend,
@@ -61,6 +66,11 @@ from policy_atlas.schema import (
     source_tag,
 )
 from policy_atlas.select import NON_EVIDENCE_TYPE
+from policy_atlas.synthesis_backend import (
+    OpenAISynthesisBackend,
+    StubSynthesisBackend,
+    SynthesisBackend,
+)
 
 log = structlog.get_logger()
 
@@ -97,6 +107,9 @@ def _run_component(
     extraction_backend: ExtractionBackend | None = None,
     extraction_run_id: uuid.UUID | None = None,
     facet_grouping_backend: FacetGroupingBackend | None = None,
+    grouping_run_id: uuid.UUID | None = None,
+    synthesis_backend: SynthesisBackend | None = None,
+    grounding_judge_backend: GroundingJudgeBackend | None = None,
 ) -> uuid.UUID:
     """Create a run, compile and record the plan, and execute one scope component.
 
@@ -120,6 +133,12 @@ def _run_component(
             other components.
         facet_grouping_backend: Facet grouping backend for ``group``; unused
             by other components.
+        grouping_run_id: Explicit grouping run for ``synthesise``; unused by
+            other components.
+        synthesis_backend: Synthesis backend for ``synthesise``; unused by
+            other components.
+        grounding_judge_backend: Grounding judge backend for ``synthesise``;
+            unused by other components.
 
     Returns:
         The created run's id.
@@ -145,6 +164,7 @@ def _run_component(
             characterisation_run_id=characterisation_run_id,
             selection_run_id=selection_run_id,
             extraction_run_id=extraction_run_id,
+            grouping_run_id=grouping_run_id,
         )
     )
     plan_payload: dict[str, Any] = {
@@ -157,6 +177,8 @@ def _run_component(
         plan_payload["selection_run_id"] = str(config.selection_run_id)
     if config.extraction_run_id is not None:
         plan_payload["extraction_run_id"] = str(config.extraction_run_id)
+    if config.grouping_run_id is not None:
+        plan_payload["grouping_run_id"] = str(config.grouping_run_id)
     events.append(
         conn,
         project_id=project_id,
@@ -181,6 +203,8 @@ def _run_component(
             ranking_backend=ranking_backend,
             extraction_backend=extraction_backend,
             facet_grouping_backend=facet_grouping_backend,
+            synthesis_backend=synthesis_backend,
+            grounding_judge_backend=grounding_judge_backend,
         )
         if component == "characterise" and langfuse_client is not None:
             # Scores and trace I/O must attach while the run's span is still the
@@ -205,6 +229,12 @@ def _run_component(
             payload = _grouping_payload(events.read(conn, project_id), run_id=run_id)
             if payload is not None:
                 tracing.grouping_score_summary(
+                    langfuse_client, payload, root_span=run_span
+                )
+        if component == "synthesise" and langfuse_client is not None:
+            payload = _synthesis_payload(events.read(conn, project_id), run_id=run_id)
+            if payload is not None:
+                tracing.synthesis_score_summary(
                     langfuse_client, payload, root_span=run_span
                 )
     return run_id
@@ -455,6 +485,50 @@ def _render_grouping(log_entries: list[dict[str, Any]], *, run_id: uuid.UUID | N
     )
 
 
+def _synthesis_payload(
+    log_entries: list[dict[str, Any]], *, run_id: uuid.UUID
+) -> dict[str, Any] | None:
+    """Return the synthesise component's completed-event payload, or None if it failed.
+
+    Entries arrive in ascending sequence order, so the search runs newest-first;
+    ``run_id`` pins the payload to one run.
+    """
+    return next(
+        (
+            e["payload"] for e in reversed(log_entries)
+            if e["event_type"] == "component.completed"
+            and e["payload"].get("component") == "synthesise"
+            and e["run_id"] == run_id
+        ),
+        None,
+    )
+
+
+def _render_synthesis(
+    log_entries: list[dict[str, Any]], *, run_id: uuid.UUID, profile: str
+) -> None:
+    """Render the synthesise summary from the event log, human-readably."""
+    payload = _synthesis_payload(log_entries, run_id=run_id)
+    if payload is None:
+        # the component emitted component.failed — the event log below shows it
+        log.warning("synthesis.missing", profile=profile)
+        return
+
+    counts = payload["counts"]
+    log.info(
+        "synthesis.summary",
+        profile=profile,
+        artefact_id=payload["artefact_id"],
+        section_count=payload["section_count"],
+        claims_total=counts["claims_total"],
+        citations_verified=counts["citations_verified"],
+        citations_unverified=counts["citations_unverified"],
+        chunk_claims_rejected=counts["chunk_claims_rejected"],
+        gap_claims_degraded=counts["gap_claims_degraded"],
+    )
+    log.info("synthesis.flags", profile=profile, flags=payload["flags"])
+
+
 def main() -> None:
     """Run the walking-skeleton thread end to end and log the result."""
     configure_logging()
@@ -528,6 +602,25 @@ def main() -> None:
             metadata={
                 "synthetic": True,
                 "abstract": "A synthetic policy document.",
+                "_stub_systematic_review": True,
+            },
+            text_basis="full_text",
+            embedder=embedding_backend,
+        )
+        # The on-topic appraised seed for the synthesise demo (task 013): the
+        # acquired fixture docs classify Unknown (no sentinels) and are never
+        # appraised, so this uploaded full-text review is what the chunk lane
+        # can honestly cite under the appraised-evidence rule.
+        seed_src = get_source("syn-002")
+        ingest_upload(
+            conn,
+            project_id=project_id,
+            chunks=list(seed_src.chunks),
+            source_locator="syn-002",
+            metadata={
+                "synthetic": True,
+                "title": "Synthetic review of housing affordability policies",
+                "abstract": "A synthetic systematic review of housing affordability policies.",
                 "_stub_systematic_review": True,
             },
             text_basis="full_text",
@@ -765,6 +858,85 @@ def main() -> None:
                 grouping_result.c.project_id == project_id
             )
         ).fetchall()
+
+        # Synthesise: EB's terminal component, demoed over four profiles that
+        # walk the substrate-conditional flow from a rapid (no-reference) run
+        # up through the full resolved chain — same live-switch pattern as
+        # the other backends above.
+        synthesis_backend: SynthesisBackend
+        grounding_judge_backend: GroundingJudgeBackend
+        if live:
+            synthesis_backend = OpenAISynthesisBackend(langfuse_client=langfuse_client)
+            grounding_judge_backend = OpenAIGroundingJudgeBackend(langfuse_client=langfuse_client)
+        else:
+            synthesis_backend = StubSynthesisBackend()
+            grounding_judge_backend = StubGroundingJudgeBackend()
+
+        # rapid: no run references at all — substrate is the appraised
+        # screened-in ingested corpus only.
+        log.info("synthesise.profile", profile="rapid")
+        synth_rapid_run_id = run_component(
+            "synthesise",
+            synthesis_backend=synthesis_backend,
+            grounding_judge_backend=grounding_judge_backend,
+        )
+        _render_synthesis(
+            events.read(conn, project_id), run_id=synth_rapid_run_id, profile="rapid"
+        )
+
+        # characterisation_only: characterisation resolves nothing further.
+        log.info(
+            "synthesise.profile",
+            profile="characterisation_only",
+            characterisation_run_id=str(char_run_id),
+        )
+        synth_characterisation_run_id = run_component(
+            "synthesise",
+            characterisation_run_id=char_run_id,
+            synthesis_backend=synthesis_backend,
+            grounding_judge_backend=grounding_judge_backend,
+        )
+        _render_synthesis(
+            events.read(conn, project_id),
+            run_id=synth_characterisation_run_id,
+            profile="characterisation_only",
+        )
+
+        # characterisation_selection: selection given alone — characterisation
+        # resolves transitively.
+        log.info(
+            "synthesise.profile",
+            profile="characterisation_selection",
+            selection_run_id=str(select_run_id),
+        )
+        synth_selection_run_id = run_component(
+            "synthesise",
+            selection_run_id=select_run_id,
+            synthesis_backend=synthesis_backend,
+            grounding_judge_backend=grounding_judge_backend,
+        )
+        _render_synthesis(
+            events.read(conn, project_id),
+            run_id=synth_selection_run_id,
+            profile="characterisation_selection",
+        )
+
+        # full_chain: the first group run given alone — everything upstream
+        # resolves transitively.
+        log.info(
+            "synthesise.profile", profile="full_chain", grouping_run_id=str(group_run_id)
+        )
+        synth_full_chain_run_id = run_component(
+            "synthesise",
+            grouping_run_id=group_run_id,
+            synthesis_backend=synthesis_backend,
+            grounding_judge_backend=grounding_judge_backend,
+        )
+        _render_synthesis(
+            events.read(conn, project_id),
+            run_id=synth_full_chain_run_id,
+            profile="full_chain",
+        )
 
         log_entries = events.read(conn, project_id)
 

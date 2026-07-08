@@ -15,8 +15,14 @@ class SourceFixture:
     chunks: tuple[str, ...]
 
 
-# Single synthetic source used by the walking-skeleton thread.
-# The quote in produce_grounded_block must be a verbatim substring of joined chunks.
+# Synthetic sources used by the skeleton thread.
+# syn-001: the walking-skeleton echo source — the quote in produce_grounded_block
+# must be a verbatim substring of its joined chunks; its text is load-bearing.
+# syn-002: the on-topic appraised seed for the synthesise demo (task 013) — an
+# uploaded full-text document about the skeleton scope's intent, sentinel-
+# classified so appraise scores it; its chunks are what the chunk lane can
+# honestly cite on the fixture corpus (the acquired fixture docs classify
+# Unknown and are never appraised).
 _SOURCES: dict[str, SourceFixture] = {
     "syn-001": SourceFixture(
         source_ref="syn-001",
@@ -24,6 +30,23 @@ _SOURCES: dict[str, SourceFixture] = {
             "Synthetic Policy Atlas test source. ",
             "Evidence suggests that structured provenance tracking improves "
             "audit trail quality in policy research systems.",
+        ),
+    ),
+    "syn-002": SourceFixture(
+        source_ref="syn-002",
+        chunks=(
+            "Synthetic review of housing affordability policies. Across the "
+            "reviewed programmes, inclusionary zoning requirements were "
+            "associated with modest increases in the supply of "
+            "affordable units in high-demand urban areas.",
+            "Rental assistance vouchers reduced housing cost burden for "
+            "low-income households in most included studies, while reported "
+            "effects on neighbourhood mobility were mixed. Several studies "
+            "note that voucher take-up depended on landlord participation.",
+            "Evidence on rent stabilisation measures was divided: short-term "
+            "affordability gains for sitting tenants were reported alongside "
+            "reduced rental supply in some markets. The review found little "
+            "evidence on long-run effects for new market entrants.",
         ),
     ),
 }

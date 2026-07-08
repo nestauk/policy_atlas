@@ -15,9 +15,17 @@ shared tools and findings schema are owned by
 [../../system/data-model.md](../../system/data-model.md).
 
 ```
-acquire → screen → classify → appraise → characterise (shallow terminus)
-        → select → extract → group → synthesise (deep terminus)
+acquire → screen → classify → appraise → characterise (landscape content)
+        → [select → extract → group]   (the deep chain, plan-selected)
+        → synthesise (run terminus — composes the artefact at any depth)
 ```
+
+The components are a **registry the plan selects from** (task 013 flow-back): which fire is the
+orchestrator's plan-time selection from intent; **data dependencies stay structural** (extract
+needs a selection; group and finding claims need an extraction; the artefact needs **at least
+one groundable substrate** — every upstream reference is optional, ADR 0010),
+expressed as explicit run references compiling fail-closed. Breadth
+and depth are independent — a targeted question compiles to a *narrow-and-deep* run.
 
 ## Tool wiring (consolidated)
 
@@ -34,7 +42,7 @@ acquire → screen → classify → appraise → characterise (shallow terminus)
 | 6 | select | `select` (strategy-parameterised) | `select` | procedure (+ optional bounded generative rerank) |
 | 7 | extract | `extract` → `intervention_outcome_finding` | `extract` | per-source fan-out |
 | 8 | group | `cluster` (facet, over findings) + `query-findings` | `cluster`, `query-findings` | agent |
-| 9 | synthesise | `produce-grounded-block` (reads grouped findings) | `query-findings` | agent-loop |
+| 9 | synthesise | `produce-grounded-block` (intent-led sections over available substrate) | `query-findings`, `search_chunks` (the `retrieve` increment) | agent-loop |
 
 ## 1 — acquire (front edge)
 
@@ -109,13 +117,13 @@ the immutable canonical chunks — units attach alongside; chunks are never re-s
 unit stamped with the embedding profile (the substrate-key leg for embedding-model version). ⏸
 budget cap + lazy vectorisation for very large relevant sets is a possible later refinement.
 
-## 5 — characterise (shallow terminus)
+## 5 — characterise (landscape content)
 
 Produces the evidence-landscape **content, not presentation**: a run-scoped characterisation
 record + topic/theme tags (task 009 clarification, decision 7). Characterise does **not** mint
-an artefact or blocks — EB produces **one** artefact, composed once at the run terminus by the
-orchestrator (see [capability.md](capability.md)); the artefact-composition step is a recorded
-seam. Two parts:
+an artefact or blocks — EB produces **one** artefact, composed once at the run terminus **by
+synthesise** (task 013 flow-back, superseding the earlier orchestrator-composes reading; the
+orchestrator shapes sections at plan time — see [capability.md](capability.md)). Two parts:
 - **Coverage / patterns over metadata** — deterministic distributions and gaps over Tier-0
   columns (study-type, geography, recency, population, category). **Source/evidence policy is
   flag-not-block here** — EB reads and counts *all* relevant in-corpus evidence, so coverage/gaps
@@ -141,7 +149,7 @@ seam. Two parts:
 Facet-level thematic grouping is a **deeper product** (component 8 `group`), not part of the
 shallow terminus.
 
-## 6 — select (deep terminus opens)
+## 6 — select (the deep chain opens)
 
 Chooses the subset for Tier-1 extraction — a clean departure from v2 (which had **no** select
 step and extracted the whole screened set). **Coverage-aware stratified selection over the
@@ -195,16 +203,80 @@ four. Mechanisms/barriers/conditions stay **landscape-only** until the
 at characterise; facet-level over extracted findings here) — via `cluster` over finding records /
 dimension values + `query-findings`.
 
-## 9 — synthesise (deep terminus)
+## 9 — synthesise (run terminus)
 
-Over the **grouped** findings, **per group produce a grounded block** reporting what the findings
-show. **Descriptive**, surfacing the direction-spread ("5 of 7 findings positive on tenancy, two
-null") — v2's `effect_consensus` counts as the descriptive steer. Each claim grounded via the
-settled `produce-grounded-block` mechanism (deterministic quote-presence + LLM judge;
-Unsupported/mis-cited a real state) — *not* v2's permissive post-hoc fuzzy matching. The
-source/evidence policy's citable bar is applied **flag-not-block** (below-bar support flagged
-weakly-grounded/below-policy, never hidden/dropped). Deep "gaps" rest on the **selected/extracted
-base**, **base-labelled, never promoted to corpus absence** — the shallow landscape is the check
-(see [provenance.md](provenance.md)). ⏸ **Consensus seam:** the *weighted* verdict
-(strength-weighted "the evidence supports X at strength Y") is deferred to the same roll-up seam;
-candidate mechanism = the deferred graph-structured synthesis.
+**EB's terminal component at every depth** (task 013 flow-back): it **composes the one artefact**
+— mints it, renders content into blocks, binds them — with the orchestrator shaping the sections
+at plan time (capability-composes; see [capability.md](capability.md)). What it renders depends
+on what the run produced:
+
+- **One substrate-conditional flow — intent-led sections whose claim types are gated by
+  what the run produced** ([ADR 0010](../../../adr/0010-intent-led-synthesis-sections.md),
+  ): synthesise takes explicit fail-closed references (**all optional** —
+  characterisation, and the deepest available of selection / extraction / grouping,
+  upstream references resolved transitively from the referenced rows and cross-checked;
+  the requirement is **at least one groundable substrate**, else structural failure) and
+  never hard-wires a component combination — the orchestrator selects any coherent
+  registry subset and synthesise adapts. **Retrieval scope = the screened-in corpus
+  always** (screen is the relevance discipline that bounds reading); **a referenced
+  selection is a soft ranking prior, never a hard boundary** — the data-model's scoping
+  principle ("look here first, widen when thin; agents are never penned in"); select
+  gates *extraction cost*, not reading; every chunk citation records its origin
+  (selected | unselected_screened) so widening is visible. Scope guarded by a fail-closed
+  in-memory retrieval ceiling (beyond it, the index-backed `retrieve` slice is required —
+  loudly, never a degraded pass). A rapid run (acquire → screen → classify → appraise →
+  ingest → synthesise — appraise precedes chunk-cited claims: produce-grounded-block cites
+  only appraised evidence, and the v3.0 appraise pass is deterministic)
+  is fully served; a run without characterise yields an artefact with no landscape — a
+  grounded answer, not an evidence report; the plan's legitimate choice. The section set is shaped from the
+  user's **intent** (a bounded schema-constrained section proposal over intent + the
+  available substrate summaries, overridable by a fail-closed scope directive; plan-compile
+  section machinery is the recorded seam). Per section, **the section loop** — a capped
+  agent-loop over scoped read-only tools, the realisation
+  [execution-orchestration](../../system/execution-orchestration.md) declares, running
+  *inside* the component per the facade principle (the capability sub-agent invokes
+  synthesise as one tool; no second agent) — gathers evidence via **`search_chunks`**
+  (a staged pipeline: content-only hybrid relevance [embedding + lexical, rank-fused] →
+  arithmetic soft priors [the selection prior where referenced + fail-closed directive
+  boosts over columns/tags/appraisal tier — re-weight, never exclude] → a cross-encoder
+  reranker slot [pass-through until Bedrock Rerank lands] → caps; over the **screened-in
+  corpus's** frozen units, each returned chunk carrying its origin — the 009 vectors'
+  first reader; the `retrieve` seam's first increment),
+  **`query-findings`** (present only when an extraction is referenced) and **`lookup`**
+  (the universal-core read tool: appraisals, classifications, selection rationale,
+  coverage records, characterisation/grouping rows, **and the tag layer** — per its own
+  definition, aggregate queries over columns/tags included; closed query vocabulary,
+  project-guarded), under a hard per-section turn cap, then emits typed claims.
+  **Availability by substrate**: **pattern claims** (coverage counts with a
+  characterisation; direction spreads with extraction/grouping — deterministically
+  validated; v2's `effect_consensus` counts as this steer) · **theme claims**
+  (characterise themes with a characterisation; facet groups with grouping — validated
+  against the referenced clustering row; softest interpretive grade, base-labelled) ·
+  **gap claims** (always; graded per [provenance.md](provenance.md) with deterministic
+  per-grade validation and the required coverage base — sparsity-grade gaps need the
+  characterisation coverage; base-labelled to the narrowest base the substrate supports,
+  promoted to corpus absence only on a non-`inadequate` `search_coverage_record`, else
+  fail-closed degraded) · **reasoning claims** (always; visibly-labelled Tier 4 authoring;
+  judge strict-routing keeps empirical content out; never counts toward strength
+  roll-ups) · **chunk claims** (with screened-in ingested documents — screen's relevance
+  discipline bounds them, the selection prior steers them, each citation carries its
+  origin; not extraction — so a question outside the intervention–outcome schema is
+  served without extract) · **finding claims** (with an **extraction** — cite finding ids resolved to
+  extract-verified anchors; the model never authors these quotes). A characterisation-only
+  run is the landscape degenerate case (pattern/theme/gap/reasoning sections).
+  **Groups, where present, are input, not structure** (uncovered groups counted, never
+  silently dropped). Every cited claim goes through the settled `produce-grounded-block`
+  mechanism (deterministic quote-presence + LLM judge; Unsupported/mis-cited a real state)
+  — *not* v2's permissive post-hoc fuzzy matching. Intent shapes emphasis, never
+  verification ("topical relevance ≠ support"). The source/evidence policy's citable bar
+  is applied **flag-not-block** (below-bar support flagged weakly-grounded/below-policy,
+  never hidden/dropped).
+- ⏸ **Corpus-scale retrieval** (ADR 0009 decision 4): in-corpus chunk grounding
+  over the **screened-in corpus** is part of grounded synthesis above (a referenced selection
+  is only a soft ranking prior) — what remains gated on the index-backed `retrieve` slice is
+  retrieval **beyond the in-memory ceiling** (`RETRIEVAL_UNIT_CAP`, fail-closed) or over
+  **unscreened** content, with ADR 0009's recorded risk note.
+
+⏸ **Consensus seam:** the *weighted* verdict (strength-weighted "the evidence supports X at
+strength Y") is deferred to the same roll-up seam; candidate mechanism = the deferred
+graph-structured synthesis.

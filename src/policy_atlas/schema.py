@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — twenty-four tables, twelve alembic migrations.
+"""SQLAlchemy Core table metadata — twenty-five tables, thirteen alembic migrations.
 
 No deferred columns (no block/artefact summary, no same_content_as, no lineage key).
 """
@@ -788,4 +788,80 @@ grouping_result = Table(
     # Run-local roll-up: same-run re-execution is a loud error, retry = new run.
     UniqueConstraint("evidence_scope_id", "run_id", name="uq_grr_scope_run"),
     CheckConstraint(f"facet IN ({_GROUPING_FACETS_SQL})", name="ck_grr_facet"),
+)
+
+# --- Synthesise model (task 013) ---
+
+synthesis_result = Table(
+    "synthesis_result",
+    metadata,
+    Column("synthesis_result_id", UUID(as_uuid=True), primary_key=True),
+    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
+    Column("run_id", UUID(as_uuid=True), nullable=False),
+    # Resolved references (all optional — substrate-conditional, contract decision 2).
+    # NULL run ids skip the composite FK check (MATCH SIMPLE), so each guard binds
+    # only when that substrate actually resolved.
+    Column("characterisation_run_id", UUID(as_uuid=True), nullable=True),
+    Column("selection_run_id", UUID(as_uuid=True), nullable=True),
+    Column("extraction_run_id", UUID(as_uuid=True), nullable=True),
+    Column("grouping_run_id", UUID(as_uuid=True), nullable=True),
+    # The minted artefact — zero-substrate runs fail structurally and write no row,
+    # so the link is NOT NULL. The 001 substrate stores the artefact itself; this
+    # table is the run-scoped execution roll-up (contract § Schema).
+    Column(
+        "artefact_id",
+        UUID(as_uuid=True),
+        ForeignKey("artefact.artefact_id"),
+        nullable=False,
+    ),
+    # Required keys (test-asserted): three prompt-surface versions incl. tool schemas,
+    # models, judge envelope-policy version, backend modes, per-phase call/turn/repair
+    # counts, substrate profile, retrieval scope (doc/unit counts, selection prior +
+    # boost, executed retrieval_boosts + unmatched_boosts, reranker mode), section set
+    # + source, all caps, per-section tool-call counts + gathered-id hash, inherited
+    # chain base per resolved reference.
+    Column("synthesis_provenance", JSONB, nullable=False),
+    # Per section: title/focus, block_id, assigned group ids, tool-call count, claim
+    # counts by type, tier distribution, verification counters, flags.
+    Column("blocks", JSONB, nullable=False),
+    Column("counts", JSONB, nullable=False),
+    Column("flags", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    # Cross-project FK guards, per the grouping-result precedent.
+    ForeignKeyConstraint(
+        ["evidence_scope_id", "project_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
+        name="fk_synr_scope_project",
+    ),
+    ForeignKeyConstraint(
+        ["run_id", "project_id"],
+        ["runs.run_id", "runs.project_id"],
+        name="fk_synr_run_project",
+    ),
+    # Each resolved reference must exist for this scope (targets the parents'
+    # (evidence_scope_id, run_id) uniques), so a roll-up can never reference an
+    # upstream run that was never written.
+    ForeignKeyConstraint(
+        ["evidence_scope_id", "characterisation_run_id"],
+        ["characterisation_result.evidence_scope_id", "characterisation_result.run_id"],
+        name="fk_synr_characterisation",
+    ),
+    ForeignKeyConstraint(
+        ["evidence_scope_id", "selection_run_id"],
+        ["selection_result.evidence_scope_id", "selection_result.run_id"],
+        name="fk_synr_selection",
+    ),
+    ForeignKeyConstraint(
+        ["evidence_scope_id", "extraction_run_id"],
+        ["extraction_result.evidence_scope_id", "extraction_result.run_id"],
+        name="fk_synr_extraction",
+    ),
+    ForeignKeyConstraint(
+        ["evidence_scope_id", "grouping_run_id"],
+        ["grouping_result.evidence_scope_id", "grouping_result.run_id"],
+        name="fk_synr_grouping",
+    ),
+    # Run-local roll-up: same-run re-execution is a loud error, retry = new run.
+    UniqueConstraint("evidence_scope_id", "run_id", name="uq_synr_scope_run"),
 )

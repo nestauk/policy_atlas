@@ -25,6 +25,7 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 
 * [structlog is the only logger](logging-structlog.md) - all log calls go through structlog; no print / stdlib logging.
 * [Tests run against the dev DB in a rolled-back transaction](testing-database.md) - no separate test database; point `DATABASE_URL` somewhere disposable.
+* [Reject model output at the grain of the fault — and persist the reason](validation-reject-at-fault-grain.md) - text-rule violations reject the unit and route it to repair; only id/envelope corruption rejects whole-response; rejection reasons persist with the run (012 fix via the 013 review stack).
 
 ## Testing rules
 
@@ -46,6 +47,8 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [Untrusted directive parsing — malformed fails closed, unknown references flag](directive-parse-malformed-vs-unknown.md) - structural malformation raises `DirectiveError` (bounded strings/collections, static messages); a well-formed unknown column/tag reference matches nothing and surfaces in `unmatched_boosts` (task 010).
 * [Facet grouping is an exhaustive partition with honest residuals](facet-grouping-exhaustive-partition.md) - grouped set == the referenced extraction run's finding set; every finding in exactly one of group/ungrouped/no_value; sum identities (incl. the overall direction spread) re-asserted at write (task 012).
 * [Grounding locations come from the verifier, never the model's claim](grounding-location-from-verification.md) - a model-emitted segment/chunk id is untrusted claim data; every dereferenceable location field derives from the verified spans (task 011, convergent review finding).
+* [Chunk-claim quotes verify against the whole-document basis](synthesis-quote-whole-doc-basis.md) - one citation row per spanned chunk, so a row's chunk_id can name a chunk the loop never received; `gathered_ids` records what the loop saw (task 013, rev 8 B2).
+* [Same-run re-execution fails loud before the first write](fail-loud-before-first-write.md) - a DB-error failure poisons the transaction and kills the harness's own component.failed event write; pre-write guards keep declared failure modes off the constraint path (task 013 review stack).
 
 ## Integration quirks (model / telemetry providers)
 

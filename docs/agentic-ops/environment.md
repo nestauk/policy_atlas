@@ -1,7 +1,7 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–012 — backend only; setup unchanged since 002; task 007 adds two dev-time
+stands (tasks 001–013 — backend only; setup unchanged since 002; task 007 adds two dev-time
 fixture-recorder scripts needing `OVERTON_API_KEY`/optional OpenAlex vars in `.env` — see
 `.env.example`; task 008 adds parsing deps (pymupdf/pymupdf4llm/trafilatura — arrive via
 `make setup`/`uv sync`) and a keyless dev-time recorder using system `curl`; task 009 adds
@@ -12,8 +12,11 @@ costs money), `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` **plus a required
 the same `OPENAI_API_KEY` live route now also drives the select rerank, the extract step
 (extraction is the deliberately-expensive Tier-1 call: full-document prompts, single calls
 can run minutes — see the 011 verification cost note) and the group facet partition (cheap
-— reference strings only); `make verify` and the
-test suite need none of them — stub backends + socket-deny keep the suite egress-free).
+— reference strings only); task 013 adds **no new deps or env vars** either — the same key
+drives synthesise's three generation surfaces (proposal · section loop · grounding judge;
+a full four-profile skeleton run ≈ $1, see the 013 verification cost note); `make verify`
+and the test suite need none of them — stub backends + socket-deny keep the suite
+egress-free).
 Gotcha (bit the 012 live check): after pulling a schema-bearing slice, run
 `uv run alembic upgrade head` against the **dev** DB — only the test DB migrates itself
 (conftest); a stale dev DB fails mid-run with `UndefinedTable`.

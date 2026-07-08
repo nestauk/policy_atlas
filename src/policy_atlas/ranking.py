@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from threading import Lock
-from typing import Protocol, TypedDict
+from typing import Any, Protocol, TypedDict
 
 import structlog
 from langfuse import Langfuse
@@ -275,19 +275,14 @@ class OpenAIRankingBackend:
         Raises:
             RuntimeError: If the response cannot be parsed into the expected shape.
         """
-        if self._langfuse_client is None:
-            scores, _usage = self._rank_once(batch, intent=intent)
-            return scores
-
-        batch_index = self._next_batch_index()
+        langfuse_client = self._langfuse_client
+        batch_index = self._next_batch_index() if langfuse_client is not None else 0
         batch_ids = {doc["id"] for doc in batch}
-        with tracing._observation(
-            self._langfuse_client,
-            name=f"rank:batch{batch_index}",
-            as_type="generation",
-        ) as span:
-            scores, usage = self._rank_once(batch, intent=intent)
-            valid = len(validate_ranked(batch_ids, scores)) == len(batch)
+
+        def _update(
+            span: Any, result: tuple[list[RankedDoc], CompletionUsage | None]
+        ) -> None:
+            scores, usage = result
             span.update(
                 input={"intent": intent, "records": list(batch)},
                 output={"scores": scores},
@@ -300,12 +295,29 @@ class OpenAIRankingBackend:
                     **usage_metadata(usage),
                 },
             )
-            self._langfuse_client.score_current_trace(
+
+        def _score_trace(
+            _span: Any, result: tuple[list[RankedDoc], CompletionUsage | None]
+        ) -> None:
+            if langfuse_client is None:
+                return
+            scores, _usage = result
+            valid = len(validate_ranked(batch_ids, scores)) == len(batch)
+            langfuse_client.score_current_trace(
                 name="rank_batch_valid",
                 value=1.0 if valid else 0.0,
                 data_type="NUMERIC",
             )
-            return scores
+
+        scores, _usage = tracing.traced_call(
+            langfuse_client,
+            name=f"rank:batch{batch_index}",
+            as_type="generation",
+            call=lambda: self._rank_once(batch, intent=intent),
+            update=_update,
+            after=_score_trace,
+        )
+        return scores
 
 
 class StubRankingBackend:

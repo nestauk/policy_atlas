@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.facet_grouping import (
     FACET_VALUE_CAP,
+    LABEL_MAX,
     PROMPT_VERSION,
     VALUE_SURFACE_MAX,
     FacetValueRecord,
@@ -385,10 +386,12 @@ def test_happy_path_writes_rollup_summary_and_provenance(conn: Connection) -> No
         "value_cap",
         "call_count",
         "repair_count",
+        "rejection_reasons",
         "distinct_value_count",
         "extraction_run_id",
         "extraction_base",
     }
+    assert provenance["rejection_reasons"] == []
     assert provenance["prompt_version"] == PROMPT_VERSION
     assert provenance["model"] == "stub"
     assert provenance["mode"] == "stub"
@@ -835,6 +838,60 @@ def test_value_surface_too_long_fails_before_backend_call(conn: Connection) -> N
     assert backend.partition_calls == 0
     assert backend.repair_calls == 0
     assert _group_count(conn, project_id) == 0
+
+
+def test_one_bad_label_never_zeroes_the_run(conn: Connection) -> None:
+    """The 013 live regression: an over-long label lost the whole partition.
+
+    Group-grain rejection keeps the healthy group, routes the bad group's
+    member to the repair, and persists the rejection reason + flag.
+    """
+    project_id, _ = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    seeded = seed_extraction(
+        conn,
+        project_id,
+        scope_id,
+        docs=[
+            (
+                uuid.uuid4(),
+                [
+                    {"intervention": "Alpha service", "outcome": "Outcome A"},
+                    {"intervention": "Beta service", "outcome": "Outcome B"},
+                    {"intervention": "Gamma service", "outcome": "Outcome C"},
+                ],
+            )
+        ],
+    )
+    backend = CountingFacetGroupingBackend(
+        partition_result={
+            "groups": [
+                {"label": "x" * (LABEL_MAX + 1), "description": "Fine.", "member_ids": ["v1"]},
+                {"label": "Kept group", "description": "Fine.", "member_ids": ["v2", "v3"]},
+            ],
+            "ungroupable": [],
+        },
+        repair_result={
+            "groups": [
+                {"label": "Repaired group", "description": "Fine.", "member_ids": ["v1"]}
+            ],
+            "ungroupable": [],
+        },
+    )
+
+    summary, group_run_id = _run_group(
+        conn, project_id, scope_id, seeded.run_id, backend=backend
+    )
+    row = _group_row(conn, project_id, group_run_id)
+
+    assert backend.partition_calls == 1
+    assert backend.repair_calls == 1
+    assert summary["counts"]["groups"] == 2
+    assert summary["counts"]["ungrouped"] == 0
+    assert "groups_rejected" in summary["flags"]
+    assert "repair_path_taken" in summary["flags"]
+    reasons = cast("dict[str, Any]", row["grouping_provenance"])["rejection_reasons"]
+    assert reasons == [f"partition: group 0 label exceeds {LABEL_MAX} chars"]
 
 
 def _zero_spread() -> dict[str, int]:

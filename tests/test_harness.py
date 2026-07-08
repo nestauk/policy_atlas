@@ -3,17 +3,26 @@
 import uuid
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas import events
 from policy_atlas.fixtures import get_source
+from policy_atlas.grounding_judge import StubGroundingJudgeBackend
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.ingest import ingest_upload
 from policy_atlas.plan import Plan, compile
 from policy_atlas.schema import annotation, artefact, block, project, runs
-from tests.helpers import delete_project_data, now, seed_project_and_run
+from policy_atlas.synthesis_backend import StubSynthesisBackend
+from tests.helpers import (
+    delete_project_data,
+    now,
+    seed_characterisation,
+    seed_project_and_run,
+    seed_run,
+    seed_scope,
+)
 
 _CHUNKS = list(get_source("syn-001").chunks)
 
@@ -123,6 +132,128 @@ def test_event_log_six_types_in_order(conn: Connection) -> None:
     # Sequences are contiguous and ordered
     seqs = [e["sequence"] for e in log]
     assert seqs == list(range(1, len(seqs) + 1))
+
+
+def test_synthesise_completes_with_characterisation_substrate(conn: Connection) -> None:
+    """A characterisation-only reference is a groundable substrate — synthesise
+    should complete, mirroring the select-over-characterisation seeding
+    precedent (tests.helpers.seed_characterisation).
+    """
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    characterisation_run_id = seed_run(conn, pid)
+    seed_characterisation(
+        conn,
+        pid,
+        scope_id,
+        characterisation_run_id,
+        themes={"theme-a": []},
+    )
+    config = compile(
+        Plan(
+            component="synthesise",
+            evidence_scope_id=scope_id,
+            characterisation_run_id=characterisation_run_id,
+        )
+    )
+
+    events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
+    events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
+
+    run_harness(
+        conn,
+        config=config,
+        project_id=pid,
+        run_id=rid,
+        provider=StubEchoProvider(),
+        synthesis_backend=StubSynthesisBackend(),
+        grounding_judge_backend=StubGroundingJudgeBackend(),
+    )
+
+    row = conn.execute(select(runs).where(runs.c.run_id == rid)).one()
+    assert row.status == "succeeded"
+
+    log = events.read(conn, pid)
+    completed = next(
+        e for e in log
+        if e["event_type"] == "component.completed"
+        and e["payload"].get("component") == "synthesise"
+    )
+    assert completed["payload"]["artefact_id"] is not None
+
+
+def test_synthesise_harness_same_run_reexecution_is_loud(conn: Connection) -> None:
+    """Running the synthesise component twice for the SAME run_id through the
+    real harness node (``run_harness`` -> ``_run_synthesise``) must not raise
+    out of the harness: the second attempt fails loudly but gracefully — a
+    ``component.failed`` event lands, the run ends 'failed', and no second
+    artefact is written.
+    """
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    characterisation_run_id = seed_run(conn, pid)
+    seed_characterisation(
+        conn,
+        pid,
+        scope_id,
+        characterisation_run_id,
+        themes={"theme-a": []},
+    )
+    config = compile(
+        Plan(
+            component="synthesise",
+            evidence_scope_id=scope_id,
+            characterisation_run_id=characterisation_run_id,
+        )
+    )
+
+    events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
+    events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
+
+    run_harness(
+        conn,
+        config=config,
+        project_id=pid,
+        run_id=rid,
+        provider=StubEchoProvider(),
+        synthesis_backend=StubSynthesisBackend(),
+        grounding_judge_backend=StubGroundingJudgeBackend(),
+    )
+
+    row = conn.execute(select(runs).where(runs.c.run_id == rid)).one()
+    assert row.status == "succeeded"
+    artefacts_before = conn.execute(
+        select(func.count()).select_from(artefact).where(artefact.c.project_id == pid)
+    ).scalar_one()
+
+    # Second attempt, same run_id, same harness path — must not raise.
+    run_harness(
+        conn,
+        config=config,
+        project_id=pid,
+        run_id=rid,
+        provider=StubEchoProvider(),
+        synthesis_backend=StubSynthesisBackend(),
+        grounding_judge_backend=StubGroundingJudgeBackend(),
+    )
+
+    row_after = conn.execute(select(runs).where(runs.c.run_id == rid)).one()
+    assert row_after.status == "failed"
+
+    log = events.read(conn, pid)
+    failed_events = [
+        e
+        for e in log
+        if e["event_type"] == "component.failed"
+        and e["payload"].get("component") == "synthesise"
+    ]
+    assert len(failed_events) == 1
+    assert "same_run_reexecution" in failed_events[0]["payload"]["error"]
+
+    artefacts_after = conn.execute(
+        select(func.count()).select_from(artefact).where(artefact.c.project_id == pid)
+    ).scalar_one()
+    assert artefacts_after == artefacts_before
 
 
 def test_fail_annotation_survives_commit(engine: Engine) -> None:

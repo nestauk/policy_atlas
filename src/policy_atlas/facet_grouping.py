@@ -17,7 +17,7 @@ own example input exactly (the 011 guardrail).
 from __future__ import annotations
 
 import json
-from typing import Protocol, TypedDict
+from typing import Any, Protocol, TypedDict
 
 from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
@@ -53,7 +53,8 @@ LABEL_MAX = 80
 DESCRIPTION_MAX = 500
 
 # Exact casefolded forbidden set: v2's "General Theme" collapse defect closed in
-# code — a catch-all label rejects the response; the ungroupable path exists.
+# code — a catch-all label rejects that group (members flow to the repair);
+# the ungroupable path exists.
 FORBIDDEN_GROUP_LABELS = frozenset(
     {"general", "miscellaneous", "other", "misc", "general theme",
      "uncategorised", "uncategorized"}
@@ -446,25 +447,18 @@ class OpenAIFacetGroupingBackend:
         empty_error: str,
         unparsed_error: str,
     ) -> PartitionResult:
-        if self._langfuse_client is None:
+        def _parse() -> tuple[PartitionResult, CompletionUsage | None]:
             return self._parse_once(
                 messages,
                 usage_event=usage_event,
                 empty_error=empty_error,
                 unparsed_error=unparsed_error,
-            )[0]
-
-        with tracing._observation(
-            self._langfuse_client,
-            name=span_name,
-            as_type="generation",
-        ) as span:
-            result, usage = self._parse_once(
-                messages,
-                usage_event=usage_event,
-                empty_error=empty_error,
-                unparsed_error=unparsed_error,
             )
+
+        def _update(
+            span: Any, parsed: tuple[PartitionResult, CompletionUsage | None]
+        ) -> None:
+            result, usage = parsed
             span.update(
                 input={"messages": messages},
                 output=result,
@@ -476,7 +470,15 @@ class OpenAIFacetGroupingBackend:
                     **usage_metadata(usage),
                 },
             )
-            return result
+
+        result, _usage = tracing.traced_call(
+            self._langfuse_client,
+            name=span_name,
+            as_type="generation",
+            call=_parse,
+            update=_update,
+        )
+        return result
 
     def partition(
         self, values: list[FacetValueRecord], *, facet: str

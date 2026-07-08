@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from threading import Lock
 from typing import Any, Literal
@@ -75,6 +75,43 @@ def _observation(client: Langfuse, *, name: str, as_type: _ObservationType) -> I
             raise
     else:
         manager.__exit__(None, None, None)
+
+
+def traced_call[T](
+    client: Langfuse | None,
+    *,
+    name: str,
+    as_type: _ObservationType,
+    call: Callable[[], T],
+    update: Callable[[Any, T], None] | None = None,
+    after: Callable[[Any, T], None] | None = None,
+) -> T:
+    """Run a provider call under an optional Langfuse observation.
+
+    Args:
+        client: Langfuse client, or ``None`` for the no-tracing fast path.
+        name: Observation name. Callers may compute this before invocation.
+        as_type: Langfuse observation type.
+        call: Zero-argument function that performs the provider call and returns
+            the parsed site-specific result.
+        update: Optional callback that records input/output/model/metadata on
+            the open observation.
+        after: Optional callback for extra work that must run before the
+            observation closes, such as trace scoring derived from the result.
+
+    Returns:
+        The value returned by ``call``.
+    """
+    if client is None:
+        return call()
+
+    with _observation(client, name=name, as_type=as_type) as span:
+        result = call()
+        if update is not None:
+            update(span, result)
+        if after is not None:
+            after(span, result)
+        return result
 
 
 class TracedEmbeddingBackend:
@@ -405,6 +442,89 @@ def grouping_score_summary(
         value=float(summary["counts"]["groups"]),
         data_type="NUMERIC",
     )
+
+
+def synthesis_score_summary(
+    client: Langfuse | None,
+    summary: dict[str, Any],
+    *,
+    root_span: Any = None,
+) -> None:
+    """Attach the synthesise run's claim/citation scores to the current Langfuse trace.
+
+    The 009 ``score_summary`` pattern, mirroring ``grouping_score_summary``
+    (task 012).
+
+    Args:
+        client: Langfuse client, or ``None`` for no-op tracing.
+        summary: Synthesise component summary payload — becomes the trace output.
+        root_span: The ``run:{run_id}`` root span yielded by ``component_span``.
+    """
+    if client is None:
+        return
+    if root_span is not None:
+        root_span.update(
+            input={"component": "synthesise", "artefact_id": summary["artefact_id"]},
+            output=summary,
+        )
+    counts = summary["counts"]
+    claims_total = sum(counts["claims_total"].values())
+    unsupported = counts["claims_by_verdict_lane"].get("unsupported_mis_cited", 0)
+    if claims_total > 0:
+        client.score_current_trace(
+            name="claims_valid_share",
+            value=(claims_total - unsupported) / claims_total,
+            data_type="NUMERIC",
+        )
+        client.score_current_trace(
+            name="unsupported_share",
+            value=unsupported / claims_total,
+            data_type="NUMERIC",
+        )
+    else:
+        client.score_current_trace(
+            name="claims_valid_share",
+            value=0.0,
+            data_type="NUMERIC",
+        )
+        client.score_current_trace(
+            name="unsupported_share",
+            value=0.0,
+            data_type="NUMERIC",
+        )
+    # Per-anchor counts on both sides — citations_verified (citation rows)
+    # and citations_unverified (flagged claims) count different units and
+    # cannot form an honest ratio.
+    anchors_verified = counts.get("anchors_verified", 0)
+    anchors_unverified = counts.get("anchors_unverified", 0)
+    anchors_seen = anchors_verified + anchors_unverified
+    if anchors_seen > 0:
+        client.score_current_trace(
+            name="citation_verified_share",
+            value=anchors_verified / anchors_seen,
+            data_type="NUMERIC",
+        )
+    else:
+        client.score_current_trace(
+            name="citation_verified_share",
+            value=0.0,
+            data_type="NUMERIC",
+        )
+    chunk_claims_total = counts["claims_total"].get("chunk", 0)
+    chunk_claims_rejected = counts["chunk_claims_rejected"]
+    chunk_denominator = chunk_claims_total + chunk_claims_rejected
+    if chunk_denominator > 0:
+        client.score_current_trace(
+            name="chunk_rejection_share",
+            value=chunk_claims_rejected / chunk_denominator,
+            data_type="NUMERIC",
+        )
+    else:
+        client.score_current_trace(
+            name="chunk_rejection_share",
+            value=0.0,
+            data_type="NUMERIC",
+        )
 
 
 def flush(client: Langfuse | None) -> None:
