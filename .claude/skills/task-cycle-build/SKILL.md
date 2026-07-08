@@ -56,6 +56,11 @@ tests ran in seconds):
   them under test-fast; 011 phase 1 hit exactly this coupling), and the **step-6 exit**.
 - The tiering changes *which suite runs*, never the rule: any red is still a full stop,
   and no commit lands on a red gate.
+- **The plan's gate map is binding** (failure-log, 2026-07-08): which phase boundaries
+  carry full verify vs verify-fast was decided at the plan gate — consecutive low-risk
+  phases may share one full-verify gate there. Don't add full-verify runs mid-build
+  "to be safe" (014 ran six where three carried the signal), and don't downgrade a
+  plan-marked full gate either.
 
 **When building reveals a design problem**, size it before reacting:
 - **Blocking / material** (the contract or a spec is wrong enough to change the design):
@@ -77,7 +82,10 @@ Fill `docs/tasks/_templates/verification.md` → `docs/tasks/NNN-slug/verificati
 (flagging any minor deviations per above), public-safety, gaps.
 
 Drive the affected flow end-to-end with `/verify` (exercises real behaviour, not just
-tests) — the flow it drove supplies the exact end-to-end command. If `make verify` is red,
+tests) — the flow it drove supplies the exact end-to-end command. **The live check runs
+at the scope the contract pinned** (failure-log, 2026-07-08: default = changed surfaces
++ one cheap full-chain smoke; full live e2e only where the contract bought it) — a
+bigger live run than contracted is spend the gate never approved, not extra rigour. If `make verify` is red,
 root-cause it — don't guess. When the stop condition is objective (`make verify` green, a
 named test), a `/goal` may drive the implement ↔ verify inner loop; judgment-call phases
 never — they end at a 🛑.

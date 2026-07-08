@@ -202,7 +202,13 @@ gated. See Known gaps.
   baseline, any schema/ingest-adjacent phase (the table-count/metadata assertions live
   *inside* the excluded `test_ingest_full_text.py`), and the step-6 exit. Never-commit-
   on-red is unchanged — the tier picks the suite, not the discipline. Rule lives in
-  task-cycle-build § Step 5.
+  task-cycle-build § Step 5. **Two sizing decisions ride the design gates** (014 retro,
+  2026-07-08 — a 3h build wall clock): the plan's **gate map** may merge adjacent
+  low-risk phases into one full-verify checkpoint (plan 🛑 reviews it; the mandatory
+  classes above never shrink), and the contract pins the **live-check scope** (default:
+  changed surfaces + one cheap full-chain smoke; full live e2e is a priced, deliberate
+  upgrade — 014's inherited skeleton-e2e spent ~50 min of downstream live chain on
+  ~2 min of new-surface evidence). Rules live in task-cycle-design § Step 1 / § Step 3.
 - `/goal` — goal-conditioned runs, only when the stop condition is objective (`make verify`
   green, a named test passing — CLAUDE.md's "only when completion is measurable"). Its independent
   checker model grades completion, so the maker doesn't grade its own homework. **Scope: one goal
