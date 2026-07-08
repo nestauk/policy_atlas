@@ -1,6 +1,8 @@
 # Plan: 014-llm-screen-classify
 
-> **Status:** **rev 4** — scoped delta review adjudicated (Codex on
+> **Status:** **rev 5** — rev-1.10 select rule folded (effective row
+> wholesale, select = stage-3 of the cascade). Rev 4: scoped delta
+> review adjudicated (Codex on
 > the stage-2 amendment: 2 blockers · 7 majors, 9/9 adopted):
 > effective-screen helper replaces the abolished "relevant-only =
 > safe" reader class; select = stage-1 confidence only; no-rescue
