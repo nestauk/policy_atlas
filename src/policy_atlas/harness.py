@@ -32,6 +32,7 @@ from policy_atlas.extract import ExtractContext, extract_scope
 from policy_atlas.extraction_backend import ExtractionBackend, StubExtractionBackend
 from policy_atlas.facet_grouping import FacetGroupingBackend, StubFacetGroupingBackend
 from policy_atlas.grounding import GroundingError, produce_grounded_block
+from policy_atlas.grounding_judge import GroundingJudgeBackend, StubGroundingJudgeBackend
 from policy_atlas.group import GroupContext, group_findings
 from policy_atlas.grouping import StubThemeGroupingBackend, ThemeGroupingBackend
 from policy_atlas.inference import InferenceProvider
@@ -46,6 +47,8 @@ from policy_atlas.ranking import RankingBackend
 from policy_atlas.schema import artefact, evidence_scope, runs
 from policy_atlas.screen import ScreenContext, screen_sources
 from policy_atlas.select import SelectContext, select_scope
+from policy_atlas.synthesis_backend import StubSynthesisBackend, SynthesisBackend
+from policy_atlas.synthesise import SynthesiseContext, SynthesiseFailure, synthesise_scope
 
 log = structlog.get_logger()
 
@@ -66,6 +69,8 @@ class HarnessState(TypedDict):
     ranking_backend: RankingBackend | None
     extraction_backend: ExtractionBackend
     facet_grouping_backend: FacetGroupingBackend
+    synthesis_backend: SynthesisBackend
+    grounding_judge_backend: GroundingJudgeBackend
     block_ids: dict[str, Any]
     error: str | None
 
@@ -338,6 +343,101 @@ def _run_characterise(state: HarnessState) -> HarnessState:
     return state
 
 
+def _run_synthesise(state: HarnessState) -> HarnessState:
+    """Synthesise node with structured block-aware failure payloads.
+
+    This mirrors ``_run_characterise`` instead of the generic
+    ``_run_scope_component`` so ``SynthesiseFailure`` can name any blocks
+    already persisted before a post-mint/post-block failure.
+    """
+    conn = state["conn"]
+    project_id = state["project_id"]
+    run_id = state["run_id"]
+    config = state["config"]
+
+    events.append(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        event_type="component.started",
+        payload={"component": config.component},
+    )
+    log.info("component.started", component=config.component)
+
+    row = conn.execute(
+        select(evidence_scope)
+        .where(evidence_scope.c.evidence_scope_id == config.evidence_scope_id)
+        .where(evidence_scope.c.project_id == project_id)
+    ).one_or_none()
+    if row is None:
+        err = (
+            f"evidence_scope {config.evidence_scope_id!r} "
+            f"not found for project {project_id!r}"
+        )
+        events.append(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            event_type="component.failed",
+            payload={"component": config.component, "error": err},
+        )
+        return {**state, "error": err}
+
+    ctx = SynthesiseContext(
+        scope_id=row.evidence_scope_id,
+        intent=row.intent,
+        context=dict(row.context),
+        characterisation_run_id=config.characterisation_run_id,
+        selection_run_id=config.selection_run_id,
+        extraction_run_id=config.extraction_run_id,
+        grouping_run_id=getattr(config, "grouping_run_id", None),
+    )
+
+    try:
+        summary = synthesise_scope(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            context=ctx,
+            synthesis_backend=state["synthesis_backend"],
+            grounding_judge_backend=state["grounding_judge_backend"],
+            embedding_backend=state["embedding_backend"],
+        )
+    except SynthesiseFailure as exc:
+        events.append(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            event_type="component.failed",
+            payload={
+                "component": config.component,
+                "error": exc.error,
+                "blocks_written": exc.blocks_written,
+            },
+        )
+        return {**state, "error": exc.error}
+    except Exception as exc:
+        err = str(exc)
+        events.append(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            event_type="component.failed",
+            payload={"component": config.component, "error": err},
+        )
+        return {**state, "error": err}
+
+    events.append(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        event_type="component.completed",
+        payload={"component": config.component, **summary},
+    )
+    log.info("component.completed", component=config.component)
+    return state
+
+
 def _dispatch(state: HarnessState) -> str:
     return state["config"].component
 
@@ -392,6 +492,7 @@ def build_graph() -> Any:
     g.add_node("select", _run_select)
     g.add_node("extract", _run_extract)
     g.add_node("group", _run_group)
+    g.add_node("synthesise", _run_synthesise)
     g.add_node("finish", _finish)
 
     g.set_entry_point("dispatch")
@@ -409,6 +510,7 @@ def build_graph() -> Any:
             "select": "select",
             "extract": "extract",
             "group": "group",
+            "synthesise": "synthesise",
         },
     )
     g.add_edge("echo", "finish")
@@ -421,6 +523,7 @@ def build_graph() -> Any:
     g.add_edge("select", "finish")
     g.add_edge("extract", "finish")
     g.add_edge("group", "finish")
+    g.add_edge("synthesise", "finish")
     g.add_edge("finish", END)
     return g.compile()
 
@@ -439,6 +542,8 @@ def run_harness(
     ranking_backend: RankingBackend | None = None,
     extraction_backend: ExtractionBackend | None = None,
     facet_grouping_backend: FacetGroupingBackend | None = None,
+    synthesis_backend: SynthesisBackend | None = None,
+    grounding_judge_backend: GroundingJudgeBackend | None = None,
 ) -> dict[str, Any]:
     """Run the compiled harness graph for one run, persisting its output.
 
@@ -471,6 +576,10 @@ def run_harness(
         facet_grouping_backend: Facet grouping backend for the group component;
             defaults to ``StubFacetGroupingBackend()`` — no default egress,
             approved gated change 2, task 012.
+        synthesis_backend: Synthesis backend for the synthesise component;
+            defaults to ``StubSynthesisBackend()`` — no default egress.
+        grounding_judge_backend: Grounding judge backend for the synthesise component;
+            defaults to ``StubGroundingJudgeBackend()`` — no default egress.
 
     Returns:
         Persisted IDs; ``artefact_id`` is None for non-echo components that do
@@ -524,6 +633,14 @@ def run_harness(
             facet_grouping_backend
             if facet_grouping_backend is not None
             else StubFacetGroupingBackend()
+        ),
+        "synthesis_backend": (
+            synthesis_backend if synthesis_backend is not None else StubSynthesisBackend()
+        ),
+        "grounding_judge_backend": (
+            grounding_judge_backend
+            if grounding_judge_backend is not None
+            else StubGroundingJudgeBackend()
         ),
         "block_ids": {},
         "error": None,
