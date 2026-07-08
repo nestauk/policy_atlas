@@ -27,6 +27,7 @@ from policy_atlas.schema import (
     block,
     runs,
     selection_result,
+    source_classification_result,
     source_screening_result,
 )
 from policy_atlas.select import (
@@ -53,6 +54,7 @@ from tests.helpers import (
     seed_run,
     seed_scope,
     seed_select_doc,
+    seed_source,
 )
 
 NON_EVIDENCE_TYPE = "Other (Non-evidence documents)"
@@ -92,6 +94,125 @@ def _docs(
         seed_select_doc(conn, project_id, run_id, scope_id, title=f"{prefix}-{index}")
         for index in range(count)
     ]
+
+
+def _seed_two_stage_doc(
+    conn: Connection,
+    project_id: uuid.UUID,
+    run_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    *,
+    title: str,
+    stage_rows: list[tuple[int, str, float | None]],
+) -> uuid.UUID:
+    """Seed a source with arbitrary raw source_screening_result rows.
+
+    ``stage_rows`` is ``(screen_stage, status, screen_decision_confidence)``
+    triples — raw inserts (not ``helpers.seed_screening_result``) so each row's
+    stage, status and confidence can be controlled independently, as the
+    effective-grain regression tests below need.
+    """
+    _, pss_id = seed_source(
+        conn, project_id, meta={"title": title, "abstract": f"Abstract for {title}.", "year": 2026}
+    )
+    for stage, status, confidence in stage_rows:
+        basis = None if status == "failed" else "title_abstract"
+        conn.execute(source_screening_result.insert().values(
+            source_screening_result_id=uuid.uuid4(),
+            evidence_scope_id=scope_id,
+            project_source_snapshot_id=pss_id,
+            project_id=project_id,
+            screened_by_run_id=run_id,
+            status=status,
+            screen_basis=basis,
+            screen_decision_confidence=confidence,
+            screen_stage=stage,
+            screened_at=now(),
+        ))
+    conn.execute(source_classification_result.insert().values(
+        source_classification_result_id=uuid.uuid4(),
+        evidence_scope_id=scope_id,
+        project_source_snapshot_id=pss_id,
+        project_id=project_id,
+        classified_by_run_id=run_id,
+        primary_evidence_type=EVIDENCE_TYPE,
+        classified_at=now(),
+    ))
+    return pss_id
+
+
+def test_screened_sources_effective_grain_four_shapes(conn: Connection) -> None:
+    """select's candidate set (screened_sources) reads the one effective row per doc.
+
+    Task 014 sweep: a demoted doc must be excluded (never leak in on its stale
+    stage-1 'relevant' row); a confirmed doc must be read once, at its stage-2
+    values; a stage-2-failed doc keeps its stage-1 values; a failed-then-
+    retried doc is read once, at the retry's values.
+    """
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+
+    demoted = _seed_two_stage_doc(
+        conn, pid, rid, scope_id, title="demoted",
+        stage_rows=[(1, "relevant", 0.9), (2, "not_relevant", 0.8)],
+    )
+    confirmed = _seed_two_stage_doc(
+        conn, pid, rid, scope_id, title="confirmed",
+        stage_rows=[(1, "relevant", 0.4), (2, "relevant", 0.95)],
+    )
+    failed_stage2 = _seed_two_stage_doc(
+        conn, pid, rid, scope_id, title="failed-stage2",
+        stage_rows=[(1, "relevant", 0.7), (2, "failed", None)],
+    )
+    retried = _seed_two_stage_doc(
+        conn, pid, rid, scope_id, title="retried",
+        stage_rows=[(1, "failed", None), (1, "relevant", 0.55)],
+    )
+
+    seed_characterisation(
+        conn, pid, scope_id, rid,
+        themes={"A": [demoted, confirmed, failed_stage2, retried]},
+    )
+
+    summary, row, _ = run_select(
+        conn, pid, scope_id, rid, context={"selection": {"budget": 10}}
+    )
+
+    # demoted excluded: the candidate set (and screened_in base) reflects only
+    # the three effective-relevant docs, never the demoted doc's stale stage-1 row.
+    assert summary["base"] == {"screened_in": 3, "non_evidence": 0, "eligible": 3}
+
+    records = {record["pss_id"]: record for record in row._mapping["selected"]}
+    assert str(demoted) not in records
+    assert set(records) == {str(confirmed), str(failed_stage2), str(retried)}
+
+    # confirmed: stage-2 confidence (0.95) is what select sees, never stage-1's (0.4).
+    assert records[str(confirmed)]["signals"]["screen_confidence"] == pytest.approx(0.95)
+    assert records[str(confirmed)]["screen_stage"] == 2
+    weights = row._mapping["selection_provenance"]["effective_weights"]
+    confirmed_signals = records[str(confirmed)]["signals"]
+    assert records[str(confirmed)]["composite"] == pytest.approx(
+        sum(weights[signal] * confirmed_signals[signal] for signal in weights)
+    )
+    stage1_composite = sum(
+        weights[signal]
+        * (0.4 if signal == "screen_confidence" else confirmed_signals[signal])
+        for signal in weights
+    )
+    assert records[str(confirmed)]["composite"] != pytest.approx(stage1_composite)
+
+    # failed stage-2: stage-1 values stand.
+    assert records[str(failed_stage2)]["signals"]["screen_confidence"] == pytest.approx(0.7)
+    assert records[str(failed_stage2)]["screen_stage"] == 1
+
+    # failed-then-retried: included once, at the retry's (stage-1) values.
+    assert records[str(retried)]["signals"]["screen_confidence"] == pytest.approx(0.55)
+    assert records[str(retried)]["screen_stage"] == 1
+
+    # thin_base counts effective confidences: confirmed's stage-2 0.95 and the
+    # failed-stage-2 doc's standing stage-1 0.7 are the only sufficiently
+    # confident effective rows.
+    assert row._mapping["flags"]["thin_base"] == {"sufficiently_confident": 2, "floor": 10}
 
 
 def test_allocation_math_matches_hand_computed_fixture(conn: Connection) -> None:
@@ -831,6 +952,7 @@ def test_missing_signals_flag_not_block() -> None:
         text_basis="full_text",
         screen_basis="title_abstract",
         screen_confidence=None,  # NULL screen confidence
+        screen_stage=1,
         primary_evidence_type=EVIDENCE_TYPE,
         quality_score=None,  # no appraisal row
         rubric_version=None,

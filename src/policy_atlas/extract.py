@@ -64,6 +64,7 @@ from policy_atlas.schema import (
     source_extraction_record,
     source_snapshot,
 )
+from policy_atlas.windowing import greedy_windows as _shared_greedy_windows
 
 log = structlog.get_logger()
 
@@ -420,57 +421,19 @@ def _resolve_basis(doc: _Doc) -> None:
     )
 
 
-def _split_oversize(segment_id: str, content: str) -> list[tuple[str, str]]:
-    """Deterministically char-split an oversize segment into overlapping parts."""
-    parts: list[tuple[str, str]] = []
-    index = 0
-    start = 0
-    length = len(content)
-    while start < length:
-        parts.append((f"{segment_id}#p{index}", content[start : start + WINDOW_CHAR_BUDGET]))
-        index += 1
-        if start + WINDOW_CHAR_BUDGET >= length:
-            break
-        # max(1, …) guards termination should the overlap ever be configured
-        # at or above the budget (impossible with the shipped constants).
-        start = start + max(1, WINDOW_CHAR_BUDGET - OVERSIZE_SUBSEGMENT_OVERLAP)
-    return parts
-
-
 def _greedy_windows(segments: list[tuple[str, str]]) -> list[list[tuple[str, str]]]:
-    """Greedy ordered windows over pre-split segments, overlapping by one segment."""
-    windows: list[list[tuple[str, str]]] = []
-    i = 0
-    n = len(segments)
-    while i < n:
-        window: list[tuple[str, str]] = []
-        total = 0
-        j = i
-        while j < n:
-            seg_len = len(segments[j][1])
-            if window and total + seg_len > WINDOW_CHAR_BUDGET:
-                break
-            window.append(segments[j])
-            total += seg_len
-            j += 1
-        windows.append(window)
-        if j >= n:
-            break
-        # Repeat the last segment as the next window's first (overlap = 1), but
-        # never regress: a single-segment window advances by one instead.
-        i = max(j - WINDOW_OVERLAP_CHUNKS, i + 1)
-    return windows
+    """Greedy ordered windows using extraction's pinned constants."""
+    return _shared_greedy_windows(
+        segments,
+        char_budget=WINDOW_CHAR_BUDGET,
+        overlap_segments=WINDOW_OVERLAP_CHUNKS,
+        oversize_overlap_chars=OVERSIZE_SUBSEGMENT_OVERLAP,
+    )
 
 
 def _window_payloads(doc: _Doc, segments: list[tuple[str, str]]) -> list[ExtractionWindowPayload]:
-    split: list[tuple[str, str]] = []
-    for segment_id, content in segments:
-        if len(content) <= WINDOW_CHAR_BUDGET:
-            split.append((segment_id, content))
-        else:
-            split.extend(_split_oversize(segment_id, content))
     payloads: list[ExtractionWindowPayload] = []
-    for window_index, window in enumerate(_greedy_windows(split)):
+    for window_index, window in enumerate(_greedy_windows(segments)):
         payloads.append(
             ExtractionWindowPayload(
                 pss_id=str(doc.pss_id),

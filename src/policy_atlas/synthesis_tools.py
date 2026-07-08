@@ -42,11 +42,11 @@ from policy_atlas.schema import (
     source_appraisal_result,
     source_classification_result,
     source_extraction_record,
-    source_screening_result,
     source_snapshot,
     source_tag,
 )
 from policy_atlas.schema import chunk as chunk_table
+from policy_atlas.screen import effective_screen_rows
 from policy_atlas.tags import has_control_character
 
 if TYPE_CHECKING:
@@ -646,6 +646,10 @@ def build_retrieval_scope(
         ),
         else_=project_source_snapshot.c.source_snapshot_id,
     ).label("text_snapshot_id")
+    # Screened-in scope = effective-relevant join via the helper (never a raw
+    # status='relevant' join, which would leak in demoted docs and double-read
+    # confirmed ones).
+    effective = effective_screen_rows()
     screened_docs = (
         sa_select(
             project_source_snapshot.c.project_source_snapshot_id.label("pss_id"),
@@ -657,14 +661,14 @@ def build_retrieval_scope(
             source_classification_result.c.primary_evidence_type,
             source_appraisal_result.c.quality_score,
         )
-        .select_from(source_screening_result)
+        .select_from(effective)
         .join(
             project_source_snapshot,
             (
                 project_source_snapshot.c.project_source_snapshot_id
-                == source_screening_result.c.project_source_snapshot_id
+                == effective.c.project_source_snapshot_id
             )
-            & (project_source_snapshot.c.project_id == source_screening_result.c.project_id),
+            & (project_source_snapshot.c.project_id == effective.c.project_id),
         )
         .join(
             source_snapshot,
@@ -688,9 +692,9 @@ def build_retrieval_scope(
             & (source_appraisal_result.c.project_id == project_id)
             & (source_appraisal_result.c.evidence_scope_id == scope_id),
         )
-        .where(source_screening_result.c.project_id == project_id)
-        .where(source_screening_result.c.evidence_scope_id == scope_id)
-        .where(source_screening_result.c.status == "relevant")
+        .where(effective.c.project_id == project_id)
+        .where(effective.c.evidence_scope_id == scope_id)
+        .where(effective.c.status == "relevant")
         .where(
             (project_source_snapshot.c.full_text_status == "ingested")
             | (source_snapshot.c.text_basis == "full_text")
@@ -1331,12 +1335,17 @@ def _ensure_kind(arguments: dict[str, Any]) -> str:
 
 
 def _screened_in_doc_ids(project_id: uuid.UUID, scope_id: uuid.UUID) -> Any:
-    """Select of this scope's screened-in doc ids — the lookup read boundary."""
+    """Select of this scope's screened-in doc ids — the lookup read boundary.
+
+    Effective-relevant via the helper (never a raw status='relevant' join),
+    per the same screened-in-scope rule as ``_load_retrieval_scope``.
+    """
+    effective = effective_screen_rows()
     return (
-        sa_select(source_screening_result.c.project_source_snapshot_id)
-        .where(source_screening_result.c.project_id == project_id)
-        .where(source_screening_result.c.evidence_scope_id == scope_id)
-        .where(source_screening_result.c.status == "relevant")
+        sa_select(effective.c.project_source_snapshot_id)
+        .where(effective.c.project_id == project_id)
+        .where(effective.c.evidence_scope_id == scope_id)
+        .where(effective.c.status == "relevant")
     )
 
 

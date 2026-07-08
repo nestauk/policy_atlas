@@ -873,7 +873,9 @@ def test_full_chain_over_both_fixture_corpora(conn: Connection) -> None:
         .where(ssr.c.screen_basis == "title_only")
     ).fetchall()
     assert title_only_rows
-    assert all(row[0] == 0.7 for row in title_only_rows)
+    # approx: the persisted value is a 3-rep consensus mean (task 014), so
+    # 0.7 arrives with float-mean noise.
+    assert all(row[0] == pytest.approx(0.7) for row in title_only_rows)
 
     classified = classify_sources(
         conn, project_id=pid, run_id=rid,

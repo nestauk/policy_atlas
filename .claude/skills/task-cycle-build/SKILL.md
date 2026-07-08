@@ -56,6 +56,11 @@ tests ran in seconds):
   them under test-fast; 011 phase 1 hit exactly this coupling), and the **step-6 exit**.
 - The tiering changes *which suite runs*, never the rule: any red is still a full stop,
   and no commit lands on a red gate.
+- **The plan's gate map is binding** (failure-log, 2026-07-08): which phase boundaries
+  carry full verify vs verify-fast was decided at the plan gate — consecutive low-risk
+  phases may share one full-verify gate there. Don't add full-verify runs mid-build
+  "to be safe" (014 ran six where three carried the signal), and don't downgrade a
+  plan-marked full gate either.
 
 **When building reveals a design problem**, size it before reacting:
 - **Blocking / material** (the contract or a spec is wrong enough to change the design):
@@ -68,16 +73,28 @@ tests ran in seconds):
 
 Durable records (`docs/knowledge/`, `docs/deferred.md`, agentic-ops claims) are authored
 **after** the review stack finalises the code — at step 8, not here — so they describe
-what actually shipped.
+what actually shipped. But **capture is this phase's job** (014 retro, 2026-07-08): what
+the build learned dies at the conversation boundary unless it's written into the handoff —
+step 6's knowledge-candidates list below is where.
 
 ## Step 6 — Verify
 
 Fill `docs/tasks/_templates/verification.md` → `docs/tasks/NNN-slug/verification.md`:
 `make verify` table, named-test results, the **exact** end-to-end command, diff summary
-(flagging any minor deviations per above), public-safety, gaps.
+(flagging any minor deviations per above), public-safety, gaps, and the **knowledge
+candidates** list in § Review handoff (014 retro, 2026-07-08): one bullet per
+durable-seeming lesson the build hit, however raw — surprises, gotchas, invariants that
+held for a non-obvious reason — *not just* flagged deviations. Step 8 authors
+`docs/knowledge/` from this list plus the review findings, against the final code; a
+lesson that never makes the list is invisible to that conversation, which is how
+step-8 knowledge drifted review-biased on 012–014 (the 014 `__main__`-guard/spawn lesson
+made verification.md only as an incident note and became knowledge nowhere).
 
 Drive the affected flow end-to-end with `/verify` (exercises real behaviour, not just
-tests) — the flow it drove supplies the exact end-to-end command. If `make verify` is red,
+tests) — the flow it drove supplies the exact end-to-end command. **The live check runs
+at the scope the contract pinned** (failure-log, 2026-07-08: default = changed surfaces
++ one cheap full-chain smoke; full live e2e only where the contract bought it) — a
+bigger live run than contracted is spend the gate never approved, not extra rigour. If `make verify` is red,
 root-cause it — don't guess. When the stop condition is objective (`make verify` green, a
 named test), a `/goal` may drive the implement ↔ verify inner loop; judgment-call phases
 never — they end at a 🛑.

@@ -900,6 +900,7 @@ def _selected_record(
         "stratum": stratum_name,
         "reason": reason,
         "text_basis": signal_doc.candidate.source.text_basis,
+        "screen_stage": signal_doc.candidate.source.screen_stage,
         "signals": signal_doc.signals,
         "missing_signals": signal_doc.missing_signals,
         "composite": signal_doc.composite,

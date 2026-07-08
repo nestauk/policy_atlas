@@ -26,6 +26,7 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [structlog is the only logger](logging-structlog.md) - all log calls go through structlog; no print / stdlib logging.
 * [Tests run against the dev DB in a rolled-back transaction](testing-database.md) - no separate test database; point `DATABASE_URL` somewhere disposable.
 * [Reject model output at the grain of the fault — and persist the reason](validation-reject-at-fault-grain.md) - text-rule violations reject the unit and route it to repair; only id/envelope corruption rejects whole-response; rejection reasons persist with the run (012 fix via the 013 review stack).
+* [Untrusted text enters prompts only as JSON-encoded records](untrusted-prompt-fields-json-records.md) - sanitization alone is not the boundary: the sanitizer preserves newlines, so raw interpolation lets a multi-line field fabricate template structure; every field rides inside `json.dumps`, allowlists re-validated at assembly (task 014 review stack, security lane).
 
 ## Testing rules
 
@@ -49,6 +50,7 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [Grounding locations come from the verifier, never the model's claim](grounding-location-from-verification.md) - a model-emitted segment/chunk id is untrusted claim data; every dereferenceable location field derives from the verified spans (task 011, convergent review finding).
 * [Chunk-claim quotes verify against the whole-document basis](synthesis-quote-whole-doc-basis.md) - one citation row per spanned chunk, so a row's chunk_id can name a chunk the loop never received; `gathered_ids` records what the loop saw (task 013, rev 8 B2).
 * [Same-run re-execution fails loud before the first write](fail-loud-before-first-write.md) - a DB-error failure poisons the transaction and kills the harness's own component.failed event write; pre-write guards keep declared failure modes off the constraint path (task 013 review stack).
+* [Every screening consumer resolves the effective row — including write paths](effective-screen-row-read-rule.md) - highest-stage non-failed via `effective_screen_rows()`; raw `status='relevant'` joins re-admit demoted docs, and classification-driven write paths (appraise) are the shape grep audits miss (task 014 review stack, adversarial lane).
 
 ## Integration quirks (model / telemetry providers)
 

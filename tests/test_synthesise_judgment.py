@@ -514,6 +514,39 @@ def test_screened_out_doc_unreachable(conn: Connection) -> None:
     assert scope.chunks == {}
 
 
+def test_demoted_doc_unreachable_in_retrieval_scope(conn: Connection) -> None:
+    """A stage-2-demoted doc's stale stage-1 'relevant' row must never leak into
+    the retrieval scope or the lookup tool's screened-in doc ids (task 014 sweep:
+    both reads must use the effective row, not a raw status='relevant' join)."""
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="demoted doc")
+    # seed_select_doc already seeded the stage-1 relevant row; add the stage-2
+    # demotion on top of it.
+    seed_screening_result(
+        conn, project_id, run_id, scope_id, pss_id, status="not_relevant", screen_stage=2
+    )
+    seed_ingested_full_text(conn, pss_id=pss_id, chunks=["Demoted at stage 2."])
+
+    scope = build_retrieval_scope(
+        conn, project_id=project_id, scope_id=scope_id, selected_pss_ids=set()
+    )
+    assert scope.units == []
+    assert scope.chunks == {}
+
+    reader = make_lookup_reader(
+        conn,
+        project_id=project_id,
+        scope_id=scope_id,
+        characterisation_run_id=None,
+        selection_run_id=None,
+        extraction_run_id=None,
+        grouping_run_id=None,
+    )
+    with pytest.raises(ToolValidationError):
+        reader({"kind": "tags_by_doc", "doc_id": str(pss_id)})
+
+
 # --- Test 7: ledger / cross-section citation is rejected ---
 
 

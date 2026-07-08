@@ -46,12 +46,12 @@ from policy_atlas.schema import (
     selection_result,
     source_appraisal_result,
     source_extraction_record,
-    source_screening_result,
     source_snapshot,
     synthesis_result,
 )
 from policy_atlas.schema import chunk as chunk_table
 from policy_atlas.schema import citation as citation_table
+from policy_atlas.screen import effective_screen_rows
 from policy_atlas.synthesis_backend import (
     FORBIDDEN_SECTION_TITLES,
     SECTION_FOCUS_MAX,
@@ -687,6 +687,10 @@ def _load_corpus_profile(
     project_id: uuid.UUID,
     scope_id: uuid.UUID,
 ) -> CorpusProfile:
+    # Screened-in scope = effective-relevant join via the helper (never a raw
+    # status='relevant' join, which would leak in demoted docs and double-count
+    # confirmed ones).
+    effective = effective_screen_rows()
     relevant_rows = conn.execute(
         sa_select(
             project_source_snapshot.c.project_source_snapshot_id,
@@ -694,14 +698,14 @@ def _load_corpus_profile(
             source_snapshot.c.text_basis,
             source_appraisal_result.c.source_appraisal_result_id,
         )
-        .select_from(source_screening_result)
+        .select_from(effective)
         .join(
             project_source_snapshot,
             (
                 project_source_snapshot.c.project_source_snapshot_id
-                == source_screening_result.c.project_source_snapshot_id
+                == effective.c.project_source_snapshot_id
             )
-            & (project_source_snapshot.c.project_id == source_screening_result.c.project_id),
+            & (project_source_snapshot.c.project_id == effective.c.project_id),
         )
         .join(
             source_snapshot,
@@ -717,9 +721,9 @@ def _load_corpus_profile(
             & (source_appraisal_result.c.project_id == project_id)
             & (source_appraisal_result.c.evidence_scope_id == scope_id),
         )
-        .where(source_screening_result.c.project_id == project_id)
-        .where(source_screening_result.c.evidence_scope_id == scope_id)
-        .where(source_screening_result.c.status == "relevant")
+        .where(effective.c.project_id == project_id)
+        .where(effective.c.evidence_scope_id == scope_id)
+        .where(effective.c.status == "relevant")
         .order_by(project_source_snapshot.c.project_source_snapshot_id)
     ).fetchall()
     appraised_pss_ids: set[str] = set()
@@ -782,6 +786,10 @@ def _load_screened_chunks(
         ),
         else_=project_source_snapshot.c.source_snapshot_id,
     )
+    # Screened-in scope = effective-relevant join via the helper (same rule as
+    # _load_corpus_profile — a second, previously-missed raw source_screening_
+    # result consumer feeding the synthesise chunk lane).
+    effective = effective_screen_rows()
     rows = conn.execute(
         sa_select(
             project_source_snapshot.c.project_source_snapshot_id,
@@ -791,14 +799,14 @@ def _load_screened_chunks(
             chunk_table.c.content,
             chunk_table.c.segmentation_policy,
         )
-        .select_from(source_screening_result)
+        .select_from(effective)
         .join(
             project_source_snapshot,
             (
                 project_source_snapshot.c.project_source_snapshot_id
-                == source_screening_result.c.project_source_snapshot_id
+                == effective.c.project_source_snapshot_id
             )
-            & (project_source_snapshot.c.project_id == source_screening_result.c.project_id),
+            & (project_source_snapshot.c.project_id == effective.c.project_id),
         )
         .join(
             source_snapshot,
@@ -806,9 +814,9 @@ def _load_screened_chunks(
             == project_source_snapshot.c.source_snapshot_id,
         )
         .join(chunk_table, chunk_table.c.source_snapshot_id == text_snapshot_id)
-        .where(source_screening_result.c.project_id == project_id)
-        .where(source_screening_result.c.evidence_scope_id == scope_id)
-        .where(source_screening_result.c.status == "relevant")
+        .where(effective.c.project_id == project_id)
+        .where(effective.c.evidence_scope_id == scope_id)
+        .where(effective.c.status == "relevant")
         .where(
             (project_source_snapshot.c.full_text_status == "ingested")
             | (source_snapshot.c.text_basis == "full_text")

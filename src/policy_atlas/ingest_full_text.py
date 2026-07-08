@@ -619,6 +619,13 @@ def ingest_full_text_sources(
         )
         .where(source_screening_result.c.evidence_scope_id == context.scope_id)
         .where(source_screening_result.c.status == "relevant")
+        # Stage-1 relevant ONLY: stage 2 runs post-ingestion (it needs the full
+        # text this component produces), so fetch must never consult stage-2
+        # rows. The effective-screen-rows helper ranks by highest stage, which
+        # would return a stage-2 verdict once one exists — wrong for this
+        # reader — so this filters screen_stage inline instead (screen.py's
+        # unique-non-failed-per-stage constraint means at most one such row).
+        .where(source_screening_result.c.screen_stage == 1)
         .where(project_source_snapshot.c.project_id == project_id)
         .where(project_source_snapshot.c.origin == "acquired")
         .order_by(project_source_snapshot.c.project_source_snapshot_id)

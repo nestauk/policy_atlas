@@ -4,6 +4,75 @@ Recurring issues encountered during the task cycle. Each entry: what happened, r
 
 ---
 
+## 2026-07-08 — Step-8 knowledge drifted review-biased: build lessons died at the B→C conversation boundary
+
+**Task:** 012–014 pattern, spotted by the user at the 014 review close.
+
+**What happened:** Knowledge concepts are authored at step 8 by the review conversation
+(C), and over 012–014 the committed knowledge skewed toward what the review lanes found
+rather than what the build learned. 014 is the clean specimen: both concepts came from
+review findings (appraise write-path grain; JSON-record prompt rule), while the build's
+best genuinely-new lesson — multiprocessing spawn re-imports the module, so live-run
+wrappers need the `__main__` guard — became knowledge nowhere and didn't even reach
+environment.md's gotchas, because by step 8 it read as a process incident, not a
+candidate lesson.
+
+**Root cause:** Information loss across the build→review conversation boundary, not the
+timing of authoring. C authors from what it can see: the diff, its own findings, and
+verification.md. Build-derived knowledge only ever survived when it happened to be
+written down as a *flagged deviation* (011's reasoning-cap and NUL-scrub concepts);
+lessons that weren't deviations had no home in the handoff. Moving authoring to step 6
+would be the wrong fix — the knowledge index requires concepts written against
+post-review code (014's review changed the very surfaces a step-6 concept would have
+described).
+
+**Fix (installed 2026-07-08):** capture at step 6, author at step 8. The verification.md
+template gains a **§ Review handoff → Knowledge candidates** list (one bullet per
+durable-seeming build lesson, however raw — not just deviations; empty on a non-trivial
+slice is a smell); task-cycle-build § Step 6 requires filling it; task-cycle-review
+§ Step 8 authors `docs/knowledge/` from candidates + findings and adjudicates each
+candidate like a finding (author / fold into existing concept / decline with reason).
+
+---
+
+## 2026-07-08 — Build wall time ~3h: full-chain live check + per-phase full-verify gates dominated a single slice
+
+**Task:** 014-llm-screen-classify (build phase)
+
+**What happened:** The 014 build ran ~190 minutes wall for one slice and the user
+flagged it as too long. Time accounting: ~60 min live check — of which ~50 min was the
+full skeleton e2e, dominated by the *downstream* live chain (four synthesise profiles,
+extraction, judge calls) while the slice's own new surfaces (screen ×3 reps, stage-2,
+classify) needed ~2 minutes of model time; ~45 min across SIX full `make verify` runs
+(baseline, phase 1 twice — one red, phase 4, phase 6, step-6 exit); ~15–20 min of
+lead polling slack between agent completions. The delegated implementation itself
+(4 codex jobs + 4 fast-worker tasks, mostly dependency-serial) was well spent.
+
+**Root cause:** Two rules were applied at their defaults instead of being sized to the
+slice at design time. (1) The contract pinned the live check as "skeleton e2e" because
+that was the 013 shape — nobody asked at the contract gate whether full-chain evidence
+was needed when only two components changed; the acceptance check silently bought the
+whole live back-half. (2) The tiered commit gate (011 retro) mandates full verify at
+"any schema/ingest-adjacent phase" plus baseline and exit — on a 7-phase plan whose
+early phases were low-risk (prompt modules, backend seams: new files, no schema/reader
+contact after phase 1), that yielded six full-suite runs where three would have carried
+the same signal.
+
+**Fix (installed in task-cycle-design § Step 1 + § Step 3, task-cycle-build § Step 5 +
+§ Step 6, harness.md § Verification layer):** two design/plan-gate levers, decided
+where the human already reviews. (1) **Live-check scope is a contract-time pin**: the
+acceptance checks must name what the live check covers — default = a live run scoped
+to the changed surfaces plus one cheap full-chain smoke; full live e2e only when the
+slice's risk profile demands it, with the wall-time cost named at the gate. (2) **Gate
+consolidation is a plan-time call**: the plan marks which phase boundaries carry a full
+`make verify` and which share one — consecutive low-risk phases may share a single
+full-verify gate, argued in the plan and reviewed at the plan 🛑. Both stay decisions
+the gates see, never mid-build improvisations; never-commit-on-red and the mandatory
+full-verify points (baseline · schema/ingest-adjacent · step-6 exit) are unchanged in
+kind — consolidation only merges *adjacent* checkpoints, it never skips the classes.
+
+---
+
 ## 2026-07-08 — Review stack never read the live traces; a build-flagged anomaly survived adjudication unexamined
 
 **Task:** 013-synthesise (review phase)

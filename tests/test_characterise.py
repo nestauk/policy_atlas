@@ -182,6 +182,57 @@ def test_coverage_distributions_match_hand_computed(conn: Connection) -> None:
     assert sum(distributions["origin"].values()) == coverage["base_counts"]["screened_in"]
 
 
+def test_base_counts_effective_grain_four_shapes(conn: Connection) -> None:
+    """_base_counts reads the effective-stage-and-status row per doc (task 014 sweep).
+
+    Raw row counts would double-count a confirmed doc against project_sources
+    and go negative on unscreened for a failed-then-retried doc; both must be
+    counted exactly once, at their effective status.
+    """
+    from policy_atlas.characterise import _base_counts
+
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+
+    # demoted: stage-1 relevant + stage-2 not_relevant -> not_relevant, not screened_in.
+    _, demoted = seed_source(conn, pid)
+    seed_screening_result(conn, pid, rid, scope_id, demoted, status="relevant", screen_stage=1)
+    seed_screening_result(conn, pid, rid, scope_id, demoted, status="not_relevant", screen_stage=2)
+
+    # confirmed: stage-1 relevant + stage-2 relevant -> screened_in once.
+    _, confirmed = seed_source(conn, pid)
+    seed_screening_result(conn, pid, rid, scope_id, confirmed, status="relevant", screen_stage=1)
+    seed_screening_result(conn, pid, rid, scope_id, confirmed, status="relevant", screen_stage=2)
+
+    # failed stage-2: stage-1 relevant + stage-2 failed -> screened_in, stage-1 stands.
+    _, failed_stage2 = seed_source(conn, pid)
+    seed_screening_result(
+        conn, pid, rid, scope_id, failed_stage2, status="relevant", screen_stage=1
+    )
+    seed_screening_result(conn, pid, rid, scope_id, failed_stage2, status="failed", screen_stage=2)
+
+    # failed-then-retried: stage-1 failed row + stage-1 relevant retry -> screened_in
+    # once, never double-counted against project_sources, unscreened never negative.
+    _, retried = seed_source(conn, pid)
+    seed_screening_result(conn, pid, rid, scope_id, retried, status="failed", screen_stage=1)
+    seed_screening_result(conn, pid, rid, scope_id, retried, status="relevant", screen_stage=1)
+
+    # all-attempts-failed: only a failed row -> screen_failed, never unscreened.
+    _, all_failed = seed_source(conn, pid)
+    seed_screening_result(conn, pid, rid, scope_id, all_failed, status="failed", screen_stage=1)
+
+    # genuinely unscreened: no screening rows at all.
+    seed_source(conn, pid)
+
+    counts = _base_counts(conn, project_id=pid, scope_id=scope_id)
+    assert counts == {
+        "screened_in": 3,
+        "not_relevant": 1,
+        "screen_failed": 1,
+        "unscreened": 1,
+    }
+
+
 def test_coverage_tag_distribution_keeps_asserters_separate(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)

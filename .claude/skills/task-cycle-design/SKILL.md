@@ -40,6 +40,13 @@ Then copy `docs/tasks/_templates/contract.md` → `docs/tasks/NNN-slug/contract.
 the specs it depends on *in depth*, not headings — if a spec looks wrong or incomplete,
 refine it first (§ Spec refinement).
 
+**Live-check scope is a contract-time pin** (failure-log, 2026-07-08): when the
+acceptance checks include a live manual check, name what it covers. Default = a live
+run scoped to the slice's changed surfaces plus one cheap full-chain smoke; a full live
+e2e is a deliberate upgrade the gate approves with its wall-time cost named (014's
+inherited "skeleton e2e" spent ~50 min of downstream live chain to evidence surfaces
+needing ~2 min). Don't inherit the previous slice's live-check shape by default.
+
 🛑 **Human approves the contract before planning** (Tier 2+).
 
 **Contract-stage adversarial review** (Tier 3+ standard; Tier 2 on demand): after the
@@ -91,6 +98,14 @@ The ladder (full version in harness.md):
 - Analysis-not-code → `deep-reasoner`; Codex takes the second seat in
   two-independent-takes.
 Re-deciding routing mid-build is the rationalisation the plan column exists to prevent.
+
+**Gate consolidation is likewise a plan-time call** (failure-log, 2026-07-08): the plan
+marks which phase boundaries carry a full `make verify` and which gate on
+`make verify-fast` — consecutive low-risk phases (new files, no schema/reader contact)
+may share a single full-verify gate, argued in the plan and reviewed at the plan 🛑.
+The mandatory full-verify classes (build-open baseline · schema/ingest-adjacent phases ·
+step-6 exit) are untouched; consolidation merges *adjacent* checkpoints, never skips a
+class. 014 ran six full-suite gates (~45 min) where three carried the same signal.
 
 **Plan-phase adversarial review** (Tier 3+ standard; Tier 2 on demand — a loose contract,
 a surprising plan, or reliance on a 🟡/❓ spec area): before the 🛑, the other family

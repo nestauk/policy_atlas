@@ -1,7 +1,6 @@
-"""Tests for the classify component — schema, stub logic, round-trips, harness integration."""
+"""Tests for the classify component — schema, backend seam, round-trips, harness integration."""
 
 import uuid
-from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -10,19 +9,28 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
 from policy_atlas import events
-from policy_atlas.classify import ClassifyContext, _stub_classify, classify_sources
+from policy_atlas.classification_backend import StubClassificationBackend
+from policy_atlas.classify import ClassifyContext, classify_sources
+from policy_atlas.classify_prompt import (
+    TAG_MAX_CHARS,
+    TAGS_MAX_PER_DOC,
+    ClassifyEnvelopePayload,
+)
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.plan import Plan, compile
 from policy_atlas.schema import (
+    METHODOLOGICAL_STRUCTURAL,
     metadata,
     runs,
     source_classification_result,
     source_screening_result,
+    source_tag,
 )
 from tests.helpers import (
     now,
     seed_project_and_run,
+    seed_run,
     seed_scope,
     seed_screening_result,
     seed_source,
@@ -36,24 +44,48 @@ def test_table_count(conn: Connection) -> None:
 
 # --- Stub logic (pure Python, no DB) ---
 
+def _stub_classify(metadata: dict[str, object]) -> str:
+    wire = StubClassificationBackend().classify(
+        ClassifyEnvelopePayload(
+            pss_id=str(uuid.uuid4()),
+            title="",
+            abstract=None,
+            priors={},
+            metadata=dict(metadata),
+        )
+    )
+    return wire.primary_evidence_type
+
+
 def test_stub_default_unknown() -> None:
-    result = _stub_classify({})
-    assert result.primary_evidence_type == "Unknown / Insufficient information"
+    assert _stub_classify({}) == "Unknown / Insufficient information"
 
 
 def test_stub_non_evidence() -> None:
-    result = _stub_classify({"_stub_non_evidence": True})
-    assert result.primary_evidence_type == "Other (Non-evidence documents)"
+    assert _stub_classify({"_stub_non_evidence": True}) == "Other (Non-evidence documents)"
 
 
 def test_stub_policy_guidance() -> None:
-    result = _stub_classify({"_stub_policy_guidance": True})
-    assert result.primary_evidence_type == "Policy Syntheses & Guidance Documents"
+    assert _stub_classify({"_stub_policy_guidance": True}) == (
+        "Policy Syntheses & Guidance Documents"
+    )
 
 
 def test_stub_rct() -> None:
-    result = _stub_classify({"_stub_rct": True})
-    assert result.primary_evidence_type == "RCTs and Quasi-Experimental Studies"
+    assert _stub_classify({"_stub_rct": True}) == "RCTs and Quasi-Experimental Studies"
+
+
+def test_stub_failure_sentinel_raises() -> None:
+    with pytest.raises(RuntimeError):
+        StubClassificationBackend().classify(
+            ClassifyEnvelopePayload(
+                pss_id=str(uuid.uuid4()),
+                title="",
+                abstract=None,
+                priors={},
+                metadata={"_stub_classify_failed": True},
+            )
+        )
 
 
 # --- Round-trips ---
@@ -75,6 +107,40 @@ def test_classify_sources_round_trip(conn: Connection) -> None:
     assert len(rows) == 1
     assert rows[0].evidence_scope_id == scope_id
     assert rows[0].project_source_snapshot_id == pss_id
+
+
+def test_classify_sources_fan_out_by_type_matches_sentinels(conn: Connection) -> None:
+    """Multiple sentinel-driven docs classify to their sentinel's type in one run."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _, pss_rct = seed_source(conn, pid, meta={"_stub_rct": True})
+    _, pss_policy = seed_source(conn, pid, meta={"_stub_policy_guidance": True})
+    _, pss_qual = seed_source(conn, pid, meta={"_stub_qualitative": True})
+    _, pss_unknown = seed_source(conn, pid)
+    for pss_id in (pss_rct, pss_policy, pss_qual, pss_unknown):
+        seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant")
+
+    ctx = ClassifyContext(scope_id=scope_id, intent="Test", context={})
+    counts = classify_sources(conn, project_id=pid, run_id=rid, context=ctx)
+
+    assert counts["classified"] == 4
+    assert counts["by_type"] == {
+        "RCTs and Quasi-Experimental Studies": 1,
+        "Policy Syntheses & Guidance Documents": 1,
+        "Qualitative & Contextual Evidence": 1,
+        "Unknown / Insufficient information": 1,
+    }
+    rows = conn.execute(
+        select(
+            source_classification_result.c.project_source_snapshot_id,
+            source_classification_result.c.primary_evidence_type,
+        ).where(source_classification_result.c.project_id == pid)
+    ).fetchall()
+    by_pss = {r.project_source_snapshot_id: r.primary_evidence_type for r in rows}
+    assert by_pss[pss_rct] == "RCTs and Quasi-Experimental Studies"
+    assert by_pss[pss_policy] == "Policy Syntheses & Guidance Documents"
+    assert by_pss[pss_qual] == "Qualitative & Contextual Evidence"
+    assert by_pss[pss_unknown] == "Unknown / Insufficient information"
 
 
 def test_classify_sources_non_evidence_persists(conn: Connection) -> None:
@@ -120,24 +186,73 @@ def test_classify_sources_skips_failed(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
     _, pss_failed = seed_source(conn, pid)
-    # Insert failed row manually (no basis/confidence)
-    conn.execute(source_screening_result.insert().values(
-        source_screening_result_id=uuid.uuid4(),
-        evidence_scope_id=scope_id,
-        project_source_snapshot_id=pss_failed,
-        project_id=pid,
-        screened_by_run_id=rid,
-        status="failed",
-        screen_basis=None,
-        screen_decision_confidence=None,
-        screened_at=now(),
-    ))
+    # Failed rows are attempt history; two raw failures for one source still
+    # count as one effective skipped source.
+    for _ in range(2):
+        conn.execute(source_screening_result.insert().values(
+            source_screening_result_id=uuid.uuid4(),
+            evidence_scope_id=scope_id,
+            project_source_snapshot_id=pss_failed,
+            project_id=pid,
+            screened_by_run_id=rid,
+            status="failed",
+            screen_basis=None,
+            screen_decision_confidence=None,
+            screened_at=now(),
+        ))
 
     ctx = ClassifyContext(scope_id=scope_id, intent="Test", context={})
     counts = classify_sources(conn, project_id=pid, run_id=rid, context=ctx)
 
     assert counts["classified"] == 0
     assert counts["skipped"] == 1
+
+
+def test_classify_sources_uses_effective_screen_rows(conn: Connection) -> None:
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _, pss_demoted = seed_source(conn, pid, meta={"_stub_rct": True})
+    _, pss_confirmed = seed_source(conn, pid, meta={"_stub_policy_guidance": True})
+    seed_screening_result(conn, pid, rid, scope_id, pss_demoted, status="relevant")
+    seed_screening_result(conn, pid, rid, scope_id, pss_confirmed, status="relevant")
+    conn.execute(source_screening_result.insert().values(
+        source_screening_result_id=uuid.uuid4(),
+        evidence_scope_id=scope_id,
+        project_source_snapshot_id=pss_demoted,
+        project_id=pid,
+        screened_by_run_id=rid,
+        status="not_relevant",
+        screen_basis="title_abstract",
+        screen_decision_confidence=0.95,
+        screen_stage=2,
+        screened_at=now(),
+    ))
+    conn.execute(source_screening_result.insert().values(
+        source_screening_result_id=uuid.uuid4(),
+        evidence_scope_id=scope_id,
+        project_source_snapshot_id=pss_confirmed,
+        project_id=pid,
+        screened_by_run_id=rid,
+        status="relevant",
+        screen_basis="title_abstract",
+        screen_decision_confidence=0.9,
+        screen_stage=2,
+        screened_at=now(),
+    ))
+
+    ctx = ClassifyContext(scope_id=scope_id, intent="Test", context={})
+    counts = classify_sources(conn, project_id=pid, run_id=rid, context=ctx)
+
+    assert counts["classified"] == 1
+    assert counts["skipped"] == 1
+    rows = conn.execute(
+        select(source_classification_result).where(
+            source_classification_result.c.project_id == pid
+        )
+    ).fetchall()
+    assert len(rows) == 1
+    assert rows[0].project_source_snapshot_id == pss_confirmed
+    assert rows[0].primary_evidence_type == "Policy Syntheses & Guidance Documents"
 
 
 def test_classify_count_invariant(conn: Connection) -> None:
@@ -279,24 +394,11 @@ def test_cross_project_fk_rejected(conn: Connection) -> None:
     conn.begin()
 
 
-def test_classify_sources_doc_exception_isolated(
-    conn: Connection, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """One document's classify exception falls back to Unknown; other docs still process."""
-    import policy_atlas.classify as classify_mod
-
-    original = classify_mod._stub_classify
-
-    def flaky(meta: dict[str, Any]) -> Any:
-        if meta.get("_boom"):
-            raise RuntimeError("simulated per-doc failure")
-        return original(meta)
-
-    monkeypatch.setattr(classify_mod, "_stub_classify", flaky)
-
+def test_classify_sources_doc_exception_isolated(conn: Connection) -> None:
+    """One document's classify exception writes no row; other docs still process."""
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
-    _, pss_boom = seed_source(conn, pid, meta={"_boom": True})
+    _, pss_boom = seed_source(conn, pid, meta={"_stub_classify_failed": True})
     _, pss_fine = seed_source(conn, pid, meta={"_stub_rct": True})
     seed_screening_result(conn, pid, rid, scope_id, pss_boom, status="relevant")
     seed_screening_result(conn, pid, rid, scope_id, pss_fine, status="relevant")
@@ -304,15 +406,31 @@ def test_classify_sources_doc_exception_isolated(
     ctx = ClassifyContext(scope_id=scope_id, intent="Test", context={})
     counts = classify_sources(conn, project_id=pid, run_id=rid, context=ctx)
 
-    assert counts["classified"] == 2
+    assert counts["classified"] == 1
+    assert counts["failed"] == 1
+    assert counts["retries"] == 1
     rows = conn.execute(
         select(source_classification_result).where(
             source_classification_result.c.project_id == pid
         )
     ).fetchall()
     by_pss = {r.project_source_snapshot_id: r.primary_evidence_type for r in rows}
-    assert by_pss[pss_boom] == "Unknown / Insufficient information"
+    assert pss_boom not in by_pss
     assert by_pss[pss_fine] == "RCTs and Quasi-Experimental Studies"
+    classified_events = [
+        e for e in events.read(conn, pid) if e["event_type"] == "source.classified"
+    ]
+    assert [e["payload"]["project_source_snapshot_id"] for e in classified_events] == [
+        str(pss_fine)
+    ]
+
+    retry_run = seed_run(conn, pid)
+    retry_counts = classify_sources(conn, project_id=pid, run_id=retry_run, context=ctx)
+
+    assert retry_counts["classified"] == 0
+    assert retry_counts["already_classified"] == 1
+    assert retry_counts["failed"] == 1
+    assert retry_counts["retries"] == 1
 
 
 # --- Harness integration ---
@@ -380,6 +498,51 @@ def test_source_classified_event_payload(conn: Connection) -> None:
     assert p["project_source_snapshot_id"] == str(pss_id)
     assert p["evidence_scope_id"] == str(scope_id)
     assert p["primary_evidence_type"] == "Unknown / Insufficient information"
+    assert p["confidence"] == 0.9
+    assert p["reason"] == "Deterministic stub classification."
+    assert p["tags"] == []
+
+
+def test_classify_sources_writes_bounded_methodological_tags(conn: Connection) -> None:
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    valid_tags = [f"method tag {index}" for index in range(TAGS_MAX_PER_DOC + 2)]
+    wire_tags = [
+        " longitudinal cohort ",
+        "",
+        "multi-country comparison",
+        "multi-country comparison",
+        "x" * (TAG_MAX_CHARS + 1),
+        "bad\ncontrol",
+        *valid_tags,
+    ]
+    _, pss_id = seed_source(
+        conn,
+        pid,
+        meta={"_stub_policy_guidance": True, "_stub_tags": wire_tags},
+    )
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant")
+
+    ctx = ClassifyContext(scope_id=scope_id, intent="Test", context={})
+    counts = classify_sources(conn, project_id=pid, run_id=rid, context=ctx)
+
+    expected_tags = ["longitudinal cohort", "multi-country comparison", *valid_tags[:8]]
+    assert counts["classified"] == 1
+    assert counts["tags_written"] == TAGS_MAX_PER_DOC
+    assert counts["tags_rejected"] == 6
+    rows = conn.execute(
+        select(source_tag.c.tag, source_tag.c.tag_type, source_tag.c.asserted_by)
+        .where(source_tag.c.project_source_snapshot_id == pss_id)
+        .order_by(source_tag.c.tag)
+    ).fetchall()
+    assert {row.tag for row in rows} == set(expected_tags)
+    assert {row.tag_type for row in rows} == {METHODOLOGICAL_STRUCTURAL}
+    assert {row.asserted_by for row in rows} == {"classify"}
+
+    classified_event = [
+        e for e in events.read(conn, pid) if e["event_type"] == "source.classified"
+    ][0]
+    assert classified_event["payload"]["tags"] == expected_tags
 
 
 def test_delete_project_data_removes_classification(conn: Connection) -> None:

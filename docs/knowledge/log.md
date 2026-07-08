@@ -1,5 +1,17 @@
 # Knowledge update log
 
+## 2026-07-08
+* **Creation**: Added
+  [effective-screen-row-read-rule](effective-screen-row-read-rule.md) — multiple screening
+  rows per doc (stages + failed retries) make the effective-row helper the only legal read;
+  the rule binds write paths too — the appraise write-path gap was the 014 review stack's
+  unique-to-adversarial-lane find.
+* **Creation**: Added
+  [untrusted-prompt-fields-json-records](untrusted-prompt-fields-json-records.md) — untrusted
+  fields enter prompts only inside `json.dumps` records; the sanitizer preserves newlines, so
+  raw interpolation is the breach shape (014 review stack, security lane's stage-2 title
+  finding).
+
 ## 2026-07-07
 * **Creation**: Added
   [facet-grouping-exhaustive-partition](facet-grouping-exhaustive-partition.md) — the

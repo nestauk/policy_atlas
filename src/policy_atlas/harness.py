@@ -26,6 +26,7 @@ from policy_atlas.acquire import (
 )
 from policy_atlas.appraise import AppraiseContext, appraise_sources
 from policy_atlas.characterise import CharacteriseContext, CharacteriseFailure, characterise_scope
+from policy_atlas.classification_backend import ClassificationBackend, StubClassificationBackend
 from policy_atlas.classify import ClassifyContext, classify_sources
 from policy_atlas.embeddings import EmbeddingBackend, StubEmbeddingBackend
 from policy_atlas.extract import ExtractContext, extract_scope
@@ -46,6 +47,7 @@ from policy_atlas.plan import Config
 from policy_atlas.ranking import RankingBackend
 from policy_atlas.schema import artefact, evidence_scope, runs
 from policy_atlas.screen import ScreenContext, screen_sources
+from policy_atlas.screening_backend import ScreeningBackend, StubScreeningBackend
 from policy_atlas.select import SelectContext, select_scope
 from policy_atlas.synthesis_backend import StubSynthesisBackend, SynthesisBackend
 from policy_atlas.synthesise import SynthesiseContext, SynthesiseFailure, synthesise_scope
@@ -64,6 +66,8 @@ class HarnessState(TypedDict):
     provider: InferenceProvider
     search_backends: list[SearchBackend]
     document_fetcher: DocumentFetcher
+    screening_backend: ScreeningBackend
+    classification_backend: ClassificationBackend
     embedding_backend: EmbeddingBackend
     theme_grouping_backend: ThemeGroupingBackend
     ranking_backend: RankingBackend | None
@@ -212,11 +216,17 @@ def _run_acquire(state: HarnessState) -> HarnessState:
 
 
 def _run_screen(state: HarnessState) -> HarnessState:
-    return _run_scope_component(state, ScreenContext, screen_sources)
+    sources_fn = functools.partial(
+        screen_sources, screening_backend=state["screening_backend"]
+    )
+    return _run_scope_component(state, ScreenContext, sources_fn)
 
 
 def _run_classify(state: HarnessState) -> HarnessState:
-    return _run_scope_component(state, ClassifyContext, classify_sources)
+    sources_fn = functools.partial(
+        classify_sources, classification_backend=state["classification_backend"]
+    )
+    return _run_scope_component(state, ClassifyContext, sources_fn)
 
 
 def _run_appraise(state: HarnessState) -> HarnessState:
@@ -539,6 +549,8 @@ def run_harness(
     provider: InferenceProvider,
     search_backends: list[SearchBackend] | None = None,
     document_fetcher: DocumentFetcher | None = None,
+    screening_backend: ScreeningBackend | None = None,
+    classification_backend: ClassificationBackend | None = None,
     embedding_backend: EmbeddingBackend | None = None,
     theme_grouping_backend: ThemeGroupingBackend | None = None,
     ranking_backend: RankingBackend | None = None,
@@ -561,6 +573,13 @@ def run_harness(
         document_fetcher: Fetcher for the ingest_full_text component; defaults
             to ``FixtureFetcher()`` — the same injection pattern as
             ``search_backends`` (approved gated change 3, task 008).
+        screening_backend: Screening backend for the screen component;
+            defaults to ``StubScreeningBackend()`` — no default egress, the
+            extraction backend pattern (approved gated change 2, task 014).
+        classification_backend: Classification backend for the classify
+            component; defaults to ``StubClassificationBackend()`` — no
+            default egress, the extraction backend pattern (approved gated
+            change 2, task 014).
         embedding_backend: Embedding backend threaded through state; defaults
             to ``StubEmbeddingBackend()`` — no default egress, same injection
             pattern as ``search_backends``.
@@ -616,6 +635,14 @@ def run_harness(
         ),
         "document_fetcher": (
             document_fetcher if document_fetcher is not None else FixtureFetcher()
+        ),
+        "screening_backend": (
+            screening_backend if screening_backend is not None else StubScreeningBackend()
+        ),
+        "classification_backend": (
+            classification_backend
+            if classification_backend is not None
+            else StubClassificationBackend()
         ),
         # Consumed by the acquire/ingest_full_text partials (their embed passes);
         # characterise reads only theme_grouping_backend.
