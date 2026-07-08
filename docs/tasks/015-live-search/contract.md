@@ -10,6 +10,51 @@ specs in [docs/specs/](../../specs/index.md).
 > follow it — promote only if a design decision changes at this gate).
 >
 > **Revision history:**
+> - **rev 1.2** (2026-07-08, V2 search autopsy adjudicated — two parallel
+>   deep-reasoner recons of `../discovery_policy_atlas` at the user's
+>   direction: production search path + the PR #184 R&D branch; fifth in
+>   the autopsy series; full record + adjudication table in
+>   [v2-search-autopsy.md](v2-search-autopsy.md)). **Adopted in-slice**:
+>   redacted HTTP errors — the concrete V2 key-leak vector closed
+>   structurally (decision 9); Overton `min_similarity=0.3` with `squery`
+>   only, the undocumented V2 production default (decision 2); sanitizer
+>   also strips wildcards `*`/`?` — a second OpenAlex 400-vector
+>   (decision 5); retryable set widened to timeout · 429 · 500/502/503/504
+>   (R&D-observed transient OpenAlex 5xx; decision 7); OpenAlex `select=`
+>   field list derived from the envelope+retain constants, test-enforced
+>   superset — credit-responsible on the institutional key (decision 6);
+>   Overton `next_page_url: false` (JSON boolean, live-observed) tolerated
+>   in shape validation (decision 10); live check gains a per-backend
+>   result-count probe for the verbatim-NL recall risk (decision 11).
+>   **New decision 12 ⚑**: NO citation floor — V2 silently applied
+>   `cited_by_count > 5` to every OpenAlex call (the agents split on
+>   adopting it; lead adjudicated recall-first, user confirmation flagged).
+>   **Risk recorded ⚑**: the R&D's strongest transport lesson — lexical
+>   endpoints starve on long verbatim NL (S2-measured 0-vs-25; OpenAlex
+>   same index class, inferred) — v1 measures rather than engineers
+>   (decision 2; query derivation stays the Arm-B seam). **Validated
+>   as-built, no action**: abstract-index reconstruction (007), DOI-keyed
+>   cross-backend dedup (007), per-backend error isolation, idiom-as-
+>   backend-property, fail-closed missing-`results` (a deliberate flip of
+>   V2's silent-empty). **Declined**: response caching (2 requests/run —
+>   YAGNI); Semantic Scholar as fast semantic backend (backend set is
+>   user-settled; stays the candidate third backend at its seam); V2's
+>   silent-swallow raw channel (nothing like it exists here). **New
+>   seams**: SR/RCT variant fanout (V2 prod recall feature, deliberately
+>   dropped in v1 — joins the Arm-B/multi-query entry) · eval-reuse
+>   pointers (PaperFindingBench zero-adapter first run · the parity-tested
+>   `metrics.py` recall@k_est port · SYNERGY true-recall · CODEC policy
+>   topics · the Campbell/3ie/EPPI "unzip" build · the coverage-vs-recall
+>   split, per-backend) — to deferred.md's search-eval seam at step 8.
+> - **rev 1.1** (2026-07-08, user gate call): **`OPENALEX_API_KEY` is
+>   mandatory in live mode** — the API itself works keyless, but Nesta
+>   holds an institutional key with different rate/volume limits and the
+>   product should always ride it; an unkeyed live call silently forfeits
+>   those limits, exactly the silent-degradation shape the fail-loud rule
+>   exists for. Decisions 8 + 9 amended: live mode requires BOTH
+>   `OVERTON_API_KEY` and `OPENALEX_API_KEY` (each missing key is a loud
+>   startup error naming the variable); OpenAlex key hygiene now matches
+>   Overton's (the key rides the query string on both).
 > - **rev 1** (2026-07-08): initial draft. Sequencing context: third slice of
 >   the live-demo path (014 LLM screen+classify MERGED → **015 live search** →
 >   016 live fetch/ingest → 017 demo dress-rehearsal → eval slice). The 007
@@ -65,6 +110,9 @@ PR landing:
 - As-built: `acquire.py` (protocol, mappers, error isolation, unknown-backend
   loudness), `scripts/record_*_fixtures.py` (the exact live call forms,
   recorded working 2026-07-05)
+- [v2-search-autopsy.md](v2-search-autopsy.md) — the rev-1.2 evidence
+  base: V2 production search autopsy + PR #184 R&D analysis, with the
+  adjudication table (file:line refs for every V2 claim in this contract)
 
 ## Decisions
 
@@ -80,14 +128,31 @@ PR landing:
    (`_get_json`-shaped) makes the backends testable without sockets.
 
 2. **Query modes are the recorded production modes, per backend** (the
-   per-backend-query-mode-is-a-backend-property note, user 2026-07-05):
-   OpenAlex = keyword `filter=title_and_abstract.search:<query>`; Overton =
-   semantic `squery`. Exactly what the recorders ran on 2026-07-05 — the
-   fixtures were deliberately recorded "in the mode production would use",
-   so live results have the same structural shape the mappers were built
-   against. Query = the scope intent verbatim (007 decision 6, unchanged).
-   Semantic/keyword mixes, `min_similarity` tuning, Overton filters
-   (`scope_filters` stays `{}`) remain at the recorded seam.
+   per-backend-query-mode-is-a-backend-property note, user 2026-07-05)
+   *(amended rev 1.2)*. OpenAlex = keyword
+   `filter=title_and_abstract.search:<query>`; Overton = semantic
+   `squery` **with `min_similarity=0.3`** — the V2 production threshold
+   (V2 `utils/overton.py:26`; rationale undocumented, calibration belongs
+   to the eval seam) — sent **only** in semantic mode (V2 sent it
+   unconditionally, even where it likely did nothing). Exactly what the
+   recorders ran on 2026-07-05 — the fixtures were deliberately recorded
+   "in the mode production would use", so live results have the same
+   structural shape the mappers were built against. Query = the scope
+   intent verbatim (007 decision 6, unchanged). **Known recall risk,
+   recorded ⚑ (rev 1.2, the R&D's strongest transport lesson):** lexical
+   endpoints starve on long verbatim natural language — the R&D measured
+   0-vs-25 hits (long NL vs short keywords) on Semantic Scholar's
+   endpoint, and OpenAlex's `title_and_abstract.search` is the same class
+   of stemmed lexical index (inferred, not directly measured); every V2
+   arm avoided the case via LLM-generated boolean queries. v1 **measures
+   rather than engineers**: the live check's result-count probe
+   (decision 11) turns the risk into evidence; a starving OpenAlex leg is
+   a reported finding that feeds the Arm-B query-derivation seam —
+   in-slice query shortening/keyword-ifying is declined as seam creep.
+   The Overton semantic leg is unaffected (dense endpoints want verbatim
+   NL — R&D-supported). Semantic/keyword mixes, `min_similarity` tuning,
+   Overton filters (`scope_filters` stays `{}`) remain at the recorded
+   seam.
 
 3. **Explicit timeouts everywhere.** Every request carries a connect+read
    timeout (recorder precedent: 30 s; exact constant plan-pinned). No call
@@ -106,76 +171,129 @@ PR landing:
    429 handling is deliberately conservative because Overton key-blocks
    abusers: losing one run is recoverable, losing the key is not.
 
-5. **OpenAlex query sanitizer on the production path.** Commas inside
-   quoted phrases break OpenAlex queries (v2 lesson: its sanitizer existed
-   but sat on a non-production method). The live backend sanitizes the
-   query in `search()` itself — the path that runs — with a unit test
-   pinning the transform.
+5. **OpenAlex query sanitizer on the production path** *(amended
+   rev 1.2)*. Two 400-vector classes, both sanitized in the live
+   `search()` itself — the path that runs (v2 lesson: its comma sanitizer
+   existed but sat on a method with no callers): commas inside quoted
+   phrases, and **wildcards `*`/`?`** (the stemmed field 400s on them —
+   R&D-observed, worked around experiment-side only). Unit tests pin both
+   transforms.
 
-6. **Per-provider result caps.** Each backend fetches **one page** with an
-   explicit page-size cap (constant plan-pinned, order-of-25 per backend;
-   same order as the fixture sets so downstream cost stays demo-scale).
-   The verbose provider can't crowd out grey literature because the caps
-   are per-backend, not shared. `stop_condition="breadth_truncated"` stays
-   the honest description. Pagination beyond one page, saturation stopping
-   and the Arm-B loop stay at their recorded seams.
+6. **Per-provider result caps; fields requested explicitly** *(amended
+   rev 1.2)*. Each backend fetches **one page** with an explicit
+   page-size cap (constant plan-pinned, order-of-25 per backend; same
+   order as the fixture sets so downstream cost stays demo-scale) — at
+   that size one page is exactly one HTTP request on both APIs
+   (R&D-confirmed pagination math). The verbose provider can't crowd out
+   grey literature because the caps are per-backend, not shared.
+   `stop_condition="breadth_truncated"` stays the honest description.
+   **OpenAlex requests carry a `select=` field list derived from the
+   mapper's constants** (envelope-source fields + `_OPENALEX_RETAIN_KEYS`
+   + `abstract_inverted_index` + `authorships`): OpenAlex calls are
+   credit-metered (V2 disabled a debug channel "to save credits") and V2
+   wastefully fetched full works; a test asserts the select list is a
+   superset of everything the mapper reads, so the list can never
+   silently starve the envelope. Pagination beyond one page, saturation
+   stopping and the Arm-B loop stay at their recorded seams.
 
-7. **Retry posture: cap 1, then honest failure.** One retry per backend
-   call on transient failures (timeout, 5xx, and the 429 case in
-   decision 4), then the backend counts as errored for the run. Per-backend
-   error isolation, the `search.executed` error payload and the fail-closed
-   coverage verdict are already built; a live-shaped test asserts an
-   exhausted-retries backend lands there.
+7. **Retry posture: cap 1, then honest failure** *(amended rev 1.2)*.
+   One retry per backend call on transient failures — timeout and HTTP
+   **429 · 500 · 502 · 503 · 504** (502/504 included on R&D evidence:
+   OpenAlex transiently 504s under load) — then the backend counts as
+   errored for the run. Per-backend error isolation, the
+   `search.executed` error payload and the fail-closed coverage verdict
+   are already built; a live-shaped test asserts an exhausted-retries
+   backend lands there.
 
-8. **Egress switch: the skeleton's one live flag; missing key fails loud.**
-   The demo entrypoint's existing `live = bool(OPENAI_API_KEY)` pattern
-   extends to search: a live skeleton run uses live search backends — the
-   operator's live intent is one switch, not per-surface toggles. Because
-   OpenAlex works keyless, key-presence cannot gate search by itself; in
-   live mode a missing `OVERTON_API_KEY` is a **loud startup error**
-   naming the variable, never a silent fixture fallback (silent
-   omission ≠ deferral). The suite and all library defaults stay
+8. **Egress switch: the skeleton's one live flag; missing keys fail loud**
+   *(amended rev 1.1)*. The demo entrypoint's existing
+   `live = bool(OPENAI_API_KEY)` pattern extends to search: a live
+   skeleton run uses live search backends — the operator's live intent is
+   one switch, not per-surface toggles. Live mode requires **both**
+   `OVERTON_API_KEY` and `OPENALEX_API_KEY`; each missing key is a **loud
+   startup error** naming the variable, never a silent fixture fallback
+   (silent omission ≠ deferral). OpenAlex's key is mandatory *by our
+   policy, not the API's* (rev 1.1): the API works keyless, but Nesta's
+   institutional key carries different rate/volume limits and an unkeyed
+   call would silently forfeit them — the same silent-degradation shape
+   the fail-loud rule exists for. The suite and all library defaults stay
    fixture-backed and egress-free.
 
-9. **Key and query hygiene.** `OVERTON_API_KEY` (required live),
-   `OPENALEX_API_KEY` (optional) and `OPENALEX_EMAIL` (optional polite-pool
-   identifier) are env-only — never committed, never logged, never
-   persisted. Overton echoes request params into response fields
-   (`next_page_url` — recorder precedent redacts): the live backend
-   strips/never-persists any response field carrying the key before
-   records leave it; a test asserts no key string survives into snapshots,
-   events or logs. Request URLs never appear in log lines at error level
-   (the key rides the query string). Hosts are pinned literals
-   (`api.openalex.org` / `app.overton.io`, HTTPS) — no provider-supplied
-   URL is ever fetched in this slice (that SSRF surface belongs to 016).
-   A `User-Agent` identifying policy-atlas rides every request.
+9. **Key and query hygiene** *(amended rev 1.1)*. `OVERTON_API_KEY`
+   (required live), `OPENALEX_API_KEY` (required live, rev 1.1) and
+   `OPENALEX_EMAIL` (optional polite-pool identifier) are env-only —
+   never committed, never logged, never persisted. **Both providers'
+   keys ride the query string**, so the hygiene rules apply uniformly:
+   Overton echoes request params into response fields (`next_page_url` —
+   recorder precedent redacts), and the live backend strips/never-persists
+   any response field carrying a key before records leave it; a test
+   asserts no key string survives into snapshots, events or logs (both
+   backends). **HTTP errors are redacted structurally** *(rev 1.2 — V2's
+   concrete leak vector)*: an HTTP-error exception carries the full
+   request URL, key included, and V2 logged exactly that at error level
+   (V2 `references.py:648`); the live backends therefore catch transport
+   errors at the fetch seam and re-raise/log **status code + host only**
+   — the raw provider exception string never propagates, with a test
+   asserting the key is absent from the raised message. Hosts are pinned
+   literals (`api.openalex.org` / `app.overton.io`, HTTPS) — no
+   provider-supplied URL is ever fetched in this slice (that SSRF surface
+   belongs to 016). A `User-Agent` identifying policy-atlas rides every
+   request (V2 sent none to Overton).
 
-10. **Provider JSON stays nested; response shape is validated.** The
-    security posture from the seam entry: everything provider-controlled
-    stays under `provider_fields` — already the as-built mapping shape,
-    now load-bearing against live data; a test asserts no
-    provider-controlled key lands at the top level of snapshot metadata
-    beside the envelope keys. A response that isn't the expected envelope
-    (non-JSON, missing `results` array) is a backend error (isolation
-    path), never a partial parse. Unknown-backend loudness is already
-    as-built (`acquire_sources` raises) — discharged, verified by existing
-    tests.
+10. **Provider JSON stays nested; response shape is validated** *(amended
+    rev 1.2)*. The security posture from the seam entry: everything
+    provider-controlled stays under `provider_fields` — already the
+    as-built mapping shape, now load-bearing against live data; a test
+    asserts no provider-controlled key lands at the top level of snapshot
+    metadata beside the envelope keys. A response that isn't the expected
+    envelope (non-JSON, missing `results` array) is a backend error
+    (isolation path), never a partial parse — a **deliberate flip of V2**,
+    which treated a missing `results` key as success-with-zero-results
+    (V2 `overton.py:81-84`: a malformed response silently read as "we
+    searched, nothing matched", corrupting the coverage verdict).
+    Tolerance note: Overton's `next_page_url` can be JSON `false`, not
+    just null (V2 live-observed) — shape validation must not choke on it
+    (v1 never follows it regardless). Unknown-backend loudness is already
+    as-built (`acquire_sources` raises) — discharged, verified by
+    existing tests.
 
-11. **Live-check scope pin** (contract-time, per failure-log 2026-07-08):
-    the live manual check covers the **changed surface plus one cheap
-    smoke** — (a) a live acquire run against both providers with a real
-    scope intent: real records land with correct envelopes/`abstract_source`
-    values, provider tags bounded, coverage record `adequate`,
-    `mode="live"` in events; (b) an immediate re-run showing dedup
-    (`already_acquired`, no duplicate snapshots); (c) rate limiter
-    observed (Overton call spacing) and key-hygiene grep clean; (d) one
-    **rapid-profile chain smoke** over the live-acquired corpus (acquire →
-    screen → classify → appraise → characterise with live LLM backends —
-    mini-class over ~50 envelopes: cents). **No deep-chain e2e** — select/
-    extract/synthesise gain nothing from this slice's surfaces (the 014
-    lesson: ~50 min of live chain to evidence surfaces needing ~2 min);
-    017 owns the full dress rehearsal. Live results are non-deterministic
-    — evidence records observed counts, not pinned values.
+11. **Live-check scope pin** (contract-time, per failure-log 2026-07-08)
+    *(amended rev 1.2)*: the live manual check covers the **changed
+    surface plus one cheap smoke** — (a) a live acquire run against both
+    providers with a real scope intent: real records land with correct
+    envelopes/`abstract_source` values, provider tags bounded, coverage
+    record `adequate`, `mode="live"` in events; (b) an immediate re-run
+    showing dedup (`already_acquired`, no duplicate snapshots); (c) rate
+    limiter observed (Overton call spacing) and key-hygiene grep clean;
+    (d) the **per-backend result-count probe** (rev 1.2, the decision-2
+    recall risk made measurable): record each backend's result count for
+    the verbatim intent — a starving OpenAlex leg (0 or near-0 against a
+    productive Overton leg) is a **reported finding** feeding the Arm-B
+    query-derivation seam, never a silent pass and never an in-slice
+    prompt-engineering fix; (e) one **rapid-profile chain smoke** over
+    the live-acquired corpus (acquire → screen → classify → appraise →
+    characterise with live LLM backends — mini-class over ~50 envelopes:
+    cents). **No deep-chain e2e** — select/extract/synthesise gain
+    nothing from this slice's surfaces (the 014 lesson: ~50 min of live
+    chain to evidence surfaces needing ~2 min); 017 owns the full dress
+    rehearsal. Live results are non-deterministic — evidence records
+    observed counts, not pinned values.
+
+12. **No citation floor — no hidden recall filters ⚑** *(new, rev 1.2;
+    user confirmation flagged — the two recon agents split on this)*. V2
+    silently applied `cited_by_count > 5` to **every** production
+    OpenAlex call (V2 `references.py:551`, `config.py:180`) — a hidden
+    filter that drops recent, niche and low-cited work before any
+    relevance judgment, unlogged and unflagged. v3 sends **no citation
+    floor**: screen is the relevance filter (recall-oriented by design,
+    014), and a pre-search popularity floor is a silent exclusion —
+    exactly the flag-not-drop violation the disciplines forbid; it also
+    biases against the recent policy-relevant work Policy Atlas exists
+    to surface. The counter-argument (it drops junk cheaply; the R&D
+    held it constant across all arms) is real but belongs to the eval
+    slice as a measured question, and the knob's future home is the
+    `scope_filters` object (shape reserved since 007) — a documented,
+    directive-expressible filter, never an implicit default.
 
 ## Scope / Out of scope
 
@@ -187,14 +305,25 @@ PR landing:
   **thin-base re-search trigger** — deferred.md says it "waits on live
   search"; proposed OUT (a screen-side loop design, not a transport slice;
   the 017 demo doesn't need it — flip at this gate if wanted) · Arm-B
-  agentic loop, multi-query derivation, citation snowballing · pagination
-  beyond one page / saturation stopping · Overton filters + `min_similarity`
-  tuning / semantic-keyword mixes · user-selectable backend scope ·
-  Semantic Scholar (third backend) · changes to mappers, dedup, coverage
-  schema, events (shared code untouched except where a decision above
-  names it) · recorder scripts (stay standalone dev tools; a dozen lines
-  of URL-building duplication is cheaper than coupling product code to
-  dev scripts).
+  agentic loop, multi-query derivation, citation snowballing · **SR/RCT
+  variant fanout** (rev 1.2 — V2's production recall feature, base +
+  systematic-review + RCT clause per query, deliberately dropped in v1;
+  joins the Arm-B/multi-query seam) · **in-slice query shortening /
+  keyword-ifying** (rev 1.2 — the decision-2 recall risk is measured, not
+  engineered; any query transformation beyond decision 5's sanitizers is
+  the Arm-B seam) · pagination beyond one page / saturation stopping ·
+  **response caching** (rev 1.2 — the R&D's cache-before-throttle is good
+  engineering at experiment scale; at 2 requests/run it's YAGNI) ·
+  Overton filters + `min_similarity` tuning / semantic-keyword mixes ·
+  **citation-floor / quality filters** (decision 12 — the future
+  `scope_filters` knob, never an implicit default) · user-selectable
+  backend scope · Semantic Scholar (third backend — rev 1.2 note: the R&D
+  holds a complete battle-tested S2 client incl. dense/citation/reference
+  verbs; the fast path when that seam opens) · changes to mappers, dedup,
+  coverage schema, events (shared code untouched except where a decision
+  above names it) · recorder scripts (stay standalone dev tools; a dozen
+  lines of URL-building duplication is cheaper than coupling product code
+  to dev scripts).
 
 ## Constraints & approval gates
 
@@ -247,14 +376,21 @@ re-record/re-ground rather than patching mappers ad hoc past the contract).
 
 - `make verify` green — deterministic, zero egress (fixture defaults;
   socket-deny posture holds; live module transport-stubbed in tests).
-- Unit tests: query sanitizer transform · rate-limiter spacing (monotonic
-  clock, no real sleeps in the suite where avoidable) · timeout passed on
-  every request · retry-then-honest-failure (timeout / 5xx / 429 paths
+- Unit tests: query sanitizer transforms (commas-in-quotes AND wildcards,
+  rev 1.2) · rate-limiter spacing (monotonic clock, no real sleeps in the
+  suite where avoidable) · timeout passed on every request ·
+  retry-then-honest-failure (timeout / 429 / 500 / 502 / 503 / 504 paths
   landing in error isolation) · response-shape validation failure → backend
-  error · key never in snapshots/events/log output · live backends return
-  mapper-consumable records (transport stub replaying a raw fixture page) ·
-  zero-egress guard extension (acquire.py clean; live module not imported
-  by acquire.py).
+  error (and `next_page_url: false` tolerated) · key never in
+  snapshots/events/log output, **including the redacted-HTTP-error test**
+  (rev 1.2: key absent from the raised/logged message on a transport
+  failure, both backends) · **`select=` superset test** (rev 1.2: the
+  OpenAlex select list covers every field the mapper reads) · **no
+  citation-floor test** (rev 1.2: the OpenAlex request carries no
+  `cited_by_count` filter) · live backends return mapper-consumable
+  records (transport stub replaying a raw fixture page) · zero-egress
+  guard extension (acquire.py clean; live module not imported by
+  acquire.py).
 - **Live manual check** (operator-run, keys env-only) — exactly the
   decision 11 pin: live acquire (both providers) · dedup re-run · rate-limit
   + key-hygiene evidence · one rapid-profile chain smoke. Red only on a
@@ -262,10 +398,17 @@ re-record/re-ground rather than patching mappers ad hoc past the contract).
 
 ## Verification evidence expected
 
-`verification.md`: command results, live-run evidence (per-backend counts,
-envelope/abstract_source spot-checks, coverage record, dedup re-run counts,
-rate-limit observation, chain-smoke summary), diff summary, public-safety
-confirmation (no real records or keys committed), known gaps.
+`verification.md`: command results, live-run evidence (per-backend counts
+incl. the decision-11 result-count probe, envelope/abstract_source
+spot-checks, coverage record, dedup re-run counts, rate-limit observation,
+chain-smoke summary), diff summary, public-safety confirmation (no real
+records or keys committed), known gaps. `deferred.md` at step 8: the
+live-`SearchBackend` seam marked discharged; new seams recorded (SR/RCT
+fanout at the Arm-B entry · the eval-reuse pointers — PaperFindingBench
+zero-adapter first run, the parity-tested `metrics.py` recall@k_est port,
+SYNERGY true-recall, CODEC policy topics, the Campbell/3ie/EPPI "unzip"
+build, the per-backend coverage-vs-recall split — at the search-eval
+seam · the citation-floor knob at `scope_filters`).
 
 ## Risk tier & review focus
 
