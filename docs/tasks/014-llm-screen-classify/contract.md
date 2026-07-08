@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 1.5), awaiting contract 🛑.
+> **Status:** drafted (rev 1.5.1), awaiting contract 🛑.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ · ADR: _expected — first
 > product read of third-party corpus text; injection posture enforcement._
@@ -106,6 +106,13 @@ specs in [docs/specs/](../../specs/index.md).
 >   baseline seeds the eval slice (incl. hard corpora) · heat_pump
 >   study re-scoped to 015/016 (search recall, not screening
 >   accuracy).
+> - **rev 1.5.1** (2026-07-08, user challenge at the gate): classify's
+>   model = **current judgment-class tier, exact id plan-pinned
+>   (default candidate `gpt-5.5`; assess `gpt-5.6-terra`)**, replacing
+>   the rev-1.5 `gpt-5.2` pin — the V2 lesson generalises to the
+>   tier, not the checkpoint; 5.2 is legacy-path (repriced upward
+>   2026-07-02) and classify cost is immaterial at any tier
+>   (flagship ≈ 1¢/doc). Decision 8 + Model route amended.
 
 ## Goal
 
@@ -358,9 +365,17 @@ PR landing:
    contradiction held)*. **Screen = `gpt-5-mini`** (compact-model
    screening sensitivity is literature-validated, and the 3-rep
    consensus adds redundancy; the 009 nano lesson still floors us at
-   mini). **Classify = the judgment-class model (`gpt-5.2`; plan pins
-   the exact id)**: V2's own human-labelled eval measured mini-class
-   at ≈ 50% vs gpt-5.2 at ≈ 76% top-1 on the IDENTICAL 9-value
+   mini). **Classify = the current judgment-class tier; the exact id
+   is a plan-time pin (default candidate `gpt-5.5`; assess
+   `gpt-5.6-terra` at the plan gate)** *(rev 1.5.1 — user challenge:
+   the V2 lesson is "judgment-class", not "gpt-5.2 specifically";
+   5.2 is two generations old and was repriced upward 2026-07-02, a
+   legacy-path signal — pinning it imports deprecation risk for zero
+   benefit, and cost is immaterial at envelope grain: flagship ≈ 1¢/
+   doc vs mini ≈ 0.2¢/doc, ~$10 vs ~$1.60 per 1,000 docs)*. The V2
+   evidence: V2's own human-labelled eval measured mini-class
+   at ≈ 50% vs its then-current judgment model (gpt-5.2) at ≈ 76%
+   top-1 on the IDENTICAL 9-value
    taxonomy (three Argilla gold sets; narrative record
    `EVIDENCE_CATEGORISATION_PLAN.md:396-431` — machine outputs
    gitignored, so evidence grade is moderate), and V2 shipped exactly
@@ -470,11 +485,11 @@ never committed. Keys env-only; grep audit before PR.
 ## Model route
 
 OpenAI via the existing client resolution (`resolve_openai_client`);
-**split route (rev 1.5)**: `gpt-5-mini` for `screen_v1` (×3 reps),
-the judgment-class model (`gpt-5.2`; plan pins the exact id) for
-`classify_v1` — see decision 8. Bedrock swap remains the routing
-seam. Prompt-bearing work (`screen_v1`, `classify_v1`) is
-lead-authored.
+**split route (revs 1.5/1.5.1)**: `gpt-5-mini` for `screen_v1`
+(×3 reps), the current judgment-class tier for `classify_v1` —
+exact id plan-pinned, default candidate `gpt-5.5` (see decision 8).
+Bedrock swap remains the routing seam. Prompt-bearing work
+(`screen_v1`, `classify_v1`) is lead-authored.
 
 ## Disciplines binding this slice
 
