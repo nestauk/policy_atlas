@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **approved rev 1.5.1 → adjudicated rev 1.6** — Codex review 10/10 adopted; two ⚑ remedies (title-only unanimity-to-exclude · ≥2-rep quorum) awaiting user confirmation; planning next.
+> **Status:** **approved rev 1.5.1 → adjudicated rev 1.6** — Codex review 10/10 adopted; two ⚑ remedies (title-only unanimity-to-exclude · ≥2-rep quorum) USER-CONFIRMED 2026-07-08; planning (step 3) in progress.
 >
 > Contract approved (before planning): **2026-07-08 · Shabeer Rauf**
 > (rev 1.5.1, covering the gated changes: runtime egress on two
