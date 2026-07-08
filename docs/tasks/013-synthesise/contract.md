@@ -3,10 +3,11 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **approved rev 7.5 → adversarial review adjudicated → rev 8**
-> — Codex contract-stage review returned 9 findings (2 blockers · 7
-> majors), 9/9 adopted (two with lead-adapted remedies, flagged ⚑ below
-> for the plan 🛑); planning next.
+> **Status:** **approved rev 8** — Codex contract-stage review returned 9
+> findings (2 blockers · 7 majors), 9/9 adopted; the two lead-adapted
+> remedies (⚑ B2 row-per-spanned-chunk citations · ⚑ M4 appraised-docs
+> gating for chunk claims) **confirmed by the user 2026-07-08**; planning
+> (step 3) in progress.
 > Contract approved (before planning): **2026-07-08 · Shabeer Rauf**
 > (rev 7.5, covering the four gated changes — one run-scoped
 > `synthesis_result` table · the `"synthesise"` registry entry with all
