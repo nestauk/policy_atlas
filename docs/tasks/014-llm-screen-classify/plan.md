@@ -1,10 +1,32 @@
 # Plan: 014-llm-screen-classify
 
-> **Status:** drafted (rev 1), awaiting plan-stage adversarial review →
+> **Status:** **rev 2** — plan-stage adversarial review adjudicated
+> (Codex, 9 findings: 5 majors · 4 minors, 9/9 adopted), awaiting
 > plan 🛑. Contract: [contract.md](contract.md) **approved rev 1.5.1,
 > adjudicated rev 1.6 (Codex 10/10), ⚑ remedies user-confirmed
 > 2026-07-08**. ADR due at plan confirmation (step 4): injection
 > posture + consensus screening are capability-class decisions.
+>
+> **Rev 2 adoptions:** classify `confidence`/`reason` into
+> `source.classified` payload with task owner (task 6) + payload
+> tests (tasks 9/10) · `screen_basis` computed in code BEFORE backend
+> calls, owner pinned in task 5, title-only behaviour tested
+> independent of model output · `skeleton.py` reclassified UNSAFE in
+> the reader table (raw attempt-row logs at l.660/949) with a concrete
+> fix action · **Phase-4 gate fix**: `screen_sources`/
+> `classify_sources` take optional backend params with stub defaults
+> so Phase 4 stays green before Phase-5 harness wiring · reader table
+> revised to exact per-file actions (task 7 stays fast-worker;
+> ambiguous discoveries escalate to lead) · borderline band pinned:
+> sorted non-failed docs by persisted confidence,
+> `max(1, ceil(0.10*n))` incl. ties at cutoff, ∪ all non-unanimous ·
+> per-doc `aggregation_flags` on `source.screened` (e.g.
+> `["tie_broken"]`, `["title_only_unanimity_applied"]`), test-asserted
+> · test-only `ScriptedScreeningBackend`/`ScriptedClassificationBackend`
+> in task 10 (013 scripted-loop precedent; production stubs stay
+> sentinel-pure) · **classify model pin RESOLVED**: `CLASSIFY_MODEL =
+> "gpt-5.5"` exactly — if unavailable at build start that is a
+> stop-condition escalation, never a silent substitution.
 
 Executor routing per harness.md § Agent-side model routing: default =
 delegate; every `lead` mark carries a justification.
@@ -13,10 +35,10 @@ delegate; every `lead` mark carries a justification.
 
 - `SCREEN_REPS = 3` · quorum ≥ 2 surviving reps · unsure → vote
   relevant / probability 0.5 · title-only exclusion requires unanimity
-- Screen model `gpt-5-mini`; classify model **plan pin:
-  `gpt-5.5`** (assessed vs `gpt-5.6-terra` at this gate — pin the id
-  actually available via the API at build start; record in
-  verification.md; the mini swap-down stays eval-gated)
+- Screen model `gpt-5-mini`; **`CLASSIFY_MODEL = "gpt-5.5"`** (exact
+  pin, rev 2 — assessed vs `gpt-5.6-terra` and resolved at this gate;
+  unavailability at build start = stop-condition escalation, never
+  silent substitution; the mini swap-down stays eval-gated)
 - Retry cap 1 per call · screen call budget ≤ docs × 3 × 2 ·
   classify budget ≤ docs × 2 · doc-level concurrency 4, reps
   concurrent within doc (≤ 12 calls in flight)
@@ -52,7 +74,8 @@ Verified by grep over `source_screening_result` consumers:
 | `classify.py` `skipped` count (l.109) | raw rows — UNSAFE | effective-status distinct-source fix (task 6) |
 | `characterise.py` `_base_counts` (l.162-179) | raw rows — UNSAFE (negative `unscreened`) | effective-status fix (task 7) |
 | `characterise.py` relevant join (l.217+) | relevant-only — safe | regression test only |
-| `appraise.py`, `ingest_full_text.py`, `synthesis_tools.py`, `synthesise.py`, `skeleton.py` | verify relevant-only in task 7 | test each; fix any raw-count found |
+| `skeleton.py` demo summaries (l.660, l.949) | raw attempt rows — UNSAFE (rev 2) | effective-status distinct-source summary; attempt-history detail split into its own log line (task 7, exact edit) |
+| `appraise.py`, `ingest_full_text.py`, `synthesis_tools.py`, `synthesise.py` | relevant-only expected — verify | regression test each; any raw-count discovery escalates to lead adjudication before editing (rev 2) |
 
 ## Tasks
 
@@ -81,15 +104,22 @@ Verified by grep over `source_screening_result` consumers:
    — **fast-worker** *(mechanical, exact spec)*
 
 **Phase 4 — component reworks (full `make verify` gate)**
-5. `screen.py` consensus rework: backend injection, 3 concurrent reps,
-   vote (unsure→relevant, quorum ≥2, title-only unanimity, 1-1
-   tie→relevant flagged), consensus-probability confidence, per-rep
-   event payload + agreement counts, non-failed NOT-EXISTS, summary
+5. `screen.py` consensus rework: **optional `screening_backend` param,
+   stub default (rev 2 — keeps the Phase-4 gate green before Phase-5
+   wiring)**; `screen_basis` computed IN CODE from abstract presence
+   BEFORE any backend call, persisted + in the event payload,
+   title-only behaviour tested independent of model output (rev 2);
+   3 concurrent reps, vote (unsure→relevant, quorum ≥2, title-only
+   unanimity, 1-1 tie→relevant flagged), consensus-probability
+   confidence, per-rep event payload + agreement count + per-doc
+   `aggregation_flags` (rev 2), non-failed NOT-EXISTS, summary
    counts (unsure · non-unanimous · rep_failures · tie_broken).
    — **codex**
-6. `classify.py` rework: backend call, no-row-on-failure, provider
-   priors assembly, tag writes via helper, `skipped` effective-status
-   fix. — **codex**
+6. `classify.py` rework: optional `classification_backend` param, stub
+   default (rev 2); backend call, no-row-on-failure, provider
+   priors assembly, tag writes via helper, **`confidence` + `reason`
+   written into the `source.classified` payload (rev 2 — payload-only,
+   never columns)**, `skipped` effective-status fix. — **codex**
 7. Effective-status sweep per the reader table: `_base_counts` fix +
    verify/fix the five "verify" readers + regression tests per reader.
    — **fast-worker** *(enumerated sweep from the table above)*
@@ -103,11 +133,15 @@ Verified by grep over `source_screening_result` consumers:
 9. Bulk suites from the contract's Acceptance enumeration (aggregation
    matrix, failure/retry/idempotency, tag bounds, migration
    roundtrip). — **fast-worker**
-10. Judgment suites: paired clean/adversarial injection fixtures
-    (semantic invariance), quorum + title-only unanimity cases,
-    Unknown-vs-Other boundary fixtures, wire-model
-    validation/NUL/oversize-field cases (scripted stub backends).
-    — **codex**
+10. Judgment suites: test-only `ScriptedScreeningBackend` /
+    `ScriptedClassificationBackend` (rev 2 — per-doc scripted rep
+    sequences; production stubs stay sentinel-pure), paired
+    clean/adversarial injection fixtures (semantic invariance),
+    quorum + title-only unanimity + tie cases, Unknown-vs-Other
+    boundary fixtures, event-payload shape assertions (per-rep
+    records · agreement count · `aggregation_flags` · classify
+    confidence/reason present, no columns), wire-model
+    validation/NUL/oversize-field cases. — **codex**
 
 **Phase 7 — records + live check**
 11. `deferred.md` (discharged entries rewritten + the rev-1.2/1.3/1.5
@@ -130,7 +164,9 @@ lane (013 process install). ≤ 250K reasoning / ≤ 500K fast-worker.
 
 Fixture corpus e2e (skeleton, live backends): screen spread sanity ·
 agreement distribution (unanimous / 2-of-3 / tie) · borderline review
-(lowest-confidence decile + all non-unanimous, reasons coherent) ·
+— band pinned (rev 2): non-failed docs sorted by persisted
+confidence, take `max(1, ceil(0.10 * n))` including ties at the
+cutoff, union all non-unanimous docs; reasons coherent ·
 classification by_type distribution not-all-Unknown + face-validity 10
 · Unknown-vs-Other spot check · paired injection probe (2 pairs) ·
 non-English record · tags within bounds · Langfuse traces + scores via
