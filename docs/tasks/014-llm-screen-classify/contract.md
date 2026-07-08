@@ -548,7 +548,25 @@ PR landing:
   signal consensus compensates for). Material stake, quantified by
   the V2 baseline (precision 0.634): ~⅓ junk in screened-in sets,
   and every junk doc ranking into select's bounded budget (default
-  25) displaces a real doc from extraction* ·
+  25) displaces a real doc from extraction. Spec home (user, third
+  round): stage 2 is a **plan-selectable registry component under
+  the thoroughness gradation** (ADR 0009: components = registry the
+  plan selects from; depth = the plan's thoroughness) — deep runs
+  compile it in post-ingestion, rapid runs skip it; the eval gate
+  decides whether to BUILD it, thoroughness decides whether it RUNS.
+  Same family as classify's Unknown full-text resolution and the
+  two-stage appraisal pass: envelope always, full-text second pass
+  at depth* ·
+  **screen-confidence retrieval boost** (user, 2026-07-08 — new
+  seam): in no-selection runs `search_chunks` has NO doc-level
+  prior; `screen_decision_confidence` (meaningful from this slice)
+  is the natural directive-expressible boost. Design notes: the
+  013 boost grammar is categorical (per-value weights) — a
+  continuous column needs banding or a clamped functional
+  multiplier; steerable-never-baked (rev-7.5 ruling) → directive
+  column, not a standing prior; double-count guard where a
+  selection reference already prices confidence in. A 013-surface
+  change — lands via its own gate, not 014 ·
   re-screening of **successful** results (the failed-row retry landed
   in-slice, rev 1.1; superseding a relevant/not_relevant decision is a
   different seam) · `Unknown` full-text resolution · grey-lit category
