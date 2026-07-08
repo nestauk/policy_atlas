@@ -65,6 +65,7 @@ from policy_atlas.schema import (
     source_snapshot,
     source_tag,
 )
+from policy_atlas.screen import effective_screen_rows
 from policy_atlas.select import NON_EVIDENCE_TYPE
 from policy_atlas.synthesis_backend import (
     OpenAISynthesisBackend,
@@ -657,13 +658,28 @@ def main() -> None:
 
         run_component("screen")
 
+        # Effective rows (screen.effective_screen_rows) drive the summaries below,
+        # never raw attempt/stage history — a demoted or confirmed doc must be
+        # read once, at its effective status. Raw-vs-effective counts are logged
+        # separately (screening_attempt_history) so history stays visible.
+        effective_screening = effective_screen_rows()
         screening_results = conn.execute(
             select(
-                source_screening_result.c.status,
-                source_screening_result.c.screen_basis,
-                source_screening_result.c.screen_decision_confidence,
-            ).where(source_screening_result.c.project_id == project_id)
+                effective_screening.c.status,
+                effective_screening.c.screen_basis,
+                effective_screening.c.screen_decision_confidence,
+            ).where(effective_screening.c.project_id == project_id)
         ).fetchall()
+        raw_screening_row_count = conn.execute(
+            select(func.count())
+            .select_from(source_screening_result)
+            .where(source_screening_result.c.project_id == project_id)
+        ).scalar_one()
+        log.info(
+            "screening_attempt_history",
+            raw_row_count=raw_screening_row_count,
+            effective_row_count=len(screening_results),
+        )
 
         run_component("classify")
 
@@ -722,6 +738,9 @@ def main() -> None:
         # Plan finding 7: budget + tag boost alone can't guarantee the live
         # extract run sees both bases — pin one full-text and one abstract-only
         # doc as must-includes, deterministically (min pss_id per basis).
+        # Effective-relevant via the helper — same screened-in-scope rule as
+        # characterise.screened_sources (select's candidate set).
+        effective_pins = effective_screen_rows()
         basis_pin_rows = conn.execute(
             select(
                 project_source_snapshot.c.project_source_snapshot_id,
@@ -737,9 +756,12 @@ def main() -> None:
                     == source_snapshot.c.source_snapshot_id,
                 )
                 .join(
-                    source_screening_result,
-                    project_source_snapshot.c.project_source_snapshot_id
-                    == source_screening_result.c.project_source_snapshot_id,
+                    effective_pins,
+                    (
+                        project_source_snapshot.c.project_source_snapshot_id
+                        == effective_pins.c.project_source_snapshot_id
+                    )
+                    & (project_source_snapshot.c.project_id == effective_pins.c.project_id),
                 )
                 .join(
                     source_classification_result,
@@ -748,7 +770,7 @@ def main() -> None:
                 )
             )
             .where(project_source_snapshot.c.project_id == project_id)
-            .where(source_screening_result.c.status == "relevant")
+            .where(effective_pins.c.status == "relevant")
             .where(source_classification_result.c.primary_evidence_type != NON_EVIDENCE_TYPE)
             .order_by(project_source_snapshot.c.project_source_snapshot_id)
         ).fetchall()

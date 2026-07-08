@@ -887,6 +887,38 @@ def test_eligibility_boundaries(conn: Connection) -> None:
         assert status == "not_attempted"
 
 
+def test_stage2_demoted_doc_still_eligible_stage1_only(conn: Connection) -> None:
+    """Ingest reads effective STAGE-1 relevant only, never stage 2 (task 014
+    sweep item 4): stage 2 needs the full text this component produces, so
+    fetch must never consult stage-2 rows. A doc demoted at stage 2 (stage-1
+    relevant + stage-2 not_relevant) therefore stays eligible here — the
+    deliberate inverse of the sweep's general "demoted doc excluded from
+    screened-in scope" rule, which applies to readers keyed off the highest
+    screening stage rather than stage 1 specifically."""
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    _, demoted_pss = _seed_acquired_link(
+        conn, project_id, run_id, {"backend": "openalex", "provider_fields": {}}
+    )
+    seed_screening_result(
+        conn, project_id, run_id, scope_id, demoted_pss, status="relevant", screen_stage=1
+    )
+    seed_screening_result(
+        conn, project_id, run_id, scope_id, demoted_pss, status="not_relevant", screen_stage=2
+    )
+
+    summary = run_ingest(conn, project_id, run_id, scope_id)
+
+    assert summary["eligible"] == 1
+    status, error = conn.execute(
+        select(
+            project_source_snapshot.c.full_text_status, project_source_snapshot.c.full_text_error,
+        )
+        .where(project_source_snapshot.c.project_source_snapshot_id == demoted_pss)
+    ).one()
+    assert (status, error) == ("fetch_failed", "no_url")
+
+
 def test_idempotency_and_retry(conn: Connection) -> None:
     project_id, run_id, scope_id = seed_small_corpus(conn)
     first = run_ingest(conn, project_id, run_id, scope_id)

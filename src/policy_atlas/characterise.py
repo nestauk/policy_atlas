@@ -36,6 +36,7 @@ from policy_atlas.schema import (
 from policy_atlas.schema import (
     chunk as chunk_table,
 )
+from policy_atlas.screen import effective_screen_rows
 from policy_atlas.tags import insert_source_tags
 
 log = structlog.get_logger()
@@ -96,6 +97,7 @@ class ScreenedSource:
     text_basis: str
     screen_basis: str | None
     screen_confidence: float | None
+    screen_stage: int
     primary_evidence_type: str | None
     quality_score: int | None
     rubric_version: str | None
@@ -160,13 +162,17 @@ def _screen_confidence_band(value: float) -> str:
 
 
 def _base_counts(conn: Connection, *, project_id: uuid.UUID, scope_id: uuid.UUID) -> dict[str, int]:
+    # Effective-stage-and-status grain (screen.effective_screen_rows): raw row
+    # counts would double-count a confirmed doc (relevant at both stages) and
+    # leak in a demoted doc (stage-1 relevant, stage-2 not_relevant) as relevant.
+    effective = effective_screen_rows()
     status_counts = {
         status: int(count)
         for status, count in conn.execute(
-            select(source_screening_result.c.status, func.count())
-            .where(source_screening_result.c.evidence_scope_id == scope_id)
-            .where(source_screening_result.c.project_id == project_id)
-            .group_by(source_screening_result.c.status)
+            select(effective.c.status, func.count())
+            .where(effective.c.evidence_scope_id == scope_id)
+            .where(effective.c.project_id == project_id)
+            .group_by(effective.c.status)
         )
     }
     project_sources = int(
@@ -176,12 +182,35 @@ def _base_counts(conn: Connection, *, project_id: uuid.UUID, scope_id: uuid.UUID
             .where(project_source_snapshot.c.project_id == project_id)
         ).scalar_one()
     )
-    screening_rows = sum(status_counts.values())
+    # Docs with screening rows for this scope but no effective (non-failed) row:
+    # every attempt failed. Screened-failed at the distinct-source grain, never
+    # unscreened — a failed-then-retried doc has an effective row (the retry) and
+    # so is excluded from this count, fixing the double-count-against-
+    # project_sources bug raw rows caused.
+    screen_failed = int(
+        conn.execute(
+            select(func.count(func.distinct(source_screening_result.c.project_source_snapshot_id)))
+            .where(source_screening_result.c.evidence_scope_id == scope_id)
+            .where(source_screening_result.c.project_id == project_id)
+            .where(
+                ~exists().where(
+                    (effective.c.evidence_scope_id == scope_id)
+                    & (effective.c.project_id == project_id)
+                    & (
+                        effective.c.project_source_snapshot_id
+                        == source_screening_result.c.project_source_snapshot_id
+                    )
+                )
+            )
+        ).scalar_one()
+    )
+    screened_in = status_counts.get("relevant", 0)
+    not_relevant = status_counts.get("not_relevant", 0)
     return {
-        "screened_in": status_counts.get("relevant", 0),
-        "not_relevant": status_counts.get("not_relevant", 0),
-        "screen_failed": status_counts.get("failed", 0),
-        "unscreened": project_sources - screening_rows,
+        "screened_in": screened_in,
+        "not_relevant": not_relevant,
+        "screen_failed": screen_failed,
+        "unscreened": project_sources - screened_in - not_relevant - screen_failed,
     }
 
 
@@ -201,6 +230,11 @@ def screened_sources(
     Returns:
         Screened-in sources enriched with classification and appraisal fields.
     """
+    # select is stage-3 of the screening cascade (contract rev 1.10): the
+    # candidate set, status and confidence all come from the one effective row
+    # per (scope, pss) — never a raw source_screening_result join, which would
+    # leak in demoted docs and double-read confirmed ones.
+    effective = effective_screen_rows()
     full_text_snapshot = source_snapshot.alias("full_text_snapshot")
     rows = conn.execute(
         select(
@@ -214,23 +248,21 @@ def screened_sources(
             source_snapshot.c.source_locator,
             source_snapshot.c.text_basis.label("envelope_text_basis"),
             full_text_snapshot.c.text_basis.label("full_text_text_basis"),
-            source_screening_result.c.screen_basis,
-            source_screening_result.c.screen_decision_confidence,
+            effective.c.screen_basis,
+            effective.c.screen_decision_confidence,
+            effective.c.screen_stage,
             source_classification_result.c.primary_evidence_type,
             source_appraisal_result.c.quality_score,
             source_appraisal_result.c.rubric_version,
         )
         .select_from(
-            source_screening_result.join(
+            effective.join(
                 project_source_snapshot,
                 (
-                    source_screening_result.c.project_source_snapshot_id
+                    effective.c.project_source_snapshot_id
                     == project_source_snapshot.c.project_source_snapshot_id
                 )
-                & (
-                    source_screening_result.c.project_id
-                    == project_source_snapshot.c.project_id
-                ),
+                & (effective.c.project_id == project_source_snapshot.c.project_id),
             )
             .join(
                 source_snapshot,
@@ -246,36 +278,30 @@ def screened_sources(
                 source_classification_result,
                 (
                     source_classification_result.c.evidence_scope_id
-                    == source_screening_result.c.evidence_scope_id
+                    == effective.c.evidence_scope_id
                 )
-                & (
-                    source_classification_result.c.project_id
-                    == source_screening_result.c.project_id
-                )
+                & (source_classification_result.c.project_id == effective.c.project_id)
                 & (
                     source_classification_result.c.project_source_snapshot_id
-                    == source_screening_result.c.project_source_snapshot_id
+                    == effective.c.project_source_snapshot_id
                 ),
             )
             .outerjoin(
                 source_appraisal_result,
                 (
                     source_appraisal_result.c.evidence_scope_id
-                    == source_screening_result.c.evidence_scope_id
+                    == effective.c.evidence_scope_id
                 )
-                & (
-                    source_appraisal_result.c.project_id
-                    == source_screening_result.c.project_id
-                )
+                & (source_appraisal_result.c.project_id == effective.c.project_id)
                 & (
                     source_appraisal_result.c.project_source_snapshot_id
-                    == source_screening_result.c.project_source_snapshot_id
+                    == effective.c.project_source_snapshot_id
                 ),
             )
         )
-        .where(source_screening_result.c.evidence_scope_id == scope_id)
-        .where(source_screening_result.c.project_id == project_id)
-        .where(source_screening_result.c.status == "relevant")
+        .where(effective.c.evidence_scope_id == scope_id)
+        .where(effective.c.project_id == project_id)
+        .where(effective.c.status == "relevant")
         .order_by(project_source_snapshot.c.project_source_snapshot_id)
     ).fetchall()
 
@@ -298,6 +324,7 @@ def screened_sources(
                 text_basis=text_basis,
                 screen_basis=row.screen_basis,
                 screen_confidence=row.screen_decision_confidence,
+                screen_stage=row.screen_stage,
                 primary_evidence_type=row.primary_evidence_type,
                 quality_score=row.quality_score,
                 rubric_version=row.rubric_version,

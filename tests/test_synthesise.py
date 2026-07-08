@@ -49,7 +49,9 @@ from tests.helpers import (
     seed_project_and_run,
     seed_run,
     seed_scope,
+    seed_screening_result,
     seed_select_doc,
+    seed_source,
 )
 
 
@@ -787,6 +789,59 @@ def test_gap_corpus_caveat_and_degradation(conn: Connection) -> None:
     ]
     assert degraded_payloads
     assert degraded_payloads[0]["gap"]["grade"] == "inferred"
+
+
+def test_corpus_profile_excludes_demoted_doc(conn: Connection) -> None:
+    """_load_corpus_profile reads the effective row: a stage-2-demoted doc's
+    stale stage-1 'relevant' row must never be counted (task 014 sweep)."""
+    from policy_atlas.synthesise import _load_corpus_profile
+
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+
+    seed_select_doc(conn, project_id, run_id, scope_id, title="confirmed")
+
+    _, demoted_pss = seed_source(conn, project_id, meta={"title": "demoted"})
+    seed_screening_result(
+        conn, project_id, run_id, scope_id, demoted_pss, status="relevant", screen_stage=1
+    )
+    seed_screening_result(
+        conn, project_id, run_id, scope_id, demoted_pss, status="not_relevant", screen_stage=2
+    )
+
+    profile = _load_corpus_profile(conn, project_id=project_id, scope_id=scope_id)
+    assert profile.screened_docs == 1
+
+
+def test_screened_chunks_excludes_demoted_doc(conn: Connection) -> None:
+    """_load_screened_chunks reads the effective row — a second, previously raw
+    source_screening_result consumer found during the task 014 sweep."""
+    from policy_atlas.synthesise import _load_screened_chunks
+
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+
+    confirmed_pss = seed_select_doc(conn, project_id, run_id, scope_id, title="confirmed")
+    seed_ingested_full_text(conn, pss_id=confirmed_pss, chunks=["Confirmed doc body."])
+
+    _, demoted_pss = seed_source(conn, project_id, meta={"title": "demoted"})
+    seed_screening_result(
+        conn, project_id, run_id, scope_id, demoted_pss, status="relevant", screen_stage=1
+    )
+    seed_screening_result(
+        conn, project_id, run_id, scope_id, demoted_pss, status="not_relevant", screen_stage=2
+    )
+    seed_ingested_full_text(conn, pss_id=demoted_pss, chunks=["Demoted doc body."])
+
+    _chunk_by_id, chunks_by_pss, _basis_by_pss = _load_screened_chunks(
+        conn,
+        project_id=project_id,
+        scope_id=scope_id,
+        selected_pss_ids=set(),
+        appraised_pss_ids=set(),
+    )
+    assert str(confirmed_pss) in chunks_by_pss
+    assert str(demoted_pss) not in chunks_by_pss
 
 
 def test_groups_unsectioned_counted(conn: Connection) -> None:

@@ -1,7 +1,6 @@
 """Tests for the screen component — schema, stub logic, round-trips, harness integration."""
 
 import uuid
-from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -19,7 +18,9 @@ from policy_atlas.schema import (
     runs,
     source_screening_result,
 )
-from policy_atlas.screen import ScreenContext, _stub_screen, screen_sources
+from policy_atlas.screen import ScreenContext, screen_sources
+from policy_atlas.screen_prompt import ScreenEnvelopePayload, ScreenFullTextPayload, ScreenRepWire
+from policy_atlas.screening_backend import StubScreeningBackend
 from tests.helpers import now, seed_project_and_run, seed_scope, seed_source
 
 # --- Schema / structure ---
@@ -46,38 +47,69 @@ def test_ssr_columns(conn: Connection) -> None:
     assert {
         "source_screening_result_id", "evidence_scope_id", "project_source_snapshot_id",
         "project_id", "screened_by_run_id", "status", "screen_basis",
-        "screen_decision_confidence", "screened_at",
+        "screen_decision_confidence", "screen_stage", "screened_at",
     } <= cols
 
 
 # --- Stub logic (pure Python, no DB) ---
 
 def test_stub_relevant_with_abstract() -> None:
-    result = _stub_screen({"abstract": "Some abstract text."})
-    assert result.status == "relevant"
-    assert result.basis == "title_abstract"
-    assert result.decision_confidence == 0.9
+    result = StubScreeningBackend().screen_envelope(
+        ScreenEnvelopePayload(
+            pss_id="pss-1",
+            title="Test",
+            abstract="Some abstract text.",
+            abstract_source=None,
+            intent="Test",
+            metadata={"abstract": "Some abstract text."},
+        )
+    )
+    assert result.decision == "relevant"
+    assert result.confidence == 0.9
 
 
 def test_stub_relevant_without_abstract() -> None:
-    result = _stub_screen({})
-    assert result.status == "relevant"
-    assert result.basis == "title_only"
-    assert result.decision_confidence == 0.7
+    result = StubScreeningBackend().screen_envelope(
+        ScreenEnvelopePayload(
+            pss_id="pss-1",
+            title="Test",
+            abstract=None,
+            abstract_source=None,
+            intent="Test",
+            metadata={},
+        )
+    )
+    assert result.decision == "relevant"
+    assert result.confidence == 0.7
 
 
 def test_stub_not_relevant() -> None:
-    result = _stub_screen({"_stub_not_relevant": True, "abstract": "Some text."})
-    assert result.status == "not_relevant"
-    assert result.basis == "title_abstract"
-    assert result.decision_confidence == 0.95
+    result = StubScreeningBackend().screen_envelope(
+        ScreenEnvelopePayload(
+            pss_id="pss-1",
+            title="Test",
+            abstract="Some text.",
+            abstract_source=None,
+            intent="Test",
+            metadata={"_stub_not_relevant": True, "abstract": "Some text."},
+        )
+    )
+    assert result.decision == "not_relevant"
+    assert result.confidence == 0.95
 
 
 def test_stub_failed() -> None:
-    result = _stub_screen({"_stub_failed": True})
-    assert result.status == "failed"
-    assert result.basis is None
-    assert result.decision_confidence is None
+    with pytest.raises(RuntimeError):
+        StubScreeningBackend().screen_envelope(
+            ScreenEnvelopePayload(
+                pss_id="pss-1",
+                title="Test",
+                abstract=None,
+                abstract_source=None,
+                intent="Test",
+                metadata={"_stub_failed": True},
+            )
+        )
 
 
 # --- Check constraints ---
@@ -254,20 +286,26 @@ def test_screen_sources_idempotent_rerun(conn: Connection) -> None:
     assert len(rows) == 1
 
 
-def test_screen_sources_doc_exception_isolated(
-    conn: Connection, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_screen_sources_doc_exception_isolated(conn: Connection) -> None:
     """One document's screening exception lands as status='failed'; other docs still process."""
-    import policy_atlas.screen as screen_mod
+    class FlakyBackend:
+        mode = "stub"
 
-    original = screen_mod._stub_screen
+        def __init__(self) -> None:
+            self._stub = StubScreeningBackend()
 
-    def flaky(meta: dict[str, Any]) -> Any:
-        if meta.get("_boom"):
-            raise RuntimeError("simulated per-doc failure")
-        return original(meta)
+        def screen_envelope(
+            self,
+            payload: ScreenEnvelopePayload,
+            *,
+            rep_index: int = 0,
+        ) -> ScreenRepWire:
+            if payload.metadata.get("_boom"):
+                raise RuntimeError("simulated per-doc failure")
+            return self._stub.screen_envelope(payload, rep_index=rep_index)
 
-    monkeypatch.setattr(screen_mod, "_stub_screen", flaky)
+        def screen_fulltext(self, payload: ScreenFullTextPayload) -> ScreenRepWire:
+            return self._stub.screen_fulltext(payload)
 
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
@@ -275,7 +313,13 @@ def test_screen_sources_doc_exception_isolated(
     seed_source(conn, pid, meta={"abstract": "Fine doc."})
     ctx = ScreenContext(scope_id=scope_id, intent="Test", context={})
 
-    counts = screen_sources(conn, project_id=pid, run_id=rid, context=ctx)
+    counts = screen_sources(
+        conn,
+        project_id=pid,
+        run_id=rid,
+        context=ctx,
+        screening_backend=FlakyBackend(),
+    )
 
     assert counts["screened"] == 2
     assert counts["failed"] == 1
@@ -321,6 +365,26 @@ def test_source_screened_event_payload(conn: Connection) -> None:
     assert payload["status"] == "relevant"
     assert payload["screen_basis"] == "title_abstract"
     assert payload["screen_decision_confidence"] == 0.9
+    assert payload["screen_stage"] == 1
+    assert payload["reps"] == [
+        {
+            "decision": "relevant",
+            "confidence": 0.9,
+            "reason": "Deterministic stub inclusion.",
+        },
+        {
+            "decision": "relevant",
+            "confidence": 0.9,
+            "reason": "Deterministic stub inclusion.",
+        },
+        {
+            "decision": "relevant",
+            "confidence": 0.9,
+            "reason": "Deterministic stub inclusion.",
+        },
+    ]
+    assert payload["agreement"] == {"agreeing": 3, "survivors": 3}
+    assert payload["aggregation_flags"] == []
 
 
 def test_unique_constraint_scope_source(conn: Connection) -> None:
@@ -386,14 +450,15 @@ def test_harness_screen_component(conn: Connection) -> None:
     ).fetchall()
     assert len(result_rows) == 2
 
-    # component.completed payload has all seven keys
+    # component.completed payload has the stage-1 summary keys
     log_entries = events.read(conn, pid)
     completed = [e for e in log_entries if e["event_type"] == "component.completed"]
     assert len(completed) == 1
     payload = completed[0]["payload"]
     expected_keys = {
         "component", "screened", "relevant", "not_relevant",
-        "failed", "title_abstract", "title_only",
+        "failed", "title_abstract", "title_only", "unsure_reps",
+        "non_unanimous", "rep_failures", "tie_broken", "retries",
     }
     assert set(payload.keys()) == expected_keys
 

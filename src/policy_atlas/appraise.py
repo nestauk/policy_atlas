@@ -19,8 +19,8 @@ from policy_atlas.schema import (
     project_source_snapshot,
     source_appraisal_result,
     source_classification_result,
-    source_screening_result,
 )
+from policy_atlas.screen import effective_screen_rows
 
 DEFAULT_RUBRIC_VERSION = "v2-hierarchy-v1"
 
@@ -143,18 +143,22 @@ def appraise_sources(
     # Relevant-but-unclassified rows: reported, never processed — makes a
     # skipped-classify misconfiguration visible. Anti-join, not count subtraction
     # (no FK guarantees classification rows are a subset of screening rows).
+    # Effective-relevant via the helper: a raw status='relevant' join would count
+    # a stage-2-demoted doc's superseded stage-1 row as "relevant but
+    # unclassified", even though classify correctly skips it.
+    effective = effective_screen_rows()
     unclassified = conn.execute(
         select(func.count())
-        .select_from(source_screening_result)
-        .where(source_screening_result.c.evidence_scope_id == context.scope_id)
-        .where(source_screening_result.c.project_id == project_id)
-        .where(source_screening_result.c.status == "relevant")
+        .select_from(effective)
+        .where(effective.c.evidence_scope_id == context.scope_id)
+        .where(effective.c.project_id == project_id)
+        .where(effective.c.status == "relevant")
         .where(
             ~exists().where(
                 (source_classification_result.c.evidence_scope_id == context.scope_id)
                 & (source_classification_result.c.project_id == project_id)
                 & (source_classification_result.c.project_source_snapshot_id
-                   == source_screening_result.c.project_source_snapshot_id)
+                   == effective.c.project_source_snapshot_id)
             )
         )
     ).scalar_one()

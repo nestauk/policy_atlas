@@ -276,15 +276,22 @@ def seed_screening_result(
     scope_id: uuid.UUID,
     pss_id: uuid.UUID,
     status: str = "relevant",
+    *,
+    screen_stage: int = 1,
+    screen_basis: str = "title_abstract",
 ) -> None:
-    """Insert a source_screening_result row."""
+    """Insert a source_screening_result row.
+
+    ``screen_stage`` defaults to 1; pass 2 to seed a stage-2 row (e.g. a
+    demotion or confirmation) atop a doc's stage-1 row.
+    """
     from policy_atlas.schema import source_screening_result
 
     if status == "failed":
         basis = None
         confidence = None
     else:
-        basis = "title_abstract"
+        basis = screen_basis
         confidence = 0.9 if status == "relevant" else 0.95
     conn.execute(source_screening_result.insert().values(
         source_screening_result_id=uuid.uuid4(),
@@ -295,6 +302,7 @@ def seed_screening_result(
         status=status,
         screen_basis=basis,
         screen_decision_confidence=confidence,
+        screen_stage=screen_stage,
         screened_at=now(),
     ))
 

@@ -171,6 +171,24 @@ def test_unclassified_counted_not_appraised(conn: Connection) -> None:
     assert _appraisal_rows(conn, pid) == []
 
 
+def test_demoted_doc_not_counted_unclassified(conn: Connection) -> None:
+    """A stage-2-demoted doc's stale stage-1 'relevant' row must not inflate
+    'unclassified' (task 014 sweep: effective-stage-and-status grain — a raw
+    status='relevant' join would count this doc even though classify correctly
+    never classified it)."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _, pss_id = seed_source(conn, pid)
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant", screen_stage=1)
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="not_relevant", screen_stage=2)
+
+    counts = appraise_sources(conn, project_id=pid, run_id=rid, context=_ctx(scope_id))
+
+    assert counts["appraised"] == 0
+    assert counts["unclassified"] == 0
+    assert _appraisal_rows(conn, pid) == []
+
+
 def test_appraise_sources_idempotent_rerun(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
