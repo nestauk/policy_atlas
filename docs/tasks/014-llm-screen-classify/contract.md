@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 1.3), awaiting contract 🛑.
+> **Status:** drafted (rev 1.4), awaiting contract 🛑.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ · ADR: _expected — first
 > product read of third-party corpus text; injection posture enforcement._
@@ -71,6 +71,17 @@ specs in [docs/specs/](../../specs/index.md).
 >   recorded seams: classify-consensus (eval-gated) ·
 >   heterogeneous-model ensemble (needs the Bedrock/routing seam —
 >   v3.0 is single-provider).
+> - **rev 1.4** (2026-07-08, user gate challenge held): **consensus
+>   confidence = probability over ALL reps, not mean-of-majority** —
+>   the user caught that mean-of-majority makes a 2/3 doc
+>   indistinguishable from a 3/3 doc in the persisted column (the only
+>   signal downstream readers see). Each rep contributes p(relevant)
+>   (= conf if relevant, 1 − conf if not_relevant, flat 0.5 if
+>   unsure); persisted confidence = confidence in the recorded
+>   decision. UNSURE_CONFIDENCE_CAP retired (unanimous-unsure lands
+>   at 0.5 naturally). Vote/probability divergence explicitly legal
+>   (relevant at < 0.5 = kept-in-but-shaky, borderline-review
+>   surfaced). Decision 3 rewritten.
 
 ## Goal
 
@@ -163,18 +174,31 @@ PR landing:
    payload + trace only — never a column, never rendered as
    instruction — enabling borderline review and disagreement autopsies
    (rev 1.2; Mäntylä 2606.17588). **Aggregation is recall-preserving
-   at every step**: per rep, `unsure` counts as `relevant` at
-   capped-low confidence (`min(model_confidence,
-   UNSURE_CONFIDENCE_CAP)`) — the published recommendation verbatim
-   ("treat unclassifiable outputs as referred-back positives",
-   LLM4SCREENLIT 2511.12635); then majority vote over the reps; a tie
-   (possible only when a rep failed) breaks to `relevant`, flagged.
-   Persisted `screen_decision_confidence` = mean confidence of the
-   majority-side reps. The event payload records every rep's
-   `{decision, confidence, reason}` plus the agreement count (3/3 ·
-   2/3 · …); non-unanimous docs are counted in the component summary —
-   the standing per-run variance evidence. `unsure` is deliberately
-   **not** a status value:
+   at every step** *(confidence formula rev 1.4)*: the **decision** is
+   a majority vote in which `unsure` counts as `relevant` — the
+   published recommendation verbatim ("treat unclassifiable outputs
+   as referred-back positives", LLM4SCREENLIT 2511.12635) — with ties
+   (possible only when a rep failed) breaking to `relevant`, flagged.
+   The **confidence** is a consensus probability over ALL reps, not
+   the majority side: each rep contributes p(relevant) = its
+   confidence if it said `relevant`, 1 − its confidence if it said
+   `not_relevant` (dissent lowers the number in proportion to the
+   dissenter's conviction), and a flat 0.5 if it said `unsure`
+   (conviction in "unsure" has no direction — this retires the
+   separate UNSURE_CONFIDENCE_CAP; unanimous-unsure lands at 0.5,
+   which IS referred-back-positive-at-low-confidence). Persisted
+   `screen_decision_confidence` = confidence in the recorded decision
+   (mean p for `relevant` rows, 1 − mean p for `not_relevant` rows),
+   keeping the column's semantics stable for its readers (select's
+   composite, `thin_base`). Vote and probability may legally diverge
+   (two weak relevants against one high-conviction dissenter →
+   `relevant` at confidence < 0.5): that is the honest recall-first
+   outcome — kept in, marked shaky — surfaced to the borderline
+   review, never silently reconciled. The event payload records every
+   rep's `{decision, confidence, reason}` plus the agreement count
+   (3/3 · 2/3 · …); non-unanimous docs are counted in the component
+   summary — the standing per-run variance evidence. `unsure` is
+   deliberately **not** a status value:
    every downstream reader filters on `status='relevant'`, so a third
    status would silently behave as exclusion — the one thing the spec
    forbids ("confidence … never a hard exclusion cutoff"); the durable
@@ -367,9 +391,11 @@ halt and report — don't tune the prompt to the fixtures.
   failed-then-retried screen doc producing a new row with attempt
   history intact, and failure-attempt-aware counts), consensus
   aggregation (unanimous · 2/3 majority · rep-failure degradation ·
-  1-1 tie→relevant flagged · all-reps-failed→doc failed · per-rep
-  unsure→relevant before the vote · majority-side mean confidence),
-  event payload carries per-rep records + agreement count, tag
+  1-1 tie→relevant flagged · all-reps-failed→doc failed · unsure
+  counts relevant in the vote and 0.5 in the probability ·
+  consensus-probability formula incl. the 2/3-vs-3/3 distinguishable
+  case and the vote/probability divergence case), event payload
+  carries per-rep records + agreement count, tag
   bounds, migration roundtrip (CHECK widen + partial unique index) on
   both DBs.
 - Judgment tests (live-shaped, stub-driven): schema-constrained output

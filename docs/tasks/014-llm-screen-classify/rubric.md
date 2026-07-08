@@ -42,7 +42,9 @@ otherwise it is in progress, not done.
         row (partial unique index; attempt history preserved; counts
         failure-attempt-aware); classify failure writes no row and
         re-runs retry exactly the unwritten docs; per-rep `unsure`
-        maps to relevant at capped-low confidence before the vote;
+        counts as relevant in the vote and 0.5 in the consensus
+        probability; the confidence formula distinguishes 2/3 from
+        3/3 and covers the vote/probability divergence case;
         majority / rep-failure-degradation / tie→relevant aggregation
         each covered; per-rep records + agreement count in the event
         payload; all failure paths counted in summaries.
