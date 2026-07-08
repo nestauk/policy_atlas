@@ -261,13 +261,20 @@ by the live check, each root-caused and regression-covered):
   citable set ⊆ the selected set, see the confound note); the property holds
   deterministically in the suite. Needs a corpus with citable docs on both
   sides of the selection.
-- **Zero-group intervention partition on the live run** — the 012 `group`
-  component returned 0 groups from 96 distinct intervention values (all
-  ungrouped through its repair) where 012's own live check grouped 94 values
-  into 16; unchanged 012 code, so either live-model drift or an
-  extraction-output shape difference. Flagged for the review stack / the
-  grouping-quality eval seam — it also weakens the full-chain profile's
-  finding-claim path (empty section seeds).
+- **Zero-group intervention partition on the live run — ROOT-CAUSED at step 7
+  (trace replay, 2026-07-08): a 012 validation defect, not model drift.** The
+  model proposed 16 coherent groups covering all 96 values in every call, but
+  `validate_partition` is all-or-nothing and one group label over
+  `LABEL_MAX=80` rejects the whole partition: partition group 6 (92 chars)
+  and repair group 8 (89 chars) on run b423032b; same shape on e50939bb —
+  4/4 intervention calls lost to a single over-long label each. The outcome
+  runs survived at a max label of 78 chars (two under the cliff), which is
+  why 012's own live check passed. Systematic driver: intervention values
+  are long compound policy phrases, and the prompt's own
+  ground-labels-in-member-vocabulary rule pushes labels long. Fix belongs in
+  012's `facet_values.py` (per-group rejection for text-rule violations, or
+  the 013 M5 clamp posture) — recorded in deferred.md; note also that the
+  rejection *reason* lives only in the trace, never in grouping provenance.
 - **Writer under-uses finding claims** — with an extraction referenced and
   `query_findings` returning records, the live writer emitted no finding-type
   claims; synthesis-quality eval seam (prompt emphasis), not a gate.
@@ -401,6 +408,19 @@ size (13.9K added lines, ~3× a routine slice — sized deliberately, 008
 retro) plus the two-stage verification of Codex's claims, which refuted two
 "critical" findings before they cost adjudication churn. Per-angle diff
 scoping was applied; no data files needed excluding.
+
+**Live-trace content review (step 7 follow-up, 2026-07-08):** the four
+synthesise profile traces were read for content, not just cost/hygiene.
+Structure is sane (one proposal per run, section turns within caps, embed
+batches ≤ turns, repair→re-judge chains present). The judge's strict lane
+fires correctly live: every `unsupported_mis_cited` sampled was a reasoning
+claim smuggling empirical assertions or recommendations — exactly the
+Tier-4 escape the contract targets — and the repairs reworded down to
+computed-count pattern claims and verbatim chunk excerpts. No empty
+rationales, no empty judge envelopes. The same trace review root-caused the
+zero-group anomaly (§ Known unverified items): a 012 `validate_partition`
+all-or-nothing rejection on one over-long label, not model drift — the
+model's grouping was good all four times.
 
 **Rubric status:** items 1–7 and 9–19 SATISFIED (contract-verifier report,
 file:line + named-test evidence; two overlap-verified here); item 8

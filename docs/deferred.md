@@ -545,6 +545,21 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 
 ## Group / facet-level theming (task 012 seams)
 
+- **BUG: all-or-nothing partition validation loses whole groupings to one bad
+  label** (root-caused 2026-07-08, 013 step-7 trace replay) — one group label
+  over `LABEL_MAX=80` anywhere makes `validate_partition`
+  (`facet_values.py`) reject the ENTIRE partition; if the repair also
+  overflows one label the run lands 0 groups with every finding ungrouped.
+  Hit both live intervention-facet runs (16 coherent, id-clean groups
+  proposed each call; 4/4 calls lost to a single 89–92-char label; outcome
+  runs survived at 78 chars). Long compound facet values + the prompt's own
+  ground-labels-in-member-vocabulary rule make overflow likely, so
+  intervention facets fail systematically. Fix next slice: per-group
+  rejection for label/description text violations (violating group's members
+  join `missing_ids` for the repair; id-integrity violations stay
+  whole-response) or the 013 M5 clamp posture; add the replayed live shape
+  as a regression test; and persist the rejection *reason* into grouping
+  provenance/flags (today it exists only in the Langfuse trace).
 - **`query-findings` tool — DISCHARGED in full (task 013).** The scoped read tool landed
   with its deliberative consumer exactly as recorded: agent-invoked in synthesise's
   section loop (`make_findings_reader` behind the closed tool set), deterministic and
