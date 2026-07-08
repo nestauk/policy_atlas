@@ -65,13 +65,12 @@ if every box holds** — otherwise it is in progress, not done.
         coverage record · rapid-profile chain smoke; no deep-chain
         e2e) — evidence in [verification.md](verification.md).
 12b. [ ] Every shipped Overton filter key matches the design-stage
-        param-pinning record (rev 3.3,
+        param-pinning record (revs 3.3–3.4,
         [overton-param-pinning.md](overton-param-pinning.md)) — wire
-        spellings, single-valued keys, three-letter language codes,
-        full-label SDGs, the never-read-semantic-`total_results` client
-        rule — and the two residual live-check confirmations
-        (`igo`/`other` tokens, one derived SDG label) are recorded in
-        [verification.md](verification.md).
+        spellings, single-valued keys, four pinned `source_type`
+        tokens, named region groups, three-letter language codes,
+        full-label SDGs, and the never-read-semantic-`total_results`
+        client rule. No residual pinning items remain.
 13. [ ] Known gaps and deferred seams recorded — live-`SearchBackend`,
         Arm-B and thin-base-trigger entries in
         [docs/deferred.md](../../deferred.md) marked discharged; the

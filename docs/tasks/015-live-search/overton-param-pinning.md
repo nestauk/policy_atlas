@@ -94,7 +94,27 @@ UNTESTED below is re-checked cheaply during the build's live check.
    224,427). Deep-mode reformulation diversity matters more than
    paging depth on this backend.
 
-## Contract deltas (folded as rev 3.3)
+## Residual-probe round (same session, +4 calls — 21 total)
+
+All residual items DISCHARGED; nothing left for the build live check:
+
+- `source_type=igo` → 50/50 `igo`; `source_type=other` → 50/50
+  `other`. **Full pinned token set: `government` · `think tank` ·
+  `igo` · `other`.**
+- `sdgcategories=SDG 13: Climate Action` (a *derived* label, not among
+  the 8 facet-observed) → 50/50 carry SDG 13 — the
+  `SDG {n}: {UN name}` derivation pattern holds; all 17 label
+  constants are safe to pin.
+- **`source_region` pinned and PROMOTED**: `source_region=OECD members`
+  → 50/50 sources carry `OECD members` in their `source.region` list.
+  Named groups work directly — no `_:` code mapping needed for
+  affirmative groups. Observed group vocabulary (facets + record
+  region lists): `OECD members` · `G7` · `G20` · `Europe` ·
+  `North America` · `APAC` · `Oceania` · `EU27` · `EEA` ·
+  `Very high human development`. The V2 `_:` negation idiom
+  (`All but UK`) remains UNTESTED — exclusion groups stay at the seam.
+
+## Contract deltas (folded as revs 3.3–3.4)
 
 - Overton `languages` values = three-letter codes (pinned vocabulary).
 - Overton `sdgs` mapping = full-label constants (bare numbers rejected

@@ -3,14 +3,27 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted rev 3.3 — awaiting contract approval (the 🛑 is
-> open; revs 2–3.3 shaped at the gate in user deliberation).
+> **Status:** drafted rev 3.4 — awaiting contract approval (the 🛑 is
+> open; revs 2–3.4 shaped at the gate in user deliberation).
 > Contract approved (before planning): _date · who_ ·
 > Plan approved (before implementation): _date · who_ · ADR: _expected:
 > one_ (depth-graded agentic search adoption — the Arm-B fold is a
 > consequential design decision; drafted at step 4).
 >
 > **Revision history:**
+> - **rev 3.4** (2026-07-09, residual pinning probes run — user:
+>   "finish off the live check"; +4 calls, 21 total; record updated in
+>   [overton-param-pinning.md](overton-param-pinning.md)). **Zero
+>   pinning residuals remain for the build live check.** `source_type`
+>   tokens `igo`/`other` confirmed (full set: government · think tank ·
+>   igo · other); the derived-SDG-label pattern held on an unobserved
+>   label (SDG 13) — all 17 constants safe; and **`publisher_region`
+>   is PROMOTED into the grammar**: `source_region` accepts named
+>   groups directly (`OECD members` → 50/50 membership-verified; no
+>   `_:` code mapping needed) — single-valued, vocabulary pinned
+>   (OECD members · G7 · G20 · Europe · North America · APAC ·
+>   Oceania · EU27 · EEA · Very high human development). The V2 `_:`
+>   negation idiom (exclusion groups) stays at the seam, untested.
 > - **rev 3.3** (2026-07-09, **Overton param-pinning session run at the
 >   design stage** — user supplied the API key for exactly this; 17
 >   rate-limited probes, findings verified against returned records;
@@ -629,14 +642,20 @@ PR landing:
         [overton-param-pinning.md](overton-param-pinning.md); every key
         verified live against returned records, composing with
         `squery`*): `publisher_type` (**single-valued** →
-        `source_type`; pinned tokens `government` · `think tank`;
-        `igo` · `other` facet-observed, confirmed at the live check) ·
+        `source_type`; pinned tokens `government` · `think tank` ·
+        `igo` · `other` — all four record-verified, rev 3.4) ·
         `publisher_country` (**single-valued** → `source_country`;
         country *names* — `UK`, `USA`, … — incl. hierarchical
-        sub-national forms and `IGO`) · `language` (**single-valued**;
+        sub-national forms and `IGO`) · `publisher_region`
+        (**single-valued** → `source_region`, rev 3.4: named groups
+        pinned — `OECD members` · `G7` · `G20` · `Europe` ·
+        `North America` · `APAC` · `Oceania` · `EU27` · `EEA` ·
+        `Very high human development`; exclusion groups — the V2 `_:`
+        idiom — stay at the seam) · `language` (**single-valued**;
         three-letter codes — `eng`, `fre`, …) · `sdgs` map to
         full-label constants on this backend (bare numbers silently
-        zero-match).
+        zero-match; the `SDG {n}: {UN name}` derivation pattern
+        verified on an unobserved label, rev 3.4).
       Validation is fail-closed at plan compile: unknown keys, unknown
       enum values, or a key in a backend block the run's backend scope
       doesn't include → structural failure. Multi-value keys map to
@@ -820,11 +839,12 @@ in-contract fix (halt and report — don't quietly raise the budgets).
 - **Overton param-pinning session — DISCHARGED at the design stage**
   *(rev 3.1 requirement; run rev 3.3, 2026-07-09, user-sanctioned key
   use; record: [overton-param-pinning.md](overton-param-pinning.md))*:
-  17 rate-limited probes pinned every decision-18 Overton key's wire
+  21 rate-limited probes pinned every decision-18 Overton key's wire
   spelling, value vocabulary and `squery` co-behavior, verified against
-  returned records; key redacted from all persisted output. Residual
-  live-check items only: one confirmation each for `source_type`
-  tokens `igo`/`other`, one derived SDG label spot-check.
+  returned records; key redacted from all persisted output. **No
+  residual pinning items remain** (rev 3.4: `igo`/`other` tokens,
+  the derived-SDG-label pattern and `source_region` named groups all
+  record-verified).
 - **Live manual check** — exactly the decision-11 pin (rapid run ·
   dedup re-run · limiter + key hygiene · comparative result-count
   probe · deep run with wall-clock/cost vs budgets · escalation
