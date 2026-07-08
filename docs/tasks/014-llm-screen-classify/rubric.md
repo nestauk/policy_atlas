@@ -18,8 +18,9 @@ otherwise it is in progress, not done.
        including the live e2e run: relevance spread, classification
        distribution not-all-`Unknown`, non-English record handled, tag
        samples within bounds, Langfuse trace ids + scores, cost, the
-       decision-10 variance probe (flip rate), and the borderline
-       review (lowest-confidence band with coherent `reason`s).
+       decision-10 agreement distribution (unanimous / 2-3 /
+       tie-broken), and the borderline review (lowest-confidence band
+       + non-unanimous docs with coherent `reason`s).
 7. [ ] Known gaps and deferred seams listed (gap →
        [docs/deferred.md](../../deferred.md)); the discharged
        LLM-screen/classify seam entries updated, the seams this slice
@@ -35,14 +36,16 @@ otherwise it is in progress, not done.
        enter prompts as id-keyed data records; outputs
        schema-constrained and code-validated against closed
        vocabularies; NUL scrub at the backend boundary.
-10. [ ] The rev-1.1 failure/uncertainty semantics are test-covered:
-        screen failure persists `status='failed'` and a re-run
-        re-attempts the doc as a new row (partial unique index;
-        attempt history preserved; counts failure-attempt-aware);
-        classify failure writes no row and re-runs retry exactly the
-        unwritten docs; wire-level `unsure` maps to relevant at
-        capped-low confidence and is event-recorded + counted; all
-        failure paths counted in summaries.
+10. [ ] The failure/uncertainty/consensus semantics (revs 1.1–1.3) are
+        test-covered: screen doc failure (all reps failed) persists
+        `status='failed'` and a re-run re-attempts the doc as a new
+        row (partial unique index; attempt history preserved; counts
+        failure-attempt-aware); classify failure writes no row and
+        re-runs retry exactly the unwritten docs; per-rep `unsure`
+        maps to relevant at capped-low confidence before the vote;
+        majority / rep-failure-degradation / tie→relevant aggregation
+        each covered; per-rep records + agreement count in the event
+        payload; all failure paths counted in summaries.
 11. [ ] Open-tag output bounded and provenance-clean: per-record and
         per-tag caps enforced, `asserted_by='classify'` ·
         `tag_type='methodological_structural'`, all writes through

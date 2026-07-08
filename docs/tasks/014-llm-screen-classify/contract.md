@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 1.1), awaiting contract 🛑.
+> **Status:** drafted (rev 1.3), awaiting contract 🛑.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ · ADR: _expected — first
 > product read of third-party corpus text; injection posture enforcement._
@@ -55,6 +55,22 @@ specs in [docs/specs/](../../specs/index.md).
 >   metrics (full confusion matrix · lost-evidence/recall · WMCC ·
 >   stub-as-non-LLM-baseline) flow to the eval slice's screening
 >   dataset.
+> - **rev 1.3** (2026-07-08, user gate call): **consensus screening
+>   ADOPTED** — the rev-1.2 deferral reversed at the gate; screen calls
+>   are envelope-grain mini-class (cents at fixture scale, low
+>   single-digit dollars at ~1K docs), so the ×N cost objection was
+>   overweighted, and a recall-preserving vote is a variance reduction
+>   with no plausible recall downside (dual-model ensemble precedent).
+>   Shape: **repeated-sampling consensus of the one screen surface**
+>   (`SCREEN_REPS = 3`, the `--reps` pattern) — decision 3/10 rewritten;
+>   per-rep unsure→relevant then majority; ties break to relevant;
+>   per-rep records in the event payload; agreement stats in the
+>   summary (subsumes the rev-1.2 two-run variance probe). **Scope:
+>   screen only** — classify stays single-call (a 9-label vote
+>   splinters; forced tie-breaks would inflate `Unknown`s). Newly
+>   recorded seams: classify-consensus (eval-gated) ·
+>   heterogeneous-model ensemble (needs the Bedrock/routing seam —
+>   v3.0 is single-provider).
 
 ## Goal
 
@@ -133,22 +149,32 @@ PR landing:
    cross-document leakage, and the cost profile at mini-class over
    envelope text is trivial.
 
-3. **Screen semantics** *(amended revs 1.1, 1.2)*. The model returns a
-   schema-constrained `{decision, confidence, reason}` where decision is
-   **three-way on the wire**: `relevant` | `not_relevant` | `unsure` —
-   forcing a binary answer invites overconfident exclusion, exactly the
-   failure a recall-oriented filter must not have. `reason` (≤ 240
-   chars, the select-rerank bound) is untrusted model text recorded in
-   the event payload + trace only — never a column, never rendered as
+3. **Screen semantics** *(amended revs 1.1, 1.2, 1.3)*. Each screen
+   decision is a **consensus over `SCREEN_REPS = 3` independent
+   samples** of the one screen surface (rev 1.3; the repeated-
+   questioning `--reps` pattern — same prompt, same model, independent
+   calls; heterogeneous-model ensembles wait on the Bedrock/routing
+   seam). Each rep returns a schema-constrained
+   `{decision, confidence, reason}` where decision is **three-way on
+   the wire**: `relevant` | `not_relevant` | `unsure` — forcing a
+   binary answer invites overconfident exclusion, exactly the failure
+   a recall-oriented filter must not have. `reason` (≤ 240 chars, the
+   select-rerank bound) is untrusted model text recorded in the event
+   payload + trace only — never a column, never rendered as
    instruction — enabling borderline review and disagreement autopsies
-   (rev 1.2; Mäntylä 2606.17588). Code maps `unsure` →
-   `status='relevant'` at capped-low confidence
-   (`min(model_confidence, UNSURE_CONFIDENCE_CAP)`) so uncertainty is
-   recall-preserving **by construction** — the published recommendation
-   verbatim ("treat unclassifiable outputs as referred-back positives",
-   LLM4SCREENLIT 2511.12635); the wire decision is recorded
-   in the `source.screened` event payload and counted (`unsure`) in the
-   component summary. `unsure` is deliberately **not** a status value:
+   (rev 1.2; Mäntylä 2606.17588). **Aggregation is recall-preserving
+   at every step**: per rep, `unsure` counts as `relevant` at
+   capped-low confidence (`min(model_confidence,
+   UNSURE_CONFIDENCE_CAP)`) — the published recommendation verbatim
+   ("treat unclassifiable outputs as referred-back positives",
+   LLM4SCREENLIT 2511.12635); then majority vote over the reps; a tie
+   (possible only when a rep failed) breaks to `relevant`, flagged.
+   Persisted `screen_decision_confidence` = mean confidence of the
+   majority-side reps. The event payload records every rep's
+   `{decision, confidence, reason}` plus the agreement count (3/3 ·
+   2/3 · …); non-unanimous docs are counted in the component summary —
+   the standing per-run variance evidence. `unsure` is deliberately
+   **not** a status value:
    every downstream reader filters on `status='relevant'`, so a third
    status would silently behave as exclusion — the one thing the spec
    forbids ("confidence … never a hard exclusion cutoff"); the durable
@@ -186,9 +212,15 @@ PR landing:
    condition — "until a real inference provider makes failure
    transient" — fires in this slice, so retry semantics land with the
    live backends rather than as a follow-on:
-   - **In-call:** one retry (cap 1) per document on both components
-     before any failure outcome is recorded.
-   - **Screen:** call failure (post-retry) → `status='failed'`
+   - **In-call:** one retry (cap 1) per call before that call counts
+     as failed — per rep for screen, per document for classify. Screen
+     call budget is known pre-run: ≤ docs × SCREEN_REPS × 2.
+   - **Screen rep failure** *(rev 1.3)*: a failed rep (post-retry)
+     drops out and the vote runs over the remaining reps (2/3 vote;
+     1-1 tie → relevant, flagged); **all** reps failed →
+     `status='failed'` for the doc. Rep failures are counted in the
+     summary and visible in the event payload.
+   - **Screen doc failure:** `status='failed'`
      persisted. `uq_ssr_scope_source` — `source_screening_result`'s
      unique constraint over (evidence_scope_id,
      project_source_snapshot_id), i.e. "one screening result per doc
@@ -238,19 +270,24 @@ PR landing:
    default everywhere; the skeleton extends its existing
    `live = bool(OPENAI_API_KEY)` pattern to the two new backends.
 
-10. **Variance made visible; consensus deferred** *(new, rev 1.2)*.
-    Single-pass LLM screening has unmeasured decision variance (the
-    field's current worry: majority-vote `--reps` consensus PRs,
+10. **Consensus screening adopted; variance visible on every run**
+    *(new rev 1.2; rewritten rev 1.3 — user gate call reversing the
+    rev-1.2 deferral)*. Single-pass LLM screening has unmeasured
+    decision variance (majority-vote `--reps` consensus PRs,
     dual-model ensembles reaching near-perfect sensitivity, Mäntylä's
-    run-multiple-LLMs recommendation). This slice does **not** buy
-    consensus voting — ×N cost before evidence of variance is
-    unjustified — but it must **measure** it: the live check runs the
-    screen twice over the same corpus (second run on a fresh scope)
-    and reports the decision flip rate in `verification.md`, and the
-    lowest-confidence band is read with its `reason`s (borderline
-    review). Consensus/ensemble screening is a recorded eval-gated
-    seam; the flip-rate number is the evidence that opens or closes
-    it.
+    run-multiple-LLMs recommendation), and at envelope-grain
+    mini-class cost the ×N objection was overweighted. Decision 3's
+    `SCREEN_REPS = 3` consensus is the adopted remedy; because every
+    doc now carries per-rep records + an agreement count, the
+    **per-run disagreement rate is standing variance evidence** — the
+    rev-1.2 second-run flip probe is subsumed and dropped. The live
+    check reports the agreement distribution (share unanimous · 2/3 ·
+    tie-broken) and runs the **borderline review** (lowest-confidence
+    band + all non-unanimous docs, read with `reason`s). Scope:
+    screen only — classify stays single-call (a 9-label vote
+    splinters; tie-breaks would inflate `Unknown`s);
+    classify-consensus and heterogeneous-model ensembles are recorded
+    eval-gated seams.
 
 ## Scope / Out of scope
 
@@ -268,14 +305,16 @@ PR landing:
   different seam) · `Unknown` full-text resolution · grey-lit category
   split · appraise changes (its
   coverage improves for free as `Unknown`s drop) · eval harness ·
-  consensus roll-up · multi-execution fan-in · **screening
-  consensus/ensemble voting** (rev 1.2 — eval-gated on the decision-10
-  flip-rate evidence) · **structured inclusion-criteria screening
-  directive** (rev 1.2 — plan-compile seam mirroring select's
-  directive pattern; intent-as-data is the v3.0 surface). The rev-1.2
-  seams + the LLM4SCREENLIT eval-metric pointers (full confusion
-  matrix · lost-evidence/recall · WMCC · the deterministic stub as the
-  non-LLM baseline) land as `deferred.md` entries at step 8.
+  consensus roll-up · multi-execution fan-in · **classify-consensus
+  voting** (rev 1.3 — eval-gated; screen consensus is IN-slice per
+  decision 10) · **heterogeneous-model screening ensemble** (rev 1.3 —
+  needs the Bedrock/routing seam; v3.0 is single-provider) ·
+  **structured inclusion-criteria screening directive** (rev 1.2 —
+  plan-compile seam mirroring select's directive pattern;
+  intent-as-data is the v3.0 surface). These seams + the
+  LLM4SCREENLIT eval-metric pointers (full confusion matrix ·
+  lost-evidence/recall · WMCC · the deterministic stub as the non-LLM
+  baseline) land as `deferred.md` entries at step 8.
 
 ## Constraints & approval gates
 
@@ -324,11 +363,15 @@ halt and report — don't tune the prompt to the fixtures.
 
 - `make verify` green — deterministic, zero egress (stub backends).
 - Bulk tests: fan-out loops against both stub backends, idempotency,
-  failure isolation (both semantics of decision 5, including a
+  failure isolation (decision 5 semantics, including a
   failed-then-retried screen doc producing a new row with attempt
-  history intact, and failure-attempt-aware counts), unsure→relevant
-  mapping + event/summaries, tag bounds, migration roundtrip (CHECK
-  widen + partial unique index) on both DBs.
+  history intact, and failure-attempt-aware counts), consensus
+  aggregation (unanimous · 2/3 majority · rep-failure degradation ·
+  1-1 tie→relevant flagged · all-reps-failed→doc failed · per-rep
+  unsure→relevant before the vote · majority-side mean confidence),
+  event payload carries per-rep records + agreement count, tag
+  bounds, migration roundtrip (CHECK widen + partial unique index) on
+  both DBs.
 - Judgment tests (live-shaped, stub-driven): schema-constrained output
   parsing, closed-vocabulary validation, injection fixture, NUL scrub.
 - **Live manual check** (operator-run, keys env-only): skeleton e2e over
@@ -338,10 +381,11 @@ halt and report — don't tune the prompt to the fixtures.
   demo-blocking failure this slice exists to remove), the non-English
   fixture record classified, open tags written within bounds, Langfuse
   traces + in-span scores verified via the public API, cost recorded,
-  key grep audit clean. Plus (rev 1.2, decision 10): the **variance
-  probe** (second screening run, flip rate reported) and the
-  **borderline review** (lowest-confidence band read with `reason`s;
-  reasons must be coherent with the decisions).
+  key grep audit clean. Plus (decision 10, rev 1.3): the **agreement
+  distribution reported** (share unanimous · 2/3 · tie-broken —
+  standing variance evidence) and the **borderline review**
+  (lowest-confidence band + all non-unanimous docs read with
+  `reason`s; reasons must be coherent with the decisions).
 
 ## Verification evidence expected
 
