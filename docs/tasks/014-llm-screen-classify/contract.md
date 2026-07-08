@@ -3,8 +3,15 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 1.5.1), awaiting contract 🛑.
-> Contract approved (before planning): _pending_ ·
+> **Status:** **approved (rev 1.5.1)** — contract-stage adversarial
+> review in progress.
+> Contract approved (before planning): **2026-07-08 · Shabeer Rauf**
+> (rev 1.5.1, covering the gated changes: runtime egress on two
+> generation surfaces across two models [`gpt-5-mini` screen ×3 reps ·
+> judgment-class classify, id plan-pinned] · `run_harness` gains
+> `screening_backend` + `classification_backend` · one migration:
+> `ck_stag_tag_type` CHECK widen + `uq_ssr_scope_source` → partial
+> unique index) ·
 > Plan approved (before implementation): _pending_ · ADR: _expected — first
 > product read of third-party corpus text; injection posture enforcement._
 >
