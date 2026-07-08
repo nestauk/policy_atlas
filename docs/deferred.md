@@ -627,6 +627,34 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   vocabulary). The 013 bar was mechanism correctness, invariant enforcement, honest
   flags and provenance fidelity; the field's loudest warning (rev 7.3 scan) — shipping
   without an eval harness — makes this the recommended next slice.
+- **Multi-execution fan-in for consumers + capability-run orchestration**
+  (user direction, 2026-07-08, post-013-build) — the registry's multiplicity,
+  made plan-expressible. The two load-bearing halves already exist: component
+  executions are run-scoped (N runs of the same component per scope coexist as
+  durable rows — 012's skeleton runs `group` twice over different facets) and
+  consumption is by explicit fail-closed run reference (nothing reads "the
+  latest"). What's missing: **(a) multi-reference fan-in** — every consumer
+  today accepts exactly ONE execution per upstream kind (synthesise: one
+  grouping/selection/characterisation; the reference shape generalises to a
+  coherent *set* of run ids, cross-checked against the same chain by the
+  transitive-resolution machinery 013 built); **(b) the capability-run
+  entity + its compile surface** (the 010 run-model seam) — no persistent
+  object yet expresses "this capability run = characterise ×1, group ×2
+  [intervention, outcome], synthesise ×1 over all of it"; `run_harness` is a
+  one-component dispatcher and the skeleton hand-sequences as the capability
+  sub-agent's stand-in. Motivating instance: **multi-facet grouping references
+  for synthesise** — the 013 live full-chain run referenced the
+  intervention-facet grouping (0 groups, all 179 findings ungrouped) while the
+  same project's outcome-facet grouping (13 healthy groups) was structurally
+  invisible; both lenses feeding one synthesis means richer theme claims and
+  spreads per facet family. Design questions for the flow-back: reference
+  shape (list vs per-facet named refs), the all-groupings-share-one-extraction
+  consistency rule, facet-namespacing of directive `group_ids` (group ids are
+  labels — facets can collide), per-facet `groups_unsectioned`, and the
+  roll-up column → list/join-table (schema gate). v3.0 stays serial (branch
+  parallelism is its own seam) — "concurrent" facets initially means cheap
+  back-to-back runs. Adjudicate in the next design conversation alongside the
+  eval-slice sequencing.
 - **Artefact capability-discriminator + versioning grain** — `synthesis_result` is the
   run-scoped roll-up pointing at its artefact; future capabilities mint artefacts into
   the same 001 substrate with their own roll-ups. The discriminator column and the
