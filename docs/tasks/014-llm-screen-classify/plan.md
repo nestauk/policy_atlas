@@ -1,10 +1,15 @@
 # Plan: 014-llm-screen-classify
 
-> **Status:** **rev 3** — contract rev 1.7 amendment folded in
-> (stage-2 full-text screen, decision 11): tasks 2b/5b added, task 8 +
-> phases + constants + live check widened; scoped Codex delta review
-> before the reopened 🛑. Rev 2 base: plan-stage adversarial review
-> adjudicated (Codex, 9 findings: 5 majors · 4 minors, 9/9 adopted). Contract: [contract.md](contract.md) **approved rev 1.5.1,
+> **Status:** **rev 4** — scoped delta review adjudicated (Codex on
+> the stage-2 amendment: 2 blockers · 7 majors, 9/9 adopted):
+> effective-screen helper replaces the abolished "relevant-only =
+> safe" reader class; select = stage-1 confidence only; no-rescue
+> write invariant; text-availability predicate; generic window
+> helper; wiring consolidated in task 8; three-prompt/four-change
+> wording fixed. Awaiting the reopened 🛑 (contract rev 1.9 + this).
+> Rev 3: contract rev 1.7/1.8 amendment folded in (stage-2 screen,
+> single-component design, tasks 2b/5b). Rev 2 base: plan-stage
+> adversarial review adjudicated (Codex, 9 findings, 9/9 adopted). Contract: [contract.md](contract.md) **approved rev 1.5.1,
 > adjudicated rev 1.6 (Codex 10/10), ⚑ remedies user-confirmed
 > 2026-07-08**. ADR due at plan confirmation (step 4): injection
 > posture + consensus screening are capability-class decisions.
@@ -63,11 +68,20 @@ delegate; every `lead` mark carries a justification.
   tags: [..], confidence: 0..1, reason}`
 - Persisted screen confidence = consensus probability (decision 3);
   event payloads carry per-rep records + agreement count
-- PROMPT_VERSIONs: `screen_v1` · `classify_v1` (8th/9th product
-  prompts, lead-authored)
-- Migration 14: `ck_stag_tag_type` widen to
-  (`topic_theme`,`methodological_structural`) + `uq_ssr_scope_source`
-  → partial unique index `WHERE status <> 'failed'`; table count
+- PROMPT_VERSIONs: `screen_v1` · `classify_v1` · `screen_fulltext_v1`
+  (8th/9th/10th product prompts, lead-authored; rev 4 fix)
+- Stage-2 availability predicate (rev 4, 013 text-availability
+  lesson): `full_text_status = 'ingested'` OR envelope
+  `text_basis = 'full_text'`
+- Select stage rule (rev 4): `ScreenedSource.screen_stage` carried;
+  composite `screen_confidence` leg + `thin_base` read **stage-1
+  confidence only**; stage 2 affects select via status (demotions
+  leave the candidate set); stage-aware composite = eval seam
+- Migration 14 (rev 4 fix — FOUR changes): `screen_stage` column
+  (1|2, NOT NULL default 1) · `screen_basis` CHECK gains `full_text` ·
+  partial unique over (scope, source, stage) WHERE status<>'failed' ·
+  `ck_stag_tag_type` widen to
+  (`topic_theme`,`methodological_structural`); table count
   stays 25; roundtrip BOTH DBs (011 lesson 13f909c)
 
 ## Reader enumeration (contract decision 5, rev 1.6 M7)
@@ -76,13 +90,25 @@ Verified by grep over `source_screening_result` consumers:
 
 | Reader | Class | Action |
 |---|---|---|
-| `screen.py` NOT-EXISTS guard (l.70) | eligibility | becomes "no **non-failed** row exists" (task 5) |
-| `classify.py` relevant join (l.77-103) + `total_relevant` (l.116) | relevant-only — safe | regression test only |
-| `classify.py` `skipped` count (l.109) | raw rows — UNSAFE | effective-status distinct-source fix (task 6) |
-| `characterise.py` `_base_counts` (l.162-179) | raw rows — UNSAFE (negative `unscreened`) | effective-status fix (task 7) |
-| `characterise.py` relevant join (l.217+) | relevant-only — safe | regression test only |
-| `skeleton.py` demo summaries (l.660, l.949) | raw attempt rows — UNSAFE (rev 2) | effective-status distinct-source summary; attempt-history detail split into its own log line (task 7, exact edit) |
-| `appraise.py`, `ingest_full_text.py`, `synthesis_tools.py`, `synthesise.py` | relevant-only expected — verify | regression test each; any raw-count discovery escalates to lead adjudication before editing (rev 2) |
+**Rev 4 (delta-review blocker): the "relevant-only = safe" class is
+ABOLISHED** — under two-stage rows a raw `status='relevant'` join
+includes demoted docs and double-reads confirmed ones. ONE shared
+**effective-screen helper** (highest-stage non-failed per
+(scope, source); authored in task 5, codex) is the read rule for
+EVERY reader below; task 7 applies it mechanically + regression
+tests per reader (demoted · confirmed · failed-stage-2 ·
+failed-then-retried cases each):
+
+| Reader | Action (all via the helper) |
+|---|---|
+| `screen.py` NOT-EXISTS guards | stage-1: no non-failed stage-1 row; stage-2: candidate = effective stage-1 relevant + text-available + no non-failed stage-2 row (task 5/5b) |
+| `classify.py` relevant join + `total_relevant` + `skipped` | effective-relevant join; effective-status distinct-source counts (task 6) |
+| `characterise.py` `_base_counts` + relevant join | effective-stage-and-status (task 7) |
+| `select.py` `ScreenedSource` (l.484-488, l.972-981, l.1509) | effective-relevant candidate set + `screen_stage` carried; **stage-1 confidence only** in composite/thin_base (task 7 + task 8 wiring) |
+| `synthesise.py` (l.720-723) + `synthesis_tools.py` (l.691-697) screened-in scope | effective-relevant (task 7) |
+| `ingest_full_text.py` relevant read | effective stage-1 relevant (stage 2 runs post-ingestion — fetch must not consult stage-2 rows; task 7) |
+| `skeleton.py` summaries (l.660, l.750-752, l.949) | effective-stage-and-status distinct-source; attempt/stage history split into its own log line (task 7) |
+| `appraise.py` | verify + effective join + regression test (task 7) |
 
 ## Tasks
 
@@ -136,11 +162,20 @@ Verified by grep over `source_screening_result` consumers:
    demote-only persistence (stage-2 row, `screen_stage=2`,
    `screen_basis='full_text'`), stage-1-stands-on-failure, counts
    (`stage2_screened/confirmed/demoted/failed/skipped_no_fulltext`);
-   skeleton deep profile = SECOND `screen` run with the stage-2
-   directive (the 012 group-twice precedent — no harness change
-   beyond task 8's params). Reuses the task-3 `ScreeningBackend`
-   protocol (a second method or a payload-typed call — codex
-   proposes, lead reviews the seam shape at drop review). — **codex**
+   `screen_stage` in every `source.screened` payload (rev 4, owner
+   pinned); the **no-rescue WRITE invariant** (stage-2 insert
+   transaction proves effective stage-1 relevant; regression:
+   stage-1-exclude + attempted stage-2-include fails); the
+   **effective-screen helper** authored here (used by every reader,
+   task 7); the **generic chunk-window helper** extracted with
+   explicit budget/overlap params + `ScreenFullTextPayload`
+   (extract's `_window_payloads` is coupled to
+   `ExtractionWindowPayload`/module-global budget — extraction keeps
+   a wrapper, behaviour test-pinned unchanged). Skeleton/harness
+   wiring is task 8's (rev 4 consolidation). Reuses the task-3
+   `ScreeningBackend` protocol (a second method or a payload-typed
+   call — codex proposes, lead reviews the seam shape at drop
+   review). — **codex**
 6. `classify.py` rework: optional `classification_backend` param, stub
    default (rev 2); backend call, no-row-on-failure, provider
    priors assembly, tag writes via helper, **`confidence` + `reason`
@@ -153,9 +188,14 @@ Verified by grep over `source_screening_result` consumers:
    discoveries escalate to lead)*
 
 **Phase 5 — wiring**
-8. `harness.py` + `skeleton.py`: two backend params (stub defaults),
-   skeleton `live = bool(OPENAI_API_KEY)` extension, score summaries.
-   — **fast-worker** *(exact pattern from seven precedents)*
+8. `harness.py` + `skeleton.py` (rev 4, consolidated wiring owner):
+   two backend params (stub defaults), stage-directive threading
+   through the screen node, skeleton deep profile = second `screen`
+   run with the stage-2 directive + rapid profile provably skipping
+   it, `ScreenedSource.screen_stage` threading into select,
+   `live = bool(OPENAI_API_KEY)` extension, score summaries.
+   — **fast-worker** *(exact pattern; the judgment calls are already
+   pinned above)*
 
 **Phase 6 — tests (full `make verify` gate)**
 9. Bulk suites from the contract's Acceptance enumeration (aggregation
@@ -167,8 +207,11 @@ Verified by grep over `source_screening_result` consumers:
     clean/adversarial injection fixtures (semantic invariance),
     quorum + title-only unanimity + tie cases, Unknown-vs-Other
     boundary fixtures, event-payload shape assertions (per-rep
-    records · agreement count · `aggregation_flags` · classify
-    confidence/reason present, no columns), wire-model
+    records · agreement count · `aggregation_flags` · **`screen_stage`
+    on every screened event (rev 4)** · classify
+    confidence/reason present, no columns), select stage-tests
+    (stage-1-only confidence in composite/thin_base; demotion removes
+    from candidate set), no-rescue invariant test, wire-model
     validation/NUL/oversize-field cases. — **codex**
 
 **Phase 7 — records + live check**

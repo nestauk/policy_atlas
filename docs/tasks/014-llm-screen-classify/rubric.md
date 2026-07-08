@@ -70,9 +70,16 @@ otherwise it is in progress, not done.
         per-tag caps enforced, `asserted_by='classify'` ·
         `tag_type='methodological_structural'`, all writes through
         `tags.insert_source_tags`, migration roundtrip green both DBs.
-12. [ ] Stage-2 full-text screen (decision 11, rev 1.7) holds:
-        demote-only (a stage-2 row can never admit a stage-1
-        exclude); stage-2 failure leaves the stage-1 result standing;
+12. [ ] Stage-2 full-text screen (decision 11, revs 1.7–1.9) holds:
+        demote-only enforced as a WRITE invariant (the
+        stage-1-exclude + attempted-stage-2-include regression
+        fails the insert); stage-2 failure leaves the stage-1 result
+        standing; every reader resolves through the shared
+        effective-screen helper (no raw `status='relevant'` join
+        survives — demoted docs excluded, confirmed docs read once);
+        select reads stage-1 confidence only (composite + thin_base)
+        with stage-2 biting via status; availability predicate =
+        text availability (ingested OR envelope full_text);
         `screen_stage` provenance on every row and event; effective
         result = highest-stage non-failed everywhere (reader sweep
         covers stage AND status); `skipped_no_fulltext` counted;

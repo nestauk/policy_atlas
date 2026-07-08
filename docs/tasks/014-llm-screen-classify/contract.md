@@ -139,6 +139,20 @@ specs in [docs/specs/](../../specs/index.md).
 >   Classify Unknown resolution + two-stage appraisal stay seams
 >   (adjudicated: heaviest, unsettled rubric design). Rubric + plan
 >   rev 3 amended; scoped Codex delta review before re-approval.
+> - **rev 1.9** (2026-07-08, scoped delta review adjudicated — Codex
+>   on the rev-1.7/1.8 amendment: 2 blockers · 7 majors, **9/9
+>   adopted** into decision 11's hardening block): B-reader-matrix —
+>   "relevant-only = safe" FALSE under two-stage rows → one
+>   effective-screen helper for every reader; B-select — silent
+>   stage-mixing in composite/thin_base → stage-1 confidence
+>   uniformly, stage 2 bites via status only (stage-aware composite =
+>   eval seam); no-rescue write invariant; availability predicate =
+>   text availability (013 lesson); generic window helper extracted
+>   (extract's is coupled to extraction payloads); spec flow-back for
+>   components §2 rides the reopened 🛑; screen_stage event/test
+>   owners pinned (plan tasks 5b/10); wiring ownership consolidated
+>   (task 8); stale two-prompt/two-change wording fixed everywhere.
+>   Plan rev 4.
 > - **rev 1.8** (2026-07-08, two user design calls): **(a) one screen
 >   component, stage-parameterised** — rev 1.7's separate
 >   `screen_fulltext` registry entry replaced by a fail-closed
@@ -606,6 +620,35 @@ PR landing:
       sub-agents can't query either stage today — vocabulary
       widening is a one-line 013-surface seam for when a consumer
       wants it.
+    - **Delta-review hardening (rev 1.9, Codex 9/9 adopted)**:
+      (i) *no-rescue is a WRITE invariant, not just a read rule* —
+      the stage-2 insert runs inside a transaction that proves an
+      effective stage-1 relevant row exists; regression test:
+      stage-1 exclude + attempted stage-2 include must fail. (ii)
+      *availability predicate pinned to TEXT AVAILABILITY* (the 013
+      build lesson): stage-2 covers docs with `full_text_status =
+      'ingested'` OR envelope `text_basis='full_text'` (uploads carry
+      full text on the envelope snapshot — keying on fetch state
+      alone would skip them and overcount `skipped_no_fulltext`).
+      (iii) *one effective-screen helper is THE read rule*: a shared
+      highest-stage-non-failed-per-(scope, source) resolver that
+      EVERY reader uses — raw `status='relevant'` joins are
+      structurally wrong under two-stage rows (demoted docs leak in;
+      confirmed docs double-read); the rev-2 reader table's
+      "relevant-only = safe" class is abolished. (iv) *select is
+      stage-aware by simplification*: `ScreenedSource` carries
+      `screen_stage`; the composite's `screen_confidence` leg and
+      `thin_base` read **stage-1 confidence uniformly** (every doc
+      has stage 1 — single measurement regime guaranteed); stage 2
+      affects select via **status only** (demotions leave the
+      candidate set). A mixed-regime/stage-aware composite is an
+      eval-seam design. (v) *windowing is extracted, not borrowed*:
+      a generic chunk-window helper (explicit budget/overlap params)
+      with a `ScreenFullTextPayload`; extraction keeps its wrapper,
+      behaviour test-pinned unchanged. (vi) *spec flow-back rides
+      this contract's reopened 🛑*: components §2 gains the
+      two-stage realisation + `full_text` basis ("screened-in" =
+      effective screened-in) per the spec-refinement flow.
     - Classify `Unknown` full-text resolution and the two-stage
       appraisal pass **stay recorded seams** (user scope call: screen
       stage-2 only).
@@ -614,7 +657,9 @@ PR landing:
 ## Scope / Out of scope
 
 - **In:** `screen.py`, `classify.py` (fan-out loops take a backend),
-  new backend module(s), the two prompts, `harness.py` + `skeleton.py`
+  new backend module(s), the THREE prompts (rev 1.9 fix: `screen_v1` ·
+  `classify_v1` · `screen_fulltext_v1`), the shared effective-screen
+  helper + generic chunk-window helper, `harness.py` + `skeleton.py`
   wiring, one migration carrying BOTH schema changes (rev 1.6 B4 fix:
   `ck_stag_tag_type` CHECK widen + `uq_ssr_scope_source` → partial
   unique index; table count stays 25), `tags.py` helper API change +
@@ -626,10 +671,11 @@ PR landing:
   the thin-base **re-search trigger** (needs live search; note: live
   screen confidence makes select's `thin_base` flag meaningful
   automatically — no code change here) · the stage-2 full-text
-  re-screen — **pulled IN-SLICE at rev 1.7 (decision 11)** after three
-  user deliberation rounds recorded there (uniform-over-band
-  two-regime argument · thoroughness-gradation spec home ·
-  SR-fidelity); what stays OUT of the family: **classify `Unknown`
+  re-screen — **NOT an Out item; cross-reference only** (rev 1.9
+  wording fix): it is IN-SLICE as decision 11, recorded here solely so
+  seam-hunters find the trail (uniform-over-band two-regime argument ·
+  thoroughness-gradation spec home · SR-fidelity); what stays OUT of
+  the family: **classify `Unknown`
   full-text resolution** and the **two-stage appraisal pass**
   (heaviest — unsettled modifier-tag rubric design; both share
   decision 11's windowing + staged-result pattern when they land) ·
