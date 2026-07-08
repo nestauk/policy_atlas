@@ -3,14 +3,51 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted rev 3 — awaiting contract approval (the 🛑 is
-> open; revs 2–3 shaped at the gate in user deliberation).
+> **Status:** drafted rev 3.1 — awaiting contract approval (the 🛑 is
+> open; revs 2–3.1 shaped at the gate in user deliberation).
 > Contract approved (before planning): _date · who_ ·
 > Plan approved (before implementation): _date · who_ · ADR: _expected:
 > one_ (depth-graded agentic search adoption — the Arm-B fold is a
 > consequential design decision; drafted at step 4).
 >
 > **Revision history:**
+> - **rev 3.1** (2026-07-09, API filter research adjudicated — two
+>   parallel deep-reasoner web recons of the official OpenAlex + Overton
+>   docs at the user's direction ("maximum functionality for the agent
+>   to define the search strategy"); full record + adjudication table in
+>   [api-filter-research.md](api-filter-research.md)). **Decision 18's
+>   filter vocabulary made concrete**: self-describing directive keys
+>   (the geography trap — OpenAlex country filters mean *author
+>   affiliation*, Overton's mean *publishing org* — is defused by
+>   naming: `author_affiliation_countries` / `publisher_countries`,
+>   never a bare "country"); shared block (dates · SDGs 1–17) + validated
+>   per-backend blocks (OpenAlex: `types` from the 28-value live-verified
+>   enum · `languages` ISO · `exclude_retracted` · `exclude_paratext` ·
+>   `oa_status` opt-in with bias warning; Overton: `publisher_types` ·
+>   `publisher_countries`). **Structural finding**: Overton's public API
+>   doc enumerates almost no filter params — most names are UI-/V2-
+>   inferred; a **dev-time operator param-pinning session** (authenticated
+>   "Generate API call" exports + a `show_search_facets=true` facet dump)
+>   is now a contracted build prerequisite, and every Overton filter key
+>   ships *contingent on pinning* (unpinnable keys drop to the seam,
+>   loudly). **Corrections**: OpenAlex strips wildcards silently rather
+>   than 400-ing (decision 5 rationale fixed — silent term loss is worse
+>   than an error; sanitizer unchanged) and the R&D's ">5 boolean
+>   operators" throttle is undocumented folklore. **Overton pagination
+>   pinned to the documented driver** — the response `next_page_url`,
+>   which is a provider-supplied URL carrying the API key: following it
+>   is the one guarded exception to "never fetch provider URLs"
+>   (host+scheme validated against the pinned literal, key never
+>   logged/persisted; decisions 9/18). **Seams from the research**:
+>   Overton-arm-B snowball upgraded to a *documented* edge
+>   (`plain_dois_cited` + bulk `generate_id_set.php` — cross-backend DOI
+>   seeding OpenAlex→Overton is the concrete hook; reverse policy-inbound
+>   unevidenced, confirm with support) · OpenAlex topic-hierarchy
+>   filters (name→id resolution) · Overton `source_region` (opaque `_:`
+>   code mapping table) · COFOG classifications (reference table) ·
+>   OpenAlex `sample`+`seed` (eval-set primitive) · `min_similarity`
+>   stays a fixed backend constant, never agent-tunable (semantics
+>   wholly undocumented).
 > - **rev 3** (2026-07-09, user unification call at the gate —
 >   **screen-in-the-loop**): the user challenged rev 2's in-loop judge
 >   ("is judge-informed cap ordering not basically a screening step?
@@ -184,6 +221,10 @@ PR landing:
   base: V2 production search autopsy + PR #184 R&D analysis (file:line
   refs for every V2/R&D claim here; the Arm-B mechanics live in its
   Report 2)
+- [api-filter-research.md](api-filter-research.md) — the rev-3.1
+  evidence base: OpenAlex + Overton filter catalogs (live-verified
+  enums, syntax rules, the Overton documentation-gap finding, tiering)
+  behind decision 18's grammar
 - R&D handover: `../discovery_policy_atlas/backend/testing/r_and_d/
   search_experiments/ONBOARDING.md` + `core/source.py` (the SourceClient
   shape decision 16 grows toward)
@@ -236,10 +277,14 @@ PR landing:
    key is not.
 
 5. **OpenAlex query sanitizer on the production path** *(amended
-   rev 1.2)*. Two 400-vector classes, both sanitized in the live
+   revs 1.2, 3.1)*. Two hazard classes, both sanitized in the live
    `search()` itself (V2's comma sanitizer sat on a method with no
-   callers): commas inside quoted phrases, and **wildcards `*`/`?`**
-   (the stemmed field 400s on them — R&D-observed). Applied to
+   callers): commas inside quoted phrases, and **wildcards/fuzzy
+   `*`/`?`/`~`** — rev 3.1 correction: per current docs OpenAlex
+   **strips** these silently rather than 400-ing (the R&D-era
+   observation is stale); silent term loss is worse than an error, so
+   we strip them ourselves, deterministically and visibly, before the
+   provider does it invisibly. Applied to
    **generated queries too** (rev 2 — the R&D saw the LLM emit `*`
    despite prompt bans; sanitize output, don't trust instructions).
    Title-lookup queries (decision 16) additionally strip the
@@ -291,8 +336,12 @@ PR landing:
    the fetch seam and re-raised/logged as **status code + host only**,
    test-asserted. Hosts are pinned literals (`api.openalex.org` /
    `app.overton.io`, HTTPS) — no provider-supplied URL is ever fetched
-   (016's SSRF surface). A `User-Agent` identifying policy-atlas rides
-   every request (V2 sent none to Overton).
+   (016's SSRF surface), with **one guarded exception** *(rev 3.1)*:
+   Overton's documented pagination driver is the response
+   `next_page_url`, followed only after scheme+host validation against
+   the pinned literal (decision 18; anything else → backend error). A
+   `User-Agent` identifying policy-atlas rides every request (V2 sent
+   none to Overton).
 
 10. **Provider JSON stays nested; response shape is validated** *(amended
     rev 1.2)*. Everything provider-controlled stays under
@@ -450,10 +499,15 @@ PR landing:
     `referenced_works` batch-resolved ≤50 ids/request via the `|` join —
     R&D transport, `openalex_client.py:337-372`; `title.search` lookup
     with decision-5 punctuation stripping). **Overton declares
-    `has_snowball=False` in v1** — its outgoing references carry DOIs
-    that *could* backward-snowball via OpenAlex resolution, but that
-    cross-backend design is the named **Overton-arm-B seam** (the
-    presentation's "novel contribution"), not a rider. Fixture backends
+    `has_snowball=False` in v1** — the cross-backend design is the
+    named **Overton-arm-B seam** (the presentation's "novel
+    contribution"), not a rider; *(rev 3.1)* the API research upgraded
+    that seam from speculative to **documented edges**:
+    `plain_dois_cited` (policy docs citing given scholarly DOIs; bulk
+    via `generate_id_set.php`) + `open_cited_institution_authors` —
+    OpenAlex-harvested DOIs seeding Overton is the concrete future
+    hook; reverse policy-inbound citation is unevidenced
+    (confirm-with-support noted at the seam). Fixture backends
     implement the verbs over small fixture pages so loop logic is
     testable end-to-end without sockets; snowball-discovered records
     enter as acquired sources through the same envelope + dedup (007
@@ -488,23 +542,67 @@ PR landing:
     skeleton, not the schema.
 
 18. **Breadth: pagination, filters, backend scope.**
-    - **Pagination to a cap**: both backends follow pagination up to the
-      decision-6 per-depth caps; the Overton page loop is limiter-gated
-      (decision 4); OpenAlex pages via `per-page` + cursor/page params.
-      `breadth_truncated` when a cap cuts results.
+    - **Pagination to a cap** *(amended rev 3.1)*: both backends follow
+      pagination up to the decision-6 per-depth caps;
+      `breadth_truncated` when a cap cuts results. OpenAlex pages via
+      `per-page` (≤200, live-verified) + page/cursor params. Overton
+      pages via the **documented driver, the response `next_page_url`**
+      (page size is server-fixed ~20; V2's `pp` param is unverified —
+      not used) — this is a provider-supplied URL carrying the API key,
+      so following it is the **one guarded exception** to decision 9's
+      no-provider-URL rule: scheme+host validated against the pinned
+      literal before the request (anything else → backend error), key
+      never logged/persisted, the loop limiter-gated (decision 4),
+      account page-caps surfacing as honest `breadth_truncated`.
     - **`scope_filters` becomes a real directive vocabulary**
-      (fail-closed): `context["search"]["filters"]` admits
-      `published_after` / `published_before` (both backends: Overton
-      params; OpenAlex `from/to_publication_date`) and `source_type` +
-      `source_country` (Overton-only; ignored-with-a-counted-note on
-      OpenAlex is WRONG — a filter a backend can't honour is a
-      structural failure for that run's directive, fail-closed, so a
-      mixed-backend run with Overton-only filters must say so
-      explicitly via a `backends`-scoped filter form; exact grammar
-      plan-pinned). Executed filters land on the coverage record's
-      `scope_filters` (non-`{}` for the first time) and in every
-      `search.executed` payload. V2's region-label mapping stays at the
-      seam.
+      *(rewritten rev 3.1 — grammar adjudicated from the API research;
+      full catalog + tiering in
+      [api-filter-research.md](api-filter-research.md))*.
+      `context["search"]["filters"]` is **fail-closed, all-opt-in, no
+      defaults** (every admitted filter is agent-authored for a stated
+      intent; the base query applies zero narrowing — the silent-recall
+      class stays structurally impossible). **Directive keys are ours,
+      self-describing, mapped per backend** — the research's highest-risk
+      semantic trap (OpenAlex geography = *author affiliation*, Overton
+      geography = *publishing org*, neither = study geography) is
+      defused by naming, not help-text hope:
+      - **shared** (mapped to both): `published_after` /
+        `published_before` (ISO dates → OpenAlex
+        `from/to_publication_date`; Overton `published_after/before`) ·
+        `sdgs` (UN SDG numbers 1–17, the one vocabulary closed on both
+        sides → OpenAlex `sustainable_development_goals.id` IRIs;
+        Overton `sdgcategories`; help text: ML-tagged relevance hints,
+        not ground truth).
+      - **openalex**: `types` (allowlist over the 28-value live-verified
+        enum, constant re-verified via `group_by=type` at build) ·
+        `languages` (ISO 639-1; auto-detected caveat) ·
+        `exclude_retracted` / `exclude_paratext` (booleans → the
+        near-free integrity guards `is_retracted:false` /
+        `is_paratext:false`) · `oa_status` (allowlist over the 6-value
+        enum; help text names the OA-venue bias and 016-fetch trade) ·
+        `author_affiliation_countries` (ISO codes →
+        `authorships.countries`).
+      - **overton** (every key **contingent on the param-pinning
+        session** — see Acceptance checks; unpinnable keys drop to the
+        seam loudly, never ship on inferred spellings):
+        `publisher_types` (government / IGO / think tank / NGO →
+        `source_type`, tokens as pinned) · `publisher_countries`
+        (country *names*, not ISO — the pinned form) · `languages`
+        (wire format pinned at the session).
+      Validation is fail-closed at plan compile: unknown keys, unknown
+      enum values, or a key in a backend block the run's backend scope
+      doesn't include → structural failure. Multi-value keys map to the
+      providers' OR forms (OpenAlex `|`, ≤100 values documented;
+      Overton `|` per V2, confirmed at pinning). Executed wire params
+      land per backend on the coverage record's `scope_filters`
+      (non-`{}` for the first time) and in every `search.executed`
+      payload. **Excluded from the grammar** (research T3): citation
+      floors (decision 12) · `min_similarity` (undocumented semantics —
+      fixed backend constant) · `sort` (backend-fixed relevance) ·
+      Overton `document_type`/`subject_area`/`tags`/`topics`
+      (open/unpublished vocabularies that silently zero-match) ·
+      OpenAlex topic/keyword/venue/funder ids (name→id resolution
+      seam). V2's region-label mapping stays at the seam.
     - **User-selectable backend scope** (public-interface gate): a
       `Config`/`Plan` field (`search_backend_scope`:
       `academic_only` | `grey_lit_only` | `both`, default `both`)
@@ -666,10 +764,25 @@ in-contract fix (halt and report — don't quietly raise the budgets).
   injection fixture (instruction-shaped metadata in reformulation/
   suggestion inputs must not steer output structure; screen's own
   injection posture is 014-tested).
+- **Overton param-pinning session** *(rev 3.1 — a dev-time,
+  operator-run build prerequisite; the public API doc does not
+  enumerate filter params)*: authenticated "Generate API call" exports
+  for each decision-18 Overton key + a `show_search_facets=true` facet
+  dump to pin exact param spellings and value vocabularies
+  (`source_type` tokens · country-name forms · language format · the
+  `squery`+filter co-behavior check · `pp`-vs-`next_page_url`
+  confirmation). Results recorded in a grounding note in this task
+  directory; keys env-only, exports key-redacted before committing.
+  **Unpinnable keys drop to the seam loudly** — nothing ships on
+  inferred spellings.
 - **Live manual check** — exactly the decision-11 pin (rapid run ·
   dedup re-run · limiter + key hygiene · comparative result-count
-  probe · deep run with wall-clock/cost vs budgets · trigger fired
-  once · rapid-profile chain smoke; no deep-chain e2e).
+  probe · deep run with wall-clock/cost vs budgets · escalation
+  exercised once · rapid-profile chain smoke; no deep-chain e2e), plus
+  *(rev 3.1)* **one filtered rapid run** (a dated + typed directive on
+  both backends: wire params visible in `search.executed` payloads +
+  the coverage record's `scope_filters`, result counts consistent with
+  the narrowing).
 
 ## Verification evidence expected
 
@@ -682,12 +795,20 @@ with flagged deviations; public-safety confirmation; known gaps.
 `deferred.md` at step 8: live `SearchBackend` + Arm-B + thin-base-trigger
 entries **discharged**; new/retained seams recorded (**select-as-tool /
 shared purpose-fit-ranking tool** — the rev-3 spec-level seam ·
-Overton-arm-B cross-backend snowball · S2 third backend · region
-mapping · caching if declined at plan · citation-floor knob · eval-reuse
-pointers: PaperFindingBench zero-adapter first run, the parity-tested
+Overton-arm-B cross-backend snowball (rev 3.1: now carrying the
+documented edges — `plain_dois_cited` + `generate_id_set.php` +
+`open_cited_institution_authors`; reverse policy-inbound =
+confirm-with-support) · S2 third backend · **filter-vocabulary growth
+seams** (rev 3.1: OpenAlex topic-hierarchy/keyword/venue/funder
+name→id resolution · Overton `source_region` `_:` code mapping table ·
+COFOG classifications reference table · Overton open-vocabulary
+`topics`/`document_type` once token lists are pinnable) · caching if
+declined at plan · citation-floor knob · eval-reuse pointers:
+PaperFindingBench zero-adapter first run, the parity-tested
 `metrics.py` recall@k_est port, SYNERGY true-recall, CODEC policy
 topics, the Campbell/3ie/EPPI "unzip" build, the per-backend
-coverage-vs-recall split).
+coverage-vs-recall split, and (rev 3.1) OpenAlex `sample`+`seed` as the
+eval-set sampling primitive).
 
 ## Risk tier & review focus
 
