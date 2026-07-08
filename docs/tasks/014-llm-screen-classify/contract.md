@@ -139,6 +139,21 @@ specs in [docs/specs/](../../specs/index.md).
 >   Classify Unknown resolution + two-stage appraisal stay seams
 >   (adjudicated: heaviest, unsettled rubric design). Rubric + plan
 >   rev 3 amended; scoped Codex delta review before re-approval.
+> - **rev 1.8** (2026-07-08, two user design calls): **(a) one screen
+>   component, stage-parameterised** — rev 1.7's separate
+>   `screen_fulltext` registry entry replaced by a fail-closed
+>   `context["screening"]["stage"]` directive on the existing
+>   `"screen"` entry (1 default · 2 full text); deep run = two runs
+>   of one component (the 012 group-twice-over-facets precedent;
+>   facade principle; no new component in the spec's wiring table).
+>   Decision 11 amended; schema/egress gates unchanged by this
+>   choice. **(b) screen-confidence retrieval-boost seam grammar
+>   pre-decided: clamped functional multiplier** (not banding) —
+>   pinned functional family when the seam opens: linear
+>   `lo + conf × (hi − lo)`, params bounded, product still clamped
+>   [0.1, 10]; smoothness over cliff effects, accepting the new
+>   grammar shape + validation rules. Seam entry updated; still lands
+>   via its own 013-surface gate, not 014.
 > - **rev 1.6** (2026-07-08, contract-stage adversarial review
 >   adjudicated — Codex, 10 findings: 2 blockers · 7 majors · 1 minor,
 >   **10/10 adopted**): **B2 fail-open made structural** — ⚑
@@ -533,13 +548,20 @@ PR landing:
 11. **Stage-2 full-text screen — IN-SLICE** *(new, rev 1.7 — user
     scope call at the plan gate, SR-fidelity grounds: abstract screen →
     full-text screen is the canonical systematic-review two-stage)*.
-    - **A new registry component `screen_fulltext`**, running
-      post-ingestion over the effective screened-in set,
-      **plan-selectable under the thoroughness gradation** (ADR 0009:
-      components = registry the plan selects from) — the skeleton's
-      deep profile runs it, the rapid profile skips it. v3.0
-      selectability = skeleton profile; the plan-compile surface
-      remains the capability-run seam.
+    - **ONE screen component, stage-parameterised** *(rev 1.8, user
+      design call replacing rev 1.7's separate `screen_fulltext`
+      registry entry)*: the existing `"screen"` registry entry gains a
+      fail-closed `context["screening"]["stage"]` directive
+      (`1` envelope default · `2` full text; unknown values →
+      structural failure, the plan-compile-fails-closed rule). A deep
+      run = **two runs of the one component** with different
+      directives — the 012 precedent exactly (skeleton runs `group`
+      twice over different facets); the rapid profile runs stage 1
+      only. Spec-faithful: components §2 declares ONE screen; the
+      thoroughness gradation parameterises it (facade principle — the
+      plan's commit parameterises tools, no new component in the
+      wiring table). Stage-2 runs post-ingestion over the effective
+      screened-in set.
     - **Uniform coverage with honest gaps**: every screened-in doc
       with ingested full text gets a stage-2 pass; `abstract_only`
       docs (fetch failed) keep their stage-1 result — so the corpus
@@ -602,6 +624,19 @@ PR landing:
   (superseded in practice by decision 11's windowed full-text pass;
   revisit only if windowing proves insufficient for poor-metadata
   grey lit) ·
+  **screen-confidence retrieval boost** (user, 2026-07-08 — new seam;
+  restored rev 1.8 after an editing loss): in no-selection runs
+  `search_chunks` has NO doc-level prior; `screen_decision_confidence`
+  (meaningful from this slice) is the natural directive-expressible
+  boost. **Grammar pre-decided (user, rev 1.8): clamped functional
+  multiplier** — linear `lo + conf × (hi − lo)`, parameters bounded,
+  product clamped [0.1, 10]; banding rejected (cliff effects at
+  thresholds); steerable-never-baked (rev-7.5 ruling) → directive
+  column, never a standing prior; double-count guard where a
+  selection reference already prices confidence in; stage-provenance
+  aware (never mix stage-1/stage-2 confidences in one multiplier
+  without the column). A 013-surface change — lands via its own
+  gate, not 014 ·
   re-screening of **successful** results (the failed-row retry landed
   in-slice, rev 1.1; superseding a relevant/not_relevant decision is a
   different seam) · `Unknown` full-text resolution · grey-lit category

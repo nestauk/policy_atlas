@@ -127,16 +127,20 @@ Verified by grep over `source_screening_result` consumers:
    `aggregation_flags` (rev 2), non-failed NOT-EXISTS, summary
    counts (unsure · non-unanimous · rep_failures · tie_broken).
    — **codex**
-5b. `screen_fulltext.py` component (rev 3): candidate set = effective
+5b. Stage-2 path inside `screen.py` (rev 3; single-component design
+   rev 1.8 — NO new registry entry): fail-closed
+   `context["screening"]["stage"]` directive parse (1 default · 2;
+   unknown → structural failure); stage-2 candidate set = effective
    stage-1 relevant docs with ingested full text AND no non-failed
    stage-2 row; windowed payload via extract's helper; single rep,
    demote-only persistence (stage-2 row, `screen_stage=2`,
    `screen_basis='full_text'`), stage-1-stands-on-failure, counts
-   (`stage2_screened/confirmed/demoted/failed/skipped_no_fulltext`),
-   `"screen_fulltext"` registry entry + skeleton deep-profile wiring.
-   Reuses the task-3 `ScreeningBackend` protocol (a second method or
-   a payload-typed call — codex proposes, lead reviews the seam
-   shape at drop review). — **codex**
+   (`stage2_screened/confirmed/demoted/failed/skipped_no_fulltext`);
+   skeleton deep profile = SECOND `screen` run with the stage-2
+   directive (the 012 group-twice precedent — no harness change
+   beyond task 8's params). Reuses the task-3 `ScreeningBackend`
+   protocol (a second method or a payload-typed call — codex
+   proposes, lead reviews the seam shape at drop review). — **codex**
 6. `classify.py` rework: optional `classification_backend` param, stub
    default (rev 2); backend call, no-row-on-failure, provider
    priors assembly, tag writes via helper, **`confidence` + `reason`
