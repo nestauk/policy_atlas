@@ -1,7 +1,19 @@
 # Implementation Plan: 013-synthesise
 
-> **Status:** drafted (rev 1) — plan-stage adversarial review next, then
-> the plan 🛑.
+> **Status:** drafted (rev 2) — plan-stage adversarial review adjudicated
+> (5 majors · 5 minors, 0 blockers — 9 adopted, 1 adopted-as-clarification
+> [m7: `chunk.segmentation_policy` exists in the as-built schema; the
+> reviewer's premise was wrong — the source is now pinned]); awaiting the
+> plan 🛑.
+> **Lane deviation, recorded:** the Codex adversarial lane was capped at
+> this gate (session limit, resets 05:30) and its rescue agent died before
+> registering a job; the review ran on the **fresh-context deep-reasoner
+> substitute** (the 011 fallback pattern) with the same read-only brief.
+> The reviewer positively verified the plan's load-bearing code-grounding
+> (transitive resolution incl. the JSONB hop; B2 row-per-chunk
+> expressibility; the five-backend factoring list; stub-vector
+> determinism; four-profile skeleton feasibility). Option open at the
+> gate: additionally re-run the Codex pass after reset.
 > Contract: [contract.md](contract.md) (approved rev 8, 2026-07-08 ·
 > Shabeer Rauf; contract-stage adversarial findings 9/9 adjudicated; the
 > two ⚑ lead-adapted remedies — B2 row-per-spanned-chunk citations, M4
@@ -49,8 +61,8 @@ The stub path is the suite; the live path is the skeleton with
 | 2 (three prompts + tool JSON schemas + judge rubric + `SynthesisBackend`/`GroundingJudgeBackend`/`ChunkRerankerBackend` protocol signatures + the normative directive-parse spec) | `lead` | prompt-bearing (judge rubric included) + seam design — lead-only per AGENTS.md |
 | 3 (`synthesis_tools.py`: retrieval helper [hybrid scoring, RRF fusion, priors, boosts, reranker stage, caps, `RETRIEVAL_UNIT_CAP` guard], `query_findings`, `lookup`, the loop runner [turn accounting, budgets, unknown-tool rejection, cap-exhaustion forcing, scripted-stub drive]) | `codex` | subtle deterministic logic with exact pass conditions; done = the tool/loop/ranking test blocks green |
 | 4 (`synthesis_backend.py` + `grounding_judge.py`: OpenAI + stub implementations of the Task-2 protocols; `tracing.py` traced-call factoring across all five OpenAI backends) | `codex` | implementation of lead-designed seams against schema-constrained I/O (the standing pattern); done = backend/stub/factoring tests + suite green |
-| 5 (`synthesise.py`: resolution → mint → proposal → loop orchestration → six per-type validators → judge → repair → substrate writes → roll-up) | `codex` | judgment-bearing execution with a fully pinned spec (validators specified below); done = the invariant/edge/flag test blocks |
-| 6 (registry/Config/harness/skeleton wiring) | `fast-worker` | mechanical from the 004–012 precedent + the exact spec below |
+| 5 (`synthesise.py`: resolution → mint → proposal → loop orchestration → six per-type validators → judge → repair → substrate writes → roll-up; **+ the bespoke `_run_synthesise` harness node** — review M1) | `codex` | judgment-bearing execution with a fully pinned spec (validators + the node spec below); done = the invariant/edge/flag test blocks |
+| 6 (registry/Config/harness/skeleton wiring **+ `synthesis_score_summary`** — review M2/m8; exact enumeration below) | `fast-worker` | mechanical against the explicit enumeration (the generic-precedent trap is closed by the Task-5 node spec) |
 | 7 (contract-bulk test suite) | `fast-worker` | transcription of the contract's named-test list |
 | 8 (judgment test suite: loop semantics, injection doubles, claim-validation edges, repair/regression guards, caps-bind, socket-deny) | `codex` | subtle-but-specified; each has an exact pass condition |
 | 9 (deferred.md updates + knowledge concepts) | `lead` | living-doc text, user-facing wording |
@@ -65,16 +77,19 @@ The stub path is the suite; the live path is the skeleton with
 | `REPAIR_ROUND_CAP` | 1 | one loop-free reword-down + one re-judge |
 | `SYNTH_CHUNK_TOP_K` | 8 | per `search_chunks` call |
 | `SYNTH_CHUNK_CHAR_BUDGET` | 24_000 | gathered chunk-text budget per section |
-| `RETRIEVAL_UNIT_CAP` | 50_000 | in-memory ceiling over screened-corpus embedding units; fail-closed `retrieval_unit_cap_exceeded` |
+| `RETRIEVAL_UNIT_CAP` | 20_000 | in-memory ceiling over screened-corpus embedding units; fail-closed `retrieval_unit_cap_exceeded` (lowered from a 50K draft — review M5: pure-Python cosine realism; the true ceiling is eval/calibration territory) |
+| `CANDIDATE_POOL_PER_LEG` | 200 | top-N per relevance leg **before** fusion (review M5): boosts/priors/reranker operate on this bounded candidate set, and "zero-relevance never surfaced by boost alone" is defined as *not in either leg's pool → not a candidate* |
 | `REASONING_CLAIMS_MAX` | 3 | per block |
 | `ARTEFACT_TITLE_MAX` | 300 | chars; verbatim intent, control chars stripped, truncated with `…` |
 | Budget maximum | 2 + `SECTION_CAP` × (`SECTION_TURN_CAP` + 3) generation calls | rev 8 B1; test-asserted as the *binding* cap (caps-bind) |
 | Models | `SYNTHESIS_MODEL = JUDGE_MODEL = "gpt-5-mini"` | contracted floor; both recorded per-surface in provenance |
 | Embeddings | existing `text-embedding-3-small` via `EmbeddingBackend` | tool-query embedding; one call per `search_chunks` invocation, memoised per (section, query) |
-| Fusion | Reciprocal Rank Fusion, k = 60, over (cosine rank, lexical rank) | lexical = casefolded token-overlap score against unit text (stdlib) |
+| Fusion | Reciprocal Rank Fusion, k = 60, over (cosine rank, lexical rank) within the candidate pool | lexical = casefolded token-overlap score against unit text (stdlib); **ties break on `str(unit_id)` lexicographic** (review m10, the codebase convention) |
+| Vector loading | **once per run** — the resolved scope's unit vectors are loaded/parsed into one memoised matrix at first `search_chunks` call and reused across all sections/turns (review M5); query embeddings memoised per (section, query) | never re-loaded per call |
+| Turn accounting | **the forced emission IS the `SECTION_TURN_CAP`-th turn** (review M4): the last turn is reserved for the claims emission, so at most `SECTION_TURN_CAP − 1` tool calls occur and the budget maximum is exact, never exceeded — the caps-bind test asserts the precise ceiling | |
 | Selection prior | ×2.0 multiplicative on fused score for chunks of selected docs | recorded in provenance; a prior, never a filter |
-| Boost clamp | [0.1, 10] | contract grammar (rev 8 M5) |
-| Envelope | `synthesis_envelope_v1` = the cited chunks' full frozen text, no neighbours | + per-chunk `segmentation_policy` persisted (rev 8 M7) |
+| Boost clamp | [0.1, 10] | contract grammar (rev 8 M5). **Divergence from the select precedent, deliberate** (review m6): select *rejects* out-of-range weights; synthesise **clamps** them — the contract grammar wins; a builder must not copy `_float_in_clamp`'s raise |
+| Envelope | `synthesis_envelope_v1` = the cited chunks' full frozen text, no neighbours | + per-chunk `segmentation_policy` persisted (rev 8 M7) — **source: the `chunk.segmentation_policy` column** (exists in the as-built schema; review m7 clarified) |
 | Prompt/schema versions | `synthesise_sections_v1` · `synthesise_section_v1` (system prompt + the three tool JSON schemas version as one unit) · `grounding_judge_v1` | module constants, provenance-recorded |
 
 **`lookup` vocabulary v1 (closed):** `appraisal_by_doc` ·
@@ -85,8 +100,16 @@ args validated; unknown kind → tool-level validation error (never
 executed); all queries scoped to `project_id` + the resolved run
 references.
 
+**Directive parser — single owner (review M3):** one
+`parse_synthesis_directive(context) -> SynthesisDirective` function in
+`synthesis_tools.py`, built in **Task 3** against the Task-2 normative
+grammar, owning the whole top-level validation (object; keys exactly
+`{sections, retrieval_boosts}`; malformed-vs-unknown semantics). Task 5
+consumes its validated output for `sections`; the retrieval helper
+consumes it for `retrieval_boosts`. No second parse anywhere.
+
 **Module layout:** `synthesis_tools.py` (tools + retrieval helper +
-loop runner + `ChunkRerankerBackend` + stubs) ·
+loop runner + directive parser + `ChunkRerankerBackend` + stubs) ·
 `synthesis_backend.py` (`SynthesisBackend` protocol, OpenAI + stub,
 both writer prompts + tool schemas) · `grounding_judge.py`
 (`GroundingJudgeBackend`, OpenAI + stub, judge prompt + envelope
@@ -146,20 +169,41 @@ asserting the negative rules on built prompts.
 three tools, loop runner (scripted-stub drivable), then OpenAI/stub
 backends and the `tracing.py` traced-call factoring across
 `extraction_backend.py`, `ranking.py`, `facet_grouping.py`,
-`synthesis_backend.py`, `grounding_judge.py`. Codex sandbox cannot
-reach localhost Postgres (012 lesson) — the lead runs DB-backed suites
-on every codex drop.
+`synthesis_backend.py`, `grounding_judge.py`. The factored helper's
+signature must accommodate the heterogeneous call-sites (review m9):
+`ranking`'s in-span extra score + `facet_grouping`'s parametrised span
+names/error strings — no lowest-common-denominator flattening. Codex
+sandbox cannot reach localhost Postgres (012 lesson) — the lead runs
+DB-backed suites on every codex drop, **plus a keyed-Langfuse smoke of
+one traced call after the factoring lands** (tracing is a no-op
+without keys, so the suite exercises the traced path shallowly).
 
 **Phase 4 — the component (Task 5, codex).** `synthesise.py` per the
 resolution + validator specs; writes ordered blocks → units →
-annotations → citations → roll-up last; failure payload names prior
-blocks. Full `make verify` at this commit.
+annotations → citations → roll-up last. **Includes the bespoke harness
+node (review M1):** synthesise does NOT route through the generic
+`_run_scope_component` — a `_run_synthesise` node modelled exactly on
+009's `_run_characterise` precedent, with a structured
+`SynthesiseFailure(blocks_written=[...])` exception so
+`component.failed` names the prior blocks (the generic node's
+`{component, error}` payload cannot). Full `make verify` at this
+commit.
 
-**Phase 5 — wiring (Task 6, fast-worker).** `"synthesise"` registry
-entry (requires `evidence_scope_id`; four optional refs), Config
-fields, `run_harness(synthesis_backend=…, grounding_judge_backend=…)`
-stub defaults, skeleton extension (threading the run ids; stub/live
-switch on `OPENAI_API_KEY`).
+**Phase 5 — wiring (Task 6, fast-worker; exact enumeration — review
+M2).** (a) `plan.py`: `grouping_run_id` added to **both**
+`_ValidatedRunSpec` and `compile()` (the field a copy-from-precedent
+sweep misses — a dropped field fails silently); `"synthesise"` registry
+entry requiring `evidence_scope_id` with all four refs optional. (b)
+`harness.py`: `synthesis_backend` + `grounding_judge_backend` threaded
+through `HarnessState` and `run_harness` (stub defaults); the Task-5
+node registered. (c) `skeleton.py`: synthesise invocation threading
+the run ids (stub/live switch on `OPENAI_API_KEY`); **the four-profile
+demo = four `synthesise` invocations varying which resolved refs are
+passed** (the reviewer verified feasibility on the existing
+single-scope skeleton). (d) `tracing.py`:
+**`synthesis_score_summary`** mirroring `grouping_score_summary`
+(review m8) — scores: claims-valid share, citation-verified share,
+unsupported share, chunk-rejection share.
 
 **Phase 6 — tests (Task 7 fast-worker · Task 8 codex).** Contract-bulk
 suite transcribing the contract's named-test list; judgment suite (loop
