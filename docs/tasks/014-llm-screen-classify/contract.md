@@ -3,7 +3,10 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **approved rev 1.5.1 → adjudicated rev 1.6** — Codex review 10/10 adopted; two ⚑ remedies (title-only unanimity-to-exclude · ≥2-rep quorum) USER-CONFIRMED 2026-07-08; planning (step 3) in progress.
+> **Status:** **approved rev 1.5.1 → adjudicated rev 1.6 → AMENDED rev
+> 1.7 (material: stage-2 full-text screen pulled in-slice, user scope
+> call at the plan gate) — amendment reopens the 🛑; awaiting
+> re-approval of rev 1.7 + plan rev 3 after the scoped delta review.**
 >
 > Contract approved (before planning): **2026-07-08 · Shabeer Rauf**
 > (rev 1.5.1, covering the gated changes: runtime egress on two
@@ -120,6 +123,22 @@ specs in [docs/specs/](../../specs/index.md).
 >   tier, not the checkpoint; 5.2 is legacy-path (repriced upward
 >   2026-07-02) and classify cost is immaterial at any tier
 >   (flagship ≈ 1¢/doc). Decision 8 + Model route amended.
+> - **rev 1.7** (2026-07-08, user scope call at the plan gate —
+>   MATERIAL, reopens the 🛑): **stage-2 full-text screen pulled
+>   in-slice** as new decision 11 (SR-fidelity: abstract screen →
+>   full-text screen is the canonical two-stage; option adjudicated
+>   against a separate slice — user chose fold, keeping the demo-path
+>   numbering). Shape: `screen_fulltext` registry component,
+>   post-ingestion, thoroughness-selectable (deep profile runs it,
+>   rapid skips), uniform over full-text-ingested screened-in docs,
+>   demote-only, single-rep, `screen_fulltext_v1` = 10th product
+>   prompt, `screen_stage` provenance column + `screen_basis` gains
+>   `full_text` + partial unique reshaped to (scope, source, stage);
+>   reader sweep widens to effective-stage-and-status; live-check
+>   demotion review. Egress gate grows to THREE generation surfaces.
+>   Classify Unknown resolution + two-stage appraisal stay seams
+>   (adjudicated: heaviest, unsettled rubric design). Rubric + plan
+>   rev 3 amended; scoped Codex delta review before re-approval.
 > - **rev 1.6** (2026-07-08, contract-stage adversarial review
 >   adjudicated — Codex, 10 findings: 2 blockers · 7 majors · 1 minor,
 >   **10/10 adopted**): **B2 fail-open made structural** — ⚑
@@ -511,6 +530,52 @@ PR landing:
     consensus adoption has V2 precedent on both the problem and the
     remedy.
 
+11. **Stage-2 full-text screen — IN-SLICE** *(new, rev 1.7 — user
+    scope call at the plan gate, SR-fidelity grounds: abstract screen →
+    full-text screen is the canonical systematic-review two-stage)*.
+    - **A new registry component `screen_fulltext`**, running
+      post-ingestion over the effective screened-in set,
+      **plan-selectable under the thoroughness gradation** (ADR 0009:
+      components = registry the plan selects from) — the skeleton's
+      deep profile runs it, the rapid profile skips it. v3.0
+      selectability = skeleton profile; the plan-compile surface
+      remains the capability-run seam.
+    - **Uniform coverage with honest gaps**: every screened-in doc
+      with ingested full text gets a stage-2 pass; `abstract_only`
+      docs (fetch failed) keep their stage-1 result — so the corpus
+      carries mixed stages by necessity and **stage provenance is
+      mandatory**: `screen_stage` (1 = envelope · 2 = full_text) on
+      `source_screening_result`; `screen_basis` gains `full_text`.
+      Effective result = highest-stage non-failed row; the
+      decision-5 reader sweep widens from effective-status to
+      **effective-stage-and-status**.
+    - **Demote-only by construction**: stage 2 can confirm or demote
+      (relevant → not_relevant — its precision purpose) but can never
+      rescue a stage-1 exclude (never fetched). Fail-open: stage-2
+      call failure (post-retry, cap 1) → stage-1 result stands,
+      failure row is attempt history. `unsure` at stage 2 → stays
+      relevant at low stage-2 confidence (referred-back positive,
+      again). Demoted docs stay ingested; they leave the reading
+      scope.
+    - **Single-rep** (`STAGE2_REPS = 1`): full text carries the
+      signal that consensus compensates for at the envelope;
+      confidence = the rep's decision confidence, never compared
+      across stages without the provenance column.
+    - **Prompt `screen_fulltext_v1`** — the 10th product prompt,
+      lead-authored, `gpt-5-mini`; payload = windowed canonical-chunk
+      text under a plan-pinned char budget (extract's windowing
+      helper reused; ponytail ceiling: first-window-only v1,
+      heading-map/section-sampling upgrade at the eval seam).
+    - **Counted, never silent**: `stage2_screened / confirmed /
+      demoted / failed / skipped_no_fulltext` in the summary;
+      per-doc stage in the event payload. The live check adds a
+      **demotion review**: every stage-2 demotion read with its
+      `reason` — a false exclusion is the dangerous outcome.
+    - Classify `Unknown` full-text resolution and the two-stage
+      appraisal pass **stay recorded seams** (user scope call: screen
+      stage-2 only).
+
+
 ## Scope / Out of scope
 
 - **In:** `screen.py`, `classify.py` (fan-out loops take a backend),
@@ -525,48 +590,18 @@ PR landing:
 - **Out:** live search backends (015) · live `DocumentFetcher` (016) ·
   the thin-base **re-search trigger** (needs live search; note: live
   screen confidence makes select's `thin_base` flag meaningful
-  automatically — no code change here) · tiered content peek — now
-  sharpened (user deliberation, 2026-07-08) to a **stage-2 full-text
-  re-screen seam**: post-ingestion re-screen scoped to the borderline
-  band (title-only basis ∪ non-unanimous ∪ lowest-confidence decile),
-  precision-only by construction (fetch is screen-gated, so stage 2
-  can demote false includes but never rescue excludes — recall is won
-  at stage 1 or not at all); mirrors human SR two-stage practice;
-  eval-gated on the borderline-band size the decision-10 agreement
-  stats will measure; the concrete exposure it closes is
-  envelope-only rerank selecting a plausible-envelope irrelevant doc
-  into extraction. *Sharpened again (user deliberation, second
-  round): if built, stage 2 should re-screen the WHOLE screened-in
-  corpus, not just the borderline band — selective re-measurement
-  creates a two-regime confidence scale that select's composite and
-  `thin_base` would compare as commensurable (the band version
-  survives only as the sizing probe). Uniform stage-2 needs: a
-  schema answer (the partial unique index admits one non-failed row
-  per doc — supersede vs staged-result surface) and stage provenance
-  on confidence so consumers never unknowingly mix measurement
-  regimes; stage 2 plausibly single-rep (full text carries the
-  signal consensus compensates for). Material stake, quantified by
-  the V2 baseline (precision 0.634): ~⅓ junk in screened-in sets,
-  and every junk doc ranking into select's bounded budget (default
-  25) displaces a real doc from extraction. Spec home (user, third
-  round): stage 2 is a **plan-selectable registry component under
-  the thoroughness gradation** (ADR 0009: components = registry the
-  plan selects from; depth = the plan's thoroughness) — deep runs
-  compile it in post-ingestion, rapid runs skip it; the eval gate
-  decides whether to BUILD it, thoroughness decides whether it RUNS.
-  Same family as classify's Unknown full-text resolution and the
-  two-stage appraisal pass: envelope always, full-text second pass
-  at depth* ·
-  **screen-confidence retrieval boost** (user, 2026-07-08 — new
-  seam): in no-selection runs `search_chunks` has NO doc-level
-  prior; `screen_decision_confidence` (meaningful from this slice)
-  is the natural directive-expressible boost. Design notes: the
-  013 boost grammar is categorical (per-value weights) — a
-  continuous column needs banding or a clamped functional
-  multiplier; steerable-never-baked (rev-7.5 ruling) → directive
-  column, not a standing prior; double-count guard where a
-  selection reference already prices confidence in. A 013-surface
-  change — lands via its own gate, not 014 ·
+  automatically — no code change here) · the stage-2 full-text
+  re-screen — **pulled IN-SLICE at rev 1.7 (decision 11)** after three
+  user deliberation rounds recorded there (uniform-over-band
+  two-regime argument · thoroughness-gradation spec home ·
+  SR-fidelity); what stays OUT of the family: **classify `Unknown`
+  full-text resolution** and the **two-stage appraisal pass**
+  (heaviest — unsettled modifier-tag rubric design; both share
+  decision 11's windowing + staged-result pattern when they land) ·
+  **tiered content peek** in its original exec-summary/headings form
+  (superseded in practice by decision 11's windowed full-text pass;
+  revisit only if windowing proves insufficient for poor-metadata
+  grey lit) ·
   re-screening of **successful** results (the failed-row retry landed
   in-slice, rev 1.1; superseding a relevant/not_relevant decision is a
   different seam) · `Unknown` full-text resolution · grey-lit category
@@ -597,17 +632,22 @@ PR landing:
 Gated changes riding this slice — **all need explicit approval at the
 contract 🛑**:
 
-1. **Runtime egress:** two new generation surfaces (`screen_v1` ·
-   `classify_v1`, 8th/9th product prompts) — the first product LLM read
-   of acquired third-party envelope text (injection posture above).
+1. **Runtime egress:** THREE new generation surfaces (rev 1.7):
+   `screen_v1` (mini, ×3 reps) · `classify_v1` (judgment-class) ·
+   `screen_fulltext_v1` (mini, ×1, windowed full text) — 8th/9th/10th
+   product prompts; the first product LLM reads of acquired
+   third-party envelope AND full text (injection posture above; full
+   text was already LLM-read by extract/synthesise since 011/013).
 2. **Public interface:** `run_harness` gains `screening_backend` +
    `classification_backend` (stub defaults; no behaviour change when
    omitted).
-3. **Schema:** one migration carrying two changes *(rev 1.1)*:
-   widening `ck_stag_tag_type` to admit `'methodological_structural'`,
-   and replacing `uq_ssr_scope_source` with a partial unique index
-   excluding `status='failed'` (retry semantics, decision 5). No new
-   tables, no new columns.
+3. **Schema:** one migration carrying four changes *(revs 1.1 + 1.7)*:
+   widening `ck_stag_tag_type` to admit `'methodological_structural'`;
+   `screen_stage` column on `source_screening_result` (1 | 2, NOT NULL
+   default 1) + `screen_basis` CHECK gains `'full_text'`; and
+   `uq_ssr_scope_source` replaced by a partial unique index over
+   (scope, source, **stage**) excluding `status='failed'` (retry
+   semantics, decision 5; stage rows, decision 11). No new tables.
 4. **Dependencies:** none.
 
 ## Public / private boundary

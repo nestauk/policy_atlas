@@ -1,8 +1,10 @@
 # Plan: 014-llm-screen-classify
 
-> **Status:** **rev 2** — plan-stage adversarial review adjudicated
-> (Codex, 9 findings: 5 majors · 4 minors, 9/9 adopted), awaiting
-> plan 🛑. Contract: [contract.md](contract.md) **approved rev 1.5.1,
+> **Status:** **rev 3** — contract rev 1.7 amendment folded in
+> (stage-2 full-text screen, decision 11): tasks 2b/5b added, task 8 +
+> phases + constants + live check widened; scoped Codex delta review
+> before the reopened 🛑. Rev 2 base: plan-stage adversarial review
+> adjudicated (Codex, 9 findings: 5 majors · 4 minors, 9/9 adopted). Contract: [contract.md](contract.md) **approved rev 1.5.1,
 > adjudicated rev 1.6 (Codex 10/10), ⚑ remedies user-confirmed
 > 2026-07-08**. ADR due at plan confirmation (step 4): injection
 > posture + consensus screening are capability-class decisions.
@@ -35,6 +37,11 @@ delegate; every `lead` mark carries a justification.
 
 - `SCREEN_REPS = 3` · quorum ≥ 2 surviving reps · unsure → vote
   relevant / probability 0.5 · title-only exclusion requires unanimity
+- Stage 2 (rev 3): `STAGE2_REPS = 1` · retry cap 1 ·
+  `STAGE2_WINDOW_CHAR_BUDGET = 60_000` first-window over canonical
+  chunks (extract's windowing helper; ponytail ceiling — heading-map
+  sampling at the eval seam) · stage-2 budget ≤ full-text docs × 2
+  calls · unsure → relevant at stage-2 confidence · demote-only
 - Screen model `gpt-5-mini`; **`CLASSIFY_MODEL = "gpt-5.5"`** (exact
   pin, rev 2 — assessed vs `gpt-5.6-terra` and resolved at this gate;
   unavailability at build start = stop-condition escalation, never
@@ -91,6 +98,11 @@ Verified by grep over `source_screening_result` consumers:
    (never additive facet rubrics — V2 root cause), missing-abstract
    rule, Unknown-vs-Other boundary definitions, data-record framing.
    — **lead** *(prompt-bearing work is lead-only, AGENTS.md)*
+2b. `screen_fulltext_v1` prompt (10th surface, rev 3): precision
+   posture (stage 1 already protected recall; stage 2 asks "does the
+   full text confirm relevance to the scope intent?"), windowed-text
+   payload framing (id-keyed data), unsure→relevant rule restated.
+   — **lead** *(prompt-bearing)*
 
 **Phase 3 — backends + helper**
 3. `screening_backend.py` + `classification_backend.py`: protocols
@@ -115,14 +127,26 @@ Verified by grep over `source_screening_result` consumers:
    `aggregation_flags` (rev 2), non-failed NOT-EXISTS, summary
    counts (unsure · non-unanimous · rep_failures · tie_broken).
    — **codex**
+5b. `screen_fulltext.py` component (rev 3): candidate set = effective
+   stage-1 relevant docs with ingested full text AND no non-failed
+   stage-2 row; windowed payload via extract's helper; single rep,
+   demote-only persistence (stage-2 row, `screen_stage=2`,
+   `screen_basis='full_text'`), stage-1-stands-on-failure, counts
+   (`stage2_screened/confirmed/demoted/failed/skipped_no_fulltext`),
+   `"screen_fulltext"` registry entry + skeleton deep-profile wiring.
+   Reuses the task-3 `ScreeningBackend` protocol (a second method or
+   a payload-typed call — codex proposes, lead reviews the seam
+   shape at drop review). — **codex**
 6. `classify.py` rework: optional `classification_backend` param, stub
    default (rev 2); backend call, no-row-on-failure, provider
    priors assembly, tag writes via helper, **`confidence` + `reason`
    written into the `source.classified` payload (rev 2 — payload-only,
    never columns)**, `skipped` effective-status fix. — **codex**
-7. Effective-status sweep per the reader table: `_base_counts` fix +
-   verify/fix the five "verify" readers + regression tests per reader.
-   — **fast-worker** *(enumerated sweep from the table above)*
+7. Effective-**stage-and-status** sweep (widened rev 3) per the reader
+   table: every reader resolves highest-stage non-failed;
+   `_base_counts` fix + verify/fix the "verify" readers + regression
+   tests per reader. — **fast-worker** *(enumerated sweep; ambiguous
+   discoveries escalate to lead)*
 
 **Phase 5 — wiring**
 8. `harness.py` + `skeleton.py`: two backend params (stub defaults),
@@ -166,7 +190,11 @@ Fixture corpus e2e (skeleton, live backends): screen spread sanity ·
 agreement distribution (unanimous / 2-of-3 / tie) · borderline review
 — band pinned (rev 2): non-failed docs sorted by persisted
 confidence, take `max(1, ceil(0.10 * n))` including ties at the
-cutoff, union all non-unanimous docs; reasons coherent ·
+cutoff, union all non-unanimous docs; reasons coherent · **stage-2
+leg (rev 3)**: deep-profile run exercises `screen_fulltext`; stage
+distribution reported; **demotion review** — every demoted doc's
+`reason` read (false exclusion = the dangerous outcome); rapid
+profile shown skipping stage 2 ·
 classification by_type distribution not-all-Unknown + face-validity 10
 · Unknown-vs-Other spot check · paired injection probe (2 pairs) ·
 non-English record · tags within bounds · Langfuse traces + scores via

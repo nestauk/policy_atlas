@@ -70,3 +70,13 @@ otherwise it is in progress, not done.
         per-tag caps enforced, `asserted_by='classify'` ·
         `tag_type='methodological_structural'`, all writes through
         `tags.insert_source_tags`, migration roundtrip green both DBs.
+12. [ ] Stage-2 full-text screen (decision 11, rev 1.7) holds:
+        demote-only (a stage-2 row can never admit a stage-1
+        exclude); stage-2 failure leaves the stage-1 result standing;
+        `screen_stage` provenance on every row and event; effective
+        result = highest-stage non-failed everywhere (reader sweep
+        covers stage AND status); `skipped_no_fulltext` counted;
+        deep profile runs it, rapid profile provably skips it; the
+        live-check demotion review reads every demoted doc's
+        `reason`; stage-2 confidence never mixed with stage-1 in any
+        comparison without the provenance column.
