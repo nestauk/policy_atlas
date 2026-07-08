@@ -324,6 +324,10 @@ class SectionLoopResult(TypedDict):
     tool_call_counts: dict[str, int]
     rejected_tool_calls: int
     turn_cap_hit: bool
+    # Claim objects a live emission carried that failed structural validation
+    # and were salvaged away (backend per-claim salvage) — counted, never
+    # silent; the component lands them in claims_rejected_structural.
+    malformed_claims: int
 
 
 _DIRECTIVE_KEYS = {"sections", "retrieval_boosts"}
@@ -1636,6 +1640,7 @@ def run_section_loop(
     transcript: list[ToolExchange] = []
     tool_call_counts: dict[str, int] = {}
     rejected_tool_calls = 0
+    malformed_claims = 0
 
     for turn in range(1, turn_cap + 1):
         force_emit = turn == turn_cap
@@ -1655,6 +1660,7 @@ def run_section_loop(
             continue
         claims = result.get("claims")
         tool_calls = result.get("tool_calls", [])
+        malformed_claims += int(result.get("malformed_claims", 0))
         if claims is not None:
             return {
                 "claims": claims,
@@ -1663,6 +1669,7 @@ def run_section_loop(
                 "tool_call_counts": tool_call_counts,
                 "rejected_tool_calls": rejected_tool_calls,
                 "turn_cap_hit": force_emit,
+                "malformed_claims": malformed_claims,
             }
         if force_emit and tool_calls:
             raise RuntimeError("backend returned tool call on forced emit turn")

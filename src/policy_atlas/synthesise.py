@@ -2632,6 +2632,9 @@ def synthesise_scope(
             gathered_id_hash=_gathered_hash(ids),
             turns_used=int(loop_result["turns_used"]),
             turn_cap_hit=bool(loop_result["turn_cap_hit"]),
+            # Claim objects the live emission carried that failed structural
+            # validation (backend per-claim salvage) — counted, never silent.
+            claims_rejected_structural=int(loop_result.get("malformed_claims", 0)),
         )
         raw_claims = loop_result["claims"] or SectionClaimsWire(claims=[])
         try:

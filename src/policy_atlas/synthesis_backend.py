@@ -25,8 +25,9 @@ from __future__ import annotations
 
 import json
 from threading import Lock
-from typing import Any, Literal, Protocol, TypedDict
+from typing import Any, Literal, NotRequired, Protocol, TypedDict
 
+import structlog
 from langfuse import Langfuse
 from openai.types.completion_usage import CompletionUsage
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -41,6 +42,8 @@ from policy_atlas.synthesis_tools import (
     ToolCallRequest,
     ToolExchange,
 )
+
+log = structlog.get_logger()
 
 SECTIONS_PROMPT_VERSION = "synthesise_sections_v1"
 SECTION_PROMPT_VERSION = "synthesise_section_v1"
@@ -189,10 +192,16 @@ class SectionClaimsWire(BaseModel):
 
 class SectionTurn(TypedDict):
     """One backend turn: exactly one of ``tool_calls`` (a single read-tool call)
-    or ``claims`` (the emission)."""
+    or ``claims`` (the emission).
+
+    ``malformed_claims`` counts claim objects a live emission carried that
+    failed structural validation and were salvaged away (per-claim, never a
+    whole-emission failure) — surfaced into ``claims_rejected_structural``.
+    """
 
     tool_calls: list[ToolCallRequest]
     claims: SectionClaimsWire | None
+    malformed_claims: NotRequired[int]
 
 
 # --- The three tool JSON schemas + the emission schema (versioned with the
@@ -440,9 +449,11 @@ The claim types:
 - "gap": an absence statement, graded and carrying its coverage base. Absence
   may only be asserted as a gap claim. "corpus_absence" (nothing found in the
   searched space) requires the search coverage record id from lookup;
-  "acknowledged_sparsity" requires the numeric sparsity signal from the
-  characterisation coverage; "inferred" is your reasoned reading of a thin
-  spot, and is visibly labelled as inference. A document not being selected
+  "acknowledged_sparsity" requires the sparsity signal read from the
+  characterisation coverage as an OBJECT — {{"path": [keys into the coverage],
+  "stated_count": the integer count at that path}} — never a bare number or
+  ratio; "inferred" is your reasoned reading of a thin spot, and is visibly
+  labelled as inference. A document not being selected
   or not being extracted is NEVER evidence of absence.
 - "reasoning": uncited background reasoning, visibly labelled as such. At most
   {REASONING_CLAIMS_MAX} per section. Reasoning claims must not smuggle
@@ -695,6 +706,44 @@ class SynthesisBackend(Protocol):
             passing siblings survive verbatim; enforced by the caller).
         """
         ...
+
+
+def _salvage_claims(arguments: str) -> tuple[SectionClaimsWire, int]:
+    """Parse an ``emit_claims`` argument string claim-by-claim.
+
+    Live emissions malform at claim grain (a v1 run persistently emitted
+    ``gap.sparsity`` as a float); whole-emission rejection let one bad field
+    poison every turn until the cap. Valid claims are salvaged; malformed
+    claims are counted (the caller lands them in
+    ``claims_rejected_structural`` — visible, never silent) and logged
+    bounded.
+
+    Raises:
+        MalformedEmissionError: If the envelope itself does not parse (not a
+            JSON object with a ``claims`` list) — the turn-consuming
+            recoverable event.
+    """
+    try:
+        payload = json.loads(arguments)
+    except json.JSONDecodeError as exc:
+        raise MalformedEmissionError(f"emit_claims arguments not JSON: {exc}") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("claims"), list):
+        raise MalformedEmissionError(
+            "emit_claims arguments must be an object with a 'claims' list"
+        )
+    valid: list[ClaimWire] = []
+    malformed = 0
+    for index, raw_claim in enumerate(payload["claims"]):
+        try:
+            valid.append(ClaimWire.model_validate(raw_claim))
+        except ValidationError as exc:
+            malformed += 1
+            log.warning(
+                "synthesis.claim_malformed",
+                claim_index=index,
+                error=str(exc)[:300],
+            )
+    return SectionClaimsWire(claims=valid), malformed
 
 
 def _json_object_or_empty(arguments: str) -> dict[str, Any]:
@@ -975,11 +1024,11 @@ class OpenAISynthesisBackend:
         if not isinstance(arguments, str):
             arguments = "{}"
         if name == "emit_claims":
-            try:
-                claims = SectionClaimsWire.model_validate_json(arguments)
-            except ValidationError as exc:
-                raise MalformedEmissionError(str(exc)[:500]) from exc
-            return {"tool_calls": [], "claims": claims}, response.usage
+            claims, malformed = _salvage_claims(arguments)
+            turn: SectionTurn = {"tool_calls": [], "claims": claims}
+            if malformed:
+                turn["malformed_claims"] = malformed
+            return turn, response.usage
         return {
             "tool_calls": [{"tool": name, "arguments": _json_object_or_empty(arguments)}],
             "claims": None,
@@ -1056,14 +1105,11 @@ class OpenAISynthesisBackend:
         arguments = function.arguments
         if not isinstance(arguments, str):
             arguments = "{}"
-        try:
-            claims = SectionClaimsWire.model_validate_json(arguments)
-        except ValidationError as exc:
-            # The repair is loop-free and unrepeatable — a malformed repair
-            # emission means the repair produced nothing; the caller lands the
-            # failing claims per the exhaustion rules (soft-flag / the counted
-            # exclusions), never a whole-component failure.
-            raise MalformedEmissionError(str(exc)[:500]) from exc
+        # Per-claim salvage, as on loop turns. An unparseable envelope means
+        # the loop-free, unrepeatable repair produced nothing — the caller
+        # lands the failing claims per the exhaustion rules (soft-flag / the
+        # counted exclusions), never a whole-component failure.
+        claims, _malformed = _salvage_claims(arguments)
         return claims, response.usage
 
     def repair_section(
