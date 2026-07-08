@@ -268,6 +268,48 @@ per task-cycle-build; none is silent drift):
 - Fixture corpus remains sanitized records + openly-licensed synthetic
   uploads; nothing acquired-and-unlicensed is committed.
 
+## Review handoff (step-7 inputs — read before dispatching any lane)
+
+- **Adjudication items from this build** (each confirmed or contested explicitly,
+  per task-cycle-review § Adjudication):
+  1. The five flagged minor deviations in § Diff summary above.
+  2. Known unverified items below — in particular the sanitized-corpus
+     face-validity ceiling (a *scope* statement the review should sanity-check,
+     not try to close).
+- **Executor provenance (family-flip anchoring is per surface):**
+  - *Codex-written* → Claude lanes anchor: `screening_backend.py`,
+    `classification_backend.py`, `screen.py` (+ `windowing.py`, the `extract.py`
+    rewrap), `classify.py`, `tests/test_screen_judgment.py`,
+    `tests/test_classify_judgment.py`, the reworked stub tests in
+    `tests/test_screen.py` / `tests/test_classify.py`.
+  - *Claude-written (fast-worker)* → Codex adversarial anchors: `tags.py` +
+    `tests/test_tags.py`, the effective-grain reader sweep (`characterise.py`,
+    `select.py`, `synthesise.py`, `synthesis_tools.py`, `ingest_full_text.py`,
+    `skeleton.py`, `appraise.py`, `tests/helpers.py` + per-reader regression
+    tests), `harness.py` / `skeleton.py` / `tracing.py` wiring, bulk test
+    additions (`test_screen.py` / `test_classify.py` / `test_schema.py`).
+  - *Lead-written* → Codex adversarial anchors: migration `e5c2a7f4b9d1` +
+    `schema.py`, `screen_prompt.py`, `classify_prompt.py`, `prompt_fields.py`,
+    this file.
+- **Diff scoping:** declared non-slice process edits — commit `f73f990`
+  (failure-log + task-cycle/harness levers) and the
+  `.claude/skills/task-cycle-review/SKILL.md` half of the handoff commit —
+  excluded from slice-code lanes; adjudicator reads them once. Fixture data
+  globs excluded per the standing rule (`:!src/policy_atlas/data/*.json`).
+- **Live-trace content lane material** (013 process install; this slice HAS live
+  runs): dev-DB project `7f071ea8-c189-4820-9b63-af57e613d49c` (per-rep records,
+  agreement counts, aggregation flags in `source.screened` event payloads);
+  Langfuse generations `screen:*` / `screen_fulltext:*` / `classify:*`
+  (full I/O). Content to review: the borderline band's rep reasons vs decisions,
+  BOTH stage-2 demotion reasons (false exclusion = the dangerous outcome), the
+  classify reasons on the two genuine uploads, and the two sibling projects from
+  the wrapper incident (`0ff42a22…`, one failed ingest run — confirm the failure
+  is the spawn-bootstrap artifact it's claimed to be). Skeleton log (best-effort,
+  session tmp): `/private/tmp/claude-503/-Users-shabeer-rauf-repos-policy-atlas/cd7139f9-df4d-447f-8105-d78cac744432/scratchpad/live/skeleton_live.log`.
+- **Review sizing:** plan § Review-stack sizing (medium, per-angle pathspecs, one
+  security lane — headline: first third-party text into product prompts,
+  contract-verifier Opus, Codex adversarial; ≤250K reasoning / ≤500K fast-worker).
+
 ## Review findings
 
 *(to be filled by conversation C — the review stack.)*

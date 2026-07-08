@@ -12,8 +12,10 @@ description: >
 # Task cycle — review phase (steps 7–10)
 
 Prerequisite: [task-cycle spine](../task-cycle/SKILL.md). Re-ground first: read
-`rubric.md`, `verification.md`, and the diff (`git diff dev...HEAD`). Confirm
-`make verify` is green — that's the self-verify gate before any review lane runs.
+`rubric.md`, `verification.md` **including its § Review handoff / flagged deviations /
+Known unverified items** (those are step-7 work items, not background), and the diff
+(`git diff dev...HEAD`). Confirm `make verify` is green — that's the self-verify gate
+before any review lane runs.
 
 **This phase requires a fresh conversation.** Fresh reviewer *lanes* are not enough: in
 007 all lanes were fresh subagents but the author adjudicated its own findings from inside
@@ -24,7 +26,11 @@ stack run and adjudicated, findings recorded, rubric item 8 holds".
 
 Reviews run on pinned/heterogeneous reviewers, **not the lead** — the lead adjudicates
 findings and decides fixes (harness.md § review lane economics). Whichever model family
-implemented, the other anchors review.
+implemented, the other anchors review. **On mixed-executor slices, apply the family
+flip per surface** (014, 2026-07-08): the build's handoff names which files each
+executor wrote — Claude lanes anchor the Codex-written surfaces, the Codex adversarial
+pass anchors the Claude-written ones (lead prompts included); without the provenance
+map, a same-family read of same-family code passes as heterogeneous when it isn't.
 
 **Token economy (failure-log 2026-07-03 → 008 retro 2026-07-05):** the budget is a
 **cost proxy, split by model class** (a flat ceiling misread 008's cheap finder fan-out
@@ -54,7 +60,10 @@ generated/bulk data files from the review diff by pathspec** — e.g.
 purpose-built check (leak guard, schema/shape audit). On 007, 12K lines of fixture JSON
 were read by all 8 finder angles for zero findings (~2× budget overrun). NB this is an
 *exclude*-list of known data globs — the 2026-06-30 entry rejected *include*-lists, which
-silently drop new code paths; an exclude-list fails open.
+silently drop new code paths; an exclude-list fails open. Also exclude **declared
+non-slice commits** (process-record commits the build named in the handoff, e.g. a
+skills/failure-log install riding the branch) from *slice-code* lanes — they still get
+read once, by the adjudicator, to confirm they are what they claim.
 
 The lanes:
 
@@ -114,7 +123,11 @@ across families are high-confidence; unique-to-one-lane findings justify that la
 existence — note both. **An anomaly the build flagged "for the review stack" is a
 step-7 work item, not a note to carry forward** — root-cause it in-stack (the trace
 lane above) before adjudication closes; "flagged for review" that survives review
-unexamined is the fake-done shape of this phase (013, 2026-07-08).
+unexamined is the fake-done shape of this phase (013, 2026-07-08). The same rule
+covers **verification.md's flagged minor deviations** (014, 2026-07-08): each one is a
+resolution the build made unilaterally within the contract's vocabulary — the stack
+confirms or contests every one explicitly (adopt as-is / require change / escalate as
+a contract problem); a deviation nobody re-examined is drift with a paper trail.
 
 ## Step 8 — Durable records + PR
 
