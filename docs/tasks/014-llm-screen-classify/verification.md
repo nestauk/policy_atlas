@@ -332,10 +332,13 @@ the amendment (the step-6 exit claim below holds for the amended tree).
     `schema.py`, `screen_prompt.py`, `classify_prompt.py`, `prompt_fields.py`,
     this file.
 - **Diff scoping:** declared non-slice process edits — commit `f73f990`
-  (failure-log + task-cycle/harness levers) and the
-  `.claude/skills/task-cycle-review/SKILL.md` half of the handoff commit —
-  excluded from slice-code lanes; adjudicator reads them once. Fixture data
-  globs excluded per the standing rule (`:!src/policy_atlas/data/*.json`).
+  (failure-log + task-cycle/harness levers), the
+  `.claude/skills/task-cycle-review/SKILL.md` half of the handoff commit, and
+  the user-directed deferred.md entry (unappraised-chunks-in-retrieval seam,
+  013 section — recorded ahead of step 8 on explicit user instruction during
+  the rev-1.11 adjudication) — excluded from slice-code lanes; adjudicator
+  reads them once. Fixture data globs excluded per the standing rule
+  (`:!src/policy_atlas/data/*.json`).
 - **Live-trace content lane material** (013 process install; this slice HAS live
   runs): dev-DB project `7f071ea8-c189-4820-9b63-af57e613d49c` (per-rep records,
   agreement counts, aggregation flags in `source.screened` event payloads);

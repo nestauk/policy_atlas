@@ -621,6 +621,29 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   validator and no judge-lane fit exists yet; a cross-corpus-shape assertion without
   computable counts rejects, and the prompt says so. The type arrives with its
   verification mechanism, never silently absorbed.
+- **Unappraised chunks in the retrieval scope — contamination measurement + soft-prior
+  fallback** (user question during the 014 rev-1.11 adjudication, 2026-07-08). The
+  read/cite split is deliberate ("screen bounds reading, appraise bounds citing"):
+  unappraised docs (classified Unknown/Other, or unclassified) are retrievable but a
+  chunk claim citing one is hard-rejected (`unappraised_doc_citation`,
+  `synthesise.py`). The open question is whether readable-but-uncitable chunks
+  *contaminate context* — occupying top-k slots under `TOP_K`/char budget and priming
+  prose nothing can cite. Two-part seam: (1) **eval measurement first** — the eval
+  workstream measures the share of retrieved chunks that are unappraised and whether
+  their presence correlates with weaker or less-cited sections (turns the intuition
+  into a number). (2) **Soft-prior fallback if it bites** — a standing default
+  down-weight of unappraised chunks in retrieval ranking. The per-run mechanism
+  already exists (`retrieval_boosts` over appraisal tier, clamped multiplicative,
+  re-weight-never-exclude); promoting it to a *default* is a baked prior and needs its
+  own 013-surface gate (the rev-7.5 steerable-never-baked ruling). An appraised-only
+  retrieval *boundary* was considered and REJECTED (2026-07-08): it would make
+  envelope-grain classification a hard reading gate (a wrong `Unknown` silently
+  removes a doc from the writer's world, unflagged), systematically penalise
+  thin-metadata grey literature (compounding the 014 11(iv-b) asymmetry), and
+  recreate the reading-boundary perversity the select-as-soft-prior ruling fixed.
+  Related shrink-the-set path: the classify-Unknown full-text resolution seam (014
+  family) — re-classified Unknowns become appraisable and citable, reducing the
+  readable-but-uncitable set by adding information rather than cutting reading.
 - **Policy-conditioned citable-bar flagging** — the source/evidence policy's citable bar
   applies flag-not-block; v1 honours the rule through the weakly-grounded mechanism only.
   Policy-conditioned flagging (below-policy support visibly flagged as such) lands with
