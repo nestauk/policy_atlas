@@ -1,8 +1,8 @@
 """Single write path for ``source_tag`` assertion rows.
 
 Both tag writers (acquire's provider materialisation, characterise's theme
-persistence) route through here so the row shape, the conflict target and the
-``topic_theme`` tag type stay in one place.
+persistence) route through here so the row shape and the conflict target stay
+in one place. The tag type is a parameter defaulting to ``topic_theme``.
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ def insert_source_tags(
     run_id: uuid.UUID,
     now: datetime,
     assertions: list[tuple[uuid.UUID, str, str]],
+    tag_type: str = TOPIC_THEME,
 ) -> None:
     """Insert tag assertion rows, idempotent on the assertion unique constraint.
 
@@ -38,6 +39,8 @@ def insert_source_tags(
         run_id: Run recorded as the assertion's creator.
         now: Timestamp for ``created_at``.
         assertions: ``(project_source_snapshot_id, tag, asserted_by)`` triples.
+        tag_type: The tag-assignment type; defaults to ``topic_theme`` so
+            existing callers are untouched.
     """
     rows = [
         {
@@ -45,7 +48,7 @@ def insert_source_tags(
             "project_id": project_id,
             "project_source_snapshot_id": pss_id,
             "tag": tag,
-            "tag_type": TOPIC_THEME,
+            "tag_type": tag_type,
             "asserted_by": asserted_by,
             "created_by_run_id": run_id,
             "created_at": now,
