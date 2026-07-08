@@ -115,14 +115,35 @@ roll-up row persisted with the full provenance key set.
 |---|---:|---|---:|---:|---|---|
 | rapid (no refs) | 8 | chunk 8 · gap 7 · reasoning 7 | 8 | 8 (no selection referenced — all `unselected_screened`, honestly) | tier_1 ×8, tier_4 ×7 | uncited_sections, repair_path_taken |
 | characterisation_only | 6 | chunk 5 · theme 3 · pattern 7 · gap 5 · reasoning 4 | 5 | 5 | tier_1 ×5, tier_4 ×4 | uncited_sections, repair_path_taken |
-| characterisation + selection (no extract) | 7 | chunk 6 · theme 3 · pattern 3 · gap 3 · reasoning 5 | 6 | **0** — the selection prior visibly steered every citation into the selected set | tier_1 ×6, tier_4 ×5 | uncited_sections, repair_path_taken |
+| characterisation + selection (no extract) | 7 | chunk 6 · theme 3 · pattern 3 · gap 3 · reasoning 5 | 6 | 0 — but see the confound note below: NOT usable as steering evidence | tier_1 ×6, tier_4 ×5 | uncited_sections, repair_path_taken |
 | full_chain (grouping ref; transitive resolution) | 6 | chunk 4 · theme 2 · pattern 6 · gap 7 · reasoning 4 | 4 | 0 | tier_1 ×4, tier_4 ×4 | uncited_sections, repair_path_taken |
 
-Honest notes:
-- **finding claims are 0 on the full chain** because the live extraction
-  legitimately produced zero intervention–outcome findings on this fixture
-  corpus (`no_findings` ×10) — the substrate profile records extraction
-  present, findings absent; nothing invented.
+Honest notes (two corrected 2026-07-08 after post-run interrogation — the
+first write-up of both was wrong/overstated):
+- **finding claims are 0 on the full chain — CORRECTED: findings DID exist.**
+  The live extraction extracted **179 findings from 9/10 docs** (mode `live`;
+  the earlier "no findings existed" note conflated a stub-mode run's
+  `no_findings ×10` with the live run). Two compounding causes: (a) the
+  referenced **intervention-facet grouping produced 0 groups** — 96 distinct
+  values, all 179 findings ungrouped through the repair (the same-project
+  outcome-facet run produced 13 groups; the demo passes the first grouping
+  run) — so every section seed's member-finding set was empty and finding
+  citability flowed only through `query_findings` returns (the rev 8 M6
+  path); (b) the writer called `query_findings` in 3 of 6 sections and
+  received records, but emitted chunk/pattern/gap claims instead of
+  finding-type claims — prompt-adherence/emphasis behaviour, not a gate (the
+  type was available; nothing rejected). (a) is a 012-lane anomaly flagged
+  for the review stack (012's live check grouped 94 values into 16 groups);
+  (b) is the synthesis-quality eval seam.
+- **The "selection prior visibly steering" reading of the 0
+  unselected-origin citations is CONFOUNDED and withdrawn.** On this fixture
+  corpus the only citable (appraised, text-bearing) docs are the two uploads,
+  and both sat inside the selected set — zero citable-but-unselected docs
+  existed, so the M4 citability gate alone fully explains the 0. The
+  prior-steers-never-filters property is proven **deterministically** instead
+  (`test_retriever_selection_prior_reorders_without_excluding_unselected`);
+  isolating live steering needs a corpus with citable docs on both sides of
+  the selection — eval-seam territory.
 - **The repair path was exercised on every profile** (`repair_path_taken`);
   per-claim salvage caught structurally malformed live emissions (e.g.
   `gap.sparsity` emitted as a float; `citations: null`) — counted into
@@ -234,6 +255,21 @@ by the live check, each root-caused and regression-covered):
   ceiling 2 + SECTION_CAP × (SECTION_TURN_CAP + 3) is asserted binding.
 
 ## Known unverified items
+
+- **Live selection-prior steering** — not isolatable on this corpus (the
+  citable set ⊆ the selected set, see the confound note); the property holds
+  deterministically in the suite. Needs a corpus with citable docs on both
+  sides of the selection.
+- **Zero-group intervention partition on the live run** — the 012 `group`
+  component returned 0 groups from 96 distinct intervention values (all
+  ungrouped through its repair) where 012's own live check grouped 94 values
+  into 16; unchanged 012 code, so either live-model drift or an
+  extraction-output shape difference. Flagged for the review stack / the
+  grouping-quality eval seam — it also weakens the full-chain profile's
+  finding-claim path (empty section seeds).
+- **Writer under-uses finding claims** — with an extraction referenced and
+  `query_findings` returning records, the live writer emitted no finding-type
+  claims; synthesis-quality eval seam (prompt emphasis), not a gate.
 
 - Live judge/writer behaviour beyond the four-profile smoke — the eval
   workstream owns quality; this slice persists judge I/O for eval-readiness.
