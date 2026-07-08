@@ -34,18 +34,23 @@ call): live HTTP transport behind the 007 `SearchBackend` seam carrying
 every v2-lesson requirement (timeouts · Overton 1 call/s limiter · query
 sanitizers · per-depth caps · key hygiene · no citation floor), plus the
 search capability itself — **rapid** = LLM multi-query fan-out with
-SR/RCT variants; **deep** = the Arm-B agentic loop (judged exemplars →
-reformulation with token-bounded inputs · citation snowballing ·
-suggestion grounding · Thompson-sampling adaptive stopping), all
-budget-governed; the thin-base re-search trigger; pagination;
-`scope_filters`; the backend-scope field. Fixture backends stay the
-zero-egress defaults — `make verify` stays deterministic and egress-free;
-the in-loop judge steers search but never screens. Gated changes riding
-this slice: **runtime egress** (transport + four generation surfaces,
-`search_queries_v1` · `search_reformulate_v1` · `search_suggest_v1` ·
-`search_judge_v1`, the 11th–14th product prompts) · **schema** (one
-`ck_scov_stop_condition` CHECK widening) · **public interface**
-(`search_backend_scope` Plan/Config field). Build per
+SR/RCT variants; **deep** = the Arm-B agentic loop realised as
+**acquire↔screen rounds** (contract rev 3: the loop's judge IS the
+unmodified 014 screen — reformulation from screened exemplars with
+token-bounded inputs · citation snowballing · suggestion grounding ·
+Thompson-sampling arm selection · stopping on real confident-relevant
+counts), all budget-governed; the thin-base re-search behaviour lives
+in the loop's stopping rule (rapid-thin runs escalate to one bounded
+deep continuation); pagination; `scope_filters`; the backend-scope
+field. Fixture backends stay the zero-egress defaults — `make verify`
+stays deterministic and egress-free; acquire itself never writes
+screening rows (one relevance surface). Gated changes riding this
+slice: **runtime egress** (transport + three generation surfaces,
+`search_queries_v1` · `search_reformulate_v1` · `search_suggest_v1`,
+the 11th–13th product prompts, plus the in-loop `screen_v1` call-volume
+change) · **schema** (one `ck_scov_stop_condition` CHECK widening) ·
+**public interface** (`search_backend_scope` Plan/Config field). Build
+per
 `docs/tasks/015-live-search/contract.md`. Stay within the contract's
 scope and stop conditions; live fetch (016), Semantic Scholar, Overton
 cross-backend snowballing, blend ranking and all other seams remain

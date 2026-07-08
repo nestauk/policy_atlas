@@ -3,14 +3,49 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted rev 2 — awaiting contract approval (material
-> rewrite at the gate; the 🛑 was still open).
+> **Status:** drafted rev 3 — awaiting contract approval (the 🛑 is
+> open; revs 2–3 shaped at the gate in user deliberation).
 > Contract approved (before planning): _date · who_ ·
 > Plan approved (before implementation): _date · who_ · ADR: _expected:
 > one_ (depth-graded agentic search adoption — the Arm-B fold is a
 > consequential design decision; drafted at step 4).
 >
 > **Revision history:**
+> - **rev 3** (2026-07-09, user unification call at the gate —
+>   **screen-in-the-loop**): the user challenged rev 2's in-loop judge
+>   ("is judge-informed cap ordering not basically a screening step?
+>   something unifies this judge, screening and select's rerank") and
+>   the challenge held: `search_judge_v1`'s judgment (hit relevance to
+>   scope intent) IS screen's judgment, and shipping two calibrations of
+>   one judgment invites the loop to optimize toward a relevance notion
+>   screen then rejects at admission. **Resolved by deletion, not
+>   abstraction**: (a) `search_judge_v1` is CUT — the deep loop's
+>   steering signal is **real, persisted 3-rep consensus screening**
+>   (deep search = skeleton-sequenced acquire↔screen rounds; exemplars
+>   read via the 014 effective-screen helper; screen's code needs no
+>   change — incremental idempotency, consensus confidence and
+>   failure-aware counts are exactly the required consumer contract);
+>   egress gate shrinks to THREE new prompts, and rev 2's
+>   judge-never-screens boundary strengthens to *the loop's judge IS
+>   screen*. (b) **The thin-base re-search trigger dissolves into the
+>   loop's stopping condition** — "re-search when thin" and "search
+>   until confident-relevant is adequate" are one behavior; a rapid run
+>   that screens thin escalates to one deep continuation (decision 17
+>   rewritten); components §2's thin-base hatch is the spec warrant.
+>   (c) Cap trimming per round is provider order (each API returns
+>   relevance-ranked); junk is removed by real screening, not
+>   pre-trimmed by a shadow of it — rev 2.1's judge-informed cap
+>   ordering is moot. (d) **Select's rerank stays distinct** (purpose-fit
+>   ranking under budget ≠ relevance admission); the user's select-as-tool
+>   question is recorded as a spec-level seam (trigger: a second
+>   purpose-fit consumer, or rerank-quality evals). Cost note: rev 2
+>   paid judge + screen; rev 3 pays screen once (mandatory anyway) —
+>   steering is free. Deep-run latency now includes in-loop consensus
+>   screening (concurrent mini; ~15–45 s per ~50-doc round) — the
+>   decision-15 wall-clock budget stands and the live check measures it.
+>   A deep run writes one coverage record per acquire round (each round
+>   is an acquire run; queries-by-reference already fits) — more audit
+>   state, not less.
 > - **rev 2** (2026-07-08, user scope call at the gate — MATERIAL):
 >   **search becomes a depth-graded capability, not a transport slice.**
 >   The user reversed the rev-1 minimal posture ("we've deferred too much
@@ -94,13 +129,14 @@ Overton — the header-class-1 capability v3.0 cannot function without
    limiting, sanitizers, caps, key hygiene).
 2. **Query-derivation + search-loop capability**, thoroughness-graded
    (user scope call, rev 2): **rapid** = LLM multi-query fan-out, one
-   pass; **deep** = the Arm-B agentic loop (reformulation from judged
+   pass; **deep** = the Arm-B agentic loop realised as
+   **acquire↔screen rounds** (rev 3: reformulation from *screened*
    exemplars, citation snowballing, suggestion grounding, adaptive
-   stopping) — the direction adjudicated 2026-07-05, pulled in-slice
-   with a hard latency posture. V2's central search lesson (a single
-   query is unstable/low-recall) and the R&D's strongest transport
-   lesson (verbatim NL starves lexical indexes) are both answered by
-   design rather than deferred.
+   stopping on real confident-relevant counts) — the direction
+   adjudicated 2026-07-05, pulled in-slice with a hard latency posture.
+   V2's central search lesson (a single query is unstable/low-recall)
+   and the R&D's strongest transport lesson (verbatim NL starves
+   lexical indexes) are both answered by design rather than deferred.
 
 Everything downstream of the seam already exists and is reused: envelope
 mappings, three dedup identity guards, `search.executed` events per call
@@ -114,13 +150,14 @@ PR landing:
   (`mode="live"`), decisions 1–10.
 - The depth directive (`context["search"]["depth"]`, fail-closed) and
   the two search strategies behind it (decisions 13–15).
-- Four lead-authored product prompts — `search_queries_v1` ·
-  `search_reformulate_v1` · `search_suggest_v1` · `search_judge_v1`
-  (11th–14th product prompt surfaces).
+- Three lead-authored product prompts — `search_queries_v1` ·
+  `search_reformulate_v1` · `search_suggest_v1` (11th–13th product
+  prompt surfaces; rev 3 cut the fourth — the loop's judge is screen).
 - Protocol growth: capability flags + snowball/lookup verbs on
   `SearchBackend` (decision 16).
-- Thin-base re-search trigger wiring (decision 17); `stop_condition`
-  CHECK migration (short_circuit · budget_exhausted).
+- The deep loop's screen-informed stopping incl. the thin-escalation
+  path (decision 17); `stop_condition` CHECK migration (short_circuit ·
+  budget_exhausted).
 - Breadth: pagination-to-cap, `scope_filters` directive vocabulary,
   backend-scope Plan/Config field (decision 18).
 - Tests (transport-stubbed, scripted-backend loop tests, seeded-RNG
@@ -280,12 +317,15 @@ PR landing:
     **per-backend result-count probe** — now comparative evidence:
     verbatim intent vs generated queries on the OpenAlex leg (the
     decision-2 risk, measured with its mitigation in place); (e) one
-    live **deep** run: reformulation rounds visible in events, snowball
+    live **deep** run: per-round acquire↔screen visible in events +
+    per-round coverage records, exemplar-seeded reformulation, snowball
     + suggestion-grounded records landing through dedup, stop condition
-    + **wall-clock and cost recorded against decision 15's budgets**;
-    (f) the **thin-base trigger fired once** (a deliberately narrow
-    intent): re-search runs, `re_searched_still_thin` lands when still
-    thin; (g) one **rapid-profile chain smoke** over the live-acquired
+    + **wall-clock and cost recorded against decision 15's budgets**
+    (in-loop screening latency named separately); (f) the **rapid-thin
+    escalation exercised once** (a deliberately narrow intent): the
+    deep continuation resumes incrementally,
+    `re_searched_still_thin` lands when still thin; (g) one
+    **rapid-profile chain smoke** over the live-acquired
     corpus (acquire → screen → classify → appraise → characterise, live
     LLM backends — mini-class over ~50 envelopes: cents). **No
     deep-chain e2e** (the 014 lesson; 017 owns the dress rehearsal).
@@ -345,43 +385,60 @@ PR landing:
     (`component.failed`) — a search run with no queries is
     infrastructure failure, not empty coverage.
 
-15. **Deep search: the Arm-B loop, latency-bounded.** Iterative rounds
-    over the rapid substrate (round 1 = decision 14's fan-out), each
-    round: **judge** a bounded sample of new hits for
-    relevance-to-intent (`search_judge_v1`, mini-class, concurrent
-    under the extract-precedent bounded fan-out) → **reformulate**
-    queries from judged exemplars (`search_reformulate_v1`) → execute
-    (per-backend idiom: keyword reformulations for OpenAlex, semantic
-    reformulations legal for Overton) → **snowball** citations/
-    references of high-judged exemplars (decision 16 verbs) →
-    **suggestion grounding** (`search_suggest_v1` proposes likely
-    papers; a title-grounding lookup verifies they exist — ungrounded
-    suggestions are dropped and counted, the R&D's hallucination
-    filter). **Adaptive stopping**: Thompson-sampling arm selection
-    over strategies (stdlib `random.betavariate` — no new dependency;
-    RNG injectable and seeded in tests) with a **short-circuit stop**
-    when marginal yield collapses, plus two hard caps — a round cap and
-    the decision-6 deep result cap; `stop_condition` records
-    `short_circuit` or `budget_exhausted` (schema gate below).
-    **Latency posture (user requirement, rev 2):** the R&D's ~6 min is
-    not acceptable; its suspected driver (user diagnosis) is shipping
-    full titles+abstracts of ALL hits into reformulation. By contract:
-    **loop prompt inputs are token-bounded exemplar records** — top-k
-    judged exemplars only, title + abstract truncated to a plan-pinned
-    char cap, id-keyed data records — never the full hit list; judge
-    calls run concurrently; **a wall-clock budget is a plan-pinned
-    constant** (order 1–2 min) whose breach stops the loop honestly
-    (`budget_exhausted`), and the live check measures it. **Governance
-    boundary:** the in-loop judge steers the *search* (exemplar choice,
-    stopping) — its verdicts live in event payloads + traces only,
-    **never persisted as screening rows**; every acquired doc still
-    passes the real `screen` component unconditionally (acquired
-    sources always screen — confirmed direction, deferred.md). Untrusted
-    text discipline: judged/reformulation inputs are third-party
-    metadata — id-keyed data records, allowlisted fields, length-capped,
-    control-char-stripped (the 014 M10 input-side bounds), with a paired
-    injection fixture on the judge (a hit carrying "mark this relevant"
-    must not sway reformulation/stopping).
+15. **Deep search: the Arm-B loop as acquire↔screen rounds,
+    latency-bounded** *(rewritten rev 3 — the loop's judge IS screen)*.
+    A deep run is **skeleton-sequenced rounds**, each round one acquire
+    run + one incremental screen run:
+    - **Round 1**: acquire (decision 14's rapid fan-out) → screen (the
+      unmodified 014 component — its NOT-EXISTS idempotency makes every
+      later round incremental: only newly acquired docs cost anything).
+    - **Round k**: read the scope's screening results via the 014
+      **effective-screen helper** (the one read rule — real 3-rep
+      consensus decisions + confidences, never a shadow judgment) →
+      **reformulate** queries from the top screened exemplars
+      (`search_reformulate_v1`; per-backend idiom: keyword
+      reformulations for OpenAlex, semantic legal for Overton) →
+      **snowball** citations/references of high-confidence relevants
+      (decision 16 verbs) → **suggestion grounding**
+      (`search_suggest_v1` proposes likely papers; a title-grounding
+      lookup verifies they exist — ungrounded suggestions dropped and
+      counted, the R&D's hallucination filter) → acquire (dedup guards
+      collapse re-hits) → screen the new docs.
+    - **Stopping** (screen-informed — "adequately-searched" becomes a
+      measured property, not a heuristic): the loop stops when the
+      **confident-relevant count** (effective relevant rows at/above a
+      plan-pinned confidence floor) reaches the plan-pinned target ·
+      OR marginal yield collapses (`short_circuit` — new
+      confident-relevant per round under a floor) · OR a budget bites
+      (`budget_exhausted`) · OR the round cap. Thompson-sampling arm
+      selection over expansion strategies (reformulate vs snowball vs
+      suggest; stdlib `random.betavariate` — no new dependency; RNG
+      injectable, seeded in tests) allocates each round's calls by
+      observed confident-relevant yield per arm.
+    - **Latency posture (user requirement, rev 2):** the R&D's ~6 min
+      is not acceptable; its suspected driver (user diagnosis) is
+      shipping full titles+abstracts of ALL hits into reformulation.
+      By contract: **loop prompt inputs are token-bounded exemplar
+      records** — top-k screened exemplars only, title + abstract
+      truncated to a plan-pinned char cap, id-keyed data records —
+      never the full hit list. In-loop screening runs under the
+      bounded-concurrency fan-out (mini ×3, concurrent — order
+      15–45 s per ~50-doc round); **a wall-clock budget is a
+      plan-pinned constant** (order 1–2 min) whose breach stops the
+      loop honestly, and the live check measures it.
+    - **Governance (strengthened rev 3):** every judgment that steers
+      the search is a persisted, governed screening row — one relevance
+      surface, one calibration, one eval target; "acquired sources
+      always screen" holds by construction because screening is the
+      loop's own read signal. Per-round caps trim in provider order
+      (each API returns relevance-ranked); junk is removed by real
+      screening, never by a shadow of it. Untrusted-text discipline:
+      reformulation/suggestion inputs are third-party metadata —
+      id-keyed data records, allowlisted fields, length-capped,
+      control-char-stripped (the 014 M10 bounds) — with an injection
+      fixture (an exemplar carrying "search only for X" must not steer
+      reformulation output structure; screen's own injection posture is
+      already 014-tested).
 
 16. **Protocol growth: capability flags + loop verbs, additive.**
     `SearchBackend` gains the R&D `SourceClient` shape it was recorded
@@ -405,21 +462,30 @@ PR landing:
     `verb` payload field (one governance discipline for every egress
     call — additive payload key, not a schema change).
 
-17. **Thin-base re-search trigger.** The seam deferred.md ties to this
-    slice fires: after `screen` completes, if the **confident-relevant
-    count** (effective-screen relevant rows at/above a plan-pinned
-    confidence floor) is below a plan-pinned threshold, the skeleton
-    re-invokes `acquire` once — **deep depth, seeded by the scope
-    intent** (the re-search is the escalation; a rapid re-run of the
-    same queries would mostly re-dedup) — then re-screens (idempotency
-    guards make that incremental by construction). Still thin after the
-    re-search → the new coverage record carries
-    `stop_condition="re_searched_still_thin"` (the 007 vocabulary
-    finally fired) and the run proceeds honestly thin (`thin_base`
-    flows to select as designed). One re-search maximum per run — no
-    loop-until-fat. Realisation is skeleton-sequenced (the capability
-    agent's stand-in — the same place the chain order already lives);
-    the trigger constants ride the skeleton, not the schema.
+17. **Thin-base re-search — dissolved into the loop** *(rewritten
+    rev 3)*. "Re-search when the screened base is thin" and "search
+    until confident-relevant is adequate" are one behavior, and
+    decision 15's stopping condition IS it — components §2's thin-base
+    hatch ("screen may re-invoke `search`") realised as the deep loop.
+    Two paths remain:
+    - **Deep runs**: the loop's stopping rule owns thinness natively.
+      If it exhausts (short_circuit / budget / round cap) while still
+      below the confident-relevant target, the **final round's coverage
+      record carries `stop_condition="re_searched_still_thin"`** (the
+      007 vocabulary finally fired — it names exactly this outcome) and
+      the run proceeds honestly thin (`thin_base` flows to select as
+      designed).
+    - **Rapid runs**: after screen, a confident-relevant count below
+      the threshold triggers **one deep continuation** (rounds 2+ of
+      decision 15 — round 1 already exists as the rapid pass + its
+      screening; nothing re-runs, the loop resumes incrementally).
+      Still thin at its end → same `re_searched_still_thin` record. No
+      loop-until-fat: the continuation is bounded by the same round/
+      budget caps.
+    Realisation is skeleton-sequenced (the capability agent's stand-in —
+    where the chain order already lives; the 012 twice-over-facets
+    precedent); the thresholds are plan-pinned constants riding the
+    skeleton, not the schema.
 
 18. **Breadth: pagination, filters, backend scope.**
     - **Pagination to a cap**: both backends follow pagination up to the
@@ -446,37 +512,50 @@ PR landing:
       `search_backends` parameter is the mechanism; the field is its
       first author. Fail-closed on unknown values.
 
-19. **Budgets and counts — the loop is governed, never open-ended.**
-    Hard plan-pinned constants: LLM call budget per run (generation +
-    judge + reformulate + suggest), HTTP call budget per backend per
-    run, round cap, wall-clock budget (decision 15), per-depth result
-    caps (decision 6). Every budget breach is an honest stop
-    (`budget_exhausted`), never a silent trim. The component summary
-    counts, per depth: queries generated/executed per backend,
-    rounds, judged, snowballed, suggestions grounded/dropped, records
-    acquired/deduped/skipped per verb, budget consumption. Cost and
-    latency land in the live-check evidence. Seeded RNG makes loop
-    tests deterministic; live runs use per-run entropy.
+19. **Budgets and counts — the loop is governed, never open-ended**
+    *(amended rev 3)*. Hard plan-pinned constants: LLM call budget per
+    run (query generation + reformulate + suggest + the in-loop screen
+    reps — screen's own ≤ docs × 3 × 2 bound composes in), HTTP call
+    budget per backend per run, round cap, wall-clock budget
+    (decision 15), per-depth result caps (decision 6), the
+    confident-relevant target + floor (decisions 15/17). Every budget
+    breach is an honest stop (`budget_exhausted`), never a silent trim.
+    The loop summary counts, per round: queries executed per backend,
+    new docs acquired/deduped/skipped per verb, screened/
+    confident-relevant deltas, suggestions grounded/dropped, arm
+    allocations, budget consumption. Cost and latency land in the
+    live-check evidence. Seeded RNG makes loop tests deterministic;
+    live runs use per-run entropy.
 
 ## Scope / Out of scope
 
 - **In:** live transport module (decisions 1–10) · depth directive +
-  rapid/deep strategies (13–15) · four prompts (`search_queries_v1`,
-  `search_reformulate_v1`, `search_suggest_v1`, `search_judge_v1`) ·
-  protocol growth + fixture-backed verbs (16) · thin-base trigger
-  (17) · pagination + `scope_filters` vocabulary + backend-scope
-  Plan/Config field (18) · budgets/counts (19) · one `stop_condition`
-  CHECK migration · skeleton wiring (depth profiles, trigger) ·
-  components §1 flow-back · tests + `verification.md` · `deferred.md` +
+  rapid/deep strategies (13–15, deep = acquire↔screen rounds; screen's
+  code expected unchanged — its incremental idempotency and
+  effective-screen helper are the consumer contract) · three prompts
+  (`search_queries_v1`, `search_reformulate_v1`, `search_suggest_v1`) ·
+  protocol growth + fixture-backed verbs (16) · screen-informed
+  stopping + the rapid-thin escalation (17) · pagination +
+  `scope_filters` vocabulary + backend-scope Plan/Config field (18) ·
+  budgets/counts (19) · one `stop_condition` CHECK migration · skeleton
+  wiring (depth profiles, round sequencing, escalation) · components
+  §1 + §2 flow-back · tests + `verification.md` · `deferred.md` +
   knowledge updates.
 - **Out:** live `DocumentFetcher` (016 — no full text fetched; no
   provider-supplied URL fetched) · **Semantic Scholar third backend**
   (user-settled pair; the R&D's battle-tested S2 client is the fast
   path when that seam opens) · **Overton snowballing via cross-backend
   DOI resolution** (the named Overton-arm-B seam — decision 16) ·
-  blend ranking of search hits (0.9·judge + rerank — the R&D's ranking
-  layer belongs to the screen/retrieval-rerank seams, not acquire;
-  ranking hits is select's job downstream) · saturation stopping as a
+  blend ranking of search hits (0.9·judge + rerank — moot in rev 3's
+  shape: screen confidence IS the doc-level relevance signal, and
+  purpose-fit ranking stays select's) · **select-as-tool / shared
+  purpose-fit-ranking tool** (rev 3, user question recorded as a
+  spec-level seam: the components taxonomy already supports ambient
+  tools — `appraise` is both; extract a shared ranking tool when a
+  second purpose-fit consumer lands or rerank-quality evals exist to
+  adjudicate it; select-the-component keeps its durable
+  `selection_result` + steer-point + rationale surface either way) ·
+  saturation stopping as a
   distinct condition (`saturated` stays ⏸ per spec — short_circuit is
   yield-collapse within one run, not corpus saturation) · V2
   region-label mapping for `source_country` · citation-floor /
@@ -496,10 +575,15 @@ contract 🛑**:
    (a) **transport**: search/snowball/lookup queries carrying scope
    intent and record identifiers to OpenAlex + Overton (the product's
    first non-LLM egress);
-   (b) **four new generation surfaces**: `search_queries_v1` ·
-   `search_reformulate_v1` · `search_suggest_v1` · `search_judge_v1`
-   (11th–14th product prompts; all mini-class default, plan-pinned ids;
-   all read third-party metadata under the 014 injection posture).
+   (b) **three new generation surfaces**: `search_queries_v1` ·
+   `search_reformulate_v1` · `search_suggest_v1` (11th–13th product
+   prompts; mini-class default, plan-pinned ids; all read third-party
+   metadata under the 014 injection posture). *(rev 3)* Plus a **call-
+   volume change on an already-approved surface**: `screen_v1` (014)
+   now also runs in-loop during deep search — same prompt, same
+   component, same per-doc bound, materially more invocations per deep
+   run (budgeted, decision 19). Named here so the egress approval
+   covers the volume, not just the surfaces.
 2. **Schema:** one migration widening `ck_scov_stop_condition` to admit
    `'short_circuit'` and `'budget_exhausted'` (existing three values
    stand; `saturated` stays out per spec). No new tables/columns; table
@@ -510,9 +594,10 @@ contract 🛑**:
 4. **Dependencies:** none (stdlib `urllib`; Thompson sampling via
    stdlib `random.betavariate`).
 
-Plus the components §1 spec flow-back (depth-graded search realisation;
-the loop as the same governed `search` verb) — approved with this
-contract per the spec-refinement flow.
+Plus the components §1 + §2 spec flow-back (depth-graded search
+realisation; the deep loop as acquire↔screen rounds — §2's thin-base
+hatch realised; the loop as the same governed `search` verb) — approved
+with this contract per the spec-refinement flow.
 
 ## Public / private boundary
 
@@ -523,20 +608,22 @@ record content. Keys env-only; grep audit before PR.
 
 ## Model route
 
-OpenAI via the existing client resolution. **Four prompt surfaces, all
+OpenAI via the existing client resolution. **Three new prompt surfaces,
 mini-class default, exact ids plan-pinned** (`search_queries_v1` may
 argue up to judgment-class at the plan gate — V2 generated boolean
-queries with its judgment model; the other three are volume surfaces
-where mini is the 009-lesson floor). Prompt-bearing work is
+queries with its judgment model; the other two are volume surfaces
+where mini is the 009-lesson floor). In-loop screening rides 014's
+approved `screen_v1` route unchanged (mini ×3). Prompt-bearing work is
 lead-authored. Bedrock swap remains the routing seam.
 
 ## Disciplines binding this slice
 
 Template set, plus: failures counted never silent (error isolation +
 fail-closed adequacy; loop-verb failures counted-and-skipped) · no
-single LLM query load-bearing (fan-out by construction) · judge steers,
-never screens (verdicts are events/traces, not rows; everything
-acquired still screens) · budgets stop loudly, never trim silently ·
+single LLM query load-bearing (fan-out by construction) · **one
+relevance surface** (rev 3: the loop's judge IS screen — no shadow
+relevance judgment exists anywhere in acquire; steering reads persisted
+effective-screen rows) · budgets stop loudly, never trim silently ·
 intent and third-party metadata enter prompts as id-keyed data records ·
 deferred seams stay seams.
 
@@ -560,21 +647,25 @@ in-contract fix (halt and report — don't quietly raise the budgets).
   test · no-citation-floor test · mapper-consumable live records
   (transport stub over a raw fixture page) · zero-egress guard
   extension.
-- Capability tests (rev 2): depth directive fail-closed (unknown depth →
-  structural failure) · rapid fan-out (n queries × variants, per-call
-  events, failed-variant isolation, generation-failure →
-  `component.failed`) · deep loop over scripted backends (rounds,
-  judge→reformulate→snowball→ground sequence, exemplar bounding —
-  inputs never exceed caps, seeded-RNG stopping, short-circuit and
-  every budget stop, honest counts) · ungrounded-suggestion drop ·
-  judge-verdicts-never-persisted (no screening rows written by
-  acquire) · snowball records through dedup · trigger test (thin
-  screen result → one deep re-search → re-screen → still-thin lands
-  `re_searched_still_thin`; fat result → no re-search) · `scope_filters`
-  grammar fail-closed + filters on events/coverage record ·
-  backend-scope field compile (three values + unknown rejected) ·
-  migration roundtrip on both DBs · injection fixtures (judge steering
-  probe; instruction-shaped metadata in reformulation inputs).
+- Capability tests (revs 2–3): depth directive fail-closed (unknown
+  depth → structural failure) · rapid fan-out (n queries × variants,
+  per-call events, failed-variant isolation, generation-failure →
+  `component.failed`) · deep loop over scripted backends + the stub
+  screening backend (round sequencing, exemplars read via the
+  effective-screen helper — never a raw status join, exemplar bounding —
+  prompt inputs never exceed caps, seeded-RNG arm selection, stopping on
+  each of: confident-relevant target · short_circuit · budget ·
+  round cap, honest per-round counts) · **acquire writes no screening
+  rows itself** (screening rows only ever from the screen component;
+  steering is read-only) · ungrounded-suggestion drop · snowball records
+  through dedup · escalation test (rapid + thin screen → one incremental
+  deep continuation → still-thin lands `re_searched_still_thin`; fat
+  result → no escalation) · `scope_filters` grammar fail-closed +
+  filters on events/coverage record · backend-scope field compile
+  (three values + unknown rejected) · migration roundtrip on both DBs ·
+  injection fixture (instruction-shaped metadata in reformulation/
+  suggestion inputs must not steer output structure; screen's own
+  injection posture is 014-tested).
 - **Live manual check** — exactly the decision-11 pin (rapid run ·
   dedup re-run · limiter + key hygiene · comparative result-count
   probe · deep run with wall-clock/cost vs budgets · trigger fired
@@ -583,30 +674,35 @@ in-contract fix (halt and report — don't quietly raise the budgets).
 ## Verification evidence expected
 
 `verification.md`: command results; live-run evidence (per-backend
-per-depth counts, the comparative probe, loop round/stop evidence,
-wall-clock + cost vs budgets, coverage records incl. non-empty
-`scope_filters` and the fired `re_searched_still_thin`, envelope
-spot-checks, trace ids); diff summary with flagged deviations;
-public-safety confirmation; known gaps. `deferred.md` at step 8: live
-`SearchBackend` + Arm-B entries **discharged**; new/retained seams
-recorded (Overton-arm-B cross-backend snowball · blend ranking pointer ·
-S2 third backend · region mapping · caching if declined at plan ·
-citation-floor knob · eval-reuse pointers: PaperFindingBench
-zero-adapter first run, the parity-tested `metrics.py` recall@k_est
-port, SYNERGY true-recall, CODEC policy topics, the Campbell/3ie/EPPI
-"unzip" build, the per-backend coverage-vs-recall split).
+per-depth counts, the comparative probe, per-round loop/stop evidence
+incl. in-loop screening latency, wall-clock + cost vs budgets, coverage
+records incl. non-empty `scope_filters` and the fired
+`re_searched_still_thin`, envelope spot-checks, trace ids); diff summary
+with flagged deviations; public-safety confirmation; known gaps.
+`deferred.md` at step 8: live `SearchBackend` + Arm-B + thin-base-trigger
+entries **discharged**; new/retained seams recorded (**select-as-tool /
+shared purpose-fit-ranking tool** — the rev-3 spec-level seam ·
+Overton-arm-B cross-backend snowball · S2 third backend · region
+mapping · caching if declined at plan · citation-floor knob · eval-reuse
+pointers: PaperFindingBench zero-adapter first run, the parity-tested
+`metrics.py` recall@k_est port, SYNERGY true-recall, CODEC policy
+topics, the Campbell/3ie/EPPI "unzip" build, the per-backend
+coverage-vs-recall split).
 
 ## Risk tier & review focus
 
-**Tier 3** (runtime egress on five surfaces + schema CHECK + public
-interface — the 014 gate shape, one notch wider). Review focus: key
-hygiene under the loop's call volume; injection posture on the judge/
-reformulation surfaces (third-party metadata steering the search);
-budget enforcement actually hard (no silent trims, no unbounded loops);
-the judge-never-screens governance boundary; limiter coverage of every
-Overton path; trigger can't loop; no scope creep into 016 (no URL
-fetching) or into ranking (no blend-rank). **Plan requirement:** the
-build is staged with consolidated verify gates (transport → rapid →
-breadth/directives → deep loop → trigger), executor-marked per
+**Tier 3** (runtime egress — transport + three new generation surfaces
++ the screen_v1 volume change — plus schema CHECK + public interface;
+the 014 gate shape, one notch wider). Review focus: key hygiene under
+the loop's call volume; injection posture on the reformulation/
+suggestion surfaces (third-party metadata steering the search); budget
+enforcement actually hard (no silent trims, no unbounded loops); the
+**one-relevance-surface property** (no shadow judgment anywhere in
+acquire; steering reads only the effective-screen helper); limiter
+coverage of every Overton path; the escalation is bounded (no
+loop-until-fat); no scope creep into 016 (no URL fetching) or into
+purpose-fit ranking (select's surface untouched). **Plan requirement:**
+the build is staged with consolidated verify gates (transport → rapid →
+breadth/directives → deep loop → escalation), executor-marked per
 harness.md — this slice is large enough that the plan's phase
 discipline is load-bearing.
