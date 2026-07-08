@@ -1,6 +1,15 @@
 # Spec update log
 
 ## 2026-07-08
+* **Update**: [EB components §2](capabilities/evidence-base/components.md) — screen refined
+  to its v3.0 **two-stage realisation of the one component** (stage-parameterised via the
+  plan directive; the thoroughness gradation selects): stage 1 metadata (fail-open,
+  title-only exclusion needs consensus unanimity) always; stage 2 windowed full-text
+  re-screen at depth, **demote-only**, text-availability-scoped, both stages persisting with
+  stage provenance ("screened-in" = *effective* screened-in); `screen_basis` gains
+  `full_text`; failures never block retry. Tiered content peek noted as largely superseded.
+  Approved with the task 014 contract (rev 1.10, 2026-07-08) per the spec-refinement flow;
+  ADR 0011.
 * **Update**: [EB components §9](capabilities/evidence-base/components.md) — `search_chunks`
   described as its staged pipeline (task 013 contract rev 7.5): content-only hybrid
   relevance → arithmetic soft priors (selection prior + fail-closed directive boosts over

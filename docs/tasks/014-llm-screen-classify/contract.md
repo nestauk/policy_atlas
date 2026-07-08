@@ -3,20 +3,22 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **approved rev 1.5.1 → adjudicated rev 1.6 → AMENDED rev
-> 1.7 (material: stage-2 full-text screen pulled in-slice, user scope
-> call at the plan gate) — amendment reopens the 🛑; awaiting
-> re-approval of rev 1.7 + plan rev 3 after the scoped delta review.**
->
+> **Status:** **APPROVED rev 1.10** (design phase complete; build =
+> conversation B).
 > Contract approved (before planning): **2026-07-08 · Shabeer Rauf**
-> (rev 1.5.1, covering the gated changes: runtime egress on two
-> generation surfaces across two models [`gpt-5-mini` screen ×3 reps ·
-> judgment-class classify, id plan-pinned] · `run_harness` gains
-> `screening_backend` + `classification_backend` · one migration:
-> `ck_stag_tag_type` CHECK widen + `uq_ssr_scope_source` → partial
-> unique index) ·
-> Plan approved (before implementation): _pending_ · ADR: _expected — first
-> product read of third-party corpus text; injection posture enforcement._
+> (rev 1.5.1) · **re-approved 2026-07-08 · Shabeer Rauf (rev 1.10**,
+> after the material rev-1.7 stage-2 amendment, covering the full
+> gated set: runtime egress on THREE generation surfaces
+> [`screen_v1` mini ×3 reps · `classify_v1` gpt-5.5 ·
+> `screen_fulltext_v1` mini ×1] · `run_harness` gains
+> `screening_backend` + `classification_backend` · one migration,
+> FOUR changes [`screen_stage` column · `screen_basis` CHECK gains
+> `full_text` · partial unique over (scope, source, stage) excluding
+> failed · `ck_stag_tag_type` widen] · the components §2 spec
+> flow-back**) ·
+> Plan approved (before implementation): **2026-07-08 · Shabeer Rauf**
+> (rev 5, with executor routing) · ADR:
+> [0011](../../adr/0011-two-stage-consensus-screening.md) Accepted.
 >
 > **Revision history:**
 > - **rev 1** (2026-07-08): initial draft. Sequencing context: the post-013

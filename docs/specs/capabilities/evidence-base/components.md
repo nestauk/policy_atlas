@@ -58,16 +58,26 @@ In v3.0 acquire snapshots the metadata envelope itself as text-in-hand
 
 A distinct **recall-oriented** relevance filter, **per-document fan-out**. The dangerous failure
 for a broad scan is the **false negative**, so the screen is deliberately inclusive.
-- **v3.0:** screens on **metadata** — title + abstract, **degrading to title-only** where no
-  abstract — **fail-open** ("no abstract" must never behave like "not relevant").
+- **v3.0: a two-stage realisation of the ONE screen component**, stage-parameterised via the
+  plan's directive (the thoroughness gradation selects; a deep run = two runs of the component,
+  a rapid run stage 1 only — the canonical systematic-review two-stage, task 014):
+  - **Stage 1 (always)** screens on **metadata** — title + abstract, **degrading to title-only**
+    where no abstract — **fail-open** ("no abstract" must never behave like "not relevant";
+    title-only exclusion requires unanimity across consensus reps).
+  - **Stage 2 (at depth, post-ingestion)** re-screens on **full text** where text is available
+    (ingested or envelope-carried), **demote-only** (it can confirm or demote, never rescue a
+    stage-1 exclude — recall is won at stage 1 or not at all); docs without full text keep
+    their stage-1 result, stage-stamped. Both stages' results persist ("screened-in" always
+    means *effective* screened-in: highest-stage non-failed).
 - Emits `is_relevant` + relevance **`confidence`** + a **`screen_basis`** flag (`title_abstract` |
-  `title_only`) + a retryable **`screen_failed`** state (distinct from not-relevant).
+  `title_only` | `full_text`) + a **`screen_stage`** + a retryable **`screen_failed`** state
+  (distinct from not-relevant; failures never block retry).
 - **Confidence is load-bearing (light):** feeds the **thin-base re-search trigger** (thin = too
   few *sufficiently-confident* relevant docs) and flags/orders borderline inclusions — but is
   **never a hard exclusion cutoff** (preserves recall). Adds the escape hatch v2 lacked
   (re-search when the screened base is too thin) — may re-invoke `search`.
 - ⏸ The richer **tiered content peek** (exec-summary / headings / passage scan for poor-metadata
-  grey lit) is **deferred**.
+  grey lit) is **deferred** (largely superseded by the stage-2 windowed full-text pass).
 
 ## 3 — classify
 
