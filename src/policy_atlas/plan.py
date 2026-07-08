@@ -20,6 +20,9 @@ COMPONENT_REGISTRY: dict[str, dict[str, list[str]]] = {
     "select": {"requires": ["evidence_scope_id", "characterisation_run_id"]},
     "extract": {"requires": ["evidence_scope_id", "selection_run_id"]},
     "group": {"requires": ["evidence_scope_id", "extraction_run_id"]},
+    # synthesise: all four run references optional — deepest-given resolves
+    # the rest transitively at execution.
+    "synthesise": {"requires": ["evidence_scope_id"]},
 }
 VALID_COMPONENTS = set(COMPONENT_REGISTRY.keys())
 
@@ -37,6 +40,9 @@ class _ValidatedRunSpec(BaseModel):
     # group reads an explicitly referenced extraction — compile fails closed
     # without it; required-by-registry for group only.
     extraction_run_id: uuid.UUID | None = None
+    # synthesise may reference an executed grouping — optional; deepest-given
+    # resolves upstream transitively at execution.
+    grouping_run_id: uuid.UUID | None = None
 
     @model_validator(mode="after")
     def validate_fields(self) -> "_ValidatedRunSpec":
@@ -65,4 +71,5 @@ def compile(plan: Plan) -> Config:  # noqa: A001
         characterisation_run_id=plan.characterisation_run_id,
         selection_run_id=plan.selection_run_id,
         extraction_run_id=plan.extraction_run_id,
+        grouping_run_id=plan.grouping_run_id,
     )

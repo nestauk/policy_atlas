@@ -444,6 +444,86 @@ def grouping_score_summary(
     )
 
 
+def synthesis_score_summary(
+    client: Langfuse | None,
+    summary: dict[str, Any],
+    *,
+    root_span: Any = None,
+) -> None:
+    """Attach the synthesise run's claim/citation scores to the current Langfuse trace.
+
+    The 009 ``score_summary`` pattern, mirroring ``grouping_score_summary``
+    (task 012).
+
+    Args:
+        client: Langfuse client, or ``None`` for no-op tracing.
+        summary: Synthesise component summary payload — becomes the trace output.
+        root_span: The ``run:{run_id}`` root span yielded by ``component_span``.
+    """
+    if client is None:
+        return
+    if root_span is not None:
+        root_span.update(
+            input={"component": "synthesise", "artefact_id": summary["artefact_id"]},
+            output=summary,
+        )
+    counts = summary["counts"]
+    claims_total = sum(counts["claims_total"].values())
+    unsupported = counts["claims_by_verdict_lane"].get("unsupported_mis_cited", 0)
+    if claims_total > 0:
+        client.score_current_trace(
+            name="claims_valid_share",
+            value=(claims_total - unsupported) / claims_total,
+            data_type="NUMERIC",
+        )
+        client.score_current_trace(
+            name="unsupported_share",
+            value=unsupported / claims_total,
+            data_type="NUMERIC",
+        )
+    else:
+        client.score_current_trace(
+            name="claims_valid_share",
+            value=0.0,
+            data_type="NUMERIC",
+        )
+        client.score_current_trace(
+            name="unsupported_share",
+            value=0.0,
+            data_type="NUMERIC",
+        )
+    citations_verified = counts["citations_verified"]
+    citations_unverified = counts["citations_unverified"]
+    citations_seen = citations_verified + citations_unverified
+    if citations_seen > 0:
+        client.score_current_trace(
+            name="citation_verified_share",
+            value=citations_verified / citations_seen,
+            data_type="NUMERIC",
+        )
+    else:
+        client.score_current_trace(
+            name="citation_verified_share",
+            value=0.0,
+            data_type="NUMERIC",
+        )
+    chunk_claims_total = counts["claims_total"].get("chunk", 0)
+    chunk_claims_rejected = counts["chunk_claims_rejected"]
+    chunk_denominator = chunk_claims_total + chunk_claims_rejected
+    if chunk_denominator > 0:
+        client.score_current_trace(
+            name="chunk_rejection_share",
+            value=chunk_claims_rejected / chunk_denominator,
+            data_type="NUMERIC",
+        )
+    else:
+        client.score_current_trace(
+            name="chunk_rejection_share",
+            value=0.0,
+            data_type="NUMERIC",
+        )
+
+
 def flush(client: Langfuse | None) -> None:
     """Flush pending Langfuse telemetry when tracing is enabled.
 
