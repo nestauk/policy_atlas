@@ -535,7 +535,20 @@ PR landing:
   eval-gated on the borderline-band size the decision-10 agreement
   stats will measure; the concrete exposure it closes is
   envelope-only rerank selecting a plausible-envelope irrelevant doc
-  into extraction ·
+  into extraction. *Sharpened again (user deliberation, second
+  round): if built, stage 2 should re-screen the WHOLE screened-in
+  corpus, not just the borderline band — selective re-measurement
+  creates a two-regime confidence scale that select's composite and
+  `thin_base` would compare as commensurable (the band version
+  survives only as the sizing probe). Uniform stage-2 needs: a
+  schema answer (the partial unique index admits one non-failed row
+  per doc — supersede vs staged-result surface) and stage provenance
+  on confidence so consumers never unknowingly mix measurement
+  regimes; stage 2 plausibly single-rep (full text carries the
+  signal consensus compensates for). Material stake, quantified by
+  the V2 baseline (precision 0.634): ~⅓ junk in screened-in sets,
+  and every junk doc ranking into select's bounded budget (default
+  25) displaces a real doc from extraction* ·
   re-screening of **successful** results (the failed-row retry landed
   in-slice, rev 1.1; superseding a relevant/not_relevant decision is a
   different seam) · `Unknown` full-text resolution · grey-lit category
