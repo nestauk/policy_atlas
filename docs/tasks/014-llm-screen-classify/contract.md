@@ -593,6 +593,19 @@ PR landing:
       per-doc stage in the event payload. The live check adds a
       **demotion review**: every stage-2 demotion read with its
       `reason` — a false exclusion is the dangerous outcome.
+    - **Both stages durably visible** *(user question, 2026-07-08)*:
+      stage 2 writes a NEW row; stage-1 rows are never mutated —
+      "effective = highest-stage non-failed" is a read rule, not a
+      storage rule. Both decisions + confidences + per-rep events +
+      traces persist per doc, so **stage-1/stage-2 pairs are an eval
+      dataset by construction** (stage 2 = higher-information
+      reference label for stage-1 precision, calibration and flip
+      rate — free from every deep run; recorded at the eval-seam
+      pointer). Gap noted as a seam: the 013 `lookup` tool's closed
+      vocabulary does NOT include screening rows, so in-loop
+      sub-agents can't query either stage today — vocabulary
+      widening is a one-line 013-surface seam for when a consumer
+      wants it.
     - Classify `Unknown` full-text resolution and the two-stage
       appraisal pass **stay recorded seams** (user scope call: screen
       stage-2 only).
