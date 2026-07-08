@@ -4,6 +4,39 @@ Recurring issues encountered during the task cycle. Each entry: what happened, r
 
 ---
 
+## 2026-07-08 — Review stack never read the live traces; a build-flagged anomaly survived adjudication unexamined
+
+**Task:** 013-synthesise (review phase)
+
+**What happened:** verification.md flagged the zero-group intervention partition "for the
+review stack", guessing live-model drift or an extraction shape difference. The stack ran
+all four lanes, adjudicated 20+ findings — and carried the anomaly forward untouched: the
+trace audit stopped at cost and key hygiene, and no lane read live-run content. The user
+had to prompt the investigation. Pulling the failing calls' exact I/O from Langfuse and
+**replaying it through the real validator** root-caused it in minutes: a 012
+`validate_partition` all-or-nothing rejection lost 16 coherent groups to one 89–92-char
+label, twice per run (4/4 calls) — the build's guess was wrong, and the model was fine.
+
+**Root cause:** Two structural gaps. (1) No review lane owned live-run *content* — the
+persisted roll-up was treated as the evidence, but the grouping row records `repair_count`
+without the rejection *reason*, so the only diagnostic signal lived in the trace no lane
+read. (2) "Flagged for the review stack" had no owner: the phrase reads as a hand-off, but
+step 7's lane list didn't include it, so the flag survived review as a note instead of
+becoming work.
+
+**Fix (adopted 2026-07-08, installed in task-cycle-review § Step 7):** (a) a named
+**live-trace content review** lane — whenever verification evidence includes live runs, the
+lead reads traces for content (per-phase model I/O sanity, validator/judge behaviour on
+real outputs), with the replay-through-the-real-validator method recorded; (b) an
+adjudication rule: a build-flagged anomaly is a **step-7 work item** to root-cause
+in-stack, not a note to carry — surviving review unexamined is this phase's fake-done
+shape; (c) the code-side corollary, applied to 012 in the same PR: when a component
+persists a rejection/repair decision, the *reason* must persist too
+(`grouping_provenance.rejection_reasons`) — a decision diagnosable only from traces is
+itself a finding.
+
+---
+
 ## 2026-07-07 — Full `make verify` at every phase commit: ~30 min of low-signal gate time on one build
 
 **Task:** 011-extract (build phase)
