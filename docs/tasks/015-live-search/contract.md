@@ -11,6 +11,21 @@ specs in [docs/specs/](../../specs/index.md).
 > consequential design decision; drafted at step 4).
 >
 > **Revision history:**
+> - **rev 3.2** (2026-07-09, user design note on the geography-trap
+>   finding): **study geography is extraction-owned — recorded as a
+>   named seam with the V2 precedent.** Because no search API supplies
+>   study geography (OpenAlex = author affiliation; Overton = publishing
+>   org), the only honest source is the document text: V2 extracted
+>   study geography at the extraction stage, feeding transferability
+>   analysis and the evidence landscape. v3's finding schema carries
+>   `population`, `study_design` and a `setting` stratum qualifier but
+>   no dedicated study-geography field; adding one is an
+>   extraction-schema gate for its own slice (joins the 010
+>   selection-diversity seam, characterise's post-extraction coverage
+>   dimensions, and the Transferability capability's needs — deferred.md
+>   entry at step 8). In-slice effect: decision 18's geography keys
+>   carry the cross-reference in their directive help ("no search filter
+>   expresses study geography; that signal arrives via extraction").
 > - **rev 3.1** (2026-07-09, API filter research adjudicated — two
 >   parallel deep-reasoner web recons of the official OpenAlex + Overton
 >   docs at the user's direction ("maximum functionality for the agent
@@ -581,7 +596,11 @@ PR landing:
         `is_paratext:false`) · `oa_status` (allowlist over the 6-value
         enum; help text names the OA-venue bias and 016-fetch trade) ·
         `author_affiliation_countries` (ISO codes →
-        `authorships.countries`).
+        `authorships.countries`). *(rev 3.2)* The geography keys' help
+        text on both backends carries the cross-reference: **no search
+        filter expresses study geography** — that signal is
+        extraction-owned (the recorded study-geography extraction seam;
+        V2 precedent).
       - **overton** (every key **contingent on the param-pinning
         session** — see Acceptance checks; unpinnable keys drop to the
         seam loudly, never ship on inferred spellings):
@@ -808,7 +827,12 @@ PaperFindingBench zero-adapter first run, the parity-tested
 `metrics.py` recall@k_est port, SYNERGY true-recall, CODEC policy
 topics, the Campbell/3ie/EPPI "unzip" build, the per-backend
 coverage-vs-recall split, and (rev 3.1) OpenAlex `sample`+`seed` as the
-eval-set sampling primitive).
+eval-set sampling primitive · **study-geography extraction field**
+(rev 3.2, user: V2 extracted study geography at the extraction stage
+for transferability + the landscape; no search API supplies it — an
+extraction-schema gate joining the 010 selection-diversity seam,
+characterise's post-extraction coverage dimensions and the
+Transferability capability)).
 
 ## Risk tier & review focus
 
