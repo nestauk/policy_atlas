@@ -525,7 +525,17 @@ PR landing:
 - **Out:** live search backends (015) · live `DocumentFetcher` (016) ·
   the thin-base **re-search trigger** (needs live search; note: live
   screen confidence makes select's `thin_base` flag meaningful
-  automatically — no code change here) · tiered content peek ·
+  automatically — no code change here) · tiered content peek — now
+  sharpened (user deliberation, 2026-07-08) to a **stage-2 full-text
+  re-screen seam**: post-ingestion re-screen scoped to the borderline
+  band (title-only basis ∪ non-unanimous ∪ lowest-confidence decile),
+  precision-only by construction (fetch is screen-gated, so stage 2
+  can demote false includes but never rescue excludes — recall is won
+  at stage 1 or not at all); mirrors human SR two-stage practice;
+  eval-gated on the borderline-band size the decision-10 agreement
+  stats will measure; the concrete exposure it closes is
+  envelope-only rerank selecting a plausible-envelope irrelevant doc
+  into extraction ·
   re-screening of **successful** results (the failed-row retry landed
   in-slice, rev 1.1; superseding a relevant/not_relevant decision is a
   different seam) · `Unknown` full-text resolution · grey-lit category
