@@ -202,7 +202,8 @@ SEARCH_CHUNKS_TOOL_SCHEMA: dict[str, Any] = {
             "Retrieve the most relevant frozen text chunks from the screened-in "
             "corpus for a query. Returns id-keyed chunk records with their full "
             "frozen content — the only text you may quote verbatim. Each record "
-            "carries its origin (selected | unselected_screened)."
+            "carries its origin (selected | unselected_screened) and whether its "
+            "document is appraised (only appraised chunks are citable)."
         ),
         "parameters": {
             "type": "object",
@@ -410,9 +411,11 @@ The claim types:
 - "chunk": a statement supported by verbatim source text. Each citation
   carries the chunk_record_id of a chunk returned by search_chunks in THIS
   section and a quote copied EXACTLY, character for character, from that
-  chunk's returned content. Never quote from memory, from summaries, or from
-  the ledger; a quote that does not appear verbatim in the source is rejected
-  and, if unrepairable, excluded.
+  chunk's returned content. Cite only chunks marked "appraised": true — you
+  may read unappraised chunks, but a citation to an unappraised document is
+  rejected. Never quote from memory, from summaries, or from the ledger; a
+  quote that does not appear verbatim in the source is rejected and, if
+  unrepairable, excluded.
 - "pattern": a computable count or direction spread over the corpus or the
   findings. State only numbers you read from the substrate summaries or tool
   results, and reference where they are computed from; a stated count that
@@ -1237,7 +1240,11 @@ class StubSynthesisBackend:
 
         chunks = _transcript_chunks(transcript)
         if "chunk" in available_claim_types and chunks:
-            chunk = chunks[0]
+            # Prefer a citable (appraised) chunk — the prompt's own rule.
+            chunk = next(
+                (record for record in chunks if record.get("appraised")),
+                chunks[0],
+            )
             chunk_id = _record_id(chunk, "chunk_record_id", "id")
             content = chunk.get("content")
             if chunk_id is not None and isinstance(content, str):

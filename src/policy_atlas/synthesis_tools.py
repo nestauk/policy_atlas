@@ -131,6 +131,11 @@ class ChunkSearchResult(TypedDict):
     sequence: int
     content: str  # the full frozen chunk text (the only quotable surface)
     origin: str  # "selected" | "unselected_screened"
+    # Citability under the appraised-evidence rule (contract rev 8 M4):
+    # produce-grounded-block cites only appraised evidence, while screen bounds
+    # READING — the model may read unappraised chunks but a citation to one
+    # rejects, so the record says which is which.
+    appraised: bool
     fused_score: float
 
 
@@ -942,6 +947,7 @@ class ChunkRetriever:
             "sequence": cast("int", chunk["sequence"]),
             "content": cast("str", chunk["content"]),
             "origin": "selected" if doc.get("selected") else "unselected_screened",
+            "appraised": doc.get("appraisal_tier") is not None,
             "fused_score": score,
         }
 

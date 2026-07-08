@@ -607,6 +607,25 @@ def main() -> None:
             text_basis="full_text",
             embedder=embedding_backend,
         )
+        # The on-topic appraised seed for the synthesise demo (task 013): the
+        # acquired fixture docs classify Unknown (no sentinels) and are never
+        # appraised, so this uploaded full-text review is what the chunk lane
+        # can honestly cite under the appraised-evidence rule.
+        seed_src = get_source("syn-002")
+        ingest_upload(
+            conn,
+            project_id=project_id,
+            chunks=list(seed_src.chunks),
+            source_locator="syn-002",
+            metadata={
+                "synthetic": True,
+                "title": "Synthetic review of housing affordability policies",
+                "abstract": "A synthetic systematic review of housing affordability policies.",
+                "_stub_systematic_review": True,
+            },
+            text_basis="full_text",
+            embedder=embedding_backend,
+        )
         log.info("source.ingested")
 
         # Create screening scope

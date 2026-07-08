@@ -246,6 +246,7 @@ def test_pass_through_reranker_is_mode_none_and_orderpreserving() -> None:
             "sequence": 1,
             "content": "x",
             "origin": "selected",
+            "appraised": True,
             "fused_score": 0.5,
         },
         {
@@ -255,6 +256,7 @@ def test_pass_through_reranker_is_mode_none_and_orderpreserving() -> None:
             "sequence": 2,
             "content": "y",
             "origin": "unselected_screened",
+            "appraised": False,
             "fused_score": 0.4,
         },
     ]
