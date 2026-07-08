@@ -54,6 +54,17 @@ Every rubric item checked, or explicitly listed as not-satisfied with reason.
 Logs, screenshots, traces, prompts, links — safe to publish? Any uploaded/acquired source text
 that must stay out of evidence?
 
+## Review handoff (step-7/8 inputs)
+
+What the review conversation needs but cannot see from the diff: adjudication items
+(flagged deviations, build-flagged anomalies), executor provenance for the family flip,
+diff-scoping exclusions, live-trace pointers — and:
+
+- **Knowledge candidates** (014 retro): one bullet per durable-seeming lesson from the
+  build, however raw — surprises, gotchas, invariants that held for a non-obvious reason.
+  Step 8 authors `docs/knowledge/` from this list + the review findings, against the
+  final code. An empty list on a non-trivial slice is a smell, not a default.
+
 ## Deferred work
 
 Seams left open → [docs/deferred.md](../../deferred.md).

@@ -73,13 +73,22 @@ tests ran in seconds):
 
 Durable records (`docs/knowledge/`, `docs/deferred.md`, agentic-ops claims) are authored
 **after** the review stack finalises the code — at step 8, not here — so they describe
-what actually shipped.
+what actually shipped. But **capture is this phase's job** (014 retro, 2026-07-08): what
+the build learned dies at the conversation boundary unless it's written into the handoff —
+step 6's knowledge-candidates list below is where.
 
 ## Step 6 — Verify
 
 Fill `docs/tasks/_templates/verification.md` → `docs/tasks/NNN-slug/verification.md`:
 `make verify` table, named-test results, the **exact** end-to-end command, diff summary
-(flagging any minor deviations per above), public-safety, gaps.
+(flagging any minor deviations per above), public-safety, gaps, and the **knowledge
+candidates** list in § Review handoff (014 retro, 2026-07-08): one bullet per
+durable-seeming lesson the build hit, however raw — surprises, gotchas, invariants that
+held for a non-obvious reason — *not just* flagged deviations. Step 8 authors
+`docs/knowledge/` from this list plus the review findings, against the final code; a
+lesson that never makes the list is invisible to that conversation, which is how
+step-8 knowledge drifted review-biased on 012–014 (the 014 `__main__`-guard/spawn lesson
+made verification.md only as an incident note and became knowledge nowhere).
 
 Drive the affected flow end-to-end with `/verify` (exercises real behaviour, not just
 tests) — the flow it drove supplies the exact end-to-end command. **The live check runs

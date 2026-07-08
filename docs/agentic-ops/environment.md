@@ -23,6 +23,11 @@ egress-free).
 Gotcha (bit the 012 live check): after pulling a schema-bearing slice, run
 `uv run alembic upgrade head` against the **dev** DB — only the test DB migrates itself
 (conftest); a stale dev DB fails mid-run with `UndefinedTable`.
+Gotcha (bit the 014 live check): any wrapper script that runs the live chain needs an
+`if __name__ == "__main__":` guard — the full-text parse workers use multiprocessing
+*spawn*, which re-imports the entry module, and a guardless wrapper re-runs the whole
+live chain in every worker (014: three projects and ~2× spend from one run; see the 014
+verification.md incident note).
 Update it when the setup changes, not before.
 
 ## Prerequisites

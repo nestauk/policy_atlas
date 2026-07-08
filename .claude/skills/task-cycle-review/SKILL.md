@@ -134,7 +134,13 @@ a contract problem); a deviation nobody re-examined is drift with a paper trail.
 With the code now **finalised by the review stack**, author the slice's durable records
 against it (they ride in this PR, not a post-merge step): new seams →
 [docs/deferred.md](../../../docs/deferred.md); verified durable learning →
-`docs/knowledge/` (OKF concept + index + log lines, not a diary); **point-in-time claims
+`docs/knowledge/` (OKF concept + index + log lines, not a diary) — authored from **both
+sources**: verification.md § Review handoff's **knowledge candidates** (the build's
+captured lessons) AND this stack's findings. Authoring from findings alone biased
+012–014's knowledge review-ward — build lessons died at the B→C conversation boundary
+(014 retro, 2026-07-08; failure-log). Adjudicate each candidate like a finding: author
+it, fold it into an existing concept, or decline with a recorded reason; an empty
+candidate list on a non-trivial slice is a smell worth noting. **Point-in-time claims
 in `docs/agentic-ops/`** (environment.md header, readiness.md task-sequence line — written
 as of this PR merged); a **living-doc sweep** for anything this slice renames or lands
 (deferred.md/knowledge describe the *current* system; historical `docs/tasks/**` stay

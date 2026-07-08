@@ -4,6 +4,37 @@ Recurring issues encountered during the task cycle. Each entry: what happened, r
 
 ---
 
+## 2026-07-08 — Step-8 knowledge drifted review-biased: build lessons died at the B→C conversation boundary
+
+**Task:** 012–014 pattern, spotted by the user at the 014 review close.
+
+**What happened:** Knowledge concepts are authored at step 8 by the review conversation
+(C), and over 012–014 the committed knowledge skewed toward what the review lanes found
+rather than what the build learned. 014 is the clean specimen: both concepts came from
+review findings (appraise write-path grain; JSON-record prompt rule), while the build's
+best genuinely-new lesson — multiprocessing spawn re-imports the module, so live-run
+wrappers need the `__main__` guard — became knowledge nowhere and didn't even reach
+environment.md's gotchas, because by step 8 it read as a process incident, not a
+candidate lesson.
+
+**Root cause:** Information loss across the build→review conversation boundary, not the
+timing of authoring. C authors from what it can see: the diff, its own findings, and
+verification.md. Build-derived knowledge only ever survived when it happened to be
+written down as a *flagged deviation* (011's reasoning-cap and NUL-scrub concepts);
+lessons that weren't deviations had no home in the handoff. Moving authoring to step 6
+would be the wrong fix — the knowledge index requires concepts written against
+post-review code (014's review changed the very surfaces a step-6 concept would have
+described).
+
+**Fix (installed 2026-07-08):** capture at step 6, author at step 8. The verification.md
+template gains a **§ Review handoff → Knowledge candidates** list (one bullet per
+durable-seeming build lesson, however raw — not just deviations; empty on a non-trivial
+slice is a smell); task-cycle-build § Step 6 requires filling it; task-cycle-review
+§ Step 8 authors `docs/knowledge/` from candidates + findings and adjudicates each
+candidate like a finding (author / fold into existing concept / decline with reason).
+
+---
+
 ## 2026-07-08 — Build wall time ~3h: full-chain live check + per-phase full-verify gates dominated a single slice
 
 **Task:** 014-llm-screen-classify (build phase)
