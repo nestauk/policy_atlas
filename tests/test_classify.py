@@ -109,6 +109,40 @@ def test_classify_sources_round_trip(conn: Connection) -> None:
     assert rows[0].project_source_snapshot_id == pss_id
 
 
+def test_classify_sources_fan_out_by_type_matches_sentinels(conn: Connection) -> None:
+    """Multiple sentinel-driven docs classify to their sentinel's type in one run."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _, pss_rct = seed_source(conn, pid, meta={"_stub_rct": True})
+    _, pss_policy = seed_source(conn, pid, meta={"_stub_policy_guidance": True})
+    _, pss_qual = seed_source(conn, pid, meta={"_stub_qualitative": True})
+    _, pss_unknown = seed_source(conn, pid)
+    for pss_id in (pss_rct, pss_policy, pss_qual, pss_unknown):
+        seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant")
+
+    ctx = ClassifyContext(scope_id=scope_id, intent="Test", context={})
+    counts = classify_sources(conn, project_id=pid, run_id=rid, context=ctx)
+
+    assert counts["classified"] == 4
+    assert counts["by_type"] == {
+        "RCTs and Quasi-Experimental Studies": 1,
+        "Policy Syntheses & Guidance Documents": 1,
+        "Qualitative & Contextual Evidence": 1,
+        "Unknown / Insufficient information": 1,
+    }
+    rows = conn.execute(
+        select(
+            source_classification_result.c.project_source_snapshot_id,
+            source_classification_result.c.primary_evidence_type,
+        ).where(source_classification_result.c.project_id == pid)
+    ).fetchall()
+    by_pss = {r.project_source_snapshot_id: r.primary_evidence_type for r in rows}
+    assert by_pss[pss_rct] == "RCTs and Quasi-Experimental Studies"
+    assert by_pss[pss_policy] == "Policy Syntheses & Guidance Documents"
+    assert by_pss[pss_qual] == "Qualitative & Contextual Evidence"
+    assert by_pss[pss_unknown] == "Unknown / Insufficient information"
+
+
 def test_classify_sources_non_evidence_persists(conn: Connection) -> None:
     """Non-evidence rows land in source_classification_result (flag-don't-drop)."""
     pid, rid = seed_project_and_run(conn)

@@ -4,7 +4,7 @@ import uuid
 
 import pytest
 import sqlalchemy as sa
-from sqlalchemy import inspect, select
+from sqlalchemy import inspect, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
@@ -17,11 +17,12 @@ from policy_atlas.schema import (
     metadata,
     runs,
     source_screening_result,
+    source_snapshot,
 )
 from policy_atlas.screen import ScreenContext, screen_sources
 from policy_atlas.screen_prompt import ScreenEnvelopePayload, ScreenFullTextPayload, ScreenRepWire
 from policy_atlas.screening_backend import StubScreeningBackend
-from tests.helpers import now, seed_project_and_run, seed_scope, seed_source
+from tests.helpers import now, seed_project_and_run, seed_run, seed_scope, seed_source
 
 # --- Schema / structure ---
 
@@ -96,6 +97,21 @@ def test_stub_not_relevant() -> None:
     )
     assert result.decision == "not_relevant"
     assert result.confidence == 0.95
+
+
+def test_stub_unsure() -> None:
+    result = StubScreeningBackend().screen_envelope(
+        ScreenEnvelopePayload(
+            pss_id="pss-1",
+            title="Test",
+            abstract="Some text.",
+            abstract_source=None,
+            intent="Test",
+            metadata={"_stub_unsure": True, "abstract": "Some text."},
+        )
+    )
+    assert result.decision == "unsure"
+    assert result.confidence == 0.6
 
 
 def test_stub_failed() -> None:
@@ -186,6 +202,42 @@ def test_ck_relevant_with_null_confidence(conn: Connection) -> None:
     conn.begin()
 
 
+def test_partial_unique_stage_matrix(conn: Connection) -> None:
+    """uq_ssr_scope_source_stage: non-failed stage-1 + stage-2 rows coexist per
+    (scope, source); a second non-failed stage-2 row conflicts; failed rows at
+    either stage never conflict with the non-failed rows or each other."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _, pss_id = seed_source(conn, pid)
+
+    _ssr_insert(conn, pid, rid, scope_id, pss_id, screen_stage=1)
+    _ssr_insert(conn, pid, rid, scope_id, pss_id, screen_stage=2, screen_basis="full_text")
+
+    with pytest.raises(IntegrityError, match="uq_ssr_scope_source_stage"), conn.begin_nested():
+        _ssr_insert(conn, pid, rid, scope_id, pss_id, screen_stage=2, screen_basis="full_text")
+
+    _ssr_insert(
+        conn, pid, rid, scope_id, pss_id, screen_stage=1,
+        status="failed", screen_basis=None, screen_decision_confidence=None,
+    )
+    _ssr_insert(
+        conn, pid, rid, scope_id, pss_id, screen_stage=2,
+        status="failed", screen_basis=None, screen_decision_confidence=None,
+    )
+    _ssr_insert(
+        conn, pid, rid, scope_id, pss_id, screen_stage=2,
+        status="failed", screen_basis=None, screen_decision_confidence=None,
+    )
+
+    rows = conn.execute(
+        select(source_screening_result.c.screen_stage, source_screening_result.c.status)
+        .where(source_screening_result.c.project_source_snapshot_id == pss_id)
+    ).fetchall()
+    assert len(rows) == 5
+    assert sum(1 for r in rows if r.status == "failed") == 3
+    assert sum(1 for r in rows if r.status != "failed") == 2
+
+
 # --- Round-trips ---
 
 def test_screen_sources_relevant_with_abstract(conn: Connection) -> None:
@@ -265,6 +317,70 @@ def test_screen_sources_mixed_counts(conn: Connection) -> None:
     assert counts["failed"] == 1
     assert counts["title_abstract"] == 2   # relevant + not_relevant both have abstract
     assert counts["title_only"] == 0
+
+
+def test_screen_sources_unsure_unanimous_relevant_at_half_confidence(conn: Connection) -> None:
+    """Three unanimous ``_stub_unsure`` reps vote relevant and average to p=0.5."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    seed_source(conn, pid, meta={"_stub_unsure": True, "abstract": "Ambiguous evidence."})
+    ctx = ScreenContext(scope_id=scope_id, intent="Test", context={})
+
+    counts = screen_sources(conn, project_id=pid, run_id=rid, context=ctx)
+
+    row = conn.execute(
+        select(source_screening_result).where(source_screening_result.c.project_id == pid)
+    ).one()
+    assert row.status == "relevant"
+    assert row.screen_decision_confidence == pytest.approx(0.5)
+    assert counts["relevant"] == 1
+    assert counts["unsure_reps"] == 3
+    assert counts["non_unanimous"] == 0
+
+
+def test_screen_sources_retry_after_failure_preserves_failed_rows_and_adds_new(
+    conn: Connection,
+) -> None:
+    """A source that fails stage-1 twice, then screens clean, keeps both failed
+    rows as attempt history and gets exactly one new relevant row.
+
+    Also proves the candidate query counts effective grain: attempt history
+    (one, then two, failed rows) never inflates or deflates ``screened``.
+    """
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    snap_id, pss_id = seed_source(conn, pid, meta={"_stub_failed": True})
+    ctx = ScreenContext(scope_id=scope_id, intent="Test", context={})
+
+    first = screen_sources(conn, project_id=pid, run_id=rid, context=ctx)
+    assert first["screened"] == 1
+    assert first["failed"] == 1
+
+    second = screen_sources(conn, project_id=pid, run_id=seed_run(conn, pid), context=ctx)
+    assert second["screened"] == 1
+    assert second["failed"] == 1
+
+    conn.execute(
+        update(source_snapshot)
+        .where(source_snapshot.c.source_snapshot_id == snap_id)
+        .values(metadata={"abstract": "Now screenable evidence text."})
+    )
+
+    third = screen_sources(conn, project_id=pid, run_id=seed_run(conn, pid), context=ctx)
+    assert third["screened"] == 1
+    assert third["relevant"] == 1
+    assert third["failed"] == 0
+
+    rows = conn.execute(
+        select(source_screening_result)
+        .where(source_screening_result.c.project_source_snapshot_id == pss_id)
+        .order_by(source_screening_result.c.screened_at)
+    ).fetchall()
+    assert [r.status for r in rows] == ["failed", "failed", "relevant"]
+    for failed_row in rows[:2]:
+        assert failed_row.screen_basis is None
+        assert failed_row.screen_decision_confidence is None
+    assert rows[2].screen_basis == "title_abstract"
 
 
 def test_screen_sources_idempotent_rerun(conn: Connection) -> None:

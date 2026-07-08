@@ -1,13 +1,17 @@
 """Schema validation — tables, columns, constraints."""
 
+import os
 import uuid
 
 import pytest
+from alembic import command
+from alembic.config import Config as AlembicConfig
 from sqlalchemy import inspect, select
-from sqlalchemy.engine import Connection
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.schema import (
+    METHODOLOGICAL_STRUCTURAL,
     annotation,
     artefact,
     block,
@@ -15,7 +19,9 @@ from policy_atlas.schema import (
     project,
     project_source_snapshot,
     runs,
+    source_screening_result,
     source_snapshot,
+    source_tag,
 )
 from policy_atlas.schema import (
     chunk as chunk_table,
@@ -23,7 +29,8 @@ from policy_atlas.schema import (
 from policy_atlas.schema import (
     citation as citation_table,
 )
-from tests.helpers import now
+from policy_atlas.tags import insert_source_tags
+from tests.helpers import now, seed_project_and_run, seed_scope, seed_source
 
 
 def test_all_fourteen_tables_exist(conn: Connection) -> None:
@@ -203,3 +210,94 @@ def test_project_source_snapshot_unique_constraint(conn: Connection) -> None:
             project_source_snapshot_id=uuid.uuid4(), project_id=pid, source_snapshot_id=sid,
             origin="uploaded", run_id=None, ingested_at=now(),
         ))
+
+
+def test_migration_roundtrip_screen_stage_and_classify_tags(engine: Engine) -> None:
+    """``downgrade -1`` then ``upgrade head`` for e5c2a7f4b9d1 succeeds and restores
+    all four changes.
+
+    Runs on its own connection outside the rolled-back ``conn`` fixture transaction
+    (the migration itself needs a connection it fully controls) and always leaves
+    the session-scoped engine's database back at head — ``downgrade``/``upgrade``
+    run back-to-back with no test logic in between, and each migration step is
+    itself one transaction, so a failure there leaves the DB at its prior revision
+    rather than stuck mid-migration.
+    """
+    cfg = AlembicConfig("alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
+
+    command.downgrade(cfg, "-1")
+    command.upgrade(cfg, "head")
+
+    with engine.connect() as verify_conn:
+        trans = verify_conn.begin()
+        try:
+            inspector = inspect(verify_conn)
+            cols = {c["name"] for c in inspector.get_columns("source_screening_result")}
+            assert "screen_stage" in cols
+
+            pid, rid = seed_project_and_run(verify_conn)
+            scope_id = seed_scope(verify_conn, pid)
+            _, pss_id = seed_source(verify_conn, pid)
+
+            # ck_ssr_basis admits 'full_text' (a stage-2 row).
+            verify_conn.execute(source_screening_result.insert().values(
+                source_screening_result_id=uuid.uuid4(),
+                evidence_scope_id=scope_id,
+                project_source_snapshot_id=pss_id,
+                project_id=pid,
+                screened_by_run_id=rid,
+                status="relevant",
+                screen_basis="full_text",
+                screen_decision_confidence=0.9,
+                screen_stage=2,
+                screened_at=now(),
+            ))
+
+            # uq_ssr_scope_source_stage: a second non-failed stage-2 row for the
+            # same (scope, source) conflicts with the one above.
+            with pytest.raises(IntegrityError), verify_conn.begin_nested():
+                verify_conn.execute(source_screening_result.insert().values(
+                    source_screening_result_id=uuid.uuid4(),
+                    evidence_scope_id=scope_id,
+                    project_source_snapshot_id=pss_id,
+                    project_id=pid,
+                    screened_by_run_id=rid,
+                    status="not_relevant",
+                    screen_basis="full_text",
+                    screen_decision_confidence=0.8,
+                    screen_stage=2,
+                    screened_at=now(),
+                ))
+
+            # ... but a failed row at the same stage never conflicts with it.
+            verify_conn.execute(source_screening_result.insert().values(
+                source_screening_result_id=uuid.uuid4(),
+                evidence_scope_id=scope_id,
+                project_source_snapshot_id=pss_id,
+                project_id=pid,
+                screened_by_run_id=rid,
+                status="failed",
+                screen_basis=None,
+                screen_decision_confidence=None,
+                screen_stage=2,
+                screened_at=now(),
+            ))
+
+            # ck_stag_tag_type admits 'methodological_structural'.
+            insert_source_tags(
+                verify_conn,
+                project_id=pid,
+                run_id=rid,
+                now=now(),
+                assertions=[(pss_id, "rct", "test")],
+                tag_type=METHODOLOGICAL_STRUCTURAL,
+            )
+            tag_row = verify_conn.execute(
+                select(source_tag.c.tag_type).where(
+                    source_tag.c.project_source_snapshot_id == pss_id
+                )
+            ).one()
+            assert tag_row.tag_type == METHODOLOGICAL_STRUCTURAL
+        finally:
+            trans.rollback()

@@ -158,7 +158,7 @@ def test_screened_sources_effective_grain_four_shapes(conn: Connection) -> None:
     )
     confirmed = _seed_two_stage_doc(
         conn, pid, rid, scope_id, title="confirmed",
-        stage_rows=[(1, "relevant", 0.6), (2, "relevant", 0.95)],
+        stage_rows=[(1, "relevant", 0.4), (2, "relevant", 0.95)],
     )
     failed_stage2 = _seed_two_stage_doc(
         conn, pid, rid, scope_id, title="failed-stage2",
@@ -186,9 +186,20 @@ def test_screened_sources_effective_grain_four_shapes(conn: Connection) -> None:
     assert str(demoted) not in records
     assert set(records) == {str(confirmed), str(failed_stage2), str(retried)}
 
-    # confirmed: stage-2 confidence (0.95) is what select sees, never stage-1's (0.6).
+    # confirmed: stage-2 confidence (0.95) is what select sees, never stage-1's (0.4).
     assert records[str(confirmed)]["signals"]["screen_confidence"] == pytest.approx(0.95)
     assert records[str(confirmed)]["screen_stage"] == 2
+    weights = row._mapping["selection_provenance"]["effective_weights"]
+    confirmed_signals = records[str(confirmed)]["signals"]
+    assert records[str(confirmed)]["composite"] == pytest.approx(
+        sum(weights[signal] * confirmed_signals[signal] for signal in weights)
+    )
+    stage1_composite = sum(
+        weights[signal]
+        * (0.4 if signal == "screen_confidence" else confirmed_signals[signal])
+        for signal in weights
+    )
+    assert records[str(confirmed)]["composite"] != pytest.approx(stage1_composite)
 
     # failed stage-2: stage-1 values stand.
     assert records[str(failed_stage2)]["signals"]["screen_confidence"] == pytest.approx(0.7)
@@ -197,6 +208,11 @@ def test_screened_sources_effective_grain_four_shapes(conn: Connection) -> None:
     # failed-then-retried: included once, at the retry's (stage-1) values.
     assert records[str(retried)]["signals"]["screen_confidence"] == pytest.approx(0.55)
     assert records[str(retried)]["screen_stage"] == 1
+
+    # thin_base counts effective confidences: confirmed's stage-2 0.95 and the
+    # failed-stage-2 doc's standing stage-1 0.7 are the only sufficiently
+    # confident effective rows.
+    assert row._mapping["flags"]["thin_base"] == {"sufficiently_confident": 2, "floor": 10}
 
 
 def test_allocation_math_matches_hand_computed_fixture(conn: Connection) -> None:
