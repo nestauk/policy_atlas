@@ -7,8 +7,11 @@ otherwise it is in progress, not done.
 2. [ ] `make verify` passes deterministically with **zero egress** (stub
        backends default everywhere); declared manual/live checks pass.
 3. [ ] No approval-gated change snuck in unapproved beyond the three the
-       contract names (two generation surfaces · two `run_harness`
-       params · the `ck_stag_tag_type` CHECK widen).
+       contract names (two generation surfaces [mini screen ×3 reps ·
+       judgment-class classify] · two `run_harness` params · one
+       migration carrying BOTH schema changes: the `ck_stag_tag_type`
+       CHECK widen AND the `uq_ssr_scope_source` partial unique
+       index).
 4. [ ] No generated files or secrets edited by hand; keys env-only,
        grep audit clean.
 5. [ ] No tests deleted, skipped or weakened without written
@@ -24,18 +27,26 @@ otherwise it is in progress, not done.
 7. [ ] Known gaps and deferred seams listed (gap →
        [docs/deferred.md](../../deferred.md)); the discharged
        LLM-screen/classify seam entries updated, the seams this slice
-       leaves open (thin-base trigger, recovery loop, content peek,
-       Unknown resolution) restated, not silently absorbed.
+       leaves open (thin-base trigger, automated recovery sweep —
+       the failed-row rerun retry itself is DISCHARGED in-slice,
+       rev 1.1/1.6 — content peek, Unknown resolution) restated, not
+       silently absorbed.
 8. [ ] Required Tier-3 review stack ran (contract verifier ·
        security-auditor lane — untrusted third-party text enters prompts
        here · Codex adversarial · /code-review medium · live-trace
        content review), or skipped with written justification — findings
        in [verification.md](verification.md).
-9. [ ] Injection posture demonstrably enforced: the injection-shaped
-       fixture test exists and passes; titles/abstracts/provider fields
-       enter prompts as id-keyed data records; outputs
-       schema-constrained and code-validated against closed
-       vocabularies; NUL scrub at the backend boundary.
+9. [ ] Injection posture demonstrably enforced: **paired
+       clean/adversarial fixtures assert semantic invariance** (same
+       decision with and without embedded instruction text — a
+       valid-but-steered label fails the test), plus the live paired
+       probe in the live check; provider fields enter prompts only
+       via the closed allowlist with per-field caps + control-char
+       stripping (overlong/instruction-shaped fixtures covered);
+       titles/abstracts/provider fields enter prompts as id-keyed
+       data records; outputs schema-constrained and code-validated
+       against closed vocabularies; NUL scrub at the backend
+       boundary.
 10. [ ] The failure/uncertainty/consensus semantics (revs 1.1–1.3) are
         test-covered: screen doc failure (all reps failed) persists
         `status='failed'` and a re-run re-attempts the doc as a new
@@ -46,8 +57,15 @@ otherwise it is in progress, not done.
         probability; the confidence formula distinguishes 2/3 from
         3/3 and covers the vote/probability divergence case;
         majority / rep-failure-degradation / tie→relevant aggregation
-        each covered; per-rep records + agreement count in the event
-        payload; all failure paths counted in summaries.
+        each covered; **quorum enforced** (< 2 surviving reps → doc
+        `failed`, no single-rep decision persists; failed reps out of
+        vote AND denominator); **title-only unanimity-to-exclude**
+        covered (dissent → relevant, flagged); Unknown-vs-Other
+        boundary fixtures both sides; per-rep records + agreement
+        count in the event payload; all failure paths counted in
+        summaries; effective-status distinct-source counting
+        regression-tested for every screening-status reader (incl.
+        `characterise._base_counts`).
 11. [ ] Open-tag output bounded and provenance-clean: per-record and
         per-tag caps enforced, `asserted_by='classify'` ·
         `tag_type='methodological_structural'`, all writes through

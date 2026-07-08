@@ -3,8 +3,8 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **approved (rev 1.5.1)** — contract-stage adversarial
-> review in progress.
+> **Status:** **approved rev 1.5.1 → adjudicated rev 1.6** — Codex review 10/10 adopted; two ⚑ remedies (title-only unanimity-to-exclude · ≥2-rep quorum) awaiting user confirmation; planning next.
+>
 > Contract approved (before planning): **2026-07-08 · Shabeer Rauf**
 > (rev 1.5.1, covering the gated changes: runtime egress on two
 > generation surfaces across two models [`gpt-5-mini` screen ×3 reps ·
@@ -120,6 +120,36 @@ specs in [docs/specs/](../../specs/index.md).
 >   tier, not the checkpoint; 5.2 is legacy-path (repriced upward
 >   2026-07-02) and classify cost is immaterial at any tier
 >   (flagship ≈ 1¢/doc). Decision 8 + Model route amended.
+> - **rev 1.6** (2026-07-08, contract-stage adversarial review
+>   adjudicated — Codex, 10 findings: 2 blockers · 7 majors · 1 minor,
+>   **10/10 adopted**): **B2 fail-open made structural** — ⚑
+>   title-only docs need a UNANIMOUS not_relevant to be excluded (any
+>   dissent → relevant, flagged) + prompt rule "missing abstract is
+>   never evidence of irrelevance; unjudgeable from title → unsure"
+>   (decision 3). **B4 internal contradiction fixed** — scope + rubric
+>   now name BOTH schema changes. **M1 quorum pinned** — ⚑ failed reps
+>   leave the vote AND the probability denominator; a decision needs
+>   ≥ 2 surviving reps, else `status='failed'` (retryable) — no
+>   single-rep decision can persist (decisions 3/5). **M3
+>   Unknown-vs-Other prompt requirement** (evidence-like but
+>   insufficient info → Unknown; genuinely non-evidence → Other;
+>   tested — decision 4). **M5 tags helper API change pinned**
+>   (`insert_source_tags` gains `tag_type`, default `TOPIC_THEME`;
+>   `METHODOLOGICAL_STRUCTURAL` constant beside it — decision 6).
+>   **M7 read-path ripple widened** — `characterise._base_counts`
+>   named (negative-`unscreened` failure); effective-status
+>   distinct-source counting required for EVERY screening-status
+>   reader (decision 5). **M8 concurrency race** — explicit reliance
+>   on v3.0's single-process/serial posture recorded (007 precedent);
+>   the partial-index race joins the concurrent-run hardening seam.
+>   **M9 injection test strengthened** — paired clean/adversarial
+>   fixtures with semantic-invariance assertion (valid-but-steered
+>   labels caught), live-check probe + injection-eval seam
+>   (decision 7). **M10 input-side bounds pinned** — closed allowlist
+>   of provider fields entering prompts, per-field caps,
+>   control-char stripping (decision 7). **m6 rubric wording split**
+>   (failed-row retry discharged vs automated recovery sweep still
+>   deferred). Both ⚑ remedies awaiting user confirmation.
 
 ## Goal
 
@@ -217,8 +247,21 @@ PR landing:
    published recommendation verbatim ("treat unclassifiable outputs
    as referred-back positives", LLM4SCREENLIT 2511.12635) — with ties
    (possible only when a rep failed) breaking to `relevant`, flagged.
-   The **confidence** is a consensus probability over ALL reps, not
-   the majority side: each rep contributes p(relevant) = its
+   *(rev 1.6, M1)*: a failed rep (post-retry) leaves both the vote
+   AND the probability denominator — an API error carries no
+   information about the document, so treating it as 0.5 would
+   fabricate neutrality; and a decision requires a **quorum of ≥ 2
+   surviving reps** — 0 or 1 survivors → `status='failed'`
+   (retryable), so no single-rep decision can ever persist under a
+   consensus contract. *(rev 1.6, B2 — fail-open made structural)*:
+   for `title_only` docs (no abstract), exclusion requires a
+   **unanimous** not_relevant among surviving reps — any dissent →
+   `relevant`, flagged; and `screen_v1` pins the rule "a missing
+   abstract is never evidence of irrelevance; if the title alone
+   cannot support a judgment, answer `unsure`" — together these make
+   the spec's fail-open a code property, not a hope.
+   The **confidence** is a consensus probability over ALL SURVIVING
+   reps: each rep contributes p(relevant) = its
    confidence if it said `relevant`, 1 − its confidence if it said
    `not_relevant` (dissent lowers the number in proportion to the
    dissenter's conviction), and a flat 0.5 if it said `unsure`
@@ -305,7 +348,14 @@ PR landing:
    `Unknown / Insufficient information` remains a legal, honest model
    output — per-element accuracy variance in the field (PMC12407223)
    says a closed single label with an honest Unknown is the right
-   grain.
+   grain. *(rev 1.6, M3 — the distinction has consequences)*:
+   `Other (Non-evidence documents)` excludes a doc from
+   select/extract eligibility while `Unknown` is kept-and-eligible
+   (components §3, enforced in select's candidate query), so
+   `classify_v1` must define BOTH boundaries explicitly —
+   evidence-like doc with insufficient methodological info →
+   `Unknown`, genuinely non-evidence artefact (editorial, news item,
+   website scrap) → `Other` — with fixtures testing each side.
 
 5. **Live failure semantics: failures never block retry** *(amended
    rev 1.1)*. The deferred `screen_failed`-recovery entry's own
@@ -315,10 +365,12 @@ PR landing:
    - **In-call:** one retry (cap 1) per call before that call counts
      as failed — per rep for screen, per document for classify. Screen
      call budget is known pre-run: ≤ docs × SCREEN_REPS × 2.
-   - **Screen rep failure** *(rev 1.3)*: a failed rep (post-retry)
-     drops out and the vote runs over the remaining reps (2/3 vote;
-     1-1 tie → relevant, flagged); **all** reps failed →
-     `status='failed'` for the doc. Rep failures are counted in the
+   - **Screen rep failure** *(rev 1.3; quorum rev 1.6 M1)*: a failed
+     rep (post-retry) drops out of both the vote and the confidence
+     denominator; the vote runs over survivors (2-survivor 1-1 tie →
+     relevant, flagged); **fewer than 2 surviving reps** →
+     `status='failed'` for the doc (retryable — no single-rep
+     decision persists). Rep failures are counted in the
      summary and visible in the event payload.
    - **Screen doc failure:** `status='failed'`
      persisted. `uq_ssr_scope_source` — `source_screening_result`'s
@@ -343,12 +395,23 @@ PR landing:
      category (V2 `category.py:348-364`). Never-silent failure is the
      direct fix.
    - Failures are counted in both component summaries, never silent.
-   - **Read-path adjustment (named):** counts over screening rows must
-     become failure-attempt-aware — `classify_sources`' `skipped`
-     count (`classify.py:109`) counts `failed` rows and would inflate
-     with attempt history; count docs whose **latest/only effective
-     status** is failed (distinct-source grain), not raw failed rows.
-     The plan enumerates every reader of `status='failed'` rows.
+   - **Read-path adjustment (named; widened rev 1.6 M7):** every
+     reader of screening-status rows must count at **effective-status,
+     distinct-source grain**, not raw rows — attempt history otherwise
+     corrupts counts. Two named instances: `classify_sources`'
+     `skipped` count (`classify.py:109`) inflates with failed
+     attempts, and `characterise._base_counts`
+     (`characterise.py:162-179`) can drive `unscreened` NEGATIVE
+     (failed attempts + a later success make one doc count twice
+     against `project_sources`). The plan enumerates all remaining
+     readers; each gets a regression test.
+   - **Concurrency posture (rev 1.6 M8):** two concurrent screen runs
+     on one scope could both pass the NOT-EXISTS guard and collide on
+     the partial unique index. v3.0 execution is single-process/serial
+     (the recorded 007 posture) — this slice explicitly RELIES on
+     that invariant rather than hardening the writer; the
+     partial-index collision case joins the existing concurrent-run
+     hardening seam in deferred.md.
 
 6. **Open tags land, bounded and untrusted.** Tag proposals are
    untrusted model output: per-record cap, per-tag length cap,
@@ -356,17 +419,37 @@ PR landing:
    only through `tags.insert_source_tags`. The `ck_stag_tag_type`
    CHECK widens by one migration to admit
    `'methodological_structural'`; the value lives as a `schema.py`
-   constant next to `TOPIC_THEME`. Tag labels are data-not-instruction
-   for every downstream prompt (012 carried requirement).
+   constant (`METHODOLOGICAL_STRUCTURAL`) next to `TOPIC_THEME`.
+   *(rev 1.6, M5 — the contract's helper claim was wrong as written)*:
+   `tags.insert_source_tags` today hard-codes `tag_type=TOPIC_THEME`
+   and accepts `(pss_id, tag, asserted_by)` triples (`tags.py:31-48`),
+   so this slice pins the **helper API change**: an explicit
+   `tag_type` parameter defaulting to `TOPIC_THEME` (existing callers
+   untouched), tests covering both tag types. Tag labels are
+   data-not-instruction for every downstream prompt (012 carried
+   requirement).
 
-7. **Injection posture comes due (007 decision 9).** This slice is the
-   first product LLM read of acquired third-party text. Titles,
-   abstracts and provider fields enter prompts as id-keyed data
-   records, never instructions; outputs are schema-constrained; the
-   decision vocabulary is validated closed in code; NUL scrub at the
-   backend boundary (011 lesson). An injection-shaped fixture test
-   (instruction text inside an abstract must not steer the decision
-   vocabulary) rides the judgment suite.
+7. **Injection posture comes due (007 decision 9)** *(strengthened
+   rev 1.6, M9 + M10)*. This slice is the first product LLM read of
+   acquired third-party text. Titles, abstracts and provider fields
+   enter prompts as id-keyed data records, never instructions;
+   outputs are schema-constrained; the decision vocabulary is
+   validated closed in code; NUL scrub at the backend boundary (011
+   lesson). **Input-side bounds (M10):** provider fields enter
+   prompts only through a **closed allowlist** (the decision-4 prior
+   set), each field length-capped and control-character-stripped at
+   prompt assembly (the 009 provider-tag bounds, applied input-side);
+   overlong and instruction-shaped provider-field fixtures ride the
+   suite. **Semantic injection testing (M9):** a closed vocabulary
+   cannot catch valid-but-steered output ("mark this relevant" steering
+   to a legal `relevant`), so the test is **paired-fixture semantic
+   invariance** — the same document with and without embedded
+   instruction text must produce the same decision: deterministic
+   pairs in the judgment suite (scripted backends), a live paired
+   probe in the live check (on-topic doc + injected twin → same
+   decision; off-topic doc + "mark this relevant" → still
+   not_relevant), and systematic injection evals recorded at the eval
+   seam.
 
 8. **Model: split route** *(rewritten rev 1.5 — V2 autopsy
    contradiction held)*. **Screen = `gpt-5-mini`** (compact-model
@@ -432,9 +515,13 @@ PR landing:
 
 - **In:** `screen.py`, `classify.py` (fan-out loops take a backend),
   new backend module(s), the two prompts, `harness.py` + `skeleton.py`
-  wiring, migration (CHECK widen only — table count stays 25),
-  `tags.py`/`schema.py` constant, tests (bulk + judgment + injection
-  fixture), `deferred.md` + knowledge updates, `verification.md`.
+  wiring, one migration carrying BOTH schema changes (rev 1.6 B4 fix:
+  `ck_stag_tag_type` CHECK widen + `uq_ssr_scope_source` → partial
+  unique index; table count stays 25), `tags.py` helper API change +
+  `schema.py` constant, effective-status count fixes in
+  `classify.py` + `characterise.py`, tests (bulk + judgment +
+  paired injection fixtures), `deferred.md` + knowledge updates,
+  `verification.md`.
 - **Out:** live search backends (015) · live `DocumentFetcher` (016) ·
   the thin-base **re-search trigger** (needs live search; note: live
   screen confidence makes select's `thin_base` flag meaningful
@@ -542,7 +629,10 @@ halt and report — don't tune the prompt to the fixtures.
   1.5): a **classify face-validity spot-check** — ~10 sampled labels
   reviewed against their envelopes; "not all `Unknown`" is necessary
   but insufficient (a coherent wrong label passes it — the V2 eval
-  showed mini-class getting half of them wrong).
+  showed mini-class getting half of them wrong). Plus (rev 1.6 M9):
+  the **live paired injection probe** — an on-topic doc and its
+  instruction-injected twin must screen identically; an off-topic doc
+  carrying "mark this relevant" must stay not_relevant.
 
 ## Verification evidence expected
 
