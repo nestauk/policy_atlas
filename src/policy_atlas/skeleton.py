@@ -21,6 +21,11 @@ from sqlalchemy import func, select, text
 from sqlalchemy.engine import Connection
 
 from policy_atlas import events, tracing
+from policy_atlas.classification_backend import (
+    ClassificationBackend,
+    OpenAIClassificationBackend,
+    StubClassificationBackend,
+)
 from policy_atlas.db import get_engine
 from policy_atlas.embeddings import EmbeddingBackend, OpenAIEmbeddingBackend, StubEmbeddingBackend
 from policy_atlas.extraction_backend import (
@@ -66,6 +71,11 @@ from policy_atlas.schema import (
     source_tag,
 )
 from policy_atlas.screen import effective_screen_rows
+from policy_atlas.screening_backend import (
+    OpenAIScreeningBackend,
+    ScreeningBackend,
+    StubScreeningBackend,
+)
 from policy_atlas.select import NON_EVIDENCE_TYPE
 from policy_atlas.synthesis_backend import (
     OpenAISynthesisBackend,
@@ -102,6 +112,8 @@ def _run_component(
     embedding_backend: EmbeddingBackend,
     theme_grouping_backend: ThemeGroupingBackend,
     langfuse_client: Langfuse | None,
+    screening_backend: ScreeningBackend | None = None,
+    classification_backend: ClassificationBackend | None = None,
     characterisation_run_id: uuid.UUID | None = None,
     ranking_backend: RankingBackend | None = None,
     selection_run_id: uuid.UUID | None = None,
@@ -122,6 +134,10 @@ def _run_component(
         embedding_backend: Embedding backend threaded into the harness.
         theme_grouping_backend: Theme grouping backend threaded into the harness.
         langfuse_client: Optional tracing client for the component span.
+        screening_backend: Screening backend for ``screen``; unused by other
+            components.
+        classification_backend: Classification backend for ``classify``;
+            unused by other components.
         characterisation_run_id: Explicit characterisation run for ``select``;
             unused by other components.
         ranking_backend: Ranking backend for ``select``; unused by other
@@ -201,12 +217,26 @@ def _run_component(
             provider=StubEchoProvider(),
             embedding_backend=embedding_backend,
             theme_grouping_backend=theme_grouping_backend,
+            screening_backend=screening_backend,
+            classification_backend=classification_backend,
             ranking_backend=ranking_backend,
             extraction_backend=extraction_backend,
             facet_grouping_backend=facet_grouping_backend,
             synthesis_backend=synthesis_backend,
             grounding_judge_backend=grounding_judge_backend,
         )
+        if component == "screen" and langfuse_client is not None:
+            payload = _component_payload(events.read(conn, project_id), "screen", run_id=run_id)
+            if payload is not None:
+                tracing.screening_score_summary(
+                    langfuse_client, payload, root_span=run_span
+                )
+        if component == "classify" and langfuse_client is not None:
+            payload = _component_payload(events.read(conn, project_id), "classify", run_id=run_id)
+            if payload is not None:
+                tracing.classification_score_summary(
+                    langfuse_client, payload, root_span=run_span
+                )
         if component == "characterise" and langfuse_client is not None:
             # Scores and trace I/O must attach while the run's span is still the
             # active context.
@@ -271,10 +301,10 @@ def _text_basis_distribution(conn: Connection, project_id: uuid.UUID) -> dict[st
     return distribution
 
 
-def _characterise_payload(
-    log_entries: list[dict[str, Any]], *, run_id: uuid.UUID | None = None
+def _component_payload(
+    log_entries: list[dict[str, Any]], component: str, *, run_id: uuid.UUID | None = None
 ) -> dict[str, Any] | None:
-    """Return the characterise component's completed-event payload, or None if it failed.
+    """Return one component's completed-event payload, or None if it failed.
 
     Entries arrive in ascending sequence order, so the search runs newest-first;
     pass ``run_id`` to pin the payload to one run rather than the latest.
@@ -283,11 +313,22 @@ def _characterise_payload(
         (
             e["payload"] for e in reversed(log_entries)
             if e["event_type"] == "component.completed"
-            and e["payload"].get("component") == "characterise"
+            and e["payload"].get("component") == component
             and (run_id is None or e["run_id"] == run_id)
         ),
         None,
     )
+
+
+def _characterise_payload(
+    log_entries: list[dict[str, Any]], *, run_id: uuid.UUID | None = None
+) -> dict[str, Any] | None:
+    """Return the characterise component's completed-event payload, or None if it failed.
+
+    Entries arrive in ascending sequence order, so the search runs newest-first;
+    pass ``run_id`` to pin the payload to one run rather than the latest.
+    """
+    return _component_payload(log_entries, "characterise", run_id=run_id)
 
 
 def _render_landscape(log_entries: list[dict[str, Any]]) -> None:
@@ -393,15 +434,7 @@ def _extraction_payload(
     Entries arrive in ascending sequence order, so the search runs newest-first;
     pass ``run_id`` to pin the payload to one run rather than the latest.
     """
-    return next(
-        (
-            e["payload"] for e in reversed(log_entries)
-            if e["event_type"] == "component.completed"
-            and e["payload"].get("component") == "extract"
-            and (run_id is None or e["run_id"] == run_id)
-        ),
-        None,
-    )
+    return _component_payload(log_entries, "extract", run_id=run_id)
 
 
 def _render_extraction(log_entries: list[dict[str, Any]]) -> None:
@@ -444,15 +477,7 @@ def _grouping_payload(
     Entries arrive in ascending sequence order, so the search runs newest-first;
     pass ``run_id`` to pin the payload to one run rather than the latest.
     """
-    return next(
-        (
-            e["payload"] for e in reversed(log_entries)
-            if e["event_type"] == "component.completed"
-            and e["payload"].get("component") == "group"
-            and (run_id is None or e["run_id"] == run_id)
-        ),
-        None,
-    )
+    return _component_payload(log_entries, "group", run_id=run_id)
 
 
 def _render_grouping(log_entries: list[dict[str, Any]], *, run_id: uuid.UUID | None = None) -> None:
@@ -494,15 +519,7 @@ def _synthesis_payload(
     Entries arrive in ascending sequence order, so the search runs newest-first;
     ``run_id`` pins the payload to one run.
     """
-    return next(
-        (
-            e["payload"] for e in reversed(log_entries)
-            if e["event_type"] == "component.completed"
-            and e["payload"].get("component") == "synthesise"
-            and e["run_id"] == run_id
-        ),
-        None,
-    )
+    return _component_payload(log_entries, "synthesise", run_id=run_id)
 
 
 def _render_synthesis(
@@ -542,12 +559,20 @@ def main() -> None:
     langfuse_client = tracing.get_langfuse() if live else None
     embedding_backend: EmbeddingBackend
     theme_grouping_backend: ThemeGroupingBackend
+    screening_backend: ScreeningBackend
+    classification_backend: ClassificationBackend
     ranking_backend: RankingBackend | None
     extraction_backend: ExtractionBackend
     facet_grouping_backend: FacetGroupingBackend
     if live:
         embedding_backend = OpenAIEmbeddingBackend()
         theme_grouping_backend = OpenAIThemeGroupingBackend()
+        # Tracing lives inside OpenAIScreeningBackend itself — no wrapper
+        # class, unlike the embedding/grouping backends below.
+        screening_backend = OpenAIScreeningBackend(langfuse_client=langfuse_client)
+        # Tracing lives inside OpenAIClassificationBackend itself — no wrapper
+        # class, unlike the embedding/grouping backends below.
+        classification_backend = OpenAIClassificationBackend(langfuse_client=langfuse_client)
         # Tracing lives inside OpenAIRankingBackend itself — no wrapper class,
         # unlike the embedding/grouping backends below.
         ranking_backend = OpenAIRankingBackend(langfuse_client=langfuse_client)
@@ -567,6 +592,8 @@ def main() -> None:
     else:
         embedding_backend = StubEmbeddingBackend()
         theme_grouping_backend = StubThemeGroupingBackend()
+        screening_backend = StubScreeningBackend()
+        classification_backend = StubClassificationBackend()
         ranking_backend = None
         extraction_backend = StubExtractionBackend()
         facet_grouping_backend = StubFacetGroupingBackend()
@@ -650,13 +677,23 @@ def main() -> None:
             embedding_backend=embedding_backend,
             theme_grouping_backend=theme_grouping_backend,
             langfuse_client=langfuse_client,
+            screening_backend=screening_backend,
+            classification_backend=classification_backend,
         )
 
         # Walk the chain: five runs over the same scope. Acquire runs first —
         # both fixture backends over the mixed corpus (this upload + acquired sets).
         run_component("acquire")
 
+        # rapid: the first screen+classify chain runs entirely on stage-1 rows —
+        # the deep profile's stage-2 full-text confirmation leg runs later,
+        # after ingest_full_text has full text to confirm against.
+        log.info("screen.profile", profile="rapid", stage=1)
         run_component("screen")
+        log.info(
+            "screen.rapid_profile_stage2_skipped",
+            reason="rapid profile: stage-2 full-text confirmation not run yet",
+        )
 
         # Effective rows (screen.effective_screen_rows) drive the summaries below,
         # never raw attempt/stage history — a demoted or confirmed doc must be
@@ -709,6 +746,51 @@ def main() -> None:
             "text_basis_distribution_after",
             **_text_basis_distribution(conn, project_id),
         )
+
+        # deep: the second screen leg — stage-2 full-text confirmation over the
+        # stage-1-relevant, now-ingested docs. Same read-modify-write directive
+        # pattern as the second group run below: preserve existing scope
+        # context keys.
+        log.info("screen.profile", profile="deep", stage=2)
+        scope_context = conn.execute(
+            select(evidence_scope.c.context).where(
+                evidence_scope.c.evidence_scope_id == scope_id
+            )
+        ).scalar_one()
+        directed_context = {**scope_context, "screening": {"stage": 2}}
+        conn.execute(
+            evidence_scope.update()
+            .where(evidence_scope.c.evidence_scope_id == scope_id)
+            .values(context=directed_context)
+        )
+        stage2_run_id = run_component("screen")
+        stage2_payload = _component_payload(
+            events.read(conn, project_id), "screen", run_id=stage2_run_id
+        )
+        if stage2_payload is None:
+            # the component emitted component.failed — the event log below shows it
+            log.warning("screen.stage2_counts.missing")
+        else:
+            log.info(
+                "screen.stage2_counts",
+                stage2_screened=stage2_payload.get("stage2_screened"),
+                confirmed=stage2_payload.get("confirmed"),
+                demoted=stage2_payload.get("demoted"),
+                failed=stage2_payload.get("failed"),
+                skipped_no_fulltext=stage2_payload.get("skipped_no_fulltext"),
+            )
+
+        # Effective rows now span both stages — recompute the summary read used
+        # by the demo's screening_result output below so it shows the mixed
+        # stage-1/stage-2 grain rather than the pre-deep-profile snapshot above.
+        screening_results = conn.execute(
+            select(
+                effective_screening.c.status,
+                effective_screening.c.screen_basis,
+                effective_screening.c.screen_decision_confidence,
+                effective_screening.c.screen_stage,
+            ).where(effective_screening.c.project_id == project_id)
+        ).fetchall()
 
         char_run_id = run_component("characterise")
 
@@ -975,7 +1057,7 @@ def main() -> None:
 
     for row in screening_results:
         log.info("screening_result", status=row.status, basis=row.screen_basis,
-                 confidence=row.screen_decision_confidence)
+                 confidence=row.screen_decision_confidence, screen_stage=row.screen_stage)
 
     for row in classify_results:
         log.info("classification_result", evidence_type=row.primary_evidence_type)

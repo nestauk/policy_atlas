@@ -527,6 +527,113 @@ def synthesis_score_summary(
         )
 
 
+def screening_score_summary(
+    client: Langfuse | None,
+    summary: dict[str, Any],
+    *,
+    root_span: Any = None,
+) -> None:
+    """Attach the screen run's consensus/demotion scores to the current Langfuse trace.
+
+    The 009 ``score_summary`` pattern, mirroring ``grouping_score_summary``
+    (task 014). ``summary`` may be a stage-1 (envelope) or stage-2 (full-text)
+    screen component summary; the stage-specific scores are only emitted when
+    the corresponding keys are present.
+
+    Args:
+        client: Langfuse client, or ``None`` for no-op tracing.
+        summary: Screen component summary payload — becomes the trace output.
+        root_span: The ``run:{run_id}`` root span yielded by ``component_span``.
+    """
+    if client is None:
+        return
+    if root_span is not None:
+        root_span.update(
+            input={"component": "screen"},
+            output=summary,
+        )
+    client.score_current_trace(
+        name="screen_failure_count",
+        value=float(summary.get("failed", 0)),
+        data_type="NUMERIC",
+    )
+    if "relevant" in summary and "not_relevant" in summary:
+        decided = summary["relevant"] + summary["not_relevant"]
+        if decided > 0:
+            client.score_current_trace(
+                name="non_unanimous_share",
+                value=summary.get("non_unanimous", 0) / decided,
+                data_type="NUMERIC",
+            )
+            client.score_current_trace(
+                name="tie_broken_count",
+                value=float(summary.get("tie_broken", 0)),
+                data_type="NUMERIC",
+            )
+    if "stage2_screened" in summary:
+        stage2_screened = summary["stage2_screened"]
+        demoted_share = (
+            summary.get("demoted", 0) / stage2_screened if stage2_screened > 0 else 0.0
+        )
+        client.score_current_trace(
+            name="stage2_demoted_share",
+            value=demoted_share,
+            data_type="NUMERIC",
+        )
+        client.score_current_trace(
+            name="stage2_failure_count",
+            value=float(summary.get("failed", 0)),
+            data_type="NUMERIC",
+        )
+
+
+def classification_score_summary(
+    client: Langfuse | None,
+    summary: dict[str, Any],
+    *,
+    root_span: Any = None,
+) -> None:
+    """Attach the classify run's evidence-type scores to the current Langfuse trace.
+
+    The 009 ``score_summary`` pattern, mirroring ``grouping_score_summary``
+    (task 014).
+
+    Args:
+        client: Langfuse client, or ``None`` for no-op tracing.
+        summary: Classify component summary payload — becomes the trace output.
+        root_span: The ``run:{run_id}`` root span yielded by ``component_span``.
+    """
+    if client is None:
+        return
+    if root_span is not None:
+        root_span.update(
+            input={"component": "classify"},
+            output=summary,
+        )
+    client.score_current_trace(
+        name="classify_failure_count",
+        value=float(summary.get("failed", 0)),
+        data_type="NUMERIC",
+    )
+    classified = summary.get("classified", 0)
+    by_type = summary.get("by_type", {})
+    unknown_share = (
+        by_type.get("Unknown / Insufficient information", 0) / classified
+        if classified > 0
+        else 0.0
+    )
+    client.score_current_trace(
+        name="unknown_share",
+        value=unknown_share,
+        data_type="NUMERIC",
+    )
+    client.score_current_trace(
+        name="tags_rejected_count",
+        value=float(summary.get("tags_rejected", 0)),
+        data_type="NUMERIC",
+    )
+
+
 def flush(client: Langfuse | None) -> None:
     """Flush pending Langfuse telemetry when tracing is enabled.
 
