@@ -86,19 +86,23 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **Grey-lit category granularity** — splitting v2's coarse Policy-Guidance / Expert-Opinion
   primary types (classify component 3; needs policy-team input). `source_classification_result`
   and `primary_evidence_type` check constraint are durable; column split is additive when ready.
-- **LLM-based classify tool** — `_stub_classify` is the deterministic stub; the real tool (LLM
-  call → one of the 9 closed `primary_evidence_type` values) is the deferred seam.
-  `ClassifyContext`, `ClassifyResult`, and `source_classification_result` are durable and ready.
+- **LLM-based classify tool — DISCHARGED (task 014).** `OpenAIClassificationBackend`
+  (`classify_v1`, judgment-class model) classifies over the closed 9-value list with
+  provider priors as allowlisted data fields; the stub survives as the zero-egress default
+  behind the `ClassificationBackend` seam. Classify-consensus voting and threshold-gating
+  remain open (task-014 section below).
 - **Open tags → `source_tag`** (revised, task 009): the stub-empty
   `source_classification_result.open_tags` column and its array CHECK were **retired** by
   migration 9 — `source_tag` (item × tag, typed, assertion provenance in the unique key) is
-  the single tag home. When the LLM classify tool's seam opens it writes `source_tag`
-  directly (`asserted_by='classify'`, `tag_type='methodological_structural'` — the
-  `ck_stag_tag_type` CHECK widens by a one-line migration; the value lives in
-  `schema.TOPIC_THEME`-style constants and all writers route through
-  `tags.insert_source_tags`). There is no `open_tags` migration left to do.
+  the single tag home. **The seam opened in task 014**: classify writes bounded
+  `source_tag` rows directly (`asserted_by='classify'`,
+  `tag_type='methodological_structural'`; `ck_stag_tag_type` widened by migration 14; all
+  writes through `tags.insert_source_tags`). Nothing left to do here.
 - **`Unknown / Insufficient information` resolution** — sources landing `Unknown` are kept-and-eligible;
-  full-text re-classification is a deferred seam mirroring the appraisal path.
+  full-text re-classification is a deferred seam mirroring the appraisal path (shares
+  decision 11's windowing + staged-result pattern when it lands, task 014). The
+  Unknown-vs-Other boundary itself was settled by contract rev 1.11: `Other` requires
+  positively recognising a non-evidence artefact; doubt → `Unknown`.
 - **`source_classification_result` → `source_screening_result` FK — deliberately absent, not just
   deferred.** No composite FK ties a classification row to its screening result; the "only relevant
   sources are classified" discipline is enforced only in `classify_sources`, not durably at the
@@ -131,19 +135,28 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   `intervention_outcome_finding`.
 - **Saturation-based search stopping** (iterating retrieval↔screen until no new relevant docs);
   `saturated` is not a v3.0 `search_coverage_record` stop value.
-- **Budget cap + lazy vectorisation** for very large relevant sets; the **tiered content peek**
-  for poor-metadata grey lit at screen.
-- **LLM-based screen tool** — `_stub_screen` is the deterministic stub; the real tool (LLM call
-  with title/abstract → relevant/not_relevant/failed decision) is the deferred seam.
-  `ScreenContext`, `ScreenResult`, and `source_screening_result` are durable and ready.
-- **Thin-base re-search trigger** — `screen_decision_confidence` is stored and
-  `re_searched_still_thin` is a valid `search_coverage_record.stop_condition` (task 007), but
-  nothing fires it; the trigger that re-runs `search` when confident-relevant count is below
-  threshold waits on the live backends (runtime-egress gate).
-- **Re-screening** — a second result row for the same `(evidence_scope_id, project_source_snapshot_id)`
-  pair is prevented by `uq_ssr_scope_source`; follow-on seam when re-screening is wanted.
-- **`screen_failed` recovery loop** — `status='failed'` rows are representable; no retry logic
-  built. Deferred until a real inference provider makes failure transient.
+- **Budget cap + lazy vectorisation** for very large relevant sets. The **tiered content peek**
+  in its original exec-summary/headings form is **superseded in practice** by task 014's
+  stage-2 windowed full-text screen (decision 11); revisit only if windowing proves
+  insufficient for poor-metadata grey lit.
+- **LLM-based screen tool — DISCHARGED (task 014).** `OpenAIScreeningBackend` (`screen_v1`,
+  mini ×3-rep consensus; `screen_fulltext_v1` stage-2 precision confirmation) replaced the
+  stub, which survives as the zero-egress default behind the `ScreeningBackend` seam.
+  Follow-on seams live in the task-014 section below.
+- **Thin-base re-search trigger** — `screen_decision_confidence` is now a meaningful live
+  consensus probability (task 014) and `re_searched_still_thin` is a valid
+  `search_coverage_record.stop_condition` (task 007), but nothing fires it; the trigger that
+  re-runs `search` when the confident-relevant count is below threshold waits on live search
+  (task 015).
+- **Re-screening of successful results** — superseding a `relevant`/`not_relevant` decision
+  is still blocked by design: `uq_ssr_scope_source_stage` (task 014's partial unique) admits
+  failed-row retries and one row per stage, never a second non-failed row per
+  `(scope, source, stage)`. Follow-on seam when deliberate re-screening is wanted.
+- **`screen_failed` recovery loop** — the failed-row rerun retry itself is **DISCHARGED
+  in-slice (task 014, revs 1.1/1.6)**: failed docs are re-attempted as new rows on the next
+  screen run (attempt history preserved; counts failure-aware). The remaining seam is an
+  **automated recovery sweep** that notices and re-runs failures without an operator-initiated
+  rerun.
 - **Graph-structured synthesis** — query-time multi-hop / community / contradiction-location over
   the findings graph (run-local → project-scoped persistent → graph datastore), gated on an
   entity-resolution-quality bar; **never** an ingestion-time global / cross-project KG.
@@ -719,6 +732,56 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   run-scoped roll-up pointing at its artefact; future capabilities mint artefacts into
   the same 001 substrate with their own roll-ups. The discriminator column and the
   versioning grain arrive with their first readers.
+
+## LLM screen + classify (task 014 seams)
+
+- **Classify-consensus voting** (contract rev 1.3) — screen got 3-rep consensus (decision
+  10); classify runs single-call. Whether classify needs the same treatment is eval-gated:
+  measure single-call error structure first.
+- **Heterogeneous-model screening ensemble** (rev 1.3) — reps across model families instead
+  of 3× one model; needs the Bedrock/routing seam (v3.0 is single-provider OpenAI).
+- **Structured inclusion-criteria screening directive** (rev 1.2) — a plan-compile seam
+  mirroring select's directive pattern: explicit inclusion/exclusion criteria compiled into
+  the screening directive instead of free-text intent-as-data (the v3.0 surface).
+- **Screen-confidence retrieval boost** (user, 2026-07-08; contract rev 1.8) — in
+  no-selection runs `search_chunks` has no doc-level prior; `screen_decision_confidence`
+  (meaningful since 014) is the natural directive-expressible boost. **Grammar pre-decided:
+  clamped functional multiplier** — linear `lo + conf × (hi − lo)`, parameters bounded,
+  product clamped [0.1, 10]; banding rejected (threshold cliffs); steerable-never-baked →
+  directive column, never a standing prior; double-count guard where a selection reference
+  already prices confidence in; stage-provenance aware (never mix stage-1/stage-2
+  confidences in one multiplier without the `screen_stage` column). A **013-surface change —
+  lands via its own gate**, not as screen work.
+- **Concurrent-run hardening** — the stage-row insert's NOT-EXISTS + partial-unique-index
+  pattern (contract M8) relies on v3.0's single-process/serial posture; concurrent screen
+  runs of one scope could race it. Recorded, not hardened.
+- **013 `lookup` vocabulary widening** — the synthesis `lookup` tool's closed vocabulary
+  does not include screening rows, so in-loop sub-agents can't query either stage; a
+  one-line 013-surface widening when a consumer wants it.
+- **Demotion-asymmetry survivorship measurement** (decision 11 iv-b) — abstract-only docs
+  are unejectable past stage 1 (no full text to confirm against), so stage-2 precision
+  accrues only to text-available docs; measure the survivorship skew in the eval slice.
+- **Screening/classification eval seam** (the eval slice's seed, all pointers recorded):
+  LLM4SCREENLIT-style metrics (full confusion matrix · lost-evidence/recall · WSS ·
+  WMCC · the deterministic stub as the non-LLM baseline) · the **V2 screening-eval
+  baseline** (13,740 docs, recall 0.836 / precision 0.634 / WSS@95 0.187, committed in V2
+  `backend/testing/evals/screening/`; must include hard corpora, where V2 recall fell to
+  0.400) · the **stage-pair dataset by construction** (both stage rows persist on every
+  deep run — stage-1 vs stage-2 label pairs are free) · the **stage-1 vs stage-2 estimator
+  difference** (consensus probability vs single-rep self-report, rev 1.10) · the
+  **unsure-at-0.5 calibration question** (rev 1.11: should a no-information doc sit at the
+  corpus base rate instead of 0.5? — first calibration target) · the heat_pump
+  manual-vs-automated study re-scoped as search/coverage-recall evidence for 015/016 (it
+  measures document identity, not screening accuracy) · **live-model injection
+  semantic-invariance eval** (014 review: the paired fixtures pin prompt *structure*; live
+  behavioural invariance is probe-only today — fold into the injection metrics).
+- **Classify-confidence threshold-gating** (rev 1.5, V2 `strength.py` precedent) —
+  confidence is event-payload-only today; a gate that acts on it arrives with its first
+  consumer.
+- **Stage-2 windowing scale efficiency** (014 review) — `_load_stage2_docs` fetches every
+  candidate chunk then keeps only the first window; fine at fixture scale under upstream
+  caps, wasteful at real corpus scale. Load only the first window's chunks when 015/016
+  bring real volumes.
 
 ## Data model / evidence
 

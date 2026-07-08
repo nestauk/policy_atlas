@@ -21,7 +21,7 @@ are done (spec-prep 2026-06-22; refreshed 2026-07-03); `[ ]` items are open gate
 - [x] Open/provisional decisions marked 🟡 / ❓ throughout; none silently flattened.
 - [ ] Tool/component I/O contracts — draft when the first implementation task lands.
 - [x] Task-contract map for first implementation slices — superseded by the running task sequence
-  (`docs/tasks/001`–`013` merged; the next slice is named in AGENTS.md **Current phase**).
+  (`docs/tasks/001`–`014` merged; the next slice is named in AGENTS.md **Current phase**).
 - [x] Verification plan for first implementation slices — per-task `verification.md` from
   `docs/tasks/_templates/`, gated by the task-cycle review stack.
 

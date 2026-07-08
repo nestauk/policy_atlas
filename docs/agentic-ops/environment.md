@@ -1,7 +1,7 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–013 — backend only; setup unchanged since 002; task 007 adds two dev-time
+stands (tasks 001–014 — backend only; setup unchanged since 002; task 007 adds two dev-time
 fixture-recorder scripts needing `OVERTON_API_KEY`/optional OpenAlex vars in `.env` — see
 `.env.example`; task 008 adds parsing deps (pymupdf/pymupdf4llm/trafilatura — arrive via
 `make setup`/`uv sync`) and a keyless dev-time recorder using system `curl`; task 009 adds
@@ -14,7 +14,10 @@ the same `OPENAI_API_KEY` live route now also drives the select rerank, the extr
 can run minutes — see the 011 verification cost note) and the group facet partition (cheap
 — reference strings only); task 013 adds **no new deps or env vars** either — the same key
 drives synthesise's three generation surfaces (proposal · section loop · grounding judge;
-a full four-profile skeleton run ≈ $1, see the 013 verification cost note); `make verify`
+a full four-profile skeleton run ≈ $1, see the 013 verification cost note); task 014 adds
+**no new deps or env vars** — the same key now also drives screen (gpt-5-mini ×3 consensus
+reps + the stage-2 full-text confirmation on deep profiles) and classify (gpt-5.5);
+fixture-corpus live chain ≈ $0.2, see the 014 verification cost note; `make verify`
 and the test suite need none of them — stub backends + socket-deny keep the suite
 egress-free).
 Gotcha (bit the 012 live check): after pulling a schema-bearing slice, run
