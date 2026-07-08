@@ -237,6 +237,11 @@ source_screening_result = Table(
     Column("status", Text, nullable=False),
     Column("screen_basis", Text, nullable=True),
     Column("screen_decision_confidence", Float, nullable=True),
+    # Stage provenance (task 014 decision 11): 1 = envelope screen, 2 = full-text
+    # screen. Effective result = highest-stage non-failed row per (scope, source) —
+    # a READ rule (the effective-screen helper), never a storage rule: stage-1 rows
+    # are never mutated by a stage-2 pass.
+    Column("screen_stage", Integer, nullable=False, server_default="1"),
     Column("screened_at", DateTime(timezone=True), nullable=False),
     # Cross-project FK guards: all three parents must share the same project_id
     ForeignKeyConstraint(
@@ -257,15 +262,22 @@ source_screening_result = Table(
         ["runs.run_id", "runs.project_id"],
         name="fk_ssr_run_project",
     ),
-    UniqueConstraint(
-        "evidence_scope_id", "project_source_snapshot_id",
-        name="uq_ssr_scope_source",
+    # Partial unique (task 014, replacing the uq_ssr_scope_source constraint):
+    # at most one NON-FAILED row per (scope, source, stage) — failed rows are
+    # attempt history and never block retry (the 011 extraction-memo precedent).
+    Index(
+        "uq_ssr_scope_source_stage",
+        "evidence_scope_id", "project_source_snapshot_id", "screen_stage",
+        unique=True,
+        postgresql_where=text("status != 'failed'"),
     ),
     CheckConstraint("status IN ('relevant', 'not_relevant', 'failed')", name="ck_ssr_status"),
     CheckConstraint(
-        "screen_basis IS NULL OR screen_basis IN ('title_abstract', 'title_only')",
+        "screen_basis IS NULL"
+        " OR screen_basis IN ('title_abstract', 'title_only', 'full_text')",
         name="ck_ssr_basis",
     ),
+    CheckConstraint("screen_stage IN (1, 2)", name="ck_ssr_stage"),
     CheckConstraint(
         "screen_decision_confidence IS NULL"
         " OR (screen_decision_confidence >= 0.0 AND screen_decision_confidence <= 1.0)",
@@ -526,8 +538,10 @@ selection_result = Table(
     CheckConstraint("budget > 0", name="ck_selr_budget_positive"),
 )
 
-# The only shipped tag_type (decision 10); writers import it via policy_atlas.tags.
+# Tag types; writers import them via policy_atlas.tags.
 TOPIC_THEME = "topic_theme"
+# Classify's open methodological/structural tag proposals (task 014 decision 6).
+METHODOLOGICAL_STRUCTURAL = "methodological_structural"
 
 source_tag = Table(
     "source_tag",
@@ -560,9 +574,10 @@ source_tag = Table(
         "project_source_snapshot_id", "tag_type", "tag", "asserted_by",
         name="uq_source_tag_assertion",
     ),
-    # Widens by a one-line migration when the LLM classify tool's seam opens
-    # ("methodological_structural") — no speculative value ships now (decision 10).
-    CheckConstraint(f"tag_type IN ('{TOPIC_THEME}')", name="ck_stag_tag_type"),
+    CheckConstraint(
+        f"tag_type IN ('{TOPIC_THEME}', '{METHODOLOGICAL_STRUCTURAL}')",
+        name="ck_stag_tag_type",
+    ),
 )
 
 # Shared bound for untrusted scope-context directive strings (select's selection

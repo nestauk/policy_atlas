@@ -115,7 +115,7 @@ def test_ck_bad_basis(conn: Connection) -> None:
     scope_id = seed_scope(conn, pid)
     _, pss_id = seed_source(conn, pid)
     with pytest.raises(IntegrityError):
-        _ssr_insert(conn, pid, rid, scope_id, pss_id, screen_basis="full_text")
+        _ssr_insert(conn, pid, rid, scope_id, pss_id, screen_basis="body_text")
     conn.rollback()
     conn.begin()
 
