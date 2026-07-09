@@ -1,8 +1,38 @@
 # Plan: 016-live-fetch
 
-> **Status:** rev 1 draft — plan-stage adversarial review next, then
-> the plan 🛑. Drafted against contract **rev 2.5** (approved 2.2,
-> amended 2.3–2.5 at/after the gate). ADR at confirmation (step 4):
+> **Status:** rev 2 — plan-stage adversarial review adjudicated
+> (Codex, 12 findings: 3 blockers · 9 majors, **12/12 adopted**;
+> the reviewer verified claims into the vendored httpx/httpcore
+> source). Blockers: (1) landing-page discovery restored to the
+> contract's full shape — `citation_pdf_url` meta AND bounded
+> obvious-PDF-anchor scan; (2) the substrate widening covers BOTH
+> loaders — `synthesise.py`'s claim loader AND
+> `synthesis_tools.build_retrieval_scope` / `ChunkSearchResult`
+> (the retrieval path filters full-text separately,
+> `synthesis_tools.py:698`); (3) pinned-IP connect redesigned at the
+> **httpcore NetworkBackend seam** — httpcore pools connections by
+> URL origin, so a host→IP URL swap corrupts pooling/SNI; instead the
+> origin stays hostname-keyed and a custom network backend
+> resolves/validates/dials at connect time (DNS bounded by the
+> connect timeout — also closing finding 7), honest fallback = a
+> non-pooled per-request path. Majors: task 4 moved to Phase 3
+> (`candidate_urls` lives in ingest_full_text.py — reader contact,
+> full verify) · `_parse_html` decodes before trafilatura as-built,
+> violating contract decision 6 — bytes-to-trafilatura fix added to
+> task 5 · cookies: httpx always builds a jar — reject-all cookie
+> policy + Set-Cookie persistence tests · the in-run URL cache must
+> NOT retain success bodies (error-cache + in-flight dedup only) ·
+> cascade failure reasons get a PRIORITY order (a DOI-fallback 404
+> can no longer overwrite `paywall`) · `fetch_error` joins the
+> reason vocabulary for escaped raises (`fetch_failed` is a STATUS,
+> not a reason) · the prompt-version bump vs the contract's "zero
+> new prompts" wording resolved by contract rev 2.6 clarification
+> (no new SURFACE; one existing-prompt text edit rides decision 9) ·
+> the live check's labelled-abstract observation made deterministic
+> (extend scope until observed; deterministic-test fallback named).
+>
+> Rev 1 drafted against contract **rev 2.5** (approved 2.2,
+> amended 2.3–2.6). ADR at confirmation (step 4):
 > **ADR 0013 — the mandatory EB spine** (acquire(search) → screen →
 > classify → appraise → ingest(fetch) → synthesise; all else
 > orchestrator-discretionary per depth gradation) — the chain-shape
@@ -29,7 +59,10 @@ fast-worker, brief-unwritable → lead), record substitutions in
 - `FETCH_TIMEOUT_S = 30.0` (`httpx.Timeout(30.0)`, connect+read;
   recorder/015 precedent). `User-Agent: policy-atlas/0.1 (+research;
   contact via repo)` on every request; **no `Authorization`, no
-  cookies, ever** (`cookies` disabled on the client; test-asserted).
+  cookies, ever** — httpx always constructs a cookie jar (rev 2,
+  finding 6), so the client's jar gets a **reject-all cookie policy**
+  (stdlib `DefaultCookiePolicy` allowing no domains); tests assert a
+  `Set-Cookie` response neither persists nor rides a later request.
 - `MAX_DOCUMENT_BYTES = 25_000_000` — enforced against
   `Content-Length` AND the streamed body (existing `too_large`
   reason; matches the 008 fixture `oversize` semantics).
@@ -41,8 +74,12 @@ fast-worker, brief-unwritable → lead), record substitutions in
   tests) · `MAX_INFLIGHT_BYTES = 100_000_000` — a fetch slot is
   granted only while accounted in-flight body bytes are under the
   cap (backpressure, never failure).
-- In-run URL cache: `dict[url, FetchResult]` on the fetcher (repeat
-  URLs across docs are one fetch); cross-run caching stays deferred.
+- In-run URL cache *(rev 2, finding 8 — success bodies are NOT
+  retained)*: the cache holds **error results + an in-flight map**
+  (duplicate concurrent requests coalesce); a successful body is
+  handed to its consumer and dropped — a rare repeat-success URL
+  re-fetches rather than pinning up to a whole corpus of bodies in
+  memory for the run. Cross-run caching stays deferred.
 
 **SSRF guard set (decision 3 + rev 2.4 blockers):**
 - Scheme allowlist `{http, https}`; URLs with userinfo refused;
@@ -52,16 +89,33 @@ fast-worker, brief-unwritable → lead), record substitutions in
   classification; refused classes: private · loopback · link-local ·
   multicast · reserved · unspecified (this covers the cloud-metadata
   169.254.0.0/16 range via link-local).
-- **Pinned-IP connect** (no check-then-reresolve window): the request
-  is issued to the validated IP with the original `Host` header and
-  TLS SNI set to the original hostname (httpx request extensions /
-  httpcore `sni_hostname`; if httpx cannot express it cleanly, the
-  fetch path drops to httpcore directly — httpx's own core, no new
-  dependency). Each manual redirect hop repeats the full
-  parse→resolve→classify→pin cycle.
-- Refusal = `FetchResult(error="blocked")`; `blocked` and
-  `blocked_by_host` join `FAILURE_REASONS` (code-enforced, zero
-  schema).
+- **Pinned-IP connect** *(redesigned rev 2, blocker finding 5 —
+  httpcore pools connections keyed by URL origin, so swapping
+  host→IP in the URL corrupts pooling and SNI)*: the URL keeps its
+  hostname (pooling stays correctly hostname-keyed; TLS verification
+  and SNI stay natural) and the pinning lives in a **custom httpcore
+  `NetworkBackend`** whose `connect_tcp` resolves the hostname,
+  classifies every answer, and dials only a validated address —
+  resolution thereby runs **under the transport's connect timeout**
+  (also closing finding 7: no unbounded pre-request DNS step).
+  Honest fallback if the backend seam fights us at build: a
+  non-pooled per-request connection path (pooling loss is acceptable
+  at concurrency 10) — never a fallback that reintroduces
+  check-then-reresolve. Each manual redirect hop repeats the full
+  parse→classify cycle; the backend validates at every connect by
+  construction.
+- Refusal = `FetchResult(error="blocked")`; `blocked` ·
+  `blocked_by_host` · `fetch_error` (rev 2, finding 10: the
+  reason for an escaped raise — `fetch_failed` is a STATUS in the
+  schema CHECK, not a reason) join `FAILURE_REASONS` (code-enforced,
+  zero schema).
+- **Failure-reason priority across a doc's cascade** *(rev 2,
+  finding 9 — as-built "last failure wins" would let a DOI-fallback
+  404 overwrite a paywall signal)*: the recorded reason is the
+  highest-priority across all attempted URLs — `paywall` >
+  `blocked_by_host` > `blocked` > `too_large` > `timeout` >
+  `fetch_error` > `empty` > `not_found` > `no_url`; the attempts
+  trail keeps every per-URL outcome verbatim.
 - Log hygiene: every log/event line derived from a URL carries
   scheme+host+path only (`_redact_url` helper, test-pinned); the
   verbatim URL persists only in the DB attempts trail +
@@ -91,12 +145,15 @@ fast-worker, brief-unwritable → lead), record substitutions in
   `^10\.\d{4,9}/\S{1,200}$` (control chars rejected), append
   `https://doi.org/<percent-encoded doi>` as the LAST cascade entry
   if not already present.
-- Landing-page discovery: when a fetch returns HTML, extract
-  `<meta name="citation_pdf_url">` (lxml, already in tree; fallback
-  regex for malformed HTML is NOT built — no meta tag → no
-  discovery); at most ONE discovered URL per landing page, appended
-  to that doc's cascade (full guard set applies), recorded in the
-  attempts trail as `discovered_from=<host+path>`.
+- Landing-page discovery *(rev 2, blocker finding 1 — restored to
+  the contract's full shape)*: when a fetch returns HTML, extract
+  `<meta name="citation_pdf_url">` (lxml, already in tree); when the
+  meta tag is absent, a **bounded obvious-PDF-anchor scan** — first
+  `<a href>` whose path ends `.pdf` (case-insensitive, query
+  ignored), same-host anchors preferred over cross-host. Either way
+  at most ONE discovered URL per landing page, appended to that
+  doc's cascade (full guard set applies), recorded in the attempts
+  trail as `discovered_from=<host+path>`.
 
 **Ingest pipeline shape (decision 5 — plan-designed):** keep the
 as-built cascade-round structure; inside each round the fetch step
@@ -115,11 +172,16 @@ escaped raise into a reason-coded `fetch_failed` and logs it.
 "ingested on the text in hand" substrate for a failed-fetch doc IS
 its envelope snapshot — already snapshotted, chunked and embedded at
 acquire; no duplicate snapshot rows. Concretely:
-- `synthesise.py` chunk loader (the `full_text_status == "ingested" |
-  text_basis == "full_text"` WHERE clause, ~`synthesise.py:820`)
-  widens to: full-text chunks where ingested, **else the doc's
-  envelope chunks** — every loaded chunk carries `text_basis`
-  (`full_text` from the winning snapshot, else `abstract_only`).
+- **Both loaders widen** *(rev 2, blocker finding 2 — the retrieval
+  path loads separately)*: `synthesise.py`'s claim/corpus loader
+  (the `full_text_status == "ingested" | text_basis == "full_text"`
+  WHERE clause, ~`synthesise.py:820`) AND
+  `synthesis_tools.build_retrieval_scope` (same filter shape,
+  `synthesis_tools.py:698`) widen to: full-text chunks where
+  ingested, **else the doc's envelope chunks** — every loaded chunk
+  carries `text_basis` (`full_text` from the winning snapshot, else
+  `abstract_only`); `ChunkSearchResult` carries it through
+  retrieval.
 - `ChunkInfo` gains `text_basis`; `search_chunks` records expose it;
   chunk-claim citation annotation payloads carry it (the label the
   contract requires on citations); the grounding-judge envelope's
@@ -140,7 +202,10 @@ gains one instruction line + record field documenting
 document's own abstract; cite them as such — claims resting on them
 are abstract-grounded"). Wire-compatible text edit; PROMPT_VERSION
 bumps to `synthesise_section_v2` as provenance (015 rev-3.6c framing:
-provenance, not a gate).
+provenance, not a gate). Contract fit *(rev 2, finding 11)*: the
+contract's "zero new prompts" means no new SURFACE — clarified as
+contract rev 2.6; this is one existing-prompt text edit riding
+decision 9's widening, lead-authored.
 
 **Fixture-corpus relocation (decision 12):**
 - Moves: `src/policy_atlas/data/fulltext/*` +
@@ -196,30 +261,40 @@ loading touches every ingest-marked test)**
 **Phase 2 — the live fetcher (verify-fast gate — genuinely new
 module, no schema/reader contact)**
 3. `fetch_live.py`: guard set (userinfo/scheme/IP-classify-all-
-   answers/pinned connect), manual redirect loop, timeout, streaming
-   size cap + in-flight accounting, per-host politeness + global
-   concurrency, retry set, magic-byte/HTML/charset classification
-   (008 parse contract preserved: PDF-as-octet-stream never reaches
-   the plain-text parser), the fetcher-side access ladder +
-   `PAYWALL_MARKERS`, in-run cache, `_redact_url` log hygiene,
-   injectable clock + transport seams for tests. — **codex** *(the
-   hardening core; judgment-bearing; machine-verifiable via
-   transport-stubbed tests)*
-4. Recall aids: `candidate_urls` DOI fallback (validation +
-   encoding) + landing-page `citation_pdf_url` extraction helper.
-   — **fast-worker** *(small pure functions from an exact spec;
-   integration into the cascade is task 5's)*
+   answers/pinned-connect NetworkBackend per the constants block),
+   manual redirect loop, timeout, streaming size cap + in-flight
+   accounting, per-host politeness + global concurrency, retry set,
+   reject-all cookie policy, magic-byte/HTML classification (008
+   parse contract preserved: PDF-as-octet-stream never reaches the
+   plain-text parser), the fetcher-side access ladder +
+   `PAYWALL_MARKERS`, error-cache + in-flight dedup, `_redact_url`
+   log hygiene, injectable clock + transport seams for tests.
+   — **codex** *(the hardening core; judgment-bearing;
+   machine-verifiable via transport-stubbed tests)*
+4. *(moved to Phase 3 — rev 2, finding 3: `candidate_urls` lives in
+   `ingest_full_text.py`; reader contact, full-verify gate.)*
 
 **Phase 3 — ingest pipeline + wiring (full `make verify` gate —
 ingest-adjacent)**
+4. Recall aids: `candidate_urls` DOI fallback (validation +
+   encoding) + landing-page discovery helper (`citation_pdf_url`
+   meta + bounded obvious-PDF-anchor scan). — **fast-worker** *(small
+   pure functions from an exact spec; integration into the cascade
+   is task 5's)*
 5. `ingest_full_text.py`: bounded-parallel fetch feeding the parse
    pool within cascade rounds + `MAX_INFLIGHT_BYTES` backpressure +
    discovery-hook wiring (≤1 discovered URL joins the doc's cascade)
-   + ingest-side OA cross-check refinement + belt-and-braces
-   isolation + summary counts growth (per-reason + bytes +
-   wall-clock). Write order and fixture-path behaviour unchanged
-   (determinism test-pinned). — **codex** *(concurrency surgery in
-   the pipeline's core loop; multi-constraint coherence)*
+   + ingest-side OA cross-check refinement + **failure-reason
+   priority across the cascade** (rev 2, finding 9) +
+   belt-and-braces isolation (`fetch_error` reason) + **the
+   `_parse_html` charset fix** (rev 2, finding 4 — bytes pass to
+   trafilatura undecoded per contract decision 6; UTF-8-replace only
+   on the plain-text path; as-built decodes first,
+   `ingest_full_text.py:383-389`) + summary counts growth
+   (per-reason + bytes + wall-clock). Write order and fixture-path
+   behaviour unchanged (determinism test-pinned). — **codex**
+   *(concurrency surgery in the pipeline's core loop;
+   multi-constraint coherence)*
 6. Harness/skeleton: `LiveDocumentFetcher` behind the one live flag;
    **every profile gains the ingest leg** (mandatory spine — rapid
    profile chain grows; deep unchanged); live-mode construction
@@ -231,10 +306,12 @@ reader contact)**
 7a. `synthesise_section_v2` prompt TEXT delta (the one text_basis
    rule + record-field doc). — **lead** *(prompt-bearing, AGENTS.md —
    never delegated)*
-7b. Substrate widening implementation per the constants block:
-   loader WHERE widening, `ChunkInfo.text_basis`, search_chunks
-   record field, citation annotation label, judge-envelope chunk
-   field, corpus-profile gating generalisation +
+7b. Substrate widening implementation per the constants block —
+   **BOTH loaders** (rev 2, blocker finding 2): `synthesise.py` WHERE
+   widening + `synthesis_tools.build_retrieval_scope`,
+   `ChunkInfo.text_basis` + `ChunkSearchResult.text_basis`,
+   search_chunks record field, citation annotation label,
+   judge-envelope chunk field, corpus-profile gating generalisation +
    `no_groundable_substrate` narrowing. Zero prompt-text authorship.
    — **codex** *(reader-contact surgery against a fully-authored
    spec)*
@@ -288,8 +365,13 @@ wall-clock + bytes recorded;
 (b) the mandatory-spine chain smoke: acquire → screen → classify →
 appraise → ingest → synthesise over the live corpus — synthesise
 mints chunk-cited claims over live-fetched full text (discharges the
-015 rev-3.14 minus-`ingest` deviation); at least one failed-fetch doc
-observed as a labelled abstract-basis substrate entry (rev 2.5);
+015 rev-3.14 minus-`ingest` deviation); **at least one failed-fetch
+doc observed as a labelled abstract-basis substrate entry — made
+deterministic** (rev 2, finding 12): if the scope happens to fetch
+100% clean, extend/re-scope until a failed-fetch doc exists; if that
+still fails (implausible live), the approved fallback is the
+scripted-backend end-to-end test's labelled-citation evidence,
+recorded explicitly in verification.md;
 (c) SSRF guards at test level only (no live probe);
 (d) log-hygiene grep over the run's logs: no query strings from
 fetched URLs (structural test + live grep);
@@ -312,7 +394,8 @@ over them). ≤ 250K reasoning / ≤ 500K fast-worker.
 
 Full `make verify`: Phase 0 baseline · Phase 1 (fixture-loading
 surface under every ingest test) · Phase 3 (ingest-adjacent core
-loop) · Phase 4 (synthesise reader contact) · Phase 5 · Phase 6 exit.
-**Phase 2 alone gates on `make verify-fast`** (a genuinely new module
-with no schema or reader contact — the only consolidation this slice
-supports; everything else touches readers or the pipeline core).
+loop — now including the recall-aid helpers, rev 2 finding 3) ·
+Phase 4 (synthesise reader contact) · Phase 5 · Phase 6 exit.
+**Phase 2 alone gates on `make verify-fast`** (after rev 2 it is
+genuinely only the new `fetch_live.py` module — no schema or reader
+contact; the only consolidation this slice supports).

@@ -22,6 +22,11 @@ specs in [docs/specs/](../../specs/index.md).
 > never refers to the orchestrator's analysis plan-as-object.
 >
 > **Revision history:**
+> - **rev 2.6** (2026-07-09, minor clarification from the PLAN-stage
+>   adversarial review, finding 11): "zero new prompts" precised to
+>   "zero new prompt SURFACES" — the rev-2.5 widening carries one
+>   lead-authored existing-prompt text edit (`synthesise_section_v1 →
+>   v2`, the text_basis rule); no settled decision changed.
 > - **rev 2.5** (2026-07-09, user call closing the rev-2.4 reopened
 >   question — findings 4+5 resolved **spec-faithful**): components
 >   §4's flag-not-drop ingestion clause enacted in full — failed-fetch
@@ -557,8 +562,13 @@ PR landing:
   justification in the repo. No other CI change.
 - **Public interfaces**: none — no new Plan/Config fields; the live
   switch already exists.
-- **No new LLM surfaces** — zero new prompts (first live-path slice
-  with no egress-side generation).
+- **No new LLM surfaces** — zero new prompt surfaces (first
+  live-path slice with no egress-side generation). *(rev 2.6
+  clarification, plan-review finding 11)*: decision 9's rev-2.5
+  widening carries **one existing-prompt text edit** —
+  `synthesise_section_v1 → v2`, the single `text_basis` labelling
+  rule, lead-authored, wire-compatible; a provenance bump, not a new
+  surface.
 
 ## Public / private boundary
 
