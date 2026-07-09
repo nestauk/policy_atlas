@@ -4,7 +4,9 @@ Core completion criteria (rev 3.1 — depth-graded search capability,
 screen-in-the-loop, adjudicated filter grammar). The task is **done only
 if every box holds** — otherwise it is in progress, not done.
 
-1. [ ] Implementation satisfies [contract.md](contract.md) (rev 2).
+1. [ ] Implementation satisfies [contract.md](contract.md) — the
+       approved contract as amended at the gate (rev 3.12 approved;
+       revs 3.13–3.14 amendments included).
 2. [ ] `make verify` passes — deterministic and egress-free (fixture
        defaults; scripted backends for loop logic, no RNG anywhere
        (rev 3.10 — fixed allocation); live transport stubbed in the
@@ -84,11 +86,13 @@ if every box holds** — otherwise it is in progress, not done.
 13. [ ] Known gaps and deferred seams recorded — live-`SearchBackend`,
         Arm-B and thin-base-trigger entries in
         [docs/deferred.md](../../deferred.md) marked discharged; the
-        rev-3 seam set recorded (select-as-tool / shared purpose-fit
-        ranking tool · Overton-arm-B cross-backend snowball · S2 ·
-        region mapping · caching if plan-declined · citation-floor
-        knob · eval-reuse pointers).
-14. [ ] Components §1 spec flow-back landed with a `log.md` entry; the
+        **full seam list in contract.md § Verification evidence
+        expected** recorded verbatim (rev 3.14: incl. retrieval-boost
+        grammar v2 · select-as-tool · tool-wide depth/time-budget
+        gradation · the rev-3.10 loop seams · filter-vocabulary
+        growth · study-geography extraction field · the eval-reuse
+        pointer set).
+14. [ ] Components §1 + §2 spec flow-back landed with a `log.md` entry; the
         ADR (depth-graded agentic search adoption) is Accepted and
         signed off.
 15. [ ] Tier-3 review stack ran (contract verifier · code review ·

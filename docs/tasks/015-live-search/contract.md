@@ -3,10 +3,12 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **APPROVED rev 3.12 · amended rev 3.13 post-approval**
-> (transport: httpx + the declaration-only dependency promotion,
-> user-approved 2026-07-09) — contract-stage adversarial review
-> running; planning next.
+> **Status:** **APPROVED rev 3.12 · amended revs 3.13–3.14
+> post-approval** (3.13: httpx transport + declaration-only dependency
+> promotion, user-approved 2026-07-09 · 3.14: adversarial review
+> adjudicated, 13/13 findings adopted — the one schema-vocabulary
+> delta, `'target_reached'`, rides the already-approved migration) —
+> planning next.
 > Contract approved (before planning): **2026-07-09 · Shabeer Rauf**
 > (rev 3.12, covering the full gated set: runtime egress — transport +
 > three generation surfaces + the in-loop `screen_v1` volume change +
@@ -20,6 +22,30 @@ specs in [docs/specs/](../../specs/index.md).
 > consequential design decision; drafted at step 4).
 >
 > **Revision history:**
+> - **rev 3.14** (2026-07-09, contract-stage adversarial review
+>   adjudicated — Codex, 13 findings: 1 blocker · 8 major · 4 minor,
+>   **13/13 adopted**; all consistency repairs, no settled decision
+>   challenged). **BLOCKER fixed**: the stop-condition widening gains
+>   `'target_reached'` (the loop's successful exit had no honest
+>   value; the round cap is classified as a budget → records
+>   `budget_exhausted`) — same single migration, vocabulary grows by
+>   one. **Majors**: the provider-URL prohibition in Stop conditions +
+>   the Out list now names the Overton `next_page_url` pagination
+>   exception instead of contradicting it · decision 19's
+>   every-breach-is-`budget_exhausted` carves out the rapid
+>   wall-clock breach (`breadth_truncated`, per rev 3.11) · decision
+>   18's stale "`pp` unverified" corrected (pinned live at rev 3.3;
+>   `pp` sets page size deliberately) · "screen's code expected
+>   unchanged" narrowed to judgment/idempotency machinery (its prompt
+>   assembly gains `title_source` per revs 3.7/3.8) · the §9 smoke
+>   deviation named (rapid shape minus `ingest` — live fetch is 016;
+>   noted in the flow-back) · decision 13's "same coverage record"
+>   disambiguated (same mechanism; one row per acquire round) · rubric
+>   item 1's stale "rev 2" → the approved contract as amended · rubric
+>   item 13 now references the contract's full seam list. **Minors**:
+>   Deliverable + rubric 14 say §1+§2; the rev-3.8 sweep note's
+>   `search_chunks` claim precision-fixed (it flattens tags; `lookup`
+>   reads full provenance).
 > - **rev 3.13** (2026-07-09, post-approval transport amendment — user
 >   challenge + approval): **transport = sync `httpx.Client`, replacing
 >   stdlib `urllib`** — the urllib choice was a ponytail overreach: no
@@ -474,7 +500,7 @@ PR landing:
 - Tests (transport-stubbed, scripted-backend loop tests — fully
   deterministic, rev 3.10) + `verification.md` with the pinned live
   check.
-- Components §1 spec flow-back + `log.md` entry; `deferred.md` +
+- Components §1 + §2 spec flow-back + `log.md` entry; `deferred.md` +
   knowledge updates.
 
 ## Read first
@@ -668,7 +694,10 @@ PR landing:
     characterise is orchestrator-discretionary in general and is
     included in THIS smoke deliberately so the rev-3.8 tag rows —
     series × overton, `source_tags` — are confirmed in its
-    distributions). Live LLM backends, mini-class over ~50 envelopes
+    distributions; the chain is §9's rapid shape **minus its `ingest`
+    leg** — a deliberate, flow-back-noted deviation: live fetch is
+    016, so the smoke synthesises over metadata envelopes — rev 3.14).
+    Live LLM backends, mini-class over ~50 envelopes
     plus one rapid synthesise: low single-digit dollars. **No
     deep-chain e2e** (the 014 lesson — no select/extract/group legs;
     017 owns the dress rehearsal).
@@ -697,7 +726,9 @@ PR landing:
     unknown values are a structural failure (plan-compile fails closed).
     One component, two strategies: a deep run is not a different
     component, it is the same governed `search` verb exercised harder —
-    same events, same coverage record, same dedup, same mappers. The
+    same events, same coverage-record **mechanism** (rev 3.14
+    disambiguation: a deep run writes one coverage row per acquire
+    round, never one per scope), same dedup, same mappers. The
     skeleton's deep profile sets `deep`; the rapid profile (and every
     default) sets `rapid`. Depth is recorded on the coverage record
     (inside `scope_filters`' sibling context or the `backends` array
@@ -806,13 +837,14 @@ PR landing:
       when it's not worth it, not only when we run out): the loop
       stops when the **confident-relevant count** (effective relevant
       rows at/above a plan-pinned confidence floor) reaches the
-      plan-pinned target · OR the **discovery rate collapses**
+      plan-pinned target (records `target_reached` — rev 3.14) · OR
+      the **discovery rate collapses**
       (`short_circuit` — new confident-relevant per docs-evaluated
       under a floor; a RATE, not a raw per-round count, so round-size
       variance can't fake saturation — rev 3.10) · OR a budget bites
-      (`budget_exhausted`) · OR the round cap (**pinned at 3** —
+      — including the round cap, which is a budget (**pinned at 3** —
       rev 3.10: feedback gains plateau at round 2–3 and reformulation
-      measurably harms past 3–4). The coverage verdict remains
+      measurably harms past 3–4) — recording `budget_exhausted`. The coverage verdict remains
       coverage-adequacy — **never a recall guarantee** (the SR field's
       ≥95%-recall convention is a different claim; a calibrated
       recall-estimate surface is a recorded seam).
@@ -904,8 +936,10 @@ PR landing:
       `breadth_truncated` when a cap cuts results. OpenAlex pages via
       `per-page` (≤200, live-verified) + page/cursor params. Overton
       pages via the **documented driver, the response `next_page_url`**
-      (page size is server-fixed ~20; V2's `pp` param is unverified —
-      not used) — this is a provider-supplied URL carrying the API key,
+      with **`pp` setting the page size deliberately** (rev 3.14 stale-
+      text fix: the rev-3.3 pinning session verified `pp` live and the
+      default page size as 50) — `next_page_url` is a provider-supplied
+      URL carrying the API key,
       so following it is the **one guarded exception** to decision 9's
       no-provider-URL rule: scheme+host validated against the pinned
       literal before the request (anything else → backend error), key
@@ -995,7 +1029,11 @@ PR landing:
     budgets** (decision 15, rev 3.11: rapid ≈ 30 s ·
     deep ≈ 2–3 min), per-depth result caps (decision 6), the
     confident-relevant target + floor (decisions 15/17). Every budget
-    breach is an honest stop (`budget_exhausted`), never a silent trim.
+    breach is an honest stop, never a silent trim — `budget_exhausted`
+    in the deep loop; the one carve-out (rev 3.14 consistency fix) is
+    the rapid wall-clock breach, which stops the remaining fan-out
+    calls as `breadth_truncated` per rev 3.11 (rapid has no loop to
+    exhaust).
     The loop summary counts, per round: queries executed per backend,
     new docs acquired/deduped/skipped per verb, screened/
     confident-relevant deltas, suggestions grounded/dropped, arm
@@ -1097,10 +1135,13 @@ PR landing:
       the `source` block) remain noted for characterise's landscape
       axes; nothing consumes them in 015.
       **Ripple sweep — verified as-built, no other component changes**
-      *(rev 3.8 sweep, user question)*: characterise
-      (`characterise.py:346-354`), select (`select.py:1272-1283`) and
-      synthesise's tool layer (`synthesis_tools.py:729-732`) already
-      read `source_tag` at `(tag_type, asserted_by, tag)` grain —
+      *(rev 3.8 sweep, user question; precision fix rev 3.14)*:
+      characterise (`characterise.py:346-354`) and select
+      (`select.py:1272-1283`) read `source_tag` at
+      `(tag_type, asserted_by, tag)` grain; synthesise's `lookup`
+      path reads full tag provenance
+      (`synthesis_tools.py:1517-1535`) while its `search_chunks`
+      path flattens to tag strings (`synthesis_tools.py:727-748`) —
       classify was the lone raw-field outlier. The new 015 tag rows
       (series as methodological_structural×overton; publisher
       `source_tags`) flow into those readers **additively, zero code
@@ -1123,7 +1164,9 @@ PR landing:
 
 - **In:** live transport module (decisions 1–10) · depth directive +
   rapid/deep strategies (13–15, deep = acquire↔screen rounds; screen's
-  code expected unchanged — its incremental idempotency and
+  **judgment/idempotency machinery** expected unchanged (rev 3.14
+  narrowing: its prompt assembly DOES change — `title_source` joins
+  the payload per revs 3.7/3.8) — its incremental idempotency and
   effective-screen helper are the consumer contract) · three prompts
   (`search_queries_v1`, `search_reformulate_v1`, `search_suggest_v1`) ·
   protocol growth + fixture-backed verbs (16) · screen-informed
@@ -1136,7 +1179,9 @@ PR landing:
   §1 + §2 flow-back · tests + `verification.md` · `deferred.md` +
   knowledge updates.
 - **Out:** live `DocumentFetcher` (016 — no full text fetched; no
-  provider-supplied URL fetched) · **Semantic Scholar third backend**
+  provider-supplied **content/document** URL fetched — the validated
+  Overton `next_page_url` pagination stays the decisions-9/18
+  exception, rev 3.14) · **Semantic Scholar third backend**
   (user-settled pair; the R&D's battle-tested S2 client is the fast
   path when that seam opens) · **Overton snowballing via cross-backend
   DOI resolution** (the named Overton-arm-B seam — decision 16) ·
@@ -1184,7 +1229,11 @@ contract 🛑**:
    versions updated as provenance. Named here so the egress approval
    covers volume and inputs, not just the surfaces.
 2. **Schema:** one migration widening `ck_scov_stop_condition` to admit
-   `'short_circuit'` and `'budget_exhausted'` (existing three values
+   `'short_circuit'`, `'budget_exhausted'` and `'target_reached'`
+   *(rev 3.14, adversarial blocker fix: the two-value widening left
+   the loop's successful exit — confident-relevant target met — with
+   no honest stop value; the round cap is classified as a budget and
+   records `budget_exhausted`)* (existing three values
    stand; `saturated` stays out per spec). No new tables/columns; table
    count stays 25.
 3. **Public interface:** the backend-scope `Config`/`Plan` field
@@ -1231,7 +1280,9 @@ deferred seams stay seams.
 
 ## Stop conditions
 
-Template set. Additionally: any need to fetch a provider-supplied URL
+Template set. Additionally: any need to fetch a provider-supplied
+**content/document** URL (the validated Overton `next_page_url`
+pagination is the one contracted exception — decisions 9/18)
 (016's SSRF surface) · any new dependency · Overton returning a shape
 the mappers can't consume (halt and re-ground, don't patch ad hoc) ·
 loop cost/latency in the live check blowing past budgets with no
