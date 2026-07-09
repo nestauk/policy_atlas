@@ -698,8 +698,14 @@ def test_rapid_result_cap_http_budget_and_wall_clock_stop(
     generation = ScriptedGenerationBackend(
         queries=[_wire_queries([f"cap query {index}" for index in range(5)])]
     )
-    many_records = [oa_record(f"cap-{index}") for index in range(80)]
-    capped_backend = ScriptedBackend(scripts={"search": [many_records]})
+    # The run cap is distributed across the planned fan-out (50 // 15 = 3 per
+    # call) so no single query can consume it — a first-live-check regression:
+    # call #1 returning the full cap silently collapsed the fan-out to one
+    # load-bearing query, the exact decision-14 failure mode.
+    scripted_pages: list[ScriptResult] = [
+        [oa_record(f"cap-{page}-{index}") for index in range(10)] for page in range(15)
+    ]
+    capped_backend = ScriptedBackend(scripts={"search": scripted_pages})
 
     capped = run_search(
         conn,
@@ -710,10 +716,10 @@ def test_rapid_result_cap_http_budget_and_wall_clock_stop(
         generation_backend=generation,
     )
 
-    assert len(capped_backend.calls) == 1
-    assert capped_backend.calls[0].max_results == 50
-    assert capped["results_returned"] == 50
-    assert capped["search"]["queries_executed"]["openalex"] == 1
+    assert len(capped_backend.calls) == 15
+    assert all(call.max_results == 3 for call in capped_backend.calls)
+    assert capped["results_returned"] == 45
+    assert capped["search"]["queries_executed"]["openalex"] == 15
 
     second_run = seed_run(conn, project_id)
     generation_2 = ScriptedGenerationBackend(

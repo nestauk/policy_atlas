@@ -1234,21 +1234,33 @@ def run_search(
         queries, overton_paraphrases = validated_queries(wire)
 
         for backend in backends:
+            # Same cap-distribution rule as the rapid fan-out: this round's
+            # search-arm calls share the episode's remaining result cap.
+            episode_remaining = max(
+                1,
+                constants["result_cap_per_backend"] - raw_results_by_backend[backend.name],
+            )
             if backend.name == "openalex":
+                planned = min(len(queries), REFORMULATE_CALL_CAP) + DIVERSITY_CALL_MIN
+                quota = max(1, episode_remaining // max(1, planned))
                 for query in queries[:REFORMULATE_CALL_CAP]:
                     execute_plan(
                         backend,
                         _PlannedCall(backend.name, query, "generated"),
                         arm="reformulate",
+                        max_records=quota,
                     )
                     if stop_all:
                         break
             elif backend.name == "overton":
+                planned = min(len(overton_paraphrases), 2)
+                quota = max(1, episode_remaining // max(1, planned))
                 for paraphrase in overton_paraphrases[:2]:
                     execute_plan(
                         backend,
                         _PlannedCall(backend.name, paraphrase, "paraphrase"),
                         arm="reformulate",
+                        max_records=quota,
                     )
                     if stop_all:
                         break
@@ -1486,10 +1498,15 @@ def run_search(
                 queries=queries,
                 overton_paraphrases=overton_paraphrases,
             )
+            # Distribute the run cap across the planned fan-out so no single
+            # query can consume it — the first live check showed call #1
+            # returning the full cap and silently collapsing the fan-out to
+            # one load-bearing query (the exact decision-14 failure mode).
+            quota = max(1, constants["result_cap_per_backend"] // max(1, len(plans)))
             backend_calls: list[ExecutedCall] = []
             generated_groups: dict[str, list[ExecutedCall]] = {}
             for plan in plans:
-                call = execute_plan(backend, plan)
+                call = execute_plan(backend, plan, max_records=quota)
                 if call is not None:
                     backend_calls.append(call)
                     if plan.group_key is not None:
