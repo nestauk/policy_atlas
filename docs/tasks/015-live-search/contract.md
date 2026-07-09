@@ -17,9 +17,9 @@ specs in [docs/specs/](../../specs/index.md).
 > Plan/Config field · the components §1+§2 spec flow-back — and
 > ratifying the rev-3.10 Thompson-sampling cut and decision 12's
 > no-citation-floor) ·
-> Plan approved (before implementation): _date · who_ · ADR: _expected:
-> one_ (depth-graded agentic search adoption — the Arm-B fold is a
-> consequential design decision; drafted at step 4).
+> Plan approved (before implementation): **2026-07-09 · Shabeer Rauf**
+> (plan rev 2, adversarially reviewed 9/9 adopted) · ADR:
+> [0012](../../adr/0012-depth-graded-agentic-search.md) Accepted.
 >
 > **Revision history:**
 > - **rev 3.14** (2026-07-09, contract-stage adversarial review

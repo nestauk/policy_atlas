@@ -27,8 +27,9 @@
 > redaction tests), not just `api_key|sk-` labels.
 >
 > Rev 1 base drafted against contract **rev 3.14** (approved
-> 3.12, amended 3.13–3.14 at the gate). Awaiting the plan 🛑. ADR due
-> at plan confirmation (step 4):
+> 3.12, amended 3.13–3.14 at the gate). **Plan approved: 2026-07-09 ·
+> Shabeer Rauf (rev 2, with executor routing + the Codex-exhaustion
+> fallback).** ADR written at confirmation (step 4):
 > **ADR 0012 — depth-graded agentic search** (screen-in-the-loop as the
 > one relevance surface · the depth spectrum's extensible constants
 > table · fixed allocation over bandits) — capability-class decisions.
