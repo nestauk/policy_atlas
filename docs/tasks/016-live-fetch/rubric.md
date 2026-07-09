@@ -47,7 +47,8 @@ otherwise it is in progress, not done.
         exact end-to-end commands run.
 14. [ ] Known gaps and deferred seams updated in
         [docs/deferred.md](../../deferred.md): discharged entries marked
-        (live `DocumentFetcher`; stage-2 windowing rider if landed), kept
+        (live `DocumentFetcher`; the pip-audit CI pre-registration;
+        stage-2 windowing rider if landed), kept
         seams intact (docling/OCR · multi-PDF assembly · caching ·
         component-progress protocol · corpus relocation · per-depth fetch
         budgets).

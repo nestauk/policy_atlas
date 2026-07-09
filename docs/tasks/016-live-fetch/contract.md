@@ -15,6 +15,15 @@ specs in [docs/specs/](../../specs/index.md).
 > never refers to the orchestrator's analysis plan-as-object.
 >
 > **Revision history:**
+> - **rev 2.2** (2026-07-09, user gate call): **pip-audit CI step
+>   folded in-slice** — the CI gate is approved at this contract's 🛑
+>   (one dependency-vulnerability audit job + a documented
+>   ignore-list policy with written justifications). Rationale: 016
+>   is the slice that turns pymupdf/lxml into parsers of arbitrary
+>   hostile web bytes, so the standing known-CVE control lands with
+>   the exposure, not after it. Discharges the deferred.md
+>   pre-registration ("a pip-audit-style dependency check belongs in
+>   CI now that binary parsing deps are in the tree").
 > - **rev 2.1** (2026-07-09, two user probes at the gate): **(a)**
 >   decision 11's invariant sharpened — peak memory bounded by window
 >   budgets, never corpus full-text size (the as-built loader holds
@@ -108,6 +117,8 @@ PR landing:
   includes ingest.
 - Tests (transport-stubbed, zero-egress; SSRF guard unit tests) +
   `verification.md` with the pinned live check (decision 12).
+- The **pip-audit CI job** + ignore-list policy (rev 2.2 — the CI
+  gate's one approved addition).
 - `deferred.md` + knowledge updates (discharged entries marked; new
   seams recorded).
 
@@ -154,6 +165,7 @@ PR landing:
   gains the ingest leg (decision 9).
 - `screen.py` stage-2 loader — the bounded windowing rider
   (decision 11) only.
+- CI config — the pip-audit job only (rev 2.2).
 - Spec flow-back: components §4/§9 + capability.md mandatory-spine
   statement; `deferred.md`; knowledge docs; ADR.
 
@@ -392,9 +404,11 @@ PR landing:
   (including declaration-only promotion of an existing transitive,
   the 015 rev-3.13 precedent), it comes back through the dependency
   gate with its case; it is not blocked by this contract.
-- **CI**: unchanged in-slice. The deferred `pip-audit` step is
-  surfaced as a gate question — if approved it lands as its own tiny
-  follow-up, not smuggled in here.
+- **CI** *(rev 2.2 — approved at this gate)*: one addition rides this
+  slice — a **`pip-audit` dependency-vulnerability job** (advisories
+  from the PyPA/OSV databases against the lockfile), with an explicit
+  ignore-list policy: every ignored advisory carries a written
+  justification in the repo. No other CI change.
 - **Public interfaces**: none — no new Plan/Config fields; the live
   switch already exists.
 - **No new LLM surfaces** — zero new prompts (first live-path slice
