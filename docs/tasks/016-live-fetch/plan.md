@@ -301,8 +301,10 @@ ingest-adjacent)**
    asserts. — **codex** *(profile-semantics change; the 015 task-9
    lesson: skeleton briefs are not self-sufficient for fast-worker)*
 
-**Phase 4 — substrate widening (full `make verify` gate — synthesise
-reader contact)**
+**Phase 4 — substrate widening + stage-2 rider (full `make verify`
+gate — reader contact on BOTH synthesise and screen: tasks 7a/7b
+touch the synthesise loaders, task 8 touches `screen.py`'s stage-2
+loader per contract decision 11)**
 7a. `synthesise_section_v2` prompt TEXT delta (the one text_basis
    rule + record-field doc). — **lead** *(prompt-bearing, AGENTS.md —
    never delegated)*
