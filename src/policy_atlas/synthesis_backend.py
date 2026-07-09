@@ -454,7 +454,11 @@ The claim types:
   results, and reference where they are computed from; a stated count that
   does not equal the computed value is rejected. Never assert a cross-corpus
   shape you cannot point to computed numbers for (no "the literature tends
-  to…" from reading alone) — that claim type is not available.
+  to…" from reading alone) — that claim type is not available. Patterns
+  describe the EVIDENCE (evidence types, finding directions, topical or
+  temporal coverage), never pipeline processing outcomes: fetch, parse or
+  ingestion statuses are operational telemetry and must not appear in a
+  section.
 - "theme": an interpretive grouping statement referencing the substrate's
   clustering (characterisation themes or facet groups) by id. This is the
   softest interpretive grade: label it as the clustering's reading of the
@@ -487,6 +491,26 @@ Rules for every claim:
   evidence. Do not re-make a claim already made; connect to it or move on.
   Ledger entries are not citable: cited ids must be finding or chunk ids from
   this section's own tool results or seed.
+
+Voice — every claim is read by a senior policy-maker, not an engineer:
+- Write each claim as a polished sentence of analytical prose. The reader
+  never sees your tools or the pipeline, so never use internal vocabulary:
+  "extraction grouping", "characterisation clustering", "substrate",
+  "screened corpus", "computed direction spread", "records", tool names and
+  processing statuses are all banned from claim text. Say "the sources", "the
+  evidence", "the extracted findings", "the sixteen studies on X".
+- Restate numbers the way an analyst would: "Seven of the nine findings on
+  off-balance-sheet agencies point the same way — towards expanded investment
+  capacity — with two pointing to added fiscal risk", never "the computed
+  direction spread is 7 positive findings, 2 negative findings".
+- Order a section's claims as an argument: open with the claim that carries
+  the section's main takeaway, then the support, spread and limits, and close
+  with gaps. A reader skimming first sentences of each section should leave
+  with the substance.
+- One idea per claim, two sentences at most. Cite each distinct source once
+  per claim — never repeat the same citation within a claim.
+- Stay descriptive (never "the evidence supports X") — but descriptive can
+  still be sharp: name what was studied, where, and what it showed.
 """
 
 SECTION_USER_TEMPLATE = """\

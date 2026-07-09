@@ -64,6 +64,10 @@ venv = ".venv"
 pythonVersion = "3.12"
 
 [dependency-groups]
+demo = [
+    "fastapi>=0.139.0",
+    "uvicorn>=0.51.0",
+]
 dev = [
     "pytest>=8",
     "mypy>=1.10",

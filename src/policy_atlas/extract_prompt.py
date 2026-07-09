@@ -166,6 +166,19 @@ What you must NOT extract — hard rules:
   estimate or mere prevalence, extract it with is_prevalence_only set true.
 - Quotes must be exact verbatim text copied from a segment — never paraphrased,
   never edited, never stitched together from separate places.
+- Aspirational, declarative or hortatory statements are not findings: a
+  communiqué "reaffirming the central role of sound public finances", a plan
+  "committing to" or "encouraging" something, or any statement of intent or
+  principle reports no observed effect — skip them. A finding requires the
+  document to report that something HAPPENED to an outcome.
+- intervention and outcome must each be self-contained and legible to a reader
+  who has not seen the document: expand acronyms the document defines (write
+  "simplified cost options (SCOs)", never bare "SCOs"), name the actual
+  mechanism rather than a document-internal label ("the strategic plan" is not
+  an intervention; "five-year strategic planning by the finance ministry" is),
+  and make the outcome a concrete, observable thing — "quality" or "success"
+  alone is too vague to extract. If a finding cannot be named self-containedly
+  from the document's own words, skip it.
 
 An empty findings list is a legal, expected answer: many documents (policy
 guidance, qualitative studies, commentary) report no intervention-outcome

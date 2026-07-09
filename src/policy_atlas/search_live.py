@@ -251,9 +251,13 @@ class OpenAlexLiveBackend(_TransportMixin):
         sanitized = sanitize_openalex_query(query)
         if not sanitized:
             return []
+        # demo-branch observability: the live UI's search activity reads these
+        log.info("search.query_issued", backend="openalex", query=sanitized)
         filter_parts = [f"title_and_abstract.search:{sanitized}"]
         filter_parts.extend(_openalex_wire_filter_parts(wire_params))
-        return self._fetch_works(filter_parts, max_results=max_results)
+        records = self._fetch_works(filter_parts, max_results=max_results)
+        log.info("search.results_page", backend="openalex", count=len(records))
+        return records
 
     def fetch_citations(
         self, record_id: str, *, max_results: int | None = None
@@ -425,6 +429,8 @@ class OvertonLiveBackend(_TransportMixin):
         limit = _result_limit(max_results, _DEFAULT_MAX_RESULTS)
         if limit == 0:
             return []
+        # demo-branch observability: the live UI's search activity reads these
+        log.info("search.query_issued", backend="overton", query=query)
 
         params = {
             **_overton_wire_params(wire_params),
@@ -466,6 +472,7 @@ class OvertonLiveBackend(_TransportMixin):
             if next_page_url is None:
                 break
             next_url = _validate_overton_next_page_url(next_page_url)
+        log.info("search.results_page", backend="overton", count=len(records))
         return records
 
     def fetch_citations(

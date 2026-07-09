@@ -1,0 +1,352 @@
+[
+ {
+  "project_id": "33c39c6d-8493-41da-8f75-99810af02e5b",
+  "name": "Finance ministries",
+  "question": "What is the evidence on how different structures of finance and economic ministries support economic growth?",
+  "plan": {
+   "check_in": "moderate",
+   "evidence_sources": "both",
+   "focus": [
+    "finance and economic ministry structures",
+    "economic growth objective"
+   ],
+   "question": "What is the evidence on how different structures of finance and economic ministries support economic growth?",
+   "ready": false,
+   "search_depth": "deep",
+   "steps": [
+    {
+     "label": "Search academic research and policy literature \u2014 systematic-style sweep",
+     "stage": "acquire"
+    },
+    {
+     "label": "Sift for relevance",
+     "stage": "screen"
+    },
+    {
+     "label": "Quality-check what's kept",
+     "stage": "appraise"
+    },
+    {
+     "label": "Read the strongest in full",
+     "stage": "ingest_full_text"
+    },
+    {
+     "label": "Map the landscape",
+     "stage": "characterise"
+    },
+    {
+     "label": "Extract and group the findings",
+     "stage": "extract"
+    },
+    {
+     "label": "Write the evidence base \u2014 every claim cited",
+     "stage": "synthesise"
+    }
+   ]
+  },
+  "created_at": "2026-07-09T09:58:22.899090+00:00"
+ },
+ {
+  "project_id": "47fc6618-531a-46ef-bffb-b188a9e62927",
+  "name": "Untitled project",
+  "question": "",
+  "plan": null,
+  "created_at": "2026-07-09T09:58:56.147090+00:00"
+ },
+ {
+  "project_id": "eacd7380-fbd7-434c-827b-6fd850d7dfce",
+  "name": "Untitled project",
+  "question": "",
+  "plan": null,
+  "created_at": "2026-07-09T09:59:35.354667+00:00"
+ },
+ {
+  "project_id": "cd784bb8-b325-4b74-b620-607506704bc0",
+  "name": "Untitled project",
+  "question": "What is the evidence on how the structure and mandates of finance and economic ministries affect economic growth in OECD countries?",
+  "plan": {
+   "check_in": "moderate",
+   "evidence_sources": "both",
+   "focus": [
+    "structures of finance and economic ministries",
+    "promotion of economic growth",
+    "OECD countries",
+    "quick first look",
+    "no extraction stage needed"
+   ],
+   "question": "What is the evidence on how the structure and mandates of finance and economic ministries affect economic growth in OECD countries?",
+   "ready": true,
+   "search_depth": "quick",
+   "steps": [
+    {
+     "label": "Search academic research and policy literature \u2014 quick pass, top sources",
+     "stage": "acquire"
+    },
+    {
+     "label": "Sift for relevance",
+     "stage": "screen"
+    },
+    {
+     "label": "Quality-check what's kept",
+     "stage": "appraise"
+    },
+    {
+     "label": "Read the strongest in full",
+     "stage": "ingest_full_text"
+    },
+    {
+     "label": "Map the landscape",
+     "stage": "characterise"
+    },
+    {
+     "label": "Extract and group the findings",
+     "stage": "extract"
+    },
+    {
+     "label": "Write the evidence base \u2014 every claim cited",
+     "stage": "synthesise"
+    }
+   ]
+  },
+  "created_at": "2026-07-09T10:19:05.815573+00:00"
+ },
+ {
+  "project_id": "d3a76a1c-cc09-46fa-8900-2f679cd482f0",
+  "name": "Untitled project",
+  "question": "",
+  "plan": null,
+  "created_at": "2026-07-09T10:20:45.236155+00:00"
+ },
+ {
+  "project_id": "25804f7b-4c23-4dc4-8bba-2a44b58a0b03",
+  "name": "Untitled project",
+  "question": "",
+  "plan": null,
+  "created_at": "2026-07-09T10:48:51.610773+00:00"
+ },
+ {
+  "project_id": "2b2c85da-457f-4fd3-83b8-1c34174e018f",
+  "name": "Untitled project",
+  "question": "What is the international evidence on how structuring finance and economic ministries \u2014 mandates, authority, coordination, and analytic capacity \u2014 can promote economic growth?",
+  "plan": {
+   "check_in": "moderate",
+   "evidence_sources": "both",
+   "focus": [
+    "finance and economic ministries",
+    "institutional structure linked to economic growth",
+    "international evidence"
+   ],
+   "question": "What is the international evidence on how structuring finance and economic ministries \u2014 mandates, authority, coordination, and analytic capacity \u2014 can promote economic growth?",
+   "ready": true,
+   "search_depth": "deep",
+   "steps": [
+    {
+     "label": "Search academic research and policy literature \u2014 systematic-style sweep",
+     "stage": "acquire"
+    },
+    {
+     "label": "Sift for relevance",
+     "stage": "screen"
+    },
+    {
+     "label": "Quality-check what's kept",
+     "stage": "appraise"
+    },
+    {
+     "label": "Read the strongest in full",
+     "stage": "ingest_full_text"
+    },
+    {
+     "label": "Map the landscape",
+     "stage": "characterise"
+    },
+    {
+     "label": "Extract and group the findings",
+     "stage": "extract"
+    },
+    {
+     "label": "Write the evidence base \u2014 every claim cited",
+     "stage": "synthesise"
+    }
+   ]
+  },
+  "created_at": "2026-07-09T10:49:37.638792+00:00"
+ },
+ {
+  "project_id": "e8ac8418-c679-4831-b8ce-4aac2052c790",
+  "name": "Untitled project",
+  "question": "What is the evidence from international experience on how national finance and economic ministries can be structured to promote economic growth?",
+  "plan": {
+   "check_in": "moderate",
+   "evidence_sources": "both",
+   "focus": [
+    "finance and economic ministry structures",
+    "aim is promoting economic growth",
+    "international focus"
+   ],
+   "question": "What is the evidence from international experience on how national finance and economic ministries can be structured to promote economic growth?",
+   "ready": true,
+   "search_depth": "deep",
+   "steps": [
+    {
+     "label": "Search academic research and policy literature \u2014 systematic-style sweep",
+     "stage": "acquire"
+    },
+    {
+     "label": "Sift for relevance",
+     "stage": "screen"
+    },
+    {
+     "label": "Quality-check what's kept",
+     "stage": "appraise"
+    },
+    {
+     "label": "Read the strongest in full",
+     "stage": "ingest_full_text"
+    },
+    {
+     "label": "Map the landscape",
+     "stage": "characterise"
+    },
+    {
+     "label": "Extract and group the findings",
+     "stage": "extract"
+    },
+    {
+     "label": "Write the evidence base \u2014 every claim cited",
+     "stage": "synthesise"
+    }
+   ]
+  },
+  "created_at": "2026-07-09T11:14:06.139846+00:00"
+ },
+ {
+  "project_id": "01d4d670-b72a-4b10-9cd6-119c1f5bf516",
+  "name": "Reducing childhood obesity",
+  "question": "What works across all settings to reduce childhood obesity?",
+  "plan": {
+   "check_in": "moderate",
+   "evidence_sources": "both",
+   "focus": [
+    "all settings",
+    "rapid search"
+   ],
+   "question": "What works across all settings to reduce childhood obesity?",
+   "ready": true,
+   "search_depth": "quick",
+   "title": "Reducing childhood obesity",
+   "steps": [
+    {
+     "label": "Search academic research and policy literature \u2014 quick pass, top sources",
+     "stage": "acquire"
+    },
+    {
+     "label": "Screen for relevance",
+     "stage": "screen"
+    },
+    {
+     "label": "Quality-check what's kept",
+     "stage": "appraise"
+    },
+    {
+     "label": "Read the strongest in full",
+     "stage": "ingest_full_text"
+    },
+    {
+     "label": "Map the landscape",
+     "stage": "characterise"
+    },
+    {
+     "label": "Extract and group the findings",
+     "stage": "extract"
+    },
+    {
+     "label": "Write the evidence base \u2014 every claim cited",
+     "stage": "synthesise"
+    }
+   ]
+  },
+  "created_at": "2026-07-09T11:59:40.507299+00:00"
+ },
+ {
+  "project_id": "c749cbbf-014b-488a-b7e7-1103bb315d07",
+  "name": "Childhood obesity interventions",
+  "question": "What works to reduce childhood obesity across intervention types?",
+  "plan": {
+   "check_in": "moderate",
+   "evidence_sources": "both",
+   "focus": [
+    "childhood obesity reduction interventions",
+    "all intervention types",
+    "rapid search"
+   ],
+   "question": "What works to reduce childhood obesity across intervention types?",
+   "ready": true,
+   "search_depth": "quick",
+   "title": "Childhood obesity interventions",
+   "steps": [
+    {
+     "label": "Search academic research and policy literature \u2014 quick pass, top sources",
+     "stage": "acquire"
+    },
+    {
+     "label": "Screen for relevance",
+     "stage": "screen"
+    },
+    {
+     "label": "Quality-check what's kept",
+     "stage": "appraise"
+    },
+    {
+     "label": "Map the landscape",
+     "stage": "characterise"
+    },
+    {
+     "label": "Write a headline evidence base \u2014 from titles and abstracts",
+     "stage": "synthesise"
+    }
+   ]
+  },
+  "created_at": "2026-07-09T18:47:57.252748+00:00"
+ },
+ {
+  "project_id": "75769504-937f-4b49-8183-30651562cfbc",
+  "name": "Reducing childhood obesity",
+  "question": "What works to reduce childhood obesity across school, family, healthcare, community, and policy settings?",
+  "plan": {
+   "check_in": "moderate",
+   "evidence_sources": "both",
+   "focus": [
+    "all intervention settings",
+    "fast first look"
+   ],
+   "question": "What works to reduce childhood obesity across school, family, healthcare, community, and policy settings?",
+   "ready": true,
+   "search_depth": "quick",
+   "title": "Reducing childhood obesity",
+   "steps": [
+    {
+     "label": "Search academic research and policy literature \u2014 quick pass, top sources",
+     "stage": "acquire"
+    },
+    {
+     "label": "Screen for relevance",
+     "stage": "screen"
+    },
+    {
+     "label": "Quality-check what's kept",
+     "stage": "appraise"
+    },
+    {
+     "label": "Map the landscape",
+     "stage": "characterise"
+    },
+    {
+     "label": "Write a headline evidence base \u2014 from titles and abstracts",
+     "stage": "synthesise"
+    }
+   ]
+  },
+  "created_at": "2026-07-09T19:25:14.301165+00:00"
+ }
+]

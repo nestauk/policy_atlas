@@ -1,0 +1,102 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* rem base stays 16px — tailwind spacing is rem-based; 14px type comes from body */
+  html {
+    @apply antialiased text-ink;
+    line-height: 1.5;
+  }
+  body {
+    @apply bg-ground;
+    font-size: 14px;
+  }
+  h1, h2, h3, h4 {
+    @apply font-display text-navy;
+  }
+  ::selection {
+    @apply bg-blue-tint text-navy;
+  }
+}
+
+@layer components {
+  /* --- Nesta signature button: 0 radius, 45° cut top-right --- */
+  .btn {
+    @apply inline-flex cursor-pointer items-center gap-2 bg-blue px-[18px] py-[11px] text-[13px] font-bold leading-none text-white transition-colors hover:bg-blue-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue;
+    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  }
+  .btn--sec {
+    @apply border border-line-2 bg-white text-navy hover:bg-[#f0f0f3];
+    clip-path: none;
+  }
+  .btn--ghost {
+    @apply border-0 bg-transparent px-[12px] py-[9px] text-[12.5px] font-semibold text-grey hover:bg-transparent hover:text-navy;
+    clip-path: none;
+  }
+
+  /* --- chips --- */
+  .chip {
+    @apply inline-flex items-center gap-1.5 border border-line-2 bg-white px-[10px] py-[4px] text-[11.5px] font-semibold text-navy;
+  }
+  .chip--blue { @apply border-blue-edge bg-blue-tint text-blue; }
+  .chip--soft { @apply border-line bg-ground text-grey; }
+  .chip--green { @apply border-green-edge bg-green-tint text-green-text; }
+  .chip--yellow { @apply border-yellow-edge bg-yellow-tint text-yellow-text; }
+  .chip--orange { @apply border-orange-edge bg-orange-tint text-orange-text; }
+
+  /* --- structure --- */
+  .pane-h {
+    @apply text-[11px] font-extrabold uppercase tracking-[.06em] text-grey;
+  }
+  .card {
+    @apply w-full bg-white p-5 shadow-card ring-1 ring-line;
+  }
+  .hairline { @apply border-line; }
+
+  /* status dot */
+  .dot { @apply inline-block h-2 w-2 shrink-0 rounded-full; }
+
+  .thin-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+  .thin-scroll::-webkit-scrollbar-thumb { background: #d3d3d8; }
+  .thin-scroll::-webkit-scrollbar-track { background: transparent; }
+}
+
+/* --- motion: every animation marks real data arriving, never decoration --- */
+@layer utilities {
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .anim-rise { animation: rise 420ms cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+
+  @keyframes glow-in {
+    0% { opacity: 0; box-shadow: 0 0 0 0 rgba(253, 182, 51, 0); }
+    50% { box-shadow: 0 0 0 6px rgba(253, 182, 51, 0.25); }
+    100% { opacity: 1; box-shadow: 0 0 0 0 rgba(253, 182, 51, 0); }
+  }
+  .anim-glow { animation: glow-in 900ms ease-out both; }
+
+  @keyframes breathe {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+  .anim-breathe { animation: breathe 1.6s ease-in-out infinite; }
+
+  @keyframes slide-in-right {
+    from { transform: translateX(24px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  .anim-slide-in { animation: slide-in-right 240ms cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .anim-spin { animation: spin 900ms linear infinite; }
+
+  .anim-bar { transition: width 700ms cubic-bezier(0.2, 0.7, 0.3, 1); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .anim-rise, .anim-glow, .anim-slide-in { animation-duration: 1ms; }
+    .anim-breathe, .anim-spin { animation: none; }
+    .anim-bar { transition: none; }
+  }
+}
