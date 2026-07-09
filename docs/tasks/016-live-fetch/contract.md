@@ -15,6 +15,18 @@ specs in [docs/specs/](../../specs/index.md).
 > never refers to the orchestrator's analysis plan-as-object.
 >
 > **Revision history:**
+> - **rev 2.1** (2026-07-09, two user probes at the gate): **(a)**
+>   decision 11's invariant sharpened — peak memory bounded by window
+>   budgets, never corpus full-text size (the as-built loader holds
+>   every document's full chunk list simultaneously; the user's
+>   200-doc × ≥25-page case makes that tens of MB and unbounded in
+>   the long-report tail). **(b)** Oversized-chunk provenance
+>   ergonomics (citations resolving into huge frozen chunks) recorded
+>   as a new deferred seam — **citation-context character clamp** at
+>   the consumption surfaces (grounding-judge envelope ·  future read
+>   surfaces), NOT in-slice: chunks are frozen, and clamping judge
+>   input is prompt-bearing/eval-sensitive (013 surface). Stage-2
+>   window confirmed fine by the user at its 60k budget.
 > - **rev 2** (2026-07-09, user gate calls — five substantive):
 >   **(a) Substrate fork resolved — Option A adopted, generalised
 >   into a chain-composition rule**: every EB run executes the
@@ -322,9 +334,18 @@ PR landing:
     which is exactly what this slice creates. The 014 review deferred
     the fix with the trigger "when 015/016 lands"; 016 is that
     trigger. The rider: load only the chunks the stage-2 window
-    actually reads. No behaviour change, test-pinned; if the plan
-    finds it non-trivial, it returns to deferred with a note — it
-    must not grow this slice.
+    actually reads. The binding invariant *(rev 2.1, user question)*:
+    **peak memory is bounded by window budgets, never by corpus
+    full-text size** — as-built, `_load_stage2_docs` materialises
+    every document's full chunk list simultaneously before any
+    payload is built, so an unluckily long corpus (200 long reports)
+    is unbounded resident text; after the rider, per-doc load stops
+    at the window budget (+ split-boundary slack) and what persists
+    per doc is only its ≤ budget payload. Exact loading shape
+    (prefix query vs streaming) is plan-designed. No behaviour
+    change, test-pinned (byte-identical first-window payload); if
+    the plan finds it non-trivial, it returns to deferred with a
+    note — it must not grow this slice.
 
 12. **Live-check scope pin** (contract-time, per failure-log
     2026-07-08): changed surfaces + one cheap full-chain smoke —

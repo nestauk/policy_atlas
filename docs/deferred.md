@@ -338,6 +338,18 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   collapsed-chunk PDFs (extract handles them via deterministic oversize subsegment splitting,
   so the full-read guarantee holds) are the **first downstream consumer signal** for gating
   this escalation — the parse-quality eval now has a measurable customer.
+- **Citation-context character clamp for oversized chunks** (016 design conversation, user
+  call 2026-07-09) — the chunk is the citation/locator grain, so a collapsed heading-light
+  chunk (tens of thousands of chars) makes clunky provenance context wherever a citation is
+  resolved to its chunk. Chunks are frozen (never re-segmented), so the fix is a character
+  clamp at the **consumption** surfaces, windowed around the cited span (embedding units
+  carry offsets — the natural anchor). Two named consumers: (a) the grounding-judge envelope
+  (`synthesis_envelope_v1` carries cited chunks' full frozen text, no clamp — a deliberate
+  013 plan call; changing judge input is prompt-bearing and eval-sensitive, so it lands with
+  eval coverage, not as a rider); (b) future read surfaces (context/dossier views — the
+  web-app slice). Cheaper mitigation than (and complementary to) the docling escalation
+  above. Trigger: live corpora making collapsed chunks common, or judge token-cost
+  observations.
 - **Time-budget-aware parser selection** — the user's stated time horizon picks the parser
   (tight → pymupdf4llm, long → ML layout); `parse_profile`-per-snapshot (ADR 0004) is the hook.
 - **Chunk-volume bias controls at the retrieve seam** — full-text documents contribute tens of
