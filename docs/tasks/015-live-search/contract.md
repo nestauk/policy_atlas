@@ -3,14 +3,46 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted rev 3.7 — awaiting contract approval (the 🛑 is
-> open; revs 2–3.7 shaped at the gate in user deliberation).
+> **Status:** drafted rev 3.8 — awaiting contract approval (the 🛑 is
+> open; revs 2–3.8 shaped at the gate in user deliberation).
 > Contract approved (before planning): _date · who_ ·
 > Plan approved (before implementation): _date · who_ · ADR: _expected:
 > one_ (depth-graded agentic search adoption — the Arm-B fold is a
 > consequential design decision; drafted at step 4).
 >
 > **Revision history:**
+> - **rev 3.8** (2026-07-09, user design call, spec-confirmed): **the
+>   tag layer becomes classify's uniform label-prior surface** —
+>   superseding rev 3.7's raw-field mechanism for label-shaped priors.
+>   The user's recollection held against the spec (data-model § Entity
+>   hierarchy): provider label signals "materialise at acquire as
+>   provenance-classed tag rows" and scoping/consumption is "queries
+>   over columns + tags alike" — the tag layer IS the designed home;
+>   `provider_priors`' raw `_topic_labels` extraction was an accident
+>   of the 014 build, not a design. The spec's columns/tags split is
+>   the new prior line: **structured-column-class properties**
+>   (single-valued record facts: `record_type`, `source.type`,
+>   `organisation_type`, `indexed_in`, `title_source`,
+>   `abstract_source`) stay direct data fields; **label-shaped priors**
+>   (open-vocabulary, many-valued) are read from `source_tag` —
+>   all non-classify asserters, with `asserted_by` + `tag_type`
+>   carried into the prompt record as data (the never-mix rule
+>   honoured by visible provenance: the model can weigh
+>   provider-curated vs provider-LLM assertions). Deltas vs the 014
+>   assembly: classify newly sees SDG labels, `llm_document_theme`
+>   (asserter-visible) and the series (via rev 3.6b's tag rows —
+>   the raw-field allowlist entry from rev 3.7 is superseded);
+>   OpenAlex `keywords` **exit the prompt deliberately** (never
+>   tagged — the rev-3.5 noise adjudication now holds end-to-end
+>   instead of leaking through `_topic_labels`). Uploads: no provider
+>   tags → empty label-prior list (unchanged behaviour class). M10
+>   bounds still apply at prompt assembly (tags are bounded at write;
+>   sanitized again on read — belt and braces). Sequencing is safe by
+>   construction (acquire writes tags in-transaction; classify runs
+>   after the acquire/screen phase in every profile incl. deep
+>   rounds). The 014-surface footprint grows from a one-line allowlist
+>   add to an input-assembly change — named in the egress gate;
+>   prompt version updates as provenance.
 > - **rev 3.7** (2026-07-09, user scope call): **classify prompt-input
 >   widening folded in** ("we might as well in this slice"); OpenAlex
 >   keywords confirmed OUT. Classify's closed input allowlist (014
@@ -813,23 +845,38 @@ PR landing:
       promotion is refused and test-pinned) · `grants` retention (not
       `select`-able — would force full-work fetches against
       decision 6).
-    - **Prompt-input widening — IN-slice** *(rev 3.7, user scope call
-      superseding 3.6c's keep-out; the 3.6c reframing itself stands:
-      prompt versions are provenance, not gates)*: classify's closed
-      input allowlist (014 decisions 4/7) gains
-      `overton_policy_document_series` + `indexed_in` as structured
-      priors, and **screen + classify both gain `title_source`**
-      (rev 3.6a made models' visibility of the translation provenance
-      a requirement; this is its mechanism). All three enter through
-      the existing M10 bounds (closed allowlist · per-field length
-      caps · control-char stripping); prompt version strings update as
-      provenance; prompt-assembly tests cover presence + bounds +
-      an instruction-shaped series value. Eval-blindness acknowledged
-      and user-accepted — bounded data fields, not instruction
-      changes; effect measured at the eval slice. Overton
-      `source.region`'s group memberships (OECD/G7/G20 — already
-      retained inside the `source` block) remain noted for
-      characterise's landscape axes; nothing consumes them in 015.
+    - **Prompt-input restructure — IN-slice, tag layer as the uniform
+      label-prior surface** *(rev 3.7 folded the widening in; rev 3.8,
+      user design call spec-confirmed, sets the mechanism)*. Classify's
+      prior record splits along the spec's columns/tags line
+      (data-model § Entity hierarchy):
+      **(i) property priors** — single-valued record facts — stay
+      direct data fields through the M10 allowlist: `record_type`,
+      `source.type`, `organisation_type`, **`indexed_in`** (new),
+      **`title_source`** (new; screen gains it too — rev 3.6a's
+      visibility requirement made mechanical), `abstract_source`
+      (existing).
+      **(ii) label priors** — open-vocabulary, many-valued — are read
+      from **`source_tag`** (all non-classify asserters), each carried
+      as `{tag, tag_type, asserted_by}` data records so
+      provider-curated vs provider-LLM assertions stay distinguishable
+      in the prompt (the never-mix rule, honoured by visible
+      provenance). This replaces `_topic_labels`' raw
+      `provider_fields` extraction: classify newly sees SDG labels,
+      `llm_document_theme` (asserter-visible) and the series (via the
+      rev-3.6b tag rows — no raw-field allowlist entry needed);
+      OpenAlex `keywords` **exit the prompt deliberately** (never
+      tagged; the rev-3.5 noise adjudication now holds end-to-end).
+      Uploads keep an empty label-prior list. M10 bounds apply at
+      assembly on both prior kinds (tags are write-bounded; sanitized
+      again on read). Prompt versions update as provenance;
+      prompt-assembly tests cover both prior kinds, asserter
+      visibility, keywords absence, bounds, and an instruction-shaped
+      tag value staying data. Eval-blindness acknowledged and
+      user-accepted; effect measured at the eval slice. Overton
+      `source.region`'s group memberships (already retained inside
+      the `source` block) remain noted for characterise's landscape
+      axes; nothing consumes them in 015.
 
 ## Scope / Out of scope
 
@@ -888,10 +935,11 @@ contract 🛑**:
    volume change on an already-approved surface**: `screen_v1` (014)
    now also runs in-loop during deep search — same prompt, same
    component, same per-doc bound, materially more invocations per deep
-   run (budgeted, decision 19). *(rev 3.7)* Plus a **prompt-input
-   widening on the approved 014 surfaces**: classify's allowlist gains
-   `overton_policy_document_series` + `indexed_in`; screen's and
-   classify's gain `title_source` — M10-bounded data fields, prompt
+   run (budgeted, decision 19). *(revs 3.7–3.8)* Plus a **prompt-input
+   restructure on the approved 014 surfaces**: classify's label priors
+   move to the tag layer (source_tag reads, asserter-visible — the
+   spec's designed surface), its property priors gain `indexed_in`,
+   and screen + classify gain `title_source` — all M10-bounded, prompt
    versions updated as provenance. Named here so the egress approval
    covers volume and inputs, not just the surfaces.
 2. **Schema:** one migration widening `ck_scov_stop_condition` to admit
@@ -964,9 +1012,12 @@ in-contract fix (halt and report — don't quietly raise the budgets).
   gets the translated title + `title_source='translated'` + native
   retained, translation-absent doc stays `native`; OpenAlex `keywords`
   never tagged — the deliberate-refusal pin) · prompt-assembly tests
-  for the rev-3.7 allowlist additions (series/indexed_in in classify,
-  title_source in screen + classify: presence, per-field bounds, an
-  instruction-shaped series value stays data) · zero-egress guard
+  for the revs-3.7/3.8 prior restructure (label priors read from
+  source_tag with `{tag, tag_type, asserted_by}` visible, uniform
+  across backends; keywords absent from the prompt; property priors
+  incl. indexed_in in classify and title_source in screen + classify:
+  presence, per-field bounds, an instruction-shaped tag value stays
+  data) · zero-egress guard
   extension.
 - Capability tests (revs 2–3): depth directive fail-closed (unknown
   depth → structural failure) · rapid fan-out (n queries × variants,
