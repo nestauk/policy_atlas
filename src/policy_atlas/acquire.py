@@ -16,6 +16,7 @@ import functools
 import importlib.resources
 import json
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
@@ -116,6 +117,50 @@ class SearchBackend(Protocol):
 
     def lookup_title(self, title: str) -> list[dict[str, Any]]:
         """Return provider records matching a title query."""
+        ...
+
+
+class ExecutedSearchCall(Protocol):
+    """Duck-typed executed search call accepted from the strategy layer."""
+
+    @property
+    def backend_name(self) -> str:
+        """Backend identifier matching a configured backend."""
+        ...
+
+    @property
+    def verb(self) -> str:
+        """Search verb for the executed call."""
+        ...
+
+    @property
+    def query(self) -> str:
+        """Exact query text sent to the backend."""
+        ...
+
+    @property
+    def query_origin(self) -> str:
+        """Deterministic origin of the query text."""
+        ...
+
+    @property
+    def wire_params(self) -> dict[str, str]:
+        """Executed backend wire parameters."""
+        ...
+
+    @property
+    def records(self) -> list[dict[str, Any]]:
+        """Raw provider records returned by the call."""
+        ...
+
+    @property
+    def status(self) -> str:
+        """``"ok"`` or ``"error"``."""
+        ...
+
+    @property
+    def error(self) -> str | None:
+        """Redacted error text for failed calls."""
         ...
 
 
@@ -531,14 +576,17 @@ def acquire_sources(
     context: AcquireContext,
     backends: list[SearchBackend],
     embedder: EmbeddingBackend | None = None,
+    executed_calls: Sequence[ExecutedSearchCall] | None = None,
+    depth: str = "rapid",
+    scope_wire_params: dict[str, dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Acquire metadata-only sources for an evidence scope over the given backends.
 
-    One search call per backend, in list order, error-isolated: a raising
-    backend contributes zero results and never aborts the other backends or the
-    run. Each attempted call emits a ``search.executed`` event; each newly
-    acquired snapshot emits ``source.acquired``; the run always writes one
-    ``search_coverage_record`` (fail-closed adequacy verdict).
+    With ``executed_calls`` omitted, the legacy path makes one
+    ``backend.search(context.intent)`` call per backend, in list order. With
+    ``executed_calls`` supplied, this function performs no search egress; it
+    consumes those call records in order and reuses the existing mapping,
+    deduplication, event, coverage, tag, and embedding machinery.
 
     Args:
         conn: Open database connection; all writes occur within its transaction.
@@ -548,6 +596,12 @@ def acquire_sources(
         backends: Configured backends, searched in list order (dedup outcomes
             are deterministic because the order is fixed).
         embedder: Optional embedding backend. Defaults to the deterministic stub.
+        executed_calls: Optional pre-executed call stream from the search
+            strategy layer. When supplied, no backend ``search`` method is
+            called here.
+        depth: Search-depth directive recorded in events and coverage.
+        scope_wire_params: Per-backend executed wire params recorded on the
+            coverage record.
 
     Returns:
         Counts dict: ``acquired``, ``already_acquired``, ``skipped_unusable``,
@@ -565,6 +619,17 @@ def acquire_sources(
         raise ValueError(f"no mapper registered for backend(s): {unknown}")
     if len(set(names)) != len(names):
         raise ValueError(f"duplicate backend names: {names}")
+    backend_by_name = {backend.name: backend for backend in backends}
+    if executed_calls is not None:
+        unknown_call_backends = [
+            call.backend_name
+            for call in executed_calls
+            if call.backend_name not in backend_by_name
+        ]
+        if unknown_call_backends:
+            raise ValueError(
+                f"executed call references unknown backend(s): {unknown_call_backends}"
+            )
 
     # Preload the project's existing identity keys — dedup is then in-memory,
     # and also catches duplicates within this call's own result stream.
@@ -595,58 +660,32 @@ def acquire_sources(
             seen_dois.add(doi)
 
     now = datetime.now(UTC)
-    by_backend: dict[str, dict[str, Any]] = {}
-    any_error = False
-    tag_assertions: list[tuple[uuid.UUID, str, str, str]] = []
-
-    for backend in backends:
-        status, error = "ok", None
-        try:
-            results = backend.search(context.intent)
-        except Exception as exc:
-            # Per-backend error isolation: this part of the search space wasn't
-            # searched, but the other backends and the run continue.
-            results = []
-            status, error = "error", str(exc)
-            any_error = True
-            log.warning(
-                "acquire.backend_failed",
-                backend=backend.name,
-                project_id=str(project_id),
-                run_id=str(run_id),
-                error=error,
-            )
-
-        events.append(
-            conn,
-            project_id=project_id,
-            run_id=run_id,
-            event_type="search.executed",
-            payload={
-                "backend": backend.name,
-                "trust_class": backend.trust_class,
-                "mode": backend.mode,
-                "query": context.intent,
-                "filters": {},
-                "status": status,
-                "result_count": len(results),
-                "error": error,
-                "evidence_scope_id": str(context.scope_id),
-            },
-        )
-
-        counts: dict[str, Any] = {
-            "status": status,
-            "error": error,
-            "results_returned": len(results),
+    by_backend: dict[str, dict[str, Any]] = {
+        backend.name: {
+            "status": "ok",
+            "error": None,
+            "results_returned": 0,
             "acquired": 0,
             "already_acquired": 0,
             "skipped_unusable": 0,
             "tags_materialised": 0,
         }
-        mapper = _MAPPERS[backend.name]  # validated upfront
+        for backend in backends
+    }
+    ok_calls_by_backend = dict.fromkeys(names, 0)
+    errors_by_backend: dict[str, list[str]] = {name: [] for name in names}
+    tag_assertions: list[tuple[uuid.UUID, str, str, str]] = []
 
-        for record in results:
+    def process_records(
+        *,
+        backend_name: str,
+        records: list[dict[str, Any]],
+        counts: dict[str, Any],
+    ) -> None:
+        counts["results_returned"] += len(records)
+        mapper = _MAPPERS[backend_name]  # validated upfront
+
+        for record in records:
             mapped = mapper(record)
             if mapped is None:
                 # A snapshot needs at least a title to be screenable —
@@ -720,11 +759,11 @@ def acquire_sources(
                     ingested_at=now,
                 )
             )
-            tag_pairs = _provider_tags(backend.name, record)
+            tag_pairs = _provider_tags(backend_name, record)
             if len(tag_pairs) > MAX_TAGS_PER_RECORD:
                 log.warning(
                     "acquire.tags_truncated",
-                    backend=backend.name,
+                    backend=backend_name,
                     backend_record_id=record_id,
                     tag_count=len(tag_pairs),
                     cap=MAX_TAGS_PER_RECORD,
@@ -743,7 +782,7 @@ def acquire_sources(
                     "source_snapshot_id": str(snapshot_id),
                     "project_source_snapshot_id": str(pss_id),
                     "evidence_scope_id": str(context.scope_id),
-                    "backend": backend.name,
+                    "backend": backend_name,
                     "backend_record_id": record_id,
                 },
             )
@@ -755,7 +794,104 @@ def acquire_sources(
             if doi:
                 seen_dois.add(doi)
 
-        by_backend[backend.name] = counts
+    if executed_calls is None:
+        for backend in backends:
+            counts = by_backend[backend.name]
+            try:
+                results = backend.search(context.intent)
+                ok_calls_by_backend[backend.name] += 1
+                status, error = "ok", None
+            except Exception as exc:
+                # Per-backend error isolation: this part of the search space
+                # wasn't searched, but the other backends and the run continue.
+                results = []
+                status, error = "error", str(exc)
+                errors_by_backend[backend.name].append(error)
+                log.warning(
+                    "acquire.backend_failed",
+                    backend=backend.name,
+                    project_id=str(project_id),
+                    run_id=str(run_id),
+                    error=error,
+                )
+
+            events.append(
+                conn,
+                project_id=project_id,
+                run_id=run_id,
+                event_type="search.executed",
+                payload={
+                    "backend": backend.name,
+                    "trust_class": backend.trust_class,
+                    "mode": backend.mode,
+                    "query": context.intent,
+                    "depth": depth,
+                    "filters": {},
+                    "status": status,
+                    "result_count": len(results),
+                    "error": error,
+                    "evidence_scope_id": str(context.scope_id),
+                },
+            )
+            if status == "ok":
+                process_records(
+                    backend_name=backend.name,
+                    records=results,
+                    counts=counts,
+                )
+    else:
+        for call in executed_calls:
+            backend = backend_by_name[call.backend_name]
+            counts = by_backend[backend.name]
+            if call.status not in {"ok", "error"}:
+                raise ValueError(f"executed call has invalid status: {call.status!r}")
+            result_count = len(call.records) if call.status == "ok" else 0
+            error = call.error if call.status == "error" else None
+            events.append(
+                conn,
+                project_id=project_id,
+                run_id=run_id,
+                event_type="search.executed",
+                payload={
+                    "backend": backend.name,
+                    "trust_class": backend.trust_class,
+                    "mode": backend.mode,
+                    "query": call.query,
+                    "query_origin": call.query_origin,
+                    "verb": call.verb,
+                    "depth": depth,
+                    "filters": call.wire_params,
+                    "status": call.status,
+                    "result_count": result_count,
+                    "error": error,
+                    "evidence_scope_id": str(context.scope_id),
+                },
+            )
+            if call.status == "ok":
+                ok_calls_by_backend[backend.name] += 1
+                process_records(
+                    backend_name=backend.name,
+                    records=call.records,
+                    counts=counts,
+                )
+            else:
+                errors_by_backend[backend.name].append(error or "unknown search error")
+                log.warning(
+                    "acquire.backend_failed",
+                    backend=backend.name,
+                    project_id=str(project_id),
+                    run_id=str(run_id),
+                    error=error,
+                )
+
+    any_error = False
+    for backend in backends:
+        errors = errors_by_backend[backend.name]
+        if errors:
+            by_backend[backend.name]["error"] = "; ".join(errors)
+        if errors and ok_calls_by_backend[backend.name] == 0:
+            by_backend[backend.name]["status"] = "error"
+            any_error = True
 
     # Bulk insert per tag_type (insert_source_tags takes one tag_type per call)
     # instead of one statement per record; tag_types are sorted so call order
@@ -800,10 +936,15 @@ def acquire_sources(
             project_id=project_id,
             acquired_by_run_id=run_id,
             backends=[
-                {"backend": b.name, "trust_class": b.trust_class, "mode": b.mode}
+                {
+                    "backend": b.name,
+                    "trust_class": b.trust_class,
+                    "mode": b.mode,
+                    "depth": depth,
+                }
                 for b in backends
             ],
-            scope_filters={},
+            scope_filters=scope_wire_params or {},
             stop_condition=stop_condition,
             adequacy_verdict=adequacy_verdict,
             verdict_origin="model",

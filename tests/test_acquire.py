@@ -759,9 +759,14 @@ def test_coverage_adequate_both_ok(conn: Connection) -> None:
     assert row.verdict_origin == "model"
     assert row.scope_filters == {}
     assert row.backends == [
-        {"backend": "openalex", "trust_class": "academic_aggregator", "mode": "fixture"},
+        {
+            "backend": "openalex",
+            "trust_class": "academic_aggregator",
+            "mode": "fixture",
+            "depth": "rapid",
+        },
         {"backend": "overton", "trust_class": "grey_literature_aggregator",
-         "mode": "fixture"},
+         "mode": "fixture", "depth": "rapid"},
     ]
 
 

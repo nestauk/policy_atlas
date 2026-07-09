@@ -6,6 +6,7 @@ with a ``ValidationError`` at construction — before the harness ever runs.
 """
 
 import uuid
+from typing import Literal
 
 from pydantic import BaseModel, model_validator
 
@@ -29,6 +30,7 @@ VALID_COMPONENTS = set(COMPONENT_REGISTRY.keys())
 
 class _ValidatedRunSpec(BaseModel):
     component: str
+    search_backend_scope: Literal["academic_only", "grey_lit_only", "both"] = "both"
     source_snapshot_id: uuid.UUID | None = None
     evidence_scope_id: uuid.UUID | None = None
     # select stratifies over an explicitly referenced characterisation — compile
@@ -66,6 +68,7 @@ def compile(plan: Plan) -> Config:  # noqa: A001
     """Compile a validated Plan into a machine-level Config."""
     return Config(
         component=plan.component,
+        search_backend_scope=plan.search_backend_scope,
         source_snapshot_id=plan.source_snapshot_id,
         evidence_scope_id=plan.evidence_scope_id,
         characterisation_run_id=plan.characterisation_run_id,
