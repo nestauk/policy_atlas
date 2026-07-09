@@ -424,9 +424,13 @@ search_coverage_record = Table(
         name="fk_scov_run_project",
     ),
     UniqueConstraint("acquired_by_run_id", name="uq_scov_run"),  # one record per acquire run
-    # 'saturated' deliberately absent — saturation-based stopping is a deferred seam (spec)
+    # 'saturated' deliberately absent — saturation-based stopping is a deferred seam (spec).
+    # Task 015 widened the vocabulary with the deep loop's stops (short_circuit =
+    # discovery-rate collapse within one run; budget_exhausted covers every budget
+    # incl. the round cap; target_reached = confident-relevant target met).
     CheckConstraint(
-        "stop_condition IN ('breadth_truncated', 're_searched_still_thin', 'error')",
+        "stop_condition IN ('breadth_truncated', 're_searched_still_thin', 'error',"
+        " 'short_circuit', 'budget_exhausted', 'target_reached')",
         name="ck_scov_stop_condition",
     ),
     CheckConstraint(
