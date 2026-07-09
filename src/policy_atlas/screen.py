@@ -525,6 +525,45 @@ def _stage2_text_snapshot_id(
     return None
 
 
+def _load_stage2_chunk_prefix(
+    conn: Connection,
+    *,
+    chunk_snapshot_id: uuid.UUID,
+) -> list[tuple[uuid.UUID, str]]:
+    """Load only the chunk prefix the first stage-2 window can read.
+
+    ``greedy_windows`` packs chunks in ``sequence`` order until the running
+    character total reaches or exceeds ``STAGE2_WINDOW_CHAR_BUDGET`` (the
+    crossing chunk included, since an oversize crossing chunk's leading
+    ``#pN`` split parts may still enter the first window). Streaming the
+    query and stopping at that crossing point bounds peak memory by the
+    window budget rather than the document's full chunk list; the
+    discarded tail is never fetched from the client-side iterator.
+    """
+    # yield_per rides the STATEMENT, never the Connection: connection-level
+    # execution_options mutates the conn's defaults for every later statement
+    # in the transaction (INSERTs would get server-side cursors and fail).
+    stream = conn.execute(
+        sa_select(chunk.c.chunk_id, chunk.c.content)
+        .where(chunk.c.source_snapshot_id == chunk_snapshot_id)
+        .order_by(chunk.c.sequence)
+        .execution_options(yield_per=25)
+    )
+    prefix: list[tuple[uuid.UUID, str]] = []
+    total = 0
+    try:
+        for chunk_row in stream:
+            prefix.append(
+                (cast("uuid.UUID", chunk_row.chunk_id), cast("str", chunk_row.content))
+            )
+            total += len(chunk_row.content)
+            if total >= STAGE2_WINDOW_CHAR_BUDGET:
+                break
+    finally:
+        stream.close()
+    return prefix
+
+
 def _load_stage2_docs(
     conn: Connection,
     *,
@@ -574,7 +613,6 @@ def _load_stage2_docs(
 
     candidate_records: list[tuple[uuid.UUID, uuid.UUID, uuid.UUID, dict[str, Any]]] = []
     skipped_no_fulltext = 0
-    chunk_snapshot_ids: set[uuid.UUID] = set()
     for row in rows:
         envelope_snapshot_id = cast("uuid.UUID", row.source_snapshot_id)
         chunk_snapshot_id = _stage2_text_snapshot_id(
@@ -586,7 +624,6 @@ def _load_stage2_docs(
         if chunk_snapshot_id is None:
             skipped_no_fulltext += 1
             continue
-        chunk_snapshot_ids.add(chunk_snapshot_id)
         candidate_records.append(
             (
                 cast("uuid.UUID", row.project_source_snapshot_id),
@@ -596,28 +633,24 @@ def _load_stage2_docs(
             )
         )
 
-    chunks_by_snapshot: dict[uuid.UUID, list[tuple[uuid.UUID, str]]] = {}
-    if chunk_snapshot_ids:
-        chunk_rows = conn.execute(
-            sa_select(chunk.c.source_snapshot_id, chunk.c.chunk_id, chunk.c.content)
-            .where(chunk.c.source_snapshot_id.in_(chunk_snapshot_ids))
-            .order_by(chunk.c.source_snapshot_id, chunk.c.sequence)
-        ).fetchall()
-        for chunk_row in chunk_rows:
-            snapshot_id = cast("uuid.UUID", chunk_row.source_snapshot_id)
-            chunks_by_snapshot.setdefault(snapshot_id, []).append(
-                (cast("uuid.UUID", chunk_row.chunk_id), cast("str", chunk_row.content))
+    # Per-snapshot cache: candidate docs occasionally share a chunk_snapshot_id
+    # (e.g. deduplicated envelope/full-text pointers), so this avoids a
+    # redundant prefix query for the same snapshot within one call.
+    prefix_cache: dict[uuid.UUID, list[tuple[uuid.UUID, str]]] = {}
+    docs: list[_Stage2Doc] = []
+    for pss_id, source_snapshot_id, chunk_snapshot_id, metadata in candidate_records:
+        if chunk_snapshot_id not in prefix_cache:
+            prefix_cache[chunk_snapshot_id] = _load_stage2_chunk_prefix(
+                conn, chunk_snapshot_id=chunk_snapshot_id
             )
-
-    docs = [
-        _Stage2Doc(
-            pss_id=pss_id,
-            source_snapshot_id=source_snapshot_id,
-            metadata=metadata,
-            chunks=chunks_by_snapshot.get(chunk_snapshot_id, []),
+        docs.append(
+            _Stage2Doc(
+                pss_id=pss_id,
+                source_snapshot_id=source_snapshot_id,
+                metadata=metadata,
+                chunks=prefix_cache[chunk_snapshot_id],
+            )
         )
-        for pss_id, source_snapshot_id, chunk_snapshot_id, metadata in candidate_records
-    ]
     return docs, skipped_no_fulltext
 
 
