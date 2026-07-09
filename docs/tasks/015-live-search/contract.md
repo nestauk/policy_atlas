@@ -3,9 +3,16 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted rev 3.12 — awaiting contract approval (the 🛑 is
-> open; revs 2–3.12 shaped at the gate in user deliberation).
-> Contract approved (before planning): _date · who_ ·
+> **Status:** **APPROVED rev 3.12** — contract-stage adversarial
+> review running; planning next.
+> Contract approved (before planning): **2026-07-09 · Shabeer Rauf**
+> (rev 3.12, covering the full gated set: runtime egress — transport +
+> three generation surfaces + the in-loop `screen_v1` volume change +
+> the prompt-input restructure on the 014 surfaces · one
+> `ck_scov_stop_condition` CHECK migration · the `search_backend_scope`
+> Plan/Config field · the components §1+§2 spec flow-back — and
+> ratifying the rev-3.10 Thompson-sampling cut and decision 12's
+> no-citation-floor) ·
 > Plan approved (before implementation): _date · who_ · ADR: _expected:
 > one_ (depth-graded agentic search adoption — the Arm-B fold is a
 > consequential design decision; drafted at step 4).
