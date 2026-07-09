@@ -305,9 +305,9 @@ def _reconstruct_abstract(index: dict[str, list[int]] | None) -> str | None:
     return " ".join(positions[p] for p in sorted(positions)) or None
 
 
-def _normalize_doi(doi: str | None) -> str | None:
+def _normalize_doi(doi: Any) -> str | None:
     """Normalize a DOI to lowercase bare form (cross-backend identity key)."""
-    if not doi:
+    if not isinstance(doi, str) or not doi:
         return None
     d = doi.strip().lower()
     for prefix in (

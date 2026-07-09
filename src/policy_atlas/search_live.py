@@ -126,20 +126,13 @@ def sanitize_openalex_query(q: str) -> str:
         q: Raw keyword or boolean query text.
 
     Returns:
-        Query text with wildcard/fuzzy characters removed, commas removed from
-        quoted phrases, and whitespace collapsed.
+        Query text with wildcard/fuzzy characters removed, every comma replaced
+        with a space, and whitespace collapsed. Commas are the OpenAlex
+        ``filter`` clause separator — a comma surviving into the embedded
+        ``title_and_abstract.search:`` value would open a new, injectable
+        filter clause (015 review finding, Codex + security lanes convergent).
     """
-    in_quotes = False
-    chars: list[str] = []
-    for ch in q:
-        if ch == '"':
-            in_quotes = not in_quotes
-            chars.append(ch)
-        elif ch == "," and in_quotes:
-            continue
-        else:
-            chars.append(ch)
-    stripped = _OPENALEX_WILDCARD_RE.sub("", "".join(chars))
+    stripped = _OPENALEX_WILDCARD_RE.sub("", q.replace(",", " "))
     return " ".join(stripped.split())
 
 
@@ -369,7 +362,14 @@ class OpenAlexLiveBackend(_TransportMixin):
                 "per-page": str(per_page),
                 "page": str(page),
             }
-            if "cited_by_count" in params["filter"]:
+            # No-citation-floor guard on wire filter clauses only: the
+            # *.search: values are sanitized free-text where the literal
+            # phrase "cited_by_count" is data, not a filter.
+            if any(
+                "cited_by_count" in part
+                for part in filter_parts
+                if not part.startswith(("title_and_abstract.search:", "title.search:"))
+            ):
                 raise ValueError("OpenAlex cited_by_count filters are not allowed")
 
             data = self._request_json(f"{OPENALEX_HOST}/works", params)
@@ -456,6 +456,11 @@ class OvertonLiveBackend(_TransportMixin):
             remaining = limit - len(records)
             records.extend(page_results[:remaining])
             if len(records) >= limit:
+                break
+            # An empty page that still advertises next_page_url must not be
+            # followed: zero progress per iteration would loop (and egress)
+            # unboundedly on a buggy or hostile endpoint (015 security lane).
+            if not page_results:
                 break
             next_page_url = _overton_next_page_url(response)
             if next_page_url is None:
@@ -562,6 +567,9 @@ def _chunks(values: list[str], size: int) -> Iterable[list[str]]:
 
 
 def _normalize_doi_for_filter(doi: str) -> str | None:
+    # Behavioral twin of acquire._normalize_doi (the cross-backend identity
+    # key). Kept local so the transport module never imports the DB layer;
+    # any prefix-handling change must land in both.
     candidate = doi.strip().lower()
     for prefix in (
         "https://doi.org/",

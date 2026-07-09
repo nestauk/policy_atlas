@@ -86,6 +86,10 @@ class DepthConstants(TypedDict):
     wall_clock_s: int
     round_cap: int
     http_budget: dict[str, int]
+    # Derived structural ceiling, not a runtime-enforced budget: the fixed
+    # arm caps (one generate per rapid run; one reformulate + one suggest per
+    # deep round × round_cap) cannot exceed it. If arms ever become dynamic,
+    # enforce this at the generation call sites (015 review adjudication).
     generation_call_cap: int
 
 
@@ -105,6 +109,17 @@ DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
         "generation_call_cap": 8,
     },
 }
+
+def _distribute_quota(remaining: int, planned_calls: int) -> int:
+    """Per-call share of a result cap across a planned fan-out.
+
+    The companion rule to every result cap (015 live-check lesson): without a
+    per-call quota the first provider call consumes the whole cap and every
+    later query is silently skipped — the single-load-bearing-query failure
+    mode the fan-out exists to avoid.
+    """
+    return max(1, remaining // max(1, planned_calls))
+
 
 SR_CLAUSE = '("systematic review" OR "meta-analysis" OR "narrative synthesis")'
 RCT_CLAUSE = (
@@ -813,20 +828,7 @@ def _text_or_none(raw: Any) -> str | None:
     return raw if isinstance(raw, str) and raw else None
 
 
-def _normalized_doi(raw: Any) -> str | None:
-    if not isinstance(raw, str):
-        return None
-    candidate = raw.strip().lower()
-    for prefix in (
-        "https://doi.org/",
-        "http://doi.org/",
-        "https://dx.doi.org/",
-        "http://dx.doi.org/",
-    ):
-        if candidate.startswith(prefix):
-            candidate = candidate[len(prefix):]
-            break
-    return candidate or None
+_normalized_doi = acquire._normalize_doi
 
 
 def _normalized_title(raw: Any) -> str:
@@ -1242,7 +1244,7 @@ def run_search(
             )
             if backend.name == "openalex":
                 planned = min(len(queries), REFORMULATE_CALL_CAP) + DIVERSITY_CALL_MIN
-                quota = max(1, episode_remaining // max(1, planned))
+                quota = _distribute_quota(episode_remaining, planned)
                 for query in queries[:REFORMULATE_CALL_CAP]:
                     execute_plan(
                         backend,
@@ -1254,7 +1256,7 @@ def run_search(
                         break
             elif backend.name == "overton":
                 planned = min(len(overton_paraphrases), 2)
-                quota = max(1, episode_remaining // max(1, planned))
+                quota = _distribute_quota(episode_remaining, planned)
                 for paraphrase in overton_paraphrases[:2]:
                     execute_plan(
                         backend,
@@ -1477,6 +1479,12 @@ def run_search(
                 diversity_query = _compose_variant(context.intent, SR_CLAUSE)
                 diversity_origin = "variant_sr"
             if arm_calls["diversity"] < DIVERSITY_CALL_MIN:
+                # The reserve is a bounded FRACTION of the per-backend result
+                # cap (contract decision 15 / rubric 7): without max_records
+                # the un-steered call could drain the episode's remaining cap.
+                reserve = max(
+                    1, int(constants["result_cap_per_backend"] * DIVERSITY_FRACTION)
+                )
                 execute_plan(
                     diversity_backend,
                     _PlannedCall(
@@ -1485,6 +1493,7 @@ def run_search(
                         diversity_origin,
                     ),
                     arm="diversity",
+                    max_records=reserve,
                 )
     else:
         wire = generation_backend.generate_queries(QueriesPayload(intent=context.intent))
@@ -1498,11 +1507,7 @@ def run_search(
                 queries=queries,
                 overton_paraphrases=overton_paraphrases,
             )
-            # Distribute the run cap across the planned fan-out so no single
-            # query can consume it — the first live check showed call #1
-            # returning the full cap and silently collapsing the fan-out to
-            # one load-bearing query (the exact decision-14 failure mode).
-            quota = max(1, constants["result_cap_per_backend"] // max(1, len(plans)))
+            quota = _distribute_quota(constants["result_cap_per_backend"], len(plans))
             backend_calls: list[ExecutedCall] = []
             generated_groups: dict[str, list[ExecutedCall]] = {}
             for plan in plans:
@@ -1678,6 +1683,7 @@ def run_deep_rounds(
             new_confident_relevant=new_confident,
             docs_screened_this_round=docs_screened,
             wall_clock_breached=wall_clock_breached,
+            round_cap=DEPTH_CONSTANTS["deep"]["round_cap"],
         )
         if decision.stop:
             if decision.stop_condition is None:

@@ -29,6 +29,8 @@ from policy_atlas.screen_prompt import ScreenEnvelopePayload, ScreenFullTextPayl
 from policy_atlas.search_loop import (
     CONFIDENT_FLOOR,
     DEEP_WALL_CLOCK_S,
+    DEPTH_CONSTANTS,
+    DIVERSITY_FRACTION,
     NEG_EXEMPLARS,
     POS_EXEMPLARS,
     RAPID_WALL_CLOCK_S,
@@ -998,6 +1000,14 @@ def test_deep_round_fixed_allocation_snowball_suggest_and_diversity(
     ]
     assert len(diversity_events) == 1
     assert "Seed positive" not in diversity_events[0]["query"]
+    # The diversity reserve is a bounded fraction of the per-backend result
+    # cap (rubric 7) — the un-steered call must not drain the episode cap.
+    diversity_calls = [call for call in calls_by_verb["search"] if call.query == intent]
+    assert len(diversity_calls) == 1
+    expected_reserve = max(
+        1, int(DEPTH_CONSTANTS["deep"]["result_cap_per_backend"] * DIVERSITY_FRACTION)
+    )
+    assert diversity_calls[0].max_results == expected_reserve
 
 
 def test_suggestion_grounding_matrix_and_screened_out_counter(

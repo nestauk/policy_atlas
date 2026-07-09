@@ -19,7 +19,11 @@ if every box holds** — otherwise it is in progress, not done.
        title_source into screen + classify, all M10-bounded) · one
        `ck_scov_stop_condition` CHECK migration · the
        `search_backend_scope` Plan/Config field. Table count stays 25;
-       no new dependency; `run_harness` signature untouched.
+       no new dependency beyond the rev-3.13 approved `httpx`
+       declaration-only promotion; `run_harness` grows only the approved
+       generation-surface backend parameter (wording reconciled at the
+       015 review stack — the pre-3.13 text read "no new dependency;
+       signature untouched").
 4. [ ] No generated files or secrets edited by hand; no key material in
        any committed file, snapshot, event payload, log line or raised
        error message (redacted-HTTP-error tests + grep audit recorded).

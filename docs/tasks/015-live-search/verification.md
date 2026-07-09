@@ -276,6 +276,108 @@ project.
   cap — the cap logged and bit for the first time). Bounds that never bound fixtures
   now bind.
 
+## Review findings (step 7)
+
+Stack run 2026-07-09, fresh conversation C. Lanes: contract-verifier (Opus,
+read-only) · `/code-review` medium (8 scoped finder angles, Claude — anchored the
+Codex-written surfaces) · security-auditor · Codex adversarial (read-only rescue,
+anchored the lead/fast-worker surfaces) · lead live-trace content review (dev-DB;
+Langfuse access not available to the review session). `make verify` confirmed green
+before dispatch and re-run green after fixes.
+
+**Adopted (fixed in-stack, regression-tested):**
+
+1. **Overton unbounded pagination** (security, HIGH): an empty page carrying
+   `next_page_url` looped forever (zero progress per iteration → unbounded egress).
+   Fix: break on a zero-record page (`search_live.py`); test pairs empty `results`
+   with a present `next_page_url`.
+2. **Comma-borne OpenAlex filter injection** (Codex HIGH + security MEDIUM —
+   convergent across both heterogeneous lanes): the sanitizer removed commas only
+   *inside* quotes, while commas are the wire's filter-clause separator — a generated
+   query could append arbitrary filter clauses (e.g. `x,is_retracted:true`), bypassing
+   the fail-closed grammar; a benign comma 400'd the call. Fix: all commas → spaces in
+   `sanitize_openalex_query`; the inverted test pin replaced with justification +
+   injection regression test (rubric-5 note: test strengthened, not weakened).
+3. **Diversity reserve was not a fraction** (contract-verifier F1 + finder angle A,
+   convergent): `DIVERSITY_FRACTION` was dead code and the un-steered call ran with no
+   `max_records`, able to drain the episode cap — documented-but-not-built at the
+   mechanism grain (rubric 7 names the fraction). Fix: reserve =
+   `result_cap × DIVERSITY_FRACTION`, asserted in the fixed-allocation test.
+4. **`cited_by_count` guard over-matched** (finder A): the no-floor guard scanned the
+   whole filter string including the free-text search value; a query naming the
+   literal phrase failed the arm. Fix: guard scoped to wire filter clauses; both
+   directions tested.
+5. **Round-cap dual source of truth** (altitude angle): `run_deep_rounds` used
+   `evaluate_deep_stop`'s default `ROUND_CAP` instead of the per-depth table. Fix:
+   `round_cap=DEPTH_CONSTANTS["deep"]["round_cap"]` threaded explicitly.
+6. **Quota rule copy-pasted 3×** (simplification angle): the live-check regression
+   guard (`max(1, remaining // planned)`) now lives in one `_distribute_quota` helper.
+7. **DOI normalization triplicated** (reuse angle): `search_loop` now aliases
+   `acquire._normalize_doi` (input guard widened to non-str safely); the transport-local
+   twin in `search_live` kept deliberately (transport must not import the DB layer —
+   the zero-egress guard forbids the reverse direction) with a cross-reference comment.
+8. **Rubric item 3 stale wording** (contract-verifier F2): pre-rev-3.13 "no new
+   dependency / signature untouched" reconciled with the approved amendments in
+   rubric.md; nothing unapproved shipped (verifier confirmed table count 25, migration
+   scope exact).
+9. **`generation_call_cap` decorative** (altitude angle): adjudicated as a *derived
+   structural ceiling* (fixed arm caps × round cap cannot exceed it) — documented as
+   such in `DepthConstants` rather than adding enforcement that can never fire; enforce
+   at the call sites if arms ever become dynamic.
+
+**Declined (recorded reasons):** deep round runs before a target check (Codex HIGH №1
++ finder A) — entry is gated by `should_escalate` on the rapid path and the
+deep-profile episode is the plan-pinned deliberate demo; quota remainder never
+redistributed (≤45<50) — the acknowledged deviation-4 trade, under-fill is the safe
+direction; caps count raw pre-dedup records — caps bound transport volume by design;
+deep-thin overlay overwrites the raw stop value — contract-pinned (rev 2), raw stop
+visible in events; `finalise_deep_stop` uuid tiebreak — per-round rows get distinct
+microsecond timestamps from distinct runs; snowball `per_seed` under-allocation with
+<5 seeds — safe-direction budget under-use, eval-slice tuning; sequential HTTP in the
+fan-out/arms (efficiency angle) — deliberate under the Overton limiter and observed
+live 429 bursts, budgets currently met (28 s/30 s, 114 s/150 s); per-round event-log
+re-scans — negligible at round-cap 3; dual wire-validator families and the two
+`acquire_sources` branches — defense-in-depth / legacy-path collapse deferred to a
+future cleanup slice; test-double and fixture-builder duplication across suites —
+next-slice hoist to `tests/helpers.py`; diversity backend selected by name not caps
+flag — single academic backend in v3.0, joins the caps-seam notes; query text echoed
+unbounded into event payloads (security LOW) — no key exposure, generated queries are
+already code-validated; nested `query.next_page_url` source + unauthenticated-follow
+edge (security LOW) — host validation strict, worst case is the provider steering its
+own pagination to an honest 401→retry→failure.
+
+**Deferred to step-8 records:** coverage-record stop-condition grain (convergent:
+contract-verifier F3 + Codex №5 + lead DB observation) — a clean rapid completion and
+a wall-clock breach both persist `breadth_truncated`, and the deep overlay hides the
+raw stop; the per-round `wall_clock_breached`/raw-stop facts live only in events/logs.
+Inherited 007 vocabulary, joins the depth/time-budget seam. Also: 60-vs-50
+`referenced_works` retain/batch headroom noted on deviation 1 (harmless).
+
+**Live-trace content lane (lead):** persisted dev-DB evidence corroborates
+verification.md — the (g) filtered-run wire params match the coverage rows verbatim;
+the chain-smoke classify distribution matches exactly (16/8/3/5/2 across 9 types);
+`methodological_structural × overton` tag rows present; key-pattern scan over all 78
+015-window `search.executed` payloads: 0 hits. The two flagged characterise anomalies
+were root-caused as far as the persisted record allows: no failed-run rows survive
+(the driver leg's transaction rolled back), and `characterise.py:509-520` discards the
+validator's rejection detail — only `error_type` reaches the logs, so the *reason* is
+Langfuse-only. That is the 013 corollary (a decision diagnosable only from traces) in
+pre-existing code 015 did not touch: recorded for step 8 as a deferred robustness item
+(persist/log `str(exc)` on discovery rejection + eval-slice retry/batch calibration)
+rather than fixed in-slice.
+
+**Flagged-deviation adjudication (all six):** 1–4 and 6 adopted as flagged
+(contract-verifier confirmed each accurately described; deviation 6 is unverifiable
+from the diff — removed pre-commit — accepted on the build's account with skeleton
+tests covering the moved behavior). Deviation 5 (chain-smoke substrate seeding)
+adopted; its rev-3.14 wording correction rides the step-8 components flow-back as
+planned.
+
+**Fake-done check on in-stack fixes:** no test deleted/weakened (the one replaced
+comma test is strengthened with written justification above); no swallowed errors
+added; all fixes carry regression tests or are behavior-neutral refactors;
+`make verify` green post-fix.
+
 ## Deferred work
 
 Recorded at step 8 into `docs/deferred.md` per the contract's § Verification list

@@ -61,11 +61,45 @@ def test_sanitize_openalex_query_strips_wildcards() -> None:
     assert sanitize_openalex_query("clim*ate ch?ange re~gulation") == "climate change regulation"
 
 
-def test_sanitize_openalex_query_removes_commas_only_inside_quotes() -> None:
+# Replaces the rev-1 commas-only-inside-quotes pin: commas are the OpenAlex
+# filter-clause separator, so NONE may survive into the embedded search value
+# (015 review: comma-borne filter injection, Codex + security lanes convergent).
+def test_sanitize_openalex_query_replaces_all_commas() -> None:
     assert (
         sanitize_openalex_query('"systematic review, meta" analysis, policy')
-        == '"systematic review meta" analysis, policy'
+        == '"systematic review meta" analysis policy'
     )
+
+
+def test_openalex_comma_query_cannot_inject_filter_clause() -> None:
+    captured: list[dict[str, str]] = []
+
+    def fetch(url: str, params: dict[str, str]) -> Any:
+        captured.append(dict(params))
+        return {"results": []}
+
+    backend = OpenAlexLiveBackend("KEY", fetch=fetch)
+    backend.search("housing policy,is_retracted:true", max_results=5)
+
+    assert len(captured) == 1
+    assert (
+        captured[0]["filter"]
+        == "title_and_abstract.search:housing policy is_retracted:true"
+    )
+
+
+def test_openalex_query_naming_cited_by_count_is_data_not_floor() -> None:
+    captured: list[dict[str, str]] = []
+
+    def fetch(url: str, params: dict[str, str]) -> Any:
+        captured.append(dict(params))
+        return {"results": []}
+
+    backend = OpenAlexLiveBackend("KEY", fetch=fetch)
+    backend.search("trends in cited_by_count metrics", max_results=5)
+
+    assert len(captured) == 1
+    assert captured[0]["filter"].startswith("title_and_abstract.search:")
 
 
 def test_sanitize_openalex_query_collapses_whitespace() -> None:
@@ -252,6 +286,29 @@ def test_overton_next_page_url_false_tolerated_single_page(
     backend = OvertonLiveBackend("KEY", fetch=fetch)
     records = backend.search("housing", max_results=50)
     assert len(records) == 1
+
+
+def test_overton_empty_page_with_next_page_url_does_not_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A zero-record page advertising next_page_url must not be followed:
+    # zero progress per iteration means unbounded egress against a buggy or
+    # hostile endpoint (015 security lane).
+    _sleep_recorder(monkeypatch)
+    calls: list[str] = []
+
+    def fetch(url: str, params: dict[str, str]) -> Any:
+        calls.append(url)
+        return {
+            "results": [],
+            "next_page_url": "https://app.overton.io/documents.php?page=2",
+        }
+
+    backend = OvertonLiveBackend("KEY", fetch=fetch)
+    records = backend.search("housing policy", max_results=10)
+
+    assert records == []
+    assert len(calls) == 1
 
 
 # --- next_page_url guard ---
