@@ -3,8 +3,10 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **APPROVED rev 2.2** — contract-stage adversarial
-> review next, then planning.
+> **Status:** **APPROVED rev 2.2 · amended rev 2.3 post-approval**
+> (fixture-corpus relocation folded in — user challenge + call,
+> 2026-07-09) — contract-stage adversarial review in flight, then
+> planning.
 > Contract approved (before planning): **2026-07-09 · Shabeer Rauf**
 > (rev 2.2, covering the gated set: runtime egress — live document
 > fetching — and the one CI addition, the pip-audit job; ratifying
@@ -20,6 +22,16 @@ specs in [docs/specs/](../../specs/index.md).
 > never refers to the orchestrator's analysis plan-as-object.
 >
 > **Revision history:**
+> - **rev 2.3** (2026-07-09, post-approval amendment — user challenge
+>   held): **fixture-corpus relocation folded in-slice** (new decision
+>   12; live check renumbered to 13). Rev 1 misread the pre-registered
+>   trigger — "when the live fetcher takes over as default" means the
+>   *product* default, not the library/test default: with 016, replay
+>   stops being product behaviour and the committed corpus is test
+>   substrate only, so the ~24 MB moves out of the wheel now, exactly
+>   as the 2026-07-05 user decision specified. Adds the test-pinned
+>   invariant that a live-flagged run never silently falls back to
+>   fixture replay.
 > - **rev 2.2** (2026-07-09, user gate call): **pip-audit CI step
 >   folded in-slice** — the CI gate is approved at this contract's 🛑
 >   (one dependency-vulnerability audit job + a documented
@@ -58,7 +70,7 @@ specs in [docs/specs/](../../specs/index.md).
 >   parallelises across spawned worker processes as-built —
 >   `ingest_full_text.py` fan-out with terminate-able 120 s/doc
 >   timeout; the demo's "serial ingest" was the demo driver's shape,
->   not the library's); decision 12's "RETRO baseline" reframed as a
+>   not the library's); the live check's "RETRO baseline" reframed as a
 >   prior data point, never a target. **(c) Dependency posture made a
 >   reasoned adjudication, not a reflex** — candidates named and
 >   adjudicated in Constraints; the dep gate stays open for a
@@ -121,7 +133,9 @@ PR landing:
   entry + ADR; skeleton/profile wiring so every profile's chain
   includes ingest.
 - Tests (transport-stubbed, zero-egress; SSRF guard unit tests) +
-  `verification.md` with the pinned live check (decision 12).
+  `verification.md` with the pinned live check (decision 13).
+- The fixture-corpus relocation (decision 12, rev 2.3): corpus out
+  of the wheel, suite-substrate home in the repo.
 - The **pip-audit CI job** + ignore-list policy (rev 2.2 — the CI
   gate's one approved addition).
 - `deferred.md` + knowledge updates (discharged entries marked; new
@@ -171,6 +185,8 @@ PR landing:
 - `screen.py` stage-2 loader — the bounded windowing rider
   (decision 11) only.
 - CI config — the pip-audit job only (rev 2.2).
+- Packaging + fixture loading — the corpus relocation (decision 13,
+  rev 2.3) only.
 - Spec flow-back: components §4/§9 + capability.md mandatory-spine
   statement; `deferred.md`; knowledge docs; ADR.
 
@@ -184,9 +200,6 @@ PR landing:
   concurrent-run write guard (web-app slice).
 - The designed component-progress protocol — recorded seam; this
   slice ships log-line telemetry only.
-- Fixture-corpus relocation — triggered only "when the live fetcher
-  takes over as default"; the fixture stays the default in-suite, so
-  the trigger has not fired.
 - Time-budget parser-tier selection; chunk-volume bias controls at
   retrieve; per-depth fetch budgets (a lever for the tool-wide
   depth/time-budget gradation seam, not hard-wired here).
@@ -325,7 +338,7 @@ PR landing:
    gate is **untouched** — every composed run reaches it with
    fetched-text substrate, and the `no_groundable_substrate` refusal
    remains as the fail-closed backstop against miscomposed plans;
-   the 015 smoke's minus-`ingest` deviation closes (decision 12b);
+   the 015 smoke's minus-`ingest` deviation closes (decision 13b);
    envelope-basis synthesis is not a product mode. Spec flow-back:
    the mandatory-spine statement lands in components §9 +
    capability.md with a `log.md` entry; **ADR records the rule**
@@ -364,7 +377,30 @@ PR landing:
     the plan finds it non-trivial, it returns to deferred with a
     note — it must not grow this slice.
 
-12. **Live-check scope pin** (contract-time, per failure-log
+12. **Fixture-corpus relocation — the pre-registered trigger fires
+    with this slice** *(rev 2.3, user call at the gate — correcting
+    rev 1's misreading)*. The 2026-07-05 decision committed the
+    ~24 MB corpus inside the package "only because replay *is* the
+    v3.0 product behaviour", with relocation triggered "when the
+    live fetcher takes over as default". 016 is that moment: live
+    fetch becomes the product behaviour; the fixtures were only ever
+    test substrate. In-slice: the corpus moves out of
+    `src/policy_atlas/data/fulltext/` — out of the wheel — to a
+    repo-committed test-data home (`tests/`, per the 2026-07-05
+    decision; exact home + loader mechanics plan-designed, noting
+    `FixtureFetcher` currently loads via
+    `importlib.resources.files("policy_atlas")` and its resolution
+    must move with the corpus); the corpus itself stays committed as
+    the deterministic test substrate; the ≤30 MB licence-guard
+    budget test moves with it. Invariants: the suite stays
+    deterministic and egress-free; the wheel slims by the corpus;
+    and a **live-flagged run never silently falls back to fixture
+    replay** (decision 2's one-switch, now stated as a test-pinned
+    property). Packaging-only — no schema or public-interface
+    change; if loader mechanics turn out non-trivial, escalate
+    rather than grow the slice.
+
+13. **Live-check scope pin** (contract-time, per failure-log
     2026-07-08): changed surfaces + one cheap full-chain smoke —
     (a) one live fetch/ingest run over a real screened-in scope
     (~30–60 docs): the full outcome distribution recorded (ok ·
@@ -462,7 +498,7 @@ is spent. Report the blocker; don't push through.
   injected) · landing-page discovery + DOI fallback · the decision-8
   ladder (401 vs corroborated-403 vs `blocked_by_host` vs
   200-with-markers) · stage-2 windowing rider behaviour-preservation.
-- The pinned live check (decision 12), evidenced in verification.md.
+- The pinned live check (decision 13), evidenced in verification.md.
 
 ## Verification evidence expected
 

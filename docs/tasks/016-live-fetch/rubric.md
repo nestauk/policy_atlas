@@ -38,20 +38,25 @@ otherwise it is in progress, not done.
         401 vs corroborated-403 vs `blocked_by_host` vs 200-with-markers;
         the OA cross-check logs inconsistencies; bot-blocks are never
         counted as paywalls.
-12. [ ] The pinned live check ran and is evidenced in
+12. [ ] The fixture-corpus relocation (contract decision 12) landed: the
+        corpus is out of `src/policy_atlas/` and the wheel; the suite stays
+        deterministic and egress-free; the licence-guard budget test moved
+        with it; a live-flagged run never silently falls back to fixture
+        replay (test-pinned).
+13. [ ] The pinned live check ran and is evidenced in
         [verification.md](verification.md): live fetch/ingest outcome
         distribution recorded (observed counts, no pinned targets) · the
         mandatory-spine chain smoke WITH the ingest leg (discharging the
         015 rev-3.14 deviation) · wall-clock per leg recorded.
-13. [ ] Verification evidence recorded (verification.md), including the
+14. [ ] Verification evidence recorded (verification.md), including the
         exact end-to-end commands run.
-14. [ ] Known gaps and deferred seams updated in
+15. [ ] Known gaps and deferred seams updated in
         [docs/deferred.md](../../deferred.md): discharged entries marked
-        (live `DocumentFetcher`; the pip-audit CI pre-registration;
-        stage-2 windowing rider if landed), kept
+        (live `DocumentFetcher`; the pip-audit CI pre-registration; the
+        fixture-corpus relocation; stage-2 windowing rider if landed), kept
         seams intact (docling/OCR · multi-PDF assembly · caching ·
-        component-progress protocol · corpus relocation · per-depth fetch
-        budgets).
-15. [ ] Required review stack ran for Tier 3 (contract verifier ·
+        component-progress protocol · per-depth fetch budgets ·
+        citation-context clamp).
+16. [ ] Required review stack ran for Tier 3 (contract verifier ·
         code/security review · adversarial review · human deep review), or
         skipped with written justification — findings in verification.md.
