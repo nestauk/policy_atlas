@@ -23,8 +23,8 @@ eligible-set order, so the persisted outcome is independent of worker count.
 """
 
 import functools
-import importlib.resources
 import json
+import os
 import re
 import time
 import uuid
@@ -33,6 +33,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from multiprocessing import get_context
+from pathlib import Path
 from typing import Any, Protocol
 
 import pymupdf
@@ -152,27 +153,53 @@ class DocumentFetcher(Protocol):
         ...
 
 
-@functools.cache  # fixture files are immutable for the process lifetime (acquire precedent)
-def _load_manifest() -> dict[str, Any]:
-    data: dict[str, Any] = json.loads(
-        importlib.resources.files("policy_atlas")
-        .joinpath("data", "fulltext_manifest.json")
-        .read_text()
-    )
-    return data
-
-
 class FixtureFetcher:
     """Replays committed real documents by URL from the manifest. Zero egress.
 
-    URLs map to outcomes in ``fulltext_manifest.json``: ``ok`` entries read the
-    committed document bytes; ``http_error``/``oversize`` entries replay the
-    recorded failure. An unmapped URL is a dead link (``not_found``). The
-    manifest loads lazily on first fetch, so constructing the default fetcher
-    (every ``run_harness`` call) costs nothing for non-ingest components.
+    The fixture corpus is repo test data (``tests/data``), not package data — it
+    never ships in the wheel (contract decision 12). URLs map to outcomes in
+    ``fulltext_manifest.json``: ``ok`` entries read the committed document bytes;
+    ``http_error``/``oversize`` entries replay the recorded failure. An unmapped
+    URL is a dead link (``not_found``). The manifest loads lazily on first
+    fetch, so constructing the default fetcher (every ``run_harness`` call)
+    costs nothing for non-ingest components.
     """
 
     mode = "fixture"
+
+    def __init__(self, root: Path | None = None) -> None:
+        """Construct the fetcher. Cheap — no I/O until the first ``fetch()``.
+
+        Args:
+            root: Directory containing ``fulltext_manifest.json`` and the
+                ``fulltext/`` document dir. If omitted, resolved lazily at first
+                fetch from the ``POLICY_ATLAS_FIXTURE_CORPUS`` env var, else the
+                repo-relative default ``tests/data``.
+        """
+        self._root_arg = root
+
+    @functools.cached_property
+    def _root(self) -> Path:
+        if self._root_arg is not None:
+            return self._root_arg
+        if env_root := os.environ.get("POLICY_ATLAS_FIXTURE_CORPUS"):
+            return Path(env_root)
+        # src/policy_atlas/ingest_full_text.py -> parents[2] is the repo root
+        # (dev/test checkout only — the fixture corpus never ships in the wheel).
+        return Path(__file__).resolve().parents[2] / "tests" / "data"
+
+    @functools.cached_property
+    def _manifest(self) -> dict[str, Any]:
+        manifest_path = self._root / "fulltext_manifest.json"
+        if not manifest_path.is_file():
+            raise FileNotFoundError(
+                f"Fixture corpus manifest not found at {manifest_path}. The fixture "
+                "corpus lives at tests/data/fulltext (manifest tests/data/"
+                "fulltext_manifest.json) — point at a copy via the "
+                "POLICY_ATLAS_FIXTURE_CORPUS env var if running outside the repo checkout."
+            )
+        data: dict[str, Any] = json.loads(manifest_path.read_text())
+        return data
 
     def fetch(self, url: str) -> FetchResult:
         """Return the manifest-recorded outcome for ``url``.
@@ -183,8 +210,12 @@ class FixtureFetcher:
         Returns:
             ``ok`` with the committed document's bytes, the recorded failure, or
             ``not_found`` for an unmapped URL (the honest dead-link equivalent).
+
+        Raises:
+            FileNotFoundError: The resolved fixture corpus (manifest or
+                document dir) is missing — never a silent empty/not_found.
         """
-        entry = _load_manifest()["outcomes"].get(url)
+        entry = self._manifest["outcomes"].get(url)
         if entry is None:
             return FetchResult(status="error", error="not_found")
         outcome = entry["outcome"]
@@ -192,11 +223,15 @@ class FixtureFetcher:
             name = entry["file"]
             # manifest names are basenames — keeps traversal structurally impossible
             assert "/" not in name and "\\" not in name, name
-            body = (
-                importlib.resources.files("policy_atlas")
-                .joinpath("data", "fulltext", name)
-                .read_bytes()
-            )
+            doc_path = self._root / "fulltext" / name
+            if not doc_path.is_file():
+                raise FileNotFoundError(
+                    f"Fixture corpus document not found at {doc_path}. The fixture "
+                    "corpus lives at tests/data/fulltext — point at a copy via the "
+                    "POLICY_ATLAS_FIXTURE_CORPUS env var if running outside the repo "
+                    "checkout."
+                )
+            body = doc_path.read_bytes()
             return FetchResult(status="ok", content_type=entry["content_type"], body=body)
         if outcome == "oversize":
             return FetchResult(status="error", error="too_large")

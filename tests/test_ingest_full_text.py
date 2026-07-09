@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
 
-from policy_atlas import events
+from policy_atlas import events, ingest_full_text
 from policy_atlas.acquire import (
     AcquireContext,
     OpenAlexFixtureBackend,
@@ -376,6 +376,31 @@ def test_ingest_module_has_no_http_client() -> None:
     assert not forbidden.search(module)
 
 
+def test_fulltext_corpus_not_in_package() -> None:
+    """The fixture corpus must not ship in the wheel — it lives at tests/data
+    (contract decision 12, task 016)."""
+    package_data_dir = Path(ingest_full_text.__file__).parent / "data"
+    assert not (package_data_dir / "fulltext").exists(), (
+        "src/policy_atlas/data/fulltext must not exist — the fixture corpus lives "
+        "at tests/data/fulltext, out of the wheel"
+    )
+    assert not (package_data_dir / "fulltext_manifest.json").exists(), (
+        "src/policy_atlas/data/fulltext_manifest.json must not exist — the fixture "
+        "corpus lives at tests/data/fulltext_manifest.json, out of the wheel"
+    )
+
+
+def test_fixture_fetcher_missing_corpus_raises_on_fetch_not_construct(
+    tmp_path: Path,
+) -> None:
+    """An empty/missing fixture corpus root is a loud FileNotFoundError at first
+    fetch — never a silent empty/not_found — but construction alone must not
+    raise (every ``run_harness`` call constructs a default fetcher)."""
+    fetcher = FixtureFetcher(root=tmp_path)  # must not raise
+    with pytest.raises(FileNotFoundError, match=re.escape(str(tmp_path))):
+        fetcher.fetch("https://example.org/whatever")
+
+
 # --- Bulk contract tests ---
 
 # Ground-truth strings below are extracted from the actual committed fixtures at
@@ -720,7 +745,7 @@ def test_governance_chain(ingested_corpus: CorpusFixture, engine: Engine) -> Non
 
 def test_licence_guard() -> None:
     manifest = json.loads(
-        resources.files("policy_atlas").joinpath("data", "fulltext_manifest.json").read_text()
+        (Path(__file__).parent / "data" / "fulltext_manifest.json").read_text()
     )
     meta = manifest["_meta"]
     assert meta["recorded_at"]
@@ -735,7 +760,7 @@ def test_licence_guard() -> None:
             assert isinstance(permission, dict)
             assert permission.get("org") and permission.get("who") and permission.get("date")
 
-    fulltext_dir = Path(__file__).parent.parent / "src" / "policy_atlas" / "data" / "fulltext"
+    fulltext_dir = Path(__file__).parent / "data" / "fulltext"
     for url, outcome in manifest["outcomes"].items():
         assert url.startswith(("https://example.org/", "https://doi.org/10.99999/")), url
         if outcome["outcome"] == "ok":
