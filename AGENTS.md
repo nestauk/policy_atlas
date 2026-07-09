@@ -38,15 +38,18 @@ prefetch · retry/backoff · magic-byte content-type sniffing · charset
 handling · size caps + bounded buffering · paywall-detection signal
 ladder · landing-page PDF-link discovery + DOI fallback · per-link
 exception isolation: a fetcher raise becomes a reason-coded outcome,
-never a component failure) — plus the **substrate decision** the
-contract pins (synthesise's envelope-only `no_groundable_substrate`
-refusal vs the demo-validated titles+abstracts quick-run product
-shape). The fixture fetcher stays the zero-egress default — `make
+never a component failure) — plus the **chain-composition rule**
+(user call, 2026-07-09): the mandatory EB spine is acquire(search) →
+screen → classify → appraise → ingest(fetch) → synthesise; all other
+components are orchestrator-discretionary per depth gradation;
+synthesise's substrate gate is untouched. The fixture fetcher stays
+the zero-egress default — `make
 verify` stays deterministic and egress-free. Gated change riding this
-slice: **runtime egress** (live document fetching). Required reading
-before build: `demo/RETRO.md` §4 on branch `demo-live-run` (real fetch
-statistics: 222 attempts → 81 ingested; paywalls; empty bodies behind
-DOI redirects; 10-way prefetch + serial ingest validated). Build per
+slice: **runtime egress** (live document fetching). `demo/RETRO.md`
+§4 on branch `demo-live-run` is an **anecdotal prior only** (user
+call: the demo was throwaway; no demo shape or number is design
+authority) — it names which live hazards are real (paywalls, empty
+bodies behind DOI redirects, parse failures on grey lit). Build per
 `docs/tasks/016-live-fetch/contract.md`. Stay within the contract's
 scope and stop conditions; docling/OCR parse tiers, multi-PDF Overton
 assembly, cross-run fetch caching and all other seams remain deferred

@@ -29,22 +29,28 @@ otherwise it is in progress, not done.
        octet-stream never reaches the plain-text parser) · charset path per
        contract decision 6 · landing-page discovery and DOI fallback bounded
        exactly as contracted.
-10. [ ] The substrate decision (contract decision 9) is implemented as
-        adopted at the gate, with components §9 spec flow-back + `log.md`
-        entry and an ADR; grounding honesty labels carry through to
-        citations where 9B applies.
-11. [ ] The pinned live check ran and is evidenced in
+10. [ ] The chain-composition rule (contract decision 9, Option A) is
+        implemented as adopted: every profile's chain includes the ingest
+        leg; synthesise's substrate gate untouched; components §9 +
+        capability.md flow-back with `log.md` entry and an ADR recording
+        the mandatory spine.
+11. [ ] The access-failure ladder (contract decision 8) is test-pinned:
+        401 vs corroborated-403 vs `blocked_by_host` vs 200-with-markers;
+        the OA cross-check logs inconsistencies; bot-blocks are never
+        counted as paywalls.
+12. [ ] The pinned live check ran and is evidenced in
         [verification.md](verification.md): live fetch/ingest outcome
-        distribution vs the RETRO §4 baseline · the §9 rapid chain smoke
-        WITH the ingest leg (discharging the 015 rev-3.14 deviation) ·
-        wall-clock per leg recorded.
-12. [ ] Verification evidence recorded (verification.md), including the
+        distribution recorded (observed counts, no pinned targets) · the
+        mandatory-spine chain smoke WITH the ingest leg (discharging the
+        015 rev-3.14 deviation) · wall-clock per leg recorded.
+13. [ ] Verification evidence recorded (verification.md), including the
         exact end-to-end commands run.
-13. [ ] Known gaps and deferred seams updated in
+14. [ ] Known gaps and deferred seams updated in
         [docs/deferred.md](../../deferred.md): discharged entries marked
         (live `DocumentFetcher`; stage-2 windowing rider if landed), kept
         seams intact (docling/OCR · multi-PDF assembly · caching ·
-        component-progress protocol · corpus relocation).
-14. [ ] Required review stack ran for Tier 3 (contract verifier ·
+        component-progress protocol · corpus relocation · per-depth fetch
+        budgets).
+15. [ ] Required review stack ran for Tier 3 (contract verifier ·
         code/security review · adversarial review · human deep review), or
         skipped with written justification — findings in verification.md.
