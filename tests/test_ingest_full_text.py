@@ -752,6 +752,145 @@ def test_summary_includes_attempted_bytes_and_wall_clock(
     assert isinstance(summary_logs[0]["wall_clock_s"], float)
 
 
+def test_live_flag_never_silently_falls_back_to_fixture_replay() -> None:
+    """A live-flagged run constructs the live fetcher, never FixtureFetcher —
+    the decision-12 test-pinned invariant riding decision 2's one switch."""
+    from policy_atlas.fetch_live import LiveDocumentFetcher
+    from policy_atlas.skeleton import select_document_fetcher
+
+    live_fetcher = select_document_fetcher(True)
+    assert isinstance(live_fetcher, LiveDocumentFetcher)
+    try:
+        assert live_fetcher.mode == "live"
+        assert not isinstance(live_fetcher, FixtureFetcher)
+    finally:
+        live_fetcher.close()
+
+    stub_fetcher = select_document_fetcher(False)
+    assert isinstance(stub_fetcher, FixtureFetcher)
+    assert stub_fetcher.mode == "fixture"
+
+
+def test_ingest_log_lines_never_carry_query_strings(conn: Connection) -> None:
+    """URL log hygiene (contract decision 3, rev 2.4 blocker 1): tokened OA URLs
+    must never leak query strings into log lines — attempts trail included."""
+    tokened_ok = "https://example.org/ok.pdf?token=SECRET-OK-b7f3"
+    tokened_fail = "https://example.org/gone.pdf?token=SECRET-FAIL-a1c9"
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    _seed_relevant_acquired(
+        conn, project_id, run_id, scope_id,
+        {"backend": "overton", "provider_fields": {"pdf_url": tokened_ok}},
+    )
+    _seed_relevant_acquired(
+        conn, project_id, run_id, scope_id,
+        {"backend": "overton", "provider_fields": {"pdf_url": tokened_fail}},
+    )
+    fetcher = _ScriptedFetcher({
+        tokened_ok: ingest_full_text.FetchResult(
+            status="ok", content_type="text/plain", body=b"x" * 400
+        ),
+        tokened_fail: ingest_full_text.FetchResult(status="error", error="not_found"),
+    })
+
+    with capture_logs() as logs:
+        summary = run_ingest(conn, project_id, run_id, scope_id, fetcher=fetcher)
+
+    assert summary["ingested"] == 1 and summary["fetch_failed"] == 1
+    log_dump = repr(logs)
+    assert "SECRET-OK" not in log_dump
+    assert "SECRET-FAIL" not in log_dump
+    assert "token=" not in log_dump
+    # The verbatim URL still persists as provenance (provider-data retention).
+    fetched_from = conn.execute(
+        select(source_snapshot.c.metadata["fetched_from"].astext)
+        .where(source_snapshot.c.text_basis == "full_text")
+        .where(
+            source_snapshot.c.source_snapshot_id
+            == select(project_source_snapshot.c.full_text_snapshot_id)
+            .where(project_source_snapshot.c.project_id == project_id)
+            .where(project_source_snapshot.c.full_text_status == "ingested")
+            .scalar_subquery()
+        )
+    ).scalar_one()
+    assert fetched_from == tokened_ok
+
+
+def test_parallel_fetch_matches_serial_outcomes(conn: Connection) -> None:
+    """Decision 5's determinism invariant: fetch_workers > 1 persists exactly the
+    outcomes and eligible-set write order of the serial path."""
+
+    def seed_one_project() -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
+        project_id, run_id = seed_project_and_run(conn)
+        scope_id = seed_scope(conn, project_id)
+        for n in range(6):
+            _seed_relevant_acquired(
+                conn, project_id, run_id, scope_id,
+                {
+                    "backend": "overton",
+                    "provider_fields": {"pdf_url": f"https://example.org/doc-{n}.pdf"},
+                },
+            )
+        return project_id, run_id, scope_id
+
+    def script() -> dict[str, ingest_full_text.FetchResult | BaseException]:
+        outcomes: dict[str, ingest_full_text.FetchResult | BaseException] = {}
+        for n in range(6):
+            url = f"https://example.org/doc-{n}.pdf"
+            if n % 3 == 0:
+                outcomes[url] = ingest_full_text.FetchResult(
+                    status="ok", content_type="text/plain", body=f"body {n} ".encode() * 60
+                )
+            elif n % 3 == 1:
+                outcomes[url] = ingest_full_text.FetchResult(status="error", error="paywall")
+            else:
+                outcomes[url] = ingest_full_text.FetchResult(status="error", error="not_found")
+        return outcomes
+
+    def outcomes_for(project_id: uuid.UUID) -> dict[str, tuple[str, str | None]]:
+        # Keyed by the doc's one candidate URL: pss ids are random UUIDs, so
+        # positional order is not comparable across two seeded projects.
+        rows = conn.execute(
+            select(
+                source_snapshot.c.metadata,
+                project_source_snapshot.c.full_text_status,
+                project_source_snapshot.c.full_text_error,
+            )
+            .select_from(
+                project_source_snapshot.join(
+                    source_snapshot,
+                    project_source_snapshot.c.source_snapshot_id
+                    == source_snapshot.c.source_snapshot_id,
+                )
+            )
+            .where(project_source_snapshot.c.project_id == project_id)
+        ).fetchall()
+        return {
+            row.metadata["provider_fields"]["pdf_url"]: (
+                row.full_text_status,
+                row.full_text_error,
+            )
+            for row in rows
+        }
+
+    serial_project, serial_run, serial_scope = seed_one_project()
+    serial_summary = run_ingest(
+        conn, serial_project, serial_run, serial_scope,
+        fetcher=_ScriptedFetcher(script()), fetch_workers=1, parse_fn=_ok_parse,
+    )
+    parallel_project, parallel_run, parallel_scope = seed_one_project()
+    parallel_summary = run_ingest(
+        conn, parallel_project, parallel_run, parallel_scope,
+        fetcher=_ScriptedFetcher(script()), fetch_workers=4, parse_fn=_ok_parse,
+    )
+
+    drop_wall_clock = ("wall_clock_s",)
+    assert {k: v for k, v in serial_summary.items() if k not in drop_wall_clock} == {
+        k: v for k, v in parallel_summary.items() if k not in drop_wall_clock
+    }
+    assert outcomes_for(serial_project) == outcomes_for(parallel_project)
+
+
 # --- Bulk contract tests ---
 
 # Ground-truth strings below are extracted from the actual committed fixtures at
