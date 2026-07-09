@@ -516,9 +516,12 @@ PR landing:
     escalation exercised once** (a deliberately narrow intent): the
     deep continuation resumes incrementally,
     `re_searched_still_thin` lands when still thin; (g) one
-    **rapid-profile chain smoke** over the live-acquired
-    corpus (acquire → screen → classify → appraise → characterise, live
-    LLM backends — mini-class over ~50 envelopes: cents). **No
+    **rapid-profile chain smoke** over the live-acquired corpus
+    (acquire → screen → classify → appraise → characterise, live
+    LLM backends — mini-class over ~50 envelopes: cents), which also
+    confirms (rev 3.8 sweep) the new tag rows surfacing in
+    characterise's tag distributions (series × overton;
+    `source_tags`). **No
     deep-chain e2e** (the 014 lesson; 017 owns the dress rehearsal).
     Live results are non-deterministic — evidence records observed
     counts, not pinned values.
@@ -877,6 +880,24 @@ PR landing:
       `source.region`'s group memberships (already retained inside
       the `source` block) remain noted for characterise's landscape
       axes; nothing consumes them in 015.
+      **Ripple sweep — verified as-built, no other component changes**
+      *(rev 3.8 sweep, user question)*: characterise
+      (`characterise.py:346-354`), select (`select.py:1272-1283`) and
+      synthesise's tool layer (`synthesis_tools.py:729-732`) already
+      read `source_tag` at `(tag_type, asserted_by, tag)` grain —
+      classify was the lone raw-field outlier. The new 015 tag rows
+      (series as methodological_structural×overton; publisher
+      `source_tags`) flow into those readers **additively, zero code
+      change** — the chain smoke checks they surface in characterise's
+      tag distributions. Deliberate non-changes: **screen gains no
+      label priors** (a recall filter judges text against intent;
+      provider topics steering admission would be a new failure
+      surface for zero recall benefit) · **extract keeps its
+      envelope-as-context shape** (its judgment is content extraction
+      from chunk text; `title_source` there is cosmetic — noted at the
+      011 envelope-fencing seam) · **tag-based retrieval scoping**
+      (the spec's "look here first" soft prior over columns+tags)
+      remains its own recorded seam, not a 015 rider.
 
 ## Scope / Out of scope
 
