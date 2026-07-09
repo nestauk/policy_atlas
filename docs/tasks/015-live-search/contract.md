@@ -3,14 +3,27 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted rev 3.10 — awaiting contract approval (the 🛑 is
-> open; revs 2–3.10 shaped at the gate in user deliberation).
+> **Status:** drafted rev 3.11 — awaiting contract approval (the 🛑 is
+> open; revs 2–3.11 shaped at the gate in user deliberation).
 > Contract approved (before planning): _date · who_ ·
 > Plan approved (before implementation): _date · who_ · ADR: _expected:
 > one_ (depth-graded agentic search adoption — the Arm-B fold is a
 > consequential design decision; drafted at step 4).
 >
 > **Revision history:**
+> - **rev 3.11** (2026-07-09, user design call): **wall-clock budgets
+>   are depth-graded, calibrated to Asta's two modes** — a single flat
+>   1–2 min budget contradicted the depth-gradation design (rev 3.10
+>   cited Asta fast/diligent as validation while keeping one flat
+>   number, and at its low end the flat budget bought only 2 of the 3
+>   capped rounds). Now: **rapid ≈ 30 s** (Asta-fast class; breach
+>   stops remaining fan-out calls honestly as `breadth_truncated` —
+>   rapid has no loop to short-circuit) and **deep ≈ 2–3 min**
+>   (Asta-diligent class; breach = `budget_exhausted` as before; the
+>   round cap of 3 is now comfortably reachable at 15–45 s/round of
+>   in-loop screening instead of marginal). Both constants plan-pinned
+>   per depth, mirroring the per-depth result caps (decision 6); the
+>   live check measures each mode against its own budget.
 > - **rev 3.10** (2026-07-09, external validation round at the user's
 >   direction — three parallel streams: published-research survey ·
 >   shipped-system engineering survey · /last30days field scan; full
@@ -581,7 +594,8 @@ PR landing:
     (a) a live **rapid** acquire run (both providers, a real scope
     intent): generated queries recorded in events, real records with
     correct envelopes/`abstract_source`, provider tags bounded, coverage
-    record `adequate`, `mode="live"`; (b) an immediate re-run showing
+    record `adequate`, `mode="live"`, **wall-clock measured against the
+    rapid ≈ 30 s budget** (rev 3.11); (b) an immediate re-run showing
     dedup; (c) rate limiter observed + key-hygiene grep clean; (d) the
     **per-backend result-count probe** — now comparative evidence:
     verbatim intent vs generated queries on the OpenAlex leg (the
@@ -749,9 +763,14 @@ PR landing:
       truncated to a plan-pinned char cap, id-keyed data records —
       never the full hit list. In-loop screening runs under the
       bounded-concurrency fan-out (mini ×3, concurrent — order
-      15–45 s per ~50-doc round); **a wall-clock budget is a
-      plan-pinned constant** (order 1–2 min) whose breach stops the
-      loop honestly, and the live check measures it.
+      15–45 s per ~50-doc round); **wall-clock budgets are per-depth,
+      plan-pinned constants calibrated to Asta's two modes**
+      *(rev 3.11, user call)*: **rapid ≈ 30 s** (breach stops the
+      remaining fan-out calls, honest `breadth_truncated`) and
+      **deep ≈ 2–3 min** (breach stops the loop, `budget_exhausted`) —
+      the deep budget makes the 3-round cap comfortably reachable
+      rather than marginal; the live check measures each mode against
+      its own budget.
     - **Governance (strengthened rev 3):** every judgment that steers
       the search is a persisted, governed screening row — one relevance
       surface, one calibration, one eval target; "acquired sources
@@ -911,8 +930,9 @@ PR landing:
     *(amended rev 3)*. Hard plan-pinned constants: LLM call budget per
     run (query generation + reformulate + suggest + the in-loop screen
     reps — screen's own ≤ docs × 3 × 2 bound composes in), HTTP call
-    budget per backend per run, round cap, wall-clock budget
-    (decision 15), per-depth result caps (decision 6), the
+    budget per backend per run, round cap, **per-depth wall-clock
+    budgets** (decision 15, rev 3.11: rapid ≈ 30 s ·
+    deep ≈ 2–3 min), per-depth result caps (decision 6), the
     confident-relevant target + floor (decisions 15/17). Every budget
     breach is an honest stop (`budget_exhausted`), never a silent trim.
     The loop summary counts, per round: queries executed per backend,
