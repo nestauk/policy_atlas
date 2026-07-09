@@ -3,8 +3,8 @@
 ``SearchBackend`` is the seam (protocol, like ``InferenceProvider``); the v3.0
 implementations replay committed sanitized fixtures derived from dev-time-recorded
 real OpenAlex and Overton responses — authentic structure, fabricated values,
-zero runtime egress. Live HTTP backends are the recorded seam behind the same
-protocol, gated on their own runtime-egress approval (docs/deferred.md).
+zero runtime egress. Live HTTP backends live in ``search_live.py`` behind the
+same protocol, so this module stays fixture-default and HTTP-import-free.
 
 Each accepted result is snapshotted on the text in hand (title + best available
 summary), joined to the project with ``origin="acquired"``. Every search call
@@ -59,6 +59,19 @@ class AcquireContext:
     context: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class BackendCaps:
+    """Capability flags declared by a search backend.
+
+    Attributes:
+        has_snowball: Whether citation/reference expansion verbs are available.
+        has_title_lookup: Whether exact-title lookup is available.
+    """
+
+    has_snowball: bool
+    has_title_lookup: bool
+
+
 class SearchBackend(Protocol):
     """The ``search`` seam: one configured backend with a declared trust class.
 
@@ -66,15 +79,49 @@ class SearchBackend(Protocol):
         name: Backend identifier (e.g. ``"openalex"``).
         trust_class: Declared trust class (e.g. ``"academic_aggregator"``).
         mode: ``"fixture"`` or ``"live"`` — carried into events + coverage record.
+        caps: Backend capability flags for deeper search loops.
     """
 
     name: str
     trust_class: str
     mode: str
+    caps: BackendCaps
 
-    def search(self, query: str) -> list[dict[str, Any]]:
+    def search(
+        self,
+        query: str,
+        *,
+        wire_params: dict[str, str] | None = None,
+        max_results: int | None = None,
+    ) -> list[dict[str, Any]]:
         """Return raw provider records for the query."""
         ...
+
+    def fetch_citations(
+        self, record_id: str, *, max_results: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Return records citing the given provider record."""
+        ...
+
+    def fetch_references(
+        self, record_ids: list[str], *, max_results: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Return provider records for referenced provider IDs."""
+        ...
+
+    def lookup_title(self, title: str) -> list[dict[str, Any]]:
+        """Return provider records matching a title query."""
+        ...
+
+
+def _limit_fixture_records(
+    records: list[dict[str, Any]], max_results: int | None
+) -> list[dict[str, Any]]:
+    if max_results is None:
+        return records
+    if max_results <= 0:
+        return []
+    return records[:max_results]
 
 
 @functools.cache  # fixture files are immutable for the process lifetime
@@ -92,10 +139,40 @@ class OpenAlexFixtureBackend:
     name = "openalex"
     trust_class = "academic_aggregator"
     mode = "fixture"
+    caps = BackendCaps(has_snowball=True, has_title_lookup=True)
 
-    def search(self, query: str) -> list[dict[str, Any]]:
+    def search(
+        self,
+        query: str,
+        *,
+        wire_params: dict[str, str] | None = None,
+        max_results: int | None = None,
+    ) -> list[dict[str, Any]]:
         """Return the sanitized fixture Work records (query is not interpreted)."""
-        return _load_fixture("openalex_works.json")
+        return _limit_fixture_records(_load_fixture("openalex_works.json"), max_results)
+
+    def fetch_citations(
+        self, record_id: str, *, max_results: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Return a deterministic small citation slice from the fixture page."""
+        return _limit_fixture_records(_load_fixture("openalex_works.json")[:3], max_results)
+
+    def fetch_references(
+        self, record_ids: list[str], *, max_results: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Return a deterministic small reference slice from the fixture page."""
+        return _limit_fixture_records(_load_fixture("openalex_works.json")[:3], max_results)
+
+    def lookup_title(self, title: str) -> list[dict[str, Any]]:
+        """Return fixture records whose titles contain the query string."""
+        needle = title.casefold().strip()
+        if not needle:
+            return []
+        return [
+            record
+            for record in _load_fixture("openalex_works.json")
+            if needle in str(record.get("display_name", "")).casefold()
+        ]
 
 
 class OvertonFixtureBackend:
@@ -104,10 +181,33 @@ class OvertonFixtureBackend:
     name = "overton"
     trust_class = "grey_literature_aggregator"
     mode = "fixture"
+    caps = BackendCaps(has_snowball=False, has_title_lookup=False)
 
-    def search(self, query: str) -> list[dict[str, Any]]:
+    def search(
+        self,
+        query: str,
+        *,
+        wire_params: dict[str, str] | None = None,
+        max_results: int | None = None,
+    ) -> list[dict[str, Any]]:
         """Return the sanitized fixture policy-document records (query is not interpreted)."""
-        return _load_fixture("overton_documents.json")
+        return _limit_fixture_records(_load_fixture("overton_documents.json"), max_results)
+
+    def fetch_citations(
+        self, record_id: str, *, max_results: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Raise because Overton v1 declares no snowball capability."""
+        raise NotImplementedError("OvertonFixtureBackend caps.has_snowball=False")
+
+    def fetch_references(
+        self, record_ids: list[str], *, max_results: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Raise because Overton v1 declares no snowball capability."""
+        raise NotImplementedError("OvertonFixtureBackend caps.has_snowball=False")
+
+    def lookup_title(self, title: str) -> list[dict[str, Any]]:
+        """Raise because Overton v1 declares no title-lookup capability."""
+        raise NotImplementedError("OvertonFixtureBackend caps.has_title_lookup=False")
 
 
 # --- Mapping layer (private): raw provider record -> normalized envelope + chunk ---
