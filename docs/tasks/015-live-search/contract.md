@@ -3,14 +3,31 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted rev 3.11 — awaiting contract approval (the 🛑 is
-> open; revs 2–3.11 shaped at the gate in user deliberation).
+> **Status:** drafted rev 3.12 — awaiting contract approval (the 🛑 is
+> open; revs 2–3.12 shaped at the gate in user deliberation).
 > Contract approved (before planning): _date · who_ ·
 > Plan approved (before implementation): _date · who_ · ADR: _expected:
 > one_ (depth-graded agentic search adoption — the Arm-B fold is a
 > consequential design decision; drafted at step 4).
 >
 > **Revision history:**
+> - **rev 3.12** (2026-07-09, user design direction recorded as a
+>   seam): **the depth axis is a spectrum, not a pair** — users will
+>   want gradations from really-rapid through in-between to deep
+>   (2–3 min) and beyond (long-running, report-grade, when the user
+>   will wait for quality); gradations factor into OTHER components
+>   too, giving the orchestrator/sub-agents time-budget **levers** to
+>   allocate per the user's intent and patience ("how best to fill up
+>   the time"). Named seam: **tool-wide depth/time-budget gradation**
+>   — the orchestrator compiles a user time/quality preference into
+>   per-component depth directives + budgets (search depth+wall-clock ·
+>   screen stage · the 008 time-budget parser-tier seam · select
+>   budget · synthesis section caps), at the plan-as-object compile
+>   surface. 015's structural contribution: decision 13's depth
+>   directive is deliberately **extensible by vocabulary** — a new
+>   gradation is a new constants row (caps + wall-clock + round cap)
+>   and a profile, never a new mechanism; nothing in this slice
+>   hard-codes two-ness beyond the validated `rapid|deep` vocabulary.
 > - **rev 3.11** (2026-07-09, user design call): **wall-clock budgets
 >   are depth-graded, calibrated to Asta's two modes** — a single flat
 >   1–2 min budget contradicted the depth-gradation design (rev 3.10
@@ -649,7 +666,15 @@ PR landing:
     default) sets `rapid`. Depth is recorded on the coverage record
     (inside `scope_filters`' sibling context or the `backends` array
     entries — exact home plan-pinned) so absence claims know how hard
-    the space was searched.
+    the space was searched. *(rev 3.12)* **The vocabulary is
+    deliberately extensible**: every depth-dependent constant (result
+    caps · wall-clock · round cap) lives in a per-depth table keyed by
+    the directive value, so a future gradation (really-rapid ·
+    intermediate · long-running report-grade) is a new constants row
+    + profile, never a new mechanism — the compile target for the
+    recorded tool-wide depth/time-budget seam (the orchestrator
+    allocating a user's time/quality preference across components as
+    levers). v3.0 ships and validates exactly `rapid | deep`.
 
 14. **Rapid search: LLM multi-query fan-out (V2's Arm-A shape, made
     honest).** One generation call per run — `search_queries_v1`
@@ -1277,6 +1302,14 @@ frontier), **MetaSyn stage-attributed metrics** (retrieval vs
 screening failures diagnosed separately) and the **mini-class judge
 comprehension-threshold gate** (measure the screen's relevance-judge
 quality before trusting loop-steered "adequate") ·
+**tool-wide depth/time-budget gradation** (rev 3.12, user direction:
+the depth axis is a spectrum — really-rapid → intermediate → deep →
+long-running report-grade; the orchestrator compiles a user
+time/quality preference into per-component depth directives + budgets
+as levers — search depth+wall-clock · screen stage · the 008
+parser-tier seam · select budget · synthesis caps — at the
+plan-as-object compile surface; 015's per-depth constants table is
+the extensible compile target) ·
 **rev-3.10 loop seams**: calibrated recall estimate (Chao
 capture-recapture / Undermind exponential-saturation fit → a
 user-facing "estimated % of relevant found" on the coverage record) ·
