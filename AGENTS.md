@@ -36,10 +36,11 @@ sanitizers · per-depth caps · key hygiene · no citation floor), plus the
 search capability itself — **rapid** = LLM multi-query fan-out with
 SR/RCT variants; **deep** = the Arm-B agentic loop realised as
 **acquire↔screen rounds** (contract rev 3: the loop's judge IS the
-unmodified 014 screen — reformulation from screened exemplars with
-token-bounded inputs · citation snowballing · suggestion grounding ·
-Thompson-sampling arm selection · stopping on real confident-relevant
-counts), all budget-governed; the thin-base re-search behaviour lives
+unmodified 014 screen — reformulation from graded screened exemplars
+with token-bounded per-round inputs · citation snowballing ·
+suggestion grounding · fixed arm allocation with a diversity reserve ·
+stopping on real confident-relevant counts and discovery rate, round
+cap 3), all budget-governed; the thin-base re-search behaviour lives
 in the loop's stopping rule (rapid-thin runs escalate to one bounded
 deep continuation); pagination; `scope_filters`; the backend-scope
 field. Fixture backends stay the zero-egress defaults — `make verify`

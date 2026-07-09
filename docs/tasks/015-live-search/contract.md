@@ -3,14 +3,64 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted rev 3.9 — awaiting contract approval (the 🛑 is
-> open; revs 2–3.9 shaped at the gate in user deliberation).
+> **Status:** drafted rev 3.10 — awaiting contract approval (the 🛑 is
+> open; revs 2–3.10 shaped at the gate in user deliberation).
 > Contract approved (before planning): _date · who_ ·
 > Plan approved (before implementation): _date · who_ · ADR: _expected:
 > one_ (depth-graded agentic search adoption — the Arm-B fold is a
 > consequential design decision; drafted at step 4).
 >
 > **Revision history:**
+> - **rev 3.10** (2026-07-09, external validation round at the user's
+>   direction — three parallel streams: published-research survey ·
+>   shipped-system engineering survey · /last30days field scan; full
+>   record + adjudication table in
+>   [deep-research-validation.md](deep-research-validation.md)).
+>   **Validated as designed, citations in place**: screen-as-loop-judge
+>   (convergent practice — PaperQA2/Undermind; MetaSyn measures
+>   screening as THE bottleneck, ≤52.7% recovered under a 90.9%
+>   retrieval ceiling; PaSa is the closest published analog, +38–40%
+>   recall over single-pass) · token-bounded reformulation (universal;
+>   the user's rev-2 latency diagnosis is field-confirmed) · 1–2 min
+>   wall-clock (between Asta's fast/diligent modes; the implied 2–4
+>   rounds sit inside CMU's 3–7-turn quality window) · snowball-as-
+>   complement (one-hop median 35.8% recall) · suggest→verify→drop
+>   (hallucination 3–20%; verification cuts bad refs 6–79×) ·
+>   per-index idiom split · governance answers the field's
+>   reproducibility criticism. **Adopted in-slice**: (a) **Thompson
+>   sampling CUT** — no shipped system uses a bandit and the
+>   cold-start arithmetic is fatal (2–4 rounds = 2–4 pulls); fixed
+>   round-robin/proportional allocation replaces it (seeded-RNG test
+>   machinery drops out; sliding-window TS recorded as an eval-gated
+>   seam that must beat round-robin); (b) **round cap pinned at 3**
+>   (ADORE plateau; drift harm at 3–4); (c) **graded exemplars,
+>   anchored to the FIXED original intent, negatives included**
+>   (ADORE's anti-drift controls — screen's persisted rows already
+>   carry the grades); (d) **reformulation context strictly per-round,
+>   non-accumulating** (the CMU context ceiling); (e) **diversity
+>   reserve** — a fixed fraction of each round's acquisition ignores
+>   screen steering (the mitigation for screener self-reinforcement,
+>   the design's highest-severity previously-un-named risk); (f)
+>   **generated-query validation** (SIGIR: skipping it collapses
+>   recall to 0.08–0.15; all-zero fallback to verbatim intent);
+>   (g) **Overton gains up to 2 generated NL paraphrases** beside the
+>   verbatim intent (the dense arm's single-point-of-failure fix);
+>   (h) **`short_circuit` = discovery-RATE floor** with marginal-yield
+>   primary and budgets backstop (AstaBench: over-search is the
+>   documented failure mode); (i) suggestion grounding prefers
+>   **ID/DOI resolution** over fuzzy title match; grounded-but-
+>   screened-out rate logged as the suggest-arm quality signal;
+>   (j) framing: the consensus screen named as the calibration
+>   control (BrowseComp: 82–91% agent calibration error), and the
+>   **mini-class judge comprehension threshold** named as the
+>   eval-slice must-measure gate; "adequate" is coverage-adequacy,
+>   never a recall guarantee. **New seams**: calibrated recall
+>   estimate (Chao capture-recapture / Undermind exponential-
+>   saturation fit → user-facing "estimated % of relevant found" on
+>   the coverage record) · sliding-window TS experiment · RCS-style
+>   abstract compression · best-of-N query selection · eval-metric
+>   stance (AstaBench cost-normalized estimated-recall+nDCG Pareto;
+>   MetaSyn stage-attributed retrieval-vs-screening metrics).
 > - **rev 3.9** (2026-07-09, two user calls): **(a) chain-terminus
 >   correction (fundamental, recurring — now also a memory entry):
 >   every run ends in `synthesise`**, the component that mints the
@@ -362,8 +412,9 @@ PR landing:
   budget_exhausted).
 - Breadth: pagination-to-cap, `scope_filters` directive vocabulary,
   backend-scope Plan/Config field (decision 18).
-- Tests (transport-stubbed, scripted-backend loop tests, seeded-RNG
-  sampling tests) + `verification.md` with the pinned live check.
+- Tests (transport-stubbed, scripted-backend loop tests — fully
+  deterministic, rev 3.10) + `verification.md` with the pinned live
+  check.
 - Components §1 spec flow-back + `log.md` entry; `deferred.md` +
   knowledge updates.
 
@@ -390,6 +441,10 @@ PR landing:
   evidence base: OpenAlex + Overton filter catalogs (live-verified
   enums, syntax rules, the Overton documentation-gap finding, tiering)
   behind decision 18's grammar
+- [deep-research-validation.md](deep-research-validation.md) — the
+  rev-3.10 evidence base: published-research + engineering-practice +
+  30-day field scan on LLM search/research agents, with the
+  adjudication table behind decisions 14/15's refinements
 - R&D handover: `../discovery_policy_atlas/backend/testing/r_and_d/
   search_experiments/ONBOARDING.md` + `core/source.py` (the SourceClient
   shape decision 16 grows toward)
@@ -593,15 +648,28 @@ PR landing:
     Fan-out: each generated query → OpenAlex **base + systematic-review
     + RCT deterministic clause variants** (V2's production recall
     feature, `_fanout.py` precedent — clauses are code constants, not
-    LLM output); **Overton takes the verbatim intent as its one
-    semantic `squery`** (dense endpoints want NL; generated keyword
-    queries would *hurt* that leg). Per-call `search.executed` events
+    LLM output); **Overton takes the verbatim intent PLUS up to 2
+    generated NL paraphrases** as semantic `squery` calls *(amended
+    rev 3.10 — a single NL query is the dense arm's single point of
+    failure, the semantic mirror of boolean fragility; the paraphrases
+    come from the same generation call, costing 2 extra rate-limited
+    HTTP calls)*; generated keyword queries would *hurt* that leg.
+    **Every generated query is validated** *(rev 3.10 — the SIGIR
+    reproduction found validation the single biggest recall lever:
+    omitting it collapses recall to 0.08–0.15)*: a zero-result
+    generated query is counted and dropped, never load-bearing; if
+    ALL generated queries zero-out, the backend falls back to the
+    verbatim-intent query with an honest note in the summary.
+    Per-call `search.executed` events
     carry each executed query verbatim (already the 007 shape — queries
     travel by reference from the coverage record). Failed variants are
     counted and skipped (decision 7); dedup collapses cross-variant
     hits (as-built, in-memory within the call stream). V2's central
-    lesson is honoured by construction: **no single LLM query is ever
-    load-bearing** — instability averages out across the fan-out.
+    lesson is honoured by construction — and now field-confirmed
+    (zero-shot boolean generation reproduces at ~0.15–0.58 recall;
+    multi-query OR-combining recovers it): **no single LLM query is
+    ever load-bearing** — instability averages out across the fan-out,
+    and deep-mode escalation carries the recall load beyond it.
     Generation-call failure (post-retry) fails the component loudly
     (`component.failed`) — a search run with no queries is
     infrastructure failure, not empty coverage.
@@ -616,26 +684,63 @@ PR landing:
     - **Round k**: read the scope's screening results via the 014
       **effective-screen helper** (the one read rule — real 3-rep
       consensus decisions + confidences, never a shadow judgment) →
-      **reformulate** queries from the top screened exemplars
-      (`search_reformulate_v1`; per-backend idiom: keyword
-      reformulations for OpenAlex, semantic legal for Overton) →
-      **snowball** citations/references of high-confidence relevants
-      (decision 16 verbs) → **suggestion grounding**
-      (`search_suggest_v1` proposes likely papers; a title-grounding
-      lookup verifies they exist — ungrounded suggestions dropped and
-      counted, the R&D's hallucination filter) → acquire (dedup guards
-      collapse re-hits) → screen the new docs.
+      **reformulate** queries from **graded exemplars anchored to the
+      fixed original intent** *(rev 3.10, ADORE's anti-drift
+      controls)*: top confident-relevants PLUS a bounded set of
+      high-confidence not_relevants as **negative exemplars** ("more
+      like these, never like those"), all id-keyed records, with the
+      original intent record riding every reformulation prompt as the
+      anchor — grading is never against the evolving exemplar
+      centroid, which is the documented query-drift mechanism.
+      Context is **strictly per-round, non-accumulating** (top-k THIS
+      round — cumulative context re-creates the measured ~7-turn
+      quality ceiling by round 3–4). Per-backend idiom: keyword
+      reformulations for OpenAlex; **NL paraphrase reformulations for
+      Overton** (rev 3.10: the dense arm gets up to 2 generated
+      paraphrases beside the verbatim intent in every mode — a single
+      NL query is the semantic mirror of boolean single-query
+      fragility) → **snowball** citations/references of
+      high-confidence relevants, preferring central/framework-shaped
+      seeds (decision 16 verbs; one-hop yield is a complement,
+      ~36% median recall in the literature, never the recall engine)
+      → **suggestion grounding** (`search_suggest_v1` proposes likely
+      papers; grounding **prefers OpenAlex ID/DOI resolution over
+      fuzzy title match** (rev 3.10 — title-lookup false-drops real
+      papers on variants); ungrounded suggestions dropped and
+      counted, and the **grounded-but-screened-out rate is logged**
+      as the suggest-arm quality signal) → acquire (dedup guards
+      collapse re-hits) → screen the new docs. **A diversity reserve**
+      *(rev 3.10 — the screener-self-reinforcement mitigation)*: a
+      fixed plan-pinned fraction of each round's acquisition budget
+      runs fresh intent-derived queries NOT steered by screen results,
+      so the loop can never fully collapse onto what the screener
+      already likes (reward-hacking amplification in feedback loops
+      is the literature's named failure; novel-vocabulary relevants
+      are where the screener is least confident).
+    - **Arm allocation: fixed round-robin/proportional** *(rev 3.10 —
+      Thompson sampling CUT: no surveyed shipped system uses a bandit,
+      and the arithmetic is fatal — a ≤3-round loop gives a 3-arm
+      bandit 2–4 pulls, permanent cold-start; fixed allocation
+      captures the value with no RNG, no extra test surface; a
+      sliding-window TS experiment that must beat round-robin is the
+      recorded seam)*.
     - **Stopping** (screen-informed — "adequately-searched" becomes a
-      measured property, not a heuristic): the loop stops when the
-      **confident-relevant count** (effective relevant rows at/above a
-      plan-pinned confidence floor) reaches the plan-pinned target ·
-      OR marginal yield collapses (`short_circuit` — new
-      confident-relevant per round under a floor) · OR a budget bites
-      (`budget_exhausted`) · OR the round cap. Thompson-sampling arm
-      selection over expansion strategies (reformulate vs snowball vs
-      suggest; stdlib `random.betavariate` — no new dependency; RNG
-      injectable, seeded in tests) allocates each round's calls by
-      observed confident-relevant yield per arm.
+      measured property, not a heuristic; **marginal-yield is the
+      PRIMARY stop, budgets the backstop** — rev 3.10, AstaBench's
+      lesson that over-search is the documented failure mode: stop
+      when it's not worth it, not only when we run out): the loop
+      stops when the **confident-relevant count** (effective relevant
+      rows at/above a plan-pinned confidence floor) reaches the
+      plan-pinned target · OR the **discovery rate collapses**
+      (`short_circuit` — new confident-relevant per docs-evaluated
+      under a floor; a RATE, not a raw per-round count, so round-size
+      variance can't fake saturation — rev 3.10) · OR a budget bites
+      (`budget_exhausted`) · OR the round cap (**pinned at 3** —
+      rev 3.10: feedback gains plateau at round 2–3 and reformulation
+      measurably harms past 3–4). The coverage verdict remains
+      coverage-adequacy — **never a recall guarantee** (the SR field's
+      ≥95%-recall convention is a different claim; a calibrated
+      recall-estimate surface is a recorded seam).
     - **Latency posture (user requirement, rev 2):** the R&D's ~6 min
       is not acceptable; its suspected driver (user diagnosis) is
       shipping full titles+abstracts of ALL hits into reformulation.
@@ -814,8 +919,11 @@ PR landing:
     new docs acquired/deduped/skipped per verb, screened/
     confident-relevant deltas, suggestions grounded/dropped, arm
     allocations, budget consumption. Cost and latency land in the
-    live-check evidence. Seeded RNG makes loop tests deterministic;
-    live runs use per-run entropy.
+    live-check evidence. *(rev 3.10)* The loop is fully deterministic
+    given its inputs — fixed arm allocation replaced the bandit, so no
+    RNG machinery exists to seed; the summary additionally reports
+    **cost-per-marginal-confident-relevant** per round (the
+    over-search signal the discovery-rate stop acts on).
 
 20. **Source-persistence + tag-layer deltas, live-shape-informed**
     *(new, rev 3.5 — user direction; zero schema change: JSONB
@@ -1001,8 +1109,8 @@ contract 🛑**:
 3. **Public interface:** the backend-scope `Config`/`Plan` field
    (`search_backend_scope`, default `both` — no behaviour change when
    omitted), compiling into the existing `search_backends` parameter.
-4. **Dependencies:** none (stdlib `urllib`; Thompson sampling via
-   stdlib `random.betavariate`).
+4. **Dependencies:** none (stdlib `urllib`; the loop's fixed
+   allocation and rate arithmetic need nothing beyond stdlib).
 
 Plus the components §1 + §2 spec flow-back (depth-graded search
 realisation; the deep loop as acquire↔screen rounds — §2's thin-base
@@ -1048,7 +1156,8 @@ in-contract fix (halt and report — don't quietly raise the budgets).
 ## Acceptance checks
 
 - `make verify` green — deterministic, zero egress (fixture defaults;
-  scripted backends + seeded RNG for loop logic; transport stubbed).
+  scripted backends for loop logic — no RNG anywhere, rev 3.10;
+  transport stubbed).
 - Transport tests (rev 1.2 set): sanitizer transforms (commas, wildcards,
   title-lookup punctuation) · limiter spacing incl. page loops · timeout
   on every request · retry-then-honest-failure (429/5xx/timeout) ·
@@ -1074,14 +1183,21 @@ in-contract fix (halt and report — don't quietly raise the budgets).
 - Capability tests (revs 2–3): depth directive fail-closed (unknown
   depth → structural failure) · rapid fan-out (n queries × variants,
   per-call events, failed-variant isolation, generation-failure →
-  `component.failed`) · deep loop over scripted backends + the stub
-  screening backend (round sequencing, exemplars read via the
-  effective-screen helper — never a raw status join, exemplar bounding —
-  prompt inputs never exceed caps, seeded-RNG arm selection, stopping on
-  each of: confident-relevant target · short_circuit · budget ·
-  round cap, honest per-round counts) · **acquire writes no screening
-  rows itself** (screening rows only ever from the screen component;
-  steering is read-only) · ungrounded-suggestion drop · snowball records
+  `component.failed`) · generated-query validation (zero-result
+  queries counted-and-dropped; all-generated-zero → verbatim-intent
+  fallback with an honest note — rev 3.10) · deep loop over scripted
+  backends + the stub screening backend (round sequencing, exemplars
+  read via the effective-screen helper — never a raw status join;
+  **graded-exemplar context**: negatives included, original intent
+  present as the anchor, strictly per-round non-accumulating, prompt
+  inputs never exceed caps — rev 3.10; fixed arm allocation incl. the
+  **diversity-reserve fraction** exercised every round; stopping on
+  each of: confident-relevant target · discovery-RATE short_circuit ·
+  budget · round cap = 3, honest per-round counts) · **acquire writes
+  no screening rows itself** (screening rows only ever from the screen
+  component; steering is read-only) · ungrounded-suggestion drop +
+  ID/DOI-preferred grounding + grounded-but-screened-out counter
+  (rev 3.10) · snowball records
   through dedup · escalation test (rapid + thin screen → one incremental
   deep continuation → still-thin lands `re_searched_still_thin`; fat
   result → no escalation) · `scope_filters` grammar fail-closed +
@@ -1135,7 +1251,19 @@ PaperFindingBench zero-adapter first run, the parity-tested
 `metrics.py` recall@k_est port, SYNERGY true-recall, CODEC policy
 topics, the Campbell/3ie/EPPI "unzip" build, the per-backend
 coverage-vs-recall split, and (rev 3.1) OpenAlex `sample`+`seed` as the
-eval-set sampling primitive · **study-geography extraction field**
+eval-set sampling primitive, and (rev 3.10) the **AstaBench scoring
+stance** (cost-normalized estimated-recall + nDCG on a Pareto
+frontier), **MetaSyn stage-attributed metrics** (retrieval vs
+screening failures diagnosed separately) and the **mini-class judge
+comprehension-threshold gate** (measure the screen's relevance-judge
+quality before trusting loop-steered "adequate") ·
+**rev-3.10 loop seams**: calibrated recall estimate (Chao
+capture-recapture / Undermind exponential-saturation fit → a
+user-facing "estimated % of relevant found" on the coverage record) ·
+sliding-window Thompson-sampling experiment (must beat round-robin) ·
+RCS-style abstract compression before screen (only if screen tokens
+bind the wall-clock) · best-of-N query selection ·
+**study-geography extraction field**
 (rev 3.2, user: V2 extracted study geography at the extraction stage
 for transferability + the landscape; no search API supplies it — an
 extraction-schema gate joining the 010 selection-diversity seam,
@@ -1151,7 +1279,13 @@ the loop's call volume; injection posture on the reformulation/
 suggestion surfaces (third-party metadata steering the search); budget
 enforcement actually hard (no silent trims, no unbounded loops); the
 **one-relevance-surface property** (no shadow judgment anywhere in
-acquire; steering reads only the effective-screen helper); limiter
+acquire; steering reads only the effective-screen helper); *(rev
+3.10)* the **anti-drift triple actually wired** (fixed-intent
+anchoring · negative exemplars · diversity reserve — the mitigations
+for screener self-reinforcement, the validated highest-severity loop
+risk) and the **mini-class judge dependency named honestly** (the
+whole loop steers on the screen; its judge quality is eval-gated, not
+assumed); limiter
 coverage of every Overton path; the escalation is bounded (no
 loop-until-fat); no scope creep into 016 (no URL fetching) or into
 purpose-fit ranking (select's surface untouched). **Plan requirement:**

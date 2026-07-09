@@ -6,8 +6,9 @@ if every box holds** — otherwise it is in progress, not done.
 
 1. [ ] Implementation satisfies [contract.md](contract.md) (rev 2).
 2. [ ] `make verify` passes — deterministic and egress-free (fixture
-       defaults; scripted backends + seeded RNG for loop logic; live
-       transport stubbed in the suite).
+       defaults; scripted backends for loop logic, no RNG anywhere
+       (rev 3.10 — fixed allocation); live transport stubbed in the
+       suite).
 3. [ ] No approval-gated change snuck in unapproved — the approved set is
        exactly: runtime egress (transport + the three named generation
        surfaces + the in-loop `screen_v1` call-volume change + the
@@ -32,11 +33,17 @@ if every box holds** — otherwise it is in progress, not done.
        user-approved).
 7. [ ] Depth gradation is fail-closed and complete: unknown depth is a
        structural failure; rapid = multi-query fan-out with no single
-       LLM query load-bearing; deep = bounded acquire↔screen rounds
-       with every budget (LLM calls incl. in-loop screen reps · HTTP
-       calls · rounds · wall-clock · results) enforced as an honest
-       stop (`short_circuit` / `budget_exhausted`), never a silent
-       trim; stopping reaches each of its four conditions in tests.
+       LLM query load-bearing (generated queries validated;
+       all-zero → verbatim fallback with an honest note); deep =
+       bounded acquire↔screen rounds (cap 3) with every budget (LLM
+       calls incl. in-loop screen reps · HTTP calls · rounds ·
+       wall-clock · results) enforced as an honest stop
+       (discovery-rate `short_circuit` / `budget_exhausted`), never a
+       silent trim; stopping reaches each of its four conditions in
+       tests; the anti-drift triple holds test-enforced (reformulation
+       context = graded exemplars with negatives, anchored to the
+       original intent, strictly per-round non-accumulating; the
+       diversity-reserve fraction runs every round).
 8. [ ] The one-relevance-surface property holds, test-enforced: acquire
        writes no screening rows itself and contains no shadow relevance
        judgment — loop steering reads only the effective-screen helper
