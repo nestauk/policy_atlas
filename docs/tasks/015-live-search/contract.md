@@ -3,14 +3,39 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted rev 3.5 — awaiting contract approval (the 🛑 is
-> open; revs 2–3.5 shaped at the gate in user deliberation).
+> **Status:** drafted rev 3.6 — awaiting contract approval (the 🛑 is
+> open; revs 2–3.6 shaped at the gate in user deliberation).
 > Contract approved (before planning): _date · who_ ·
 > Plan approved (before implementation): _date · who_ · ADR: _expected:
 > one_ (depth-graded agentic search adoption — the Arm-B fold is a
 > consequential design decision; drafted at step 4).
 >
 > **Revision history:**
+> - **rev 3.6** (2026-07-09, three user calls on the rev-3.5
+>   adjudication): **(a) English-first title for Overton** — the tool
+>   is English-language for UK government use, so the envelope `title`
+>   becomes `translated_title` when present (else native), WITH the
+>   provenance guard the repo's discipline demands: a translation is
+>   provider-generated text, not the document's own words, so the
+>   envelope gains `title_source` (`native` | `translated` — the
+>   `abstract_source` pattern exactly) and the native `title` joins the
+>   Overton retain keys whenever the translation takes primary.
+>   **(b) `overton_policy_document_series` → the tag layer directly**
+>   — the user is right that it IS methodological/structural material:
+>   acquire materialises it as `source_tag` rows with
+>   `tag_type='methodological_structural'`, `asserted_by='overton'` —
+>   the 014 machinery (CHECK already widened; `insert_source_tags`
+>   already takes `tag_type`) makes this zero-schema; provider and
+>   classify assertions share the tag_type namespace, distinguishable
+>   by `asserted_by`. **(c) Version-bump framing withdrawn** (user
+>   correction: greenfield, nothing deployed — bump ceremony is
+>   production thinking): the classify-allowlist seam entry is
+>   re-grounded on its real reasons — slice scope (015 doesn't edit a
+>   second component's prompt) and eval-blindness (the 011 lesson),
+>   NOT versioning; prompt-version strings remain provenance metadata,
+>   not gates, and the widening is a two-line change whenever wanted.
+>   With (b) delivering the series deterministically, the classify
+>   prior is also now lower-stakes.
 > - **rev 3.5** (2026-07-09, user direction: re-adjudicate source
 >   persistence + the tags layer on the now-known live shapes; one
 >   OpenAlex select/shape probe added — see the api-filter-research.md
@@ -724,13 +749,25 @@ PR landing:
     grow where the probes showed value:
     - **Overton retains** (added to `_OVERTON_RETAIN_KEYS`):
       `overton_policy_document_series` (document-series/type —
-      "Working paper" · "Clinical guidance" · "White paper" — a
-      classify prior and landscape axis) · `translated_title`
-      (non-English support; already the title fallback, now persisted
-      when both titles exist) · `pdf_document_id` (the second half of
-      the two-level identity; 016/multi-PDF seam) ·
+      "Working paper" · "Clinical guidance" · "White paper" — also
+      tagged, below) · `translated_title` · native `title` when the
+      translation takes primary (rev 3.6a) · `pdf_document_id` (the
+      second half of the two-level identity; 016/multi-PDF seam) ·
       `keyed_other_identifiers` (cross-reference identity beyond the
       consumed DOI).
+    - **English-first title mapping** *(rev 3.6a — user product call:
+      English-language tool, UK-government-first)*: the Overton
+      envelope `title` = `translated_title` when present, else the
+      native `title` (inverting the 007 fallback order). Provenance
+      guard: a translation is provider-generated text, never the
+      document's own words, so the envelope carries **`title_source`**
+      (`native` | `translated` — the `abstract_source` pattern), the
+      native title is always retained when displaced, and screen/
+      classify see `title_source` as a data field exactly as they see
+      `abstract_source`. The chunk text (the screening substrate)
+      uses the English-first title — right for an English-intent
+      recall filter; grounding honesty is preserved by the provenance
+      key, not by hiding the translation.
     - **OpenAlex retains** (added to `_OPENALEX_RETAIN_KEYS`, both
       select-probe-verified as `select`-able): `indexed_in`
       (crossref/doaj/pubmed/arxiv — a cheap discipline/OA prior) ·
@@ -741,6 +778,20 @@ PR landing:
       `_provider_tags` path, `asserted_by='overton'`, under the
       standing caps and control-character bounds; sanitized fixtures
       already carry the field.
+    - **Tags gain `overton_policy_document_series` as
+      methodological/structural assertions** *(rev 3.6b — user call:
+      the series IS the kind of material classify's open tags carry)*:
+      acquire materialises it as `source_tag` rows with
+      `tag_type='methodological_structural'`,
+      `asserted_by='overton'` — zero schema (the 014 migration already
+      widened `ck_stag_tag_type`; `insert_source_tags` already takes
+      `tag_type`). Provider and classify assertions share the
+      tag_type namespace and stay distinguishable by `asserted_by` —
+      consumers weigh a publisher's "Working paper" against classify's
+      judgment without either overwriting the other (assertion
+      provenance is in the unique key). `_provider_tags` grows a
+      per-assertion `tag_type` (topical assertions keep the
+      `TOPIC_THEME` default).
     - **Declined, with evidence**: OpenAlex `keywords` → tags (the
       shape probe surfaced wrong-sense disambiguation noise —
       "Government (linguistics)", "Stock (firearms)" — which would
@@ -748,14 +799,21 @@ PR landing:
       promotion is refused and test-pinned) · `grants` retention (not
       `select`-able — would force full-work fetches against
       decision 6).
-    - **Consumption stays gated**: the new priors join classify's
-      *retained* substrate, but widening classify's closed input
-      allowlist (014 decisions 4/7) is a prompt-surface change on an
-      approved egress surface — recorded as a seam riding the next
-      `classify_v1` version bump, never silently folded in here.
-      Overton `source.region`'s group memberships (OECD/G7/G20 —
-      already retained inside the `source` block) are noted for
-      characterise's landscape axes the same way.
+    - **Classify's prompt stays untouched — on scope grounds, not
+      ceremony** *(reframed rev 3.6c, user correction: greenfield —
+      version bumps are production thinking)*: widening classify's
+      closed input allowlist (014 decisions 4/7) to see
+      `policy_document_series`/`indexed_in` is a two-line change with
+      no bump ceremony attached; it stays out of 015 because this
+      slice doesn't edit a second component's prompt (scope
+      discipline) and prompt changes are eval-blind until the eval
+      slice (the 011 lesson) — and rev 3.6b already delivers the
+      series to the tag layer deterministically, so the prior is
+      low-stakes. The prompt-version string remains provenance
+      metadata, not a gate. Overton `source.region`'s group
+      memberships (OECD/G7/G20 — already retained inside the `source`
+      block) are noted for characterise's landscape axes the same
+      way.
 
 ## Scope / Out of scope
 
@@ -880,8 +938,12 @@ in-contract fix (halt and report — don't quietly raise the budgets).
   no-citation-floor test · mapper-consumable live records
   (transport stub over a raw fixture page) · retention/tag deltas
   (decision 20: new retain keys present on mapped fixtures; Overton
-  `source_tags` materialised within bounds; OpenAlex `keywords` never
-  tagged — the deliberate-refusal pin) · zero-egress guard
+  `source_tags` materialised within bounds; series →
+  `methodological_structural` tags with `asserted_by='overton'`;
+  English-first title cases — English doc unchanged, non-English doc
+  gets the translated title + `title_source='translated'` + native
+  retained, translation-absent doc stays `native`; OpenAlex `keywords`
+  never tagged — the deliberate-refusal pin) · zero-egress guard
   extension.
 - Capability tests (revs 2–3): depth directive fail-closed (unknown
   depth → structural failure) · rapid fan-out (n queries × variants,
