@@ -3,17 +3,21 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **APPROVED rev 2.2 · amended revs 2.3–2.5
+> **Status:** **APPROVED rev 2.2 · amended revs 2.3–2.6
 > post-approval** (2.3: fixture-corpus relocation, user challenge ·
 > 2.4: adversarial review adjudicated, 8/10 adopted · 2.5: findings
-> 4+5 resolved spec-faithful, user call) — planning next.
+> 4+5 resolved spec-faithful, user call · 2.6: prompt-wording
+> clarification) — **design phase complete; build next
+> (conversation B)**.
+> Plan approved (before implementation): **2026-07-09 · Shabeer
+> Rauf** (plan rev 2 + Phase-4 heading fix; plan-stage adversarial
+> review 12/12 adopted) · ADR:
+> [0013](../../adr/0013-mandatory-eb-spine.md) Accepted.
 > Contract approved (before planning): **2026-07-09 · Shabeer Rauf**
 > (rev 2.2, covering the gated set: runtime egress — live document
 > fetching — and the one CI addition, the pip-audit job; ratifying
 > the decision-9 chain-composition rule, the decision-8
-> access-failure ladder, and the rev-2 dependency posture) ·
-> Plan approved (before implementation): _pending_ · ADR: expected
-> (chain-composition rule, decision 9).
+> access-failure ladder, and the rev-2 dependency posture).
 >
 > **Terminology note — "plan-pinned"**: pinned in THIS TASK's
 > implementation plan (`plan.md`, task-cycle step 3) and reviewed at

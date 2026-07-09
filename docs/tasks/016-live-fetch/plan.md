@@ -32,7 +32,9 @@
 > (extend scope until observed; deterministic-test fallback named).
 >
 > Rev 1 drafted against contract **rev 2.5** (approved 2.2,
-> amended 2.3–2.6). ADR at confirmation (step 4):
+> amended 2.3–2.6). **Plan approved: 2026-07-09 · Shabeer Rauf
+> (rev 2 + the Phase-4 heading fix).** ADR written at confirmation
+> (step 4):
 > **ADR 0013 — the mandatory EB spine** (acquire(search) → screen →
 > classify → appraise → ingest(fetch) → synthesise; all else
 > orchestrator-discretionary per depth gradation) — the chain-shape
