@@ -1,5 +1,15 @@
 # Knowledge update log
 
+## 2026-07-09
+* **Creation**: Added
+  [synthesise-is-run-terminus](synthesise-is-run-terminus.md) — every run ends in
+  synthesise (the artefact-minting terminus); characterise and the composition generally
+  are plan choices. Captured at the 015 contract gate after the mistake (chains described
+  as ending in characterise) recurred across slices; the 015 smoke chain was corrected
+  under it (contract rev 3.9). Verified against components.md §9 and the merged 013
+  skeleton — not new-slice code, so it lands ahead of 015's PR by exception to the
+  in-implementing-PR rule.
+
 ## 2026-07-08
 * **Creation**: Added
   [effective-screen-row-read-rule](effective-screen-row-read-rule.md) — multiple screening

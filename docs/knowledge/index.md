@@ -51,6 +51,7 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [Chunk-claim quotes verify against the whole-document basis](synthesis-quote-whole-doc-basis.md) - one citation row per spanned chunk, so a row's chunk_id can name a chunk the loop never received; `gathered_ids` records what the loop saw (task 013, rev 8 B2).
 * [Same-run re-execution fails loud before the first write](fail-loud-before-first-write.md) - a DB-error failure poisons the transaction and kills the harness's own component.failed event write; pre-write guards keep declared failure modes off the constraint path (task 013 review stack).
 * [Every screening consumer resolves the effective row — including write paths](effective-screen-row-read-rule.md) - highest-stage non-failed via `effective_screen_rows()`; raw `status='relevant'` joins re-admit demoted docs, and classification-driven write paths (appraise) are the shape grep audits miss (task 014 review stack, adversarial lane).
+* [Every EB run terminates in synthesise; every other component is a plan choice](synthesise-is-run-terminus.md) - synthesise mints the artefact, so no valid chain ends before it; characterise is orchestrator-discretionary ("a grounded answer, not an evidence report"); trim mid-chain legs for cost, never the terminus (recurring mistake, captured at the 015 contract gate; verified against components.md §9 + the merged 013 skeleton).
 
 ## Integration quirks (model / telemetry providers)
 
