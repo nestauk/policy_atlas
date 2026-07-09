@@ -3,14 +3,28 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted rev 3.6 — awaiting contract approval (the 🛑 is
-> open; revs 2–3.6 shaped at the gate in user deliberation).
+> **Status:** drafted rev 3.7 — awaiting contract approval (the 🛑 is
+> open; revs 2–3.7 shaped at the gate in user deliberation).
 > Contract approved (before planning): _date · who_ ·
 > Plan approved (before implementation): _date · who_ · ADR: _expected:
 > one_ (depth-graded agentic search adoption — the Arm-B fold is a
 > consequential design decision; drafted at step 4).
 >
 > **Revision history:**
+> - **rev 3.7** (2026-07-09, user scope call): **classify prompt-input
+>   widening folded in** ("we might as well in this slice"); OpenAlex
+>   keywords confirmed OUT. Classify's closed input allowlist (014
+>   decisions 4/7) gains `overton_policy_document_series` and
+>   `indexed_in` as data-field priors, and **both** screen's and
+>   classify's allowlists gain `title_source` (making rev 3.6a's
+>   "models see it like abstract_source" explicit — the prompts are
+>   open anyway). All additions enter through the M10 mechanism
+>   (allowlisted · length-capped · control-char-stripped); prompt
+>   version strings update as provenance (rev 3.6c framing). The
+>   eval-blindness risk is acknowledged and user-accepted: these are
+>   bounded data-field priors, not instruction changes, and the eval
+>   slice measures their effect. The rev-3.5/3.6 classify-allowlist
+>   seam is DISCHARGED in-slice.
 > - **rev 3.6** (2026-07-09, three user calls on the rev-3.5
 >   adjudication): **(a) English-first title for Overton** — the tool
 >   is English-language for UK government use, so the envelope `title`
@@ -799,21 +813,23 @@ PR landing:
       promotion is refused and test-pinned) · `grants` retention (not
       `select`-able — would force full-work fetches against
       decision 6).
-    - **Classify's prompt stays untouched — on scope grounds, not
-      ceremony** *(reframed rev 3.6c, user correction: greenfield —
-      version bumps are production thinking)*: widening classify's
-      closed input allowlist (014 decisions 4/7) to see
-      `policy_document_series`/`indexed_in` is a two-line change with
-      no bump ceremony attached; it stays out of 015 because this
-      slice doesn't edit a second component's prompt (scope
-      discipline) and prompt changes are eval-blind until the eval
-      slice (the 011 lesson) — and rev 3.6b already delivers the
-      series to the tag layer deterministically, so the prior is
-      low-stakes. The prompt-version string remains provenance
-      metadata, not a gate. Overton `source.region`'s group
-      memberships (OECD/G7/G20 — already retained inside the `source`
-      block) are noted for characterise's landscape axes the same
-      way.
+    - **Prompt-input widening — IN-slice** *(rev 3.7, user scope call
+      superseding 3.6c's keep-out; the 3.6c reframing itself stands:
+      prompt versions are provenance, not gates)*: classify's closed
+      input allowlist (014 decisions 4/7) gains
+      `overton_policy_document_series` + `indexed_in` as structured
+      priors, and **screen + classify both gain `title_source`**
+      (rev 3.6a made models' visibility of the translation provenance
+      a requirement; this is its mechanism). All three enter through
+      the existing M10 bounds (closed allowlist · per-field length
+      caps · control-char stripping); prompt version strings update as
+      provenance; prompt-assembly tests cover presence + bounds +
+      an instruction-shaped series value. Eval-blindness acknowledged
+      and user-accepted — bounded data fields, not instruction
+      changes; effect measured at the eval slice. Overton
+      `source.region`'s group memberships (OECD/G7/G20 — already
+      retained inside the `source` block) remain noted for
+      characterise's landscape axes; nothing consumes them in 015.
 
 ## Scope / Out of scope
 
@@ -872,8 +888,12 @@ contract 🛑**:
    volume change on an already-approved surface**: `screen_v1` (014)
    now also runs in-loop during deep search — same prompt, same
    component, same per-doc bound, materially more invocations per deep
-   run (budgeted, decision 19). Named here so the egress approval
-   covers the volume, not just the surfaces.
+   run (budgeted, decision 19). *(rev 3.7)* Plus a **prompt-input
+   widening on the approved 014 surfaces**: classify's allowlist gains
+   `overton_policy_document_series` + `indexed_in`; screen's and
+   classify's gain `title_source` — M10-bounded data fields, prompt
+   versions updated as provenance. Named here so the egress approval
+   covers volume and inputs, not just the surfaces.
 2. **Schema:** one migration widening `ck_scov_stop_condition` to admit
    `'short_circuit'` and `'budget_exhausted'` (existing three values
    stand; `saturated` stays out per spec). No new tables/columns; table
@@ -943,7 +963,10 @@ in-contract fix (halt and report — don't quietly raise the budgets).
   English-first title cases — English doc unchanged, non-English doc
   gets the translated title + `title_source='translated'` + native
   retained, translation-absent doc stays `native`; OpenAlex `keywords`
-  never tagged — the deliberate-refusal pin) · zero-egress guard
+  never tagged — the deliberate-refusal pin) · prompt-assembly tests
+  for the rev-3.7 allowlist additions (series/indexed_in in classify,
+  title_source in screen + classify: presence, per-field bounds, an
+  instruction-shaped series value stays data) · zero-egress guard
   extension.
 - Capability tests (revs 2–3): depth directive fail-closed (unknown
   depth → structural failure) · rapid fan-out (n queries × variants,

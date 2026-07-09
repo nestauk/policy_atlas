@@ -10,10 +10,13 @@ if every box holds** — otherwise it is in progress, not done.
        transport stubbed in the suite).
 3. [ ] No approval-gated change snuck in unapproved — the approved set is
        exactly: runtime egress (transport + the three named generation
-       surfaces + the in-loop `screen_v1` call-volume change) · one
-       `ck_scov_stop_condition` CHECK migration · the
-       `search_backend_scope` Plan/Config field. Table count stays 25;
-       no new dependency; `run_harness` signature untouched.
+       surfaces + the in-loop `screen_v1` call-volume change + the
+       rev-3.7 prompt-input widening on the 014 surfaces:
+       series/indexed_in into classify, title_source into screen +
+       classify, all M10-bounded) · one `ck_scov_stop_condition` CHECK
+       migration · the `search_backend_scope` Plan/Config field. Table
+       count stays 25; no new dependency; `run_harness` signature
+       untouched.
 4. [ ] No generated files or secrets edited by hand; no key material in
        any committed file, snapshot, event payload, log line or raised
        error message (redacted-HTTP-error tests + grep audit recorded).
