@@ -3,8 +3,10 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **APPROVED rev 3.12** — contract-stage adversarial
-> review running; planning next.
+> **Status:** **APPROVED rev 3.12 · amended rev 3.13 post-approval**
+> (transport: httpx + the declaration-only dependency promotion,
+> user-approved 2026-07-09) — contract-stage adversarial review
+> running; planning next.
 > Contract approved (before planning): **2026-07-09 · Shabeer Rauf**
 > (rev 3.12, covering the full gated set: runtime egress — transport +
 > three generation surfaces + the in-loop `screen_v1` volume change +
@@ -18,6 +20,26 @@ specs in [docs/specs/](../../specs/index.md).
 > consequential design decision; drafted at step 4).
 >
 > **Revision history:**
+> - **rev 3.13** (2026-07-09, post-approval transport amendment — user
+>   challenge + approval): **transport = sync `httpx.Client`, replacing
+>   stdlib `urllib`** — the urllib choice was a ponytail overreach: no
+>   production system hand-rolls urllib for API clients, and a real
+>   client gives connection pooling for the fan-out, sane retry/timeout
+>   semantics and cleaner exceptions — exactly the surface the carried
+>   v2-lesson hardening lives on. httpx over requests: it ships a
+>   **default-timeout philosophy** (requests' no-default-timeout is
+>   V2's exact footgun class) and is already a pinned transitive of the
+>   `openai` SDK. **Dependency gate amended (user-approved)**: one
+>   **declaration-only promotion** — `httpx>=0.28,<1` becomes a
+>   declared direct dependency (already in the lockfile/venv; zero new
+>   code enters the tree; promotion guards against a future openai SDK
+>   dropping it silently at lock regen). One httpx client per backend
+>   (pooled), explicit timeout config, injectable fetch seam unchanged;
+>   recorder scripts stay stdlib (standalone dev tools). Validation
+>   note found en route: OpenAlex made API keys **mandatory at the API
+>   level from 2026-02-13** (per pyalex/OpenAlex docs — verify at
+>   build), retroactively vindicating rev 1.1's mandatory-key policy;
+>   the "OpenAlex works keyless" wording elsewhere is now historical.
 > - **rev 3.12** (2026-07-09, user design direction recorded as a
 >   seam): **the depth axis is a spectrum, not a pair** — users will
 >   want gradations from really-rapid through in-between to deep
@@ -496,8 +518,15 @@ PR landing:
    classes live in a **new module** so `acquire.py` stays free of HTTP
    imports — the 007 zero-egress guard test keeps passing against
    `acquire.py` and extends to assert the live module is never imported
-   by it. Transport is **stdlib `urllib` with explicit timeouts** — no
-   new dependency; sync HTTP in sync code. A small injectable fetch seam
+   by it. Transport is a **sync `httpx.Client`** *(rev 3.13 —
+   replacing stdlib urllib; user-approved declaration-only dependency
+   promotion)*: one client per backend (pooled connections for the
+   fan-out), explicit timeout config (httpx's default-timeout
+   philosophy is the anti-V2 posture), our decision-7 retry semantics
+   implemented on top (never a library's own competing retry layer);
+   sync HTTP in sync code. **No provider SDKs** (pyalex et al.) — the
+   transport requirements ARE this slice's hardening content and stay
+   first-party. A small injectable fetch seam
    (`_get_json`-shaped) makes the backends testable without sockets.
 
 2. **Native query idiom per backend; `min_similarity=0.3`** *(amended
@@ -1161,8 +1190,11 @@ contract 🛑**:
 3. **Public interface:** the backend-scope `Config`/`Plan` field
    (`search_backend_scope`, default `both` — no behaviour change when
    omitted), compiling into the existing `search_backends` parameter.
-4. **Dependencies:** none (stdlib `urllib`; the loop's fixed
-   allocation and rate arithmetic need nothing beyond stdlib).
+4. **Dependencies:** one **declaration-only promotion** (rev 3.13,
+   user-approved): `httpx>=0.28,<1` moves from transitive (via the
+   `openai` SDK) to declared direct dependency — already in the
+   lockfile and venv, zero new code enters the tree. Nothing else
+   (the loop's fixed allocation and rate arithmetic are stdlib).
 
 Plus the components §1 + §2 spec flow-back (depth-graded search
 realisation; the deep loop as acquire↔screen rounds — §2's thin-base
