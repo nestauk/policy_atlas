@@ -3,8 +3,13 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted (rev 2) — awaiting contract approval.
-> Contract approved (before planning): _pending_ ·
+> **Status:** **APPROVED rev 2.2** — contract-stage adversarial
+> review next, then planning.
+> Contract approved (before planning): **2026-07-09 · Shabeer Rauf**
+> (rev 2.2, covering the gated set: runtime egress — live document
+> fetching — and the one CI addition, the pip-audit job; ratifying
+> the decision-9 chain-composition rule, the decision-8
+> access-failure ladder, and the rev-2 dependency posture) ·
 > Plan approved (before implementation): _pending_ · ADR: expected
 > (chain-composition rule, decision 9).
 >
