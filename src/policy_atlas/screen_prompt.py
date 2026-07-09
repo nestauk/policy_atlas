@@ -1,7 +1,9 @@
-"""The ``screen_v1`` and ``screen_fulltext_v1`` prompts — the repo's 8th and
-10th product prompt surfaces (task 014, decisions 3 and 11).
+"""The ``screen_v2`` and ``screen_fulltext_v1`` prompts — the repo's 8th and
+10th product prompt surfaces (task 014, decisions 3 and 11; ``screen_v2`` is
+task 015's wire-compatible text edit — the stage-1 document record gains
+``title_source``, the Overton English-first-title provenance guard).
 
-Lead-authored and versioned. Stage 1 (``screen_v1``) is the recall-oriented
+Lead-authored and versioned. Stage 1 (``screen_v2``) is the recall-oriented
 envelope screen: three-way wire vocabulary, consensus over ``SCREEN_REPS``
 independent samples, holistic-probability confidence (never V2's additive
 facet rubric — the root cause of its FP 0.880 ≈ TP 0.904 miscalibration).
@@ -27,7 +29,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from policy_atlas.extraction_records import SegmentRecord
 from policy_atlas.prompt_fields import sanitize_prompt_field
 
-SCREEN_PROMPT_VERSION = "screen_v1"
+SCREEN_PROMPT_VERSION = "screen_v2"
 SCREEN_FULLTEXT_PROMPT_VERSION = "screen_fulltext_v1"
 
 # The contracted model floor (the 009 nano lesson is binding); consensus reps
@@ -54,9 +56,10 @@ SCREEN_TITLE_MAX = 500
 SCREEN_ABSTRACT_MAX = 5_000
 SCREEN_INTENT_MAX = 2_000
 
-# abstract_source values the prompt explains; unknown values pass through
-# sanitized (data, not vocabulary — acquire owns this field's values).
+# abstract_source / title_source values the prompt explains; unknown values
+# pass through sanitized (data, not vocabulary — acquire owns these fields).
 _ABSTRACT_SOURCE_MAX = 50
+_TITLE_SOURCE_MAX = 50
 
 ScreenDecision = Literal["relevant", "not_relevant", "unsure"]
 
@@ -101,6 +104,7 @@ class ScreenEnvelopePayload:
     abstract: str | None
     abstract_source: str | None
     intent: str
+    title_source: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -147,6 +151,11 @@ Rules:
   'llm_description' means it is a provider's machine-generated summary and
   'snippet' a document excerpt — treat both as secondhand, weaker signals
   than a publisher abstract.
+- The title_source field tells you where the title came from. 'translated'
+  means the title is a provider's machine translation of a non-English
+  original — still a faithful signal of what the document is about, but
+  provider-generated text, not the document's own words. 'native' (or an
+  absent field) means the document's own title.
 - confidence is one holistic probability that your decision is correct,
   judged over the whole document-versus-intent question. Never build it up
   from a checklist or award points per matching aspect. For an unsure
@@ -247,6 +256,11 @@ def build_screen_messages(
         "abstract_source": (
             sanitize_prompt_field(payload.abstract_source, max_chars=_ABSTRACT_SOURCE_MAX)
             if payload.abstract_source
+            else None
+        ),
+        "title_source": (
+            sanitize_prompt_field(payload.title_source, max_chars=_TITLE_SOURCE_MAX)
+            if payload.title_source
             else None
         ),
     }

@@ -1,4 +1,4 @@
-"""Classification backend seam for the classify_v1 call."""
+"""Classification backend seam for the classify_v2 call."""
 
 from __future__ import annotations
 

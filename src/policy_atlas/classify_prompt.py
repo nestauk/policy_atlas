@@ -1,5 +1,6 @@
-"""The ``classify_v1`` prompt — the repo's 9th product prompt surface
-(task 014, decisions 4/6/8).
+"""The ``classify_v2`` prompt — the repo's 9th product prompt surface
+(task 014, decisions 4/6/8; ``classify_v2`` is task 015's prior restructure,
+contract decision 20 / revs 3.7–3.8).
 
 Lead-authored and versioned. Classification is intent-free (the 011
 precedent: a property of the document, not the question): a schema-constrained
@@ -7,9 +8,16 @@ single choice over the closed ``EVIDENCE_TYPES`` list, plus bounded open
 methodological/structural tag proposals (components §3's second output),
 plus event-payload-only ``confidence`` and ``reason``.
 
-Structured provider priors enter as data fields through a closed allowlist —
-``record_type``, Overton ``source.type`` / ``organisation_type``, provider
-topic labels — to cut ``Unknown``s on acquired documents. Each field is
+Provider priors enter along the spec's columns/tags line (data-model § Entity
+hierarchy): **property priors** — single-valued record facts — stay direct
+data fields through the closed allowlist (``record_type``, Overton
+``source.type`` / ``organisation_type``, ``indexed_in``, ``title_source``,
+``abstract_source``); **label priors** — open-vocabulary, many-valued — are
+read from ``source_tag`` (all non-classify asserters) and carried as
+``{tag, tag_type, asserted_by}`` records so provider-curated vs provider-LLM
+assertions stay distinguishable in the prompt (the never-mix rule, honoured
+by visible provenance). OpenAlex ``keywords`` exit the prompt deliberately
+(the rev-3.5 wrong-sense-noise adjudication holds end-to-end). Each field is
 length-capped and control-character-stripped at prompt assembly (M10).
 
 Model: the judgment-class tier (plan-pinned exact id) — V2's human-labelled
@@ -30,7 +38,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from policy_atlas.prompt_fields import sanitize_prompt_field
 from policy_atlas.schema import EVIDENCE_TYPES
 
-CLASSIFY_PROMPT_VERSION = "classify_v1"
+CLASSIFY_PROMPT_VERSION = "classify_v2"
 
 # Exact pin (plan rev 2): unavailability at build start is a stop-condition
 # escalation, never a silent substitution; the mini swap-down stays eval-gated.
@@ -49,8 +57,11 @@ TAG_MAX_CHARS = 100
 CLASSIFY_TITLE_MAX = 500
 CLASSIFY_ABSTRACT_MAX = 5_000
 PRIOR_FIELD_MAX = 500
-PRIOR_TOPIC_LABELS_MAX = 10
-PRIOR_TOPIC_LABEL_CHARS_MAX = 100
+# Label priors (task 015): source_tag rows carried as data records.
+LABEL_PRIORS_MAX = 30
+LABEL_TAG_MAX = 200  # tags are write-bounded at 200; sanitized again on read
+LABEL_PROVENANCE_MAX = 50  # tag_type / asserted_by vocabulary tokens
+INDEXED_IN_MAX_ITEMS = 10  # OpenAlex indexed_in is a small closed list
 
 EvidenceType = Literal[
     "Systematic Review and Meta-Analysis",
@@ -133,49 +144,84 @@ def _prior_str(value: Any) -> str | None:
     return sanitize_prompt_field(value.strip(), max_chars=PRIOR_FIELD_MAX)
 
 
-def _topic_labels(provider_fields: dict[str, Any]) -> list[str]:
-    """Extract provider topic labels defensively from either provider's shape.
+def _indexed_in(provider_fields: dict[str, Any]) -> list[str]:
+    """Sanitized OpenAlex ``indexed_in`` list (crossref/doaj/pubmed/arxiv)."""
+    value = provider_fields.get("indexed_in")
+    if not isinstance(value, list):
+        return []
+    items: list[str] = []
+    for item in value:
+        if isinstance(item, str) and item.strip():
+            sanitized = sanitize_prompt_field(item.strip(), max_chars=LABEL_PROVENANCE_MAX)
+            if sanitized and sanitized not in items:
+                items.append(sanitized)
+    return items[:INDEXED_IN_MAX_ITEMS]
 
-    OpenAlex: ``topics`` / ``keywords`` / ``primary_topic`` dicts carrying
-    ``display_name``. Overton: ``topics`` (string or list of strings) and
-    ``classifications`` (list of strings). Anything else is skipped — the
-    allowlist admits labels, never structures.
+
+def _label_priors(label_rows: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Sanitize source_tag rows into ``{tag, tag_type, asserted_by}`` records.
+
+    Tags are write-bounded at materialisation; sanitizing again on read is
+    belt-and-braces (M10). Classify's own assertions are dropped defensively —
+    the caller queries non-classify asserters, but the never-feed-own-output
+    invariant must hold at the prompt boundary, not by caller discipline.
     """
-    labels: list[str] = []
+    records: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for row in label_rows:
+        tag = row.get("tag")
+        tag_type = row.get("tag_type")
+        asserted_by = row.get("asserted_by")
+        if (
+            not isinstance(tag, str)
+            or not tag.strip()
+            or not isinstance(tag_type, str)
+            or not tag_type.strip()
+            or not isinstance(asserted_by, str)
+            or not asserted_by.strip()
+        ):
+            continue
+        if asserted_by.strip() == "classify":
+            continue
+        record = {
+            "tag": sanitize_prompt_field(tag.strip(), max_chars=LABEL_TAG_MAX),
+            "tag_type": sanitize_prompt_field(tag_type.strip(), max_chars=LABEL_PROVENANCE_MAX),
+            "asserted_by": sanitize_prompt_field(
+                asserted_by.strip(), max_chars=LABEL_PROVENANCE_MAX
+            ),
+        }
+        if not record["tag"]:
+            continue
+        key = (record["tag"].casefold(), record["tag_type"], record["asserted_by"])
+        if key in seen:
+            continue
+        seen.add(key)
+        records.append(record)
+        if len(records) == LABEL_PRIORS_MAX:
+            break
+    return records
 
-    def add(candidate: Any) -> None:
-        if isinstance(candidate, dict):
-            candidate = candidate.get("display_name")
-        if not isinstance(candidate, str) or not candidate.strip():
-            return
-        label = sanitize_prompt_field(
-            candidate.strip(), max_chars=PRIOR_TOPIC_LABEL_CHARS_MAX
-        )
-        if label and label not in labels:
-            labels.append(label)
 
-    add(provider_fields.get("primary_topic"))
-    for key in ("topics", "keywords", "classifications"):
-        value = provider_fields.get(key)
-        if isinstance(value, str):
-            add(value)
-        elif isinstance(value, list):
-            for item in value:
-                add(item)
-
-    return labels[:PRIOR_TOPIC_LABELS_MAX]
-
-
-def provider_priors(metadata: dict[str, Any]) -> dict[str, Any]:
+def provider_priors(
+    metadata: dict[str, Any],
+    label_rows: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Build the closed-allowlist provider-prior record for one document.
 
-    Only the decision-4 prior set crosses into the prompt: ``record_type``,
-    Overton ``source.type`` / ``organisation_type``, and provider topic
-    labels — each capped and control-character-stripped (M10). Absent fields
-    are omitted, never fabricated.
+    Property priors (single-valued record facts) come from the envelope and
+    ``provider_fields``: ``record_type``, Overton ``source.type`` /
+    ``organisation_type``, ``indexed_in``, ``title_source``,
+    ``abstract_source``. Label priors (open-vocabulary) come from the
+    caller's batched ``source_tag`` read — all non-classify asserters, each
+    carried as a ``{tag, tag_type, asserted_by}`` record. OpenAlex raw
+    ``keywords``/``topics`` never enter (the tag layer is the one label
+    surface). Everything is capped and control-character-stripped (M10);
+    absent fields are omitted, never fabricated.
 
     Args:
         metadata: The envelope snapshot metadata.
+        label_rows: ``source_tag`` rows for this document as dicts carrying
+            ``tag``/``tag_type``/``asserted_by`` (non-classify asserters).
 
     Returns:
         The sanitized prior record (possibly empty).
@@ -194,8 +240,14 @@ def provider_priors(metadata: dict[str, Any]) -> dict[str, Any]:
         priors["source_type"] = source_type
     if (organisation_type := _prior_str(source.get("organisation_type"))) is not None:
         priors["organisation_type"] = organisation_type
-    if labels := _topic_labels(provider_fields):
-        priors["topic_labels"] = labels
+    if indexed_in := _indexed_in(provider_fields):
+        priors["indexed_in"] = indexed_in
+    if (title_source := _prior_str(metadata.get("title_source"))) is not None:
+        priors["title_source"] = title_source
+    if (abstract_source := _prior_str(metadata.get("abstract_source"))) is not None:
+        priors["abstract_source"] = abstract_source
+    if labels := _label_priors(label_rows or []):
+        priors["label_priors"] = labels
     return priors
 
 
@@ -257,9 +309,19 @@ Rules:
 - Exactly one primary_evidence_type. When a document mixes kinds (a guidance
   document containing a systematic review), choose its primary character —
   what the document as a whole is.
-- The provider metadata record carries secondhand signals (provider type
-  labels, topic labels). They may inform your choice but the title and
-  abstract always take precedence — provider labels are sometimes wrong.
+- The provider metadata record carries secondhand signals. Its plain fields
+  are record facts from the providing index (the provider's own record type,
+  publisher type, which indexes list the document). Its label_priors list
+  carries subject/methodological labels asserted about this document, each
+  with its asserter: a provider's curated labels (e.g. asserted_by
+  'overton' or 'openalex') come from editorial or indexing processes, while
+  machine-generated assertions (e.g. asserted_by 'overton_llm') are
+  themselves LLM output — weigh curated labels somewhat more, and treat all
+  of them as hints. Everything here may inform your choice but the title
+  and abstract always take precedence — provider labels are sometimes wrong.
+- title_source and abstract_source tell you where the title/abstract text
+  came from ('translated' and 'llm_description' mean provider-generated
+  text rather than the document's own words).
 - confidence is one holistic probability that your chosen type is correct.
   Never build it from a checklist.
 - reason: one short sentence (at most 240 characters, single line).
@@ -288,21 +350,22 @@ def _validated_priors(priors: dict[str, Any]) -> dict[str, Any]:
     unknown keys are dropped, scalars and labels re-sanitized and re-capped.
     """
     validated: dict[str, Any] = {}
-    for key in ("record_type", "source_type", "organisation_type"):
+    for key in (
+        "record_type",
+        "source_type",
+        "organisation_type",
+        "title_source",
+        "abstract_source",
+    ):
         if (value := _prior_str(priors.get(key))) is not None:
             validated[key] = value
-    labels = priors.get("topic_labels")
+    if indexed_in := _indexed_in({"indexed_in": priors.get("indexed_in")}):
+        validated["indexed_in"] = indexed_in
+    labels = priors.get("label_priors")
     if isinstance(labels, list):
-        clean = [
-            sanitized
-            for item in labels
-            if isinstance(item, str) and item.strip()
-            if (sanitized := sanitize_prompt_field(
-                item.strip(), max_chars=PRIOR_TOPIC_LABEL_CHARS_MAX
-            ))
-        ]
+        clean = _label_priors([row for row in labels if isinstance(row, dict)])
         if clean:
-            validated["topic_labels"] = clean[:PRIOR_TOPIC_LABELS_MAX]
+            validated["label_priors"] = clean
     return validated
 
 
