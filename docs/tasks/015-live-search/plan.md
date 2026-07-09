@@ -15,6 +15,16 @@
 Executor routing per harness.md § Agent-side model routing: default =
 delegate; every `lead` mark carries a justification.
 
+**Codex-exhaustion fallback (user, 2026-07-09 — this slice is large
+enough that Codex usage may run out mid-build; NOT a blocker, never a
+stall):** if Codex becomes unavailable, re-route the remaining
+`codex`-marked tasks down the ladder — judgment-bearing implementation
+→ **deep-reasoner**, mechanical remainder → **fast-worker**, brief-
+unwritable work → **lead** — continue building, and record every
+substitution in `verification.md` (the family-flip review Codex would
+have provided in-line is then covered by conversation C's adversarial
+lane as usual).
+
 ## Plan-pinned constants
 
 **Transport (decisions 1/3/4/7/9):**
