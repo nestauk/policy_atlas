@@ -1,8 +1,34 @@
 # Plan: 015-live-search
 
-> **Status:** rev 1 — drafted against contract **rev 3.14** (approved
-> 3.12, amended 3.13–3.14 at the gate). Plan-stage adversarial review
-> pending; then the plan 🛑. ADR due at plan confirmation (step 4):
+> **Status:** rev 2 — plan-stage adversarial review adjudicated
+> (Codex, 9 findings: 2 blockers · 6 majors · 1 minor, **9/9
+> adopted**). Blockers: (1) prompt-text authorship pulled back to the
+> lead — task 3 split into 3a (lead: `screen_v2`/`classify_v2` text +
+> prior-record contract) / 3b (codex: assembly only); (2) deep
+> OpenAlex HTTP arithmetic fixed — per-round per-arm CALL caps pinned
+> (reformulate 4 · snowball 6 · suggest 6 · diversity 1 = 17/round),
+> deep OA budget 40→50 (15 + 2×17 = 49 ≤ 50). Majors: the
+> **deep-thin overlay** (any non-target deep stop while below target →
+> final coverage row records `re_searched_still_thin`, task 8 + tests
+> + live check) · gate consolidation corrected (Phases 2 and 6 touch
+> readers → full verify; only 3 and 5 stay verify-fast) ·
+> `search_backend_scope` pinned on **Plan AND Config** with compile
+> copy/validation + harness backend resolution from compiled config ·
+> `squery` + `min_similarity=0.3` (semantic-mode-only) added to the
+> transport wire contract + assertions · **caching decided: NO cache
+> in v1** (dedup guards absorb re-hits; reformulated queries are never
+> identical; budgets bound repeats — cache-before-throttle stays the
+> recorded seam) · task 9 → **codex** with the exact skeleton sequence
+> pinned (the existing skeleton "deep profile" already means stage-2
+> full-text screening — 015's deep SEARCH rounds run pre-ingest under
+> the same profile axis, no naming collision, stage-2 honestly
+> `skipped_no_fulltext` on live-acquired docs until 016). Minor: the
+> live-check key audit greps the ACTUAL env key values (+ structural
+> redaction tests), not just `api_key|sk-` labels.
+>
+> Rev 1 base drafted against contract **rev 3.14** (approved
+> 3.12, amended 3.13–3.14 at the gate). Awaiting the plan 🛑. ADR due
+> at plan confirmation (step 4):
 > **ADR 0012 — depth-graded agentic search** (screen-in-the-loop as the
 > one relevance surface · the depth spectrum's extensible constants
 > table · fixed allocation over bandits) — capability-class decisions.
@@ -53,6 +79,10 @@ lane as usual).
   reads (grants is NOT select-able; excluded per rev 3.5).
 - Overton page size via `pp` (pinned live): rapid `pp=50` single page;
   deep `pp=50` paging via `next_page_url` under the run cap.
+- Overton semantic wire contract *(rev 2 — contracted, now owned)*:
+  `squery=<NL text>` + `min_similarity=0.3`, the pair sent **only** in
+  semantic mode (task 4 wire mapping; task 10 asserts both presence in
+  semantic calls and absence anywhere else).
 - Keys: `OPENALEX_API_KEY` + `OVERTON_API_KEY` both required live
   (loud startup error naming the variable). Key-redaction applies to
   raised messages, logs, persisted fields (incl. `next_page_url`).
@@ -63,10 +93,24 @@ target; one row per depth):**
 | constant | rapid | deep |
 |---|---|---|
 | result cap / backend | 50 | 150 (whole run) |
-| wall-clock | `RAPID_WALL_CLOCK_S = 30` (breach → stop remaining calls, `breadth_truncated`) | `DEEP_WALL_CLOCK_S = 150` (breach → `budget_exhausted`) |
+| wall-clock | `RAPID_WALL_CLOCK_S = 30` (breach → stop remaining calls, `breadth_truncated`) | `DEEP_WALL_CLOCK_S = 150` (breach → `budget_exhausted`, thin-overlay below) |
 | rounds | 1 (the fan-out) | `ROUND_CAP = 3` |
-| HTTP budget / backend | 20 | 40 |
+| HTTP budget — OpenAlex | 20 | 50 *(rev 2 blocker fix: 15 round-1 fan-out + 2 × 17 per-round arm cap = 49)* |
+| HTTP budget — Overton | 5 | 15 (≈18 s at 1.2 s spacing — fits the wall-clock) |
+| per-round arm CALL caps (rounds 2–3) | — | reformulate ≤ 4 · snowball ≤ 6 (5 fwd + 1 backward batch) · suggest lookups ≤ 6 · diversity ≥ 1 (= 17 OA-class calls) *(rev 2)* |
 | generation-LLM calls | 1 (`search_queries_v1`) | ≤ 8 (1 queries + ≤3 reformulate + ≤3 suggest + escalation reuse) |
+
+**Deep-thin overlay (rev 2, contract decision 17):** any deep stop
+other than `target_reached` (short_circuit · budget · round cap) while
+confident-relevant < target ⇒ the FINAL round's coverage row records
+`stop_condition = 're_searched_still_thin'` (the overlay wins over the
+raw stop value); owner task 8, tests task 11, live-check (f).
+
+**Caching (rev 2 — the contract's plan-time decision): NONE in v1.**
+Dedup identity guards make re-acquired hits cheap skips; reformulated
+queries are never byte-identical; per-arm caps + budgets bound repeat
+fetches. Cache-before-throttle (the R&D pattern) stays the recorded
+seam.
 
 **Rapid strategy (decision 14):**
 - `N_QUERIES = 5` diverse keyword queries from one `search_queries_v1`
@@ -150,11 +194,16 @@ research + pinning records):**
 - Executed wire params → coverage-record `scope_filters` (per
   backend) + every `search.executed` payload.
 
-**Config/plan surface:** `search_backend_scope`
-(`academic_only|grey_lit_only|both`, default `both`) on `Config`;
-compile → backend list; unknown → ValidationError. Depth directive
-`context["search"]["depth"]` (`rapid` default | `deep`) parsed
-fail-closed in acquire.
+**Config/plan surface** *(rev 2 — as-built fit: `Plan` and `Config`
+are separate models and `run_harness` currently ignores `Config` for
+the backend default, `plan.py:57-75` / `harness.py:631-635`)*:
+`search_backend_scope` (`academic_only|grey_lit_only|both`, default
+`both`) lives on **both `Plan` and `Config`**; `compile` copies and
+validates it (unknown → ValidationError, fail-closed before
+execution); `run_harness` resolves the default backend list from the
+COMPILED config whenever the `search_backends` parameter is not
+explicitly passed. Depth directive `context["search"]["depth"]`
+(`rapid` default | `deep`) parsed fail-closed in acquire.
 
 **Migration 15:** `ck_scov_stop_condition` widens to
 {breadth_truncated, re_searched_still_thin, error, short_circuit,
@@ -186,17 +235,27 @@ summary adds per-round `cost_per_marginal_confident_relevant`.
    never like", anchored to the intent record); suggest asks for
    verifiable identity fields (title/year/DOI). — **lead**
    *(prompt-bearing, AGENTS.md)*
-3. Screen/classify prompt-input restructure (revs 3.7/3.8):
-   `title_source` into screen payload + prompt text (`screen_v2`);
-   classify property-prior additions + tag-layer label-prior read
-   (`classify_v2`; `provider_priors` split, `_topic_labels` retired,
-   the source_tag read batched per run). Prompt TEXT deltas
-   lead-reviewed at drop review; assembly is implementation. —
-   **codex** *(judgment-bearing multi-file change against pinned
-   spec; prompt text minimal and lead-reviewed)*
+3a. `screen_v2` / `classify_v2` **prompt TEXT + prior-record
+   contract** (rev 2 blocker fix — prompt-bearing is lead-ONLY, never
+   delegate-then-review): the exact prompt-text deltas for
+   `title_source`, the property-prior additions, and the tag-layer
+   label-prior record framing (`{tag, tag_type, asserted_by}` as
+   data), authored in full before 3b starts. — **lead**
+   *(prompt-bearing, AGENTS.md)*
+3b. Assembly implementation against 3a's authored text: screen payload
+   plumbing, `provider_priors` split (property vs label priors),
+   `_topic_labels` retired, batched per-run `source_tag` read, bounds
+   at assembly, version strings. Zero prompt-text authorship — any
+   needed wording change escalates to lead. — **codex**
+   *(judgment-bearing multi-file plumbing against a fully-authored
+   spec)*
 
-**Phase 3 — live transport (verify-fast gate; new modules, no
-schema/reader contact — consolidation argued per 3.11 retro)**
+**Phase 2 gates FULL `make verify`** *(rev 2 fix: task 3b changes
+classify/screen prompt-input readers — reader contact mandates the
+full gate)*.
+
+**Phase 3 — live transport (verify-fast gate; genuinely new modules,
+no schema/reader contact)**
 4. `search_live.py`: httpx clients, limiter, retry/redaction
    (status+host-only errors, key-scrub), sanitizers, `OA_SELECT`,
    filters→wire-params mapping, `pp` + validated `next_page_url`
@@ -227,17 +286,29 @@ ingest-adjacent: snapshot/tag writes change)**
    grows the strategy call while keeping mapping/dedup/coverage
    machinery untouched. — **codex**
 
-**Phase 6 — deep loop + escalation (verify-fast gate)**
+**Phase 6 — deep loop + escalation (full `make verify` gate — rev 2
+fix: the loop READS effective screening rows for steering)**
 8. `search_loop.py` deep path: graded-exemplar assembly (per-round,
-   negatives, intent anchor), fixed allocation incl. diversity
-   reserve, reformulate/suggest calls, snowball via task-5 verbs,
+   negatives, intent anchor — read via the effective-screen helper),
+   fixed allocation incl. diversity reserve + the per-round arm CALL
+   caps (rev 2), reformulate/suggest calls, snowball via task-5 verbs,
    grounding (id-preferred) + counters, stopping (four exits → three
-   stop values), per-round budgets + `DEEP_WALL_CLOCK_S`. — **codex**
-9. Skeleton sequencing: deep profile = acquire↔screen rounds; rapid
-   profile + `THIN_CONFIDENT_RELEVANT` escalation (one deep
-   continuation); per-mode wall-clock logging; live-mode key checks
-   (both keys, loud). — **fast-worker** *(sequencing pattern is
-   pinned; 012 twice-over precedent)*
+   stop values) **+ the deep-thin overlay** (rev 2: non-target stop
+   below target ⇒ final coverage row `re_searched_still_thin`),
+   per-round budgets + `DEEP_WALL_CLOCK_S`. — **codex**
+9. Skeleton sequencing *(rev 2: re-routed fast-worker → codex — the
+   brief is not self-sufficient: the as-built skeleton's "deep
+   profile" already means the stage-2 full-text screening leg,
+   `skeleton.py:684-766`)*. Pinned sequence: ONE profile axis —
+   the deep profile sets search depth=`deep` AND keeps its existing
+   stage-2 leg; deep SEARCH rounds (acquire↔screen stage-1) run
+   **pre-ingest**; the existing `ingest_full_text` fixture replay +
+   stage-2 screen leg follow unchanged (live-acquired docs carry no
+   full text until 016 → stage-2 counts them `skipped_no_fulltext`,
+   honestly); rapid profile = single rapid acquire + stage-1 screen +
+   `THIN_CONFIDENT_RELEVANT` escalation (one deep continuation,
+   resuming at round-2 semantics); per-mode wall-clock logging;
+   live-mode key checks (both keys, loud). — **codex**
 
 **Phase 7 — tests (full `make verify` gate — step-6 exit adjacent)**
 10. Bulk suites from the contract's Acceptance enumeration: transport
@@ -253,7 +324,11 @@ ingest-adjacent: snapshot/tag writes change)**
     tests (both prior kinds, asserter visibility, keywords absent,
     bounds, instruction-shaped tag/series values stay data),
     injection fixtures (reformulation/suggestion steering),
-    acquire-writes-no-screening-rows, grounding matrix. — **codex**
+    acquire-writes-no-screening-rows, grounding matrix, **the
+    deep-thin overlay cases** (rev 2: each non-target stop below
+    target → `re_searched_still_thin`; at/above target → the raw stop
+    value) and **`squery`+`min_similarity` wire assertions** (rev 2).
+    — **codex**
 
 **Phase 8 — records + live check (step-6 exit: full `make verify`)**
 12. `deferred.md` rewrite (discharged: live SearchBackend · Arm-B ·
@@ -269,7 +344,11 @@ Dev DB `alembic upgrade head` first (012 lesson). Then:
 (a) live rapid run, real intent — generated queries in events, envelope
 spot-checks, tags bounded, coverage `adequate`, wall-clock vs 30 s;
 (b) immediate re-run — dedup counts, no dup snapshots;
-(c) Overton spacing ≥1.2 s observed; `rg -i "api_key|sk-"` audit clean;
+(c) Overton spacing ≥1.2 s observed; key audit against the **actual
+env key VALUES** (script reads both keys from env and greps logs, DB
+dumps and verification artifacts for the literal values — rev 2: label
+greps like `api_key|sk-` miss raw key material) + structural redaction
+tests green;
 (d) comparative probe: verbatim intent vs generated queries result
 counts per backend (the decision-2 risk, measured with mitigation);
 (e) live deep run — per-round acquire↔screen in events + per-round
@@ -299,10 +378,11 @@ scoping (exclude fixture data + probe scratch), one security lane
 contract-verifier Opus, Codex adversarial, live-trace CONTENT review
 lane. ≤ 250K reasoning / ≤ 500K fast-worker.
 
-## Gate consolidation summary (3.11-retro rule)
+## Gate consolidation summary (3.11-retro rule; corrected rev 2)
 
-Full `make verify`: Phase 0 baseline · Phase 1 (schema+deps) · Phase 4
-(ingest-adjacent writes) · Phase 7 · Phase 8 exit. Phases 2/3 and 5/6
-gate on `make verify-fast` (new modules/prompts, no schema or reader
-contact; consecutive low-risk phases share the signal — the 014
-lesson: six full gates where three carried it).
+Full `make verify`: Phase 0 baseline · Phase 1 (schema+deps) ·
+**Phase 2** (task 3b touches classify/screen prompt-input readers) ·
+Phase 4 (ingest-adjacent writes) · **Phase 6** (the loop reads
+effective screening rows) · Phase 7 · Phase 8 exit. Phases **3 and 5**
+gate on `make verify-fast` (genuinely new modules, no schema or reader
+contact).
