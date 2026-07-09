@@ -54,6 +54,26 @@ is gated by `screen`. Ingestion is *not* a tool; this component's verb is `searc
 In v3.0 acquire snapshots the metadata envelope itself as text-in-hand
 (`text_basis="abstract_only"`); full-text fetch + Tier-0 ingestion remain post-screen.
 
+**As-built, task 015 ([ADR 0012](../../../adr/0012-depth-graded-agentic-search.md)):**
+search is **depth-graded** — acquire reads `context["search"]["depth"]`
+(`rapid` default | `deep`, fail-closed; every depth constant lives in an extensible
+per-depth table). **Rapid** = LLM multi-query fan-out per backend idiom (OpenAlex
+keyword-lexical queries + SR/RCT variants; Overton verbatim intent + ≤2 NL paraphrases,
+semantic `squery`) with no single query load-bearing (validated generation; all-zero →
+loud verbatim fallback; per-call result quotas distribute the cap). **Deep** = bounded
+acquire↔screen rounds (cap 3) where the loop's relevance judge IS the production
+screen — acquire itself writes **no** screening rows and holds no shadow relevance
+judgment; steering reads persisted consensus rows via the effective-screen helper.
+Round arms (reformulate over graded exemplars anchored to the fixed intent · citation
+snowball · suggested-paper grounding · an un-steered diversity reserve) run on fixed
+call caps. Stops are honest (`target_reached` / `short_circuit` / `budget_exhausted`,
+thin overlay `re_searched_still_thin`); every egress call emits `search.executed`; each
+acquire round writes a fail-closed coverage record carrying depth + executed
+`scope_filters` (the empirically-pinned directive grammar). `search_backend_scope`
+(Plan+Config) selects backends. Transport is first-party httpx, hardened
+(timeouts · Overton limiter · retry cap 1 · redacted errors · sanitizers · no citation
+floor).
+
 ## 2 — screen
 
 A distinct **recall-oriented** relevance filter, **per-document fan-out**. The dangerous failure
@@ -75,7 +95,15 @@ for a broad scan is the **false negative**, so the screen is deliberately inclus
 - **Confidence is load-bearing (light):** feeds the **thin-base re-search trigger** (thin = too
   few *sufficiently-confident* relevant docs) and flags/orders borderline inclusions — but is
   **never a hard exclusion cutoff** (preserves recall). Adds the escape hatch v2 lacked
-  (re-search when the screened base is too thin) — may re-invoke `search`.
+  (re-search when the screened base is too thin) — may re-invoke `search`. **As-built
+  (task 015):** the trigger dissolved into the depth-graded loop's stopping rule — a
+  rapid run below the confident-relevant threshold escalates (`should_escalate`) to one
+  bounded deep continuation, and any non-target stop below target records
+  `re_searched_still_thin` on the coverage record. Screen is also the **deep loop's
+  judge**: every in-loop relevance judgment is the same durable 3-rep consensus
+  admission decision (one calibration, one eval surface — ADR 0012 decision 3);
+  stage-1 prompt inputs grew `title_source` provenance and (classify likewise) the
+  tag-layer label priors with visible `asserted_by` (task 015 revs 3.7–3.8).
 - ⏸ The richer **tiered content peek** (exec-summary / headings / passage scan for poor-metadata
   grey lit) is **deferred** (largely superseded by the stage-2 windowed full-text pass).
 
@@ -225,7 +253,11 @@ on what the run produced:
   ): synthesise takes explicit fail-closed references (**all optional** —
   characterisation, and the deepest available of selection / extraction / grouping,
   upstream references resolved transitively from the referenced rows and cross-checked;
-  the requirement is **at least one groundable substrate**, else structural failure) and
+  the requirement is **at least one groundable substrate**, else structural failure —
+  as-built the groundable substrate is **full-text chunks**: an envelope-only corpus
+  (acquired metadata, nothing ingested) refuses honestly with
+  `no_groundable_substrate` until live fetch (016) lands — the 015 chain smoke hit
+  this; see the synthesise-is-run-terminus knowledge concept) and
   never hard-wires a component combination — the orchestrator selects any coherent
   registry subset and synthesise adapts. **Retrieval scope = the screened-in corpus
   always** (screen is the relevance discipline that bounds reading); **a referenced

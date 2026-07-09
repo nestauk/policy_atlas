@@ -378,6 +378,23 @@ comma test is strengthened with written justification above); no swallowed error
 added; all fixes carry regression tests or are behavior-neutral refactors;
 `make verify` green post-fix.
 
+## Step-8 records (authored at review, ride this PR)
+
+- `docs/deferred.md`: live-`SearchBackend` · Arm-B · thin-base-trigger · backend-scope ·
+  per-backend-query-mode entries discharged; new **task-015 section** carrying the full
+  contract § Verification seam list + the review stack's coverage-grain and cleanup notes;
+  characterise robustness observations recorded at the 009 grouping entry; envelope-consumers
+  and saturation entries swept current.
+- `docs/knowledge/`: three new concepts (cap-distribution rule · guard-invariant evasion ·
+  wire-grammar sanitization), the terminus concept's substrate corollary, index + log
+  updated; candidate adjudication recorded in log.md (three authored, one folded, three
+  routed to deferred.md/ADR with reasons).
+- Components §1 (depth-graded as-built) + §2 (trigger dissolution, screen-as-judge,
+  prompt-input growth) + §9 (groundable substrate = full-text chunks — the rev-3.14
+  correction) flow-back landed.
+- `docs/agentic-ops/`: environment.md header (015 keys/cost posture) + readiness.md
+  task-sequence line, written as of this PR merged.
+
 ## Deferred work
 
 Recorded at step 8 into `docs/deferred.md` per the contract's § Verification list

@@ -27,11 +27,14 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [Tests run against the dev DB in a rolled-back transaction](testing-database.md) - no separate test database; point `DATABASE_URL` somewhere disposable.
 * [Reject model output at the grain of the fault — and persist the reason](validation-reject-at-fault-grain.md) - text-rule violations reject the unit and route it to repair; only id/envelope corruption rejects whole-response; rejection reasons persist with the run (012 fix via the 013 review stack).
 * [Untrusted text enters prompts only as JSON-encoded records](untrusted-prompt-fields-json-records.md) - sanitization alone is not the boundary: the sanitizer preserves newlines, so raw interpolation lets a multi-line field fabricate template structure; every field rides inside `json.dumps`, allowlists re-validated at assembly (task 014 review stack, security lane).
+* [A total result cap needs a companion distribution rule](result-caps-need-distribution-rule.md) - with `max_results = remaining`, provider call #1 eats the whole cap and the fan-out silently collapses to one load-bearing query; per-call quotas via `_distribute_quota` (015 live check — scripted tests structurally could not catch it).
+* [Values embedded in a structured wire param must exclude that wire's metacharacters](embedded-values-escape-wire-grammar.md) - OpenAlex's `filter` is comma-delimited, so a comma surviving into the embedded search value opens an injectable filter clause that bypasses the fail-closed directive grammar (015 review stack, convergent Codex + security finding).
 
 ## Testing rules
 
 * [Audit sanitized fixtures against the raw recording](sanitized-fixtures-audit-against-raw.md) - key-based sanitizers miss list-inherited keys and rare fields; substring-audit raw vs fixture, with a neutral fake lexicon.
 * [Assert contract-required keys on the written row, not the component summary](assert-on-row-not-summary.md) - summary and row are built separately and drift; downstream readers consume rows — anchor evidence there (task 012 review stack).
+* [Guard tests must assert the real invariant, or agents satisfy their letter](guard-tests-name-real-invariant.md) - the 007 zero-egress regex was dodged with `importlib.import_module("httpx")`; the honest move is extending the guard's stated invariant, and delegated executors optimise against the checks they are given (task 015 build).
 
 ## Invariants (verified)
 

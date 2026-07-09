@@ -42,3 +42,10 @@ caught. The mistake recurred across multiple slices before being captured here
 - "Characterise runs" is never an assumption a reader/consumer may bake in:
   code consuming characterisation output must tolerate its absence (the
   artefact is then a grounded answer without a landscape, by design).
+- **The terminus has a substrate precondition** (013 as-built, hit live at the
+  015 chain smoke): synthesise refuses an envelope-only corpus with an honest
+  structural `no_groundable_substrate` — its citable substrate is full-text
+  chunks. Until live fetch (016) lands, no chain running purely on acquired
+  metadata envelopes can mint; a demo/smoke must seed at least one full-text
+  document. A spec/contract line saying a chain "synthesises over metadata
+  envelopes" is written against intent, not the as-built rule.
