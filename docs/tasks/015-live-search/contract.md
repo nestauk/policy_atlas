@@ -3,14 +3,37 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted rev 3.8 — awaiting contract approval (the 🛑 is
-> open; revs 2–3.8 shaped at the gate in user deliberation).
+> **Status:** drafted rev 3.9 — awaiting contract approval (the 🛑 is
+> open; revs 2–3.9 shaped at the gate in user deliberation).
 > Contract approved (before planning): _date · who_ ·
 > Plan approved (before implementation): _date · who_ · ADR: _expected:
 > one_ (depth-graded agentic search adoption — the Arm-B fold is a
 > consequential design decision; drafted at step 4).
 >
 > **Revision history:**
+> - **rev 3.9** (2026-07-09, two user calls): **(a) chain-terminus
+>   correction (fundamental, recurring — now also a memory entry):
+>   every run ends in `synthesise`**, the component that mints the
+>   capability's artefact; characterise — like the composition
+>   generally — is orchestrator/sub-agent discretion per intent
+>   (components.md §9 verbatim: a run without characterise is "a
+>   grounded answer, not an evidence report; the plan's legitimate
+>   choice"). Decision 11(g)'s smoke chain was wrong (ended at
+>   characterise) — corrected: … → appraise → characterise →
+>   **synthesise** (rapid no-reference profile; characterise included
+>   in the smoke *deliberately* for the rev-3.8 tag-distribution
+>   check). This also invalidated one argument in the retrieval-boost
+>   deliberation ("synthesise isn't in the smoke" — it is, now);
+>   the other grounds stood and the user held the keep-out. **(b)
+>   Retrieval scoping stays a deferred seam, upgraded to a named
+>   companion-slice shape**: *retrieval-boost grammar v2* — tag-based
+>   scoping ("look here first" over columns+tags, the spec's soft
+>   prior) + the 014 rev-1.8 screen-confidence multiplier — **land
+>   together in one 013-surface slice** (the boost grammar moves once,
+>   not twice; both signals become meaningful in 015: a populated tag
+>   layer, live consensus confidence); sequence before 017 so the
+>   dress rehearsal exercises both, or parallel to 015's build
+>   (disjoint surfaces).
 > - **rev 3.8** (2026-07-09, user design call, spec-confirmed): **the
 >   tag layer becomes classify's uniform label-prior surface** —
 >   superseding rev 3.7's raw-field mechanism for label-shaped priors.
@@ -517,12 +540,16 @@ PR landing:
     deep continuation resumes incrementally,
     `re_searched_still_thin` lands when still thin; (g) one
     **rapid-profile chain smoke** over the live-acquired corpus
-    (acquire → screen → classify → appraise → characterise, live
-    LLM backends — mini-class over ~50 envelopes: cents), which also
-    confirms (rev 3.8 sweep) the new tag rows surfacing in
-    characterise's tag distributions (series × overton;
-    `source_tags`). **No
-    deep-chain e2e** (the 014 lesson; 017 owns the dress rehearsal).
+    *(chain corrected rev 3.9 — synthesise is the terminus)*: acquire →
+    screen → classify → appraise → characterise → **synthesise** (the
+    rapid no-reference profile — the terminus mints the artefact;
+    characterise is orchestrator-discretionary in general and is
+    included in THIS smoke deliberately so the rev-3.8 tag rows —
+    series × overton, `source_tags` — are confirmed in its
+    distributions). Live LLM backends, mini-class over ~50 envelopes
+    plus one rapid synthesise: low single-digit dollars. **No
+    deep-chain e2e** (the 014 lesson — no select/extract/group legs;
+    017 owns the dress rehearsal).
     Live results are non-deterministic — evidence records observed
     counts, not pinned values.
 
@@ -896,8 +923,12 @@ PR landing:
       envelope-as-context shape** (its judgment is content extraction
       from chunk text; `title_source` there is cosmetic — noted at the
       011 envelope-fencing seam) · **tag-based retrieval scoping**
-      (the spec's "look here first" soft prior over columns+tags)
-      remains its own recorded seam, not a 015 rider.
+      stays a deferred seam, upgraded rev 3.9 to the named
+      companion-slice shape: **retrieval-boost grammar v2** = tag
+      scoping + the 014 screen-confidence multiplier landing together
+      in one 013-surface slice (grammar moves once; both input signals
+      are 015 products), sequenced before 017 or parallel to 015's
+      build.
 
 ## Scope / Out of scope
 
@@ -1086,7 +1117,10 @@ records incl. non-empty `scope_filters` and the fired
 `re_searched_still_thin`, envelope spot-checks, trace ids); diff summary
 with flagged deviations; public-safety confirmation; known gaps.
 `deferred.md` at step 8: live `SearchBackend` + Arm-B + thin-base-trigger
-entries **discharged**; new/retained seams recorded (**select-as-tool /
+entries **discharged**; new/retained seams recorded (**retrieval-boost
+grammar v2** — rev 3.9's named companion slice: tag-based scoping +
+the 014 screen-confidence multiplier, one 013-surface slice, sequenced
+before 017 or parallel to 015's build · **select-as-tool /
 shared purpose-fit-ranking tool** — the rev-3 spec-level seam ·
 Overton-arm-B cross-backend snowball (rev 3.1: now carrying the
 documented edges — `plain_dois_cited` + `generate_id_set.php` +
