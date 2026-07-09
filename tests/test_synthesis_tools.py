@@ -6,9 +6,13 @@ import uuid
 from typing import Any
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.embeddings import EMBEDDING_DIMENSIONS
+from policy_atlas.embeddings import EMBEDDING_DIMENSIONS, EMBEDDING_PROFILE, UNIT_POLICY
+from policy_atlas.grounding import content_hash
+from policy_atlas.schema import chunk as chunk_table
+from policy_atlas.schema import chunk_embedding, project_source_snapshot
 from policy_atlas.synthesis_backend import SectionClaimsWire
 from policy_atlas.synthesis_tools import (
     BOOST_CLAMP_MAX,
@@ -26,6 +30,7 @@ from policy_atlas.synthesis_tools import (
     SynthesisDirectiveError,
     ToolExchange,
     ToolValidationError,
+    build_retrieval_scope,
     build_section_tools,
     gathered_ids,
     make_lookup_reader,
@@ -139,12 +144,14 @@ def _one_chunk_scope(*, selected_a: bool = False, selected_b: bool = False) -> R
             "sequence": 1,
             "pss_id": "doc-a",
             "segmentation_policy": "manual_v1",
+            "text_basis": "full_text",
         },
         "chunk-b": {
             "content": "beta policy evidence",
             "sequence": 1,
             "pss_id": "doc-b",
             "segmentation_policy": "manual_v1",
+            "text_basis": "abstract_only",
         },
     }
     units = [
@@ -269,6 +276,7 @@ def test_retriever_ranking_is_deterministic_and_lexical_match_is_reachable() -> 
                 "sequence": 1,
                 "pss_id": "doc-a",
                 "segmentation_policy": "manual_v1",
+                "text_basis": "full_text",
             }
         },
         units=[
@@ -306,6 +314,22 @@ def test_retriever_selection_prior_reorders_without_excluding_unselected() -> No
     assert retriever.provenance()["selection_prior"] == 2.0
 
 
+def test_retriever_search_results_expose_chunk_text_basis_values() -> None:
+    retriever = ChunkRetriever(
+        _one_chunk_scope(),
+        embedder=FakeEmbedder({"policy": _vector(1.0)}),
+        directive=SynthesisDirective(),
+        reranker=PassThroughChunkReranker(),
+    )
+
+    results = retriever.search("policy")
+
+    assert {chunk["chunk_record_id"]: chunk["text_basis"] for chunk in results} == {
+        "chunk-a": "full_text",
+        "chunk-b": "abstract_only",
+    }
+
+
 def test_retriever_directive_boosts_reweight_but_do_not_surface_zero_relevance() -> None:
     docs = _one_chunk_scope().docs
     docs["doc-c"] = {
@@ -323,6 +347,7 @@ def test_retriever_directive_boosts_reweight_but_do_not_surface_zero_relevance()
         "sequence": 1,
         "pss_id": "doc-c",
         "segmentation_policy": "manual_v1",
+        "text_basis": "full_text",
     }
     units = _one_chunk_scope().units
     units.append({
@@ -370,6 +395,7 @@ def test_retriever_reranker_invoked_and_top_k_cap_enforced() -> None:
             "sequence": index,
             "pss_id": doc_id,
             "segmentation_policy": "manual_v1",
+            "text_basis": "full_text",
         }
         units.append({
             "unit_id": f"unit-{index:02d}",
@@ -418,12 +444,14 @@ def test_retriever_tie_breaks_by_unit_and_chunk_id() -> None:
             "sequence": 1,
             "pss_id": "doc-a",
             "segmentation_policy": "manual_v1",
+            "text_basis": "full_text",
         },
         "b": {
             "content": "same",
             "sequence": 1,
             "pss_id": "doc-b",
             "segmentation_policy": "manual_v1",
+            "text_basis": "full_text",
         },
     }
     units: list[dict[str, Any]] = [
@@ -495,6 +523,7 @@ def test_search_chunks_char_budget_tail_drop_and_zero_budget() -> None:
     )
     first = tools["search_chunks"]({"query": "policy"})
     assert [chunk["chunk_record_id"] for chunk in first["chunks"]] == ["chunk-a"]
+    assert first["chunks"][0]["text_basis"] == "full_text"
     assert first["truncated"] is True
     second = tools["search_chunks"]({"query": "policy"})
     assert second == {"chunks": [], "truncated": True}
@@ -626,6 +655,7 @@ def test_retriever_candidate_pool_cap_prevents_boost_only_surface() -> None:
             "sequence": index,
             "pss_id": doc_id,
             "segmentation_policy": "manual_v1",
+            "text_basis": "full_text",
         }
         units.append({
             "unit_id": f"unit-{index:03d}",
@@ -739,3 +769,70 @@ def test_lookup_excludes_screened_out_doc_from_tag_reads(conn: Connection) -> No
 
     with pytest.raises(ToolValidationError, match="doc_id is unknown"):
         reader({"kind": "tags_by_doc", "doc_id": str(pss_id)})
+
+
+def test_build_retrieval_scope_exposes_abstract_basis_search_chunks(
+    conn: Connection,
+) -> None:
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    pss_id = seed_select_doc(
+        conn,
+        project_id,
+        run_id,
+        scope_id,
+        title="abstract-only doc",
+        text_basis="abstract",
+    )
+    envelope_snapshot_id = conn.execute(
+        select(project_source_snapshot.c.source_snapshot_id).where(
+            project_source_snapshot.c.project_source_snapshot_id == pss_id
+        )
+    ).scalar_one()
+    content = "abstract-only subsidy evidence is visible in the envelope chunk."
+    chunk_id = uuid.uuid4()
+    conn.execute(
+        chunk_table.insert().values(
+            chunk_id=chunk_id,
+            source_snapshot_id=envelope_snapshot_id,
+            sequence=0,
+            content=content,
+            content_hash=content_hash(content),
+            locator={},
+            segmentation_policy="abstract_v1",
+            created_at=now(),
+        )
+    )
+    conn.execute(
+        chunk_embedding.insert().values(
+            chunk_embedding_id=uuid.uuid4(),
+            chunk_id=chunk_id,
+            embedding_profile=EMBEDDING_PROFILE,
+            unit_policy=UNIT_POLICY,
+            unit_index=0,
+            unit_locator={"start": 0, "end": len(content)},
+            vector=_vector(1.0),
+            created_at=now(),
+        )
+    )
+
+    scope = build_retrieval_scope(
+        conn, project_id=project_id, scope_id=scope_id, selected_pss_ids=set()
+    )
+    retriever = ChunkRetriever(
+        scope,
+        embedder=FakeEmbedder({"subsidy": _vector(1.0)}),
+        directive=SynthesisDirective(),
+        reranker=PassThroughChunkReranker(),
+    )
+    tools = build_section_tools(
+        retriever=retriever,
+        findings_reader=None,
+        lookup_reader=lambda args: {"kind": args["kind"], "result": {}},
+    )
+
+    result = tools["search_chunks"]({"query": "subsidy"})
+
+    assert scope.chunks[str(chunk_id)]["text_basis"] == "abstract_only"
+    assert result["chunks"][0]["chunk_record_id"] == str(chunk_id)
+    assert result["chunks"][0]["text_basis"] == "abstract_only"

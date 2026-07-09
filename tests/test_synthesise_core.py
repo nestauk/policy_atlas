@@ -16,7 +16,7 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.embeddings import EMBEDDING_PROFILE, UNIT_POLICY, StubEmbeddingBackend
 from policy_atlas.grounding import content_hash
-from policy_atlas.grounding_judge import StubGroundingJudgeBackend
+from policy_atlas.grounding_judge import JudgeResponseWire, StubGroundingJudgeBackend
 from policy_atlas.schema import (
     addressable_unit,
     annotation,
@@ -30,7 +30,15 @@ from policy_atlas.schema import (
     synthesis_result,
 )
 from policy_atlas.schema import chunk as chunk_table
-from policy_atlas.synthesis_backend import StubSynthesisBackend
+from policy_atlas.synthesis_backend import (
+    ChunkCitationWire,
+    ClaimWire,
+    SectionClaimsWire,
+    SectionProposalWire,
+    SectionTurn,
+    SectionWire,
+    StubSynthesisBackend,
+)
 from policy_atlas.synthesise import SynthesiseContext, SynthesiseFailure, synthesise_scope
 from tests.helpers import (
     now,
@@ -111,7 +119,8 @@ def _run_synthesise(
     selection_run_id: uuid.UUID | None = None,
     extraction_run_id: uuid.UUID | None = None,
     grouping_run_id: uuid.UUID | None = None,
-    backend: StubSynthesisBackend | None = None,
+    backend: Any | None = None,
+    grounding_judge_backend: Any | None = None,
 ) -> dict[str, Any]:
     return synthesise_scope(
         conn,
@@ -127,9 +136,120 @@ def _run_synthesise(
             grouping_run_id=grouping_run_id,
         ),
         synthesis_backend=backend or StubSynthesisBackend(),
-        grounding_judge_backend=StubGroundingJudgeBackend(),
+        grounding_judge_backend=grounding_judge_backend or StubGroundingJudgeBackend(),
         embedding_backend=StubEmbeddingBackend(),
     )
+
+
+def _seed_envelope_chunk(
+    conn: Connection,
+    *,
+    pss_id: uuid.UUID,
+    content: str,
+    segmentation_policy: str = "abstract_v1",
+) -> uuid.UUID:
+    envelope_snapshot_id = conn.execute(
+        select(project_source_snapshot.c.source_snapshot_id).where(
+            project_source_snapshot.c.project_source_snapshot_id == pss_id
+        )
+    ).scalar_one()
+    chunk_id = uuid.uuid4()
+    conn.execute(
+        chunk_table.insert().values(
+            chunk_id=chunk_id,
+            source_snapshot_id=envelope_snapshot_id,
+            sequence=0,
+            content=content,
+            content_hash=content_hash(content),
+            locator={},
+            segmentation_policy=segmentation_policy,
+            created_at=now(),
+        )
+    )
+    conn.execute(
+        chunk_embedding.insert().values(
+            chunk_embedding_id=uuid.uuid4(),
+            chunk_id=chunk_id,
+            embedding_profile=EMBEDDING_PROFILE,
+            unit_policy=UNIT_POLICY,
+            unit_index=0,
+            unit_locator={"start": 0, "end": len(content)},
+            vector=StubEmbeddingBackend().embed_texts([content])[0],
+            created_at=now(),
+        )
+    )
+    return chunk_id
+
+
+class _SearchAndCiteBackend:
+    mode = "stub"
+    quote = "abstract-only subsidy evidence"
+
+    def __init__(self) -> None:
+        self.seen_chunks: list[dict[str, Any]] = []
+
+    def propose_sections(
+        self, *, intent: str, substrate: dict[str, Any], rejection: list[str] | None = None
+    ) -> SectionProposalWire:
+        del intent, substrate, rejection
+        return SectionProposalWire(
+            sections=[
+                SectionWire(
+                    title="Abstract-basis evidence",
+                    focus="Evidence visible from abstract-basis chunks.",
+                )
+            ]
+        )
+
+    def section_turn(
+        self, seed: dict[str, Any], transcript: list[Any], *, force_emit: bool
+    ) -> SectionTurn:
+        del seed
+        chunks = [
+            chunk
+            for exchange in transcript
+            if exchange["tool"] == "search_chunks"
+            for chunk in exchange["result"].get("chunks", [])
+        ]
+        self.seen_chunks = chunks
+        if not chunks and not force_emit:
+            return {
+                "tool_calls": [{"tool": "search_chunks", "arguments": {"query": "subsidy"}}],
+                "claims": None,
+            }
+        chunk_id = chunks[0]["chunk_record_id"] if chunks else "missing"
+        return {
+            "tool_calls": [],
+            "claims": SectionClaimsWire(
+                claims=[
+                    ClaimWire(
+                        claim_type="chunk",
+                        text="The abstract reports subsidy evidence.",
+                        citations=[
+                            ChunkCitationWire(chunk_record_id=chunk_id, quote=self.quote)
+                        ],
+                    )
+                ]
+            ),
+        }
+
+    def repair_section(
+        self, seed: dict[str, Any], transcript: list[Any], *, failing: list[dict[str, Any]]
+    ) -> SectionClaimsWire:
+        del seed, transcript, failing
+        return SectionClaimsWire(claims=[])
+
+
+class _CapturingJudgeBackend:
+    mode = "stub"
+
+    def __init__(self) -> None:
+        self.envelopes: list[dict[str, Any]] = []
+        self._delegate = StubGroundingJudgeBackend()
+
+    def judge_block(self, envelope: dict[str, Any]) -> JudgeResponseWire:
+        self.envelopes.append(envelope)
+        return self._delegate.judge_block(envelope)
 
 
 def test_zero_substrate_fails_without_artefact_or_rollup(conn: Connection) -> None:
@@ -141,6 +261,66 @@ def test_zero_substrate_fails_without_artefact_or_rollup(conn: Connection) -> No
 
     assert _count(conn, artefact, project_id) == 0
     assert _count(conn, synthesis_result, project_id) == 0
+
+
+def test_all_fetch_failed_abstract_basis_corpus_synthesises_with_labels(
+    conn: Connection,
+) -> None:
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    pss_id = seed_select_doc(
+        conn,
+        project_id,
+        run_id,
+        scope_id,
+        title="abstract-only policy evidence",
+        text_basis="abstract",
+    )
+    chunk_id = _seed_envelope_chunk(
+        conn,
+        pss_id=pss_id,
+        content=(
+            "The abstract-only subsidy evidence reports improved policy outcomes "
+            "without a fetched full text."
+        ),
+    )
+    backend = _SearchAndCiteBackend()
+    judge = _CapturingJudgeBackend()
+
+    summary = _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        backend=backend,
+        grounding_judge_backend=judge,
+    )
+
+    assert summary["section_count"] == 1
+    assert backend.seen_chunks
+    assert {chunk["text_basis"] for chunk in backend.seen_chunks} == {"abstract_only"}
+    assert backend.seen_chunks[0]["chunk_record_id"] == str(chunk_id)
+    row = conn.execute(
+        select(synthesis_result).where(synthesis_result.c.project_id == project_id)
+    ).one()
+    assert row.synthesis_provenance["substrate_profile"]["ingested_docs"] == 0
+    assert row.synthesis_provenance["retrieval_scope"]["unit_count"] == 1
+    payloads = _project_annotations(conn, project_id)
+    citation_payload = next(payload for payload in payloads if "citations" in payload)
+    assert citation_payload["citations"][0]["text_basis"] == "abstract_only"
+    assert citation_payload["citations"][0]["spans"][0]["text_basis"] == "abstract_only"
+    assert judge.envelopes
+    assert judge.envelopes[0]["chunks"] == [
+        {
+            "chunk_record_id": str(chunk_id),
+            "segmentation_policy": "abstract_v1",
+            "text_basis": "abstract_only",
+            "content": (
+                "The abstract-only subsidy evidence reports improved policy outcomes "
+                "without a fetched full text."
+            ),
+        }
+    ]
 
 
 def test_characterisation_only_stub_writes_substrate_and_rollup(conn: Connection) -> None:

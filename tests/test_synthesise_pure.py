@@ -46,6 +46,7 @@ def _substrate() -> SubstrateView:
         sequence=0,
         content="alpha quoted evidence appears here",
         segmentation_policy="manual_v1",
+        text_basis="abstract_only",
         origin="unselected_screened",
         appraised=True,
     )
@@ -56,6 +57,7 @@ def _substrate() -> SubstrateView:
         sequence=0,
         content="beta quoted evidence appears here",
         segmentation_policy="manual_v1",
+        text_basis="full_text",
         origin="selected",
         appraised=False,
     )
@@ -155,6 +157,17 @@ def _rejected_reason(claim: ClaimWire, **kwargs: Any) -> str:
     )
     assert len(batch.rejected) == 1
     return batch.rejected[0].reason
+
+
+def test_chunk_info_carries_text_basis_values() -> None:
+    substrate = _substrate()
+
+    assert {
+        chunk_id: chunk.text_basis for chunk_id, chunk in substrate.chunk_by_id.items()
+    } == {
+        "11111111-1111-1111-1111-111111111111": "abstract_only",
+        "22222222-2222-2222-2222-222222222222": "full_text",
+    }
 
 
 def test_artefact_title_strips_control_chars_and_truncates() -> None:

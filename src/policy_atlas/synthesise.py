@@ -218,6 +218,7 @@ class ChunkInfo:
     sequence: int
     content: str
     segmentation_policy: str
+    text_basis: str
     origin: str
     appraised: bool
 
@@ -502,7 +503,7 @@ def available_claim_types_for_substrate(substrate: SubstrateView) -> set[str]:
     claim_types = {"gap", "reasoning"}
     if substrate.extraction is not None:
         claim_types.add("finding")
-    if substrate.corpus.appraised_ingested_docs > 0:
+    if substrate.corpus.appraised_docs > 0:
         claim_types.add("chunk")
     if (
         substrate.characterisation is not None
@@ -776,9 +777,9 @@ def _load_screened_chunks(
     appraised_pss_ids: set[str],
 ) -> tuple[dict[str, ChunkInfo], dict[str, list[ChunkInfo]], dict[str, BasisText]]:
     # The text-bearing snapshot per document: the fetched full-text snapshot when
-    # the fetch pipeline ingested one, else the envelope snapshot when it carries
-    # full text itself (uploads — chunked at upload ingest). full_text_status is
-    # fetch-pipeline state, never text availability (schema comment).
+    # the fetch pipeline ingested one, else the envelope snapshot acquired for
+    # the doc. full_text_status is fetch-pipeline state, never text availability
+    # (schema comment).
     text_snapshot_id = sa_case(
         (
             project_source_snapshot.c.full_text_status == "ingested",
@@ -786,6 +787,14 @@ def _load_screened_chunks(
         ),
         else_=project_source_snapshot.c.source_snapshot_id,
     )
+    chunk_text_basis = sa_case(
+        (
+            (chunk_table.c.source_snapshot_id == project_source_snapshot.c.source_snapshot_id)
+            & (source_snapshot.c.text_basis != "full_text"),
+            "abstract_only",
+        ),
+        else_="full_text",
+    ).label("text_basis")
     # Screened-in scope = effective-relevant join via the helper (same rule as
     # _load_corpus_profile — a second, previously-missed raw source_screening_
     # result consumer feeding the synthesise chunk lane).
@@ -798,6 +807,7 @@ def _load_screened_chunks(
             chunk_table.c.sequence,
             chunk_table.c.content,
             chunk_table.c.segmentation_policy,
+            chunk_text_basis,
         )
         .select_from(effective)
         .join(
@@ -817,10 +827,6 @@ def _load_screened_chunks(
         .where(effective.c.project_id == project_id)
         .where(effective.c.evidence_scope_id == scope_id)
         .where(effective.c.status == "relevant")
-        .where(
-            (project_source_snapshot.c.full_text_status == "ingested")
-            | (source_snapshot.c.text_basis == "full_text")
-        )
         .order_by(
             project_source_snapshot.c.project_source_snapshot_id,
             chunk_table.c.sequence,
@@ -839,6 +845,7 @@ def _load_screened_chunks(
             sequence=cast("int", row.sequence),
             content=cast("str", row.content),
             segmentation_policy=cast("str", row.segmentation_policy),
+            text_basis=cast("str", row.text_basis),
             origin="selected" if pss_id in selected_pss_ids else "unselected_screened",
             appraised=pss_id in appraised_pss_ids,
         )
@@ -1359,6 +1366,7 @@ def _spans_to_citations(
         }
         if with_origin:
             record["origin"] = spanned_chunk.origin
+            record["text_basis"] = spanned_chunk.text_basis
         span_records.append(record)
         citation_rows.append(
             CitationDraft(
@@ -1507,7 +1515,7 @@ def _validate_chunk_claim(
     substrate: SubstrateView,
     citable_chunk_ids: set[str],
 ) -> ClaimDraft | RejectedClaim:
-    if substrate.corpus.appraised_ingested_docs <= 0:
+    if substrate.corpus.appraised_docs <= 0:
         return _reject(
             claim,
             claim_id=claim_id,
@@ -1603,6 +1611,7 @@ def _validate_chunk_claim(
                 "cited_chunk_record_id": chunk_id,
                 "quote": quote,
                 "match_status": match.status,
+                "text_basis": chunk.text_basis,
                 "spans": span_records,
             }
         )
@@ -1890,6 +1899,7 @@ def _judge_claims(
         {
             "chunk_record_id": chunk_id,
             "segmentation_policy": substrate.chunk_by_id[chunk_id].segmentation_policy,
+            "text_basis": substrate.chunk_by_id[chunk_id].text_basis,
             "content": substrate.chunk_by_id[chunk_id].content,
         }
         for chunk_id in sorted(chunk_ids)
@@ -2538,7 +2548,7 @@ def synthesise_scope(
     }
     refs = _resolve_references(conn, project_id=project_id, context=context)
     corpus = _load_corpus_profile(conn, project_id=project_id, scope_id=context.scope_id)
-    if not refs.any_resolved() and corpus.ingested_docs == 0:
+    if not refs.any_resolved() and corpus.screened_docs == 0:
         raise SynthesiseFailure("no_groundable_substrate")
 
     selected_pss_id_strings = _selected_pss_ids(refs.selection_row)
@@ -2560,7 +2570,7 @@ def synthesise_scope(
 
     retrieval_scope = None
     retriever: ChunkRetriever | None = None
-    if corpus.ingested_docs > 0:
+    if corpus.screened_docs > 0:
         try:
             retrieval_scope = build_retrieval_scope(
                 conn,
