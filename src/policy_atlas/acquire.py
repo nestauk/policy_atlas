@@ -72,10 +72,12 @@ class BackendCaps:
     Attributes:
         has_snowball: Whether citation/reference expansion verbs are available.
         has_title_lookup: Whether exact-title lookup is available.
+        has_doi_lookup: Whether DOI-batch lookup is available.
     """
 
     has_snowball: bool
     has_title_lookup: bool
+    has_doi_lookup: bool = False
 
 
 class SearchBackend(Protocol):
@@ -117,6 +119,12 @@ class SearchBackend(Protocol):
 
     def lookup_title(self, title: str) -> list[dict[str, Any]]:
         """Return provider records matching a title query."""
+        ...
+
+    def lookup_dois(
+        self, dois: list[str], *, max_results: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Return provider records matching DOI identifiers."""
         ...
 
 
@@ -189,7 +197,7 @@ class OpenAlexFixtureBackend:
     name = "openalex"
     trust_class = "academic_aggregator"
     mode = "fixture"
-    caps = BackendCaps(has_snowball=True, has_title_lookup=True)
+    caps = BackendCaps(has_snowball=True, has_title_lookup=True, has_doi_lookup=True)
 
     def search(
         self,
@@ -223,6 +231,19 @@ class OpenAlexFixtureBackend:
             for record in _load_fixture("openalex_works.json")
             if needle in str(record.get("display_name", "")).casefold()
         ]
+
+    def lookup_dois(
+        self, dois: list[str], *, max_results: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Return fixture records whose normalized DOI matches a requested DOI."""
+        wanted = {_normalize_doi(doi) for doi in dois}
+        wanted.discard(None)
+        records = [
+            record
+            for record in _load_fixture("openalex_works.json")
+            if _normalize_doi(record.get("doi")) in wanted
+        ]
+        return _limit_fixture_records(records, max_results)
 
 
 class OvertonFixtureBackend:
@@ -258,6 +279,12 @@ class OvertonFixtureBackend:
     def lookup_title(self, title: str) -> list[dict[str, Any]]:
         """Raise because Overton v1 declares no title-lookup capability."""
         raise NotImplementedError("OvertonFixtureBackend caps.has_title_lookup=False")
+
+    def lookup_dois(
+        self, dois: list[str], *, max_results: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Raise because Overton v1 declares no DOI-lookup capability."""
+        raise NotImplementedError("OvertonFixtureBackend caps.has_doi_lookup=False")
 
 
 # --- Mapping layer (private): raw provider record -> normalized envelope + chunk ---
@@ -608,7 +635,7 @@ def acquire_sources(
         ``results_returned`` (invariant: the first three sum to it, per backend
         and in total), ``by_backend`` (with per-backend ``status``/``error``),
         ``tags_materialised``, ``embed``, ``stop_condition``,
-        ``adequacy_verdict``, ``coverage_record_id``.
+        ``adequacy_verdict``, ``coverage_record_id``, ``acquired_pss_by_verb``.
     """
     # A backend without a registered mapping (or a duplicate name, which would
     # corrupt by_backend) is a wiring error, not a search failure — fail loud
@@ -675,10 +702,12 @@ def acquire_sources(
     ok_calls_by_backend = dict.fromkeys(names, 0)
     errors_by_backend: dict[str, list[str]] = {name: [] for name in names}
     tag_assertions: list[tuple[uuid.UUID, str, str, str]] = []
+    acquired_pss_by_verb: dict[str, list[str]] = {}
 
     def process_records(
         *,
         backend_name: str,
+        verb: str,
         records: list[dict[str, Any]],
         counts: dict[str, Any],
     ) -> None:
@@ -788,6 +817,7 @@ def acquire_sources(
             )
 
             counts["acquired"] += 1
+            acquired_pss_by_verb.setdefault(verb, []).append(str(pss_id))
             seen_hashes.add(chash)
             if record_id:
                 seen_record_ids.add(record_id)
@@ -836,6 +866,7 @@ def acquire_sources(
             if status == "ok":
                 process_records(
                     backend_name=backend.name,
+                    verb="search",
                     records=results,
                     counts=counts,
                 )
@@ -871,6 +902,7 @@ def acquire_sources(
                 ok_calls_by_backend[backend.name] += 1
                 process_records(
                     backend_name=backend.name,
+                    verb=call.verb,
                     records=call.records,
                     counts=counts,
                 )
@@ -968,4 +1000,5 @@ def acquire_sources(
         "stop_condition": stop_condition,
         "adequacy_verdict": adequacy_verdict,
         "coverage_record_id": str(coverage_record_id),
+        "acquired_pss_by_verb": acquired_pss_by_verb,
     }

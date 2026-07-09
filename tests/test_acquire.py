@@ -88,6 +88,11 @@ class FakeBackend:
     def lookup_title(self, title: str) -> list[dict[str, Any]]:
         raise NotImplementedError("FakeBackend caps.has_title_lookup=False")
 
+    def lookup_dois(
+        self, dois: list[str], *, max_results: int | None = None
+    ) -> list[dict[str, Any]]:
+        raise NotImplementedError("FakeBackend caps.has_doi_lookup=False")
+
 
 def oa_record(
     rid: str = "https://example.org/W1",

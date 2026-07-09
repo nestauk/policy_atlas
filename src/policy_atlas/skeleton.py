@@ -11,16 +11,18 @@ All gates approved; see ADR 0001 and contract.md.
 
 import functools
 import os
+import time
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import structlog
 from langfuse import Langfuse
 from sqlalchemy import func, select, text
 from sqlalchemy.engine import Connection
 
-from policy_atlas import events, tracing
+from policy_atlas import events, search_generation, search_live, search_loop, tracing
+from policy_atlas.acquire import SearchBackend
 from policy_atlas.classification_backend import (
     ClassificationBackend,
     OpenAIClassificationBackend,
@@ -76,6 +78,7 @@ from policy_atlas.screening_backend import (
     ScreeningBackend,
     StubScreeningBackend,
 )
+from policy_atlas.search_generation import SearchGenerationBackend
 from policy_atlas.select import NON_EVIDENCE_TYPE
 from policy_atlas.synthesis_backend import (
     OpenAISynthesisBackend,
@@ -123,6 +126,8 @@ def _run_component(
     grouping_run_id: uuid.UUID | None = None,
     synthesis_backend: SynthesisBackend | None = None,
     grounding_judge_backend: GroundingJudgeBackend | None = None,
+    search_backends: list[SearchBackend] | None = None,
+    search_generation_backend: SearchGenerationBackend | None = None,
 ) -> uuid.UUID:
     """Create a run, compile and record the plan, and execute one scope component.
 
@@ -155,6 +160,10 @@ def _run_component(
         synthesis_backend: Synthesis backend for ``synthesise``; unused by
             other components.
         grounding_judge_backend: Grounding judge backend for ``synthesise``;
+            unused by other components.
+        search_backends: Search backends for ``acquire``; unused by other
+            components.
+        search_generation_backend: Search generation backend for ``acquire``;
             unused by other components.
 
     Returns:
@@ -224,6 +233,8 @@ def _run_component(
             facet_grouping_backend=facet_grouping_backend,
             synthesis_backend=synthesis_backend,
             grounding_judge_backend=grounding_judge_backend,
+            search_backends=search_backends,
+            search_generation_backend=search_generation_backend,
         )
         if component == "screen" and langfuse_client is not None:
             payload = _component_payload(events.read(conn, project_id), "screen", run_id=run_id)
@@ -318,6 +329,19 @@ def _component_payload(
         ),
         None,
     )
+
+
+def _component_payload_or_raise(
+    conn: Connection,
+    project_id: uuid.UUID,
+    component: str,
+    *,
+    run_id: uuid.UUID,
+) -> dict[str, Any]:
+    payload = _component_payload(events.read(conn, project_id), component, run_id=run_id)
+    if payload is None:
+        raise RuntimeError(f"{component} component completed payload missing")
+    return payload
 
 
 def _characterise_payload(
@@ -564,6 +588,8 @@ def main() -> None:
     ranking_backend: RankingBackend | None
     extraction_backend: ExtractionBackend
     facet_grouping_backend: FacetGroupingBackend
+    search_backends: list[SearchBackend] | None
+    search_generation_backend: SearchGenerationBackend | None
     if live:
         embedding_backend = OpenAIEmbeddingBackend()
         theme_grouping_backend = OpenAIThemeGroupingBackend()
@@ -582,6 +608,10 @@ def main() -> None:
         # Tracing lives inside OpenAIFacetGroupingBackend itself — no wrapper
         # class, unlike the embedding/grouping backends below.
         facet_grouping_backend = OpenAIFacetGroupingBackend(langfuse_client=langfuse_client)
+        search_backends = cast(list[SearchBackend], search_live.live_search_backends())
+        search_generation_backend = search_generation.OpenAISearchGenerationBackend(
+            langfuse_client=langfuse_client
+        )
         if langfuse_client is not None:
             embedding_backend = tracing.TracedEmbeddingBackend(
                 embedding_backend, langfuse_client
@@ -597,11 +627,14 @@ def main() -> None:
         ranking_backend = None
         extraction_backend = StubExtractionBackend()
         facet_grouping_backend = StubFacetGroupingBackend()
+        search_backends = None
+        search_generation_backend = None
     log.info(
         "skeleton.backends",
         mode="live" if live else "stub",
         traced=langfuse_client is not None,
         ranking="llm_rerank_v1" if live else "coverage_stratified_v1",
+        search="live" if live else "fixture",
     )
 
     engine = get_engine()
@@ -679,10 +712,13 @@ def main() -> None:
             langfuse_client=langfuse_client,
             screening_backend=screening_backend,
             classification_backend=classification_backend,
+            search_backends=search_backends,
+            search_generation_backend=search_generation_backend,
         )
 
         # Walk the chain: five runs over the same scope. Acquire runs first —
         # both fixture backends over the mixed corpus (this upload + acquired sets).
+        rapid_start = time.monotonic()
         run_component("acquire")
 
         # rapid: the first screen+classify chain runs entirely on stage-1 rows —
@@ -690,9 +726,86 @@ def main() -> None:
         # after ingest_full_text has full text to confirm against.
         log.info("screen.profile", profile="rapid", stage=1)
         run_component("screen")
+        rapid_elapsed = time.monotonic() - rapid_start
+        log.info("search.rapid_leg_elapsed", wall_clock_s=rapid_elapsed)
         log.info(
             "screen.rapid_profile_stage2_skipped",
             reason="rapid profile: stage-2 full-text confirmation not run yet",
+        )
+
+        confident_after_rapid = search_loop.confident_relevant_count(
+            conn,
+            project_id=project_id,
+            scope_id=scope_id,
+        )
+        if search_loop.should_escalate(conn, project_id=project_id, scope_id=scope_id):
+            log.info(
+                "search.rapid_thin_escalation",
+                confident_relevant=confident_after_rapid,
+                threshold=search_loop.THIN_CONFIDENT_RELEVANT,
+            )
+        else:
+            log.info(
+                "search.deep_profile_demo",
+                confident_relevant=confident_after_rapid,
+                threshold=search_loop.THIN_CONFIDENT_RELEVANT,
+            )
+
+        scope_context = dict(
+            conn.execute(
+                select(evidence_scope.c.context).where(
+                    evidence_scope.c.evidence_scope_id == scope_id
+                )
+            ).scalar_one()
+        )
+        raw_search_context = scope_context.get("search")
+        search_context = (
+            dict(raw_search_context) if isinstance(raw_search_context, dict) else {}
+        )
+        search_context["depth"] = "deep"
+        directed_context = {**scope_context, "search": search_context}
+        conn.execute(
+            evidence_scope.update()
+            .where(evidence_scope.c.evidence_scope_id == scope_id)
+            .values(context=directed_context)
+        )
+
+        def acquire_deep_round() -> dict[str, Any]:
+            acquire_run_id = run_component("acquire")
+            return _component_payload_or_raise(
+                conn,
+                project_id,
+                "acquire",
+                run_id=acquire_run_id,
+            )
+
+        def screen_deep_round() -> dict[str, Any]:
+            screen_run_id = run_component("screen")
+            return _component_payload_or_raise(
+                conn,
+                project_id,
+                "screen",
+                run_id=screen_run_id,
+            )
+
+        deep_summary = search_loop.run_deep_rounds(
+            conn,
+            project_id=project_id,
+            scope_id=scope_id,
+            acquire_round=acquire_deep_round,
+            screen_round=screen_deep_round,
+            start_round=2,
+        )
+        for round_summary in deep_summary["rounds"]:
+            log.info("search.deep_round_summary", **round_summary)
+        log.info(
+            "search.deep_episode_completed",
+            stop_condition=deep_summary["stop_condition"],
+            confident_relevant=deep_summary["confident_relevant"],
+            wall_clock_s=deep_summary["wall_clock_s"],
+            suggest_grounded_screened_out=deep_summary[
+                "suggest_grounded_screened_out"
+            ],
         )
 
         # Effective rows (screen.effective_screen_rows) drive the summaries below,
@@ -891,10 +1004,17 @@ def main() -> None:
                 full_text=str(ft_pin) if ft_pin is not None else None,
                 abstract_only=str(ab_pin) if ab_pin is not None else None,
             )
+        scope_context = dict(
+            conn.execute(
+                select(evidence_scope.c.context).where(
+                    evidence_scope.c.evidence_scope_id == scope_id
+                )
+            ).scalar_one()
+        )
         conn.execute(
             evidence_scope.update()
             .where(evidence_scope.c.evidence_scope_id == scope_id)
-            .values(context={"theme": "housing", "selection": selection_directive})
+            .values(context={**scope_context, "selection": selection_directive})
         )
         log.info("select.directive", budget=8, boost_tag=boost_tag)
 

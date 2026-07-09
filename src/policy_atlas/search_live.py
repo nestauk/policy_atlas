@@ -231,7 +231,7 @@ class OpenAlexLiveBackend(_TransportMixin):
     name = "openalex"
     trust_class = "academic_aggregator"
     mode = "live"
-    caps = BackendCaps(has_snowball=True, has_title_lookup=True)
+    caps = BackendCaps(has_snowball=True, has_title_lookup=True, has_doi_lookup=True)
 
     def __init__(self, api_key: str, *, email: str | None = None, fetch: _Fetch | None = None):
         self._api_key = api_key
@@ -316,6 +316,40 @@ class OpenAlexLiveBackend(_TransportMixin):
         if not sanitized:
             return []
         return self._fetch_works([f"title.search:{sanitized}"], max_results=5)
+
+    def lookup_dois(
+        self, dois: list[str], *, max_results: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Batch-resolve OpenAlex Work records by DOI.
+
+        Args:
+            dois: DOI identifiers, either bare or URL-prefixed.
+            max_results: Optional cap across all DOI chunks.
+
+        Returns:
+            Raw OpenAlex Work dictionaries matching requested DOIs.
+        """
+        normalized = _unique_normalized_dois(dois)
+        limit = _result_limit(max_results, len(normalized))
+        if limit == 0 or not normalized:
+            return []
+
+        records: list[dict[str, Any]] = []
+        for chunk in _chunks(normalized, _OPENALEX_REFERENCE_BATCH_SIZE):
+            remaining = limit - len(records)
+            if remaining <= 0:
+                break
+            params = {
+                **self._auth_params(),
+                "filter": f"doi:{'|'.join(chunk)}",
+                "select": ",".join(OA_SELECT),
+                "per-page": str(min(remaining, len(chunk), _OPENALEX_MAX_PER_PAGE)),
+                "page": "1",
+            }
+            data = self._request_json(f"{OPENALEX_HOST}/works", params)
+            page_results = _results_array(data, _host_from_url(OPENALEX_HOST))
+            records.extend(page_results[:remaining])
+        return records[:limit]
 
     def _fetch_works(
         self, filter_parts: list[str], *, max_results: int | None = None
@@ -445,6 +479,12 @@ class OvertonLiveBackend(_TransportMixin):
         """Raise because Overton v1 declares no title-lookup capability."""
         raise NotImplementedError("OvertonLiveBackend caps.has_title_lookup=False")
 
+    def lookup_dois(
+        self, dois: list[str], *, max_results: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Raise because Overton v1 declares no DOI-lookup capability."""
+        raise NotImplementedError("OvertonLiveBackend caps.has_doi_lookup=False")
+
     def _wait_rate_limit(self) -> None:
         now = time.monotonic()
         if self._last_request_at is not None:
@@ -519,6 +559,32 @@ def _result_limit(max_results: int | None, default: int) -> int:
 def _chunks(values: list[str], size: int) -> Iterable[list[str]]:
     for i in range(0, len(values), size):
         yield values[i : i + size]
+
+
+def _normalize_doi_for_filter(doi: str) -> str | None:
+    candidate = doi.strip().lower()
+    for prefix in (
+        "https://doi.org/",
+        "http://doi.org/",
+        "https://dx.doi.org/",
+        "http://dx.doi.org/",
+    ):
+        if candidate.startswith(prefix):
+            candidate = candidate[len(prefix):]
+            break
+    return candidate or None
+
+
+def _unique_normalized_dois(dois: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for doi in dois:
+        normalized = _normalize_doi_for_filter(doi)
+        if normalized is None or normalized in seen:
+            continue
+        seen.add(normalized)
+        out.append(normalized)
+    return out
 
 
 def _normalize_openalex_work_id(record_id: str) -> str:

@@ -19,11 +19,24 @@ from typing import Any, Literal, TypedDict, cast
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas import acquire
+from policy_atlas import acquire, screen
 from policy_atlas.embeddings import EmbeddingBackend
-from policy_atlas.schema import search_coverage_record
+from policy_atlas.schema import (
+    event_log,
+    project_source_snapshot,
+    search_coverage_record,
+    source_snapshot,
+)
 from policy_atlas.search_generation import SearchGenerationBackend
-from policy_atlas.search_prompts import N_QUERIES, QueriesPayload, validated_queries
+from policy_atlas.search_prompts import (
+    N_QUERIES,
+    ExemplarRecord,
+    QueriesPayload,
+    ReformulatePayload,
+    SuggestPayload,
+    validated_queries,
+    validated_suggestions,
+)
 
 SearchDepth = Literal["rapid", "deep"]
 QueryOrigin = Literal[
@@ -33,12 +46,37 @@ QueryOrigin = Literal[
     "paraphrase",
     "verbatim",
     "fallback_verbatim",
+    "snowball_forward",
+    "snowball_backward",
+    "suggestion_doi",
+    "suggestion_title",
+]
+CallVerb = Literal[
+    "search",
+    "fetch_citations",
+    "fetch_references",
+    "lookup_dois",
+    "lookup_title",
 ]
 CallStatus = Literal["ok", "error"]
+ArmName = Literal["reformulate", "snowball", "suggest", "diversity"]
 
 RAPID_WALL_CLOCK_S = 30
 DEEP_WALL_CLOCK_S = 150
 ROUND_CAP = 3
+POS_EXEMPLARS = 8
+NEG_EXEMPLARS = 4
+SNOWBALL_SEEDS = 5
+SNOWBALL_RESULTS = 40
+TARGET_CONFIDENT_RELEVANT = 20
+CONFIDENT_FLOOR = 0.7
+SHORT_CIRCUIT_RATE = 1.0 / 50.0
+THIN_CONFIDENT_RELEVANT = 8
+DIVERSITY_FRACTION = 0.15
+REFORMULATE_CALL_CAP = 4
+SNOWBALL_CALL_CAP = 6
+SUGGEST_CALL_CAP = 6
+DIVERSITY_CALL_MIN = 1
 
 
 class DepthConstants(TypedDict):
@@ -166,7 +204,7 @@ class ExecutedCall:
 
     Attributes:
         backend_name: Backend identifier matching a configured backend.
-        verb: Search verb; Phase 5 uses only ``"search"``.
+        verb: Search verb.
         query: Exact query text sent to the backend.
         query_origin: Deterministic origin of the query text.
         wire_params: Executed backend wire parameters, already redacted.
@@ -176,7 +214,7 @@ class ExecutedCall:
     """
 
     backend_name: str
-    verb: Literal["search"]
+    verb: CallVerb
     query: str
     query_origin: QueryOrigin
     wire_params: dict[str, str]
@@ -191,6 +229,28 @@ class _PlannedCall:
     query: str
     query_origin: QueryOrigin
     group_key: str | None = None
+
+
+@dataclass(frozen=True)
+class _ScreenedRecord:
+    pss_id: uuid.UUID
+    metadata: dict[str, Any]
+    confidence: float
+
+
+@dataclass(frozen=True)
+class StopDecision:
+    """Deep-loop stop decision.
+
+    Attributes:
+        stop: Whether the loop should stop after this evaluation.
+        stop_condition: Raw stop condition before any deep-thin overlay.
+        overlay_applied: Whether an overlay has already been applied.
+    """
+
+    stop: bool
+    stop_condition: str | None
+    overlay_applied: bool
 
 
 def _str_values(key: str, value: Any) -> list[str]:
@@ -607,6 +667,347 @@ def _count_existing_rounds(
     return int(count)
 
 
+def confident_relevant_count(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    scope_id: uuid.UUID,
+) -> int:
+    """Count effective relevant rows at or above the confidence floor.
+
+    Args:
+        conn: Open database connection.
+        project_id: Owning project.
+        scope_id: Evidence scope being searched.
+
+    Returns:
+        Count of effective screened rows with ``status='relevant'`` and
+        ``screen_decision_confidence >= CONFIDENT_FLOOR``.
+    """
+    effective = screen.effective_screen_rows()
+    count = conn.execute(
+        select(func.count())
+        .select_from(effective)
+        .where(effective.c.project_id == project_id)
+        .where(effective.c.evidence_scope_id == scope_id)
+        .where(effective.c.status == "relevant")
+        .where(effective.c.screen_decision_confidence >= CONFIDENT_FLOOR)
+    ).scalar_one()
+    return int(count)
+
+
+def should_escalate(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    scope_id: uuid.UUID,
+) -> bool:
+    """Return whether a rapid run is thin enough to need deep continuation.
+
+    Args:
+        conn: Open database connection.
+        project_id: Owning project.
+        scope_id: Evidence scope being searched.
+
+    Returns:
+        ``True`` when confident relevant evidence is below
+        ``THIN_CONFIDENT_RELEVANT``.
+    """
+    return (
+        confident_relevant_count(conn, project_id=project_id, scope_id=scope_id)
+        < THIN_CONFIDENT_RELEVANT
+    )
+
+
+def evaluate_deep_stop(
+    *,
+    round_index: int,
+    confident_relevant: int,
+    new_confident_relevant: int,
+    docs_screened_this_round: int,
+    wall_clock_breached: bool,
+    round_cap: int = ROUND_CAP,
+) -> StopDecision:
+    """Evaluate deep-loop stopping without touching the database.
+
+    Args:
+        round_index: Search round just completed.
+        confident_relevant: Current confident-relevant total.
+        new_confident_relevant: New confident-relevant rows from this round.
+        docs_screened_this_round: Stage-1 docs screened this round.
+        wall_clock_breached: Whether the deep wall-clock budget was exceeded.
+        round_cap: Maximum round index before the budget backstop fires.
+
+    Returns:
+        Stop decision with the raw stop condition, if any.
+    """
+    if confident_relevant >= TARGET_CONFIDENT_RELEVANT:
+        return StopDecision(True, "target_reached", False)
+    if round_index >= 2 and (
+        docs_screened_this_round == 0
+        or new_confident_relevant / docs_screened_this_round < SHORT_CIRCUIT_RATE
+    ):
+        return StopDecision(True, "short_circuit", False)
+    if wall_clock_breached or round_index >= round_cap:
+        return StopDecision(True, "budget_exhausted", False)
+    return StopDecision(False, None, False)
+
+
+def finalise_deep_stop(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    stop_condition: str,
+    below_target: bool,
+) -> str:
+    """Write the final deep stop condition onto the latest coverage row.
+
+    Args:
+        conn: Open database connection.
+        project_id: Owning project.
+        scope_id: Evidence scope being searched.
+        stop_condition: Raw stop condition from ``evaluate_deep_stop``.
+        below_target: Whether final confident-relevant count is below target.
+
+    Returns:
+        Stop condition written to ``search_coverage_record`` after applying the
+        deep-thin overlay.
+
+    Raises:
+        RuntimeError: If no search coverage row exists for the scope.
+    """
+    final_value = (
+        "re_searched_still_thin"
+        if stop_condition != "target_reached" and below_target
+        else stop_condition
+    )
+    row = conn.execute(
+        select(search_coverage_record.c.search_coverage_record_id)
+        .where(search_coverage_record.c.project_id == project_id)
+        .where(search_coverage_record.c.evidence_scope_id == scope_id)
+        .order_by(
+            search_coverage_record.c.created_at.desc(),
+            search_coverage_record.c.acquired_by_run_id.desc(),
+        )
+        .limit(1)
+    ).one_or_none()
+    if row is None:
+        raise RuntimeError("deep stop finalisation requires a coverage row")
+    conn.execute(
+        search_coverage_record.update()
+        .where(
+            search_coverage_record.c.search_coverage_record_id
+            == row.search_coverage_record_id
+        )
+        .values(stop_condition=final_value)
+    )
+    return final_value
+
+
+def _metadata(raw: Any) -> dict[str, Any]:
+    return dict(raw) if isinstance(raw, dict) else {}
+
+
+def _text_or_none(raw: Any) -> str | None:
+    return raw if isinstance(raw, str) and raw else None
+
+
+def _normalized_doi(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    candidate = raw.strip().lower()
+    for prefix in (
+        "https://doi.org/",
+        "http://doi.org/",
+        "https://dx.doi.org/",
+        "http://dx.doi.org/",
+    ):
+        if candidate.startswith(prefix):
+            candidate = candidate[len(prefix):]
+            break
+    return candidate or None
+
+
+def _normalized_title(raw: Any) -> str:
+    return " ".join(str(raw or "").casefold().split())
+
+
+def _record_key(record: dict[str, Any]) -> str:
+    record_id = record.get("id")
+    if isinstance(record_id, str) and record_id:
+        return f"id:{record_id}"
+    doi = _normalized_doi(record.get("doi"))
+    if doi is not None:
+        return f"doi:{doi}"
+    return f"title:{_normalized_title(record.get('display_name'))}"
+
+
+def _dedupe_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for record in records:
+        key = _record_key(record)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(record)
+    return out
+
+
+def _prior_deep_usage(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    backend_names: list[str],
+) -> tuple[dict[str, int], dict[str, int]]:
+    http_calls = dict.fromkeys(backend_names, 0)
+    result_counts = dict.fromkeys(backend_names, 0)
+    rows = conn.execute(
+        select(event_log.c.payload)
+        .where(event_log.c.project_id == project_id)
+        .where(event_log.c.event_type == "search.executed")
+        .where(event_log.c.payload.op("->>")("evidence_scope_id") == str(scope_id))
+        .where(event_log.c.payload.op("->>")("depth") == "deep")
+    ).fetchall()
+    for row in rows:
+        payload = _metadata(row.payload)
+        backend = payload.get("backend")
+        if not isinstance(backend, str) or backend not in http_calls:
+            continue
+        http_calls[backend] += 1
+        try:
+            result_counts[backend] += int(payload.get("result_count") or 0)
+        except (TypeError, ValueError):
+            continue
+    return http_calls, result_counts
+
+
+def _screened_records(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    status: Literal["relevant", "not_relevant"],
+    limit: int,
+    confidence_floor: float | None,
+) -> list[_ScreenedRecord]:
+    effective = screen.effective_screen_rows()
+    query = (
+        select(
+            project_source_snapshot.c.project_source_snapshot_id,
+            source_snapshot.c.metadata,
+            effective.c.screen_decision_confidence,
+        )
+        .select_from(
+            effective.join(
+                project_source_snapshot,
+                (
+                    effective.c.project_source_snapshot_id
+                    == project_source_snapshot.c.project_source_snapshot_id
+                )
+                & (effective.c.project_id == project_source_snapshot.c.project_id),
+            ).join(
+                source_snapshot,
+                project_source_snapshot.c.source_snapshot_id
+                == source_snapshot.c.source_snapshot_id,
+            )
+        )
+        .where(effective.c.project_id == project_id)
+        .where(effective.c.evidence_scope_id == scope_id)
+        .where(effective.c.status == status)
+        .where(effective.c.screen_decision_confidence.is_not(None))
+        .order_by(
+            effective.c.screen_decision_confidence.desc(),
+            project_source_snapshot.c.project_source_snapshot_id,
+        )
+        .limit(limit)
+    )
+    if confidence_floor is not None:
+        query = query.where(effective.c.screen_decision_confidence >= confidence_floor)
+    return [
+        _ScreenedRecord(
+            pss_id=cast(uuid.UUID, row.project_source_snapshot_id),
+            metadata=_metadata(row.metadata),
+            confidence=float(row.screen_decision_confidence),
+        )
+        for row in conn.execute(query)
+    ]
+
+
+def _exemplar(record: _ScreenedRecord) -> ExemplarRecord:
+    return ExemplarRecord(
+        pss_id=str(record.pss_id),
+        title=_text_or_none(record.metadata.get("title")) or "",
+        abstract=_text_or_none(record.metadata.get("abstract")),
+        screen_confidence=record.confidence,
+    )
+
+
+def _read_exemplars(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    scope_id: uuid.UUID,
+) -> tuple[
+    list[_ScreenedRecord],
+    list[_ScreenedRecord],
+    list[ExemplarRecord],
+    list[ExemplarRecord],
+]:
+    positives = _screened_records(
+        conn,
+        project_id=project_id,
+        scope_id=scope_id,
+        status="relevant",
+        limit=POS_EXEMPLARS,
+        confidence_floor=CONFIDENT_FLOOR,
+    )
+    negatives = _screened_records(
+        conn,
+        project_id=project_id,
+        scope_id=scope_id,
+        status="not_relevant",
+        limit=NEG_EXEMPLARS,
+        confidence_floor=None,
+    )
+    return positives, negatives, [_exemplar(record) for record in positives], [
+        _exemplar(record) for record in negatives
+    ]
+
+
+def _suggest_grounded_screened_out(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    pss_ids: list[str],
+) -> int:
+    if not pss_ids:
+        return 0
+    effective = screen.effective_screen_rows()
+    parsed = [uuid.UUID(pss_id) for pss_id in pss_ids]
+    count = conn.execute(
+        select(func.count())
+        .select_from(effective)
+        .where(effective.c.project_id == project_id)
+        .where(effective.c.evidence_scope_id == scope_id)
+        .where(effective.c.project_source_snapshot_id.in_(parsed))
+        .where(effective.c.status == "not_relevant")
+    ).scalar_one()
+    return int(count)
+
+
+def _docs_screened_from_payload(payload: dict[str, Any]) -> int:
+    # Stage-1 ``screened`` is the honest deep-loop denominator: it is the
+    # number of newly loaded docs before consensus insertion.
+    value = payload.get("screened")
+    if isinstance(value, int):
+        return value
+    raise RuntimeError("deep loop screen_round payload must include stage-1 'screened'")
+
+
 def _compose_variant(query: str, clause: str) -> str:
     return f"({query}) AND {clause}"
 
@@ -661,7 +1062,7 @@ def run_search(
     embedder: EmbeddingBackend | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> dict[str, Any]:
-    """Execute the Phase-5 search strategy and persist acquired records.
+    """Execute the depth-graded search strategy and persist acquired records.
 
     Args:
         conn: Open database connection; writes are delegated to acquire.
@@ -678,7 +1079,6 @@ def run_search(
 
     Raises:
         SearchDirectiveError: If the search directive or filters are malformed.
-        NotImplementedError: For deep rounds after round 1; Phase 6 owns them.
         RuntimeError: If generation fails.
     """
     depth, raw_filters = parse_search_directive(context.context)
@@ -695,20 +1095,49 @@ def run_search(
         project_id=project_id,
         scope_id=context.scope_id,
     ) + 1
-    if depth == "deep" and round_index >= 2:
-        raise NotImplementedError("deep rounds land in phase 6")
+    prior_http_calls, prior_result_counts = _prior_deep_usage(
+        conn,
+        project_id=project_id,
+        scope_id=context.scope_id,
+        backend_names=backend_names,
+    ) if depth == "deep" else (
+        dict.fromkeys(backend_names, 0),
+        dict.fromkeys(backend_names, 0),
+    )
 
     start = clock()
     executed_calls: list[ExecutedCall] = []
-    raw_results_by_backend = dict.fromkeys(backend_names, 0)
-    http_calls_by_backend = dict.fromkeys(backend_names, 0)
+    raw_results_by_backend = dict(prior_result_counts)
+    http_calls_by_backend = dict(prior_http_calls)
     queries_zero_result = dict.fromkeys(backend_names, 0)
     fallback_to_verbatim = dict.fromkeys(backend_names, False)
+    arm_calls: dict[ArmName, int] = {
+        "reformulate": 0,
+        "snowball": 0,
+        "suggest": 0,
+        "diversity": 0,
+    }
+    positive_exemplars: list[ExemplarRecord] = []
+    negative_exemplars: list[ExemplarRecord] = []
+    suggestions_proposed = 0
+    suggestions_grounded = 0
+    suggestions_dropped = 0
+    suggest_failures = 0
     wall_clock_breached = False
     stop_all = False
     generation_calls = 0
 
-    def execute_plan(backend: acquire.SearchBackend, plan: _PlannedCall) -> ExecutedCall | None:
+    def execute_call(
+        backend: acquire.SearchBackend,
+        *,
+        verb: CallVerb,
+        query: str,
+        query_origin: QueryOrigin,
+        wire_params: dict[str, str],
+        fetch: Callable[[int], list[dict[str, Any]]],
+        max_records: int | None = None,
+        arm: ArmName | None = None,
+    ) -> ExecutedCall | None:
         nonlocal stop_all, wall_clock_breached
         if stop_all:
             return None
@@ -716,6 +1145,8 @@ def run_search(
         if http_calls_by_backend[backend.name] >= backend_budget:
             return None
         remaining = constants["result_cap_per_backend"] - raw_results_by_backend[backend.name]
+        if max_records is not None:
+            remaining = min(remaining, max_records)
         if remaining <= 0:
             return None
         if clock() - start > constants["wall_clock_s"]:
@@ -724,20 +1155,15 @@ def run_search(
             return None
 
         http_calls_by_backend[backend.name] += 1
-        wire_params = wire_params_by_backend[backend.name]
         try:
-            records = backend.search(
-                plan.query,
-                wire_params=wire_params,
-                max_results=remaining,
-            )
+            records = fetch(remaining)
             records = records[:remaining]
             raw_results_by_backend[backend.name] += len(records)
             call = ExecutedCall(
                 backend_name=backend.name,
-                verb="search",
-                query=plan.query,
-                query_origin=plan.query_origin,
+                verb=verb,
+                query=query,
+                query_origin=query_origin,
                 wire_params=wire_params,
                 records=records,
                 status="ok",
@@ -746,22 +1172,308 @@ def run_search(
         except Exception as exc:
             call = ExecutedCall(
                 backend_name=backend.name,
-                verb="search",
-                query=plan.query,
-                query_origin=plan.query_origin,
+                verb=verb,
+                query=query,
+                query_origin=query_origin,
                 wire_params=wire_params,
                 records=[],
                 status="error",
                 error=str(exc),
             )
         executed_calls.append(call)
+        if arm is not None:
+            arm_calls[arm] += 1
         return call
+
+    def execute_plan(
+        backend: acquire.SearchBackend,
+        plan: _PlannedCall,
+        *,
+        arm: ArmName | None = None,
+        max_records: int | None = None,
+    ) -> ExecutedCall | None:
+        wire_params = wire_params_by_backend[backend.name]
+        return execute_call(
+            backend,
+            verb="search",
+            query=plan.query,
+            query_origin=plan.query_origin,
+            wire_params=wire_params,
+            max_records=max_records,
+            arm=arm,
+            fetch=lambda remaining: backend.search(
+                plan.query,
+                wire_params=wire_params,
+                max_results=remaining,
+            ),
+        )
 
     if all(backend.mode == "fixture" for backend in backends):
         for backend in backends:
             execute_plan(backend, _PlannedCall(backend.name, context.intent, "verbatim"))
             if stop_all:
                 break
+    elif depth == "deep" and round_index >= 2:
+        positive_records, _negative_records, positive_exemplars, negative_exemplars = (
+            _read_exemplars(
+                conn,
+                project_id=project_id,
+                scope_id=context.scope_id,
+            )
+        )
+
+        wire = generation_backend.reformulate(
+            ReformulatePayload(
+                intent=context.intent,
+                round_index=round_index,
+                positive=positive_exemplars,
+                negative=negative_exemplars,
+            )
+        )
+        generation_calls += 1
+        queries, overton_paraphrases = validated_queries(wire)
+
+        for backend in backends:
+            if backend.name == "openalex":
+                for query in queries[:REFORMULATE_CALL_CAP]:
+                    execute_plan(
+                        backend,
+                        _PlannedCall(backend.name, query, "generated"),
+                        arm="reformulate",
+                    )
+                    if stop_all:
+                        break
+            elif backend.name == "overton":
+                for paraphrase in overton_paraphrases[:2]:
+                    execute_plan(
+                        backend,
+                        _PlannedCall(backend.name, paraphrase, "paraphrase"),
+                        arm="reformulate",
+                    )
+                    if stop_all:
+                        break
+            if stop_all:
+                break
+
+        openalex_backend = next(
+            (
+                backend for backend in backends
+                if backend.name == "openalex" and backend.caps.has_snowball
+            ),
+            None,
+        )
+        if openalex_backend is not None and not stop_all:
+            seeds = [
+                record for record in positive_records
+                if record.metadata.get("backend") == "openalex"
+                and isinstance(record.metadata.get("backend_record_id"), str)
+            ][:SNOWBALL_SEEDS]
+            snowball_records = 0
+            per_seed = SNOWBALL_RESULTS // SNOWBALL_SEEDS
+            for seed in seeds:
+                if arm_calls["snowball"] >= SNOWBALL_CALL_CAP:
+                    break
+                if snowball_records >= SNOWBALL_RESULTS:
+                    break
+                seed_id = cast(str, seed.metadata["backend_record_id"])
+
+                def fetch_forward_citations(
+                    remaining: int,
+                    *,
+                    record_id: str = seed_id,
+                ) -> list[dict[str, Any]]:
+                    return openalex_backend.fetch_citations(
+                        record_id,
+                        max_results=remaining,
+                    )
+
+                call = execute_call(
+                    openalex_backend,
+                    verb="fetch_citations",
+                    query=seed_id,
+                    query_origin="snowball_forward",
+                    wire_params={},
+                    max_records=min(per_seed, SNOWBALL_RESULTS - snowball_records),
+                    arm="snowball",
+                    fetch=fetch_forward_citations,
+                )
+                if call is not None and call.status == "ok":
+                    snowball_records += len(call.records)
+                if stop_all:
+                    break
+
+            referenced: list[str] = []
+            seen_refs: set[str] = set()
+            for seed in seeds:
+                provider_fields = seed.metadata.get("provider_fields")
+                if not isinstance(provider_fields, dict):
+                    continue
+                raw_refs = provider_fields.get("referenced_works")
+                if not isinstance(raw_refs, list):
+                    continue
+                for raw_ref in raw_refs:
+                    ref = raw_ref if isinstance(raw_ref, str) else None
+                    if ref is None or ref in seen_refs:
+                        continue
+                    seen_refs.add(ref)
+                    referenced.append(ref)
+                    if len(referenced) == 50:
+                        break
+                if len(referenced) == 50:
+                    break
+
+            remaining_snowball = SNOWBALL_RESULTS - snowball_records
+            if (
+                referenced
+                and remaining_snowball > 0
+                and arm_calls["snowball"] < SNOWBALL_CALL_CAP
+                and not stop_all
+            ):
+                execute_call(
+                    openalex_backend,
+                    verb="fetch_references",
+                    query="|".join(referenced),
+                    query_origin="snowball_backward",
+                    wire_params={},
+                    max_records=remaining_snowball,
+                    arm="snowball",
+                    fetch=lambda remaining: openalex_backend.fetch_references(
+                        referenced,
+                        max_results=remaining,
+                    ),
+                )
+
+        suggest_backend = next(
+            (
+                backend for backend in backends
+                if backend.name == "openalex"
+                and (backend.caps.has_doi_lookup or backend.caps.has_title_lookup)
+            ),
+            None,
+        )
+        if suggest_backend is not None and not stop_all:
+            try:
+                generation_calls += 1
+                suggestions = validated_suggestions(
+                    generation_backend.suggest(
+                        SuggestPayload(intent=context.intent, positive=positive_exemplars)
+                    )
+                )
+            except Exception:
+                suggest_failures += 1
+                suggestions = []
+
+            suggestions_proposed = len(suggestions)
+            grounded_indices: set[int] = set()
+            doi_to_indices: dict[str, list[int]] = {}
+            doi_values: list[str] = []
+            for index, suggestion in enumerate(suggestions):
+                doi = _normalized_doi(suggestion.get("doi"))
+                if doi is None:
+                    continue
+                doi_to_indices.setdefault(doi, []).append(index)
+                if doi not in doi_values:
+                    doi_values.append(doi)
+
+            if (
+                doi_values
+                and suggest_backend.caps.has_doi_lookup
+                and arm_calls["suggest"] < SUGGEST_CALL_CAP
+            ):
+
+                def fetch_doi_groundings(remaining: int) -> list[dict[str, Any]]:
+                    candidates = suggest_backend.lookup_dois(
+                        doi_values,
+                        max_results=min(remaining, len(doi_values)),
+                    )
+                    grounded: list[dict[str, Any]] = []
+                    for candidate in candidates:
+                        candidate_doi = _normalized_doi(candidate.get("doi"))
+                        if candidate_doi not in doi_to_indices:
+                            continue
+                        grounded.extend([candidate])
+                        grounded_indices.update(doi_to_indices[candidate_doi])
+                    return _dedupe_records(grounded)
+
+                execute_call(
+                    suggest_backend,
+                    verb="lookup_dois",
+                    query="|".join(doi_values),
+                    query_origin="suggestion_doi",
+                    wire_params={},
+                    arm="suggest",
+                    fetch=fetch_doi_groundings,
+                )
+
+            if suggest_backend.caps.has_title_lookup:
+                for index, suggestion in enumerate(suggestions):
+                    if index in grounded_indices:
+                        continue
+                    if arm_calls["suggest"] >= SUGGEST_CALL_CAP or stop_all:
+                        break
+                    title = cast(str, suggestion["title"])
+                    suggestion_doi = _normalized_doi(suggestion.get("doi"))
+                    title_key = _normalized_title(title)
+
+                    def fetch_title_grounding(
+                        remaining: int,
+                        *,
+                        title_text: str = title,
+                        normalized_title: str = title_key,
+                        doi: str | None = suggestion_doi,
+                        suggestion_index: int = index,
+                    ) -> list[dict[str, Any]]:
+                        candidates = suggest_backend.lookup_title(title_text)
+                        grounded: list[dict[str, Any]] = []
+                        for candidate in candidates:
+                            title_matches = (
+                                _normalized_title(candidate.get("display_name"))
+                                == normalized_title
+                            )
+                            doi_matches = (
+                                doi is not None
+                                and _normalized_doi(candidate.get("doi")) == doi
+                            )
+                            if title_matches or doi_matches:
+                                grounded.append(candidate)
+                        if grounded:
+                            grounded_indices.add(suggestion_index)
+                        return _dedupe_records(grounded)[:remaining]
+
+                    execute_call(
+                        suggest_backend,
+                        verb="lookup_title",
+                        query=title,
+                        query_origin="suggestion_title",
+                        wire_params={},
+                        arm="suggest",
+                        fetch=fetch_title_grounding,
+                    )
+
+            suggestions_grounded = len(grounded_indices)
+            suggestions_dropped = suggestions_proposed - suggestions_grounded
+
+        diversity_backend = next(
+            (backend for backend in backends if backend.name == "openalex"),
+            None,
+        )
+        if diversity_backend is not None and not stop_all:
+            if round_index == 2:
+                diversity_query = context.intent
+                diversity_origin: QueryOrigin = "verbatim"
+            else:
+                diversity_query = _compose_variant(context.intent, SR_CLAUSE)
+                diversity_origin = "variant_sr"
+            if arm_calls["diversity"] < DIVERSITY_CALL_MIN:
+                execute_plan(
+                    diversity_backend,
+                    _PlannedCall(
+                        diversity_backend.name,
+                        diversity_query,
+                        diversity_origin,
+                    ),
+                    arm="diversity",
+                )
     else:
         wire = generation_backend.generate_queries(QueriesPayload(intent=context.intent))
         generation_calls = 1
@@ -844,5 +1556,149 @@ def run_search(
         "wall_clock_s": elapsed,
         "wall_clock_breached": wall_clock_breached,
         "generation_calls": generation_calls,
+        "arm_calls": arm_calls,
+        "suggestions_proposed": suggestions_proposed,
+        "suggestions_grounded": suggestions_grounded,
+        "suggestions_dropped": suggestions_dropped,
+        "suggest_failures": suggest_failures,
+        "exemplars": {
+            "positive": len(positive_exemplars),
+            "negative": len(negative_exemplars),
+        },
+        "prior_http_calls": prior_http_calls,
     }
     return counts
+
+
+def run_deep_rounds(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    acquire_round: Callable[[], dict[str, Any]],
+    screen_round: Callable[[], dict[str, Any]],
+    start_round: int = 2,
+    clock: Callable[[], float] = time.monotonic,
+) -> dict[str, Any]:
+    """Run skeleton-sequenced deep acquire/screen rounds to a stop.
+
+    Args:
+        conn: Open database connection.
+        project_id: Owning project.
+        scope_id: Evidence scope being searched.
+        acquire_round: Callable that executes one acquire component and returns
+            its ``component.completed`` payload.
+        screen_round: Callable that executes one stage-1 screen component and
+            returns its ``component.completed`` payload.
+        start_round: First deep continuation round. Defaults to round 2 because
+            round 1 is the already-screened rapid leg.
+        clock: Monotonic clock dependency for deterministic tests.
+
+    Returns:
+        Deep-loop summary containing per-round costs, final stop condition,
+        final confident-relevant count, wall-clock seconds and suggest-arm
+        quality counters.
+
+    Raises:
+        RuntimeError: If a screen payload does not include the stage-1
+            ``screened`` count or finalization lacks a coverage row.
+    """
+    started = clock()
+    round_index = start_round
+    rounds: list[dict[str, Any]] = []
+    suggest_pss_ids: list[str] = []
+    prior_confident = confident_relevant_count(
+        conn,
+        project_id=project_id,
+        scope_id=scope_id,
+    )
+    final_stop_condition: str | None = None
+    overlay_applied = False
+
+    while True:
+        elapsed = clock() - started
+        if elapsed > DEEP_WALL_CLOCK_S:
+            final_stop_condition = finalise_deep_stop(
+                conn,
+                project_id=project_id,
+                scope_id=scope_id,
+                stop_condition="budget_exhausted",
+                below_target=prior_confident < TARGET_CONFIDENT_RELEVANT,
+            )
+            overlay_applied = final_stop_condition != "budget_exhausted"
+            break
+
+        acquire_payload = acquire_round()
+        by_verb = acquire_payload.get("acquired_pss_by_verb")
+        if isinstance(by_verb, dict):
+            for verb in ("lookup_dois", "lookup_title"):
+                values = by_verb.get(verb)
+                if isinstance(values, list):
+                    suggest_pss_ids.extend(str(value) for value in values)
+
+        screen_payload = screen_round()
+        docs_screened = _docs_screened_from_payload(screen_payload)
+        confident = confident_relevant_count(
+            conn,
+            project_id=project_id,
+            scope_id=scope_id,
+        )
+        new_confident = max(0, confident - prior_confident)
+        cost = None if new_confident == 0 else docs_screened / new_confident
+        rounds.append(
+            {
+                "round": round_index,
+                "docs_screened": docs_screened,
+                "new_confident_relevant": new_confident,
+                "cost_per_marginal_confident_relevant": cost,
+            }
+        )
+
+        wall_clock_breached = clock() - started > DEEP_WALL_CLOCK_S
+        decision = evaluate_deep_stop(
+            round_index=round_index,
+            confident_relevant=confident,
+            new_confident_relevant=new_confident,
+            docs_screened_this_round=docs_screened,
+            wall_clock_breached=wall_clock_breached,
+        )
+        if decision.stop:
+            if decision.stop_condition is None:
+                raise RuntimeError("deep stop decision missing stop_condition")
+            final_stop_condition = finalise_deep_stop(
+                conn,
+                project_id=project_id,
+                scope_id=scope_id,
+                stop_condition=decision.stop_condition,
+                below_target=confident < TARGET_CONFIDENT_RELEVANT,
+            )
+            overlay_applied = final_stop_condition != decision.stop_condition
+            prior_confident = confident
+            break
+
+        prior_confident = confident
+        round_index += 1
+
+    if final_stop_condition is None:
+        raise RuntimeError("deep loop ended without a stop condition")
+
+    suggest_grounded_screened_out = _suggest_grounded_screened_out(
+        conn,
+        project_id=project_id,
+        scope_id=scope_id,
+        pss_ids=suggest_pss_ids,
+    )
+    wall_clock_s = clock() - started
+    return {
+        "rounds": rounds,
+        "stop_condition": final_stop_condition,
+        "confident_relevant": prior_confident,
+        "wall_clock_s": wall_clock_s,
+        "overlay_applied": overlay_applied,
+        "suggest": {
+            "acquired_pss": suggest_pss_ids,
+            "acquired": len(suggest_pss_ids),
+            "grounded_screened_out": suggest_grounded_screened_out,
+        },
+        "suggest_grounded_screened_out": suggest_grounded_screened_out,
+    }
