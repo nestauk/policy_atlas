@@ -19,6 +19,7 @@ import sqlalchemy as sa
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
+from structlog.testing import capture_logs
 
 from policy_atlas import events, ingest_full_text
 from policy_atlas.acquire import (
@@ -35,6 +36,7 @@ from policy_atlas.inference import StubEchoProvider
 from policy_atlas.ingest_full_text import (
     FixtureFetcher,
     IngestFullTextContext,
+    _highest_priority_fetch_reason,
     _run_parse_jobs,
     candidate_urls,
     ingest_full_text_sources,
@@ -180,6 +182,77 @@ def run_ingest(
     )
 
 
+class _ScriptedFetcher:
+    mode = "fixture"
+
+    def __init__(
+        self,
+        script: dict[str, ingest_full_text.FetchResult | BaseException],
+    ) -> None:
+        self.script = script
+        self.calls: list[str] = []
+
+    def fetch(self, url: str) -> ingest_full_text.FetchResult:
+        self.calls.append(url)
+        outcome = self.script[url]
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+
+class _RecordingReleaseFetcher(_ScriptedFetcher):
+    def __init__(
+        self,
+        script: dict[str, ingest_full_text.FetchResult | BaseException],
+    ) -> None:
+        super().__init__(script)
+        self.releases: list[int] = []
+
+    def release_body(self, n_bytes: int) -> None:
+        self.releases.append(n_bytes)
+
+
+def _seed_relevant_acquired(
+    conn: Connection,
+    project_id: uuid.UUID,
+    run_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    meta: dict[str, Any],
+) -> uuid.UUID:
+    _, pss_id = _seed_acquired_link(conn, project_id, run_id, meta)
+    seed_screening_result(conn, project_id, run_id, scope_id, pss_id, status="relevant")
+    return pss_id
+
+
+def _ok_parse(body: bytes, content_type: str, thin_min: int) -> dict[str, Any]:  # noqa: ARG001
+    return {
+        "status": "ok",
+        "chunks": [{"content": f"parsed {len(body)} bytes", "locator": {}}],
+        "parse_profile": "test_v1",
+        "segmentation_policy": "test_v1",
+    }
+
+
+def _html_fails_pdf_ok_parse(
+    body: bytes,
+    content_type: str,
+    thin_min: int,  # noqa: ARG001
+) -> dict[str, Any]:
+    if content_type.split(";", 1)[0].strip().lower() == "text/html":
+        return {"status": "error", "reason": "empty"}
+    return _ok_parse(body, content_type, thin_min)
+
+
+def _fail_on_marker_parse(
+    body: bytes,
+    content_type: str,
+    thin_min: int,
+) -> dict[str, Any]:
+    if body == b"fail":
+        return {"status": "error", "reason": "corrupt"}
+    return _ok_parse(body, content_type, thin_min)
+
+
 def _corpus_state(conn: Connection, project_id: uuid.UUID) -> list[tuple[Any, ...]]:
     """Normalized, id-free ingest outcome per link: status, reason, snapshot content,
     chunk sequence/hash/locator/policy — the comparable surface for determinism."""
@@ -233,6 +306,12 @@ def _corpus_state(conn: Connection, project_id: uuid.UUID) -> list[tuple[Any, ..
     return sorted(state, key=lambda t: t[0])
 
 
+def _summary_without_wall_clock(summary: dict[str, Any]) -> dict[str, Any]:
+    comparable = dict(summary)
+    comparable.pop("wall_clock_s", None)
+    return comparable
+
+
 # --- Fan-out determinism, timeout termination, zero egress (lead-authored) ---
 
 
@@ -247,7 +326,7 @@ def test_fanout_determinism_workers_1_vs_4(
     fixture_project, _, _, fixture_summary, _ = ingested_corpus
     p4, r4, s4 = seed_corpus(conn)
     summary4 = run_ingest(conn, p4, r4, s4, max_workers=4)
-    assert fixture_summary == summary4
+    assert _summary_without_wall_clock(fixture_summary) == _summary_without_wall_clock(summary4)
     with engine.connect() as conn_a:
         state_a = _corpus_state(conn_a, fixture_project)
     assert state_a == _corpus_state(conn, p4)
@@ -370,7 +449,8 @@ def test_ingest_module_has_no_http_client() -> None:
         Path(__file__).parent.parent / "src" / "policy_atlas" / "ingest_full_text.py"
     ).read_text()
     forbidden = re.compile(
-        r"^\s*(import|from)\s+(urllib|requests|httpx|aiohttp|http\.client|socket)\b",
+        r"^\s*(import|from)\s+"
+        r"(urllib\.(?:request|error)|requests|httpx|aiohttp|http\.client|socket)\b",
         re.MULTILINE,
     )
     assert not forbidden.search(module)
@@ -399,6 +479,277 @@ def test_fixture_fetcher_missing_corpus_raises_on_fetch_not_construct(
     fetcher = FixtureFetcher(root=tmp_path)  # must not raise
     with pytest.raises(FileNotFoundError, match=re.escape(str(tmp_path))):
         fetcher.fetch("https://example.org/whatever")
+
+
+def test_fetch_failure_reason_priority_helper() -> None:
+    assert _highest_priority_fetch_reason(["not_found", "timeout"]) == "timeout"
+    assert (
+        _highest_priority_fetch_reason(["not_found", "paywall", "fetch_error"])
+        == "paywall"
+    )
+    assert _highest_priority_fetch_reason(["blocked", "blocked_by_host"]) == "blocked_by_host"
+    assert _highest_priority_fetch_reason([]) == "no_url"
+
+
+def test_escaped_fetcher_raise_is_reason_coded_per_link(conn: Connection) -> None:
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    url = "https://example.org/raises?token=SECRET"
+    pss_id = _seed_relevant_acquired(
+        conn,
+        project_id,
+        run_id,
+        scope_id,
+        {"backend": "overton", "provider_fields": {"pdf_url": url}},
+    )
+    fetcher = _ScriptedFetcher({url: RuntimeError("boom")})
+
+    with capture_logs() as logs:
+        summary = run_ingest(
+            conn,
+            project_id,
+            run_id,
+            scope_id,
+            fetcher=fetcher,
+            parse_fn=_ok_parse,
+            max_workers=1,
+        )
+
+    assert summary["fetch_failed"] == 1
+    assert summary["by_reason"] == {"fetch_error": 1}
+    status, error = conn.execute(
+        select(
+            project_source_snapshot.c.full_text_status,
+            project_source_snapshot.c.full_text_error,
+        )
+        .where(project_source_snapshot.c.project_source_snapshot_id == pss_id)
+    ).one()
+    assert (status, error) == ("fetch_failed", "fetch_error")
+    assert any(entry["event"] == "fulltext.fetcher_escaped" for entry in logs)
+    assert "SECRET" not in repr(logs)
+
+
+def test_discovery_extends_cascade_to_discovered_pdf(conn: Connection) -> None:
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    landing_url = "https://example.org/landing?token=SECRET"
+    discovered_url = "https://cdn.example.org/report.pdf?download=SECRET"
+    pss_id = _seed_relevant_acquired(
+        conn,
+        project_id,
+        run_id,
+        scope_id,
+        {"backend": "openalex", "provider_fields": {
+            "primary_location": {"landing_page_url": landing_url}
+        }},
+    )
+    html = (
+        b"<html><head><meta name='citation_pdf_url' "
+        b"content='https://cdn.example.org/report.pdf?download=SECRET'></head>"
+        b"<body>landing page</body></html>"
+    )
+    fetcher = _ScriptedFetcher({
+        landing_url: ingest_full_text.FetchResult(
+            status="ok",
+            content_type="text/html",
+            body=html,
+        ),
+        discovered_url: ingest_full_text.FetchResult(
+            status="ok",
+            content_type="application/pdf",
+            body=b"%PDF-1.7 synthetic",
+        ),
+    })
+
+    with capture_logs() as logs:
+        summary = run_ingest(
+            conn,
+            project_id,
+            run_id,
+            scope_id,
+            fetcher=fetcher,
+            parse_fn=_html_fails_pdf_ok_parse,
+            max_workers=1,
+        )
+
+    assert summary["ingested"] == 1
+    assert fetcher.calls == [landing_url, discovered_url]
+    row = conn.execute(
+        select(
+            project_source_snapshot.c.full_text_status,
+            project_source_snapshot.c.full_text_error,
+            project_source_snapshot.c.full_text_snapshot_id,
+        )
+        .where(project_source_snapshot.c.project_source_snapshot_id == pss_id)
+    ).one()
+    assert row.full_text_status == "ingested"
+    assert row.full_text_error is None
+    locator = conn.execute(
+        select(source_snapshot.c.source_locator)
+        .where(source_snapshot.c.source_snapshot_id == row.full_text_snapshot_id)
+    ).scalar_one()
+    assert locator == discovered_url
+    rendered = repr(logs)
+    assert "SECRET" not in rendered
+    assert "?token" not in rendered
+    assert "?download" not in rendered
+    assert "https://example.org/landing" in rendered
+    assert "https://cdn.example.org/report.pdf" in rendered
+
+
+def test_release_body_called_for_parse_and_preparse_reject(
+    conn: Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    urls = {
+        "ok": "https://example.org/ok.txt",
+        "fail": "https://example.org/fail.txt",
+        "large": "https://example.org/large.txt",
+    }
+    for url in urls.values():
+        _seed_relevant_acquired(
+            conn,
+            project_id,
+            run_id,
+            scope_id,
+            {"backend": "overton", "provider_fields": {"pdf_url": url}},
+        )
+    fetcher = _RecordingReleaseFetcher({
+        urls["ok"]: ingest_full_text.FetchResult(
+            status="ok",
+            content_type="text/plain",
+            body=b"ok",
+        ),
+        urls["fail"]: ingest_full_text.FetchResult(
+            status="ok",
+            content_type="text/plain",
+            body=b"fail",
+        ),
+        urls["large"]: ingest_full_text.FetchResult(
+            status="ok",
+            content_type="text/plain",
+            body=b"toolong",
+        ),
+    })
+    monkeypatch.setattr(ingest_full_text, "FETCH_BYTE_CAP", 5)
+
+    summary = run_ingest(
+        conn,
+        project_id,
+        run_id,
+        scope_id,
+        fetcher=fetcher,
+        parse_fn=_fail_on_marker_parse,
+        max_workers=2,
+    )
+
+    assert summary["ingested"] == 1
+    assert summary["parse_failed"] == 1
+    assert summary["fetch_failed"] == 1
+    assert summary["by_reason"] == {"too_large": 1, "corrupt": 1}
+    assert summary["bytes_fetched"] == len(b"ok") + len(b"fail") + len(b"toolong")
+    assert sorted(fetcher.releases) == [len(b"ok"), len(b"fail"), len(b"toolong")]
+
+
+def test_oa_cross_check_upgrade_and_inconsistency_log(conn: Connection) -> None:
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    closed_url = "https://example.org/closed.pdf"
+    open_url = "https://example.org/open.pdf"
+    closed_pss = _seed_relevant_acquired(
+        conn,
+        project_id,
+        run_id,
+        scope_id,
+        {
+            "backend": "openalex",
+            "provider_fields": {
+                "best_oa_location": {"pdf_url": closed_url},
+                "open_access": {"is_oa": False},
+            },
+        },
+    )
+    open_pss = _seed_relevant_acquired(
+        conn,
+        project_id,
+        run_id,
+        scope_id,
+        {
+            "backend": "openalex",
+            "provider_fields": {
+                "best_oa_location": {"pdf_url": open_url},
+                "open_access": {"is_oa": True},
+            },
+        },
+    )
+    fetcher = _ScriptedFetcher({
+        closed_url: ingest_full_text.FetchResult(status="error", error="blocked_by_host"),
+        open_url: ingest_full_text.FetchResult(status="error", error="blocked_by_host"),
+    })
+
+    with capture_logs() as logs:
+        summary = run_ingest(
+            conn,
+            project_id,
+            run_id,
+            scope_id,
+            fetcher=fetcher,
+            parse_fn=_ok_parse,
+            max_workers=1,
+        )
+
+    assert summary["by_reason"] == {"paywall": 1, "blocked_by_host": 1}
+    rows = {
+        pss_id: error
+        for pss_id, error in conn.execute(
+            select(
+                project_source_snapshot.c.project_source_snapshot_id,
+                project_source_snapshot.c.full_text_error,
+            )
+            .where(
+                project_source_snapshot.c.project_source_snapshot_id.in_(
+                    [closed_pss, open_pss]
+                )
+            )
+        ).fetchall()
+    }
+    assert rows[closed_pss] == "paywall"
+    assert rows[open_pss] == "blocked_by_host"
+    inconsistency_logs = [
+        entry for entry in logs if entry["event"] == "fulltext.oa_inconsistency"
+    ]
+    assert len(inconsistency_logs) == 1
+    assert inconsistency_logs[0]["pss_id"] == str(open_pss)
+    assert inconsistency_logs[0]["reason"] == "blocked_by_host"
+
+
+def test_summary_includes_attempted_bytes_and_wall_clock(
+    conn: Connection,
+) -> None:
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    _seed_relevant_acquired(
+        conn,
+        project_id,
+        run_id,
+        scope_id,
+        {"backend": "openalex", "provider_fields": {}},
+    )
+
+    with capture_logs() as logs:
+        summary = run_ingest(conn, project_id, run_id, scope_id)
+
+    assert summary["attempted"] == 1
+    assert summary["bytes_fetched"] == 0
+    assert isinstance(summary["wall_clock_s"], float)
+    assert summary["wall_clock_s"] >= 0.0
+    summary_logs = [entry for entry in logs if entry["event"] == "fulltext.summary"]
+    assert len(summary_logs) == 1
+    assert summary_logs[0]["attempted"] == 1
+    assert summary_logs[0]["bytes_fetched"] == 0
+    assert isinstance(summary_logs[0]["wall_clock_s"], float)
 
 
 # --- Bulk contract tests ---

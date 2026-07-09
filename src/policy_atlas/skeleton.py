@@ -3,9 +3,10 @@
 Smoke command: python -m policy_atlas.skeleton
 
 Creates a project + run, ingests a synthetic source, creates a screening scope,
-then walks screen → classify → appraise → ingest_full_text → characterise → select
-→ extract over the same scope, rendering the landscape, selection and extraction
-summaries and the event log.
+then walks the mandatory EB spine acquire(search) → screen → classify → appraise
+→ ingest(fetch) → synthesise, with characterise/select/extract/group as
+demo-discretionary legs over the same scope. It renders the landscape, selection,
+extraction, synthesis summaries and the event log.
 All gates approved; see ADR 0001 and contract.md.
 """
 
@@ -40,6 +41,7 @@ from policy_atlas.facet_grouping import (
     OpenAIFacetGroupingBackend,
     StubFacetGroupingBackend,
 )
+from policy_atlas.fetch_live import LiveDocumentFetcher
 from policy_atlas.fixtures import get_source
 from policy_atlas.grounding_judge import (
     GroundingJudgeBackend,
@@ -54,6 +56,7 @@ from policy_atlas.grouping import (
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.ingest import ingest_upload
+from policy_atlas.ingest_full_text import DocumentFetcher, FixtureFetcher
 from policy_atlas.logging import configure_logging
 from policy_atlas.plan import Plan, compile
 from policy_atlas.ranking import OpenAIRankingBackend, RankingBackend
@@ -87,6 +90,23 @@ from policy_atlas.synthesis_backend import (
 )
 
 log = structlog.get_logger()
+
+
+def select_document_fetcher(live: bool) -> DocumentFetcher:
+    """Select the full-text fetcher for the skeleton entrypoint.
+
+    Args:
+        live: Whether the operator selected live mode via the skeleton's single
+            live flag.
+
+    Returns:
+        ``LiveDocumentFetcher`` in live mode, otherwise ``FixtureFetcher``.
+    """
+    if live:
+        fetcher = LiveDocumentFetcher()
+        assert fetcher.mode == "live"
+        return fetcher
+    return FixtureFetcher()
 
 
 def _log_component_counts(log_entries: list[dict[str, Any]], component: str) -> None:
@@ -128,6 +148,7 @@ def _run_component(
     grounding_judge_backend: GroundingJudgeBackend | None = None,
     search_backends: list[SearchBackend] | None = None,
     search_generation_backend: SearchGenerationBackend | None = None,
+    document_fetcher: DocumentFetcher | None = None,
 ) -> uuid.UUID:
     """Create a run, compile and record the plan, and execute one scope component.
 
@@ -165,6 +186,8 @@ def _run_component(
             components.
         search_generation_backend: Search generation backend for ``acquire``;
             unused by other components.
+        document_fetcher: Fetcher for ``ingest_full_text``; unused by other
+            components.
 
     Returns:
         The created run's id.
@@ -235,6 +258,7 @@ def _run_component(
             grounding_judge_backend=grounding_judge_backend,
             search_backends=search_backends,
             search_generation_backend=search_generation_backend,
+            document_fetcher=document_fetcher,
         )
         if component == "screen" and langfuse_client is not None:
             payload = _component_payload(events.read(conn, project_id), "screen", run_id=run_id)
@@ -590,6 +614,10 @@ def main() -> None:
     facet_grouping_backend: FacetGroupingBackend
     search_backends: list[SearchBackend] | None
     search_generation_backend: SearchGenerationBackend | None
+    selected_document_fetcher = select_document_fetcher(live)
+    if live:
+        assert selected_document_fetcher.mode == "live"
+    document_fetcher = selected_document_fetcher if live else None
     if live:
         embedding_backend = OpenAIEmbeddingBackend()
         theme_grouping_backend = OpenAIThemeGroupingBackend()
@@ -635,6 +663,7 @@ def main() -> None:
         traced=langfuse_client is not None,
         ranking="llm_rerank_v1" if live else "coverage_stratified_v1",
         search="live" if live else "fixture",
+        fetch="live" if live else "fixture",
     )
 
     engine = get_engine()
@@ -714,16 +743,17 @@ def main() -> None:
             classification_backend=classification_backend,
             search_backends=search_backends,
             search_generation_backend=search_generation_backend,
+            document_fetcher=document_fetcher,
         )
 
-        # Walk the chain: five runs over the same scope. Acquire runs first —
+        # Walk the mandatory spine over the same scope. Acquire runs first —
         # both fixture backends over the mixed corpus (this upload + acquired sets).
         rapid_start = time.monotonic()
         run_component("acquire")
 
-        # rapid: the first screen+classify chain runs entirely on stage-1 rows —
-        # the deep profile's stage-2 full-text confirmation leg runs later,
-        # after ingest_full_text has full text to confirm against.
+        # rapid: the first screen leg runs entirely on stage-1 rows. The
+        # discretionary stage-2 full-text confirmation leg runs later, after
+        # ingest_full_text has full text to confirm against.
         log.info("screen.profile", profile="rapid", stage=1)
         run_component("screen")
         rapid_elapsed = time.monotonic() - rapid_start

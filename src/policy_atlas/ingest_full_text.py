@@ -29,13 +29,16 @@ import re
 import time
 import uuid
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from multiprocessing import get_context
 from pathlib import Path
 from typing import Any, Protocol
+from urllib.parse import quote, urljoin, urlsplit
 
+import lxml.html  # type: ignore[import-untyped]
 import pymupdf
 import pymupdf4llm  # type: ignore[import-untyped]
 import structlog
@@ -94,6 +97,8 @@ PARSE_TIMEOUT_SECONDS = 120.0  # hard per-document parse timeout; worker is term
 # (120s: user-set 2026-07-05 — generous for a 200+-page report; fan-out absorbs the tail)
 THIN_TEXT_MIN_CHARS = 200  # below this, parsed text is a failure, never "ok" (decision 7)
 DEFAULT_MAX_WORKERS = 4
+# LiveDocumentFetcher has the actual global/per-host semaphores; this pool only supplies threads.
+LIVE_FETCH_WORKERS = 10
 
 PDF_PARSE_PROFILE = "pymupdf4llm_v1"
 HTML_PARSE_PROFILE = "trafilatura_v1"
@@ -108,9 +113,74 @@ PLAIN_SEGMENTATION_POLICY = "plain_para_v1"
 FAILURE_REASONS = (
     "no_url", "paywall", "not_found", "too_large", "timeout",
     "corrupt", "no_text_layer", "thin_text", "empty",
+    "blocked", "blocked_by_host", "fetch_error",
 )
 
 _HTTP_STATUS_REASONS = {401: "paywall", 403: "paywall", 404: "not_found", 410: "not_found"}
+FETCH_FAILURE_REASON_PRIORITY = (
+    "paywall",
+    "blocked_by_host",
+    "blocked",
+    "too_large",
+    "timeout",
+    "fetch_error",
+    "empty",
+    "not_found",
+    "no_url",
+)
+_FETCH_FAILURE_REASON_SET = frozenset(FETCH_FAILURE_REASON_PRIORITY)
+
+
+def _redact_url(url: str | None) -> str | None:
+    """Return scheme + host + path only for log-safe URL rendering."""
+    if url is None:
+        return None
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return url.split("?", 1)[0].split("#", 1)[0]
+    if parts.scheme not in ("http", "https") or parts.hostname is None:
+        return parts.path or url.split("?", 1)[0].split("#", 1)[0]
+    host = parts.hostname
+    try:
+        port = parts.port
+    except ValueError:
+        port = None
+    if port is not None:
+        host = (
+            f"[{host}]:{port}"
+            if ":" in host and not host.startswith("[")
+            else f"{host}:{port}"
+        )
+    return f"{parts.scheme}://{host}{parts.path}"
+
+
+def _base_content_type(content_type: str | None) -> str:
+    """Normalize a content type to its MIME base."""
+    return (content_type or "").split(";", 1)[0].strip().lower()
+
+
+def _highest_priority_fetch_reason(reasons: Iterable[str | None]) -> str:
+    """Return the highest-priority fetch failure reason from a cascade."""
+    seen = {reason for reason in reasons if reason in _FETCH_FAILURE_REASON_SET}
+    for reason in FETCH_FAILURE_REASON_PRIORITY:
+        if reason in seen:
+            return reason
+    return "no_url"
+
+
+def _fetch_failure_reason(error: str | None) -> str:
+    """Coerce a fetcher-provided error to the closed fetch-failure vocabulary."""
+    if error in _FETCH_FAILURE_REASON_SET:
+        return error
+    return "fetch_error"
+
+
+def _release_fetch_body(fetcher: "DocumentFetcher", n_bytes: int) -> None:
+    """Duck-type the live fetcher's body-byte release hook."""
+    release = getattr(fetcher, "release_body", None)
+    if callable(release):
+        release(n_bytes)
 
 
 @dataclass
@@ -151,6 +221,30 @@ class DocumentFetcher(Protocol):
             ``ok`` with bytes + content type, or a reason-coded error.
         """
         ...
+
+
+def _safe_fetch(fetcher: DocumentFetcher, url: str, *, pss_id: uuid.UUID) -> FetchResult:
+    """Call the fetcher seam, reducing escaped per-link raises to ``fetch_error``.
+
+    Args:
+        fetcher: Fetcher seam implementation.
+        url: Verbatim provider/discovered URL to fetch.
+        pss_id: Link id for log correlation.
+
+    Returns:
+        The fetcher's result, or an ``error/fetch_error`` result when the
+        fetcher unexpectedly raises for this URL.
+    """
+    try:
+        return fetcher.fetch(url)
+    except Exception as exc:
+        log.warning(
+            "fulltext.fetcher_escaped",
+            pss_id=str(pss_id),
+            url=_redact_url(url),
+            exc_type=type(exc).__name__,
+        )
+        return FetchResult(status="error", error="fetch_error")
 
 
 class FixtureFetcher:
@@ -267,6 +361,46 @@ def _normalize_url(value: Any) -> str | None:
     return None
 
 
+_DOI_RE = re.compile(r"^10\.\d{4,9}/\S{1,200}$")
+_DOI_HOSTS = frozenset({"doi.org", "dx.doi.org"})
+
+
+def _valid_doi(value: Any) -> str | None:
+    """Validate a bare, normalised DOI string (contract decision 7 recall aid).
+
+    Must be a ``str`` matching ``^10\\.\\d{4,9}/\\S{1,200}$`` and contain no
+    control characters — ``\\S`` alone does not exclude them (e.g. embedded
+    ``\\x01`` is non-whitespace and would otherwise pass).
+
+    Args:
+        value: The candidate value (typically ``metadata["doi"]``).
+
+    Returns:
+        The DOI string if valid, else ``None`` (absence/invalidity is normal —
+        no warning is logged).
+    """
+    if not isinstance(value, str) or not _DOI_RE.match(value):
+        return None
+    if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in value):
+        return None
+    return value
+
+
+def _doi_url_already_present(urls: list[str], encoded_doi: str) -> bool:
+    """True if ``urls`` already carries a doi.org URL for this DOI.
+
+    Treats ``http://`` vs ``https://`` and ``dx.doi.org`` vs ``doi.org`` as the
+    same URL, so the constructed fallback never duplicates a provider-supplied
+    DOI link that only differs in scheme/host convention.
+    """
+    target = encoded_doi.lstrip("/")
+    for url in urls:
+        parts = urlsplit(url)
+        if parts.netloc.lower() in _DOI_HOSTS and parts.path.lstrip("/") == target:
+            return True
+    return False
+
+
 def candidate_urls(metadata: dict[str, Any]) -> list[str]:
     """Resolve the ordered candidate-URL cascade from a snapshot's provider fields.
 
@@ -274,6 +408,13 @@ def candidate_urls(metadata: dict[str, Any]) -> list[str]:
     ``open_access.oa_url`` → ``primary_location.landing_page_url``. Overton:
     ``pdf_url`` → ``document_url``. Deduplicated preserving order; non-URL
     sentinels (e.g. Overton's ``"n/a"``) are treated as absent.
+
+    Every URL above is verbatim provider metadata. The one exception (contract
+    decision 3/7) is a DOI-URL fallback: when ``metadata["doi"]`` is a valid
+    bare DOI (see ``_valid_doi``), ``https://doi.org/<percent-encoded doi>`` is
+    appended as the LAST cascade entry — the one URL this function constructs
+    rather than receives — unless an equivalent doi.org/dx.doi.org URL is
+    already present.
 
     Args:
         metadata: The envelope snapshot's metadata JSONB.
@@ -306,7 +447,81 @@ def candidate_urls(metadata: dict[str, Any]) -> list[str]:
         url = _normalize_url(value)
         if url is not None and url not in urls:
             urls.append(url)
+    doi = _valid_doi(metadata.get("doi"))
+    if doi is not None:
+        encoded = quote(doi, safe="/")
+        if not _doi_url_already_present(urls, encoded):
+            urls.append(f"https://doi.org/{encoded}")
     return urls
+
+
+def discover_document_url(html_body: bytes, base_url: str) -> str | None:
+    """Discover a document URL from a fetched HTML landing page.
+
+    Pure, side-effect-free recall aid (contract decision 7): no fetching and no
+    SSRF validation beyond URL shape — the caller validates any returned URL
+    before use. Not yet wired into the fetch cascade (a later task does that).
+
+    Priority 1: ``<meta name="citation_pdf_url" content="...">`` — the
+    scholarly-metadata standard (name matched case-insensitively) — returned
+    absolutized against ``base_url``.
+
+    Priority 2 (only when priority 1 yields nothing): a bounded scan of
+    ``<a href>`` anchors in document order, considering only those whose
+    absolutized URL path ends ``.pdf`` (case-insensitive; the query string and
+    fragment are ignored when testing the path). Same-host candidates are
+    preferred over cross-host ones: the first same-host candidate wins if any
+    exists, else the first cross-host candidate.
+
+    Only http(s) results are ever returned; a candidate that absolutizes to a
+    non-http(s) scheme (e.g. ``javascript:``, ``mailto:``, ``ftp:``) is
+    skipped.
+
+    Args:
+        html_body: Raw HTML bytes of the fetched landing page.
+        base_url: The URL the page was fetched from — the absolutization base
+            and the same-host comparison point.
+
+    Returns:
+        At most one discovered URL, or ``None`` if nothing qualifies or the
+        HTML could not be parsed.
+    """
+    try:
+        tree = lxml.html.fromstring(html_body)
+    except Exception:
+        return None
+
+    base_host = urlsplit(base_url).netloc.lower()
+
+    for meta in tree.iter("meta"):
+        name = meta.get("name")
+        if name is not None and name.strip().lower() == "citation_pdf_url":
+            content = meta.get("content")
+            if content:
+                candidate: str = urljoin(base_url, str(content).strip())
+                if urlsplit(candidate).scheme in ("http", "https"):
+                    return candidate
+            break  # standard allows one such tag; fall through to anchor scan
+
+    same_host_candidate: str | None = None
+    cross_host_candidate: str | None = None
+    for anchor in tree.iter("a"):
+        href = anchor.get("href")
+        if not href:
+            continue
+        candidate = urljoin(base_url, href)
+        parts = urlsplit(candidate)
+        if parts.scheme not in ("http", "https"):
+            continue
+        if not parts.path.lower().endswith(".pdf"):
+            continue
+        if parts.netloc.lower() == base_host:
+            if same_host_candidate is None:
+                same_host_candidate = candidate
+        elif cross_host_candidate is None:
+            cross_host_candidate = candidate
+
+    return same_host_candidate or cross_host_candidate
 
 
 # --- Parse + segment (pure; runs in worker processes; primitives in/out) ---
@@ -422,7 +637,7 @@ def _decode(body: bytes) -> str:
 
 
 def _parse_html(body: bytes) -> dict[str, Any]:
-    extracted = trafilatura.extract(_decode(body), include_comments=False, include_tables=True)
+    extracted = trafilatura.extract(body, include_comments=False, include_tables=True)
     if not extracted or not extracted.strip():
         return {"status": "error", "reason": "empty"}
     chunks = [
@@ -583,14 +798,176 @@ class _DocState:
 
     pss_id: uuid.UUID
     envelope_snapshot_id: uuid.UUID
+    metadata: dict[str, Any]
     urls: list[str]
     next_url: int = 0
     attempts: list[str] = field(default_factory=list)
+    fetch_failure_reasons: list[str] = field(default_factory=list)
+    discovered_landing_urls: set[str] = field(default_factory=set)
     resolution: str | None = None  # "ingested" | "fetch_failed" | "parse_failed"
     reason: str | None = None
     parsed: dict[str, Any] | None = None
     fetched_from: str | None = None
     content_type: str | None = None
+
+
+@dataclass(frozen=True)
+class _FetchRoundResult:
+    """Parent-thread result for one document's fetch walk in a cascade round."""
+
+    body: bytes | None
+    content_type: str
+    bytes_fetched: int
+
+
+def _maybe_discover_url(doc: _DocState, *, body: bytes, url: str, content_type: str) -> None:
+    if _base_content_type(content_type) != "text/html":
+        return
+    if url in doc.discovered_landing_urls:
+        return
+    discovered = discover_document_url(body, url)
+    doc.discovered_landing_urls.add(url)
+    if discovered is None or discovered in doc.urls:
+        return
+    doc.urls.append(discovered)
+    doc.attempts.append(f"{_redact_url(discovered)}: discovered_from={_redact_url(url)}")
+
+
+def _openalex_is_oa(metadata: dict[str, Any]) -> bool | None:
+    if metadata.get("backend") != "openalex":
+        return None
+    fields = metadata.get("provider_fields")
+    if not isinstance(fields, dict):
+        return None
+    open_access = fields.get("open_access")
+    if not isinstance(open_access, dict):
+        return None
+    is_oa = open_access.get("is_oa")
+    return is_oa if isinstance(is_oa, bool) else None
+
+
+def _apply_oa_cross_check(doc: _DocState) -> None:
+    is_oa = _openalex_is_oa(doc.metadata)
+    if is_oa is False and doc.reason == "blocked_by_host":
+        doc.reason = "paywall"
+    if is_oa is True and doc.reason in {"paywall", "blocked_by_host"}:
+        log.info(
+            "fulltext.oa_inconsistency",
+            pss_id=str(doc.pss_id),
+            reason=doc.reason,
+        )
+
+
+def _fetch_doc_for_round(doc: _DocState, fetcher: DocumentFetcher) -> _FetchRoundResult:
+    bytes_fetched = 0
+    while doc.next_url < len(doc.urls):
+        url = doc.urls[doc.next_url]
+        doc.next_url += 1
+        fetch_result = _safe_fetch(fetcher, url, pss_id=doc.pss_id)
+        if fetch_result.status == "ok":
+            fetched = fetch_result.body or b""
+            bytes_fetched += len(fetched)
+            content_type = fetch_result.content_type or "application/octet-stream"
+            if len(fetched) > FETCH_BYTE_CAP:
+                _release_fetch_body(fetcher, len(fetched))
+                reason = "too_large"
+                doc.attempts.append(f"{_redact_url(url)}: {reason}")
+                doc.fetch_failure_reasons.append(reason)
+                doc.reason = _highest_priority_fetch_reason(doc.fetch_failure_reasons)
+                log.info(
+                    "fulltext.fetch_attempt",
+                    pss_id=str(doc.pss_id),
+                    url=_redact_url(url),
+                    outcome=reason,
+                )
+                continue
+            _maybe_discover_url(doc, body=fetched, url=url, content_type=content_type)
+            doc.fetched_from = url
+            doc.content_type = content_type
+            log.info(
+                "fulltext.fetch_attempt",
+                pss_id=str(doc.pss_id),
+                url=_redact_url(url),
+                outcome="ok",
+            )
+            return _FetchRoundResult(
+                body=fetched,
+                content_type=content_type,
+                bytes_fetched=bytes_fetched,
+            )
+        reason = _fetch_failure_reason(fetch_result.error)
+        doc.attempts.append(f"{_redact_url(url)}: {reason}")
+        doc.fetch_failure_reasons.append(reason)
+        doc.reason = _highest_priority_fetch_reason(doc.fetch_failure_reasons)
+        log.info(
+            "fulltext.fetch_attempt",
+            pss_id=str(doc.pss_id),
+            url=_redact_url(url),
+            outcome=reason,
+        )
+
+    doc.resolution = "fetch_failed"
+    doc.reason = _highest_priority_fetch_reason(doc.fetch_failure_reasons)
+    return _FetchRoundResult(body=None, content_type="", bytes_fetched=bytes_fetched)
+
+
+def _drain_ready_parse_jobs(
+    *,
+    ready_jobs: list[tuple[int, bytes, str]],
+    ready_body_lengths: dict[int, int],
+    docs: list[_DocState],
+    fetcher: DocumentFetcher,
+    max_workers: int,
+    parse_timeout: float,
+    thin_min: int,
+    parse_fn: Callable[[bytes, str, int], dict[str, Any]],
+) -> bool:
+    if not ready_jobs:
+        return False
+    jobs = sorted(ready_jobs, key=lambda job: job[0])
+    body_lengths = dict(ready_body_lengths)
+    ready_jobs.clear()
+    ready_body_lengths.clear()
+    released: set[int] = set()
+    try:
+        results = _run_parse_jobs(
+            jobs,
+            max_workers=max_workers,
+            parse_timeout=parse_timeout,
+            thin_min=thin_min,
+            parse_fn=parse_fn,
+        )
+    except Exception:
+        for idx, n_bytes in body_lengths.items():
+            if idx not in released:
+                _release_fetch_body(fetcher, n_bytes)
+        raise
+    try:
+        for i, result in results.items():
+            _release_fetch_body(fetcher, body_lengths[i])
+            released.add(i)
+            doc = docs[i]
+            if result["status"] == "ok":
+                doc.resolution = "ingested"
+                doc.parsed = result
+                continue
+            doc.attempts.append(f"{_redact_url(doc.fetched_from)}: {result['reason']}")
+            doc.reason = result["reason"]
+            log.info(
+                "fulltext.parse_failed",
+                pss_id=str(doc.pss_id),
+                url=_redact_url(doc.fetched_from),
+                reason=result["reason"],
+                detail=result.get("detail"),
+            )
+            if doc.next_url >= len(doc.urls):
+                doc.resolution = "parse_failed"
+            # else: unresolved — next round fetches the next candidate
+    finally:
+        for idx, n_bytes in body_lengths.items():
+            if idx not in released:
+                _release_fetch_body(fetcher, n_bytes)
+    return True
 
 
 def ingest_full_text_sources(
@@ -602,6 +979,7 @@ def ingest_full_text_sources(
     fetcher: DocumentFetcher,
     embedder: EmbeddingBackend | None = None,
     max_workers: int = DEFAULT_MAX_WORKERS,
+    fetch_workers: int | None = None,
     parse_timeout: float = PARSE_TIMEOUT_SECONDS,
     thin_min: int = THIN_TEXT_MIN_CHARS,
     parse_fn: Callable[[bytes, str, int], dict[str, Any]] = parse_and_segment,
@@ -623,15 +1001,27 @@ def ingest_full_text_sources(
         fetcher: The ``DocumentFetcher`` seam implementation.
         embedder: Optional embedding backend. Defaults to the deterministic stub.
         max_workers: Bound on live worker processes.
+        fetch_workers: Bound on parent-side fetch threads. ``None`` resolves to
+            ``LIVE_FETCH_WORKERS`` for live fetchers and ``1`` for fixture replay.
         parse_timeout: Hard per-document parse timeout in seconds.
         thin_min: Thin-text guard threshold in characters.
         parse_fn: Parse callable (test seam; must be a picklable top-level function).
 
     Returns:
-        Counts dict: ``eligible``, ``ingested``, ``already_ingested``,
-        ``fetch_failed``, ``parse_failed``, ``by_reason``, ``embed`` (invariant:
+        Counts dict: ``eligible``, ``attempted``, ``ingested``,
+        ``already_ingested``, ``fetch_failed``, ``parse_failed``,
+        ``by_reason``, ``bytes_fetched``, ``wall_clock_s``, ``embed``
+        (invariant:
         ``eligible == ingested + already_ingested + fetch_failed + parse_failed``).
     """
+    started_at = time.monotonic()
+    if fetch_workers is None:
+        resolved_fetch_workers = LIVE_FETCH_WORKERS if fetcher.mode == "live" else 1
+    else:
+        resolved_fetch_workers = fetch_workers
+    if resolved_fetch_workers < 1:
+        raise ValueError("fetch_workers must be >= 1")
+
     eligible_rows = conn.execute(
         select(
             project_source_snapshot.c.project_source_snapshot_id,
@@ -671,6 +1061,7 @@ def ingest_full_text_sources(
         _DocState(
             pss_id=row.project_source_snapshot_id,
             envelope_snapshot_id=row.source_snapshot_id,
+            metadata=dict(row.metadata),
             urls=candidate_urls(row.metadata),
         )
         for row in eligible_rows
@@ -681,72 +1072,85 @@ def ingest_full_text_sources(
         if not doc.urls:
             # Durable state, distinguishable from not_attempted (adversarial finding 1)
             doc.resolution, doc.reason = "fetch_failed", "no_url"
+            doc.fetch_failure_reasons.append("no_url")
 
     # Cascade rounds: fetch in the parent, parse in workers; a parse failure with
     # candidates remaining re-enters the next round on its next URL (decision 4).
+    bytes_fetched = 0
     while True:
-        jobs: list[tuple[int, bytes, str]] = []
-        for i, doc in enumerate(docs):
-            if doc.resolution is not None:
-                continue
-            body: bytes | None = None
-            while doc.next_url < len(doc.urls):
-                url = doc.urls[doc.next_url]
-                doc.next_url += 1
-                fetch_result = fetcher.fetch(url)
-                if fetch_result.status == "ok":
-                    fetched = fetch_result.body or b""
-                    if len(fetched) > FETCH_BYTE_CAP:
-                        doc.attempts.append(f"{url}: too_large")
-                        doc.reason = "too_large"
-                        log.info(
-                            "fulltext.fetch_attempt", pss_id=str(doc.pss_id), url=url,
-                            outcome="too_large",
-                        )
-                        continue
-                    body = fetched
-                    doc.fetched_from = url
-                    doc.content_type = fetch_result.content_type or "application/octet-stream"
-                    log.info(
-                        "fulltext.fetch_attempt", pss_id=str(doc.pss_id), url=url, outcome="ok",
-                    )
-                    break
-                doc.attempts.append(f"{url}: {fetch_result.error}")
-                doc.reason = fetch_result.error
-                log.info(
-                    "fulltext.fetch_attempt", pss_id=str(doc.pss_id), url=url,
-                    outcome=fetch_result.error,
-                )
-            if body is None:
-                # every remaining candidate failed to fetch: last failure wins
-                doc.resolution = "fetch_failed"
-                continue
-            jobs.append((i, body, doc.content_type or ""))
-        if not jobs:
+        unresolved = [
+            (i, doc)
+            for i, doc in enumerate(docs)
+            if doc.resolution is None
+        ]
+        if not unresolved:
             break
+        parsed_any = False
+        ready_jobs: list[tuple[int, bytes, str]] = []
+        ready_body_lengths: dict[int, int] = {}
+        serial_fixture_fetch = resolved_fetch_workers == 1 and fetcher.mode != "live"
 
-        results = _run_parse_jobs(
-            jobs,
-            max_workers=max_workers,
-            parse_timeout=parse_timeout,
-            thin_min=thin_min,
-            parse_fn=parse_fn,
-        )
-        for i, result in results.items():
-            doc = docs[i]
-            if result["status"] == "ok":
-                doc.resolution = "ingested"
-                doc.parsed = result
-                continue
-            doc.attempts.append(f"{doc.fetched_from}: {result['reason']}")
-            doc.reason = result["reason"]
-            log.info(
-                "fulltext.parse_failed", pss_id=str(doc.pss_id), url=doc.fetched_from,
-                reason=result["reason"], detail=result.get("detail"),
+        with ThreadPoolExecutor(max_workers=resolved_fetch_workers) as executor:
+            future_to_index: dict[Future[_FetchRoundResult], int] = {
+                executor.submit(_fetch_doc_for_round, doc, fetcher): i
+                for i, doc in unresolved
+            }
+            pending = set(future_to_index)
+            while pending:
+                timeout = None if serial_fixture_fetch else 0.1 if ready_jobs else None
+                done, pending = wait(pending, timeout=timeout, return_when=FIRST_COMPLETED)
+                if not done:
+                    parsed_any = (
+                        _drain_ready_parse_jobs(
+                            ready_jobs=ready_jobs,
+                            ready_body_lengths=ready_body_lengths,
+                            docs=docs,
+                            fetcher=fetcher,
+                            max_workers=max_workers,
+                            parse_timeout=parse_timeout,
+                            thin_min=thin_min,
+                            parse_fn=parse_fn,
+                        )
+                        or parsed_any
+                    )
+                    continue
+                for future in done:
+                    i = future_to_index[future]
+                    outcome = future.result()
+                    bytes_fetched += outcome.bytes_fetched
+                    if outcome.body is None:
+                        continue
+                    ready_jobs.append((i, outcome.body, outcome.content_type))
+                    ready_body_lengths[i] = len(outcome.body)
+                if not serial_fixture_fetch and len(ready_jobs) >= max_workers:
+                    parsed_any = (
+                        _drain_ready_parse_jobs(
+                            ready_jobs=ready_jobs,
+                            ready_body_lengths=ready_body_lengths,
+                            docs=docs,
+                            fetcher=fetcher,
+                            max_workers=max_workers,
+                            parse_timeout=parse_timeout,
+                            thin_min=thin_min,
+                            parse_fn=parse_fn,
+                        )
+                        or parsed_any
+                    )
+            parsed_any = (
+                _drain_ready_parse_jobs(
+                    ready_jobs=ready_jobs,
+                    ready_body_lengths=ready_body_lengths,
+                    docs=docs,
+                    fetcher=fetcher,
+                    max_workers=max_workers,
+                    parse_timeout=parse_timeout,
+                    thin_min=thin_min,
+                    parse_fn=parse_fn,
+                )
+                or parsed_any
             )
-            if doc.next_url >= len(doc.urls):
-                doc.resolution = "parse_failed"
-            # else: unresolved — next round fetches the next candidate
+        if not parsed_any:
+            break
 
     # Writes, in eligible-set order (decision 8: deterministic regardless of
     # completion order and worker count).
@@ -802,10 +1206,12 @@ def ingest_full_text_sources(
             )
             counts["ingested"] += 1
             log.info(
-                "fulltext.ingested", pss_id=str(doc.pss_id), url=doc.fetched_from,
+                "fulltext.ingested", pss_id=str(doc.pss_id), url=_redact_url(doc.fetched_from),
                 chunk_count=len(chunks),
             )
         else:
+            if doc.resolution == "fetch_failed":
+                _apply_oa_cross_check(doc)
             # failure ⟺ closed-vocabulary reason (the CHECK enforces presence; the
             # vocabulary is code-enforced here, as the FAILURE_REASONS comment claims)
             assert doc.reason in FAILURE_REASONS, doc.reason
@@ -836,9 +1242,12 @@ def ingest_full_text_sources(
 
     summary = {
         "eligible": len(eligible_rows),
+        "attempted": len(docs),
         "already_ingested": already_ingested,
         **counts,
         "by_reason": by_reason,
+        "bytes_fetched": bytes_fetched,
+        "wall_clock_s": round(time.monotonic() - started_at, 2),
         "embed": embed_counts,
     }
     log.info("fulltext.summary", **summary)

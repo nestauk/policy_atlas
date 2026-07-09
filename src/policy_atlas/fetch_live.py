@@ -510,21 +510,28 @@ class LiveDocumentFetcher:
             except ValueError:
                 pass
 
+        # Reserve the full document cap up-front rather than accounting chunk by
+        # chunk: a stream that blocks on the byte budget mid-download while
+        # already holding accounted bytes can deadlock the whole pool (every
+        # stream waiting on releases only other streams can produce). Blocking
+        # only here — while this stream holds nothing — makes the budget
+        # deadlock-impossible by construction, keeps the strict MAX_INFLIGHT
+        # bound, and never trusts Content-Length. The reservation shrinks to the
+        # actual body size on completion (the part release_body later frees).
+        self._account_bytes(MAX_DOCUMENT_BYTES)
         body = bytearray()
-        accounted = 0
         try:
             for chunk in response.iter_bytes():
                 if not chunk:
                     continue
                 if len(body) + len(chunk) > MAX_DOCUMENT_BYTES:
-                    self._release_accounted_bytes(accounted)
+                    self._release_accounted_bytes(MAX_DOCUMENT_BYTES)
                     return FetchResult(status="error", error="too_large")
-                self._account_bytes(len(chunk))
-                accounted += len(chunk)
                 body.extend(chunk)
         except Exception:
-            self._release_accounted_bytes(accounted)
+            self._release_accounted_bytes(MAX_DOCUMENT_BYTES)
             raise
+        self._release_accounted_bytes(MAX_DOCUMENT_BYTES - len(body))
         return bytes(body)
 
     def _account_bytes(self, n_bytes: int) -> None:
