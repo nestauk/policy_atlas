@@ -3,10 +3,10 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **APPROVED rev 2.2 · amended rev 2.3 post-approval**
-> (fixture-corpus relocation folded in — user challenge + call,
-> 2026-07-09) — contract-stage adversarial review in flight, then
-> planning.
+> **Status:** **APPROVED rev 2.2 · amended revs 2.3–2.5
+> post-approval** (2.3: fixture-corpus relocation, user challenge ·
+> 2.4: adversarial review adjudicated, 8/10 adopted · 2.5: findings
+> 4+5 resolved spec-faithful, user call) — planning next.
 > Contract approved (before planning): **2026-07-09 · Shabeer Rauf**
 > (rev 2.2, covering the gated set: runtime egress — live document
 > fetching — and the one CI addition, the pip-audit job; ratifying
@@ -22,6 +22,18 @@ specs in [docs/specs/](../../specs/index.md).
 > never refers to the orchestrator's analysis plan-as-object.
 >
 > **Revision history:**
+> - **rev 2.5** (2026-07-09, user call closing the rev-2.4 reopened
+>   question — findings 4+5 resolved **spec-faithful**): components
+>   §4's flag-not-drop ingestion clause enacted in full — failed-fetch
+>   docs are ingested on abstract + metadata, join grounded retrieval
+>   as labelled substrate (`text_basis: abstract_only` on citations),
+>   an all-fetch-failed corpus still synthesises visibly labelled,
+>   and `no_groundable_substrate` narrows to genuinely empty corpora.
+>   In-scope: the ingest failure path's abstract-basis substrate
+>   entry + a bounded synthesise chunk-loader widening. Live check
+>   gains the labelled-abstract-substrate observation. This enacts
+>   written spec text 008 never reached; doesn't touch the A-vs-B
+>   call (fetch is attempted for every document regardless).
 > - **rev 2.4** (2026-07-09, contract-stage adversarial review
 >   adjudicated — Codex, 10 findings: 2 blocker · 7 major · 1 minor;
 >   **8 adopted in-slice, 2 reopen a scoped 🛑 question**). Adopted:
@@ -160,7 +172,9 @@ PR landing:
 - The chain-composition rule (decision 9): spec flow-back (components
   §9 + capability.md + the components.md opening chain statement —
   rev 2.4) + `log.md` entry + ADR; skeleton/profile wiring so every
-  profile's chain includes ingest.
+  profile's chain includes ingest; the **§4 failure-path enactment**
+  (rev 2.5) — abstract-basis ingestion of unfetchable docs +
+  synthesise's bounded loader widening with citation labels.
 - Tests (transport-stubbed, zero-egress; SSRF guard unit tests) +
   `verification.md` with the pinned live check (decision 13).
 - The fixture-corpus relocation (decision 12, rev 2.3): corpus out
@@ -213,6 +227,9 @@ PR landing:
   gains the ingest leg (decision 9).
 - `screen.py` stage-2 loader — the bounded windowing rider
   (decision 11) only.
+- `synthesise.py` — the bounded chunk-loader widening for
+  abstract-basis substrate + citation labels (decision 9, rev 2.5)
+  only; the substrate gate's fail-closed character unchanged.
 - CI config — the pip-audit job only (rev 2.2).
 - Packaging + fixture loading — the corpus relocation (decision 13,
   rev 2.3) only.
@@ -378,11 +395,14 @@ PR landing:
    `paywall`/`blocked_by_host` logs the inconsistency (a future eval
    signal). Exact mappings plan-pinned; vocabulary additions are
    code-enforced (zero-schema). Flag-not-drop unchanged — and
-   *by construction as-built* (verified, user question): a doc whose
-   fetch fails keeps its envelope snapshot, whose abstract was
-   chunked AND embedded at acquire (`acquire.py` envelope path +
-   `embed_pending_chunks`), so it remains retrievable at abstract
-   grain, `text_basis`-labelled; nothing is dropped for being
+   *by construction as-built at the embedding layer* (verified, user
+   question): a doc whose fetch fails keeps its envelope snapshot,
+   whose abstract was chunked AND embedded at acquire (`acquire.py`
+   envelope path + `embed_pending_chunks`) — and *(rev 2.5,
+   adversarial finding 5 + user call)* that availability now extends
+   to the **synthesis surface** via decision 9's §4 enactment:
+   failed-fetch docs join grounded retrieval as labelled
+   abstract-basis substrate; nothing is dropped for being
    unfetchable.
 
 9. **Chain composition: the mandatory EB spine includes ingest**
@@ -398,11 +418,23 @@ PR landing:
    substrate guarantee** — live fetching can fail per document and,
    in the worst corpus, for every document; what the spine
    guarantees is that the attempt was made and every outcome is
-   reason-coded. The handling of the all-fetch-failed corpus at
-   synthesise (refuse honestly vs ground on labelled abstract text
-   per components §4's flag-not-drop ingestion clause) is **❓ OPEN
-   at the reopened gate — findings 4+5, user decision pending**;
-   this paragraph is finalised in the next revision. Unchanged
+   reason-coded. **Resolved (rev 2.5, user call): components §4's
+   flag-not-drop ingestion clause is enacted in full** — a document
+   whose fetch fails is still ingested **on the text in hand**
+   (abstract + metadata), enters grounded retrieval as labelled
+   substrate, and every citation into it carries
+   `text_basis: abstract_only` so grounding and readers see what a
+   claim rests on. Consequences: an all-fetch-failed corpus still
+   synthesises — everything visibly abstract-labelled — and
+   `no_groundable_substrate` narrows to genuinely empty corpora
+   (screened-in count zero), the true miscomposition backstop.
+   In-scope mechanics: the ingest failure path materialises the
+   abstract-basis substrate entry (exact shape plan-designed) and
+   synthesise's chunk loader gains the **bounded** widening to
+   include it, labels carried through; the substrate gate's
+   fail-closed character is preserved. This enacts spec text that
+   008 (fixture era) never reached — no spec flow-back needed
+   beyond an as-enacted note. Unchanged
    either way: the 015 smoke's minus-`ingest` deviation closes
    (decision 13b); envelope-basis synthesis absent ingest is not a
    product mode. Spec flow-back: the mandatory-spine statement lands
@@ -483,7 +515,11 @@ PR landing:
     claims over live-fetched full text — **discharging the 015
     rev-3.14 flow-back deviation** (its smoke ran minus `ingest`);
     (c) SSRF guards evidenced at test level (localhost / private-IP /
-    redirect-to-private all refused) — no live probe; (d) wall-clock
+    redirect-to-private all refused) — no live probe; (d) *(rev 2.5)*
+    at least one failed-fetch document observed in the smoke's
+    synthesise output as **labelled abstract-basis substrate**
+    (partial fetch failure is a near-certainty in any live corpus,
+    so this costs nothing extra); (e) wall-clock
     recorded per leg (feeds the depth/time-budget seam and 017).
     **No deep-chain e2e** (the 014 lesson; 017 owns the dress
     rehearsal — no select/extract/group legs). Cost: mini-class LLM

@@ -29,7 +29,10 @@ otherwise it is in progress, not done.
 8. [ ] Per-link exception isolation holds: a raising/failing fetch yields a
        reason-coded outcome; the component never fails because documents
        failed; flag-not-drop — unfetchable sources stay, `text_basis`
-       labelled.
+       labelled, AND (rev 2.5) are ingested on abstract + metadata into
+       grounded retrieval with `text_basis: abstract_only` carried onto
+       citations; an all-fetch-failed corpus synthesises visibly labelled;
+       `no_groundable_substrate` fires only for genuinely empty corpora.
 9. [ ] Content handling test-pinned: magic-byte-first classification (PDF as
        octet-stream never reaches the plain-text parser) · charset path per
        contract decision 6 · landing-page discovery and DOI fallback bounded
