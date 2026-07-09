@@ -69,11 +69,16 @@ Companion files: [components.md](components.md) (the skeleton) · [provenance.md
 ## Component skeleton
 
 ```
-acquire → screen → classify → appraise → characterise (landscape content)
-        → [select → extract → group]   (the deep chain, plan-selected)
-        → synthesise (run terminus — composes the artefact at any depth)
+acquire → screen → classify → appraise → ingest(fetch) → synthesise   (the mandatory spine)
+        + characterise (landscape content)                            (discretionary)
+        + [select → extract → group]   (the deep chain, plan-selected) (discretionary)
 ```
 
+**The mandatory EB spine** ([ADR 0013](../../../adr/0013-mandatory-eb-spine.md), task 016):
+every run — rapid included — executes the spine, so every artefact synthesises over fetched
+text (or a document's labelled abstract basis where fetch failed — a mandatory *attempt*,
+reason-coded per document, never a substrate guarantee); characterise, select, extract, group
+and stage-2 screen are orchestrator-discretionary per the depth gradation.
 `screen` / `classify` / `appraise` run as **per-document fan-out**. **Full-text ingestion is
 gated post-`screen`** (cheap shared substrate built for *all* screened-in — so even a shallow
 landscape run builds the full-text corpus); **Tier-1 extraction is gated by `select`** (the

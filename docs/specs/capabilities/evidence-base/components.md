@@ -15,17 +15,25 @@ shared tools and findings schema are owned by
 [../../system/data-model.md](../../system/data-model.md).
 
 ```
-acquire → screen → classify → appraise → characterise (landscape content)
-        → [select → extract → group]   (the deep chain, plan-selected)
-        → synthesise (run terminus — composes the artefact at any depth)
+acquire → screen → classify → appraise → ingest(fetch) → synthesise   (the mandatory spine)
+        + characterise (landscape content)                            (discretionary)
+        + [select → extract → group]   (the deep chain, plan-selected) (discretionary)
 ```
 
-The components are a **registry the plan selects from** (task 013 flow-back): which fire is the
-orchestrator's plan-time selection from intent; **data dependencies stay structural** (extract
-needs a selection; group and finding claims need an extraction; the artefact needs **at least
-one groundable substrate** — every upstream reference is optional, ADR 0010),
-expressed as explicit run references compiling fail-closed. Breadth
-and depth are independent — a targeted question compiles to a *narrow-and-deep* run.
+**The mandatory EB spine** ([ADR 0013](../../../adr/0013-mandatory-eb-spine.md), task 016
+flow-back): every EB run executes acquire(`search`) → screen → classify → appraise →
+ingest(fetch) → synthesise; every other component — characterise · select · extract · group ·
+stage-2 screen — is **orchestrator-discretionary**, chosen per the depth gradation. Mandatory
+ingest is a mandatory **attempt**, not a substrate guarantee: live fetching can fail per
+document (in the worst corpus, for every document); what the spine guarantees is that the
+attempt was made and every outcome is reason-coded, with unfetchable documents entering the
+substrate on labelled abstract text (§4). Beyond the spine, the components are a **registry the
+plan selects from** (task 013 flow-back): which fire is the orchestrator's plan-time selection
+from intent; **data dependencies stay structural** (extract needs a selection; group and
+finding claims need an extraction; the artefact needs **at least one groundable substrate** —
+every upstream reference is optional, ADR 0010), expressed as explicit run references compiling
+fail-closed. Breadth and depth are independent — a targeted question compiles to a
+*narrow-and-deep* run.
 
 ## Tool wiring (consolidated)
 
@@ -143,7 +151,14 @@ substrate downstream capabilities/retrieval/Q&A reuse. Only Tier-1 extraction is
 `select`. **When full text can't be fetched (paywall, dead link) the source is *not* dropped** —
 it is snapshotted/ingested on the text in hand (abstract + metadata), carrying a per-source
 **`text_basis`** (`full_text` | `abstract_only`) so grounding and coverage see which a finding
-rests on. Full-text fetch is egress but mechanical execution of the governed `search` (telemetry
+rests on. *As enacted (task 016, contract rev 2.5 — spec text 008's fixture era never
+reached):* the failed-fetch document's substrate IS its envelope snapshot's abstract chunks,
+already chunked and embedded at acquire; they join grounded retrieval as labelled substrate,
+every chunk record and citation carrying `text_basis` (`abstract_only`), so an all-fetch-failed
+corpus still synthesises — visibly abstract-labelled — and the access-failure vocabulary stays
+honest (401 → paywall; 403 → paywall only with corroboration, else `blocked_by_host`; refused
+URLs `blocked`; bot-blocks are never counted as paywalls). Full-text fetch is egress but
+mechanical execution of the governed `search` (telemetry
 plane + run-record summary, *not* a per-document audit event). Vectorisation is **eager and
 uniform** (lazy/on-demand rejected — biases retrieval toward what was vectorised early). In v3.0
 Tier-0 ingestion lands as fetch → parse → segment → embed: the embed seam opened in task 009
@@ -254,10 +269,14 @@ on what the run produced:
   characterisation, and the deepest available of selection / extraction / grouping,
   upstream references resolved transitively from the referenced rows and cross-checked;
   the requirement is **at least one groundable substrate**, else structural failure —
-  as-built the groundable substrate is **full-text chunks**: an envelope-only corpus
-  (acquired metadata, nothing ingested) refuses honestly with
-  `no_groundable_substrate` until live fetch (016) lands — the 015 chain smoke hit
-  this; see the synthesise-is-run-terminus knowledge concept) and
+  as-built (task 016) the groundable substrate is the screened-in corpus's chunks at
+  their honest grain: **full-text chunks where ingested, else the document's labelled
+  abstract-basis envelope chunks** (§4's flag-not-drop clause enacted; every chunk
+  record and citation carries `text_basis`), so `no_groundable_substrate` fires only
+  on the genuinely empty case — no upstream references AND a screened-in corpus of
+  zero — the true miscomposition backstop, unreachable in a composed run under the
+  mandatory spine (ADR 0013; the envelope-only refusal the 015 chain smoke hit is
+  closed by composition; see the synthesise-is-run-terminus knowledge concept)) and
   never hard-wires a component combination — the orchestrator selects any coherent
   registry subset and synthesise adapts. **Retrieval scope = the screened-in corpus
   always** (screen is the relevance discipline that bounds reading); **a referenced
