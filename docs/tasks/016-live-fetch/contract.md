@@ -22,6 +22,33 @@ specs in [docs/specs/](../../specs/index.md).
 > never refers to the orchestrator's analysis plan-as-object.
 >
 > **Revision history:**
+> - **rev 2.4** (2026-07-09, contract-stage adversarial review
+>   adjudicated — Codex, 10 findings: 2 blocker · 7 major · 1 minor;
+>   **8 adopted in-slice, 2 reopen a scoped 🛑 question**). Adopted:
+>   **BLOCKER 1** — URL hygiene: userinfo URLs refused; fragments
+>   stripped; log lines/events carry scheme+host+path only (never
+>   query strings — tokened OA URLs are the 015 leak class); verbatim
+>   URLs persist only in the DB attempts trail + `fetched_from`
+>   (provider-data retention, 007 precedent). **BLOCKER 2** — DNS
+>   rebinding closed: all A/AAAA answers classified (IPv4-mapped-IPv6
+>   normalised), connection pinned to the validated address or
+>   revalidated at connect. **3** — DOI fallback named as the one
+>   URL-construction exception (validated, encoded, fully guarded).
+>   **6** — prefix-hydration proof added to acceptance/rubric.
+>   **7** — live-check rubric item gains politeness/memory/isolation
+>   evidence. **8** — OS-level CI egress guard explicitly deferred
+>   with rationale (test-level socket-deny already covers parent +
+>   workers as-built); the "every pre-registered requirement" claim
+>   annotated. **9** — flow-back scope gains the components.md
+>   opening chain statement (second stale chain source). **10** —
+>   pip-audit rubric item added. **REOPENED (findings 4+5, one
+>   substrate-honesty pair)**: decision 9's wording corrected to
+>   mandatory-ATTEMPT (live fetch can fail for every document); the
+>   all-fetch-failed corpus at synthesise — and whether failed-fetch
+>   docs join grounded retrieval on labelled abstract text per
+>   components §4's flag-not-drop ingestion clause (as-built,
+>   synthesise loads only full-text chunks) — is ❓ OPEN for the
+>   user at the gate.
 > - **rev 2.3** (2026-07-09, post-approval amendment — user challenge
 >   held): **fixture-corpus relocation folded in-slice** (new decision
 >   12; live check renumbered to 13). Rev 1 misread the pre-registered
@@ -103,7 +130,9 @@ Two things land together:
 
 1. **The live fetcher**, carrying every pre-registered requirement
    from `docs/deferred.md` § Full-text ingestion so none is
-   rediscovered in production (decisions 1–8, 10–11).
+   rediscovered in production (decisions 1–8, 10–12; one named
+   exception — the OS-level CI egress guard is explicitly deferred
+   with rationale, see Out of scope; rev 2.4).
 2. **The chain-composition rule** (decision 9, user call at this
    gate): the mandatory EB spine includes ingest, so every run —
    rapid included — synthesises over fetched text; synthesise's
@@ -129,9 +158,9 @@ PR landing:
   cascade fallback · the honest access-failure ladder + OA
   cross-check (decisions 7–8).
 - The chain-composition rule (decision 9): spec flow-back (components
-  §9 + capability.md, the mandatory-spine statement) + `log.md`
-  entry + ADR; skeleton/profile wiring so every profile's chain
-  includes ingest.
+  §9 + capability.md + the components.md opening chain statement —
+  rev 2.4) + `log.md` entry + ADR; skeleton/profile wiring so every
+  profile's chain includes ingest.
 - Tests (transport-stubbed, zero-egress; SSRF guard unit tests) +
   `verification.md` with the pinned live check (decision 13).
 - The fixture-corpus relocation (decision 12, rev 2.3): corpus out
@@ -203,6 +232,13 @@ PR landing:
 - Time-budget parser-tier selection; chunk-volume bias controls at
   retrieve; per-depth fetch budgets (a lever for the tool-wide
   depth/time-budget gradation seam, not hard-wired here).
+- The `unshare -n`-style **OS-level CI egress guard** *(rev 2.4,
+  adversarial finding 8 — explicit deferral with rationale, not a
+  silent drop)*: the pre-registered test-level control already
+  exists as-built (the socket-deny guard covers parent + workers);
+  the OS-level CI variant is the stronger durable control but is a
+  CI change beyond this slice's one approved addition — stays in
+  deferred.md with this rationale.
 
 ## Decisions
 
@@ -247,7 +283,24 @@ PR landing:
    resolved IP); a refused URL is a per-URL reason-coded failure
    (`blocked` joins the code-enforced `FAILURE_REASONS` — no
    migration), never a crash. URLs are fetched verbatim from
-   metadata — never rewritten, never templated.
+   metadata — never rewritten, never templated — with **one named
+   construction exception**: decision 7's DOI fallback *(rev 2.4,
+   adversarial finding 3)*. **DNS-rebinding is closed structurally**
+   *(rev 2.4, adversarial finding 2)*: ALL resolved addresses are
+   classified (every A and AAAA answer, IPv4-mapped-IPv6 forms
+   normalised before checking), and the connection is made **to the
+   validated address** (pinned-IP transport with Host/SNI preserved)
+   or revalidated at connect time — never check-then-reresolve.
+   **URL hygiene** *(rev 2.4, adversarial finding 1)*: URLs carrying
+   userinfo (`user:pass@host`) are refused outright (`blocked`);
+   fragments are stripped; **log lines and events carry scheme +
+   host + path only — never query strings** (OA aggregators hand out
+   signed/tokened URLs; a token in a log line is the 015 leak class
+   again). The verbatim URL lives only in the persisted per-URL
+   attempts trail — provider-supplied data retained under the same
+   discipline as the rest of the envelope metadata (007 precedent) —
+   and in `fetched_from` provenance; verification evidence records
+   hosts only.
 
 4. **Timeouts, size caps, bounded buffering.** Every request carries
    an explicit connect+read timeout (constant plan-pinned). Byte cap
@@ -301,7 +354,13 @@ PR landing:
    followed per landing page, SSRF-validated (decision 3), recorded
    in the existing per-URL attempts trail. (b) `candidate_urls` gains
    a final **`https://doi.org/<doi>` fallback** when the envelope
-   carries a DOI and it is not already present. Both are
+   carries a DOI and it is not already present — **the one URL the
+   product constructs rather than receives** *(rev 2.4, adversarial
+   finding 3 — named exception to decision 3's verbatim rule)*: the
+   DOI value is validated before use (shape/length caps,
+   control-character rejection), percent-encoded into the path, and
+   the resulting URL goes through the full decision-3 guard set
+   including per-hop redirect validation. Both aids are
    deterministic mechanics, not new judgment surfaces.
 
 8. **Access-failure honesty: 401/403 are NOT one bucket** *(rewritten
@@ -334,22 +393,32 @@ PR landing:
    **orchestrator-discretionary**, chosen per the user's
    depth-gradation preference (the tool-wide depth/time-budget seam
    allocates; per-depth fetch budgets are a recorded lever of that
-   seam, not hard-wired here). Consequences: synthesise's substrate
-   gate is **untouched** — every composed run reaches it with
-   fetched-text substrate, and the `no_groundable_substrate` refusal
-   remains as the fail-closed backstop against miscomposed plans;
-   the 015 smoke's minus-`ingest` deviation closes (decision 13b);
-   envelope-basis synthesis is not a product mode. Spec flow-back:
-   the mandatory-spine statement lands in components §9 +
-   capability.md with a `log.md` entry; **ADR records the rule**
-   (this is the chain-shape decision the orchestrator slice will
-   compile against).
+   seam, not hard-wired here). **Precision (rev 2.4, adversarial
+   finding 4): mandatory ingest is a mandatory ATTEMPT, not a
+   substrate guarantee** — live fetching can fail per document and,
+   in the worst corpus, for every document; what the spine
+   guarantees is that the attempt was made and every outcome is
+   reason-coded. The handling of the all-fetch-failed corpus at
+   synthesise (refuse honestly vs ground on labelled abstract text
+   per components §4's flag-not-drop ingestion clause) is **❓ OPEN
+   at the reopened gate — findings 4+5, user decision pending**;
+   this paragraph is finalised in the next revision. Unchanged
+   either way: the 015 smoke's minus-`ingest` deviation closes
+   (decision 13b); envelope-basis synthesis absent ingest is not a
+   product mode. Spec flow-back: the mandatory-spine statement lands
+   in components §9 + capability.md **and the components.md opening
+   chain/table statement** *(rev 2.4, adversarial finding 9 — the
+   top-of-file chain shape is a second stale source the orchestrator
+   compiler would read)* with a `log.md` entry; **ADR records the
+   rule**.
 
 10. **Telemetry: the fetch is mechanical execution of the governed
     `search`** (spec) — structured log lines per attempt (as-built
-    pattern) + **run-record summary counts** (attempted · ok ·
-    per-reason failures · parse failures · bytes fetched · wall-clock),
-    no per-document audit events. The user-grade component-progress
+    pattern, **amended rev 2.4**: log lines carry scheme+host+path
+    only, never query strings — decision 3's URL hygiene) +
+    **run-record summary counts** (attempted · ok · per-reason
+    failures · parse failures · bytes fetched · wall-clock), no
+    per-document audit events. The user-grade component-progress
     protocol stays a recorded seam.
 
 11. **Stage-2 screen windowing rider (small, pre-registered
@@ -491,13 +560,20 @@ is spent. Report the blocker; don't push through.
 - `make verify` (okf-validate · test · typecheck · lint · build) —
   green, deterministic, zero-egress (fixture default unchanged;
   socket-deny guard extended to the live module's import boundary).
-- Unit tests pin: SSRF refusals (scheme/IP/redirect) · size-cap
-  enforcement (header + streamed) · content-type classification
-  branches · retry/backoff set · per-link isolation (a raising
-  fetcher yields a reason-coded outcome) · politeness spacing (clock
-  injected) · landing-page discovery + DOI fallback · the decision-8
-  ladder (401 vs corroborated-403 vs `blocked_by_host` vs
-  200-with-markers) · stage-2 windowing rider behaviour-preservation.
+- Unit tests pin: SSRF refusals (scheme · userinfo · private/
+  loopback/link-local/metadata IP across ALL A/AAAA answers and
+  IPv4-mapped-IPv6 forms · per-hop redirect · connect-time pinning,
+  rev 2.4) · URL log hygiene (no query strings in log lines) ·
+  size-cap enforcement (header + streamed) · content-type
+  classification branches · retry/backoff set · per-link isolation
+  (a raising fetcher yields a reason-coded outcome) · politeness
+  spacing (clock injected) · landing-page discovery + DOI fallback
+  (validated, encoded, guarded) · the decision-8 ladder (401 vs
+  corroborated-403 vs `blocked_by_host` vs 200-with-markers) ·
+  stage-2 windowing rider: behaviour preservation (byte-identical
+  first-window payload) AND **prefix hydration proof** — only chunks
+  up to `STAGE2_WINDOW_CHAR_BUDGET` + split-boundary slack are
+  loaded per doc (rev 2.4, adversarial finding 6).
 - The pinned live check (decision 13), evidenced in verification.md.
 
 ## Verification evidence expected

@@ -14,9 +14,14 @@ otherwise it is in progress, not done.
 4. [ ] No generated files or secrets edited by hand; no fetched document
        bytes committed.
 5. [ ] No tests deleted, skipped or weakened without written justification.
-6. [ ] SSRF guards test-pinned: scheme allowlist · private/loopback/
-       link-local/metadata IP refusal · per-hop redirect re-validation ·
-       refusals are per-URL reason-coded failures, never crashes.
+6. [ ] SSRF guards test-pinned: scheme allowlist · userinfo refusal ·
+       private/loopback/link-local/metadata IP refusal across ALL resolved
+       answers (A + AAAA, IPv4-mapped-IPv6 normalised) · per-hop redirect
+       re-validation · the connection goes to the validated address
+       (pinned-IP transport or connect-time revalidation — no
+       check-then-reresolve window) · DOI-fallback URLs validated, encoded
+       and guarded · refusals are per-URL reason-coded failures, never
+       crashes · no query strings in log lines or events.
 7. [ ] Resource bounds test-pinned: explicit timeouts on every request ·
        size cap enforced against both Content-Length and streamed body ·
        total prefetch buffering capped · per-host politeness (concurrency +
@@ -47,7 +52,10 @@ otherwise it is in progress, not done.
         [verification.md](verification.md): live fetch/ingest outcome
         distribution recorded (observed counts, no pinned targets) · the
         mandatory-spine chain smoke WITH the ingest leg (discharging the
-        015 rev-3.14 deviation) · wall-clock per leg recorded.
+        015 rev-3.14 deviation) · wall-clock per leg recorded · per-host
+        politeness spacing observed in logs · buffering/memory cap
+        observed holding · per-link failures visibly isolated (failed
+        documents reason-coded, component green).
 14. [ ] Verification evidence recorded (verification.md), including the
         exact end-to-end commands run.
 15. [ ] Known gaps and deferred seams updated in
@@ -57,6 +65,8 @@ otherwise it is in progress, not done.
         seams intact (docling/OCR · multi-PDF assembly · caching ·
         component-progress protocol · per-depth fetch budgets ·
         citation-context clamp).
-16. [ ] Required review stack ran for Tier 3 (contract verifier ·
+16. [ ] The pip-audit CI job landed and runs against the lockfile; every
+        ignored advisory carries a written justification in the repo.
+17. [ ] Required review stack ran for Tier 3 (contract verifier ·
         code/security review · adversarial review · human deep review), or
         skipped with written justification — findings in verification.md.
