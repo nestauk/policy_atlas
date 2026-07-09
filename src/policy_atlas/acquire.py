@@ -27,12 +27,14 @@ from sqlalchemy.engine import Connection
 from policy_atlas import events
 from policy_atlas.embeddings import EmbeddingBackend, StubEmbeddingBackend, embed_pending_chunks
 from policy_atlas.grounding import content_hash
-from policy_atlas.schema import chunk as chunk_table
 from policy_atlas.schema import (
+    METHODOLOGICAL_STRUCTURAL,
+    TOPIC_THEME,
     project_source_snapshot,
     search_coverage_record,
     source_snapshot,
 )
+from policy_atlas.schema import chunk as chunk_table
 from policy_atlas.tags import has_control_character, insert_source_tags
 
 log = structlog.get_logger()
@@ -42,6 +44,9 @@ SEGMENTATION_POLICY = "metadata_envelope_v1"
 # like theme names so no unvalidated text shape reaches source_tag or coverage keys.
 TAG_MAX_LENGTH = 200
 MAX_TAGS_PER_RECORD = 50
+# Bounded retention for the deep loop's backward-snowball batch (decision 16):
+# referenced_works can run into the hundreds; only the leading slice is kept.
+REFERENCED_WORKS_RETAIN_CAP = 60
 
 
 @dataclass
@@ -273,7 +278,12 @@ _OPENALEX_RETAIN_KEYS = (
     "ids",
     "language",
     "sustainable_development_goals",
+    "indexed_in",  # decision 20: crossref/doaj/pubmed/arxiv — cheap discipline/OA prior
+    "publication_date",  # decision 20: full ISO date; envelope keeps year-grain only
 )
+# "referenced_works" is deliberately NOT in this tuple — decision 20 caps its
+# retention (REFERENCED_WORKS_RETAIN_CAP) rather than keeping it raw/unbounded,
+# so it is handled explicitly in _map_openalex_work below.
 
 _OVERTON_RETAIN_KEYS = (
     "document_url",  # slice 008; multi-PDF documents are real
@@ -295,6 +305,11 @@ _OVERTON_RETAIN_KEYS = (
     # LLM-generated, like llm_document_description — retained but always
     # identifiable as machine text, never mixed into document-own-words fields
     "llm_document_theme",
+    "overton_policy_document_series",  # decision 20: also tagged, see _provider_tags
+    "translated_title",  # decision 20: English-first title mapping input
+    "title",  # decision 20: native title, retained so it survives displacement
+    "pdf_document_id",  # decision 20: second half of the two-level identity
+    "keyed_other_identifiers",  # decision 20: cross-reference identity beyond DOI
 )
 
 
@@ -322,9 +337,13 @@ def _map_openalex_work(record: dict[str, Any]) -> dict[str, Any] | None:
     }
     provider_fields = {k: record.get(k) for k in _OPENALEX_RETAIN_KEYS if k in record}
     provider_fields["authorships"] = _slim_authorships(record.get("authorships"))
+    referenced_works = record.get("referenced_works")
+    if isinstance(referenced_works, list) and referenced_works:
+        provider_fields["referenced_works"] = referenced_works[:REFERENCED_WORKS_RETAIN_CAP]
     return {
         "envelope": envelope,
         "abstract_source": "publisher_abstract" if abstract else "none",
+        "title_source": None,  # OpenAlex has no translation seam (decision 20)
         "source_locator": record.get("id"),  # the work's canonical id URL
         "provider_fields": provider_fields,
     }
@@ -342,9 +361,19 @@ def _map_overton_document(record: dict[str, Any]) -> dict[str, Any] | None:
 
     Overton expresses absence as empty strings/lists on always-present keys —
     empty-string/empty-list is treated as absent throughout.
+
+    English-first title mapping (contract rev 3.6a): the envelope title is
+    ``translated_title`` when present, else the native ``title`` — unusable
+    only when both are absent. The native title is always retained in
+    ``provider_fields`` (``_OVERTON_RETAIN_KEYS``) so it survives displacement.
     """
-    title = record.get("title") or record.get("translated_title")
-    if not title:
+    native_title = record.get("title") or None
+    translated_title = record.get("translated_title") or None
+    if translated_title:
+        title, title_source = translated_title, "translated"
+    elif native_title:
+        title, title_source = native_title, "native"
+    else:
         return None
 
     # Overton ships no real abstract: snippet (document excerpt) falls back to
@@ -386,6 +415,7 @@ def _map_overton_document(record: dict[str, Any]) -> dict[str, Any] | None:
     return {
         "envelope": envelope,
         "abstract_source": abstract_source,
+        "title_source": title_source,
         "source_locator": source_locator,
         "provider_fields": provider_fields,
     }
@@ -413,8 +443,10 @@ def _normalize_tag(value: Any) -> str | None:
     return tag
 
 
-def _dedupe_tag_values(values: list[Any], asserted_by: str) -> list[tuple[str, str]]:
-    tags: list[tuple[str, str]] = []
+def _dedupe_tag_values(
+    values: list[Any], asserted_by: str, tag_type: str = TOPIC_THEME
+) -> list[tuple[str, str, str]]:
+    tags: list[tuple[str, str, str]] = []
     seen: set[str] = set()
     for value in values:
         tag = _normalize_tag(value)
@@ -424,12 +456,17 @@ def _dedupe_tag_values(values: list[Any], asserted_by: str) -> list[tuple[str, s
         if key in seen:
             continue
         seen.add(key)
-        tags.append((tag, asserted_by))
+        tags.append((tag, asserted_by, tag_type))
     return tags
 
 
-def _provider_tags(backend_name: str, record: dict[str, Any]) -> list[tuple[str, str]]:
-    """Extract provider topical assertions from a raw provider record."""
+def _provider_tags(backend_name: str, record: dict[str, Any]) -> list[tuple[str, str, str]]:
+    """Extract provider topical/structural assertions from a raw provider record.
+
+    Returns ``(tag, asserted_by, tag_type)`` triples — the tag-assignment type
+    is per-assertion (decision 20) so topical and methodological/structural
+    provider assertions coexist under the same asserter.
+    """
     if backend_name == "openalex":
         values: list[Any] = []
         primary_topic = record.get("primary_topic")
@@ -443,6 +480,9 @@ def _provider_tags(backend_name: str, record: dict[str, Any]) -> list[tuple[str,
         sdgs = record.get("sustainable_development_goals")
         if isinstance(sdgs, list):
             values.extend(sdg.get("display_name") for sdg in sdgs if isinstance(sdg, dict))
+        # "keywords" is deliberately never promoted to tags (decision 20: the
+        # shape probe showed wrong-sense disambiguation noise, e.g.
+        # "Stock (firearms)") — retention in provider_fields stands.
         return _dedupe_tag_values(values, "openalex")
 
     if backend_name == "overton":
@@ -462,10 +502,23 @@ def _provider_tags(backend_name: str, record: dict[str, Any]) -> list[tuple[str,
         sdgcategories = record.get("sdgcategories")
         if isinstance(sdgcategories, list):
             overton_values.extend(sdgcategories)
-        return [
+        source_tags = record.get("source_tags")  # decision 20: publisher-curated headings
+        if isinstance(source_tags, list):
+            overton_values.extend(source_tags)
+        tags = [
             *_dedupe_tag_values(overton_values, "overton"),
             *_dedupe_tag_values([record.get("llm_document_theme")], "overton_llm"),
         ]
+        # decision 20 (rev 3.6b): the document series is methodological/
+        # structural material, not a topical assertion.
+        tags.extend(
+            _dedupe_tag_values(
+                [record.get("overton_policy_document_series")],
+                "overton",
+                tag_type=METHODOLOGICAL_STRUCTURAL,
+            )
+        )
+        return tags
 
     return []
 
@@ -544,7 +597,7 @@ def acquire_sources(
     now = datetime.now(UTC)
     by_backend: dict[str, dict[str, Any]] = {}
     any_error = False
-    tag_assertions: list[tuple[uuid.UUID, str, str]] = []
+    tag_assertions: list[tuple[uuid.UUID, str, str, str]] = []
 
     for backend in backends:
         status, error = "ok", None
@@ -632,6 +685,14 @@ def acquire_sources(
                     metadata={
                         **{k: v for k, v in envelope.items() if v is not None},
                         "abstract_source": mapped["abstract_source"],
+                        # title_source follows abstract_source's None-omission
+                        # pattern: OpenAlex has no translation seam, so it maps
+                        # to None and is left out of persisted metadata.
+                        **(
+                            {"title_source": mapped["title_source"]}
+                            if mapped["title_source"] is not None
+                            else {}
+                        ),
                         "provider_fields": mapped["provider_fields"],
                     },
                     created_at=now,
@@ -670,7 +731,7 @@ def acquire_sources(
                 )
                 tag_pairs = tag_pairs[:MAX_TAGS_PER_RECORD]
             tag_assertions.extend(
-                (pss_id, tag, asserted_by) for tag, asserted_by in tag_pairs
+                (pss_id, tag, asserted_by, tag_type) for tag, asserted_by, tag_type in tag_pairs
             )
             counts["tags_materialised"] += len(tag_pairs)
             events.append(
@@ -696,10 +757,21 @@ def acquire_sources(
 
         by_backend[backend.name] = counts
 
-    # One bulk insert for the whole run instead of one statement per record.
-    insert_source_tags(
-        conn, project_id=project_id, run_id=run_id, now=now, assertions=tag_assertions
-    )
+    # Bulk insert per tag_type (insert_source_tags takes one tag_type per call)
+    # instead of one statement per record; tag_types are sorted so call order
+    # is deterministic across runs.
+    assertions_by_type: dict[str, list[tuple[uuid.UUID, str, str]]] = {}
+    for pss_id, tag, asserted_by, tag_type in tag_assertions:
+        assertions_by_type.setdefault(tag_type, []).append((pss_id, tag, asserted_by))
+    for tag_type in sorted(assertions_by_type):
+        insert_source_tags(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            now=now,
+            assertions=assertions_by_type[tag_type],
+            tag_type=tag_type,
+        )
 
     totals = {
         key: sum(b[key] for b in by_backend.values())
