@@ -1,7 +1,7 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–014 — backend only; setup unchanged since 002; task 007 adds two dev-time
+stands (tasks 001–015 — backend only; setup unchanged since 002; task 007 adds two dev-time
 fixture-recorder scripts needing `OVERTON_API_KEY`/optional OpenAlex vars in `.env` — see
 `.env.example`; task 008 adds parsing deps (pymupdf/pymupdf4llm/trafilatura — arrive via
 `make setup`/`uv sync`) and a keyless dev-time recorder using system `curl`; task 009 adds
@@ -17,7 +17,12 @@ drives synthesise's three generation surfaces (proposal · section loop · groun
 a full four-profile skeleton run ≈ $1, see the 013 verification cost note); task 014 adds
 **no new deps or env vars** — the same key now also drives screen (gpt-5-mini ×3 consensus
 reps + the stage-2 full-text confirmation on deep profiles) and classify (gpt-5.5);
-fixture-corpus live chain ≈ $0.2, see the 014 verification cost note; `make verify`
+fixture-corpus live chain ≈ $0.2, see the 014 verification cost note; task 015 promotes
+`httpx` to a declared dep (no new packages — it was already transitive) and makes
+**live search** available: `OPENALEX_API_KEY` + `OVERTON_API_KEY` in `.env` switch the
+skeleton's search backends live (both required together, checked loudly); the same
+`OPENAI_API_KEY` drives the three search-generation surfaces; a live rapid+deep check
+lands in low single-digit dollars, see the 015 verification cost note; `make verify`
 and the test suite need none of them — stub backends + socket-deny keep the suite
 egress-free).
 Gotcha (bit the 012 live check): after pulling a schema-bearing slice, run

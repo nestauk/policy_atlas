@@ -26,6 +26,10 @@ dependencies = [
     # Task 009: trace backbone — env-driven, no-op without LANGFUSE_* keys
     # >=4.13: what the live check actually ran; <5: full-I/O trace exporter, same rule as openai
     "langfuse>=4.13,<5",
+    # Task 015 (approved gated change 4, declaration-only promotion): live search
+    # transport. Already a pinned transitive of the openai SDK — declaring it guards
+    # against a future SDK release dropping it silently at lock regen. Zero new packages.
+    "httpx>=0.28,<1",
 ]
 
 [project.scripts]

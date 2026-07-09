@@ -27,6 +27,7 @@ from policy_atlas.schema import (
     source_classification_result,
     source_screening_result,
     source_snapshot,
+    source_tag,
 )
 from policy_atlas.screen import effective_screen_rows
 from policy_atlas.tags import has_control_character, insert_source_tags
@@ -62,15 +63,48 @@ def _text_or_empty(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
-def _payload_for(pss_id: uuid.UUID, metadata: dict[str, Any]) -> ClassifyEnvelopePayload:
+def _payload_for(
+    pss_id: uuid.UUID,
+    metadata: dict[str, Any],
+    label_rows: list[dict[str, Any]] | None = None,
+) -> ClassifyEnvelopePayload:
     abstract = metadata.get("abstract")
     return ClassifyEnvelopePayload(
         pss_id=str(pss_id),
         title=_text_or_empty(metadata.get("title", "")),
         abstract=abstract if isinstance(abstract, str) and abstract else None,
-        priors=provider_priors(metadata),
+        priors=provider_priors(metadata, label_rows=label_rows),
         metadata=metadata,
     )
+
+
+def _label_rows_by_pss(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    pss_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, list[dict[str, Any]]]:
+    if not pss_ids:
+        return {}
+
+    grouped: dict[uuid.UUID, list[dict[str, Any]]] = {}
+    rows = conn.execute(
+        select(
+            source_tag.c.project_source_snapshot_id,
+            source_tag.c.tag,
+            source_tag.c.tag_type,
+            source_tag.c.asserted_by,
+        )
+        .where(source_tag.c.project_id == project_id)
+        .where(source_tag.c.project_source_snapshot_id.in_(pss_ids))
+        .where(source_tag.c.asserted_by != "classify")
+        .order_by(source_tag.c.tag_type, source_tag.c.asserted_by, source_tag.c.tag)
+    ).fetchall()
+    for pss_id, tag, tag_type, asserted_by in rows:
+        grouped.setdefault(pss_id, []).append(
+            {"tag": tag, "tag_type": tag_type, "asserted_by": asserted_by}
+        )
+    return grouped
 
 
 def _load_relevant_docs(
@@ -109,6 +143,9 @@ def _load_relevant_docs(
         .order_by(project_source_snapshot.c.project_source_snapshot_id)
     ).fetchall()
 
+    pss_ids = [pss_id for pss_id, _, _ in rows]
+    label_rows_by_pss = _label_rows_by_pss(conn, project_id=project_id, pss_ids=pss_ids)
+
     docs: list[_ClassifyDoc] = []
     for pss_id, source_snapshot_id, raw_metadata in rows:
         metadata = _metadata(raw_metadata)
@@ -117,7 +154,7 @@ def _load_relevant_docs(
                 pss_id=pss_id,
                 source_snapshot_id=source_snapshot_id,
                 metadata=metadata,
-                payload=_payload_for(pss_id, metadata),
+                payload=_payload_for(pss_id, metadata, label_rows_by_pss.get(pss_id, [])),
             )
         )
     return docs

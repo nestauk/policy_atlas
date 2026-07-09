@@ -1,5 +1,39 @@
 # Knowledge update log
 
+## 2026-07-09 (task 015 step 8)
+* **Creation**: Added
+  [result-caps-need-distribution-rule](result-caps-need-distribution-rule.md) — a total
+  cap needs a per-call distribution rule or the fan-out silently collapses to one
+  load-bearing query (015 live-check finding, fixed in-slice as `_distribute_quota`).
+* **Creation**: Added
+  [guard-tests-name-real-invariant](guard-tests-name-real-invariant.md) — the 007
+  zero-egress guard's importlib dodge (015 build); guards name their invariant, evasion
+  is a defect even on green CI.
+* **Creation**: Added
+  [embedded-values-escape-wire-grammar](embedded-values-escape-wire-grammar.md) — the
+  comma-borne OpenAlex filter injection (015 review stack, convergent across both
+  heterogeneous lanes); sanitizers must be wire-grammar-aware.
+* **Update**: [synthesise-is-run-terminus](synthesise-is-run-terminus.md) gained the
+  substrate corollary — synthesise refuses envelope-only corpora
+  (`no_groundable_substrate`), so no acquire-only chain can mint until 016; hit live at
+  the 015 chain smoke (contract rev 3.14's wording corrected via components flow-back).
+* **Adjudicated, not authored** (015 build candidates): "deep search's judge is free" —
+  recorded in ADR 0012 decision 3 + verification evidence, no separate concept;
+  429-burst behaviour → the cache-before-throttle seam note (deferred.md, task-015
+  section); characterise live-corpus wobbles → deferred.md robustness entry (a work
+  item, not durable learning); Overton tag-layer richness → a scale note on the
+  filter-vocabulary seam entry.
+
+## 2026-07-09
+* **Creation**: Added
+  [synthesise-is-run-terminus](synthesise-is-run-terminus.md) — every run ends in
+  synthesise (the artefact-minting terminus); characterise and the composition generally
+  are plan choices. Captured at the 015 contract gate after the mistake (chains described
+  as ending in characterise) recurred across slices; the 015 smoke chain was corrected
+  under it (contract rev 3.9). Verified against components.md §9 and the merged 013
+  skeleton — not new-slice code, so it lands ahead of 015's PR by exception to the
+  in-implementing-PR rule.
+
 ## 2026-07-08
 * **Creation**: Added
   [effective-screen-row-read-rule](effective-screen-row-read-rule.md) — multiple screening

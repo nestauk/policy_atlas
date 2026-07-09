@@ -315,6 +315,7 @@ def _load_stage1_docs(
                     title=_text_value(metadata, "title"),
                     abstract=_optional_text_value(metadata, "abstract"),
                     abstract_source=_optional_text_value(metadata, "abstract_source"),
+                    title_source=_optional_text_value(metadata, "title_source"),
                     intent=intent,
                     metadata=metadata,
                 ),

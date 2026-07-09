@@ -133,8 +133,10 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   note (task 011): V2's CFIR implementation-profile field definitions (cost/staffing/complexity +
   the inner-setting rule) are recorded design input for this schema; no field of it entered
   `intervention_outcome_finding`.
-- **Saturation-based search stopping** (iterating retrieval↔screen until no new relevant docs);
-  `saturated` is not a v3.0 `search_coverage_record` stop value.
+- **Saturation-based search stopping** — `saturated` is still not a
+  `search_coverage_record` stop value (kept out by migration 15's widening, task 015):
+  within-run discovery-RATE collapse now stops honestly as `short_circuit`, but
+  *corpus* saturation (nothing new exists to find) remains a distinct, deferred concept.
 - **Budget cap + lazy vectorisation** for very large relevant sets. The **tiered content peek**
   in its original exec-summary/headings form is **superseded in practice** by task 014's
   stage-2 windowed full-text screen (decision 11); revisit only if windowing proves
@@ -143,11 +145,11 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   mini ×3-rep consensus; `screen_fulltext_v1` stage-2 precision confirmation) replaced the
   stub, which survives as the zero-egress default behind the `ScreeningBackend` seam.
   Follow-on seams live in the task-014 section below.
-- **Thin-base re-search trigger** — `screen_decision_confidence` is now a meaningful live
-  consensus probability (task 014) and `re_searched_still_thin` is a valid
-  `search_coverage_record.stop_condition` (task 007), but nothing fires it; the trigger that
-  re-runs `search` when the confident-relevant count is below threshold waits on live search
-  (task 015).
+- **Thin-base re-search trigger — DISCHARGED (task 015).** The trigger dissolved into the
+  depth-graded loop's stopping rule (ADR 0012 decision 5): any non-target stop below the
+  confident-relevant target records `re_searched_still_thin` (the 007 vocabulary, finally
+  fired — observed live); rapid-thin runs escalate via `should_escalate` to one bounded
+  deep continuation.
 - **Re-screening of successful results** — superseding a `relevant`/`not_relevant` decision
   is still blocked by design: `uq_ssr_scope_source_stage` (task 014's partial unique) admits
   failed-row retries and one row per stage, never a second non-failed row per
@@ -163,54 +165,40 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 
 ## Search / acquisition (task 007 seams)
 
-- **Live `SearchBackend` implementations** (OpenAlex, Overton) — **confirmed in-scope for
-  v3.0** (user, 2026-07-05; header class 1 — the product cannot function without live
-  search). The seam is built and both envelope mappings run against authentic recorded
-  structure; wiring live HTTP is **runtime egress**, its own gated slice. Requirements carried from the v2 integration review (task 007
-  contract): explicit request timeouts everywhere (v2's OpenAlex path could hang unbounded);
-  a real Overton rate limiter (max 1 call/s, 429 + key-block on abuse — v2 had none); the
-  OpenAlex query sanitizer (commas inside quoted phrases break queries) applied on the
-  *production* path; per-provider result caps so the verbose provider can't crowd out grey
-  literature; no sync HTTP inside async contexts. Security posture for the same slice: keep
-  provider JSON out of top-level snapshot metadata (everything provider-controlled stays nested
-  under `provider_fields` — the stub sentinels `_stub_*` and envelope keys share the top-level
-  namespace); a third backend requires registering its mapper (`acquire_sources` rejects unknown
-  backend names loudly rather than skipping their results).
-- **Arm-B agentic search loop — the chosen query-derivation direction** (user, 2026-07-05;
-  colleague R&D June 2026: v2 branch `search-experiment-pr`, PR nestauk/discovery_policy_atlas#184;
-  presentation `docs/research-and-development/Search methods [Policy Atlas R&D] - June 2026.pdf`
-  (internal, not published); handover `backend/testing/r_and_d/search_experiments/ONBOARDING.md`,
-  maintainer Aidan Kelly). Iterative search with query reformulation from judged exemplars,
-  citation snowballing (forward + backward), LLM-suggested-paper grounding, Thompson-sampling
-  adaptive judging with a short-circuit stop, blend ranking (0.9·LLM-judge + 0.075·rerank);
-  measured ~2× single-pass recall@k_est at ~$0.44/query, ~6 min. LLM- and egress-heavy → lands
-  behind the LLM + live-backend gates. What 007 left ready: `SearchBackend` grows into the R&D's
-  `SourceClient` shape (add citation-fetch / reference-fetch / title-grounding-lookup /
-  optionally dense-search verbs + per-backend capability flags — additive to the protocol);
-  N search calls per run already fit (per-call `search.executed` events + one per-run coverage
-  record, queries by reference); `stop_condition` vocabulary grows by one-line CHECK migration
-  (quota / exhausted / short-circuit are cousins of the deferred `saturated`). Snowball-discovered
-  records enter as acquired sources through the same envelope + dedup. **Semantic Scholar** is
-  the candidate third backend (Arm C was a close second; dense `/snippet/search`, `x-api-key`,
-  ~1 req/s). An **Overton arm-B** is named future work (the presentation calls it a novel
-  open-source contribution). The **Campbell/3ie/EPPI golden-dataset** recommendation belongs to
-  the eval workstream (per data-model's judge-calibration ownership). Blend-rank + LLM-judge
-  relevance belong to the screen / retrieval-rerank seams, not acquire. v2's central lesson
-  stands recorded: a single LLM-generated boolean query is unstable/low-recall (v2 built a
-  query-stability eval to prove it); its multi-query fan-out design + eval harness are the
-  starting point when the seam opens. v3.0's intent-verbatim query is stable by construction.
-- **User-selectable backend scope** (academic-only / grey-lit-only / both — v2 precedent; later
-  possibly orchestrator-derived from the intent conversation) — lands as a Plan/Config field
-  (its own public-interface gate) driving the `search_backends` parameter `run_harness` gained
-  in task 007; nothing in v3.0 reads a selection, so no inert field shipped.
-- **Per-backend query mode is a backend property, not one-size-fits-all** (user, 2026-07-05):
-  v2 production ran semantic-only on Overton (`squery` + `min_similarity` — cheap) and
-  boolean-only on OpenAlex (semantic exists there but costs more; v2 bet on query generation).
-  To explore at the seam: a semantic/keyword mix per backend; whether Overton's semantic mode is
-  already hybrid under the hood (unverified). The richer **Overton filters**
-  (`source_country`/`source_region` with v2's region-label mapping, `source_type`, date bounds)
-  sit at the same seam; v3.0 sends none (`scope_filters` stays `{}`, shape reserved on the
-  coverage record).
+- **Live `SearchBackend` implementations — DISCHARGED (task 015).** `search_live.py` ships
+  hardened first-party httpx transport for both backends (ADR 0012 decision 6): explicit
+  timeouts on every request, Overton 1.2 s limiter on every path including validated
+  `next_page_url` follows, retry cap 1 then honest failure, structural error redaction to
+  status+host, both sanitizers on the production path (commas fully excluded from the
+  OpenAlex wire — the v2 note's commas-in-quotes scope was widened at the 015 review:
+  commas are the filter-clause separator, an injection surface), per-depth per-provider
+  result caps *with per-call distribution quotas*, credit-responsible `select=`, no
+  citation floor, and a zero-progress page guard on pagination. The stub remains the
+  zero-egress default; the 007 guard now names `search_live.py` as the sole sanctioned
+  HTTP-import home.
+- **Arm-B agentic search loop — DISCHARGED (task 015, ADR 0012).** The R&D direction landed
+  as the deep depth: query reformulation from judged exemplars (via the production screen —
+  the loop's judge IS `screen_v1`, no shadow relevance judgment), citation snowballing
+  (forward + backward through the decision-16 protocol verbs + `lookup_dois`),
+  LLM-suggested-paper grounding (ID/DOI-preferred, drop-and-count when ungrounded), honest
+  stop vocabulary (`target_reached` / `short_circuit` / `budget_exhausted` + the
+  `re_searched_still_thin` overlay). Deliberately NOT carried: Thompson-sampling adaptive
+  judging (fixed allocation won — a ≤3-round loop leaves a 3-arm bandit in permanent
+  cold-start; TS survives as an eval-gated seam that must beat round-robin, task-015
+  section) and blend ranking (screen / retrieval-rerank seams own relevance weighting).
+  v2's central lesson is structurally honoured: no single LLM query is load-bearing
+  (validated multi-query fan-out, all-zero → verbatim fallback).
+- **User-selectable backend scope — DISCHARGED (task 015).** `search_backend_scope`
+  (`academic` / `grey_literature` / `both`) compiles on Plan AND Config (unknown values
+  rejected on both), driving the 007 `search_backends` parameter; the harness resolves
+  defaults from compiled config.
+- **Per-backend query mode — DISCHARGED as built, exploration seams remain (task 015).**
+  Shipped per-idiom: Overton semantic (`squery` + `min_similarity=0.3` on every call) with
+  verbatim intent + ≤2 NL paraphrases; OpenAlex keyword-lexical multi-query fan-out with
+  SR/RCT variants. The richer filters shipped as the fail-closed `scope_filters` grammar
+  over wire-verified vocabularies (revs 3.3–3.4 pinning). Still open, now in the task-015
+  section: whether Overton's semantic mode is hybrid under the hood (unverified), and the
+  filter-vocabulary growth seams.
 - **Injection screening of acquired text** — posture recorded at task 007 (contract decision 9):
   acquired titles/abstracts/snippets are third-party text entering the corpus ("ingestion is not
   a tool"); v3.0's deterministic stubs never interpret them (security-review-confirmed), but the
@@ -219,16 +207,76 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   visibly (`abstract_source="llm_description"`; theme retained under `provider_fields`) and
   never mixed into document-own-words fields — when grounding lands, claims resting on
   `llm_description` text are flagged distinctly (flag-not-drop).
-- **Downstream consumers of the acquired envelope** (API exploration, 2026-07-05): the LLM
-  screen tool should read `abstract_source` (lower decision confidence on provider-LLM
-  summaries; decide non-English handling — fixtures carry a non-English record); the LLM
-  classify tool should consume structured provider priors (`record_type`, Overton
-  `source.type`/`organisation_type`, provider topics) to cut `Unknown`s on acquired documents —
-  classification quality gates appraisal coverage (all acquired docs are `Unknown` →
-  `skipped_unknown` under the v3.0 stubs, honest but appraisal-empty); `is_retracted` is
-  retained-but-unread — becomes a visible flag in the deferred appraisal second pass
-  (flag-not-block); the small-sample-penalty deferral is now evidence-backed (neither API ships
-  sample size).
+- **Downstream consumers of the acquired envelope — largely DISCHARGED (tasks 014–015).**
+  Screen reads `abstract_source` and (015) `title_source`; classify consumes property
+  priors (`record_type`, source typing, `indexed_in`, `title_source`) plus the tag layer
+  as its uniform label-prior surface (`{tag, tag_type, asserted_by}` visible — ADR 0012
+  decision 8; OpenAlex keywords deliberately exited the prompt). Still open:
+  `is_retracted` retained-but-unread (a visible flag in the deferred appraisal second
+  pass, flag-not-block); non-English handling beyond English-first title selection.
+
+## Live search / depth-graded loop (task 015 seams)
+
+Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
+
+- **Retrieval-boost grammar v2** — rev 3.9's named companion slice: tag-based retrieval
+  scoping + the 014 screen-confidence multiplier (grammar pre-decided in the task-014
+  section above), one 013-surface slice; sequence before 017 or alongside it.
+- **Select-as-tool / shared purpose-fit-ranking tool** — the rev-3 spec-level seam:
+  select's ranking machinery exposed as a tool other components (and the deep loop) could
+  call, instead of each growing its own fitness heuristics.
+- **Overton arm-B cross-backend snowball** — Overton has `has_snowball=False` in v3.0; the
+  documented edges when this opens: `plain_dois_cited` + `generate_id_set.php` +
+  `open_cited_institution_authors`; reverse policy-inbound citation = confirm-with-support.
+- **Semantic Scholar third backend** — dense `/snippet/search`, `x-api-key`, ~1 req/s.
+  Registration duties recorded at the 009 tag-consolidation entry (mapper + tag extractor +
+  caps flags — and the review note that the diversity arm currently selects its backend by
+  name, not a caps flag; backend #3 is the trigger to add one).
+- **Filter-vocabulary growth** — OpenAlex topic-hierarchy / keyword / venue / funder
+  name→id resolution; Overton `source_region` `_:` code mapping table; COFOG
+  classifications reference table; Overton open-vocabulary `topics`/`document_type` once
+  token lists are pinnable. (Live scale note: Overton's publisher tag layer runs ~29
+  tags/record — bounds sized on fixtures now genuinely bind.)
+- **Caching (cache-before-throttle)** — declined at plan; live 429s arrive in bursts right
+  after a fan-out (observed: OpenAlex rate-limited the immediately-following run in the
+  same process), so a response cache pays for itself before a smarter throttle does.
+- **Citation-floor knob** — no citation floor is the recall-first default (decision 12,
+  user-approved); a steerable floor, if ever wanted, is a directive knob — never a silent
+  transport filter (the V2 lesson).
+- **Tool-wide depth/time-budget gradation** (rev 3.12, user direction) — the depth axis is
+  a spectrum (really-rapid → intermediate → deep → long-running report-grade); the
+  orchestrator compiles a user time/quality preference into per-component depth directives
+  + budgets (search depth+wall-clock · screen stage · the 008 parser-tier seam · select
+  budget · synthesis caps) at the plan-as-object compile surface. 015's per-depth constants
+  table is the extensible compile target. Two 015 observations join this seam: whether the
+  user-facing "deep ≈ 2–3 min" should include the round-1 rapid-leg screening (a full live
+  episode ran 343 s end-to-end while the loop driver honoured its 150 s budget), and the
+  **coverage-record stop-condition grain** (review stack, three lanes convergent): a clean
+  rapid completion and a wall-clock breach both persist `breadth_truncated`, and the
+  deep-thin overlay hides the raw stop value — the per-round facts live only in
+  events/logs; a richer stop/attribution vocabulary is a one-line CHECK migration cousin.
+- **Rev-3.10 loop seams** — calibrated recall estimate (Chao capture-recapture /
+  Undermind exponential-saturation fit → a user-facing "estimated % of relevant found" on
+  the coverage record); sliding-window Thompson-sampling arm allocation (eval-gated, must
+  beat round-robin); RCS-style abstract compression before screen (only if screen tokens
+  bind the wall-clock); best-of-N query selection.
+- **Study-geography extraction field** (rev 3.2, user) — no search API supplies study
+  geography; an extraction-schema gate joining the 010 selection-diversity seam,
+  characterise's post-extraction coverage dimensions and the Transferability capability.
+- **Eval-reuse pointers** (the eval slice's search seed): PaperFindingBench zero-adapter
+  first run · the parity-tested `metrics.py` recall@k_est port · SYNERGY true-recall ·
+  CODEC policy topics · the Campbell/3ie/EPPI "unzip" golden-dataset build · the
+  per-backend coverage-vs-recall split · OpenAlex `sample`+`seed` as the eval-set sampling
+  primitive · the AstaBench scoring stance (cost-normalized estimated-recall + nDCG on a
+  Pareto frontier) · MetaSyn stage-attributed metrics (retrieval vs screening failures
+  diagnosed separately) · the **mini-class judge comprehension-threshold gate** (measure
+  the screen's relevance-judge quality before trusting loop-steered "adequate" — ADR 0012
+  names this the loop's single biggest un-eval'd dependency) · suggest-arm live yield
+  (0 proposals in the one live deep run; machinery scripted-test-covered).
+- **Review-stack cleanup candidates** (015 step 7, recorded not ridden): collapse
+  `acquire_sources`' legacy no-executed-calls branch into the executed-calls path; unify
+  the two wire-validator families in `search_loop.py` when the filter grammar next grows;
+  hoist the duplicated `oa_record`/scripted-generation test doubles into `tests/helpers.py`.
 
 ## Full-text ingestion (task 008 seams)
 
@@ -356,7 +404,14 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **Very-large-corpus grouping** — discovery currently reads all titles+abstracts in one
   call; the scale seam is discovery-sampling and/or embedding-based clustering over the
   landed chunk vectors (contract decision 4). Assignment already scales (batched,
-  concurrent, budget-enforced).
+  concurrent, budget-enforced). **Live-corpus robustness observations (015 live check —
+  the first component to wobble when inputs got real):** a 206-doc corpus produced an
+  `APITimeoutError` batch failure and an 85-doc corpus a double `InvalidDiscoveryOutput`
+  rejection before a ~60-doc pass succeeded; retry caps and batch sizes are eval-slice
+  calibration targets. Compounding gap (015 review, the 013 corollary):
+  `_discover_themes` discards the validator's rejection detail — only `error_type`
+  reaches the logs, so the rejection *reason* is diagnosable solely from Langfuse traces;
+  persist/log `str(exc)` when this component is next touched.
 - **Grouping-quality + adversarial-content evals** — theme quality is *not* asserted by
   the build (sanitized fixture corpora make it meaningless by construction); the eval seam
   owns: quality bars, adversarial/injection-shaped corpora beyond the shipped unit tests,

@@ -22,7 +22,6 @@ from policy_atlas.acquire import (
     OpenAlexFixtureBackend,
     OvertonFixtureBackend,
     SearchBackend,
-    acquire_sources,
 )
 from policy_atlas.appraise import AppraiseContext, appraise_sources
 from policy_atlas.characterise import CharacteriseContext, CharacteriseFailure, characterise_scope
@@ -48,6 +47,8 @@ from policy_atlas.ranking import RankingBackend
 from policy_atlas.schema import artefact, evidence_scope, runs
 from policy_atlas.screen import ScreenContext, screen_sources
 from policy_atlas.screening_backend import ScreeningBackend, StubScreeningBackend
+from policy_atlas.search_generation import SearchGenerationBackend, StubSearchGenerationBackend
+from policy_atlas.search_loop import run_search
 from policy_atlas.select import SelectContext, select_scope
 from policy_atlas.synthesis_backend import StubSynthesisBackend, SynthesisBackend
 from policy_atlas.synthesise import SynthesiseContext, SynthesiseFailure, synthesise_scope
@@ -65,6 +66,7 @@ class HarnessState(TypedDict):
     artefact_id: uuid.UUID | None  # set by _run_echo only; None for scope components
     provider: InferenceProvider
     search_backends: list[SearchBackend]
+    search_generation_backend: SearchGenerationBackend
     document_fetcher: DocumentFetcher
     screening_backend: ScreeningBackend
     classification_backend: ClassificationBackend
@@ -208,8 +210,9 @@ def _run_scope_component(
 
 def _run_acquire(state: HarnessState) -> HarnessState:
     sources_fn = functools.partial(
-        acquire_sources,
+        run_search,
         backends=state["search_backends"],
+        generation_backend=state["search_generation_backend"],
         embedder=state["embedding_backend"],
     )
     return _run_scope_component(state, AcquireContext, sources_fn)
@@ -540,6 +543,17 @@ def build_graph() -> Any:
     return g.compile()
 
 
+def _default_search_backends(search_backend_scope: str) -> list[SearchBackend]:
+    if search_backend_scope == "both":
+        backends: list[SearchBackend] = [OpenAlexFixtureBackend(), OvertonFixtureBackend()]
+        return backends
+    if search_backend_scope == "academic_only":
+        return [OpenAlexFixtureBackend()]
+    if search_backend_scope == "grey_lit_only":
+        return [OvertonFixtureBackend()]
+    raise ValueError(f"unknown search_backend_scope: {search_backend_scope!r}")
+
+
 def run_harness(
     conn: Connection,
     *,
@@ -548,6 +562,7 @@ def run_harness(
     run_id: uuid.UUID,
     provider: InferenceProvider,
     search_backends: list[SearchBackend] | None = None,
+    search_generation_backend: SearchGenerationBackend | None = None,
     document_fetcher: DocumentFetcher | None = None,
     screening_backend: ScreeningBackend | None = None,
     classification_backend: ClassificationBackend | None = None,
@@ -568,8 +583,10 @@ def run_harness(
         run_id: Pre-created run row to execute.
         provider: Inference provider used by the grounding leg.
         search_backends: Backends for the acquire component, searched in list
-            order; defaults to the fixture pair (OpenAlex, Overton) — the same
-            injection pattern as ``provider``.
+            order; when omitted, the compiled ``search_backend_scope`` selects
+            the fixture backend set. The default remains both backends.
+        search_generation_backend: Generation backend for search fan-out;
+            defaults to ``StubSearchGenerationBackend()`` — no default egress.
         document_fetcher: Fetcher for the ingest_full_text component; defaults
             to ``FixtureFetcher()`` — the same injection pattern as
             ``search_backends`` (approved gated change 3, task 008).
@@ -631,7 +648,12 @@ def run_harness(
         "search_backends": (
             search_backends
             if search_backends is not None
-            else [OpenAlexFixtureBackend(), OvertonFixtureBackend()]
+            else _default_search_backends(config.search_backend_scope)
+        ),
+        "search_generation_backend": (
+            search_generation_backend
+            if search_generation_backend is not None
+            else StubSearchGenerationBackend()
         ),
         "document_fetcher": (
             document_fetcher if document_fetcher is not None else FixtureFetcher()

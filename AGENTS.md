@@ -22,31 +22,38 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `014-llm-screen-classify`.
+Implementation — task `015-live-search`.
 
-Tasks `001-walking-skeleton` through `013-synthesise` are complete (merged) —
-the EB chain runs end-to-end, terminus included. The active slice is the
-**first of the live-demo path** (014 LLM screen+classify → 015 live search →
-016 live fetch/ingest → 017 demo dress-rehearsal → eval slice): it replaces
-the deterministic `screen` and `classify` stubs with **live LLM tools**
-behind two new backend seams (`ScreeningBackend` · `ClassificationBackend`,
-stub defaults — `make verify` stays deterministic and egress-free). Screen
-becomes a real recall-oriented relevance filter over the metadata envelope
-(title + abstract, `screen_basis` computed in code, fail-open on missing
-abstract; judged against the scope intent as id-keyed data); classify
-becomes a real evidence-type classifier over the closed 9-value list
-(intent-free — classification is a property of the document), consuming
-structured provider priors as data fields, **plus** its spec-required
-second output: bounded methodological/structural tag proposals into
-`source_tag` (`asserted_by='classify'`,
-`tag_type='methodological_structural'`). Gated changes riding this slice:
-**runtime egress** (two new generation surfaces, `screen_v1` ·
-`classify_v1`, the 8th/9th product prompts — the first product LLM read of
-acquired third-party text; injection posture from task 007 decision 9 comes
-due) · **public interface** (`run_harness` gains `screening_backend` +
-`classification_backend`) · **schema** (one CHECK-widening migration on
-`ck_stag_tag_type`; no new tables). Build per
-`docs/tasks/014-llm-screen-classify/contract.md`. Stay within the
-contract's scope and stop conditions; live search/fetch and all other
-seams remain deferred (`docs/deferred.md`).
+Tasks `001-walking-skeleton` through `014-llm-screen-classify` are complete
+(merged) — the EB chain runs end-to-end with live LLM screen/classify. The
+active slice is the **second of the live-demo path** (014 LLM
+screen+classify → **015 live search** → 016 live fetch/ingest → 017 demo
+dress-rehearsal → eval slice): it makes acquire a **live, depth-graded
+search capability** over OpenAlex + Overton (contract rev 2, user scope
+call): live HTTP transport behind the 007 `SearchBackend` seam carrying
+every v2-lesson requirement (timeouts · Overton 1 call/s limiter · query
+sanitizers · per-depth caps · key hygiene · no citation floor), plus the
+search capability itself — **rapid** = LLM multi-query fan-out with
+SR/RCT variants; **deep** = the Arm-B agentic loop realised as
+**acquire↔screen rounds** (contract rev 3: the loop's judge IS the
+unmodified 014 screen — reformulation from graded screened exemplars
+with token-bounded per-round inputs · citation snowballing ·
+suggestion grounding · fixed arm allocation with a diversity reserve ·
+stopping on real confident-relevant counts and discovery rate, round
+cap 3), all budget-governed; the thin-base re-search behaviour lives
+in the loop's stopping rule (rapid-thin runs escalate to one bounded
+deep continuation); pagination; `scope_filters`; the backend-scope
+field. Fixture backends stay the zero-egress defaults — `make verify`
+stays deterministic and egress-free; acquire itself never writes
+screening rows (one relevance surface). Gated changes riding this
+slice: **runtime egress** (transport + three generation surfaces,
+`search_queries_v1` · `search_reformulate_v1` · `search_suggest_v1`,
+the 11th–13th product prompts, plus the in-loop `screen_v1` call-volume
+change) · **schema** (one `ck_scov_stop_condition` CHECK widening) ·
+**public interface** (`search_backend_scope` Plan/Config field). Build
+per
+`docs/tasks/015-live-search/contract.md`. Stay within the contract's
+scope and stop conditions; live fetch (016), Semantic Scholar, Overton
+cross-backend snowballing, blend ranking and all other seams remain
+deferred (`docs/deferred.md`).
 

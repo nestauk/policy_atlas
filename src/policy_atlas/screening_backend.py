@@ -1,4 +1,4 @@
-"""Screening backend seam for the screen_v1 and screen_fulltext_v1 calls."""
+"""Screening backend seam for the screen_v2 and screen_fulltext_v1 calls."""
 
 from __future__ import annotations
 

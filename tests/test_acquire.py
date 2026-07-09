@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from policy_atlas import events
 from policy_atlas.acquire import (
     AcquireContext,
+    BackendCaps,
     OpenAlexFixtureBackend,
     OvertonFixtureBackend,
     _map_openalex_work,
@@ -58,13 +59,39 @@ class FakeBackend:
         self.name = name
         self.trust_class = trust_class
         self.mode = mode
+        self.caps = BackendCaps(has_snowball=False, has_title_lookup=False)
         self._records = records or []
         self._exc = exc
 
-    def search(self, query: str) -> list[dict[str, Any]]:
+    def search(
+        self,
+        query: str,
+        *,
+        wire_params: dict[str, str] | None = None,
+        max_results: int | None = None,
+    ) -> list[dict[str, Any]]:
         if self._exc is not None:
             raise self._exc
-        return self._records
+        records = self._records
+        return records if max_results is None else records[:max_results]
+
+    def fetch_citations(
+        self, record_id: str, *, max_results: int | None = None
+    ) -> list[dict[str, Any]]:
+        raise NotImplementedError("FakeBackend caps.has_snowball=False")
+
+    def fetch_references(
+        self, record_ids: list[str], *, max_results: int | None = None
+    ) -> list[dict[str, Any]]:
+        raise NotImplementedError("FakeBackend caps.has_snowball=False")
+
+    def lookup_title(self, title: str) -> list[dict[str, Any]]:
+        raise NotImplementedError("FakeBackend caps.has_title_lookup=False")
+
+    def lookup_dois(
+        self, dois: list[str], *, max_results: int | None = None
+    ) -> list[dict[str, Any]]:
+        raise NotImplementedError("FakeBackend caps.has_doi_lookup=False")
 
 
 def oa_record(
@@ -737,9 +764,14 @@ def test_coverage_adequate_both_ok(conn: Connection) -> None:
     assert row.verdict_origin == "model"
     assert row.scope_filters == {}
     assert row.backends == [
-        {"backend": "openalex", "trust_class": "academic_aggregator", "mode": "fixture"},
+        {
+            "backend": "openalex",
+            "trust_class": "academic_aggregator",
+            "mode": "fixture",
+            "depth": "rapid",
+        },
         {"backend": "overton", "trust_class": "grey_literature_aggregator",
-         "mode": "fixture"},
+         "mode": "fixture", "depth": "rapid"},
     ]
 
 
@@ -996,14 +1028,30 @@ def test_overton_fixture_quirk_coverage() -> None:
 
 
 def test_acquire_module_has_no_http_client() -> None:
-    """acquire.py and the package import graph carry no HTTP client usage."""
+    """No package module but the live transport carries HTTP client usage.
+
+    Task 015 extension (contract decision 1): ``search_live.py`` is the one
+    sanctioned HTTP home; every other module stays HTTP-import-free, and
+    ``acquire.py`` must never import the live module — fixture defaults stay
+    zero-egress by construction.
+    """
     src_dir = Path(__file__).parent.parent / "src" / "policy_atlas"
     forbidden = re.compile(
         r"^\s*(import|from)\s+(urllib|requests|httpx|aiohttp|http\.client|socket)\b",
         re.MULTILINE,
     )
     for module in src_dir.rglob("*.py"):
+        if module.name == "search_live.py":
+            continue
         assert not forbidden.search(module.read_text()), f"HTTP client import in {module}"
+
+    live_import = re.compile(
+        r"^\s*(import|from)\s+policy_atlas\.search_live\b|"
+        r"^\s*from\s+policy_atlas\s+import\s+.*\bsearch_live\b",
+        re.MULTILINE,
+    )
+    acquire_text = (src_dir / "acquire.py").read_text()
+    assert not live_import.search(acquire_text), "acquire.py imports the live module"
 
 
 def test_recorder_scripts_not_imported_by_package() -> None:
