@@ -394,9 +394,15 @@ def test_timeout_does_not_swallow_completed_sibling() -> None:
     """
     import multiprocessing
 
+    # parse_timeout must comfortably exceed worker spawn + package import
+    # (~1s idle, >5s under heavy host load — observed 017): the deadline clock
+    # starts at proc.start(), so too tight a budget mislabels a healthy fast
+    # worker as the timeout this test exists to rule out. 20s keeps the
+    # property intact — the fast job's deadline still lapses while the hung
+    # sibling drains — with spawn headroom.
     results = _run_parse_jobs(
         [(0, b"slow", "text/plain"), (1, b"fast", "text/plain")],
-        max_workers=2, parse_timeout=5.0, thin_min=0, parse_fn=_sleep_by_marker_parse,
+        max_workers=2, parse_timeout=20.0, thin_min=0, parse_fn=_sleep_by_marker_parse,
     )
     assert results[0] == {"status": "error", "reason": "timeout"}
     assert results[1]["status"] == "ok"
@@ -1315,7 +1321,7 @@ def test_licence_guard() -> None:
 
 
 def test_migration_roundtrip_and_checks(conn: Connection) -> None:
-    assert len(metadata.tables) == 25
+    assert len(metadata.tables) == 26
     project_id, _ = seed_project_and_run(conn)
     snap_id, pss_id = seed_source(conn, project_id)
 

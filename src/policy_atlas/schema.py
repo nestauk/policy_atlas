@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — twenty-five tables, thirteen alembic migrations.
+"""SQLAlchemy Core table metadata — twenty-six tables, fourteen alembic migrations.
 
 No deferred columns (no block/artefact summary, no same_content_as, no lineage key).
 """
@@ -883,4 +883,37 @@ synthesis_result = Table(
     ),
     # Run-local roll-up: same-run re-execution is a loud error, retry = new run.
     UniqueConstraint("evidence_scope_id", "run_id", name="uq_synr_scope_run"),
+)
+
+# --- Orchestration plan (task 017) ---
+
+orchestration_plan = Table(
+    "orchestration_plan",
+    metadata,
+    Column("plan_id", UUID(as_uuid=True), primary_key=True),
+    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    # NULLABLE — resolved at approval time; the composite FK below binds only
+    # once it's set (MATCH SIMPLE, per synthesis_result's optional references).
+    Column("evidence_scope_id", UUID(as_uuid=True), nullable=True),
+    Column("version", Integer, nullable=False),  # 1..n; amendments append rows
+    Column("status", Text, nullable=False),  # proposed|approved|superseded|abandoned
+    Column("payload", JSONB, nullable=False),  # the validated OrchestrationPlan dump
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("created_by", Text, nullable=False),  # 'user'|'planner' attribution
+    Column("approved_at", DateTime(timezone=True), nullable=True),
+    # Cross-project FK guard, per the synthesis-result precedent: NULL
+    # evidence_scope_id skips the check (MATCH SIMPLE), so the guard binds
+    # only once a scope is actually resolved.
+    ForeignKeyConstraint(
+        ["evidence_scope_id", "project_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
+        name="fk_oplan_scope_project",
+    ),
+    # One plan lineage per project in v1 — amendments append new-version rows.
+    UniqueConstraint("project_id", "version", name="uq_oplan_project_version"),
+    CheckConstraint(
+        "status IN ('proposed', 'approved', 'superseded', 'abandoned')",
+        name="ck_oplan_status",
+    ),
+    CheckConstraint("jsonb_typeof(payload) = 'object'", name="ck_oplan_payload_object"),
 )

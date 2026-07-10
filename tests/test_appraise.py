@@ -82,7 +82,7 @@ def _appraisal_rows(conn: Connection, project_id: uuid.UUID) -> list[sa.Row[Any]
 # --- Schema ---
 
 def test_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 25
+    assert len(metadata.tables) == 26
 
 
 # --- Rubric and labels (pure Python, no DB) ---
