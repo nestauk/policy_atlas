@@ -3,9 +3,11 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **drafted rev 2.3** — awaiting contract 🛑 (revs 1–2.3 were
-> shaped in the gate conversation, not yet approved). Companion:
-> [v2-wizard-study.md](v2-wizard-study.md) (rev 2.2c evidence).
+> **Status:** **drafted rev 2.4** — awaiting contract 🛑 (revs 1–2.4 were
+> shaped in the gate conversation, not yet approved). Companions:
+> [v2-wizard-study.md](v2-wizard-study.md) (rev 2.2c evidence) ·
+> [orchestration-research-notes.md](orchestration-research-notes.md)
+> (rev 2.4 evidence).
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
 > ADR: expected (the v1 orchestrator carve + the Unattended steering-mode
@@ -21,6 +23,26 @@ specs in [docs/specs/](../../specs/index.md).
 > the **component config** to keep the three apart.
 >
 > **Revision history:**
+> - **rev 2.4** (2026-07-10, research pass — /last30days + web research
+>   on agent planning/orchestration, user-directed; findings + full
+>   adjudication in
+>   [orchestration-research-notes.md](orchestration-research-notes.md)):
+>   **(a) Sequencing invariant pinned** (decision 5): the one LLM
+>   planning surface completes before the chain touches untrusted
+>   content; mid-run amendments are user-authored and deterministically
+>   compiled — corpus text has no machine path into plan content (the
+>   plan-then-execute security literature's injection-boundary
+>   property, stated so the build can't accidentally break it; joins
+>   review focus + rubric). **(b) Resume-seam design note** (decision
+>   7): the deferred resume engine's requirement recorded — checkpoint
+>   state serialization + an idempotency key persisted before any
+>   interruption. **(c) Per-leg token/cost roll-up** joins wall-clocks
+>   in the run record (decision 11). Confirmations recorded, not
+>   folded: unified intent-planning taxonomy (our planner's shape),
+>   static/dynamic interrupt ↔ mode-compile/steer-point mapping,
+>   simplest-pattern-first + the review-gate middle tier (validate the
+>   thin deterministic runner + steering posture), plan-as-data
+>   convergence (AgentCore/Kastor/plan-freezing).
 > - **rev 2.3** (2026-07-10, user gate probes round 3 — two changes):
 >   **(a) Screening criteria adopted as a first-class plan field**
 >   (user probe — rev 2.2 had deferred them wholesale to the 014
@@ -485,7 +507,18 @@ PR landing:
    consumption — lands together in 018's refine loop; rev 2.3b).
    Structured output validated fail-closed (pydantic; the
    planner cannot smuggle components or parameters past the
-   registry). Honesty rules carried from the product voice: never
+   registry). **Sequencing invariant** *(rev 2.4a, research-informed
+   — the plan-then-execute security literature's fixed-before-
+   untrusted-reads property, stated so the build can't accidentally
+   break it)*: **the slice's one LLM planning surface completes
+   before the chain touches untrusted content.** Once acquire
+   begins, corpus-derived text (titles, abstracts, theme labels,
+   rationale strings) reaches only deterministic surfaces — check-in
+   renders read by the human, never by a prompt-bearing compiler —
+   and every mid-run plan amendment is user-authored input compiled
+   fail-closed against the declared grammar. Third-party corpus text
+   therefore has no machine path into plan content. Honesty rules
+   carried from the product voice: never
    promise findings, never state what the evidence says, assumptions
    surfaced not buried. The demo planner prompt is an anecdotal
    prior; this prompt is written fresh by the lead. Model:
@@ -548,7 +581,11 @@ PR landing:
    direction; also what a future read surface needs to watch a run);
    a failed run reports honestly and is re-run from the top. The
    long-deep-run fragility this accepts is recorded at the durability
-   seam; building the engine pre-demo is overreach. This changes the
+   seam — the seam note now also carries the resume-engine design
+   requirement the 2026 durable-execution consensus supplies *(rev
+   2.4b)*: state serialized at the checkpoint, and an **idempotency
+   key persisted before any interruption** so a resumed action runs
+   exactly once; building the engine pre-demo is overreach. This changes the
    run's transaction shape from `skeleton.py`'s single
    `engine.begin()` — the single-active-writer-per-project invariant
    is unchanged (serial runner), and partial state on failure is
@@ -621,7 +658,12 @@ PR landing:
     no new protocol.** The plan lifecycle is auditable from the event
     log (`plan.proposed` → `plan.approved` → per-component
     `plan.compiled` → component events, with `plan.amended` +
-    steering-resolution events interleaved). The user-grade
+    steering-resolution events interleaved). The run-record summary
+    carries per-leg wall-clocks **and a per-leg token/cost roll-up
+    from the existing usage telemetry** *(rev 2.4c — "token bleed" is
+    the season's named orchestration cost failure mode; the roll-up
+    feeds the depth seam's bands and the plan's time-band honesty at
+    near-zero cost)*. The user-grade
     component-progress protocol stays a recorded seam (016
     precedent); the CLI surfaces the existing structured logs.
 
@@ -752,7 +794,10 @@ refinement recorded).
 path that drives every live component. Review focus: compile
 fail-closed completeness (planner output and steering responses can
 never smuggle execution past the registry — the plan is data, not
-code) · spine-enforcement fidelity (ADR 0013 exactly, including
+code) · the rev-2.4a sequencing invariant (no prompt-bearing
+planning surface runs once acquire begins; corpus text has no
+machine path into plan content) · spine-enforcement fidelity (ADR
+0013 exactly, including
 mandatory-attempt semantics) · failure-chaining honesty (no failed
 run id ever feeds downstream; degrade vs fail boundaries per
 decision 8) · steering honesty (substance never silent in any mode;

@@ -50,7 +50,9 @@ in progress, not done. (Rev 2 — tracks contract rev 2.)
         free text, re-derived as framing evolves); structured output validated
         fail-closed; no plan field collected that nothing consumes; check-in content
         deterministic (no narration surface); no other prompt text changed anywhere
-        in the tree.
+        in the tree; the sequencing invariant holds (the planner completes before
+        acquire begins — no prompt-bearing planning surface runs mid-chain, and every
+        mid-run amendment is user-authored, deterministically compiled).
 13. [ ] **Plan lifecycle auditable and durable**: the `orchestration_plan` row(s) carry
         the approved plan and its immutable amendment versions; `plan.proposed` →
         `plan.approved` → [`plan.amended` + steering resolutions] → `plan.compiled` →
