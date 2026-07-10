@@ -22,45 +22,39 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `017-orchestrator`.
+Implementation — task `018-dress-rehearsal`.
 
-Tasks `001-walking-skeleton` through `016-live-fetch` are complete
-(merged) — the EB chain runs end-to-end live: LLM screen/classify,
-depth-graded search over OpenAlex + Overton, hardened live full-text
-fetch/ingest, and synthesise minting chunk-cited claims over live
-text. The active slice is the **fourth of the live-demo path**
-(014 → 015 → 016 → **017 orchestrator/planning** → 018 demo
-dress-rehearsal → eval slice), re-sequenced by the user 2026-07-10:
-nothing in product code turns a user intent into a chain — chains
-exist only as test-harness profiles in `skeleton.py`, and the demo's
-planner is de-authorised throwaway. 017 lands the **thin v1
-orchestrator**: a lead-authored LLM **planner** (intent →
-depth-graded plan proposal anchored to concrete numbers + a time
-band, ask-only-on-shape, the fixed lighter/as-proposed/deeper
-nudge), a deterministic **composer** (plan → chain composition,
-fail-closed against the component registry, honouring the ADR 0013
-mandatory spine acquire(search) → screen → classify → appraise →
-ingest(fetch) → synthesise with all other components
-orchestrator-discretionary by intent-fit × the two-axis gradation, search effort × analysis depth), a serial **EB
-capability-runner** the orchestrator delegates to (the sub-agent
-boundary made real; topological walk, per-component commits, failure
-chaining off successful predecessors only; its directive-authoring
-slot is the future LLM EB-expert's drop-in seam), and the
-**steering structural core** (four modes — Frequent · Moderate ·
-Minimal · Unattended — deterministic-content check-ins, the
-deepening-selection steer-point with intent-vocabulary options,
-bounded not-yet-run-components-only adjustments, clean abort; Unattended
-auto-resolves to visible plan defaults, everything flagged +
-collated — a spec refinement to execution-orchestration rides the
-flow-back). Gated changes riding this slice: **runtime egress** (the
-planner LLM call — one new lead-authored prompt surface) and one new
-CLI entrypoint. Adjudicated at the gate (2026-07-10): retrieval-boost
-grammar v2 stays eval-gated (not in 017); durability = per-component
-commits, no resume engine. `demo/RETRO.md` on branch `demo-live-run`
-is an **anecdotal prior only**. Build per
-`docs/tasks/017-orchestrator/contract.md`. Stay within the
-contract's scope and stop conditions; the LLM EB-expert capability
-agent, durability/resume engine, narration/clarify-escalate
-surfaces, section-directive compile, component progress protocol and
-all other seams remain deferred (`docs/deferred.md`).
+Tasks `001-walking-skeleton` through `017-orchestrator` are complete
+(merged) — the EB chain runs end-to-end live behind the thin v1
+orchestrator: intent → planner conversation → depth-graded plan →
+spine-by-construction composition → serial EB capability-runner with
+steering. The active slice is the **fifth of the live-demo path**
+(014 → 015 → 016 → 017 → **018 dress-rehearsal** → eval slice) and
+the repo's **first eval-type slice**: prompt-bearing iteration judged
+qualitatively on outputs, not a single code build — the contract's
+§ How this slice runs records where task-cycle conventions are
+deliberately adapted. 018 lands: (A) code riders — model refresh to
+gpt-5.4-mini (+ a provider-neutral reasoning-effort knob;
+classify @ xhigh), telemetry sweep (Langfuse sessions, usage-return,
+durable per-component wall-clock + counts), standard-depth regrade
+(select/extract/group become deep-only; bands re-measured),
+planner-history fix (native message arrays, provider-neutral —
+Bedrock is infra-ready and queued post-eval), OpenAlex country
+filter, and the direction-vocabulary rename
+positive/negative → increase/decrease (the one approved schema
+migration); (B) the **synthesis output-shape v2** (ADR due,
+supersedes 013's claims-are-the-prose emission): authored prose
+answering the intent with typed claims anchored as char-offset span
+annotations *into* the prose, every grounding invariant preserved,
+plus the grounded **conclusion-block front door** and widened
+judge/writer envelopes; (C) a **refine-replay loop** (baseline
+capture → per-surface replay on recorded projects → before/after
+evidence; anti-overfit pins via the v2 question taxonomy) ending in
+a live **dress rehearsal** on a Nesta-mission question rendered on
+the updated `demo-live-run` surface (throwaway — the frontend
+scaffold gate stays untouched). Build per
+`docs/tasks/018-dress-rehearsal/contract.md`; stay within its scope
+and stop conditions. Bedrock migration, the screen-stage rename,
+RAG-quick-run findings, direct plan editing and all other seams
+remain deferred (`docs/deferred.md`).
 

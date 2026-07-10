@@ -465,7 +465,13 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   quotation-verified assignment, at the grouping-quality eval seam (contract § Research
   grounding).
 - **Provider-signal prompt enrichment** — provider topics as per-doc grouping hints;
-  taxonomy-bias risk → enters via the eval seam, never as a silent default.
+  taxonomy-bias risk → enters via the eval seam, never as a silent default. Same family
+  (user, 2026-07-10, recorded at the 018 gate): **characterise theme outputs as
+  facet-grouping hints** (cross-component enrichment — quality unmeasurable before the
+  grouping-quality evals) and **mapper-produced per-document open tags for the document
+  layer** — the latter additionally aggravates the tag-fragmentation trigger recorded at
+  the tag-consolidation entry (more open-vocabulary tag writers before consolidation
+  exists); both enter via the eval seam.
 - **`group`-component inheritance — discharged (task 012)** — v2's theming lessons
   transferred when `group` was built; each recorded defect closed structurally: dead
   critique stage → no critique stage built (one schema-constrained partition + one
@@ -507,6 +513,12 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   explicit `base` ladder and **no absence claims** (test-asserted).
 - **Bedrock routes** — both seams (`EmbeddingBackend`, `ThemeGroupingBackend`) swap
   implementations; first pass OpenAI → target Bedrock is the documented v3.0 posture.
+  **Infra ready on the DevOps side (user, 2026-07-10)** — the migration is now a pull
+  decision, deliberately sequenced **after the eval slice**: it is a model-family swap
+  (Bedrock does not serve the OpenAI models), which re-opens every empirically-settled
+  model-routing choice, so the eval harness is the regression net that licenses it.
+  Standing constraint until then (018 contract): nothing new couples to
+  OpenAI-specific API surface (e.g. no Responses-API server-side conversation state).
 - **Upload audit-event seam** — when the web-app slice gives uploads a real surface they
   get their own audit event + observable processing (incl. embed counts, currently a
   structured log line `ingest_upload.embed_counts`) — an app-boundary event, not a run
@@ -592,6 +604,15 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   subset makes `no_findings`/`not_extracted` unverifiable (a silent new base-ladder rung —
   false-absence machinery EB exists to prevent) and inverts the recall-critical trade. Any
   future retrieval scoping must be an explicit, recorded coverage-base rung, never silent.
+- **RAG-based findings layer for quick/standard runs** (user, 2026-07-10, recorded at the
+  018 gate) — a retrieval-grounded findings/extraction surface for runs that skip the deep
+  extract chain (and a more generic variant for non-intervention-shaped intents). This is
+  exactly the explicit coverage-base rung the entry above reserves: legitimate only with
+  its own recorded rung and honest absence semantics, so it needs its own design gate —
+  never a silent quick-run shortcut. Adjacent gradation fact (018): standard analysis
+  depth no longer runs select/extract/group, so this seam is the recorded path to
+  findings-shaped content at sub-deep depths if evals show envelope-basis synthesis
+  insufficient there.
 - **Generic finding container — declined** (contract rev 1.1a) — typed tables with
   CHECK-enforced vocabularies won ("coherent typed record, dimensions intact and
   queryable"); revisit only if a third finding schema is specced.
@@ -925,7 +946,20 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   carries wall-clocks only; per-component tokens are read in Langfuse. A
   runner-visible single-line usage aggregate needs a usage-return refactor —
   arrives with that refactor or the component-progress protocol (contract
-  decision 11, rev 2.6).
+  decision 11, rev 2.6). **Scheduled: 018 Phase A telemetry sweep** (usage-return
+  refactor + durable per-component wall-clock/counts).
+- **Component-name rename `screen`→`screen_abstract` / `screen_stage2`→`screen_full`**
+  (user, 2026-07-10) — the DB already stores stage as an integer (`ck_ssr_stage`), so
+  this touches only the plan-vocabulary strings (`DiscretionaryComponent`, runner step
+  lists, persisted `orchestration_plan` rows and event payloads that carry step names).
+  Cosmetic (component names never reach the UI — demo/RETRO §2), so it waits for the
+  next slice that touches the screen/plan vocabulary anyway; renaming persisted plan/event
+  vocabulary needs a data migration or a read-side alias, decided then.
+- **Direct plan editing on the plan pane** (user, 2026-07-10) — editing the proposed
+  plan directly (not only conversationally), with edits synced back to the planner
+  conversation and a confirm-changes step before the run button arms. Web-app-slice
+  feature: it needs the durable plan surface + a plan-patch grammar and the planner's
+  acknowledgement turn. The conversational half stays the only editing path until then.
 
 ## Data model / evidence
 
@@ -997,7 +1031,11 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   committed **judge calibration scheme** (owned by the eval workstream; v3.0 only persists judge
   I/O for eval-readiness).
 - **Time/cost estimate model** (the plan drives an estimate; the model is deferred — a coarse band
-  suffices in v3.0).
+  suffices in v3.0). Sharpened (user, 2026-07-10): the eventual model is per-component roll-up,
+  conditioned on corpus size and the plan's component set (search effort × analysis depth) —
+  which needs to know which components scale with corpus size and which are near-invariant.
+  **Data accrual starts in 018** (durable per-component wall-clock + in/out counts on every
+  run); the model itself is eval-slice-or-later work over that accrued telemetry.
 - **Forecast/prewarm extraction** — modelled only if built (no inert forecast object otherwise).
 - **`structlog.contextvars.bind_contextvars` for ambient run/project correlation** —
   `logging.py` wires `merge_contextvars` into the processor chain but nothing calls
