@@ -35,24 +35,32 @@ nothing in product code turns a user intent into a chain — chains
 exist only as test-harness profiles in `skeleton.py`, and the demo's
 planner is de-authorised throwaway. 017 lands the **thin v1
 orchestrator**: a lead-authored LLM **planner** (intent →
-depth-graded plan proposal, ask-only-on-shape, relative
-lighter/deeper nudge), a deterministic **composer** (plan → chain
-composition, fail-closed against the component registry, honouring
-the ADR 0013 mandatory spine acquire(search) → screen → classify →
-appraise → ingest(fetch) → synthesise with all other components
-orchestrator-discretionary per depth gradation), and a serial
-**driver** (topological walk over the existing components,
-per-component commits, failure chaining off successful predecessors
-only). Gated changes riding this slice: **runtime egress** (the
+depth-graded plan proposal anchored to concrete numbers + a time
+band, ask-only-on-shape, the fixed lighter/as-proposed/deeper
+nudge), a deterministic **composer** (plan → chain composition,
+fail-closed against the component registry, honouring the ADR 0013
+mandatory spine acquire(search) → screen → classify → appraise →
+ingest(fetch) → synthesise with all other components
+orchestrator-discretionary per depth gradation), a serial **EB
+capability-runner** the orchestrator delegates to (the sub-agent
+boundary made real; topological walk, per-component commits, failure
+chaining off successful predecessors only; its directive-authoring
+slot is the future LLM EB-expert's drop-in seam), and the
+**steering structural core** (four modes — Frequent · Moderate ·
+Minimal · Unattended — deterministic-content check-ins, the
+deepening-selection steer-point with intent-vocabulary options,
+bounded un-run-legs-only adjustments, clean abort; Unattended
+auto-resolves to visible plan defaults, everything flagged +
+collated — a spec refinement to execution-orchestration rides the
+flow-back). Gated changes riding this slice: **runtime egress** (the
 planner LLM call — one new lead-authored prompt surface) and one new
-CLI entrypoint. Adjudicated at the contract 🛑: retrieval-boost
-grammar v2 (recommendation: stays eval-gated, not in 017) and the
-steering/durability posture (recommendation: Minimal-only steering +
-per-component commits, no resume engine). `demo/RETRO.md` on branch
-`demo-live-run` is an **anecdotal prior only**. Build per
+CLI entrypoint. Adjudicated at the gate (2026-07-10): retrieval-boost
+grammar v2 stays eval-gated (not in 017); durability = per-component
+commits, no resume engine. `demo/RETRO.md` on branch `demo-live-run`
+is an **anecdotal prior only**. Build per
 `docs/tasks/017-orchestrator/contract.md`. Stay within the
-contract's scope and stop conditions; the durability/resume engine,
-check-in mediation surfaces, section-directive compile, component
-progress protocol and all other seams remain deferred
-(`docs/deferred.md`).
+contract's scope and stop conditions; the LLM EB-expert capability
+agent, durability/resume engine, narration/clarify-escalate
+surfaces, section-directive compile, component progress protocol and
+all other seams remain deferred (`docs/deferred.md`).
 
