@@ -3,9 +3,10 @@
 > **Status:** drafted (rev 2 — user feedback 2026-07-10: key-findings and conclusions are
 > separate blocks; writer-envelope widening is evidence-gated not assumed; baselines come
 > from the 017 slice runs with a post-model-refresh re-baseline; the output-shape change
-> is a design fork, not a pre-commitment). Contract approved (before planning): _pending_ ·
-> Plan approved (before implementation): _pending_ · ADR: due (synthesis output-shape —
-> records the fork decision; supersedes/amends the 013 emission decision accordingly).
+> is a design fork, not a pre-commitment). Contract approved (before planning):
+> **2026-07-10 · user (rev 3)** · Plan approved (before implementation): _pending_ ·
+> ADR: due (synthesis output-shape — records the fork decision; supersedes/amends the
+> 013 emission decision accordingly).
 
 ## Goal
 
@@ -81,8 +82,12 @@ here flows back as the eval-slice convention.
    `str(exc)` from `_discover_themes` validator rejections (recorded 015 gap).
    (e) Assess (don't adopt by default) prompt-registry/datasets — likely eval-slice.
 3. **Standard-depth regrade.** `ANALYSIS_DEPTH_TABLE` standard row: `deep_chain=False`
-   (select/extract/group become deep-only; standard synthesises on the
-   envelope + characterise basis, the RETRO quick-run shape). Re-seed
+   — select/extract/group become deep-only. **The ADR 0013 mandatory spine is untouched**
+   (adversarial finding 4): standard still runs acquire → screen → classify → appraise →
+   ingest → stage-2 → characterise → synthesise; full-text chunks remain citable;
+   what standard drops is only the **findings layer** (no extracted findings, so
+   synthesis grounds in chunks + characterisation — never "envelope-basis absent
+   ingest", which ADR 0013 rejected). Re-seed
    `TIME_BANDS[("standard","standard")]` from a fresh measured run (target ~15–20 min;
    displayed-band-is-measured discipline). `FACET_VALUE_CAP` 150 → 400 (demo-validated at
    live scale: 280 distinct values, 19 coherent groups) — retires the second demo
@@ -126,10 +131,17 @@ the ceiling actually binds at the quality bar is an open question, and the redes
   then authors section prose *over the gathered units*, anchoring typed claims as
   **char-offset spans into that prose** as it writes (`addressable_unit` locators
   already carry start/end — no DB migration expected); span-binding validated
-  deterministically (exact substring); salvage + bounded repair lanes preserved
-  (post-hoc revision survives only as the repair loop's shape, which it already is).
-  Structurally removes the ceiling; more machinery, and the annotation layer must be
-  re-proven.
+  deterministically (exact substring). **Repair lane v2 (adversarial finding 1):** the
+  current repair rewrites failing claim objects only — under spans that breaks the text
+  the offsets point into, so Option B redesigns repair to rewrite the failing claim's
+  prose segment *in place*, re-bind its span, recompute downstream offsets, and re-run
+  span validation on the repaired section; salvage lanes preserved. **Unspanned-prose
+  traceability (adversarial finding 2):** the spec's traceability rule covers every
+  significant statement, not just emitted claims — so the judge lane additionally
+  receives the full section prose + span map and flags evidential assertions outside
+  any claim span (`unspanned_assertion`, flag-not-drop); connective tissue is what
+  survives that check, not what avoids it. Structurally removes the ceiling; more
+  machinery, and the annotation layer must be re-proven.
 
 **Fork protocol (plan step):** (1) cheap probe first — replay the demo-branch prompt
 approach on a recorded 017 substrate with the Phase A models and judge whether the
@@ -163,12 +175,16 @@ assertion — the judge rubric owns that line.
     two-block structure is an owner decision (2026-07-10) flowing back into
     capability.md + provenance-grounding.md with a log entry.
 - **Judge envelope v2 — evidence-gated with a verification-grade test (user,
-  2026-07-10).** Candidate additions: for finding claims the finding's verified source
-  quote *and its chunk text*, plus the intent/section focus (today the judge is blind to
-  the question). The judge is a **verification surface**, so its A/B is not output
-  taste: replay the same claim set through both envelopes, diff the verdict
-  distributions, and **hand-inspect every flipped verdict** — watching specifically for
-  intent-induced leniency (on-topic-but-unsupported claims drifting up-tier). Full judge
+  2026-07-10; strengthened per adversarial finding 3).** Candidate additions: for
+  finding claims the finding's verified source quote *and its chunk text*, plus the
+  intent/section focus (today the judge is blind to the question). The judge is a
+  **verification surface**, so its A/B is not output taste: replay the same claim set
+  through both envelopes, diff the verdict distributions, **hand-inspect every flipped
+  verdict** (watching for intent-induced leniency), **plus a stratified sample of
+  unchanged verdicts per lane** (flips alone miss unchanged-but-wrong), **plus a
+  scripted adversarial fixture** for the recorded 013 self-certification case (a chunk
+  whose text instructs the judge to up-tier claims citing it must not sway the verdict —
+  mandatory here because envelope v2 feeds the judge *more* chunk text). Full judge
   calibration remains eval-workstream property; this is the honest 018-level check.
 - **Writer envelope widening — default set + A/B set (user, 2026-07-10).**
   *Default-adopt* (PaperQA2-precedented + the product's own quality ladder):
@@ -200,7 +216,12 @@ assertion — the judge rubric owns that line.
   pinned inputs (extract on the same selected docs; synthesise on the same substrate) →
   judge (user taste + lead) → pin or revert. Full composed live runs are NOT the loop
   unit (017 live-run economy rule carries over: ~40 min + spend needs a specific
-  question a replay can't answer).
+  question a replay can't answer). **Bounds (adversarial finding 5):** at most **3
+  refinement rounds per surface** against the same quality bar — a surface not
+  converging by round 3 stops and re-scopes rather than iterating (the bounded-repair
+  philosophy applied to the loop itself); the loop's total live-replay budget is
+  **≤ 30 component replays** (baselines, fork probe, B smoke, D-phase runs excluded);
+  either bound breached = the stop condition fires.
 - **Surfaces in the loop**: extraction rules (validating the RETRO's never-validated
   fixes: self-contained naming, expanded acronyms, no hortatory statements, concrete
   outcomes), synthesis prose/voice on the new shape, planner (incl.
@@ -208,7 +229,14 @@ assertion — the judge rubric owns that line.
 - **Anti-overfit pins**: each refined prompt is checked against at least one question
   per v2-question-taxonomy category (7 categories) at planner level, and
   extraction/synthesis spot-checks run on the *other* recorded project (different
-  intent) — refinements must not encode the mission question.
+  intent) — refinements must not encode the mission question. **Strengthened
+  (adversarial finding 6, adopted partially):** every refined extraction/synthesis
+  prompt additionally passes (a) a deterministic no-mission-vocabulary check (the
+  prompt text contains no question-specific terms) and (b) a recorded desk review of
+  each rule against the 7 taxonomy question *shapes* (would this rule misfire on a
+  what-works / landscape / comparative / … question?). Full per-category chain runs for
+  extraction/synthesis are eval-slice scale, not 018 — recorded as a known limit in
+  verification.md.
 - **Contingent: extraction junk judge.** Built ONLY if post-refresh replay still shows
   junk findings (the RETRO's "next lever"). One new lead-authored prompt surface on the
   approved OpenAI route (pre-approved at this gate, bounds: post-extract filter,
@@ -284,8 +312,10 @@ delegates per the routing ladder.
 ## Stop conditions
 
 - Phase B needs a real schema change → stop, reopen the gate.
-- Standard-on-envelope-basis synthesis proves dishonest or empty on live corpora → stop,
-  re-adjudicate the regrade (fallback: keep deep_chain at standard, accept the band).
+- Standard-without-findings-layer synthesis proves dishonest or empty on live corpora →
+  stop, re-adjudicate the regrade (fallback: keep deep_chain at standard, accept the
+  band).
+- A loop bound breaches (3 rounds/surface · 30 replays total) → stop and re-scope.
 - A grounding invariant can't survive the chosen Phase B option without weakening → stop
   (for Option B that includes the annotation layer failing to re-prove on replay).
 - Prompt-refine loop stops converging (taste bar not met after bounded rounds) → stop and

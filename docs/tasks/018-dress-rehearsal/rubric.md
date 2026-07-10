@@ -26,21 +26,27 @@ The task is **done only if every box holds** — otherwise it is in progress, no
 10. [ ] Every claim in the shipped artefact still carries its full lane: typed
         annotation, verified-or-flagged citations, judge verdict (judged types), honesty
         flags — nothing weakened relative to 013's guarantees, under whichever option won.
-11. [ ] If Option B: claim spans bind to prose by exact validated offsets; prose outside
-        claim spans carries no evidential assertion (judge-rubric line recorded in the
-        ADR); the annotation layer is re-proven on a replayed live-substrate run.
+11. [ ] If Option B: claim spans bind to prose by exact validated offsets; the
+        unspanned-prose judge check exists and flags evidential assertions outside
+        spans (`unspanned_assertion`, flag-not-drop — the traceability rule covers all
+        significant prose, not just emitted claims); repair lane v2 rewrites the failing
+        span's prose in place, re-binds offsets, and re-validates — proven by test; the
+        annotation layer is re-proven on a replayed live-substrate run.
 12. [ ] Pattern-count recomputation, gap grading + coverage base, flag-not-drop
         (incl. mixed/unclear directions) all hold on a replayed live-substrate run.
-13. [ ] The grounded key-findings block (produced last, shown first, conditional on
-        headline claims) and the separate bottom conclusions block (evidence-descriptive,
-        no recommendations) both exist as distinct grounded blocks; spec flow-back
-        (capability.md + provenance-grounding.md + log entry) recorded.
+13. [ ] The grounded key-findings block (produced last, shown first, **present iff
+        headline claims are made — conditional-required, never forced**) and the
+        separate bottom conclusions block (evidence-descriptive, no recommendations)
+        exist as distinct grounded block kinds; spec flow-back (capability.md +
+        provenance-grounding.md + log entry) recorded.
 13a. [ ] Writer envelope: the default set (year · evidence type · appraisal label ·
         venue · cited-by · `is_retracted` flag) landed terse-and-adjacent; A/B-set
         fields (author institution first) adopted only with replay evidence.
 13b. [ ] Judge envelope v2 changes carry the verification-grade check: verdict
-        distributions diffed on the same replayed claim set, every flipped verdict
-        hand-inspected (intent-leniency watched for), findings recorded.
+        distributions diffed on the same replayed claim set; every flipped verdict
+        hand-inspected (intent-leniency watched for); a stratified sample of unchanged
+        verdicts per lane inspected; the chunk-self-certification adversarial fixture
+        passes; findings recorded.
 13c. [ ] The slice-wide discipline held: no LLM prompt or envelope surface changed
         without before/after replay evidence (generation → output quality;
         verification → verdict-shift inspection).
@@ -53,7 +59,12 @@ The task is **done only if every box holds** — otherwise it is in progress, no
 15. [ ] Every adopted prompt change carries before/after replay evidence (trace
         pointers); reverted changes noted.
 16. [ ] Anti-overfit pins recorded: planner replay across all 7 v2-question-taxonomy
-        categories; extraction/synthesis spot-checks on the non-mission recorded project.
+        categories; extraction/synthesis spot-checks on the non-mission recorded
+        project; deterministic no-mission-vocabulary check on every refined prompt;
+        desk review of each rule against the 7 taxonomy shapes; the
+        full-chain-per-category limit recorded honestly.
+16a. [ ] Loop bounds held: ≤3 refinement rounds per surface, ≤30 live component replays
+        total — or the stop condition fired and was escalated, never silently exceeded.
 17. [ ] The RETRO's extraction rules are validated (kept/amended/replaced) by replay —
         not still an unvalidated claim. Junk judge built only if its trigger fired, with
         flag-not-drop accounting.
@@ -71,6 +82,10 @@ The task is **done only if every box holds** — otherwise it is in progress, no
         wall-clock + in/out counts persist durably from every run.
 22. [ ] Planner history is native message arrays, provider-neutral (no
         OpenAI-specific conversation state), bounds/sanitisation preserved.
+22a. [ ] `_discover_themes` validator rejection detail persists (log + provenance),
+        no longer Langfuse-only.
+22b. [ ] OpenAlex country filter wire-verified and in the `scope_filters` grammar;
+        Overton `publisher_country` key verified live (closes the 017 open item).
 
 ### Rehearsal (terminal)
 
