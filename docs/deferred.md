@@ -189,7 +189,7 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   v2's central lesson is structurally honoured: no single LLM query is load-bearing
   (validated multi-query fan-out, all-zero → verbatim fallback).
 - **User-selectable backend scope — DISCHARGED (task 015).** `search_backend_scope`
-  (`academic` / `grey_literature` / `both`) compiles on Plan AND Config (unknown values
+  (`academic_only` / `grey_lit_only` / `both`) compiles on Plan AND Config (unknown values
   rejected on both), driving the 007 `search_backends` parameter; the harness resolves
   defaults from compiled config.
 - **Per-backend query mode — DISCHARGED as built, exploration seams remain (task 015).**
@@ -222,6 +222,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Retrieval-boost grammar v2** — rev 3.9's named companion slice: tag-based retrieval
   scoping + the 014 screen-confidence multiplier (grammar pre-decided in the task-014
   section above), one 013-surface slice; sequence before 017 or alongside it.
+  **Adjudicated at the 017 contract gate (rev 2d, user call, 2026-07-10): stays
+  deferred, eval-gated via its own 013-surface slice; 017 composes with the v1
+  grammar as-built.**
 - **Select-as-tool / shared purpose-fit-ranking tool** — the rev-3 spec-level seam:
   select's ranking machinery exposed as a tool other components (and the deep loop) could
   call, instead of each growing its own fitness heuristics.
@@ -478,7 +481,11 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   also registers its tag extractor next to its mapper — `_provider_tags` dispatches by
   backend name and silently yields no tags for unknown names (`_MAPPERS` and the tag
   branches are two structures today; unify or add exhaustiveness enforcement when backend
-  #3 lands — review adjudication, 2026-07-06).
+  #3 lands — review adjudication, 2026-07-06). **Sharpened trigger (user live
+  observation, 2026-07-10, recorded at the 017 gate):** classify's open
+  methodological/structural tag vocabulary fragments at live scale, isolating
+  documents — consolidation becomes useful there first; still an orchestrator-family
+  seam with the trigger unfired in v1 (one run per project).
 - **Langfuse follow-ons** (decision 13 ships the baseline: env-gated client, full-I/O
   spans, in-span scores, no-op with nothing configured, loud on partial config / missing
   host): runtime prompt-registry deployment (labels/environments, emergency-edit
@@ -705,12 +712,14 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   backends (`extraction_backend.py`, `ranking.py`, `facet_grouping.py`,
   `synthesis_backend.py`, `grounding_judge.py`) ride it, heterogeneous call-sites
   preserved (ranking's in-span trace score via the `after` hook).
-- **Harness failure-event append dies inside an aborted transaction** (012 live check,
-  standing behaviour — predates 012, affects every component): a server-side DB error
-  mid-component leaves the connection's transaction aborted, so `_run_scope_component`'s
-  `component.failed` event INSERT itself fails (`InFailedSqlTransaction`) — the run dies
-  loudly but without its failure event recorded. Fix belongs in the harness (append the
-  failure event on a fresh transaction/rollback first); repo-wide, not group-specific.
+- **Harness failure-event append dies inside an aborted transaction — DISCHARGED
+  (task 017).** The EB capability-runner's failure path rolls back the component
+  transaction first and appends `component.failed`/`run.failed` idempotently on a
+  fresh transaction against the pre-committed run row (`runner.py::
+  _record_failure_backstop`; contract rev 2.5 adversarial finding 7). Honestly
+  scoped: the fix lives at the runner layer (the product path); a component driven
+  directly through `run_harness` outside the runner (the zero-egress skeleton smoke)
+  retains the old behaviour — acceptable, the runner is the product path.
 
 ## Synthesise (task 013 seams)
 
@@ -879,6 +888,39 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   size. Behaviour-preserving, test-pinned (byte-identical first-window payload + the
   prefix-hydration proof).
 
+## Orchestrator (task 017 seams)
+
+- **The LLM EB-expert capability agent** — the JIT directive-authoring expert
+  sub-agent (system-prompted as an evidence-review expert; reads upstream
+  outputs to author each component's directive; makes reasoned
+  surface-vs-settle calls; carries domain expertise into a more cohesive
+  artefact). Its drop-in seam is `runner.py::leg_directive(plan, step,
+  upstream_state)` — v1 returns the composer's directive delta unchanged. Own
+  slice, recommended post-eval (directive quality is unmeasurable before
+  evals). Contract rev 2c, user + lead converged.
+- **Plan-field ↔ chat-turn provenance** — v1 persists the approved plan
+  object (`orchestration_plan` rows), not per-field conversation
+  back-references; the planning transcript is ephemeral CLI state. The
+  spec's provenance rule (plan-as-object) waits for the workspace cluster.
+- **Resume-engine design requirement** — 017 ships per-component commits, no
+  resume engine (re-run-from-top accepted for 017/018; contract decision 7).
+  The engine's requirement recorded from the 2026 durable-execution
+  consensus (rev 2.4b): checkpoint state serialization + an **idempotency
+  key persisted before any interruption** so a resumed action runs exactly
+  once.
+- **Steering conversational half** — narration voice (the demo's second
+  posture) · `clarify`/`escalate` parking on durable signals ·
+  `agent_judgement_routed` residual events (require runtime agent
+  discretion the deterministic runner lacks) · free-text steering →
+  replanning · mid-run mode *suppression* rules. All stay out of 017 by
+  contract (Out-of-scope); check-in content stays deterministic renders.
+- **Runner-visible token-usage aggregate** — as-built, every LLM backend
+  discards `_usage` after Langfuse tracing, so 017's dev summary log
+  carries wall-clocks only; per-component tokens are read in Langfuse. A
+  runner-visible single-line usage aggregate needs a usage-return refactor —
+  arrives with that refactor or the component-progress protocol (contract
+  decision 11, rev 2.6).
+
 ## Data model / evidence
 
 - **`supersedes` edge on `source_snapshot`** — human-asserted pointer from a corrected re-upload
@@ -919,14 +961,18 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Execution / collaboration / ops
 
-- **Harness failure-event write on an aborted transaction** (013 review stack,
-  2026-07-08) — every `run_harness` node's exception handler appends the
-  `component.failed` event on the same connection; a DB-error exception
-  (constraint violation, driver error) leaves the transaction aborted, the
-  event write itself fails, and no audit record survives. 013's synthesise
-  node avoids the known case with a pre-write guard; the general fix
-  (savepoint around component execution, or event write after rollback) is a
-  harness slice.
+- **Harness failure-event write on an aborted transaction — DISCHARGED for the
+  product path (task 017)** (013 review stack, 2026-07-08) — every `run_harness`
+  node's exception handler appends the `component.failed` event on the same
+  connection; a DB-error exception (constraint violation, driver error) leaves
+  the transaction aborted, the event write itself fails, and no audit record
+  survives. 013's synthesise node avoids the known case with a pre-write guard.
+  Task 017's EB capability-runner closes the gap for the product path
+  (`runner.py::_record_failure_backstop`: rollback first, `component.failed` +
+  `run.failed` idempotently on a fresh transaction — same discharge as the
+  task-012 entry above). Residual: `run_harness` driven directly outside the
+  runner (the zero-egress `skeleton.py` smoke) retains the old behaviour; an
+  in-harness fix remains a harness slice if that path ever matters.
 - **Harness node generalisation** — `_run_scope_component`,
   `_run_characterise` and `_run_synthesise` share ~30 verbatim lines of
   started/lookup/not-found/completed bookkeeping, diverging only in the

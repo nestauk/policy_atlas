@@ -1,6 +1,18 @@
 # Spec update log
 
 ## 2026-07-10
+* **Update**: [execution-orchestration § Steering modes & the routing rule](system/execution-orchestration.md)
+  — **Unattended mode** added (task 017, contract rev 2 decision 6b, user call; approved in
+  principle at the 017 contract 🛑; ADR 0014): a fourth steering mode with zero mid-run
+  interaction. Anticipated steer-points auto-resolve to **pre-declared visible default
+  resolutions carried as plan content** (pre-declarable rules per steer-point class, never
+  runtime-data-specific answers — rev 2.5 adversarial finding 6); every auto-resolution is
+  flagged, collated into the end-of-run review and marked on the run record. The firm
+  principle's wording assumed a live pause; its accountability purpose is preserved — the
+  human substance decision moves from run-time to plan-time and is never *silent*, no longer
+  always *live*. The routing-rule table gains the Unattended column; unanticipated substance
+  residuals resolve proceed-and-flag as `unconfigured_default`, the loudest flag class.
+  Approved with the 017 contract per the spec-refinement flow.
 * **Update**: [EB components](capabilities/evidence-base/components.md) (opening chain
   statement + §9) and [EB capability](capabilities/evidence-base/capability.md) (component
   skeleton) — **the mandatory EB spine** (task 016, user call at the contract gate
