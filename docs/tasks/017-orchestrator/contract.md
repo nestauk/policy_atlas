@@ -3,8 +3,13 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **drafted rev 2.4** — awaiting contract 🛑 (revs 1–2.4 were
-> shaped in the gate conversation, not yet approved). Companions:
+> **Status:** **APPROVED rev 2.4** — contract approved (before
+> planning): **2026-07-10 · Shabeer Rauf** (covering the gated set:
+> runtime egress — the planner LLM surface; one CLI entrypoint; the
+> `orchestration_plan` schema addition; the Unattended steering-mode
+> spec refinement in principle — and ratifying the gate adjudications
+> recorded in revs 2–2.4). Contract-stage adversarial review next
+> (Tier 3), then planning. Companions:
 > [v2-wizard-study.md](v2-wizard-study.md) (rev 2.2c evidence) ·
 > [orchestration-research-notes.md](orchestration-research-notes.md)
 > (rev 2.4 evidence).
