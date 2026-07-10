@@ -312,6 +312,14 @@ in place per the sections above; item 19 is the review stack itself.
   judgment — per-angle scoping per the plan's review-stack sizing.
 - **Live-trace pointers:** Langfuse traces for the planner conversations +
   the composed run (2026-07-10, project ids in the local records).
+- **Live-run economy (user call, 2026-07-10):** the review stack must NOT
+  re-run the full composed end-to-end live run unless strictly necessary —
+  it costs ~40 min wall + live spend, and this build's run is fully
+  evidenced above (plan rows, plan.compiled chain, selection provenance,
+  wall-clocks, honesty labels, dev-DB project `91d2d684` + Langfuse traces).
+  Review lanes verify against the recorded evidence + the dev DB / traces;
+  a fresh live probe needs a specific finding that the recorded run cannot
+  answer. Planner-only conversations (pennies, seconds) remain fine.
 - **Knowledge candidates** (one bullet per durable-seeming lesson, however
   raw):
   - Alembic migration-roundtrip tests must pin explicit revision targets and
