@@ -13,7 +13,8 @@ specs in [docs/specs/](../../specs/index.md).
 > [v2-wizard-study.md](v2-wizard-study.md) (rev 2.2c evidence) ·
 > [orchestration-research-notes.md](orchestration-research-notes.md)
 > (rev 2.4 evidence).
-> Contract approved (before planning): _pending_ ·
+> **Rev 2.5** (adversarial review adjudicated, 8/8 adopted) awaits the
+> user's ack of the two flagged items (findings 1 + 7) before planning.
 > Plan approved (before implementation): _pending_ ·
 > ADR: expected (the v1 orchestrator carve + the Unattended steering-mode
 > refinement; drafted at step 4).
@@ -28,6 +29,38 @@ specs in [docs/specs/](../../specs/index.md).
 > the **component config** to keep the three apart.
 >
 > **Revision history:**
+> - **rev 2.5** (2026-07-10, contract-stage adversarial review
+>   adjudicated — Codex, 8 findings: 2 blocker · 5 major · 1 minor;
+>   **8/8 adopted**, all verified against as-built code before
+>   adoption): **BLOCKER 1** — the rev-2.4a sequencing invariant
+>   overclaimed ("only deterministic surfaces" post-acquire is false
+>   against ADR 0010's section proposal + synthesise's section loop);
+>   narrowed to the plan-authorship property actually meant: no LLM
+>   surface authors or amends orchestration-plan content once acquire
+>   begins. **BLOCKER 2** — pre-run plan events don't fit the event
+>   substrate (`event_log.run_id` non-null, composite FK to `runs` —
+>   verified); plan lifecycle made **table-first** (plan rows are the
+>   audit trail; `plan.compiled` events gain plan id + version; no
+>   schema relaxation, no synthetic planning run). **3** — screening
+>   criteria compile pinned to the screen's intent INPUT at the screen
+>   boundary, never the shared `evidence_scope.intent` (search and
+>   synthesise read it too). **4** — scope-filter grammar precised
+>   (two-level shared/openalex/overton blocks; `publisher_country`
+>   Overton-only; backend enum exactly `academic_only`/
+>   `grey_lit_only`/`both`; stale deferred.md spelling fixed in
+>   flow-back). **5** — steer-point options mapped to the real
+>   directive grammar (`priority_strata` for clusters,
+>   `weight_emphasis` quality/screen_confidence for strongest/most-
+>   relevant — richer than the rev-2.2f guess). **6** — Unattended
+>   defaults restricted to pre-declarable rules per steer-point class,
+>   never runtime-data-specific answers. **7** — the recorded
+>   harness gap (failure event dies in an aborted transaction) folded
+>   in as a rider on the runner's transaction ownership: rollback
+>   first, failure event on a fresh transaction (escape valve back to
+>   deferred if non-trivial). **8** — token/cost roll-up carrier
+>   pinned developer-log-only (no `runs` summary column exists or is
+>   approved). Findings 1 + 7 flagged for user ack (claim narrowing;
+>   small scope rider).
 > - **rev 2.4** (2026-07-10, research pass — /last30days + web research
 >   on agent planning/orchestration, user-directed; findings + full
 >   adjudication in
@@ -220,10 +253,11 @@ PR landing:
 - Failure semantics productionised (decision 8): spine-leg failure
   fails the run honestly; discretionary-leg failure degrades with
   flags; bounded retry for LLM-bearing legs.
-- Plan persistence (decision 2, rev 2.2): the minimal
-  `orchestration_plan` table (the one approved schema addition) +
-  `plan.proposed` / `plan.approved` / `plan.amended` events
-  referencing it — the plan is the first decision-log entry.
+- Plan persistence (decision 2, rev 2.2; table-first rev 2.5): the
+  minimal `orchestration_plan` table (the one approved schema
+  addition) — status transitions + immutable version rows are the
+  plan's audit trail; per-component `plan.compiled` events carry
+  plan id + version.
 - Stub planner backend; `make verify` stays green, deterministic and
   egress-free.
 - Spec flow-back: the **Unattended-mode refinement** to
@@ -279,9 +313,10 @@ PR landing:
   adjustments · collation).
 - `plan.py`: additive extension only if composition needs it (the
   component config and registry semantics are reused, not reshaped).
-- Event vocabulary: `plan.proposed` / `plan.approved` / `plan.amended`
-  + steering-resolution events (event payloads, zero-schema — the 001
-  event-log substrate).
+- Event vocabulary: `plan.compiled` payloads gain plan id + version;
+  steering-resolution events ride the run context they occur in
+  (event payloads, zero-schema — the 001 event-log substrate; plan
+  lifecycle itself is table-first, rev 2.5).
 - `skeleton.py`: untouched — it stays the zero-egress walking-skeleton
   smoke.
 - Spec flow-back (the rev-2b steering refinement) / ADR /
@@ -362,10 +397,18 @@ PR landing:
    rev 2.1c's events-only posture)*. A pydantic model over: refined
    question · scoping notes (user-expressed only, never invented) ·
    backend scope (existing `search_backend_scope` vocabulary) ·
-   **scope constraints** *(rev 2.1b)* — recency window · geography —
-   compiled into the existing search `scope_filters` grammar
-   (`published_after`/`published_before` · `publisher_country`; the
-   as-built 015 directive surface), each **defaulted visibly**
+   **scope constraints** *(rev 2.1b; grammar precised rev 2.5,
+   adversarial finding 4)* — recency window · geography — compiled
+   into the as-built **two-level** search filter grammar: a `filters`
+   object with `shared` / `openalex` / `overton` blocks
+   (`search_loop.py`), recency via shared
+   `published_after`/`published_before`, geography via Overton
+   `publisher_country` (**Overton-only as-built** — whether OpenAlex
+   carries a usable geography key is a plan-time check, and the plan
+   states the asymmetry honestly if not); the backend-scope enum is
+   exactly `plan.py`'s `academic_only`/`grey_lit_only`/`both` (the
+   deferred.md variant spelling is stale — fix rides this slice's
+   flow-back). Each **defaulted visibly**
    (assumptions field) and asked about only when shape-changing, with
    one honesty caveat carried: a geography constraint is
    **publication** geography — study geography lives in the text and
@@ -377,13 +420,20 @@ PR landing:
    deferred wholesale)* — user-expressed and planner-suggested
    inclusion/exclusion criteria ("only studies with under-5s",
    "exclude opinion pieces"), a first-class, visible, editable plan
-   field; **v1 compile is deterministic composition into the scope's
-   intent/scoping text** — the surface the screen already judges
-   against, so no screen-prompt change rides this slice — and the
-   field re-targets to the structured screening directive when that
-   recorded 014 seam lands (per-criterion structured compile stays
-   that seam; unlike V2, the criteria are never invisible: they sit
-   in the plan, not buried in a rubric) · depth
+   field; **v1 compile pinned precisely (rev 2.5, adversarial finding
+   3): criteria compose into the screen's intent INPUT at the screen
+   boundary — never written into the shared `evidence_scope.intent`**
+   (which search generation and synthesise also read; as-built,
+   screen/search/synthesis all consume the one intent string, so
+   composing criteria into the scope row would leak them into query
+   generation and sectioning). The screen prompt template is
+   unchanged; its intent input grows. If plan-time design finds this
+   needs more than input composition, criteria consumption defers to
+   the 014 structured-directive seam and the field ships
+   plan-visible-only with that stated honestly. The field re-targets
+   to the structured screening directive when that seam lands
+   (unlike V2, the criteria are never invisible: they sit in the
+   plan, not buried in a rubric) · depth
    gradation (decision 4's bundle) · discretionary component set
    (decision 4's intent-fit × gradation selection, visible in the
    plan) · grouping facet ·
@@ -403,7 +453,8 @@ PR landing:
    the plan can only reference what the registry declares; a plan
    that doesn't validate is a caught error, never a silent run.
    Persistence *(rev 2.2 — user challenge held; supersedes rev
-   2.1c)*: a minimal **`orchestration_plan` table** — the plan is a
+   2.1c; lifecycle made table-first rev 2.5, adversarial finding 2)*:
+   a minimal **`orchestration_plan` table** — the plan is a
    first-class domain object, not an event-scrape. Rationale for the
    reversal: the plan is the most behaviour-bearing object in this
    slice (proposed → approved → amended at steer-points → compiled →
@@ -419,9 +470,17 @@ PR landing:
    attribution; linkage to executed component runs is the minimal
    form the implementation plan justifies (e.g. nullable `plan_id` on
    `runs`, or plan id + version carried in `plan.compiled` payloads).
-   The `plan.proposed` / `plan.approved` / `plan.amended` events
-   still emit, referencing the plan row — the decision-log trail and
-   the durable object are complements, not alternatives. What stays
+   **The plan lifecycle is table-first** *(rev 2.5)*: as-built,
+   `event_log.run_id` is non-null and composite-FK-bound to `runs`
+   (verified — `schema.py`), so pre-run `plan.proposed`/`plan.approved`
+   events cannot exist on this substrate without a schema relaxation
+   or a synthetic planning-run row — neither is taken. The plan rows'
+   status transitions + version rows + attribution ARE the plan's
+   audit trail (the "first decision-log entry" is satisfied by the
+   decision-log projection reading plan rows alongside events);
+   steering amendments persist as new plan version rows; execution-
+   time `plan.compiled` events gain plan id + version so every run
+   back-references the plan version it executed. What stays
    out: the artefact-like machinery (blocks/units, versioning UX,
    change-log surfaces — workspace cluster) and the capability-run
    entity (still deferred); the run's execution identity in v1
@@ -514,17 +573,23 @@ PR landing:
    consumption — lands together in 018's refine loop; rev 2.3b).
    Structured output validated fail-closed (pydantic; the
    planner cannot smuggle components or parameters past the
-   registry). **Sequencing invariant** *(rev 2.4a, research-informed
-   — the plan-then-execute security literature's fixed-before-
-   untrusted-reads property, stated so the build can't accidentally
-   break it)*: **the slice's one LLM planning surface completes
-   before the chain touches untrusted content.** Once acquire
-   begins, corpus-derived text (titles, abstracts, theme labels,
-   rationale strings) reaches only deterministic surfaces — check-in
-   renders read by the human, never by a prompt-bearing compiler —
-   and every mid-run plan amendment is user-authored input compiled
-   fail-closed against the declared grammar. Third-party corpus text
-   therefore has no machine path into plan content. Honesty rules
+   registry). **Sequencing invariant** *(rev 2.4a; narrowed rev 2.5,
+   adversarial finding 1 — the 2.4a wording claimed "only
+   deterministic surfaces" for the whole run, which is false against
+   ADR 0010's bounded section-proposal call and synthesise's section
+   loop, both prompt-bearing over corpus substrate post-acquisition)*:
+   **no LLM surface authors or amends orchestration-plan content once
+   acquire begins.** The planner completes pre-acquisition; every
+   mid-run plan amendment is user-authored input compiled fail-closed
+   against the declared grammar; check-in content is deterministic
+   renders. The capability-internal prompt surfaces that legitimately
+   read corpus text post-acquisition (screen · classify · characterise
+   · extract · group · synthesise, including its section proposal) are
+   unchanged by this slice and write component/artefact state under
+   their own verification machinery — never plan state. Corpus text
+   therefore has no machine path into **plan content**, which is the
+   injection-boundary property the plan-then-execute security
+   literature names. Honesty rules
    carried from the product voice: never
    promise findings, never state what the evidence says, assumptions
    surfaced not buried. The demo planner prompt is an anecdotal
@@ -543,7 +608,14 @@ PR landing:
      **Unattended never pauses** — anticipated steer-points
      auto-resolve to the plan's visible default resolutions
      (decision 2), every auto-resolution flagged, collated and marked
-     on the run record. Substance is thereby honoured in every mode:
+     on the run record. Defaults are **pre-declarable rules per
+     steer-point class, never runtime-data-specific answers** *(rev
+     2.5, adversarial finding 6 — trigger data like cluster names
+     exists only after `select` runs)*: e.g. "on any
+     deepening-selection trigger: proceed as proposed and flag"; the
+     user-nominated-cluster trigger evaluates against nominations
+     already in the plan (must-includes / priority clusters), so
+     every rule is checkable at approval time. Substance is thereby honoured in every mode:
      live pause, or pre-declared visible defaults — never silent.
      This is a **spec refinement** to execution-orchestration
      § Steering modes (the firm principle's wording assumes a live
@@ -559,25 +631,31 @@ PR landing:
      trigger fires — the selection **excludes a large or
      user-nominated cluster**, or the **base is thin** (the third
      spec trigger, policy-unmeetable, is n/a — no policy object in
-     v1). **Options speak user intents** *(rev 2f, user call)*:
-     deepen named clusters (tag boosts / must-include pins) · "just
-     the strongest evidence" (appraisal-tier-weighted ordering) ·
-     "most relevant to my question" (relevance-weighted ordering) ·
-     adjust budget · as proposed — each compiled to the declared
-     selection grammar; an intent the grammar cannot express yet is
-     an honest "not yet" (recorded seam), never a silent
-     approximation. Exact expressible set is a plan-time check
-     against `select`'s as-built directive fields. After adjustment,
-     `select` re-runs cheaply; `extract` has not yet spent.
+     v1). **Options speak user intents, mapping pinned to the
+     as-built grammar** *(rev 2f, user call; mapping precised rev
+     2.5, adversarial finding 5 — `select.py`'s directive keys are
+     `budget` · `must_include_ids` · `boosts` · `weight_emphasis` ·
+     `priority_strata`, weight signals `recency` · `quality` ·
+     `text_basis` · `screen_confidence` · `origin`)*: deepen named
+     clusters → `priority_strata` (+ `must_include_ids` for named
+     documents) · "just the strongest evidence" → `weight_emphasis`
+     on `quality` · "most relevant to my question" →
+     `weight_emphasis` on `screen_confidence` (named honestly as the
+     relevance proxy — the closest as-built signal) · adjust budget →
+     `budget` · as proposed → no directive change. Exact emphasis
+     values plan-pinned; an intent the grammar cannot express is an
+     honest "not yet" (recorded seam), never a silent approximation.
+     After adjustment, `select` re-runs cheaply; `extract` has not
+     yet spent.
    - **Bounded steering application, everywhere**: at any pause the
      user may continue · adjust not-yet-run legs' directives within
      the declared grammar (incl. the remaining-legs nudge and a mode
      change) · **stop the run** (clean abort: committed legs stand,
      run honestly marked abandoned, no artefact — synthesise is the
      minting terminus). Never re-runs completed legs, never free-text
-     replanning. Every steering response is a user-attributed
-     `plan.amended` event (the spec's "human substance enters
-     honestly in provenance").
+     replanning. Every steering response persists as a new
+     user-attributed plan version row (the spec's "human substance
+     enters honestly in provenance"; table-first, rev 2.5).
    - **Minimal/Unattended collation**: flagged events (degraded legs,
      hatch firings, retries, auto-resolutions, coverage caveats)
      collate into an end-of-run review.
@@ -614,7 +692,18 @@ PR landing:
    construction; rev 2.1d). LLM-bearing legs get **one
    bounded retry** before failing (which legs, plan-pinned; the
    characterise twice-in-a-row wobble is the motivating prior). All
-   outcomes reason-coded in events; nothing silently absorbed.
+   outcomes reason-coded in events; nothing silently absorbed —
+   **including DB-error failures** *(rev 2.5, adversarial finding 7,
+   folding the recorded repo-wide harness gap into this slice)*: the
+   deferred ledger records that a `component.failed` append dies
+   inside an aborted transaction (the event write itself fails and no
+   audit record survives); since decision 7 makes the runner own
+   per-component transactions anyway, the runner's failure path
+   **rolls back first and appends the failure event on a fresh
+   transaction** — discharging the deferred.md harness entry. If
+   plan-time design finds this non-trivial, it returns to deferred
+   with the failure-semantics claim narrowed to non-DB-aborting
+   failures (escape valve, must not grow the slice).
 
 9. **Retrieval-boost grammar v2 — adjudicated: does NOT ride 017**
    *(rev 2d, user call at this gate)*. `deferred.md` pre-registered
@@ -650,7 +739,7 @@ PR landing:
     dress rehearsal is explicitly 018's), run at **Moderate** so the
     deepening-selection steer-point fires live and one steering
     adjustment (an intent-vocabulary option) is exercised and lands
-    as a `plan.amended` event. Recorded: the composed chain vs the
+    as a new plan version row. Recorded: the composed chain vs the
     approved plan (provably the same — the audit point), per-leg
     wall-clocks, failure/degrade behaviour if any leg wobbles, the
     minted artefact's honesty labels intact.
@@ -662,15 +751,19 @@ PR landing:
     low single-digit dollars.
 
 11. **Telemetry: plan + steering events + existing component events;
-    no new protocol.** The plan lifecycle is auditable from the event
-    log (`plan.proposed` → `plan.approved` → per-component
-    `plan.compiled` → component events, with `plan.amended` +
-    steering-resolution events interleaved). The run-record summary
-    carries per-leg wall-clocks **and a per-leg token/cost roll-up
-    from the existing usage telemetry** *(rev 2.4c — "token bleed" is
-    the season's named orchestration cost failure mode; the roll-up
-    feeds the depth seam's bands and the plan's time-band honesty at
-    near-zero cost)*. **The roll-up is developer-side telemetry only**
+    no new protocol.** The plan lifecycle is auditable table-first
+    (rev 2.5): `orchestration_plan` status transitions + version rows,
+    joined to execution via per-component `plan.compiled` events
+    carrying plan id + version, with steering-resolution events on
+    their run context. Per-leg wall-clocks **and a per-leg token/cost
+    roll-up from the existing usage telemetry** are emitted as an
+    end-of-run structured-log summary (+ visible in Langfuse) *(rev
+    2.4c; carrier pinned rev 2.5, adversarial finding 8 — the `runs`
+    table has no summary payload column and none is approved: the
+    roll-up is developer-log-only, no durable carrier implied)*.
+    "Token bleed" is the season's named orchestration cost failure
+    mode; the roll-up feeds the depth seam's bands and the plan's
+    time-band honesty at near-zero cost. **The roll-up is developer-side telemetry only**
     *(user call, 2026-07-10)*: no token count or monetary cost ever
     reaches a user-facing surface — the plan and check-ins speak in
     **time bands**, which cost data may inform invisibly; the
@@ -778,7 +871,7 @@ the blocker; don't push through.
   omits/reorders a spine leg) · fail-closed compile (unknown
   component/parameter/directive rejects — caught error, never a
   silent run) · approved-plan ↔ executed-config equivalence (the
-  round-trip property, `plan.amended` included) · depth bundles
+  round-trip property, amendment version rows included) · depth bundles
   compile only to existing directive surfaces · nudge re-derivation
   (each option yields a valid full plan + band) · steering: mode →
   pause-set compile; the deepening-selection triggers (fault-injected

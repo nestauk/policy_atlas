@@ -1,7 +1,7 @@
 # Rubric: 017-orchestrator
 
 Core completion criteria. The task is **done only if every box holds** — otherwise it is
-in progress, not done. (Rev 2 — tracks contract rev 2.)
+in progress, not done. (Rev 2.5 — tracks contract rev 2.5.)
 
 1. [ ] Implementation satisfies [contract.md](contract.md).
 2. [ ] `make verify` passes — green, deterministic, zero-egress (stub planner; fixture
@@ -22,9 +22,12 @@ in progress, not done. (Rev 2 — tracks contract rev 2.)
        executed config are provably the same (round-trip property, amendments included).
 8. [ ] **Failure semantics test-pinned** (fault-injected): spine-leg failure fails the
        run honestly with no downstream legs; discretionary-leg failure degrades with
-       reason-coded events and synthesise takes the deepest successful reference; a
+       reason-coded events and synthesise takes the deepest successful reference
+       (transitive resolution — the whole surviving chain feeds the artefact); a
        failed stage's run id never feeds downstream; the bounded-retry rule fires as
-       plan-pinned.
+       plan-pinned; a DB-error failure still records its `component.failed` event
+       (rollback first, fresh transaction — contract decision 8 rev 2.5), unless the
+       escape valve was taken with written justification.
 9. [ ] **Depth compile bounded and the nudge anchored**: gradation bundles compile only
        to existing directive surfaces (search depth · stage-2 screen · characterise ·
        deep chain · selection budget · grouping facet); nothing compiles into the
@@ -36,8 +39,8 @@ in progress, not done. (Rev 2 — tracks contract rev 2.)
         in every mode except Unattended; its intent-vocabulary options (clusters ·
         strongest · most-relevant · budget · as-proposed) compile to the declared
         selection grammar with inexpressible intents refused honestly; steering
-        adjustments touch only not-yet-run legs and land as user-attributed
-        `plan.amended` events; Unattended auto-resolves to the plan's visible defaults
+        adjustments touch only not-yet-run legs and land as user-attributed plan
+        version rows; Unattended auto-resolves to the plan's visible defaults
         with every resolution flagged + collated; abort leaves committed legs and an
         honestly-abandoned run with no artefact.
 11. [ ] **Sub-agent boundary real**: the orchestrator delegates execution to the EB
@@ -53,11 +56,11 @@ in progress, not done. (Rev 2 — tracks contract rev 2.)
         in the tree; the sequencing invariant holds (the planner completes before
         acquire begins — no prompt-bearing planning surface runs mid-chain, and every
         mid-run amendment is user-authored, deterministically compiled).
-13. [ ] **Plan lifecycle auditable and durable**: the `orchestration_plan` row(s) carry
-        the approved plan and its immutable amendment versions; `plan.proposed` →
-        `plan.approved` → [`plan.amended` + steering resolutions] → `plan.compiled` →
-        component events reconstruct the run — including every steering interaction —
-        and reference the plan row they concern.
+13. [ ] **Plan lifecycle auditable and durable (table-first)**: the
+        `orchestration_plan` rows carry the proposed/approved plan and its immutable
+        amendment versions with attribution; per-component `plan.compiled` events
+        carry plan id + version; plan rows + events together reconstruct the run —
+        including every steering interaction — with no orphan state in either.
 14. [ ] **Posture honesty**: per-component commit shape verified (mid-chain failure
         leaves prior legs committed and the run honestly failed); no resume implied;
         substance never silent in any mode.
@@ -72,7 +75,7 @@ in progress, not done. (Rev 2 — tracks contract rev 2.)
         probe) and one compiled scope constraint; (b) one
         composed end-to-end run at modest gradation, at Moderate, with the
         deepening-selection steer-point exercised live and one intent-vocabulary
-        adjustment landing as `plan.amended`, plan↔chain equivalence, per-leg
+        adjustment landing as a new plan version row, plan↔chain equivalence, per-leg
         wall-clocks and intact honesty labels; (c) fault-injected failure-semantics +
         scripted Unattended tests (no live fault probe).
 17. [ ] Gate adjudications recorded (steering core + Unattended mode · durability
