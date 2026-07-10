@@ -13,6 +13,8 @@ from typing import Any, Literal, Self, TypedDict
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from policy_atlas.plan import COMPONENT_REGISTRY
+from policy_atlas.schema import DIRECTIVE_STRING_MAX
+from policy_atlas.screen import CRITERIA_LIST_MAX
 
 BackendScope = Literal["academic_only", "grey_lit_only", "both"]
 SearchEffort = Literal["rapid", "standard", "deep"]
@@ -90,18 +92,24 @@ NAMED_PAIRINGS: dict[str, tuple[SearchEffort, AnalysisDepth]] = {
     "deeper": ("deep", "deep"),
 }
 
-# Display bands are seeded from measured anchors, not from the target comments:
-# acquire 24s, screen 36s, ingest 134.8s, synthesise 589.9s at 32 docs; the 015
-# full deep search episode was 343s; the standard loop estimate is 2.5-3.5 min;
-# the demo deep prior is ~95 min. Targets remain calibration notes only:
-# lighter <= ~10 min, standard ~15-30 min, deeper ~90 min.
+# Display bands are seeded from measured anchors, not from the target comments.
+# 017 live check (2026-07-10, heat-pump question, standard x standard, budget
+# 10, 22 full texts): acquire 21s + screen 63s + classify 36s + appraise 0.1s +
+# ingest 107s + stage2 47s + characterise 53s + select 37s+38s + extract 393s +
+# group 569s + synthesise 1047s = ~40 min end to end — the standard-depth rows
+# below are seeded from that run. Landscape rows keep the 016 anchors (acquire
+# 24s, screen 36s, ingest 134.8s; landscape-profile synthesis unmeasured live);
+# deep-depth rows keep the demo deep prior (~95 min) + 015's full search
+# episode (343s). Targets remain calibration notes only (lighter <= ~10 min,
+# standard ~15-30 min, deeper ~90 min); the standard target-vs-measured gap
+# (~40 min measured) is the recorded depth-seam calibration item for 018/eval.
 TIME_BANDS: dict[tuple[SearchEffort, AnalysisDepth], str] = {
     ("rapid", "landscape"): "~10-15 min",
     ("standard", "landscape"): "~15-20 min",
     ("deep", "landscape"): "~20-25 min",
-    ("rapid", "standard"): "~15-25 min",
-    ("standard", "standard"): "~15-30 min",
-    ("deep", "standard"): "~25-40 min",
+    ("rapid", "standard"): "~30-45 min",
+    ("standard", "standard"): "~30-45 min",
+    ("deep", "standard"): "~35-50 min",
     ("rapid", "deep"): "~75-90 min",
     ("standard", "deep"): "~80-95 min",
     ("deep", "deep"): "~90-100 min",
@@ -368,8 +376,24 @@ class OrchestrationPlan(BaseModel):
             The validated list.
 
         Raises:
-            ValueError: If any item is empty or padded with whitespace.
+            ValueError: If any item is empty or padded with whitespace, or —
+                for ``screening_criteria`` — breaches the screen directive
+                grammar's caps (the compile target must accept every valid
+                plan by construction; live check 017 caught a >200-char
+                criterion validating here and rejecting at the screen
+                boundary).
         """
+        if info.field_name == "screening_criteria":
+            if len(values) > CRITERIA_LIST_MAX:
+                raise ValueError(
+                    f"screening_criteria must have at most {CRITERIA_LIST_MAX} entries"
+                )
+            for value in values:
+                if len(value) > DIRECTIVE_STRING_MAX:
+                    raise ValueError(
+                        "screening_criteria entries must be at most "
+                        f"{DIRECTIVE_STRING_MAX} characters"
+                    )
         return [_require_clean_string(value, field_name=info.field_name) for value in values]
 
     @field_validator("components")

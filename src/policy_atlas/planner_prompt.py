@@ -122,7 +122,9 @@ yourself.
   outcomes...). Never invent scoping the user did not give.
 - screening_criteria: inclusion/exclusion rules for individual documents
   ("only studies with under-5s", "exclude opinion pieces") — user-expressed,
-  plus ones you suggest when the intent type warrants them.
+  plus ones you suggest when the intent type warrants them. Each criterion
+  is ONE short rule, strictly under 200 characters; split compound rules
+  into separate criteria rather than writing long sentences.
 - backend_scope: academic_only | grey_lit_only | both. Default both.
 - Scope constraints: published_after / published_before (ISO dates) for a
   recency window; publisher_country for grey-literature geography. A
@@ -142,8 +144,9 @@ yourself.
   synthesise. Discretionary, chosen by you for intent-fit:
   - characterise: maps the corpus landscape (themes, coverage, gaps).
     Fits landscape and most questions.
-  - screen_stage2: a precision re-screen of full text. Fits whenever
-    documents are fetched and precision matters (standard/deep).
+  - screen_stage2: a precision re-screen of full text. ONLY available when
+    analysis_depth is standard or deep — never with landscape (the landscape
+    rung does not buy the full-text confirmation pass).
   - select -> extract -> group (the deep chain, in that order, all or
     none from select onward): extract pulls structured intervention-outcome
     findings from selected documents and group organises them by facet.
@@ -153,7 +156,10 @@ yourself.
     chain does not fit at ANY depth — compose without it and let depth buy
     search effort and synthesis thoroughness instead.
 - component_rationale: one honest sentence per discretionary component you
-  include (or pointedly exclude), so the selection is visible.
+  include (or pointedly exclude), so the selection is visible. Keys MUST be
+  exact single component names from the list above — characterise,
+  screen_stage2, select, extract, group — one entry per component, never a
+  combined key like "select_extract_group".
 - grouping_facet: intervention | outcome | population — only when group runs.
 - steering_mode: frequent | moderate | minimal | unattended. Default
   moderate. Mention that unattended runs never pause: flagged decisions

@@ -243,3 +243,18 @@ def test_expected_artefact_shape_and_time_band_are_deterministic() -> None:
     assert grounded.time_band == TIME_BANDS[("standard", "standard")]
     assert facet.expected_artefact_shape == "facet-organised synthesis over extracted findings"
     assert facet.time_band == TIME_BANDS[("deep", "deep")]
+
+
+def test_screening_criteria_caps_mirror_screen_directive_grammar() -> None:
+    """Plan-model caps match screen.py's directive caps by construction.
+
+    Live check 017: a >200-char criterion validated on the plan, composed,
+    and rejected at the screen boundary mid-run. The plan model must reject
+    anything its compile target rejects.
+    """
+    with pytest.raises(ValidationError, match="at most 200 characters"):
+        _plan(screening_criteria=["x" * 201])
+    with pytest.raises(ValidationError, match="at most 50 entries"):
+        _plan(screening_criteria=[f"criterion {i}" for i in range(51)])
+    ok = _plan(screening_criteria=["x" * 200] + [f"criterion {i}" for i in range(49)])
+    assert len(ok.screening_criteria) == 50
