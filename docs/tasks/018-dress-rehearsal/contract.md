@@ -1,8 +1,11 @@
 # Task contract: 018-dress-rehearsal
 
-> **Status:** drafted. Contract approved (before planning): _pending_ ·
+> **Status:** drafted (rev 2 — user feedback 2026-07-10: key-findings and conclusions are
+> separate blocks; writer-envelope widening is evidence-gated not assumed; baselines come
+> from the 017 slice runs with a post-model-refresh re-baseline; the output-shape change
+> is a design fork, not a pre-commitment). Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ · ADR: due (synthesis output-shape —
-> supersedes the 013 claims-are-the-prose emission decision).
+> records the fork decision; supersedes/amends the 013 emission decision accordingly).
 
 ## Goal
 
@@ -23,9 +26,10 @@ here flows back as the eval-slice convention.
 ## Deliverable
 
 1. **Code riders** (conventional diffs, Phase A below) landed on `dev` via PR.
-2. **Synthesis output-shape v2** (Phase B): prose-first emission with claims as char-offset
-   span annotations into the prose; grounded conclusion-block front door; widened judge and
-   writer envelopes. ADR recorded.
+2. **Synthesis output quality** (Phase B): the prompt-vs-structural fork decided on
+   evidence and shipped; the grounded key-findings block (produced last, shown first) and
+   the separate bottom conclusions block; judge envelope v2; evidence-gated writer-envelope
+   widening. ADR + spec flow-back recorded.
 3. **Refined prompt surfaces** (Phase C) with before/after replay evidence per change and
    anti-overfit pins against the v2 question taxonomy.
 4. **A completed dress rehearsal**: pre-run deep project + live standard run on a
@@ -35,11 +39,12 @@ here flows back as the eval-slice convention.
 ## Read first
 
 - [provenance-grounding](../../specs/system/provenance-grounding.md) — the annotation
-  layer, gap grading, summaries, and the **conclusion-block front door** ("the 'what did
-  it conclude' front door is a grounded key-findings/conclusion block, inside the
-  grounding economy"). The prose redesign must stay inside this spec; note the spec speaks
-  of "the prose **and its epistemic annotations**" — block-text-as-claim-join was a 013
-  implementation choice, not spec intent.
+  layer, gap grading, summaries, and the front door ("the 'what did it conclude' front
+  door is a grounded key-findings/conclusion block, inside the grounding economy" —
+  note the owner's 2026-07-10 refinement splits this into two blocks; Phase B). Any
+  redesign must stay inside this spec; the spec speaks of "the prose **and its epistemic
+  annotations**" — block-text-as-claim-join was a 013 implementation choice, not spec
+  intent, so both fork options are spec-compatible.
 - [EB capability](../../specs/capabilities/evidence-base/capability.md) +
   [components](../../specs/capabilities/evidence-base/components.md) — synthesise §,
   extract §.
@@ -97,39 +102,81 @@ here flows back as the eval-slice convention.
    + data `UPDATE` on existing rows), the `EffectDirection` literal, extraction prompt
    examples/guidance, spread readers pass through untouched (they iterate the tuple).
 
-### Phase B — synthesis output-shape v2 (the core; ADR due)
+### Phase B — synthesis output quality (the core; design fork + ADR)
 
-The disjointedness is structural, not prompt-level: block text is literally the `\n\n`
-join of independently validated claim texts (`synthesise.py:2182`), the writer is
-forbidden free prose, and no field exists for connective tissue. Redesign:
+**The problem, honestly stated with both bodies of evidence.** The as-built structure is
+claims-are-the-prose: block text is literally the `\n\n` join of independently validated
+claim texts (`synthesise.py:2182`), the writer is forbidden free prose, and no field
+exists for connective tissue — a structural ceiling on authored narrative. *But* the
+demo branch's prompt-level changes alone (voice rules + gpt-5.5 writer, decisions made
+fast and not thought through) produced a report the owner judged quite good. So whether
+the ceiling actually binds at the quality bar is an open question, and the redesign is a
+**fork decided at the plan step, not a contract pre-commitment**:
 
-- **Prose surface decoupled from claim units.** The writer authors section prose that
-  answers the intent; typed claims anchor as **char-offset spans into that prose**
-  (`addressable_unit` locators already carry start/end — no DB migration expected).
-  Emission wire: prose + claims-with-spans, span-binding validated deterministically
-  (exact substring), salvage lanes preserved.
-- **Every grounding invariant survives**: per-type deterministic validators, judge lanes
-  (finding/chunk/reasoning), pattern-count recomputation, gap grading + coverage base,
-  flag-not-drop, honesty flags, verified-verbatim citations. Prose text not covered by
-  any claim span is connective tissue — it must carry no evidential assertion; the judge
-  rubric owns that line and the ADR records it.
-- **Conclusion-block front door** (spec-backed): a grounded key-findings/conclusion block,
-  cited to sources, rendered first on the surface.
+- **Option A — prompt-first, structure kept.** Claim texts written as flowing,
+  takeaway-first prose; ordering guidance; the demo voice rules carried into src;
+  possibly softer joins. Cheapest; annotation layer unchanged by construction.
+- **Option B — prose-first, claims as spans.** The writer authors section prose
+  answering the intent; typed claims anchor as **char-offset spans into that prose**
+  (`addressable_unit` locators already carry start/end — no DB migration expected);
+  span-binding validated deterministically (exact substring); salvage lanes preserved.
+  Structurally removes the ceiling; more machinery, and the annotation layer must be
+  re-proven.
+
+**Fork protocol (plan step):** (1) cheap probe first — replay the demo-branch prompt
+approach on a recorded 017 substrate with the Phase A models and judge whether the
+residual gap to the quality bar is structural or prompt-reachable; (2) web research on
+attributed report generation (prose-first vs claim-first, attribution-vs-fluency
+evidence) feeds the same decision; (3) options laid out side by side (Artifact) with
+pros/cons for **both prose quality and annotation-layer quality**; (4) user decides at
+the plan 🛑. The ADR records the fork, the evidence, and the decision — superseding or
+amending 013's emission decision accordingly.
+
+**Invariant under either option**: per-type deterministic validators, judge lanes
+(finding/chunk/reasoning), pattern-count recomputation, gap grading + coverage base,
+flag-not-drop, honesty flags, verified-verbatim citations all survive unweakened. Under
+Option B, prose outside claim spans is connective tissue and must carry no evidential
+assertion — the judge rubric owns that line.
+
+**Independent of the fork, Phase B also lands:**
+
+- **Two new block kinds, per spec + owner direction (2026-07-10) — distinct blocks,
+  never merged:**
+  - **Grounded key-findings block** — the headline evidence claims at their appropriate
+    grade, cited to sources, **produced last, shown first** (capability spec § artefact:
+    production ≠ presentation), conditional-required (present iff headline claims are
+    made), distinct from the citation-free artefact summary.
+  - **Conclusions block** — sits at the **bottom** of the report: what this evidence
+    amounts to against the user's question. Evidence-descriptive per the EB scope rule —
+    **no recommendations / decision-answer content**. Grounded, cited to sources, never
+    to sibling blocks. *Spec refinement rides this slice*: the written specs carry the
+    key-findings block but no separate bottom conclusions block (only
+    provenance-grounding's compound "key-findings/conclusion block" phrase) — the
+    two-block structure is an owner decision (2026-07-10) flowing back into
+    capability.md + provenance-grounding.md with a log entry.
 - **Judge envelope v2**: for finding claims the judge additionally sees the finding's
   verified source quote *and its chunk text*, plus the intent/section focus (today it
   judges claim text against cited chunks blind to the question). Eval-sensitive by
   record — the per-surface replay loop is the coverage that licenses touching it now.
-- **Writer envelope widening**: document metadata (year, evidence type, appraisal label)
-  on `query_findings` records and `search_chunks` results (today: title only, no year).
-- **Annotation-layer purpose statement** rides the ADR: annotations = the epistemic layer
-  (provenance, tiers, gaps, flags) rendered *in* the prose (RETRO locked decision); prose
-  = the answer to the intent.
+- **Writer envelope widening — evidence-gated, not assumed.** Candidate metadata on
+  `query_findings` records and `search_chunks` results (today: document title only, not
+  even year): publication year · evidence type · appraisal label · **author
+  institution(s)** · publisher/venue · possibly cited-by/FWCI. Hypothesis: the writer
+  triages citations better when it can see recency/quality/provenance. Risk: context
+  noise that degrades prose or distracts citation choice. The plan step designs a
+  minimal A/B (same substrate, envelope with vs without the added fields, judged on
+  citation choice + prose); fields are adopted per evidence, not wholesale. Web-research
+  input on metadata-enriched writer contexts feeds the field shortlist.
 
 ### Phase C — refine-replay loop + rehearsal
 
-- **Baseline capture first**: recorded outputs on the two existing dev-DB projects
-  (heat-pump `91d2d684`, finance `e8ac8418`) + their Langfuse traces, before any prompt
-  change — every refinement carries before/after evidence.
+- **Baselines — two-stage (user pin, 2026-07-10).** *Baseline-0*: the most recent runs
+  from the **017 slice itself** (dev-DB project `91d2d684`, the composed live run, plus
+  the first-attempt project `128c0a81`, with their Langfuse traces) — NOT the
+  demo-branch runs. These predate the Phase A model refresh, so they are the historical
+  reference only. *Baseline-1* (the true loop baseline): after Phase A lands, replay the
+  same substrates on the new models with unchanged prompts — every prompt refinement is
+  judged against baseline-1, so model effects and prompt effects are never conflated.
 - **Loop protocol** per surface: change (lead-authored) → **per-component replay** on
   pinned inputs (extract on the same selected docs; synthesise on the same substrate) →
   judge (user taste + lead) → pin or revert. Full composed live runs are NOT the loop
@@ -149,9 +196,10 @@ forbidden free prose, and no field exists for connective tissue. Redesign:
   flag-not-drop — junk findings are flagged/excluded with honest accounting, never
   silently dropped).
 - **Rendering surface**: `demo-live-run` branch updated (merge dev; retire the model/cap
-  monkeypatches as the src riders land), conclusion block rendered as the front door,
-  planner-turn progress/streaming (planner runs ~20–30 s/turn). This is the throwaway
-  demo surface, not a production front-end — the **frontend-scaffold gate is untouched**.
+  monkeypatches as the src riders land), key-findings block rendered first and the
+  conclusions block at the report foot, planner-turn progress/streaming (planner runs
+  ~20–30 s/turn). This is the throwaway demo surface, not a production front-end — the
+  **frontend-scaffold gate is untouched**.
 - **Dress rehearsal** (terminal check): morning-of deep pre-run + live standard run on a
   Nesta-mission question on the updated surface, inside the re-seeded standard band.
 
@@ -219,7 +267,8 @@ delegates per the routing ladder.
 - Phase B needs a real schema change → stop, reopen the gate.
 - Standard-on-envelope-basis synthesis proves dishonest or empty on live corpora → stop,
   re-adjudicate the regrade (fallback: keep deep_chain at standard, accept the band).
-- A grounding invariant can't survive the prose redesign without weakening → stop.
+- A grounding invariant can't survive the chosen Phase B option without weakening → stop
+  (for Option B that includes the annotation layer failing to re-prove on replay).
 - Prompt-refine loop stops converging (taste bar not met after bounded rounds) → stop and
   re-scope rather than overfit.
 - Any other approval gate, or budget spent.

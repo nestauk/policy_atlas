@@ -18,23 +18,33 @@ The task is **done only if every box holds** — otherwise it is in progress, no
 
 ## Slice-specific criteria
 
-### Grounding integrity through the redesign (Phase B)
+### Output quality + grounding integrity (Phase B)
 
-9. [ ] Every claim in a v2 artefact still carries its full lane: typed annotation,
-       verified-or-flagged citations, judge verdict (judged types), honesty flags —
-       nothing weakened relative to 013's guarantees.
-10. [ ] Claim spans bind to prose by exact validated offsets; prose outside claim spans
-        carries no evidential assertion (judge-rubric line recorded in the ADR).
-11. [ ] Pattern-count recomputation, gap grading + coverage base, flag-not-drop
+9. [ ] The prompt-vs-structural fork was decided on recorded evidence (cheap probe +
+       research + side-by-side options) at the plan 🛑 — not defaulted; the ADR records
+       the fork, evidence and decision.
+10. [ ] Every claim in the shipped artefact still carries its full lane: typed
+        annotation, verified-or-flagged citations, judge verdict (judged types), honesty
+        flags — nothing weakened relative to 013's guarantees, under whichever option won.
+11. [ ] If Option B: claim spans bind to prose by exact validated offsets; prose outside
+        claim spans carries no evidential assertion (judge-rubric line recorded in the
+        ADR); the annotation layer is re-proven on a replayed live-substrate run.
+12. [ ] Pattern-count recomputation, gap grading + coverage base, flag-not-drop
         (incl. mixed/unclear directions) all hold on a replayed live-substrate run.
-12. [ ] The conclusion-block front door exists, is grounded (cited to sources, never
-        sibling blocks), and renders first on the surface.
-13. [ ] ADR written: supersedes the 013 claims-are-the-prose emission; records the
-        annotation-layer purpose statement and the connective-tissue line.
+13. [ ] The grounded key-findings block (produced last, shown first, conditional on
+        headline claims) and the separate bottom conclusions block (evidence-descriptive,
+        no recommendations) both exist as distinct grounded blocks; spec flow-back
+        (capability.md + provenance-grounding.md + log entry) recorded.
+13a. [ ] Writer-envelope fields (year / evidence type / appraisal label / author
+        institution / venue …) were adopted per A/B replay evidence — any field without
+        evidence of benefit stayed out (noise guard); judge envelope v2 changes carry
+        before/after evidence.
 
 ### Loop discipline (Phase C)
 
-14. [ ] Baseline captured on both recorded projects BEFORE any prompt/model change.
+14. [ ] Baseline-0 (017-slice runs `91d2d684`/`128c0a81`, pre-model-refresh, historical
+        reference) and baseline-1 (post-Phase-A replay, unchanged prompts — the loop
+        baseline) both captured; prompt refinements judged against baseline-1 only.
 15. [ ] Every adopted prompt change carries before/after replay evidence (trace
         pointers); reverted changes noted.
 16. [ ] Anti-overfit pins recorded: planner replay across all 7 v2-question-taxonomy
