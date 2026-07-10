@@ -309,6 +309,14 @@ delegates per the routing ladder.
   the taste judge (CEO-proxy stands in the RETRO; the user directly here).
 - **The rehearsal is the terminal acceptance check** — an event with recorded evidence
   (timings, artefact id, trace pointers, surface screenshots), not a diff.
+- **`/goal` usage (operational addendum, user question 2026-07-10):** goals only where
+  completion is machine-measurable — Phases A-model/A-rest/B get one goal each, shaped
+  around their gates. Phase C gets NO outcome-shaped goal (its bar is the user's taste
+  judgment; an agent goal there self-adjudicates quality) — at most a process-shaped
+  goal (evidence trail per adopted change · bounds respected with tally · pins
+  recorded), with the quality verdict staying human. Phase D (rehearsal): no goal — an
+  attended event, not a completion state. Flows back with the loop protocol as the
+  eval-slice convention.
 - Whatever loop protocol survives contact becomes the eval-slice convention (flow-back
   note in verification.md).
 
