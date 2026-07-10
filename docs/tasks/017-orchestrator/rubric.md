@@ -28,10 +28,11 @@ in progress, not done. (Rev 2.5 — tracks contract rev 2.5.)
        plan-pinned; a DB-error failure still records its `component.failed` event
        (rollback first, fresh transaction — contract decision 8 rev 2.5), unless the
        escape valve was taken with written justification.
-9. [ ] **Gradation compile bounded, two-axis, and the nudge anchored**: search breadth
+9. [ ] **Gradation compile bounded, two-axis, and the nudge anchored**: search effort
        × analysis depth compile only to existing directive surfaces (search depth ·
        stage-2 screen · characterise · deep chain · selection budget · grouping facet);
-       off-diagonal compositions (narrow-and-deep, broad-and-shallow) compose validly;
+       off-diagonal compositions (narrow-and-deep, horizon-scan) compose validly; the
+       thin-base hatch is armed at adaptive+ and disarmed-with-honest-flag at rapid;
        nothing compiles into the synthesis section directive; the fixed
        lighter/as-proposed/deeper options each re-derive a valid full plan with its own
        concrete proposal + measured time band; the default proposal is the middle

@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **APPROVED rev 2.4 · amended revs 2.5 (ack'd) · 2.6 (micro-clarification) · 2.7 (plan-gate user calls)** — contract approved (before
+> **Status:** **APPROVED rev 2.4 · amended revs 2.5 (ack'd) · 2.6 (micro-clarification) · 2.7–2.8 (plan-gate user calls)** — contract approved (before
 > planning): **2026-07-10 · Shabeer Rauf** (covering the gated set:
 > runtime egress — the planner LLM surface; one CLI entrypoint; the
 > `orchestration_plan` schema addition; the Unattended steering-mode
@@ -29,6 +29,20 @@ specs in [docs/specs/](../../specs/index.md).
 > the **component config** to keep the three apart.
 >
 > **Revision history:**
+> - **rev 2.8** (2026-07-10, user calls at the plan 🛑, round 2):
+>   **(a) Search axis renamed and given three rungs** — "search
+>   breadth (focused/broad)" → **search effort (rapid / adaptive /
+>   deep)**: the deep agentic loop is targeting-heavy (query
+>   reformulation), not merely broad, so effort is the honest axis
+>   name; `adaptive` = the as-built thin-base escalation as the
+>   middle rung (hatch armed), `rapid` disarms the hatch and flags
+>   thinness honestly; 3×3 parity with analysis depth; diagonal
+>   pairings rapid×landscape / adaptive×standard / deep×deep.
+>   **(b) Demo extraction-timing prior corrected** — extraction is
+>   parallel as-built (`ThreadPoolExecutor`, `MAX_CONCURRENT_EXTRACT
+>   = 4`); the ~1.4 min/doc prior is a concurrency-4 measurement,
+>   not serial-demo noise; pool size is a recorded depth-seam tuning
+>   lever; standard budget stays 10 (user call).
 > - **rev 2.7** (2026-07-10, user calls at the plan 🛑 — three):
 >   **(a) Gradation split into two independent axes** — search
 >   breadth (evidence-base size) × analysis depth (component set +
@@ -461,7 +475,9 @@ PR landing:
    default resolutions** (visible plan content — what Unattended
    auto-applies and every mode falls back to; rev 2b) · **the declared
    escape hatch** (the thin-base search escalation, as-built in
-   `search_loop` — declared rather than firing undeclared; rev 2f) ·
+   `search_loop` — declared rather than firing undeclared; rev 2f;
+   armed at search-effort `adaptive`+, disarmed-with-honest-flag at
+   `rapid` — rev 2.8) ·
    **expected artefact shape** (a forecast-level, non-executing field
    derived deterministically from the composed chain: landscape
    coverage/themes/gaps iff characterise; facet-organised synthesis
@@ -539,22 +555,30 @@ PR landing:
      in the plan (the discretionary set + a why), and composition
      stays fail-closed regardless of what the planner reasons.
    - **Gradation — two independent axes** *(rev 2.7, user call at
-     the plan gate; enacts the spec's breadth/depth independence —
-     capability.md: "breadth and depth are independent parameters";
-     the EB handoff maps the wireframe Quick/Deep control to a
-     search-breadth signal)*: **search breadth** (how big the
-     evidence base gets — search depth rapid/deep, per-backend result
-     caps) × **analysis depth** (how far the analysis goes —
-     discretionary components, stage-2 screen, selection budget,
-     facet). Named pairings survive as authoring convenience (the
-     lighter/standard/deeper diagonal — never a user-facing dial),
-     and the planner composes **off-diagonal** shapes where intent
-     warrants: narrow-and-deep (focused search, full extraction) and
-     broad-and-shallow (wide sweep, landscape only — the horizon-scan
-     shape). User-facing exposure unchanged: the concrete proposal +
-     time band; the single nudge re-derives both axes coherently;
-     either axis moves individually via conversation, plan edits, or
-     bounded check-in adjustments. Pinned now: **the
+     the plan gate; axis renamed + three-rung rev 2.8 — "broad" was a
+     misnomer: the as-built deep loop raises coverage through
+     iterative TARGETING — reformulation over judged exemplars,
+     snowball, suggest arms — as much as volume, so the axis measures
+     acquisition effort, not width; enacts the spec's
+     breadth/depth-independence line and instantiates the deferred
+     depth-spectrum seam's v1 rungs)*: **search effort**
+     (`rapid` — one-pass multi-query fan-out, rapid caps, thin-base
+     hatch disarmed by plan with thinness flagged honestly ·
+     `adaptive` — rapid pass + the declared thin-base hatch armed
+     (the as-built `should_escalate` → one bounded deep continuation)
+     · `deep` — the full agentic loop from round 1, all arms, round
+     cap 3, deep caps) × **analysis depth** (`landscape` · `standard`
+     · `deep` — discretionary components, stage-2 screen, selection
+     budget, facet). Named pairings survive as authoring convenience
+     (the lighter/standard/deeper diagonal = rapid×landscape ·
+     adaptive×standard · deep×deep — never a user-facing dial), and
+     the planner composes **off-diagonal** shapes where intent
+     warrants: narrow-and-deep (rapid search, full extraction) and
+     the horizon scan (deep search, landscape only). User-facing
+     exposure unchanged: the concrete proposal + time band; the
+     single nudge re-derives both axes coherently; either axis moves
+     individually via conversation, plan edits, or bounded check-in
+     adjustments. Pinned now: **the
    default proposal is a middle gradation**, anchored to concrete
    numbers + a time band; the nudge vocabulary is fixed as
    **lighter / as proposed / deeper** (constant across all projects

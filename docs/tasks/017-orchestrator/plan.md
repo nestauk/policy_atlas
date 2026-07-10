@@ -1,6 +1,13 @@
 # Plan: 017-orchestrator
 
-> **Status:** rev 3 — plan-🛑 user calls folded (contract rev 2.7):
+> **Status:** rev 4 — plan-🛑 round-2 user calls folded (contract rev
+> 2.8): search axis renamed **search effort** with three rungs
+> (rapid / adaptive / deep — `adaptive` = the as-built thin-base
+> escalation as the middle rung; hatch disarmed + honest flag at
+> rapid), 3×3 parity with analysis depth, diagonals re-paired;
+> extraction-timing prior corrected (parallel as-built at
+> concurrency 4 — pool size is the tuning lever, budget stays 10).
+> Rev 3 — plan-🛑 user calls folded (contract rev 2.7):
 > gradation split into the two-axis compile (search breadth ×
 > analysis depth; diagonal pairings as planner defaults; off-diagonal
 > legitimate); time-band targets pinned (≤10 / 15–30 / ~90 min) with
@@ -54,11 +61,11 @@ never stall.
     `filters` grammar: recency under `shared`, geography under
     `overton` only; OpenAlex has no as-built geography key, stated
     in the plan's assumptions when a geography constraint is set) ·
-    `search_breadth` (`focused|broad`) · `analysis_depth`
+    `search_effort` (`rapid|adaptive|deep`) · `analysis_depth`
     (`landscape|standard|deep`) — the two independent gradation axes
-    (contract rev 2.7); `lighter|standard|deeper` survive as named
-    diagonal pairings the planner defaults to, never a user-facing
-    dial · `components: list[str]` + `component_
+    (contract revs 2.7–2.8); `lighter|standard|deeper` survive as
+    named diagonal pairings the planner defaults to, never a
+    user-facing dial · `components: list[str]` + `component_
     rationale` (intent-fit × gradation, visible) · `grouping_facet` ·
     `steering_mode` (`frequent|moderate|minimal|unattended`) ·
     `steer_point_defaults` (pre-declarable rules only; schema forbids
@@ -70,11 +77,13 @@ never stall.
   - The two-axis compile tables (rev 3; intent-fit strikes the deep
     chain / facet regardless of either axis):
 
-    **Search breadth** → search directive:
-    | breadth | search depth | result caps |
+    **Search effort** → search directive + hatch posture (all three
+    rungs compose existing machinery — no new search code):
+    | effort | search behaviour | thin-base hatch |
     |---|---|---|
-    | `focused` | rapid (+ thin-base hatch, as-built) | as-built rapid caps (50/backend) |
-    | `broad` | deep | as-built deep caps (150/backend) |
+    | `rapid` | one-pass rapid (caps 50/backend) | disarmed — thinness flagged honestly |
+    | `adaptive` | rapid, escalating via as-built `should_escalate` to one bounded deep continuation | armed (the declared hatch) |
+    | `deep` | full agentic loop from round 1 (reformulation/snowball/suggest arms, round cap 3, caps 150/backend) | n/a (already deep) |
 
     **Analysis depth** → component set + budgets:
     | depth | stage-2 | characterise | deep chain | selection budget |
@@ -84,17 +93,23 @@ never stall.
     | `deep` | on | on | on | 25 (`DEFAULT_SELECTION_BUDGET`) |
 
     Named diagonal pairings (planner defaults): `lighter` =
-    focused×landscape · `standard` = focused×standard · `deeper` =
-    broad×deep. Off-diagonal composition is legitimate
-    (narrow-and-deep = focused×deep; horizon scan = broad×landscape).
+    rapid×landscape · `standard` = adaptive×standard · `deeper` =
+    deep×deep. Off-diagonal composition is legitimate
+    (narrow-and-deep = rapid×deep; horizon scan = deep×landscape).
     **Time-band targets (user call): lighter ≤ ~10 min · standard
     ~15–30 min · deeper ~90 min.** Displayed bands are MEASURED
     (`TIME_BANDS` seeded from the 016 wall-clocks — ingest 134.8 s,
     synthesise 589.9 s on 32 docs — + the demo deep prior ~95 min,
     re-seeded from the build live check); arithmetic says standard
-    at budget 12 risked ~40 min, hence budget 10; residual
-    target-vs-measured divergence is recorded at the depth seam for
-    018/eval tuning, never hidden in the band.
+    at budget 12 risked ~40 min, hence budget 10. Timing-prior note
+    (rev 4, user probe verified in code): extraction is PARALLEL
+    as-built — `extract.py` fans all window payloads through a
+    `ThreadPoolExecutor`, `MAX_CONCURRENT_EXTRACT = 4` — so the demo
+    ~1.4 min/doc prior is a concurrency-4 measurement, not
+    serial-demo noise; the pool size is a recorded depth-seam tuning
+    lever (rate-limit-bounded). Residual target-vs-measured
+    divergence is recorded at the depth seam for 018/eval tuning,
+    never hidden in the band.
   - `compose(plan) -> ComposedChain`: ordered component-step specs (component ·
     per-component directive deltas · reference-threading rule). Spine
     enforced by construction (the component list is built from the spine
