@@ -95,10 +95,11 @@ planner prompt gains the capability line (lead); close 017's Overton
 
 **Writer/judge envelopes (B, fork-independent):**
 - `_finding_record` + `_result_for_chunk` (`synthesis_tools.py`) gain the default
-  metadata set: `year` · `evidence_type` · `appraisal_label` · `venue` · `cited_by` ·
-  `is_retracted` — terse fields on the existing records, sourced from the envelope
-  snapshot + classification/appraisal rows (year already queried at
-  `synthesis_tools.py:608`, currently dropped). A/B-set fields (author institution,
+  metadata set: `year` · `evidence_type` · `appraisal_label` · `venue` · `cited_by` —
+  terse fields on the existing records, sourced from the envelope snapshot +
+  classification/appraisal rows (year already queried at `synthesis_tools.py:608`,
+  currently dropped). `is_retracted` deliberately NOT surfaced (user strike,
+  2026-07-10 — screening-side home, deferred.md). A/B-set fields (author institution,
   FWCI) land behind the same record shape only when their A/B passes.
 - Judge envelope v2 (`grounding_judge.py::build_envelope` + prompt, lead): finding
   claims gain their verified quote's chunk text; envelope gains `intent` +

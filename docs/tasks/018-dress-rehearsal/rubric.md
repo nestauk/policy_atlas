@@ -40,8 +40,9 @@ The task is **done only if every box holds** — otherwise it is in progress, no
         exist as distinct grounded block kinds; spec flow-back (capability.md +
         provenance-grounding.md + log entry) recorded.
 13a. [ ] Writer envelope: the default set (year · evidence type · appraisal label ·
-        venue · cited-by · `is_retracted` flag) landed terse-and-adjacent; A/B-set
-        fields (author institution first) adopted only with replay evidence.
+        venue · cited-by) landed terse-and-adjacent; A/B-set fields (author
+        institution first) adopted only with replay evidence; `is_retracted` NOT
+        surfaced (stays deferred, screening-side home recorded).
 13b. [ ] Judge envelope v2 changes carry the verification-grade check: verdict
         distributions diffed on the same replayed claim set; every flipped verdict
         hand-inspected (intent-leniency watched for); a stratified sample of unchanged

@@ -189,8 +189,9 @@ assertion — the judge rubric owns that line.
 - **Writer envelope widening — default set + A/B set (user, 2026-07-10).**
   *Default-adopt* (PaperQA2-precedented + the product's own quality ladder):
   publication year · evidence type · **appraisal label** (our journal-quality analogue,
-  done properly) · venue/publisher · cited-by count · **`is_retracted`** as a visible
-  flag (flag-not-block — gives the recorded retained-but-unread field its first reader).
+  done properly) · venue/publisher · cited-by count. (`is_retracted` struck from the
+  set — user, 2026-07-10: stays deferred; its likely home is the screening/eligibility
+  surface, not the writer envelope — recorded in deferred.md.)
   *A/B-gated* (adopted per replay evidence): **author institution(s)** (first in the
   queue) · FWCI · further fields the loop suggests. All fields terse, structured, and
   attached **adjacent to the evidence unit they describe** (never mid-context bulk — the
