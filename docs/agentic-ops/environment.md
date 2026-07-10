@@ -1,7 +1,7 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–016 — backend only; setup unchanged since 002; task 007 adds two dev-time
+stands (tasks 001–017 — backend only; setup unchanged since 002; task 007 adds two dev-time
 fixture-recorder scripts needing `OVERTON_API_KEY`/optional OpenAlex vars in `.env` — see
 `.env.example`; task 008 adds parsing deps (pymupdf/pymupdf4llm/trafilatura — arrive via
 `make setup`/`uv sync`) and a keyless dev-time recorder using system `curl`; task 009 adds
@@ -28,7 +28,10 @@ makes **live full-text fetch** available behind the same live flag (no new keys 
 fetcher hits document hosts directly; a live spine check ≈ low single-digit dollars,
 see the 016 verification cost note), relocates the fixture corpus to `tests/data/`
 (`POLICY_ATLAS_FIXTURE_CORPUS` points elsewhere if needed) and adds a `pip-audit` gate
-(`make audit`, also a CI job); `make verify`
+(`make audit`, also a CI job); task 017 adds **no new deps or env vars** — the one new
+entrypoint `python -m policy_atlas.orchestrate` runs fully stubbed without keys and goes
+live behind the same `OPENAI_API_KEY` flag (planner conversation + composed run; one
+modest standard×standard run ≈ 40 min wall, see the 017 verification evidence); `make verify`
 and the test suite need none of them — stub backends + socket-deny keep the suite
 egress-free).
 Gotcha (bit the 012 live check): after pulling a schema-bearing slice, run

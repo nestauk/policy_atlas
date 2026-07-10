@@ -29,7 +29,12 @@ boundary, not N call sites.
 # Watch out
 
 - Any future backend seam that stores wire text (group, synthesise) needs the same scrub at
-  its own boundary — grep for `_scrub_nul` and lift it if a second consumer appears.
+  its own boundary — grep for `_scrub_nul` and lift it if a third consumer appears. The
+  planner became the second consumer (017 review stack: `_scrub_turn` initially scrubbed
+  only reply/question, and a NUL in any nested plan-draft field passed plan validation and
+  would abort at the JSONB insert; it now imports `extract._scrub_nul` for the whole draft).
+- The scrub must cover the WHOLE record recursively — scrubbing only the top-level string
+  fields re-opens the hole in every nested list/dict field (the 017 instance).
 - Quote verification runs on scrubbed text against frozen (never-scrubbed) basis text; a
   quote whose only mismatch was a NUL now verifies — that's correct (the NUL was model
   noise, not source text).
