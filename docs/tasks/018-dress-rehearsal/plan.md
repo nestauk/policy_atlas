@@ -258,10 +258,13 @@ replay (the B smoke)** before Phase C opens.
 - C3 taxonomy pins: planner replay across the 7 v2-question categories, drawing one
   real question per category from the V2 user-question list (user-provided 2026-07-10;
   product-internal data held outside the repo — ask the owner or the lead's notes),
-  **recording a per-category composition-adequacy verdict** (does the planner compose
-  honestly for the shapes the chain serves poorly — statistics/fact-finding, opinions —
-  rather than pretending the deep chain fits?); extraction/synthesis spot-check on the
-  non-mission project. — **lead** runs, **fast-worker** harness if scripting needed.
+  **recording a per-category composition-adequacy verdict**. The bar per the owner
+  posture (2026-07-10, deferred.md § Capabilities mapping): for statistics/fact-finding
+  and opinions shapes — whose ideal homes are future capabilities — EB neither refuses
+  nor pretends: honest intent-fit composition producing a somewhat-useful
+  evidence-descriptive artefact, with NO prompt work biased toward these shapes.
+  Extraction/synthesis spot-check on the non-mission project. — **lead** runs,
+  **fast-worker** harness if scripting needed.
 - C4 demo surface: merge dev into `demo-live-run`, retire monkeypatches, render
   key-findings first + conclusions foot, planner-turn progress. — **codex** *(bounded
   frontend/server work on the throwaway branch; scaffold gate untouched)*

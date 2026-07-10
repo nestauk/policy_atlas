@@ -28,6 +28,15 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **Options Assessment** consumes EB output + the findings layer to resolve descriptive
   intervention clusters into named, comparable options — the decision-relative step EB explicitly
   leaves out.
+- **Question-shape → future-capability mapping (user posture, 2026-07-10, recorded at the
+  018 gate).** Two real-user question shapes from the V2 taxonomy have their ideal homes in
+  capabilities that don't exist yet: **opinions / stakeholder mapping** (a proposed
+  public-opinion / stakeholder-mapping capability) and **statistics / fact-finding**
+  (potentially a baseline-analysis capability). Interim posture: EB — the most
+  general-purpose capability — must still produce **something somewhat useful** for these
+  shapes (honest intent-fit composition, evidence-descriptive output), but v3.0 prompt/eval
+  work deliberately does NOT overbias toward them; optimisation for these shapes arrives
+  with their capabilities.
 
 ## Product / output
 
