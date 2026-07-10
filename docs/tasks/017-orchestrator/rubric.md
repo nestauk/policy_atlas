@@ -6,10 +6,11 @@ in progress, not done. (Rev 2 — tracks contract rev 2.)
 1. [ ] Implementation satisfies [contract.md](contract.md).
 2. [ ] `make verify` passes — green, deterministic, zero-egress (stub planner; fixture
        defaults unchanged).
-3. [ ] No approval-gated change snuck in unapproved — schema (none permitted: no plan
-       table, no capability-run entity), auth/tenancy, egress beyond the approved planner
-       surface, deps, CI, production config, public interfaces beyond the one approved
-       CLI entrypoint, scaffold.
+3. [ ] No approval-gated change snuck in unapproved — schema limited to the approved
+       `orchestration_plan` table + minimal run linkage (no capability-run entity, no
+       plan blocks/units), auth/tenancy, egress beyond the approved planner surface,
+       deps, CI, production config, public interfaces beyond the one approved CLI
+       entrypoint, scaffold.
 4. [ ] No generated files or secrets edited by hand.
 5. [ ] No tests deleted, skipped or weakened without written justification.
 6. [ ] **Spine enforcement test-pinned**: no composable orchestration plan omits or
@@ -43,13 +44,18 @@ in progress, not done. (Rev 2 — tracks contract rev 2.)
         capability-runner; steer-points surface only through the orchestrator; the
         runner's directive-authoring slot is a named seam (the future LLM EB-expert
         drop-in), recorded in `deferred.md`.
-12. [ ] **Planner surface discipline**: exactly one new prompt surface, lead-authored;
-        structured output validated fail-closed; check-in content deterministic (no
-        narration surface); no other prompt text changed anywhere in the tree.
-13. [ ] **Plan lifecycle auditable**: `plan.proposed` → `plan.approved` →
-        [`plan.amended` + steering resolutions] → `plan.compiled` → component events
-        reconstruct the run — including every steering interaction — from the event
-        log alone.
+12. [ ] **Planner surface discipline**: exactly one new prompt surface, lead-authored
+        and question-type-neutral (no inherited intervention framing — the V2
+        anti-pattern); questions carry suggested answers (broad→narrow, degrade to
+        free text, re-derived as framing evolves); structured output validated
+        fail-closed; no plan field collected that nothing consumes; check-in content
+        deterministic (no narration surface); no other prompt text changed anywhere
+        in the tree.
+13. [ ] **Plan lifecycle auditable and durable**: the `orchestration_plan` row(s) carry
+        the approved plan and its immutable amendment versions; `plan.proposed` →
+        `plan.approved` → [`plan.amended` + steering resolutions] → `plan.compiled` →
+        component events reconstruct the run — including every steering interaction —
+        and reference the plan row they concern.
 14. [ ] **Posture honesty**: per-component commit shape verified (mid-chain failure
         leaves prior legs committed and the run honestly failed); no resume implied;
         substance never silent in any mode.

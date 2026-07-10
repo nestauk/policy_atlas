@@ -3,8 +3,9 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **drafted rev 2** — awaiting contract 🛑 (re-approval; rev 1 was
-> discussed, not approved).
+> **Status:** **drafted rev 2.2** — awaiting contract 🛑 (revs 1–2.2 were
+> shaped in the gate conversation, not yet approved). Companion:
+> [v2-wizard-study.md](v2-wizard-study.md) (rev 2.2c evidence).
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
 > ADR: expected (the v1 orchestrator carve + the Unattended steering-mode
@@ -20,6 +21,29 @@ specs in [docs/specs/](../../specs/index.md).
 > the **component config** to keep the three apart.
 >
 > **Revision history:**
+> - **rev 2.2** (2026-07-10, user gate probes round 2 — three
+>   changes): **(a) Plan table in — the events-only posture reversed**
+>   (user challenge held; rev 2.1c superseded): the plan is the most
+>   behaviour-bearing object in the slice and 018's read surface is
+>   its near-term reader (the demo's event-scraping read models are
+>   the RETRO-flagged anti-pattern) — a minimal `orchestration_plan`
+>   table becomes the slice's one approved schema addition (decision
+>   2; shape plan-designed; immutable version rows; events still emit
+>   as the decision-log trail). **(b) Language scope-constraint
+>   dropped** (user call): English-language tool for UK policy makers;
+>   the grammar key exists if that changes. **(c) V2 search-wizard
+>   study folded in** (Explore agent over `../discovery_policy_atlas`;
+>   findings in the design record): adopted — suggested answers on
+>   planner questions (2–5, broad→narrow, buttons + free text,
+>   degrade-don't-block, re-derived as framing evolves),
+>   no-preference-style visible defaults, pre-launch review; named
+>   anti-patterns — intervention-framed copy/prompts (V2 hard-coded
+>   "about interventions" into every suggestion prompt), dead
+>   collected fields (`use_case` analytics-only, additional-questions
+>   step skipped dead, `inner_setting` unread by retrieval/screening),
+>   one-shot suggestions, opaque derived screening criteria (confirms
+>   the visible-defaults posture + the deferred structured-criteria
+>   seam).
 > - **rev 2.1** (2026-07-10, user gate probes — four holds): **(a)
 >   Intent-fit component selection** — rev 2 derived the discretionary
 >   set from the gradation alone; the user challenge held (extraction
@@ -148,9 +172,10 @@ PR landing:
 - Failure semantics productionised (decision 8): spine-leg failure
   fails the run honestly; discretionary-leg failure degrades with
   flags; bounded retry for LLM-bearing legs.
-- Plan persistence as events (decision 2): `plan.proposed` /
-  `plan.approved` / `plan.amended` on the event log — the plan is the
-  first decision-log entry. **No schema change.**
+- Plan persistence (decision 2, rev 2.2): the minimal
+  `orchestration_plan` table (the one approved schema addition) +
+  `plan.proposed` / `plan.approved` / `plan.amended` events
+  referencing it — the plan is the first decision-log entry.
 - Stub planner backend; `make verify` stays green, deterministic and
   egress-free.
 - Spec flow-back: the **Unattended-mode refinement** to
@@ -285,20 +310,23 @@ PR landing:
    as-is; any extension is additive and plan-designed.
 
 2. **The orchestration plan is a structured selection, persisted as
-   events — no schema.** A pydantic model over: refined question ·
-   scoping notes (user-expressed only, never invented) · backend
-   scope (existing `search_backend_scope` vocabulary) · **scope
-   constraints** *(rev 2.1b)* — recency window · geography · language —
+   a first-class table** *(rev 2.2 — user challenge held, reversing
+   rev 2.1c's events-only posture)*. A pydantic model over: refined
+   question · scoping notes (user-expressed only, never invented) ·
+   backend scope (existing `search_backend_scope` vocabulary) ·
+   **scope constraints** *(rev 2.1b)* — recency window · geography —
    compiled into the existing search `scope_filters` grammar
-   (`published_after`/`published_before` · `languages`/`language` ·
-   `publisher_country`; the as-built 015 directive surface), each
-   **defaulted visibly** (assumptions field) and asked about only when
-   shape-changing, with one honesty caveat carried: a geography
-   constraint is **publication** geography — study geography lives in
-   the text and is a recorded extraction seam, and the plan must never
-   imply otherwise; structured screening inclusion/exclusion criteria
-   stay the recorded 014 seam (free-text scoping notes ride the intent
-   the screen judges against, as-built) · depth
+   (`published_after`/`published_before` · `publisher_country`; the
+   as-built 015 directive surface), each **defaulted visibly**
+   (assumptions field) and asked about only when shape-changing, with
+   one honesty caveat carried: a geography constraint is
+   **publication** geography — study geography lives in the text and
+   is a recorded extraction seam, and the plan must never imply
+   otherwise (no language field *(rev 2.2)* — Policy Atlas is an
+   English-language tool for UK policy makers; the grammar key exists
+   if that ever changes); structured screening inclusion/exclusion
+   criteria stay the recorded 014 seam (free-text scoping notes ride
+   the intent the screen judges against, as-built) · depth
    gradation (decision 4's bundle) · discretionary component set
    (decision 4's intent-fit × gradation selection, visible in the
    plan) · grouping facet ·
@@ -317,21 +345,30 @@ PR landing:
    estimate model stays deferred). Robust compile by construction:
    the plan can only reference what the registry declares; a plan
    that doesn't validate is a caught error, never a silent run.
-   Persistence: `plan.proposed` / `plan.approved` / `plan.amended`
-   events carry the full plan payload — the plan is the first
-   decision-log entry; per-component `plan.compiled` events continue
-   unchanged. *Why events, not a plan table (rev 2.1c)*: the durable
-   plan entity's behaviours (editing, versioning, re-runs — the
-   plan-as-object's artefact-like face) are workspace-cluster
-   territory, and "model only what behaves" says don't commit a table
-   shape before its behaviours exist; the event log is already the
-   ordered, attributed decision-log substrate, and v1's only readers
-   (the run, audit) are fully served by it. Named trade-off: "the
-   current plan" is the latest plan event, not a keyed row — fine
-   while one project has one run; promotion to a first-class table
-   arrives through the schema gate with the versioning UX. The
-   capability-run entity stays deferred; the run's identity in v1 is
-   the project + scope + its event trail.
+   Persistence *(rev 2.2 — user challenge held; supersedes rev
+   2.1c)*: a minimal **`orchestration_plan` table** — the plan is a
+   first-class domain object, not an event-scrape. Rationale for the
+   reversal: the plan is the most behaviour-bearing object in this
+   slice (proposed → approved → amended at steer-points → compiled →
+   executed against) and the spec's central audit object
+   (plan-as-canonical); its first read surface is near-term (018
+   renders "the plan for this project" — the demo's event-scraping
+   read models are the RETRO-flagged anti-pattern); a keyed row beats
+   latest-event lookup for every downstream reader. Shape is minimal
+   and **plan-designed within this approved gate**: id · project (+
+   scope) reference · status (proposed / approved / superseded /
+   abandoned) · version (amendments append immutable version rows,
+   never mutate) · the validated plan payload · timestamps +
+   attribution; linkage to executed component runs is the minimal
+   form the implementation plan justifies (e.g. nullable `plan_id` on
+   `runs`, or plan id + version carried in `plan.compiled` payloads).
+   The `plan.proposed` / `plan.approved` / `plan.amended` events
+   still emit, referencing the plan row — the decision-log trail and
+   the durable object are complements, not alternatives. What stays
+   out: the artefact-like machinery (blocks/units, versioning UX,
+   change-log surfaces — workspace cluster) and the capability-run
+   entity (still deferred); the run's execution identity in v1
+   remains the project + scope + its event trail.
 
 3. **Composition: the ADR 0013 spine is enforced by construction and
    test-pinned.** Every composed chain executes acquire(`search`) →
@@ -397,7 +434,26 @@ PR landing:
    questions; rev 2.1a/b), updates a visible
    plan draft each turn, sets a ready flag; proposal anchored per
    decision 4; carries the declared component descriptions as its
-   reasoning substrate. Structured output validated fail-closed (pydantic; the
+   reasoning substrate. **Questions carry suggested answers**
+   *(rev 2.2c — the V2 search-wizard study, user direction)*: when
+   the planner does ask, its structured turn output includes 2–5
+   candidate answers alongside free text (scoping suggestions ordered
+   broad → narrow — the V2 pattern that worked), so 018's surface can
+   render them as buttons while the CLI shows numbered options;
+   suggestion failure degrades to a plain free-text question, never
+   blocks; suggestions re-derive as the framing evolves (V2's
+   one-shot-never-revisited is the named anti-pattern). Scoping
+   dimensions (population, setting, outcomes) are suggestion material
+   **when the intent type warrants them** (intent-fit — V2 hard-coded
+   the intervention frame into every prompt and heading; this prompt
+   is question-type-neutral by design). **No dead fields**: V2
+   collected `use_case`, additional-questions and `inner_setting`
+   into analytics-only or unread state; every V3 plan field compiles
+   or is explicitly non-executing annotation (decision 2), and
+   nothing is asked that nothing consumes (V2's audience/user-context
+   field is deliberately not collected in v1 — it feeds only
+   synthesis framing, an off-limits prompt surface this slice).
+   Structured output validated fail-closed (pydantic; the
    planner cannot smuggle components or parameters past the
    registry). Honesty rules carried from the product voice: never
    promise findings, never state what the evidence says, assumptions
@@ -508,7 +564,9 @@ PR landing:
     **at least one non-intervention intent composes without the deep
     chain** (rev 2.1a — the intent-fit probe); at least one
     conversation carries a scope constraint (e.g. recency) landing as
-    a compiled `scope_filters` field (rev 2.1b).
+    a compiled `scope_filters` field (rev 2.1b); at least one planner
+    question observed carrying sensible suggested answers, and none
+    on an intent where no question was shape-necessary (rev 2.2c).
     (b) **one composed end-to-end run**: a real Nesta-mission
     question through the product path — planner → approval → composer
     → runner → artefact — at a **modest gradation** (deep enough to
@@ -542,9 +600,11 @@ PR landing:
   with user intent text. Approved at this contract's 🛑. All other
   egress (search backends, fetcher, component LLM calls) is
   previously approved and rides unchanged.
-- **Schema**: none. Plan persistence is event-payload only
-  (zero-schema by the 001 event-log design). Any schema need — the
-  capability-run entity, a plan table — is a **stop condition**.
+- **Schema** *(rev 2.2 — one approved addition)*: the minimal
+  `orchestration_plan` table + its minimal run linkage (decision 2;
+  exact shape plan-designed, reviewed at the plan 🛑). Nothing else —
+  the capability-run entity, plan blocks/units, or any further
+  table/column is a **stop condition**.
 - **Dependencies**: none expected (`openai` + `pydantic` already in
   the tree). Any candidate returns through the dependency gate with
   its case.
@@ -599,7 +659,8 @@ planner keeps the suite egress-free.
 ## Stop conditions
 
 Halt and escalate when: any approval gate above is hit beyond what
-this contract records (schema — including a plan table or
+this contract records (schema beyond the approved
+`orchestration_plan` table + minimal linkage — e.g. the
 capability-run entity — deps, CI, public interfaces beyond the one
 entrypoint); the composer or steer-point compile turns out to need a
 directive surface that doesn't exist yet (that's the gradation seam
