@@ -26,10 +26,11 @@
 > from judge prompt + envelope semantics (lead) in B task rows. Minors: stale "step-6"
 > labels → Phase E exit; direction-rename check scoped to effect-direction *values*
 > (search-reformulate positive/negative example fields are exempt, named).
-> Plan 🛑 pending.
-> The **Phase B fork is decided AT the plan 🛑** — the probe (§ Fork probe) runs during
-> this design phase so the gate has its evidence; this plan therefore carries BOTH
-> options' task shapes, one of which is struck at approval.
+> **Fork resolved at the gate (2026-07-10 · user): OPTION B** — gather-then-author
+> prose with span-anchored claims, arm-B voice rules carried into the prose prompt
+> (probe evidence: [fork-probe.md](fork-probe.md)). The Option A task rows below stay
+> as the recorded FALLBACK (fires only via the Phase B stop condition — invariants
+> failing to re-prove). Plan 🛑 still pending (user: revisions first).
 > Contract: [contract.md](contract.md) · research:
 > [synthesis-research-notes.md](synthesis-research-notes.md).
 
@@ -209,7 +210,8 @@ Gate: **full `make verify`** at Phase A-rest exit (schema class — A5 migration
   (evidence + decision, whichever option wins) + the two-block spec flow-back
   (capability.md + provenance-grounding.md + log entry). — **lead** *(design prose)*
 
-*If Option A (prompt-first):*
+*Option A (prompt-first) — STRUCK to fallback at the gate (fires only via the Phase B
+stop condition):*
 - B-A1 voice/ordering rules into `synthesis_backend.py` prompts (from demo evidence +
   research notes), claim-text register rules. — **lead** *(prompt-bearing)*
 - B-A2 envelope default set + judge-envelope **plumbing** + section-role field +
@@ -220,7 +222,7 @@ Gate: **full `make verify`** at Phase A-rest exit (schema class — A5 migration
   self-cert evidence run; key-findings + conclusions prompts. — **lead**
   *(prompt-bearing + verification adjudication)*
 
-*If Option B (gather-then-author):*
+*Option B (gather-then-author) — DECIDED (2026-07-10 · user):*
 - B-B1 emission wire v2: `SectionProseWire` (prose + claims with `span: {start,end}`),
   span-binding validator (exact substring, fail-closed, salvage lanes preserved),
   `_write_section` binds units to spans instead of computing joins; **repair lane v2**
