@@ -538,59 +538,104 @@ function PlanRecap() {
   const assumptions = plan.assumptions ?? []
   const steps = plan.steps ?? []
   // parity rule: everything the pre-run plan pane shows stays visible here
-  const summary = [
-    label(SEARCH_EFFORT_LABEL, plan.search_effort),
-    label(ANALYSIS_DEPTH_LABEL, plan.analysis_depth),
-    plan.backend_scope ? SOURCES_LABEL[plan.backend_scope] : '',
-    plan.steering_mode ? `Check-ins: ${label(STEERING_MODE_LABEL, plan.steering_mode).toLowerCase()}` : '',
-    plan.time_band ?? '',
-  ].filter(Boolean).join(' · ')
+  const settings: [string, string][] = (
+    [
+      ['Search effort', label(SEARCH_EFFORT_LABEL, plan.search_effort)],
+      ['Analysis depth', label(ANALYSIS_DEPTH_LABEL, plan.analysis_depth)],
+      ['Sources', plan.backend_scope ? SOURCES_LABEL[plan.backend_scope] ?? plan.backend_scope : ''],
+      ['Check-ins', label(STEERING_MODE_LABEL, plan.steering_mode)],
+    ] as [string, string][]
+  ).filter(([, v]) => v)
+
   return (
-    <div className="mb-3">
-      <button className="chip chip--soft" onClick={() => setOpen(!open)} aria-expanded={open}>
-        View plan {open ? '▴' : '▾'}
+    <div className="card mb-4 !p-0">
+      <button
+        className="flex w-full items-baseline gap-3 px-5 py-3.5 text-left hover:bg-ground/60"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+      >
+        <PaneH className="shrink-0">The plan</PaneH>
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-navy">
+          {plan.question}
+        </span>
+        {plan.time_band && <span className="chip chip--soft shrink-0">{plan.time_band}</span>}
+        <span className="shrink-0 text-[11px] text-grey">{open ? '▴ Hide' : '▾ Details'}</span>
       </button>
+
       {open && (
-        <div className="anim-rise mt-2 space-y-2 border hairline bg-white p-4 text-[13px]">
-          <div className="font-semibold text-navy">{plan.question}</div>
+        <div className="anim-rise border-t hairline">
+          <p className="px-5 pb-1 pt-4 font-display text-[15px] font-semibold leading-snug text-navy">
+            {plan.question}
+          </p>
+
+          {settings.length > 0 && (
+            <div
+              className="mx-5 my-3 grid gap-px border hairline bg-line"
+              style={{ gridTemplateColumns: `repeat(${Math.min(settings.length, 4)}, minmax(0, 1fr))` }}
+            >
+              {settings.map(([k, v]) => (
+                <div key={k} className="bg-white px-3.5 py-2.5">
+                  <div className="text-[10.5px] font-extrabold uppercase tracking-[.06em] text-navy-40">{k}</div>
+                  <div className="mt-0.5 text-[13px] font-medium leading-snug text-navy">{v}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {(scopingNotes.length > 0 || constraints.length > 0) && (
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-1.5 px-5 pb-1">
               {scopingNotes.map((f) => (
                 <span key={f} className="chip chip--soft">{f}</span>
               ))}
               {constraints.map((c) => (
-                <span key={c} className="chip chip--soft">{c}</span>
+                <span key={c} className="chip chip--blue">{c}</span>
               ))}
             </div>
           )}
+
           {screeningCriteria.length > 0 && (
-            <ul className="list-disc space-y-0.5 pl-4 text-[12px] text-grey">
-              {screeningCriteria.map((c) => (
-                <li key={c}>{c}</li>
-              ))}
-            </ul>
-          )}
-          {summary && <div className="text-[12.5px] text-grey">{summary}</div>}
-          {steps.length > 0 && (
-            <div>
-              <div className="text-[11px] font-bold uppercase tracking-wide text-navy-40">Agreed steps</div>
-              <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-[12px] text-grey">
-                {steps.map((s) => (
-                  <li key={s.stage}>{s.label}</li>
-                ))}
-              </ol>
-            </div>
-          )}
-          {assumptions.length > 0 && (
-            <div>
-              <div className="text-[11px] font-bold uppercase tracking-wide text-navy-40">Assumptions</div>
-              <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[12px] text-grey">
-                {assumptions.map((a) => (
-                  <li key={a}>{a}</li>
+            <div className="px-5 pt-3">
+              <PaneH>Screening criteria</PaneH>
+              <ul className="mt-1.5 space-y-1">
+                {screeningCriteria.map((c) => (
+                  <li key={c} className="flex gap-2 text-[12.5px] leading-snug text-navy">
+                    <span className="mt-[7px] h-1 w-1 shrink-0 bg-navy-40" /> {c}
+                  </li>
                 ))}
               </ul>
             </div>
           )}
+
+          {steps.length > 0 && (
+            <div className="px-5 pt-4">
+              <PaneH>Agreed steps</PaneH>
+              <ol className="mt-2 grid grid-cols-1 gap-x-8 gap-y-1.5 lg:grid-cols-2">
+                {steps.map((s, i) => (
+                  <li key={s.stage} className="flex gap-2.5 text-[12.5px] leading-snug text-navy">
+                    <span className="w-4 shrink-0 text-right font-mono text-[11px] font-bold text-navy-40">
+                      {i + 1}
+                    </span>
+                    {s.label}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {assumptions.length > 0 && (
+            <div className="px-5 pt-4">
+              <PaneH>Assumptions</PaneH>
+              <ul className="mt-1.5 space-y-1">
+                {assumptions.map((a) => (
+                  <li key={a} className="flex gap-2 text-[12.5px] leading-snug text-grey">
+                    <span className="mt-[7px] h-1 w-1 shrink-0 bg-line-2" /> {a}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="pb-4" />
         </div>
       )}
     </div>
