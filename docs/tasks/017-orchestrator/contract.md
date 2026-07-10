@@ -37,7 +37,9 @@ specs in [docs/specs/](../../specs/index.md).
 >   7): the deferred resume engine's requirement recorded — checkpoint
 >   state serialization + an idempotency key persisted before any
 >   interruption. **(c) Per-leg token/cost roll-up** joins wall-clocks
->   in the run record (decision 11). Confirmations recorded, not
+>   in the run record (decision 11) — **developer-side only** (user
+>   call): users see time bands, never tokens or cost; cost data may
+>   inform the bands invisibly. Confirmations recorded, not
 >   folded: unified intent-planning taxonomy (our planner's shape),
 >   static/dynamic interrupt ↔ mode-compile/steer-point mapping,
 >   simplest-pattern-first + the review-gate middle tier (validate the
@@ -663,7 +665,12 @@ PR landing:
     from the existing usage telemetry** *(rev 2.4c — "token bleed" is
     the season's named orchestration cost failure mode; the roll-up
     feeds the depth seam's bands and the plan's time-band honesty at
-    near-zero cost)*. The user-grade
+    near-zero cost)*. **The roll-up is developer-side telemetry only**
+    *(user call, 2026-07-10)*: no token count or monetary cost ever
+    reaches a user-facing surface — the plan and check-ins speak in
+    **time bands**, which cost data may inform invisibly; the
+    roll-up lives in the run record/logs for the depth seam, evals
+    and ops. The user-grade
     component-progress protocol stays a recorded seam (016
     precedent); the CLI surfaces the existing structured logs.
 
