@@ -114,6 +114,7 @@
    "ready": true
   },
   "approved": null,
+  "turns": [],
   "created_at": "2026-07-10T11:35:47.863443+00:00"
  },
  {
@@ -144,6 +145,7 @@
    "ready": false
   },
   "approved": null,
+  "turns": [],
   "created_at": "2026-07-09T11:59:40.507299+00:00"
  },
  {
@@ -175,6 +177,7 @@
    "ready": false
   },
   "approved": null,
+  "turns": [],
   "created_at": "2026-07-09T18:47:57.252748+00:00"
  },
  {
@@ -205,6 +208,7 @@
    "ready": false
   },
   "approved": null,
+  "turns": [],
   "created_at": "2026-07-09T19:25:14.301165+00:00"
  },
  {
@@ -240,6 +244,7 @@
    "ready": false
   },
   "approved": null,
+  "turns": [],
   "created_at": "2026-07-09T18:00:00+00:00"
  },
  {
@@ -384,6 +389,24 @@
    ],
    "time_band": "~10-15 min"
   },
+  "turns": [
+   {
+    "role": "user",
+    "text": "Is there a relationship between individual optimism and national pessimism in the UK and what are the driving factors of this?"
+   },
+   {
+    "role": "planner",
+    "text": "I can turn this into a standard evidence review plan. I\u2019m treating the question as about UK public attitudes: whether people can be optimistic about their own lives while pessimistic about the country, and what factors are associated with that gap. Because this is an associational/explanatory question rather than an intervention-effect question, I\u2019d include corpus characterisation and a full-text re-screen, but not structured intervention-outcome extraction or grouping."
+   },
+   {
+    "role": "user",
+    "text": "I'd like a quick search"
+   },
+   {
+    "role": "planner",
+    "text": "I\u2019ve revised this to a quick-search version: rapid search effort with landscape analysis. That keeps the focus on finding and mapping the most relevant UK evidence quickly, while flagging if the result set is thin. Because this is still an associational/explanatory public-attitudes question rather than an intervention-effect review, I would include corpus characterisation but not intervention-outcome extraction or grouping. I\u2019ve also removed the full-text re-screen because that is only available at standard or deep analysis depth, not landscape."
+   }
+  ],
   "created_at": "2026-07-10T14:00:44.200768+00:00"
  }
 ]
