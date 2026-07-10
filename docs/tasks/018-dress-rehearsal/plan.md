@@ -1,6 +1,11 @@
 # Plan: 018-dress-rehearsal
 
-> **Status:** rev 2 — drafted against contract **rev 3 (approved 2026-07-10)**, then
+> **Status: rev 3 — APPROVED (plan confirmed): 2026-07-10 · Shabeer Rauf.**
+> ADR 0015 (prose-first synthesis with span-anchored claims) written at this
+> confirmation and committed on the branch; plan task B0 therefore reduces to the
+> spec flow-back half (capability.md + provenance-grounding.md two-block refinement +
+> log entry) — the ADR itself is done.
+> History: rev 2 — drafted against contract **rev 3 (approved 2026-07-10)**, then
 > the contract-stage adversarial review adjudicated (Codex, 8 findings: 6 MAJOR ·
 > 2 MINOR, **8/8 adopted, finding 6 partially** — repair-lane×span redesign ·
 > unspanned-prose traceability check · judge test strengthened (unchanged-verdict

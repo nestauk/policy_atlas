@@ -4,9 +4,9 @@
 > separate blocks; writer-envelope widening is evidence-gated not assumed; baselines come
 > from the 017 slice runs with a post-model-refresh re-baseline; the output-shape change
 > is a design fork, not a pre-commitment). Contract approved (before planning):
-> **2026-07-10 · user (rev 3)** · Plan approved (before implementation): _pending_ ·
-> ADR: due (synthesis output-shape — records the fork decision; supersedes/amends the
-> 013 emission decision accordingly).
+> **2026-07-10 · user (rev 3; rev 4 folds adversarial findings)** · Plan approved
+> (before implementation): **2026-07-10 · user (plan rev 3)** · ADR:
+> **0015-prose-first-synthesis-with-span-anchored-claims (Accepted 2026-07-10)**.
 
 ## Goal
 
