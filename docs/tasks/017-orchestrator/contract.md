@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **drafted rev 2.2** — awaiting contract 🛑 (revs 1–2.2 were
+> **Status:** **drafted rev 2.3** — awaiting contract 🛑 (revs 1–2.3 were
 > shaped in the gate conversation, not yet approved). Companion:
 > [v2-wizard-study.md](v2-wizard-study.md) (rev 2.2c evidence).
 > Contract approved (before planning): _pending_ ·
@@ -21,6 +21,25 @@ specs in [docs/specs/](../../specs/index.md).
 > the **component config** to keep the three apart.
 >
 > **Revision history:**
+> - **rev 2.3** (2026-07-10, user gate probes round 3 — two changes):
+>   **(a) Screening criteria adopted as a first-class plan field**
+>   (user probe — rev 2.2 had deferred them wholesale to the 014
+>   structured-directive seam; the V2 study called invisible criteria
+>   its biggest gap, and the fix splits cleanly): user-expressed and
+>   planner-suggested inclusion/exclusion criteria live visibly in
+>   the plan; v1 compiles them deterministically into the scope's
+>   intent/scoping text the screen already judges against (no
+>   screen-prompt change); the per-criterion structured compile
+>   remains the 014 seam this field re-targets to. **(b)
+>   "Off-limits" corrected to "staged"** (user challenge on synthesis
+>   framing): only the grounding-judge surface is hard-pinned; the
+>   synthesis writer prompt is refinable and explicitly queued for
+>   018's refine loop (demo voice rules · writer-under-uses-finding-
+>   claims · the user's live-run quality report), now including the
+>   audience/user-context pair (planner field + consumption together —
+>   the no-dead-fields rule is why the field doesn't ship in 017).
+>   017's synthesise bar stays mechanics + honesty labels, not prose
+>   quality.
 > - **rev 2.2** (2026-07-10, user gate probes round 2 — three
 >   changes): **(a) Plan table in — the events-only posture reversed**
 >   (user challenge held; rev 2.1c superseded): the plan is the most
@@ -324,9 +343,18 @@ PR landing:
    is a recorded extraction seam, and the plan must never imply
    otherwise (no language field *(rev 2.2)* — Policy Atlas is an
    English-language tool for UK policy makers; the grammar key exists
-   if that ever changes); structured screening inclusion/exclusion
-   criteria stay the recorded 014 seam (free-text scoping notes ride
-   the intent the screen judges against, as-built) · depth
+   if that ever changes) · **screening criteria** *(rev 2.3a — user
+   probe; the V2 study's "biggest gap" finding adopted rather than
+   deferred wholesale)* — user-expressed and planner-suggested
+   inclusion/exclusion criteria ("only studies with under-5s",
+   "exclude opinion pieces"), a first-class, visible, editable plan
+   field; **v1 compile is deterministic composition into the scope's
+   intent/scoping text** — the surface the screen already judges
+   against, so no screen-prompt change rides this slice — and the
+   field re-targets to the structured screening directive when that
+   recorded 014 seam lands (per-criterion structured compile stays
+   that seam; unlike V2, the criteria are never invisible: they sit
+   in the plan, not buried in a rubric) · depth
    gradation (decision 4's bundle) · discretionary component set
    (decision 4's intent-fit × gradation selection, visible in the
    plan) · grouping facet ·
@@ -443,7 +471,8 @@ PR landing:
    suggestion failure degrades to a plain free-text question, never
    blocks; suggestions re-derive as the framing evolves (V2's
    one-shot-never-revisited is the named anti-pattern). Scoping
-   dimensions (population, setting, outcomes) are suggestion material
+   dimensions (population, setting, outcomes) **and screening
+   criteria** (rev 2.3a) are suggestion material
    **when the intent type warrants them** (intent-fit — V2 hard-coded
    the intervention frame into every prompt and heading; this prompt
    is question-type-neutral by design). **No dead fields**: V2
@@ -451,8 +480,9 @@ PR landing:
    into analytics-only or unread state; every V3 plan field compiles
    or is explicitly non-executing annotation (decision 2), and
    nothing is asked that nothing consumes (V2's audience/user-context
-   field is deliberately not collected in v1 — it feeds only
-   synthesis framing, an off-limits prompt surface this slice).
+   field is deliberately not collected in 017 — its only consumer is
+   synthesis framing, and the pair — planner field + prompt
+   consumption — lands together in 018's refine loop; rev 2.3b).
    Structured output validated fail-closed (pydantic; the
    planner cannot smuggle components or parameters past the
    registry). Honesty rules carried from the product voice: never
@@ -564,9 +594,11 @@ PR landing:
     **at least one non-intervention intent composes without the deep
     chain** (rev 2.1a — the intent-fit probe); at least one
     conversation carries a scope constraint (e.g. recency) landing as
-    a compiled `scope_filters` field (rev 2.1b); at least one planner
-    question observed carrying sensible suggested answers, and none
-    on an intent where no question was shape-necessary (rev 2.2c).
+    a compiled `scope_filters` field (rev 2.1b) and one a screening
+    criterion visibly composed into the judged intent (rev 2.3a); at
+    least one planner question observed carrying sensible suggested
+    answers, and none on an intent where no question was
+    shape-necessary (rev 2.2c).
     (b) **one composed end-to-end run**: a real Nesta-mission
     question through the product path — planner → approval → composer
     → runner → artefact — at a **modest gradation** (deep enough to
@@ -617,8 +649,22 @@ PR landing:
   lead-authored (AGENTS.md rule: prompt-bearing work is lead-only).
   Check-in content is deterministic by design (decision 6) — no
   narration surface. **No other prompt text changes ride this slice**
-  (the prompt-refine loop is 018's contract-pinned activity; the
-  grounding-judge surface stays off-limits per the 013 pin).
+  *(rev 2.3b — staging, not sanctity)*: only the grounding-judge
+  surface is hard-pinned (013: judge-input changes land with eval
+  coverage only); every other prompt — the synthesis writer
+  emphatically included — is refinable, but prompt *improvement* is
+  018's contract-pinned refine loop, which carries the discipline
+  eval-blind edits need (per-surface replay over captured I/O,
+  anti-overfit checks across the question taxonomy, every change
+  logged as an observation→change pair). The synthesis writer prompt
+  is explicitly queued there — the demo's unvalidated voice rules,
+  013's writer-under-uses-finding-claims observation, the user's
+  2026-07-10 live-run quality report ("outputs quite frankly crap"),
+  now joined by the **audience/user-context pair** (planner field +
+  synthesis-framing consumption land together, so no dead field
+  ships in 017). 017's live-check bar for synthesise is composition
+  mechanics and honesty labels, not prose quality — that's 018's
+  measured target.
 - **Spec refinement** (rides this slice's flow-back, approved at this
   🛑 in principle): execution-orchestration § Steering modes gains
   the Unattended mode via the pre-declared-visible-defaults path

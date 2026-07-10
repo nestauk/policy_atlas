@@ -69,7 +69,11 @@ screening factors. Users could not see or edit the effective criteria.
 **Adopted** — suggested answers on planner questions (2–5, broad→narrow, buttons +
 free text, degrade-don't-block, re-derived as framing evolves); no-preference-style
 visible defaults with a two-field-equivalent required core; pre-launch editable
-review (the plan draft/proposal); cost transparency (time band).
+review (the plan draft/proposal); cost transparency (time band); **screening
+criteria as a first-class visible plan field** (rev 2.3a — fixing V2's biggest gap:
+criteria existed only as one free-text box + an opaque prompt rubric; V3 puts them
+in the plan, v1-compiled into the judged intent, re-targeting to the structured
+014 directive seam when it lands).
 **Named anti-patterns** — intervention-framed copy/prompts (planner prompt is
 question-type-neutral; intent-fit decides when population/setting/outcome suggestions
 are even relevant); dead collected fields (V3 rule: every plan field compiles or is
