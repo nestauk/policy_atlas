@@ -408,5 +408,167 @@
    }
   ],
   "created_at": "2026-07-10T14:00:44.200768+00:00"
+ },
+ {
+  "project_id": "a59e7725-b8f5-4b79-8408-82370a8b70b9",
+  "name": "Quick scan of interventions to reduce childhood obesity",
+  "question": "What intervention approaches have been studied to prevent or reduce childhood obesity, and what does the evidence base look like across populations, settings and outcomes?",
+  "plan": {
+   "title": "Quick scan of interventions to reduce childhood obesity",
+   "question": "What intervention approaches have been studied to prevent or reduce childhood obesity, and what does the evidence base look like across populations, settings and outcomes?",
+   "scoping_notes": [
+    "Population: children and young people; exact age range not specified.",
+    "Intervention focus: approaches to prevent or reduce childhood obesity.",
+    "Outcomes: obesity-related outcomes; exact outcome set not specified.",
+    "Setting: not specified.",
+    "Geography: not specified."
+   ],
+   "screening_criteria": [
+    "Include studies of children or young people under 18.",
+    "Include interventions aiming to prevent or reduce obesity or excess weight.",
+    "Include studies reporting obesity, adiposity, diet or physical activity outcomes.",
+    "Include academic studies and policy-relevant grey literature.",
+    "Exclude adult-only studies.",
+    "Exclude documents with no intervention focus.",
+    "Exclude opinion pieces without evidence or evaluation.",
+    "Exclude documents not available in English."
+   ],
+   "backend_scope": "both",
+   "scope_constraints": {
+    "published_after": null,
+    "published_before": null,
+    "publisher_country": null
+   },
+   "search_effort": "rapid",
+   "analysis_depth": "landscape",
+   "components": [
+    "characterise"
+   ],
+   "component_rationale": {
+    "characterise": "Included to quickly map intervention types, settings, populations, outcomes and obvious evidence gaps across the initial corpus.",
+    "screen_stage2": "Excluded because landscape depth does not include the full-text precision re-screen.",
+    "select": "Excluded because a quick landscape scan will not select documents for in-depth extraction.",
+    "extract": "Excluded because rapid landscape work will not extract structured intervention-outcome findings from selected documents.",
+    "group": "Excluded because grouping depends on structured extraction, which is not part of this quick scan."
+   },
+   "steering_mode": "moderate",
+   "assumptions": [
+    "I am treating \u201cchildhood\u201d as children and young people under 18 unless you specify a narrower age range.",
+    "I am assuming the focus is on interventions intended to prevent or reduce overweight or obesity, not only treatment for severe obesity.",
+    "I am not assuming a country or setting restriction; UK-relevant evidence may include international studies and grey literature.",
+    "I am assuming outcomes may include BMI, BMI z-score, overweight/obesity prevalence, adiposity measures, diet, physical activity, or related behavioural outcomes.",
+    "I am interpreting \u201cquick search\u201d as a rapid landscape scan rather than an in-depth extraction review."
+   ],
+   "expected_artefact_shape": "landscape coverage, themes and gaps",
+   "time_band": "~10-15 min",
+   "steps": [
+    {
+     "label": "Searching sources",
+     "blurb": "Queries out to academic and policy databases",
+     "stage": "acquire"
+    },
+    {
+     "label": "Screening for relevance",
+     "blurb": "Every title and abstract, against your question",
+     "stage": "screen"
+    },
+    {
+     "label": "Sorting by evidence type",
+     "blurb": "Trial, review, evaluation \u2014 each source labelled",
+     "stage": "classify"
+    },
+    {
+     "label": "Appraising quality",
+     "blurb": "How much weight each source can bear",
+     "stage": "appraise"
+    },
+    {
+     "label": "Reading in full",
+     "blurb": "Fetching the documents; paywalls noted, not hidden",
+     "stage": "ingest_full_text"
+    },
+    {
+     "label": "Mapping the landscape",
+     "blurb": "What the evidence covers, and where it's thin",
+     "stage": "characterise"
+    },
+    {
+     "label": "Writing the evidence base",
+     "blurb": "Cited, checked, ready to challenge",
+     "stage": "synthesise"
+    }
+   ],
+   "ready": true
+  },
+  "approved": {
+   "title": "Quick scan of interventions to reduce childhood obesity",
+   "question": "What intervention approaches have been studied to prevent or reduce childhood obesity, and what does the evidence base look like across populations, settings and outcomes?",
+   "scoping_notes": [
+    "Population: children and young people; exact age range not specified.",
+    "Intervention focus: approaches to prevent or reduce childhood obesity.",
+    "Outcomes: obesity-related outcomes; exact outcome set not specified.",
+    "Setting: not specified.",
+    "Geography: not specified."
+   ],
+   "screening_criteria": [
+    "Include studies of children or young people under 18.",
+    "Include interventions aiming to prevent or reduce obesity or excess weight.",
+    "Include studies reporting obesity, adiposity, diet or physical activity outcomes.",
+    "Include academic studies and policy-relevant grey literature.",
+    "Exclude adult-only studies.",
+    "Exclude documents with no intervention focus.",
+    "Exclude opinion pieces without evidence or evaluation.",
+    "Exclude documents not available in English."
+   ],
+   "backend_scope": "both",
+   "scope_constraints": {
+    "published_after": null,
+    "published_before": null,
+    "publisher_country": null
+   },
+   "search_effort": "rapid",
+   "analysis_depth": "landscape",
+   "components": [
+    "characterise"
+   ],
+   "component_rationale": {
+    "characterise": "Included to quickly map intervention types, settings, populations, outcomes and obvious evidence gaps across the initial corpus.",
+    "screen_stage2": "Excluded because landscape depth does not include the full-text precision re-screen.",
+    "select": "Excluded because a quick landscape scan will not select documents for in-depth extraction.",
+    "extract": "Excluded because rapid landscape work will not extract structured intervention-outcome findings from selected documents.",
+    "group": "Excluded because grouping depends on structured extraction, which is not part of this quick scan."
+   },
+   "grouping_facet": null,
+   "steering_mode": "moderate",
+   "steer_point_defaults": [],
+   "expected_artefact_shape": "landscape coverage, themes and gaps",
+   "assumptions": [
+    "I am treating \u201cchildhood\u201d as children and young people under 18 unless you specify a narrower age range.",
+    "I am assuming the focus is on interventions intended to prevent or reduce overweight or obesity, not only treatment for severe obesity.",
+    "I am not assuming a country or setting restriction; UK-relevant evidence may include international studies and grey literature.",
+    "I am assuming outcomes may include BMI, BMI z-score, overweight/obesity prevalence, adiposity measures, diet, physical activity, or related behavioural outcomes.",
+    "I am interpreting \u201cquick search\u201d as a rapid landscape scan rather than an in-depth extraction review."
+   ],
+   "time_band": "~10-15 min"
+  },
+  "turns": [
+   {
+    "role": "user",
+    "text": "Interventions to reduce childhood obesity"
+   },
+   {
+    "role": "planner",
+    "text": "I\u2019ve drafted a standard evidence-review plan for the broad question of interventions to prevent or reduce childhood obesity. Because the prompt is broad, I\u2019ve left country, setting, age subgroup, and publication-date restrictions open rather than inventing them. The proposed run uses both academic and grey-literature sources, screens for intervention evaluations, maps the landscape, then extracts structured findings from a selected set of key documents and groups them by intervention type. If you want it narrower, the main levers would be age group, setting, country, or intervention type."
+   },
+   {
+    "role": "user",
+    "text": "let's do a quick search"
+   },
+   {
+    "role": "planner",
+    "text": "I\u2019ve reworked the plan as a quick scan. This switches from the earlier standard review to rapid search effort and landscape analysis: it will search both academic and grey-literature sources, screen for relevance, classify and appraise the evidence, fetch available full text where possible, and characterise the corpus. It will not do the full-text precision re-screen or structured extraction of intervention-outcome findings, because those belong to a standard or deep intervention review rather than a quick landscape scan. The output should be a fast map of what kinds of childhood-obesity interventions appear in the evidence base, across populations, settings and outcomes, with any thinness flagged."
+   }
+  ],
+  "created_at": "2026-07-10T14:50:39.214164+00:00"
  }
 ]
