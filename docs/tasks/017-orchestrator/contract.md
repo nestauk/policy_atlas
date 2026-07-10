@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **APPROVED rev 2.4** — contract approved (before
+> **Status:** **APPROVED rev 2.4 · amended rev 2.5 (ack'd) + rev 2.6 (micro-clarification)** — contract approved (before
 > planning): **2026-07-10 · Shabeer Rauf** (covering the gated set:
 > runtime egress — the planner LLM surface; one CLI entrypoint; the
 > `orchestration_plan` schema addition; the Unattended steering-mode
@@ -29,6 +29,12 @@ specs in [docs/specs/](../../specs/index.md).
 > the **component config** to keep the three apart.
 >
 > **Revision history:**
+> - **rev 2.6** (2026-07-10, micro-clarification from the PLAN-stage
+>   adversarial review, finding 4): decision 11's developer-side
+>   roll-up precised — wall-clocks in the end-of-run summary log;
+>   per-leg tokens via Langfuse (usage is trace-only as-built); the
+>   single-line aggregate is a recorded seam. No settled decision
+>   changed.
 > - **rev 2.5** (2026-07-10, contract-stage adversarial review
 >   adjudicated — Codex, 8 findings: 2 blocker · 5 major · 1 minor;
 >   **8/8 adopted**, all verified against as-built code before
@@ -755,12 +761,15 @@ PR landing:
     (rev 2.5): `orchestration_plan` status transitions + version rows,
     joined to execution via per-component `plan.compiled` events
     carrying plan id + version, with steering-resolution events on
-    their run context. Per-leg wall-clocks **and a per-leg token/cost
-    roll-up from the existing usage telemetry** are emitted as an
-    end-of-run structured-log summary (+ visible in Langfuse) *(rev
-    2.4c; carrier pinned rev 2.5, adversarial finding 8 — the `runs`
-    table has no summary payload column and none is approved: the
-    roll-up is developer-log-only, no durable carrier implied)*.
+    their run context. Per-leg wall-clocks are emitted in an end-of-run
+    structured-log summary; per-leg token usage is read in Langfuse,
+    where the existing telemetry already records it per call *(rev
+    2.4c; carrier pinned rev 2.5, adversarial finding 8; split
+    precised rev 2.6 — plan-stage review, finding 4: as-built
+    backends discard `_usage` after tracing, so a single-line token
+    aggregate would need a usage-return refactor — recorded seam, not
+    built; both surfaces are developer-side, no durable carrier, no
+    user exposure)*.
     "Token bleed" is the season's named orchestration cost failure
     mode; the roll-up feeds the depth seam's bands and the plan's
     time-band honesty at near-zero cost. **The roll-up is developer-side telemetry only**

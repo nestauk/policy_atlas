@@ -1,10 +1,27 @@
 # Plan: 017-orchestrator
 
-> **Status:** rev 1 — drafted against contract **rev 2.5** (approved
-> 2.4, adversarial rev 2.5 ack'd 2026-07-10). Plan-stage adversarial
-> review pending; plan 🛑 pending. ADR 0014 (the v1 orchestrator
-> carve + the Unattended steering-mode refinement) is written at
-> confirmation (step 4), per the 016 precedent.
+> **Status:** rev 2 — plan-stage adversarial review adjudicated
+> (Codex, 6 findings: 2 blocker · 3 major · 1 minor, **6/6 adopted**,
+> all verified in as-built code). Blockers: (1) `weight_emphasis` is
+> **multiplicative** on the default weights, never renormalised
+> (`select.py:439,568`) — the steer-point option constants re-pinned
+> as multipliers with rank-shift tests; (2) the failure-event
+> backstop needed a **two-phase run lifecycle** — the run row (+
+> `run.started` + `plan.compiled`) commits in its own short
+> transaction BEFORE leg work, so it survives a leg rollback and the
+> fresh-transaction `component.failed` keeps FK validity
+> (`schema.py:101/113`, `harness.py:579`). Majors: the screening
+> directive parser rejects unknown keys (`screen.py:165-171`) — task
+> 5 now owns widening the grammar to `{stage?, criteria?}`; token
+> usage is trace-only as-built (backends discard `_usage`) — the dev
+> summary log narrows to wall-clock, per-leg tokens read from
+> Langfuse, single-line aggregation recorded as a seam (contract
+> decision 11 micro-clarified, rev 2.6); task 3's brief gains the
+> full per-leg run lifecycle + component reference-kwargs map (the
+> 015 brief-self-sufficiency lesson). Minor: ADR 0014 ownership
+> pinned — lead authors it at plan confirmation (step 4), before the
+> build.
+> Rev 1 drafted against contract **rev 2.5**. Plan 🛑 pending.
 > Contract: [contract.md](contract.md).
 >
 > "Plan-pinned" constants below are THIS plan's code constants,
@@ -76,7 +93,19 @@ never stall.
   findings; assumptions first-class.
 - `runner.py` — the EB capability-runner: `run_plan(engine, plan,
   backends, io: OrchestratorIO)`. Per-leg `engine.begin()`
-  transactions (block-boundary commits). The directive-authoring slot
+  transactions (block-boundary commits) with the **two-phase per-leg
+  run lifecycle** (rev 2, blocker 2): phase A — a short transaction
+  creates the `runs` row + appends `run.started` + `plan.compiled`
+  (payload incl. plan_id/plan_version + the leg's reference kwargs)
+  and COMMITS; phase B — the leg's work transaction. A leg failure
+  rolls back phase B only; the committed run row keeps
+  `event_log`'s composite FK valid, so the fresh-transaction
+  `component.failed` append + run-status update always lands.
+  Reference kwargs per component (the `_run_component` map,
+  productionised): select ← characterisation_run_id (+
+  ranking_backend) · extract ← selection_run_id · group ←
+  extraction_run_id · synthesise ← deepest successful reference.
+  The directive-authoring slot
   is one function — `leg_directive(plan, leg, upstream_state) ->
   dict` (scope-context deltas per leg: search depth+filters ·
   screening stage/criteria · selection budget/emphasis/strata ·
@@ -90,9 +119,14 @@ never stall.
   transaction, open a short fresh transaction, append
   `component.failed` (idempotent — check-before-insert against the
   harness's own write) + set run status. End-of-run: collation of
-  flagged events + one structured dev summary log line (per-leg
-  wall-clock + token usage where the backend telemetry exposes it —
-  developer-side only).
+  flagged events + one structured dev summary log line carrying
+  **per-leg wall-clocks** (rev 2, finding 4: token usage is
+  trace-only as-built — every backend discards `_usage` after
+  tracing, so per-leg tokens are read in **Langfuse**, where they
+  already exist per call; both surfaces are developer-side, honouring
+  the contract; a runner-visible usage aggregate is a recorded seam —
+  arrives with a usage-return refactor or the component-progress
+  protocol; contract decision 11 micro-clarified as rev 2.6).
 - `orchestrate.py` — the CLI entrypoint (`python -m
   policy_atlas.orchestrate`): planning conversation loop (numbered
   suggested-answer menus + free text) → plan review → approval writes
@@ -142,19 +176,27 @@ as-built) · excluded user-nominated cluster/doc (plan
 `priority_strata`/`must_include_ids` vs selection rationale) ·
 thin base (as-built select flags). Option mapping (contract decision
 6 rev 2.5): clusters → `priority_strata` (+`must_include_ids`) ·
-strongest → `weight_emphasis: {quality: 0.45}` · most-relevant →
-`weight_emphasis: {screen_confidence: 0.40}` (exact values reviewed
-here; both leave the remaining default weights renormalised as-built)
-· budget → `budget` · as-proposed → no delta. After adjustment:
-new plan version row → recompose remaining legs → re-run `select`.
+strongest → `weight_emphasis: {"quality": 2.0}` · most-relevant →
+`weight_emphasis: {"screen_confidence": 2.5}` — **multipliers on the
+default weights** (rev 2, blocker 1: `select.py` multiplies defaults
+by emphasis values and sums unnormalised — there is no
+renormalisation; the earlier target-weight framing was wrong).
+Rank-shift tests prove each option reorders a fixture candidate set
+the intended way. · budget → `budget` · as-proposed → no delta.
+After adjustment: new plan version row → recompose remaining legs →
+re-run `select`.
 
 **Screening-criteria compose (contract decision 2 rev 2.5):**
 `context["screening"]["criteria"]: list[str]` (length/char caps
-mirroring the selection directive's `DIRECTIVE_LIST_MAX` discipline),
-consumed ONLY in `screen.py` payload assembly — the intent INPUT
-string grows a fenced "Additional screening criteria" block; the
-prompt template is unchanged; `evidence_scope.intent` itself is never
-rewritten. Test-pinned isolation: criteria appear in the screen
+mirroring the selection directive's `DIRECTIVE_LIST_MAX` discipline).
+**The screening directive grammar widens** (rev 2, finding 3: the
+as-built parser rejects any key besides `stage`, `screen.py:165-171`)
+— task 5 owns the fail-closed widening to `{stage?: int, criteria?:
+list[str]}`, criteria preserved alongside a stage-2 directive, with
+stage-1 AND stage-2 tests. Criteria are consumed ONLY in `screen.py`
+payload assembly — the intent INPUT string grows a fenced "Additional
+screening criteria" block; the prompt template is unchanged;
+`evidence_scope.intent` itself is never rewritten. Test-pinned isolation: criteria appear in the screen
 payload; search-generation inputs and synthesise's intent read the
 untouched scope intent.
 
@@ -183,21 +225,31 @@ schema class, mandatory)**
 
 **Phase 2 — the EB capability-runner (full `make verify` gate —
 reader contact: task 5 touches `screen.py`)**
-3. `runner.py` core: chain walk, per-leg transactions, reference
-   threading, `leg_directive` authoring slot, `plan.compiled` +
-   plan_id/version, retry cap, degrade/skip matrix, end-of-run
-   collation + dev summary log. — **codex** *(the slice's core;
-   multi-constraint coherence; fault-injection tests specced below
-   make done machine-verifiable)*
+3. `runner.py` core: chain walk with the **two-phase per-leg run
+   lifecycle** (run row + `run.started` + `plan.compiled` w/
+   plan_id/version + reference kwargs committed before leg work — the
+   constants block pins the shape and the per-component kwargs map),
+   reference threading, `leg_directive` authoring slot, retry cap,
+   degrade/skip matrix, end-of-run collation + the wall-clock dev
+   summary log. `run_harness` stays a one-component dispatcher — the
+   runner owns everything `skeleton._run_component` does today, per
+   plan, per leg. — **codex** *(the slice's core; multi-constraint
+   coherence; fault-injection tests specced below make done
+   machine-verifiable; rev 2 — brief made self-sufficient on the run
+   lifecycle, the 015 lesson)*
 4. Failure semantics + the fresh-transaction failure-event backstop;
    fault-injected tests: spine-leg fail → run fail, no downstream;
    discretionary fail → degrade + deepest-successful synthesise;
    DB-abort component → `component.failed` survives on a fresh
    transaction; retry fires once. — **codex** *(same subsystem as 3,
    separate brief so each has one concern)*
-5. `screen.py` criteria input composition + isolation tests (screen
-   payload gains the block; search-generation + synthesise inputs
-   provably don't). — **fast-worker** *(small exact spec + test list)*
+5. `screen.py`: screening-directive grammar widening (`{stage?,
+   criteria?}`, fail-closed, caps per the constants block) + criteria
+   input composition + isolation tests (screen payload gains the
+   block at stage 1 AND stage 2; a criteria+stage-2 directive
+   round-trips; search-generation + synthesise inputs provably never
+   see criteria). — **fast-worker** *(exact spec + test list; rev 2 —
+   grammar widening made explicit, finding 3)*
 
 **Phase 3 — steering core (`make verify-fast` gate — new-module logic
 over Phase-2 seams, no schema/reader contact)**
@@ -226,7 +278,9 @@ interface lands; end-to-end integration)**
     **codex** *(multi-file integration; scripted-IO done)*
 
 **Phase 5 — flow-back + records (`make verify-fast` gate — docs +
-ledger only)**
+ledger only)** *(ADR 0014 is NOT here — rev 2, finding 6: the lead
+authors it at plan confirmation, step 4, committed on the branch
+before the build opens; Phase 5's spec/ledger edits reference it.)*
 11. Spec refinement: execution-orchestration § Steering modes gains
     Unattended (pre-declared-visible-defaults path, firm principle's
     purpose preserved) + `log.md` entry. — **lead** *(spec prose is
