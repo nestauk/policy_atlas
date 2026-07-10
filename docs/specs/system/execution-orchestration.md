@@ -134,7 +134,8 @@ quality/latency/filtering/scale/operability.
 
 **Steering mode** = a per-run dial for involvement *frequency* (mutable mid-run; check-ins
 suppressible) — **Minimal** (runs to completion; substance still pauses) · **Moderate**
-(recommended default; pauses on important decisions) · **Frequent** (every section/block).
+(recommended default; pauses on important decisions) · **Frequent** (every section/block) ·
+**Unattended** (zero mid-run interaction; task 017 refinement, see below).
 *(UX label currently reads "Thorough" — sync; "thoroughness" is the separate depth axis, §5.)*
 Per-mode approval/recording guarantees (forecast/shape approval up front in every mode;
 per-commit approval in Frequent/Moderate; every commit recorded) — the **audit posture across
@@ -143,14 +144,28 @@ the modes** — live in [plan-as-object.md](plan-as-object.md).
 **The routing rule** — when a run hits something the plan didn't anticipate, route to *pause &
 ask* / *flag & continue* / *silently log & continue*, by **kind of decision × mode**:
 
-| Situation | Minimal | Moderate | Frequent |
-|---|---|---|---|
-| Method — within a declared escape hatch | log + continue | flag + continue | pause |
-| Method — outside the hatch envelope | flag + continue | pause | pause |
-| **Substance — declared gate *or* conclusion-shaping residual** | **pause** | **pause** | **pause** |
+| Situation | Unattended | Minimal | Moderate | Frequent |
+|---|---|---|---|---|
+| Method — within a declared escape hatch | log + continue | log + continue | flag + continue | pause |
+| Method — outside the hatch envelope | flag + continue | flag + continue | pause | pause |
+| **Substance — declared gate *or* conclusion-shaping residual** | **pre-declared visible default, flagged** | **pause** | **pause** | **pause** |
 
 - **Firm principle: substance escalates to a human in *every* mode** — and a substance check-in
   can **never** be silenced by the frequency dial or a suppression rule (hard-constrained).
+- **Unattended — the pre-declared-visible-defaults path** *(task 017 refinement; the firm
+  principle's accountability purpose preserved, its mechanism generalised)*: the run never
+  pauses. Instead, each **anticipated** steer-point's default resolution is **visible plan
+  content approved with the plan** — a pre-declarable rule per steer-point *class* (e.g. "on
+  any deepening-selection trigger: proceed as proposed and flag"), never a
+  runtime-data-specific answer (trigger data such as cluster names exists only after the
+  component runs, so every rule must be checkable at approval time). Approving/starting the
+  run is the consent; nothing extra is asked. Every auto-resolution is **flagged, collated
+  into the end-of-run review, and marked on the run record** — the human substance decision
+  still happens and is still attributable; it moves from run-time to plan-time. Substance is
+  therefore *never silent* in any mode, but no longer always *live*: an **unanticipated**
+  substance residual (no pre-declared rule covers it) resolves to the safe declared default
+  (proceed-and-flag) and is flagged as `unconfigured_default` — the loudest flag class,
+  reviewed first in the collation.
 - **Classification is resolved structurally, not by a from-scratch runtime judgement**: substance
   is pre-declared as **anticipated mandatory checkpoints** (§4 — unconditional gates *or*
   conditional steer-points with explicit escalation triggers); sanctioned method is pre-declared

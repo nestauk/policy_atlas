@@ -124,15 +124,15 @@ def build_envelope(
     """Assemble ``synthesis_envelope_v1`` — the judge's evidence envelope.
 
     The envelope is the cited chunks' full frozen text, no neighbours (plan
-    rev 2), plus each chunk's ``segmentation_policy`` (persisted per cited
-    chunk on the annotation payload — contract rev 8 M7).
+    rev 2), plus each chunk's ``segmentation_policy`` and ``text_basis`` as
+    cited-chunk data fields.
 
     Args:
         claims: Id-keyed claim records: ``claim_id``, ``claim_type``, ``text``,
             and the claim's citations (chunk ids + quotes, or resolved finding
             anchors).
         chunks: Id-keyed cited chunk records: ``chunk_record_id``,
-            ``segmentation_policy`` and full frozen ``content``.
+            ``segmentation_policy``, ``text_basis`` and full frozen ``content``.
 
     Returns:
         The versioned envelope payload (deterministic, JSON-compatible).

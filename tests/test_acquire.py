@@ -181,7 +181,7 @@ def assert_invariant(counts: dict[str, Any]) -> None:
 
 
 def test_acquire_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 25
+    assert len(metadata.tables) == 26
 
 
 def seed_coverage_row(
@@ -1028,20 +1028,23 @@ def test_overton_fixture_quirk_coverage() -> None:
 
 
 def test_acquire_module_has_no_http_client() -> None:
-    """No package module but the live transport carries HTTP client usage.
+    """No package module but the live transports carries HTTP client usage.
 
-    Task 015 extension (contract decision 1): ``search_live.py`` is the one
-    sanctioned HTTP home; every other module stays HTTP-import-free, and
-    ``acquire.py`` must never import the live module — fixture defaults stay
-    zero-egress by construction.
+    Task 015 extension (contract decision 1): ``search_live.py`` is a
+    sanctioned HTTP home; task 016 extension (contract decision 1, the same
+    pattern): ``fetch_live.py`` is the other. Every other module stays
+    HTTP-import-free (``urllib.parse`` is pure URL parsing, not a client, and
+    stays allowed), ``acquire.py`` must never import its live module, and
+    ``ingest_full_text.py`` must never import ``fetch_live`` — fixture
+    defaults stay zero-egress by construction.
     """
     src_dir = Path(__file__).parent.parent / "src" / "policy_atlas"
     forbidden = re.compile(
-        r"^\s*(import|from)\s+(urllib|requests|httpx|aiohttp|http\.client|socket)\b",
+        r"^\s*(import|from)\s+(urllib(?!\.parse\b)|requests|httpx|aiohttp|http\.client|socket)\b",
         re.MULTILINE,
     )
     for module in src_dir.rglob("*.py"):
-        if module.name == "search_live.py":
+        if module.name in ("search_live.py", "fetch_live.py"):
             continue
         assert not forbidden.search(module.read_text()), f"HTTP client import in {module}"
 
@@ -1052,6 +1055,16 @@ def test_acquire_module_has_no_http_client() -> None:
     )
     acquire_text = (src_dir / "acquire.py").read_text()
     assert not live_import.search(acquire_text), "acquire.py imports the live module"
+
+    fetch_live_import = re.compile(
+        r"^\s*(import|from)\s+policy_atlas\.fetch_live\b|"
+        r"^\s*from\s+policy_atlas\s+import\s+.*\bfetch_live\b",
+        re.MULTILINE,
+    )
+    ingest_text = (src_dir / "ingest_full_text.py").read_text()
+    assert not fetch_live_import.search(ingest_text), (
+        "ingest_full_text.py imports the live fetch module"
+    )
 
 
 def test_recorder_scripts_not_imported_by_package() -> None:

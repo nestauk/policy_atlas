@@ -30,6 +30,11 @@ dependencies = [
     # transport. Already a pinned transitive of the openai SDK — declaring it guards
     # against a future SDK release dropping it silently at lock regen. Zero new packages.
     "httpx>=0.28,<1",
+    # Task 016 (plan rev 2, blocker finding 5): the live fetcher's pinned-IP connect
+    # is a custom httpcore NetworkBackend — a direct import, so the same
+    # declaration-only promotion as httpx above (015 rev-3.13 precedent): already a
+    # pinned transitive of httpx; declaring it guards a lock regen. Zero new packages.
+    "httpcore>=1,<2",
 ]
 
 [project.scripts]

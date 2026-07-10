@@ -1,5 +1,39 @@
 # Spec update log
 
+## 2026-07-10
+* **Update**: [execution-orchestration § Steering modes & the routing rule](system/execution-orchestration.md)
+  — **Unattended mode** added (task 017, contract rev 2 decision 6b, user call; approved in
+  principle at the 017 contract 🛑; ADR 0014): a fourth steering mode with zero mid-run
+  interaction. Anticipated steer-points auto-resolve to **pre-declared visible default
+  resolutions carried as plan content** (pre-declarable rules per steer-point class, never
+  runtime-data-specific answers — rev 2.5 adversarial finding 6); every auto-resolution is
+  flagged, collated into the end-of-run review and marked on the run record. The firm
+  principle's wording assumed a live pause; its accountability purpose is preserved — the
+  human substance decision moves from run-time to plan-time and is never *silent*, no longer
+  always *live*. The routing-rule table gains the Unattended column; unanticipated substance
+  residuals resolve proceed-and-flag as `unconfigured_default`, the loudest flag class.
+  Approved with the 017 contract per the spec-refinement flow.
+* **Update**: [EB components](capabilities/evidence-base/components.md) (opening chain
+  statement + §9) and [EB capability](capabilities/evidence-base/capability.md) (component
+  skeleton) — **the mandatory EB spine** (task 016, user call at the contract gate
+  2026-07-09; ADR 0013): every EB run executes acquire(`search`) → screen → classify →
+  appraise → ingest(fetch) → synthesise; characterise · select · extract · group · stage-2
+  screen are orchestrator-discretionary per the depth gradation. Mandatory ingest is a
+  mandatory **attempt** (reason-coded per document), never a substrate guarantee.
+  Synthesise's substrate gate is untouched in character; its envelope-only refusal becomes
+  unreachable-by-composition and `no_groundable_substrate` narrows to the genuinely empty
+  corpus (no references AND screened-in count zero). Approved with the 016 contract
+  (rev 2.2 + amendments, 2026-07-09) per the spec-refinement flow.
+* **Update**: [EB components §4](capabilities/evidence-base/components.md) — as-enacted
+  note on the flag-not-drop failure path (016 contract rev 2.5, user call): the
+  unfetchable document's substrate IS its envelope abstract chunks (chunked + embedded at
+  acquire), joining grounded retrieval as labelled substrate with `text_basis` carried on
+  chunk records and citations; an all-fetch-failed corpus still synthesises, visibly
+  abstract-labelled. Access-failure honesty recorded (401 → paywall; 403 → paywall only
+  with corroboration, else `blocked_by_host`; bot-blocks never counted as paywalls). This
+  enacts written §4 text the 008 fixture era never reached — no semantic change to the
+  spec's intent.
+
 ## 2026-07-08
 * **Update**: [EB components §2](capabilities/evidence-base/components.md) — screen refined
   to its v3.0 **two-stage realisation of the one component** (stage-parameterised via the

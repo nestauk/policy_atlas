@@ -189,7 +189,7 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   v2's central lesson is structurally honoured: no single LLM query is load-bearing
   (validated multi-query fan-out, all-zero → verbatim fallback).
 - **User-selectable backend scope — DISCHARGED (task 015).** `search_backend_scope`
-  (`academic` / `grey_literature` / `both`) compiles on Plan AND Config (unknown values
+  (`academic_only` / `grey_lit_only` / `both`) compiles on Plan AND Config (unknown values
   rejected on both), driving the 007 `search_backends` parameter; the harness resolves
   defaults from compiled config.
 - **Per-backend query mode — DISCHARGED as built, exploration seams remain (task 015).**
@@ -222,6 +222,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Retrieval-boost grammar v2** — rev 3.9's named companion slice: tag-based retrieval
   scoping + the 014 screen-confidence multiplier (grammar pre-decided in the task-014
   section above), one 013-surface slice; sequence before 017 or alongside it.
+  **Adjudicated at the 017 contract gate (rev 2d, user call, 2026-07-10): stays
+  deferred, eval-gated via its own 013-surface slice; 017 composes with the v1
+  grammar as-built.**
 - **Select-as-tool / shared purpose-fit-ranking tool** — the rev-3 spec-level seam:
   select's ranking machinery exposed as a tool other components (and the deep loop) could
   call, instead of each growing its own fitness heuristics.
@@ -280,33 +283,60 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Full-text ingestion (task 008 seams)
 
-- **Live `DocumentFetcher`** — **confirmed in-scope for v3.0** (user, 2026-07-05: the product
-  cannot function as intended without live fetching), so this entry is *sequencing*, not
-  scoping-out — unlike most of this file. The seam is built (protocol +
-  `run_harness(document_fetcher=…)`); wiring live HTTP is **runtime egress**, its own gated
-  slice. Requirements carried from the 008 contract + review stack (pre-registered so they
-  aren't rediscovered in production):
-  explicit timeouts, redirect handling with an explicit protocol policy (SSRF posture for
-  provider-supplied URLs), politeness + per-host rate limiting, retry/backoff, content-type
-  sniffing (a PDF served as `application/octet-stream` must not fall through to the plain-text
-  parser — magic bytes, not headers) and charset handling (v3.0 decodes HTML as UTF-8-replace;
-  honour the declared charset or pass bytes to trafilatura), landing-page scrape + PDF-link
-  discovery, DOI-URL fallback, a **paywall-detection signal ladder** (v3.0 maps only HTTP
-  401/403) with an OA-status cross-check, per-link exception isolation (a fetcher raise must
-  become a reason-coded outcome, not a component failure — fail-loud is correct fixture-world,
-  wrong live), bounded in-flight buffering / streaming (parent-side bodies are unbounded per
-  cascade round today; fine at 24 fixture docs, an OOM risk live) and concurrent fetching
-  (v3.0 fetches serially in the parent — fine for fixture replay, sum-of-latencies live), and
-  a worker-side / OS-level egress guard in the test suite (the socket-deny test now covers
-  parent + workers; an `unshare -n`-style CI guard is the stronger durable control). A
-  `pip-audit`-style dependency check belongs in CI now that binary parsing deps (pymupdf,
-  lxml) are in the tree — CI config is its own gate. **Fixture-corpus relocation** (user
-  decision, 2026-07-05): the ~24 MB committed corpus ships inside the package only because
-  replay *is* the v3.0 product behaviour; when the live fetcher takes over as default, move
-  the documents out of `src/policy_atlas/data/fulltext/` (to `tests/` or a pinned-hash
-  release asset) so the wheel slims — the corpus itself stays in the repo as the
-  deterministic test substrate. Growth is capped meanwhile by a test-enforced ≤30 MB budget
-  (`test_licence_guard`); raising the cap means consciously choosing the corpus strategy.
+- **Live `DocumentFetcher` — DISCHARGED (task 016).** Every pre-registered requirement from
+  this entry shipped in `fetch_live.py` + the ingest pipeline, with one named exception kept
+  below: explicit timeouts · manual per-hop-validated redirects with the full SSRF guard set
+  (scheme allowlist, userinfo refusal, every A/AAAA answer classified with IPv4-mapped forms
+  unwrapped, pinned-IP connect at the httpcore NetworkBackend seam) · per-host politeness +
+  global bounded concurrency · retry/backoff (015 retry set, cap 1) · magic-byte content-type
+  sniffing (%PDF wins over any header) · charset handling (bytes pass to trafilatura
+  undecoded; UTF-8-replace only on the plain-text path) · landing-page PDF-link discovery +
+  DOI-URL fallback (the one constructed URL, validated + encoded + fully guarded) · the
+  access-failure ladder (401 → paywall; 403 → paywall only with corroboration, else
+  `blocked_by_host`; 200+markers → paywall) with the OA cross-check · per-link exception
+  isolation (an escaped raise becomes reason-coded `fetch_error`, never a component failure) ·
+  streaming size caps + reservation-based in-flight byte accounting (deadlock-impossible
+  backpressure) · bounded-parallel fetch feeding the parse pool. `make verify` stays
+  deterministic and egress-free (fixture default unchanged; the import guard sanctions
+  `fetch_live.py` alongside `search_live.py` and pins that `ingest_full_text.py` never
+  imports it). The `pip-audit` CI pre-registration also **discharged** (016 rev 2.2:
+  `make audit` + an independent CI job, ignore-list policy documented in the Makefile).
+  **Fixture-corpus relocation discharged** (016 decision 12, per the 2026-07-05 trigger):
+  corpus moved to `tests/data/fulltext` (out of the wheel, wheel-check test-pinned);
+  `FixtureFetcher` resolves via explicit root / `POLICY_ATLAS_FIXTURE_CORPUS` / repo-relative
+  default with a loud missing-corpus error; the ≤30 MB budget guard moved with it; a
+  live-flagged run never silently falls back to fixture replay (test-pinned).
+- **OS-level CI egress guard** (`unshare -n`-style) — the one 016 exception, **explicitly
+  deferred with rationale** (016 rev 2.4, adversarial finding 8): the pre-registered
+  test-level control exists as-built (the socket-deny guard covers parent + workers; the
+  import-boundary guard pins the transport homes), and the OS-level CI variant — the stronger
+  durable control — is a CI change beyond 016's one approved addition (the pip-audit job).
+  Lands as its own CI-gated change.
+- **Per-depth fetch budgets** (016 contract, decision 9 note) — a recorded lever of the
+  tool-wide depth/time-budget gradation seam, not hard-wired in the fetcher: depth selects
+  how much fetch wall-clock/volume a run buys. Arrives with the gradation seam's allocator.
+- **Landing-page boilerplate heuristic** (016 review stack, Codex adversarial finding —
+  declined as-designed): when landing HTML parses ≥ the thin threshold *and* a
+  `citation_pdf_url` was discovered, the cascade accepts the HTML parse and never follows
+  the PDF. Correct for full-text HTML articles that also carry pdf meta (the BMC/Frontiers
+  shape — reordering would demote real articles); wrong for verbose landing pages, which
+  then ingest as boilerplate `full_text`. Eval territory: content-quality evals decide
+  whether a boilerplate detector / conditional PDF preference pays its complexity.
+- **Bounded DNS resolution** (016 review stack, Codex adversarial finding): `getaddrinfo`
+  runs outside the 30 s per-request timeout in both `_guard_url` and the pinned-IP connect;
+  OS resolver defaults bound it near the same order in practice. A thread-wrapped resolver
+  timeout lands only if live telemetry ever shows resolver stalls tying up fetch workers.
+- **Destination-port allowlist** (016 review stack, security lane LOW): the SSRF guard
+  permits any port on public IPs; an 80/443 allowlist would close public-host port probing
+  at the cost of rare odd-port OA hosts. Revisit with live-corpus telemetry.
+- **Stage-2 hydration as one window-function query** (016 review stack): per-snapshot
+  streaming queries are the deliberate memory-bound trade (server-side early stop); a
+  `SUM(length) OVER (PARTITION BY …)` single-query form gets both if stage-2 telemetry ever
+  shows DB round-trips (not LLM calls) dominating wall-clock.
+- **Shared live-HTTP retry vocabulary** (016 review stack, reuse finder): `fetch_live` and
+  `search_live` duplicate the retryable-status set and retry-once/backoff shape; their
+  control flows differ enough (status-outcome objects vs exception-only) that unification
+  waits for a third live client to prove the seam.
 - **Concurrent-run write guard** — eligibility selection takes no row locks and final writes
   are unconditional, so two simultaneous ingest runs over **one scope** could interleave
   (mirrors 007's concurrent-run dedup note; Codex adversarial finding, task 008). Scoped
@@ -338,6 +368,18 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   collapsed-chunk PDFs (extract handles them via deterministic oversize subsegment splitting,
   so the full-read guarantee holds) are the **first downstream consumer signal** for gating
   this escalation — the parse-quality eval now has a measurable customer.
+- **Citation-context character clamp for oversized chunks** (016 design conversation, user
+  call 2026-07-09) — the chunk is the citation/locator grain, so a collapsed heading-light
+  chunk (tens of thousands of chars) makes clunky provenance context wherever a citation is
+  resolved to its chunk. Chunks are frozen (never re-segmented), so the fix is a character
+  clamp at the **consumption** surfaces, windowed around the cited span (embedding units
+  carry offsets — the natural anchor). Two named consumers: (a) the grounding-judge envelope
+  (`synthesis_envelope_v1` carries cited chunks' full frozen text, no clamp — a deliberate
+  013 plan call; changing judge input is prompt-bearing and eval-sensitive, so it lands with
+  eval coverage, not as a rider); (b) future read surfaces (context/dossier views — the
+  web-app slice). Cheaper mitigation than (and complementary to) the docling escalation
+  above. Trigger: live corpora making collapsed chunks common, or judge token-cost
+  observations.
 - **Time-budget-aware parser selection** — the user's stated time horizon picks the parser
   (tight → pymupdf4llm, long → ML layout); `parse_profile`-per-snapshot (ADR 0004) is the hook.
 - **Chunk-volume bias controls at the retrieve seam** — full-text documents contribute tens of
@@ -439,7 +481,11 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   also registers its tag extractor next to its mapper — `_provider_tags` dispatches by
   backend name and silently yields no tags for unknown names (`_MAPPERS` and the tag
   branches are two structures today; unify or add exhaustiveness enforcement when backend
-  #3 lands — review adjudication, 2026-07-06).
+  #3 lands — review adjudication, 2026-07-06). **Sharpened trigger (user live
+  observation, 2026-07-10, recorded at the 017 gate):** classify's open
+  methodological/structural tag vocabulary fragments at live scale, isolating
+  documents — consolidation becomes useful there first; still an orchestrator-family
+  seam with the trigger unfired in v1 (one run per project).
 - **Langfuse follow-ons** (decision 13 ships the baseline: env-gated client, full-I/O
   spans, in-span scores, no-op with nothing configured, loud on partial config / missing
   host): runtime prompt-registry deployment (labels/environments, emergency-edit
@@ -666,12 +712,14 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   backends (`extraction_backend.py`, `ranking.py`, `facet_grouping.py`,
   `synthesis_backend.py`, `grounding_judge.py`) ride it, heterogeneous call-sites
   preserved (ranking's in-span trace score via the `after` hook).
-- **Harness failure-event append dies inside an aborted transaction** (012 live check,
-  standing behaviour — predates 012, affects every component): a server-side DB error
-  mid-component leaves the connection's transaction aborted, so `_run_scope_component`'s
-  `component.failed` event INSERT itself fails (`InFailedSqlTransaction`) — the run dies
-  loudly but without its failure event recorded. Fix belongs in the harness (append the
-  failure event on a fresh transaction/rollback first); repo-wide, not group-specific.
+- **Harness failure-event append dies inside an aborted transaction — DISCHARGED
+  (task 017).** The EB capability-runner's failure path rolls back the component
+  transaction first and appends `component.failed`/`run.failed` idempotently on a
+  fresh transaction against the pre-committed run row (`runner.py::
+  _record_failure_backstop`; contract rev 2.5 adversarial finding 7). Honestly
+  scoped: the fix lives at the runner layer (the product path); a component driven
+  directly through `run_harness` outside the runner (the zero-egress skeleton smoke)
+  retains the old behaviour — acceptable, the runner is the product path.
 
 ## Synthesise (task 013 seams)
 
@@ -833,10 +881,51 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Classify-confidence threshold-gating** (rev 1.5, V2 `strength.py` precedent) —
   confidence is event-payload-only today; a gate that acts on it arrives with its first
   consumer.
-- **Stage-2 windowing scale efficiency** (014 review) — `_load_stage2_docs` fetches every
-  candidate chunk then keeps only the first window; fine at fixture scale under upstream
-  caps, wasteful at real corpus scale. Load only the first window's chunks when 015/016
-  bring real volumes.
+- **Stage-2 windowing scale efficiency — DISCHARGED (task 016, decision 11: the
+  pre-registered trigger fired).** `_load_stage2_docs` now hydrates only the chunk prefix the
+  first window can read (per-snapshot streamed query, stop at the budget-crossing chunk);
+  peak memory is bounded by window budgets + split-boundary slack, never corpus full-text
+  size. Behaviour-preserving, test-pinned (byte-identical first-window payload + the
+  prefix-hydration proof).
+
+## Orchestrator (task 017 seams)
+
+- **The LLM EB-expert capability agent** — the JIT directive-authoring expert
+  sub-agent (system-prompted as an evidence-review expert; reads upstream
+  outputs to author each component's directive; makes reasoned
+  surface-vs-settle calls; carries domain expertise into a more cohesive
+  artefact). Its drop-in seam is `runner.py::leg_directive(plan, step,
+  upstream_state)` — v1 returns the composer's directive delta unchanged. Own
+  slice, recommended post-eval (directive quality is unmeasurable before
+  evals). Contract rev 2c, user + lead converged.
+- **Plan-field ↔ chat-turn provenance** — v1 persists the approved plan
+  object (`orchestration_plan` rows), not per-field conversation
+  back-references; the planning transcript is ephemeral CLI state. The
+  spec's provenance rule (plan-as-object) waits for the workspace cluster.
+  017 review addendum: a steer-point reselect's plan version row carries
+  attribution but no *pointer* to the commit-layer directive that motivated
+  it (the substance lives in `selection_result.selection_provenance` —
+  durable and reachable via the `plan.compiled` chain, confirmed as-designed
+  per decision 4; a version row that names its cause would make the audit
+  one hop shorter).
+- **Resume-engine design requirement** — 017 ships per-component commits, no
+  resume engine (re-run-from-top accepted for 017/018; contract decision 7).
+  The engine's requirement recorded from the 2026 durable-execution
+  consensus (rev 2.4b): checkpoint state serialization + an **idempotency
+  key persisted before any interruption** so a resumed action runs exactly
+  once.
+- **Steering conversational half** — narration voice (the demo's second
+  posture) · `clarify`/`escalate` parking on durable signals ·
+  `agent_judgement_routed` residual events (require runtime agent
+  discretion the deterministic runner lacks) · free-text steering →
+  replanning · mid-run mode *suppression* rules. All stay out of 017 by
+  contract (Out-of-scope); check-in content stays deterministic renders.
+- **Runner-visible token-usage aggregate** — as-built, every LLM backend
+  discards `_usage` after Langfuse tracing, so 017's dev summary log
+  carries wall-clocks only; per-component tokens are read in Langfuse. A
+  runner-visible single-line usage aggregate needs a usage-return refactor —
+  arrives with that refactor or the component-progress protocol (contract
+  decision 11, rev 2.6).
 
 ## Data model / evidence
 
@@ -878,14 +967,18 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Execution / collaboration / ops
 
-- **Harness failure-event write on an aborted transaction** (013 review stack,
-  2026-07-08) — every `run_harness` node's exception handler appends the
-  `component.failed` event on the same connection; a DB-error exception
-  (constraint violation, driver error) leaves the transaction aborted, the
-  event write itself fails, and no audit record survives. 013's synthesise
-  node avoids the known case with a pre-write guard; the general fix
-  (savepoint around component execution, or event write after rollback) is a
-  harness slice.
+- **Harness failure-event write on an aborted transaction — DISCHARGED for the
+  product path (task 017)** (013 review stack, 2026-07-08) — every `run_harness`
+  node's exception handler appends the `component.failed` event on the same
+  connection; a DB-error exception (constraint violation, driver error) leaves
+  the transaction aborted, the event write itself fails, and no audit record
+  survives. 013's synthesise node avoids the known case with a pre-write guard.
+  Task 017's EB capability-runner closes the gap for the product path
+  (`runner.py::_record_failure_backstop`: rollback first, `component.failed` +
+  `run.failed` idempotently on a fresh transaction — same discharge as the
+  task-012 entry above). Residual: `run_harness` driven directly outside the
+  runner (the zero-egress `skeleton.py` smoke) retains the old behaviour; an
+  in-harness fix remains a harness slice if that path ever matters.
 - **Harness node generalisation** — `_run_scope_component`,
   `_run_characterise` and `_run_synthesise` share ~30 verbatim lines of
   started/lookup/not-found/completed bookkeeping, diverging only in the

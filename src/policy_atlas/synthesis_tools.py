@@ -22,9 +22,9 @@ import re
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Protocol, TypedDict, cast
+from typing import TYPE_CHECKING, Any, NotRequired, Protocol, TypedDict, cast
 
-from sqlalchemy import case, func
+from sqlalchemy import ColumnElement, case, func
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
@@ -130,6 +130,7 @@ class ChunkSearchResult(TypedDict):
     document_title: str
     sequence: int
     content: str  # the full frozen chunk text (the only quotable surface)
+    text_basis: NotRequired[str]  # "full_text" | "abstract_only"
     origin: str  # "selected" | "unselected_screened"
     # Citability under the appraised-evidence rule (contract rev 8 M4):
     # produce-grounded-block cites only appraised evidence, while screen bounds
@@ -611,6 +612,40 @@ def _doc_record(row: Any, selected_pss_ids: set[uuid.UUID]) -> dict[str, Any]:
     return doc
 
 
+def chunk_text_basis_case(
+    chunk_snapshot_id_col: ColumnElement[uuid.UUID],
+    envelope_snapshot_id_col: ColumnElement[uuid.UUID],
+    envelope_text_basis_col: ColumnElement[str],
+) -> ColumnElement[str]:
+    """Build the ``text_basis`` CASE shared by both chunk-retrieval read paths.
+
+    A chunk is ``abstract_only`` exactly when it belongs to the envelope
+    snapshot itself (no full-text snapshot was ingested for the doc) AND the
+    envelope's own ``text_basis`` is not already ``full_text``; every other
+    chunk is ``full_text``. Extracted (016 review stack) so this module's
+    ``build_retrieval_scope`` and synthesise.py's ``_load_screened_chunks``
+    encode the rule once and can never silently drift apart.
+
+    Args:
+        chunk_snapshot_id_col: The chunk row's ``source_snapshot_id`` column.
+        envelope_snapshot_id_col: The document's envelope
+            ``source_snapshot_id`` (or an equivalent labeled column/subquery
+            reference).
+        envelope_text_basis_col: The envelope snapshot's ``text_basis`` column.
+
+    Returns:
+        A ``"text_basis"``-labeled CASE expression.
+    """
+    return case(
+        (
+            (chunk_snapshot_id_col == envelope_snapshot_id_col)
+            & (envelope_text_basis_col != "full_text"),
+            "abstract_only",
+        ),
+        else_="full_text",
+    ).label("text_basis")
+
+
 def build_retrieval_scope(
     conn: Connection,
     *,
@@ -618,7 +653,7 @@ def build_retrieval_scope(
     scope_id: uuid.UUID,
     selected_pss_ids: set[uuid.UUID],
 ) -> RetrievalScope:
-    """Load the screened-in, appraised full-text retrieval scope.
+    """Load the screened-in chunk retrieval scope.
 
     Args:
         conn: Open database connection.
@@ -636,9 +671,9 @@ def build_retrieval_scope(
         ValueError: If a persisted vector or unit locator is malformed.
     """
     # The text-bearing snapshot per document: the fetched full-text snapshot when
-    # the fetch pipeline ingested one, else the envelope snapshot when it carries
-    # full text itself (uploads — chunked at upload ingest). full_text_status is
-    # fetch-pipeline state, never text availability (schema comment).
+    # the fetch pipeline ingested one, else the envelope snapshot acquired for
+    # the doc. full_text_status is fetch-pipeline state, never text availability
+    # (schema comment).
     text_snapshot_id = case(
         (
             project_source_snapshot.c.full_text_status == "ingested",
@@ -695,11 +730,12 @@ def build_retrieval_scope(
         .where(effective.c.project_id == project_id)
         .where(effective.c.evidence_scope_id == scope_id)
         .where(effective.c.status == "relevant")
-        .where(
-            (project_source_snapshot.c.full_text_status == "ingested")
-            | (source_snapshot.c.text_basis == "full_text")
-        )
         .subquery()
+    )
+    chunk_text_basis = chunk_text_basis_case(
+        chunk_table.c.source_snapshot_id,
+        screened_docs.c.envelope_snapshot_id,
+        screened_docs.c.text_basis,
     )
     unit_count = int(
         conn.execute(
@@ -756,6 +792,7 @@ def build_retrieval_scope(
             chunk_table.c.sequence,
             chunk_table.c.content,
             chunk_table.c.segmentation_policy,
+            chunk_text_basis,
             screened_docs.c.pss_id,
         )
         .select_from(chunk_embedding)
@@ -786,6 +823,7 @@ def build_retrieval_scope(
                 "sequence": cast("int", row.sequence),
                 "pss_id": str(row.pss_id),
                 "segmentation_policy": cast("str", row.segmentation_policy),
+                "text_basis": cast("str", row.text_basis),
             },
         )
         locator = row.unit_locator
@@ -970,6 +1008,7 @@ class ChunkRetriever:
             "document_title": cast("str", doc["title"]),
             "sequence": cast("int", chunk["sequence"]),
             "content": cast("str", chunk["content"]),
+            "text_basis": cast("str", chunk["text_basis"]),
             "origin": "selected" if doc.get("selected") else "unselected_screened",
             "appraised": doc.get("appraisal_tier") is not None,
             "fused_score": score,

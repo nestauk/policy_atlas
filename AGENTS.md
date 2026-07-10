@@ -22,38 +22,45 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `015-live-search`.
+Implementation — task `017-orchestrator`.
 
-Tasks `001-walking-skeleton` through `014-llm-screen-classify` are complete
-(merged) — the EB chain runs end-to-end with live LLM screen/classify. The
-active slice is the **second of the live-demo path** (014 LLM
-screen+classify → **015 live search** → 016 live fetch/ingest → 017 demo
-dress-rehearsal → eval slice): it makes acquire a **live, depth-graded
-search capability** over OpenAlex + Overton (contract rev 2, user scope
-call): live HTTP transport behind the 007 `SearchBackend` seam carrying
-every v2-lesson requirement (timeouts · Overton 1 call/s limiter · query
-sanitizers · per-depth caps · key hygiene · no citation floor), plus the
-search capability itself — **rapid** = LLM multi-query fan-out with
-SR/RCT variants; **deep** = the Arm-B agentic loop realised as
-**acquire↔screen rounds** (contract rev 3: the loop's judge IS the
-unmodified 014 screen — reformulation from graded screened exemplars
-with token-bounded per-round inputs · citation snowballing ·
-suggestion grounding · fixed arm allocation with a diversity reserve ·
-stopping on real confident-relevant counts and discovery rate, round
-cap 3), all budget-governed; the thin-base re-search behaviour lives
-in the loop's stopping rule (rapid-thin runs escalate to one bounded
-deep continuation); pagination; `scope_filters`; the backend-scope
-field. Fixture backends stay the zero-egress defaults — `make verify`
-stays deterministic and egress-free; acquire itself never writes
-screening rows (one relevance surface). Gated changes riding this
-slice: **runtime egress** (transport + three generation surfaces,
-`search_queries_v1` · `search_reformulate_v1` · `search_suggest_v1`,
-the 11th–13th product prompts, plus the in-loop `screen_v1` call-volume
-change) · **schema** (one `ck_scov_stop_condition` CHECK widening) ·
-**public interface** (`search_backend_scope` Plan/Config field). Build
-per
-`docs/tasks/015-live-search/contract.md`. Stay within the contract's
-scope and stop conditions; live fetch (016), Semantic Scholar, Overton
-cross-backend snowballing, blend ranking and all other seams remain
-deferred (`docs/deferred.md`).
+Tasks `001-walking-skeleton` through `016-live-fetch` are complete
+(merged) — the EB chain runs end-to-end live: LLM screen/classify,
+depth-graded search over OpenAlex + Overton, hardened live full-text
+fetch/ingest, and synthesise minting chunk-cited claims over live
+text. The active slice is the **fourth of the live-demo path**
+(014 → 015 → 016 → **017 orchestrator/planning** → 018 demo
+dress-rehearsal → eval slice), re-sequenced by the user 2026-07-10:
+nothing in product code turns a user intent into a chain — chains
+exist only as test-harness profiles in `skeleton.py`, and the demo's
+planner is de-authorised throwaway. 017 lands the **thin v1
+orchestrator**: a lead-authored LLM **planner** (intent →
+depth-graded plan proposal anchored to concrete numbers + a time
+band, ask-only-on-shape, the fixed lighter/as-proposed/deeper
+nudge), a deterministic **composer** (plan → chain composition,
+fail-closed against the component registry, honouring the ADR 0013
+mandatory spine acquire(search) → screen → classify → appraise →
+ingest(fetch) → synthesise with all other components
+orchestrator-discretionary by intent-fit × the two-axis gradation, search effort × analysis depth), a serial **EB
+capability-runner** the orchestrator delegates to (the sub-agent
+boundary made real; topological walk, per-component commits, failure
+chaining off successful predecessors only; its directive-authoring
+slot is the future LLM EB-expert's drop-in seam), and the
+**steering structural core** (four modes — Frequent · Moderate ·
+Minimal · Unattended — deterministic-content check-ins, the
+deepening-selection steer-point with intent-vocabulary options,
+bounded not-yet-run-components-only adjustments, clean abort; Unattended
+auto-resolves to visible plan defaults, everything flagged +
+collated — a spec refinement to execution-orchestration rides the
+flow-back). Gated changes riding this slice: **runtime egress** (the
+planner LLM call — one new lead-authored prompt surface) and one new
+CLI entrypoint. Adjudicated at the gate (2026-07-10): retrieval-boost
+grammar v2 stays eval-gated (not in 017); durability = per-component
+commits, no resume engine. `demo/RETRO.md` on branch `demo-live-run`
+is an **anecdotal prior only**. Build per
+`docs/tasks/017-orchestrator/contract.md`. Stay within the
+contract's scope and stop conditions; the LLM EB-expert capability
+agent, durability/resume engine, narration/clarify-escalate
+surfaces, section-directive compile, component progress protocol and
+all other seams remain deferred (`docs/deferred.md`).
 

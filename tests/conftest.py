@@ -7,6 +7,7 @@ without re-migrating on every test.
 
 import os
 from collections.abc import Generator
+from pathlib import Path
 
 import pytest
 from alembic import command
@@ -16,6 +17,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Connection, Engine
 
 load_dotenv()
+
+# Fixture corpus moved out of the package (contract decision 12, task 016) — point
+# FixtureFetcher's default resolution at the repo test-data home for the suite.
+os.environ.setdefault("POLICY_ATLAS_FIXTURE_CORPUS", str(Path(__file__).parent / "data"))
 
 
 def _alembic_cfg() -> AlembicConfig:

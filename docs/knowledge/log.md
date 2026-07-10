@@ -1,5 +1,26 @@
 # Knowledge update log
 
+## 2026-07-10 (task 017 step 8)
+* **Creation**: Added [alembic-roundtrip-explicit-revisions](alembic-roundtrip-explicit-revisions.md) — explicit downgrade targets; uncommitted seeds across DDL on a second connection hang silently behind FK-dependent DROPs (017 build, 14-minute hang).
+* **Creation**: Added [process-start-deadlines-need-spawn-headroom](process-start-deadlines-need-spawn-headroom.md) — a Process.start() deadline clock asserts spawn+import<deadline and inverts under host load (017 build).
+* **Creation**: Added [macos-swap-presents-as-docker-wedge](macos-swap-presents-as-docker-wedge.md) — first Runbook entry; swap exhaustion presents as a Docker Desktop wedge, check `sysctl vm.swapusage` first (017 build incident).
+* **Creation**: Added [structured-output-prompts-pin-key-vocabulary](structured-output-prompts-pin-key-vocabulary.md) — pin exact dict keys and state cross-field constraints as hard prompt rules; the fail-closed loop is the recovery surface (017 live check).
+* **Creation**: Added [run-id-fk-shapes-audit-carriers](run-id-fk-shapes-audit-carriers.md) — no run, no event: the carrier decision (table-first / outcome-object / re-run provenance) recurred three times in 017.
+* **Creation**: Added [two-phase-run-lifecycle-evented-vs-escaped](two-phase-run-lifecycle-evented-vs-escaped.md) — evented failure vs escaped exception; identity-first commit makes the failure backstop's FK trivial (017, decision 8).
+* **Creation**: Added [compile-target-parity-covers-composed-wholes](compile-target-parity-covers-composed-wholes.md) — parity checks compose with the real composer against the real bound; containment for canonicalising round-trips; registries for runtime-consumed names (017 review stack, three instances of one class).
+* **Update**: [model-output-nul-scrub](model-output-nul-scrub.md) — the planner became `_scrub_nul`'s second consumer; the scrub must be recursive over the whole record (017 review stack).
+* **Declined**: weight_emphasis multiplier semantics (already carried by `steering.py`'s constants comment + rank-shift tests); planner ~20–30 s/turn latency (an 018 surface input, carried in 017's review handoff, not durable knowledge).
+
+## 2026-07-10 (task 016 step 8)
+* **Creation**: Added [execution-options-statement-not-connection](execution-options-statement-not-connection.md) — Connection-level `execution_options` is sticky and wrapped subsequent INSERTs in server-side cursors, red-lining three stage-2 tests at the phase-3 gate (task 016).
+* **Creation**: Added [reserve-then-shrink-byte-budgets](reserve-then-shrink-byte-budgets.md) — reserve the per-item cap up front and shrink on completion, or in-flight holders on a shared budget can deadlock; found by lead review of the composed pipeline, not any component's tests (task 016).
+* **Creation**: Added [pip-audit-environment-mode-under-uv](pip-audit-environment-mode-under-uv.md) — `pip-audit -r` SIGABRTs under uv-managed CPython on macOS; environment-mode audit over the synced lockfile is the CI-parity fix (task 016 deviation 1).
+* **Creation**: Added [httpcore-origin-pooling-pinned-ip](httpcore-origin-pooling-pinned-ip.md) — SSRF-safe IP pinning must live in a custom `NetworkBackend.connect_tcp`, not a rewritten URL, or pooling and SNI break (task 016 plan-stage review blocker #3).
+* **Creation**: Added [timing-asserts-injected-clock-logs-corroborate](timing-asserts-injected-clock-logs-corroborate.md) — politeness timing is asserted on an injected clock; live log timestamps only corroborate and can show jittered sub-interval gaps (016 live check).
+* **Creation**: Added [http-403-is-usually-bot-blocking](http-403-is-usually-bot-blocking.md) — 403s from document hosts are bot-blocking unless corroborated as a paywall; 5 of 7 016 live-check failures were bot-blocks, zero corroborated paywalls.
+* **Creation**: Added [isolation-belts-reraise-config-errors](isolation-belts-reraise-config-errors.md) — a per-item isolation belt swallowed a missing-fixture-corpus `FileNotFoundError` into per-doc `fetch_error` rows, exiting green over a systemic misconfiguration (016 review stack).
+* **Creation**: Added [ip-refusal-allowlist-not-denylist](ip-refusal-allowlist-not-denylist.md) — IP refusal is allowlist-shaped (`not ip.is_global`); Python's `is_private` misses RFC 6598 CGNAT space, found by the 016 security lane's bypass-family testing.
+
 ## 2026-07-09 (task 015 step 8)
 * **Creation**: Added
   [result-caps-need-distribution-rule](result-caps-need-distribution-rule.md) — a total

@@ -19,3 +19,13 @@ jobs:
       - run: cp .env.example .env
       - run: make setup
       - run: make verify
+
+  # Dependency-vulnerability audit (016 contract rev 2.2) — independent job so
+  # advisory-database availability never blocks or slows the verify gate.
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: make audit
