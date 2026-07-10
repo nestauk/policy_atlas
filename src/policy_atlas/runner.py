@@ -12,7 +12,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, runtime_checkable
 
 import structlog
 from langfuse import Langfuse
@@ -33,14 +33,32 @@ from policy_atlas.ingest_full_text import DocumentFetcher
 from policy_atlas.orchestration_plan import (
     _REGISTRY_COMPONENT_BY_STEP,
     ComponentStep,
+    ComposedChain,
     OrchestrationPlan,
     compose,
 )
 from policy_atlas.plan import Plan, compile
 from policy_atlas.ranking import RankingBackend
-from policy_atlas.schema import event_log, evidence_scope, runs
+from policy_atlas.schema import event_log, evidence_scope, orchestration_plan, runs
 from policy_atlas.screening_backend import ScreeningBackend
 from policy_atlas.search_generation import SearchGenerationBackend
+from policy_atlas.steering import (
+    DEEPENING_SELECTION_STEER_POINT,
+    Abort,
+    Adjust,
+    Continue,
+    PausePoint,
+    SteeringAdjustmentError,
+    SteeringResponse,
+    apply_adjustment,
+    apply_reselect,
+    build_steer_point_options,
+    pause_points,
+    render_check_in,
+    render_collation,
+    resolve_unattended,
+    steer_point_triggers,
+)
 from policy_atlas.synthesis_backend import SynthesisBackend
 
 log = structlog.get_logger()
@@ -68,7 +86,7 @@ DISCRETIONARY_REQUIREMENTS = {
     "group": "extract",
 }
 
-RunPlanStatus = Literal["succeeded", "degraded", "failed"]
+RunPlanStatus = Literal["succeeded", "degraded", "failed", "aborted"]
 StepStatus = Literal["succeeded", "failed", "skipped"]
 
 
@@ -108,12 +126,11 @@ class RunnerBackends:
     langfuse_client: Langfuse | None = None
 
 
-class OrchestratorIO(Protocol):
-    """Minimal runner-to-orchestrator IO seam.
+class CheckInIO(Protocol):
+    """Minimal check-in sink accepted by the runner.
 
     Sub-agents do not address users directly. The runner reports deterministic
-    component boundary outcomes through this protocol; later steering work can
-    extend this seam without changing the harness contract.
+    component boundary outcomes through this protocol.
     """
 
     def check_in(self, component: str, payload: dict[str, Any]) -> None:
@@ -124,6 +141,28 @@ class OrchestratorIO(Protocol):
             payload: Deterministic outcome payload containing status and
                 headline counts.
         """
+        ...
+
+
+class OrchestratorIO(CheckInIO, Protocol):
+    """Full runner-to-orchestrator IO seam with blocking steering pauses."""
+
+    def pause(self, point: dict[str, Any], render: str) -> SteeringResponse:
+        """Request a steering response at a deterministic pause point.
+
+        Args:
+            point: Boundary payload with kind, boundary and component fields.
+            render: Deterministic human-readable check-in text.
+
+        Returns:
+            The steering response to apply.
+        """
+        ...
+
+
+@runtime_checkable
+class _PauseCapable(Protocol):
+    def pause(self, point: dict[str, Any], render: str) -> SteeringResponse:
         ...
 
 
@@ -138,6 +177,19 @@ class NullIO:
             payload: Deterministic outcome payload.
         """
         del component, payload
+
+    def pause(self, point: dict[str, Any], render: str) -> SteeringResponse:
+        """Continue through a steering pause without interaction.
+
+        Args:
+            point: Pause-point payload.
+            render: Deterministic pause render.
+
+        Returns:
+            ``Continue()``.
+        """
+        del point, render
+        return Continue()
 
 
 @dataclass
@@ -173,11 +225,13 @@ class RunPlanOutcome:
         status: Overall plan-run status.
         steps: Ordered per-step outcomes.
         flagged_events: Collated retry, failure and skip flags for review.
+        collation_render: Deterministic end-of-run flagged-event render.
     """
 
     status: RunPlanStatus
     steps: list[RunStepOutcome]
     flagged_events: list[dict[str, Any]]
+    collation_render: str = ""
 
 
 @dataclass
@@ -187,6 +241,24 @@ class _AttemptOutcome:
     wall_clock_s: float
     headline_counts: dict[str, Any]
     error: str | None
+
+
+@dataclass
+class _SteeringState:
+    plan: OrchestrationPlan
+    plan_id: uuid.UUID
+    plan_version: int
+    plan_row_id: uuid.UUID | None
+    chain: ComposedChain
+    pause_points: set[PausePoint]
+
+
+@dataclass(frozen=True)
+class _PauseApplied:
+    state: _SteeringState
+    aborted: bool = False
+    changed: bool = False
+    reselect: dict[str, Any] | None = None
 
 
 def leg_directive(
@@ -222,8 +294,9 @@ def run_plan(
     plan: OrchestrationPlan,
     plan_id: uuid.UUID,
     plan_version: int,
+    plan_row_id: uuid.UUID | None = None,
     backends: RunnerBackends | None = None,
-    io: OrchestratorIO | None = None,
+    io: CheckInIO | None = None,
 ) -> RunPlanOutcome:
     """Execute an approved orchestration plan with per-component commits.
 
@@ -235,6 +308,9 @@ def run_plan(
         plan: Approved orchestration plan to compose and walk.
         plan_id: Persisted orchestration-plan id carried into compile events.
         plan_version: Persisted orchestration-plan version carried into events.
+        plan_row_id: Current orchestration-plan row id for steering amendments
+            and abort status flips. ``None`` rejects adjustment persistence and
+            makes abort a run-local stop only.
         backends: Optional backend seam bundle. ``None`` uses harness defaults.
         io: Optional orchestrator IO seam. ``None`` uses ``NullIO``.
 
@@ -243,13 +319,50 @@ def run_plan(
     """
     backend_bundle = backends if backends is not None else RunnerBackends()
     io_sink = io if io is not None else NullIO()
-    chain = compose(plan)
+    initial_chain = compose(plan)
+    steering_state = _SteeringState(
+        plan=plan,
+        plan_id=plan_id,
+        plan_version=plan_version,
+        plan_row_id=plan_row_id,
+        chain=initial_chain,
+        pause_points=pause_points(plan.steering_mode, initial_chain),
+    )
+    remaining_steps = list(initial_chain.steps)
     step_outcomes: list[RunStepOutcome] = []
     flagged_events: list[dict[str, Any]] = []
     successful_runs: dict[str, uuid.UUID] = {}
     blocked_discretionary: dict[str, str] = {}
+    completed_components: set[str] = set()
+    last_check_in_payload: dict[str, Any] | None = None
 
-    for step in chain.steps:
+    while remaining_steps:
+        step = remaining_steps.pop(0)
+        before_point = PausePoint("before_component", step.component)
+        if before_point in steering_state.pause_points and last_check_in_payload is not None:
+            pause_result = _handle_pause(
+                engine,
+                io_sink,
+                point=before_point,
+                render=render_check_in(last_check_in_payload),
+                state=steering_state,
+                project_id=project_id,
+                completed_components=completed_components,
+            )
+            steering_state = pause_result.state
+            if pause_result.aborted:
+                return _finish_run(
+                    step_outcomes,
+                    flagged_events,
+                    status="aborted",
+                )
+            if pause_result.changed:
+                remaining_steps = _remaining_steps(
+                    steering_state.chain,
+                    completed_components=completed_components,
+                )
+                continue
+
         skip_reason = _skip_reason(step.component, blocked_discretionary)
         if skip_reason is not None:
             outcome = RunStepOutcome(
@@ -264,11 +377,33 @@ def run_plan(
             blocked_discretionary[step.component] = skip_reason
             flag = {"component": step.component, "status": "skipped", "reason": skip_reason}
             flagged_events.append(flag)
-            _check_in(io_sink, outcome, headline_counts={"reason": skip_reason})
+            last_check_in_payload = _check_in(
+                io_sink,
+                outcome,
+                headline_counts={"reason": skip_reason},
+            )
+            completed_components.add(step.component)
+            pause_result = _handle_after_component_boundary(
+                engine,
+                io_sink,
+                step=step,
+                render=render_check_in(last_check_in_payload),
+                state=steering_state,
+                project_id=project_id,
+                completed_components=completed_components,
+                flagged_events=flagged_events,
+            )
+            steering_state = pause_result.state
+            if pause_result.aborted:
+                return _finish_run(step_outcomes, flagged_events, status="aborted")
+            remaining_steps = _remaining_steps(
+                steering_state.chain,
+                completed_components=completed_components,
+            )
             continue
 
         upstream_state = {"successful_run_ids": dict(successful_runs)}
-        directive_delta = leg_directive(plan, step, upstream_state)
+        directive_delta = leg_directive(steering_state.plan, step, upstream_state)
         reference_kwargs = _reference_kwargs(step.component, successful_runs)
         retry_cap = COMPONENT_RETRY_CAP if step.component in LLM_BEARING_COMPONENTS else 0
 
@@ -278,9 +413,9 @@ def run_plan(
                 engine,
                 project_id=project_id,
                 evidence_scope_id=evidence_scope_id,
-                plan=plan,
-                plan_id=plan_id,
-                plan_version=plan_version,
+                plan=steering_state.plan,
+                plan_id=steering_state.plan_id,
+                plan_version=steering_state.plan_version,
                 step=step,
                 directive_delta=directive_delta,
                 reference_kwargs=reference_kwargs,
@@ -320,7 +455,46 @@ def run_plan(
                         "run_id": str(final_attempt.run_id),
                     }
                 )
-            _check_in(io_sink, outcome, headline_counts=final_attempt.headline_counts)
+            last_check_in_payload = _check_in(
+                io_sink,
+                outcome,
+                headline_counts=final_attempt.headline_counts,
+            )
+            completed_components.add(step.component)
+            pause_result = _handle_after_component_boundary(
+                engine,
+                io_sink,
+                step=step,
+                render=render_check_in(last_check_in_payload),
+                state=steering_state,
+                project_id=project_id,
+                completed_components=completed_components,
+                flagged_events=flagged_events,
+                selection_run_id=(
+                    final_attempt.run_id if step.component == "select" else None
+                ),
+            )
+            steering_state = pause_result.state
+            if pause_result.aborted:
+                return _finish_run(step_outcomes, flagged_events, status="aborted")
+            if pause_result.reselect is not None:
+                last_check_in_payload = _run_select_rerun(
+                    engine,
+                    io_sink,
+                    project_id=project_id,
+                    evidence_scope_id=evidence_scope_id,
+                    state=steering_state,
+                    directive_delta=pause_result.reselect["directive"],
+                    backends=backend_bundle,
+                    successful_runs=successful_runs,
+                    blocked_discretionary=blocked_discretionary,
+                    step_outcomes=step_outcomes,
+                    flagged_events=flagged_events,
+                )
+            remaining_steps = _remaining_steps(
+                steering_state.chain,
+                completed_components=completed_components,
+            )
             continue
 
         reason = final_attempt.error or "component failed"
@@ -342,16 +516,33 @@ def run_plan(
                 "reason": reason,
             }
         )
-        _check_in(io_sink, outcome, headline_counts=final_attempt.headline_counts)
+        last_check_in_payload = _check_in(
+            io_sink,
+            outcome,
+            headline_counts=final_attempt.headline_counts,
+        )
+        completed_components.add(step.component)
+        pause_result = _handle_after_component_boundary(
+            engine,
+            io_sink,
+            step=step,
+            render=render_check_in(last_check_in_payload),
+            state=steering_state,
+            project_id=project_id,
+            completed_components=completed_components,
+            flagged_events=flagged_events,
+        )
+        steering_state = pause_result.state
+        if pause_result.aborted:
+            return _finish_run(step_outcomes, flagged_events, status="aborted")
+        remaining_steps = _remaining_steps(
+            steering_state.chain,
+            completed_components=completed_components,
+        )
 
         if step.component in SPINE_COMPONENTS:
             summary_status: RunPlanStatus = "failed"
-            _log_run_summary(step_outcomes, status=summary_status)
-            return RunPlanOutcome(
-                status=summary_status,
-                steps=step_outcomes,
-                flagged_events=flagged_events,
-            )
+            return _finish_run(step_outcomes, flagged_events, status=summary_status)
         blocked_discretionary[step.component] = reason
 
     summary_status = (
@@ -359,11 +550,403 @@ def run_plan(
         if any(outcome.status in {"failed", "skipped"} for outcome in step_outcomes)
         else "succeeded"
     )
-    _log_run_summary(step_outcomes, status=summary_status)
+    return _finish_run(step_outcomes, flagged_events, status=summary_status)
+
+
+def _handle_after_component_boundary(
+    engine: Engine,
+    io: CheckInIO,
+    *,
+    step: ComponentStep,
+    render: str,
+    state: _SteeringState,
+    project_id: uuid.UUID,
+    completed_components: set[str],
+    flagged_events: list[dict[str, Any]],
+    selection_run_id: uuid.UUID | None = None,
+) -> _PauseApplied:
+    if step.component == "select" and state.plan.steering_mode == "unattended":
+        return _resolve_unattended_boundary(
+            engine,
+            state=state,
+            project_id=project_id,
+            component=step.component,
+            flagged_events=flagged_events,
+        )
+
+    point = PausePoint("after_component", step.component)
+    if point not in state.pause_points:
+        return _PauseApplied(state=state)
+    # The deepening-selection steer point only offers re-run options when select
+    # actually produced a persisted selection to steer over.
+    is_steer_point = step.component == "select" and selection_run_id is not None
+    triggers: list[dict[str, Any]] | None = None
+    if is_steer_point and selection_run_id is not None:
+        with engine.connect() as conn:
+            triggers = steer_point_triggers(
+                conn,
+                project_id=project_id,
+                selection_run_id=selection_run_id,
+                plan=state.plan,
+            )
+    return _handle_pause(
+        engine,
+        io,
+        point=point,
+        render=render,
+        state=state,
+        project_id=project_id,
+        completed_components=completed_components,
+        steer_point=is_steer_point,
+        triggers=triggers,
+    )
+
+
+def _handle_pause(
+    engine: Engine,
+    io: CheckInIO,
+    *,
+    point: PausePoint,
+    render: str,
+    state: _SteeringState,
+    project_id: uuid.UUID,
+    completed_components: set[str],
+    steer_point: bool = False,
+    triggers: list[dict[str, Any]] | None = None,
+) -> _PauseApplied:
+    pause_payload = _pause_payload(
+        point, plan=state.plan, steer_point=steer_point, triggers=triggers
+    )
+    current_render = render
+    while True:
+        response = _pause_response(io, pause_payload, current_render)
+        if isinstance(response, Continue):
+            return _PauseApplied(state=state)
+        if isinstance(response, Abort):
+            _abandon_plan(engine, project_id=project_id, plan_row_id=state.plan_row_id)
+            return _PauseApplied(state=state, aborted=True)
+        if isinstance(response, Adjust):
+            # At the deepening-selection steer point a select delta means re-run
+            # select (it has already run); everywhere else a select delta is a
+            # rejected already-run adjustment via the generic path below.
+            if steer_point and set(response.directive_deltas) == {"select"}:
+                try:
+                    reselect_state, merged_directive = _apply_reselect(
+                        engine,
+                        project_id=project_id,
+                        state=state,
+                        adjustment=response,
+                    )
+                except SteeringAdjustmentError as exc:
+                    current_render = f"{render}\nRe-selection rejected: {exc}"
+                    continue
+                return _PauseApplied(
+                    state=reselect_state,
+                    reselect={"directive": merged_directive},
+                )
+            try:
+                amended_state = _apply_runner_adjustment(
+                    engine,
+                    project_id=project_id,
+                    state=state,
+                    adjustment=response,
+                    completed_components=completed_components,
+                )
+            except SteeringAdjustmentError as exc:
+                current_render = f"{render}\nAdjustment rejected: {exc}"
+                continue
+            return _PauseApplied(state=amended_state, changed=True)
+        current_render = f"{render}\nSteering response rejected: unknown response type"
+
+
+def _pause_response(
+    io: CheckInIO,
+    point: dict[str, Any],
+    render: str,
+) -> SteeringResponse:
+    if isinstance(io, _PauseCapable):
+        return io.pause(point, render)
+    return Continue()
+
+
+def _pause_payload(
+    point: PausePoint,
+    *,
+    plan: OrchestrationPlan,
+    steer_point: bool = False,
+    triggers: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "kind": "check_in",
+        "boundary": point.boundary,
+        "component": point.component,
+    }
+    if steer_point:
+        payload["kind"] = "steer_point"
+        payload["steer_point"] = DEEPENING_SELECTION_STEER_POINT
+        payload["options"] = build_steer_point_options(
+            plan=plan,
+            point=DEEPENING_SELECTION_STEER_POINT,
+        )
+        if triggers is not None:
+            payload["triggers"] = triggers
+    return payload
+
+
+def _apply_runner_adjustment(
+    engine: Engine,
+    *,
+    project_id: uuid.UUID,
+    state: _SteeringState,
+    adjustment: Adjust,
+    completed_components: set[str],
+) -> _SteeringState:
+    if state.plan_row_id is None:
+        raise SteeringAdjustmentError("plan_row_id is required to persist an adjustment")
+    with engine.begin() as conn:
+        plan_row = conn.execute(
+            select(orchestration_plan).where(
+                orchestration_plan.c.plan_id == state.plan_row_id
+            )
+        ).one()
+        amended_plan, amended_plan_id, amended_version = apply_adjustment(
+            conn,
+            project_id=project_id,
+            plan_row=plan_row,
+            plan=state.plan,
+            adjustment=adjustment,
+            completed_components=completed_components,
+        )
+    amended_chain = compose(amended_plan)
+    return _SteeringState(
+        plan=amended_plan,
+        plan_id=amended_plan_id,
+        plan_version=amended_version,
+        plan_row_id=amended_plan_id,
+        chain=amended_chain,
+        pause_points=pause_points(amended_plan.steering_mode, amended_chain),
+    )
+
+
+def _apply_reselect(
+    engine: Engine,
+    *,
+    project_id: uuid.UUID,
+    state: _SteeringState,
+    adjustment: Adjust,
+) -> tuple[_SteeringState, dict[str, Any]]:
+    """Persist a re-selection version row and return the merged select directive.
+
+    Merges the chosen steer-point option's select delta over the plan-compiled
+    select directive (so the re-run keeps the plan's budget while gaining the
+    option's emphasis/nominations), records a new user-attributed plan version
+    row, and returns steering state advanced to that version. The chain and plan
+    payload are unchanged — the fine directive lives at the commit layer.
+    """
+    if state.plan_row_id is None:
+        raise SteeringAdjustmentError("plan_row_id is required to persist a re-selection")
+    select_step = next(
+        (step for step in state.chain.steps if step.component == "select"),
+        None,
+    )
+    if select_step is None:
+        raise SteeringAdjustmentError("composed chain has no select step to re-run")
+    base_selection = select_step.directive_delta.get("selection", {})
+    option_delta = adjustment.directive_deltas["select"]
+    option_selection = option_delta.get("selection") if isinstance(option_delta, dict) else None
+    if not isinstance(option_selection, dict) or not isinstance(base_selection, dict):
+        raise SteeringAdjustmentError("select re-run directive must contain a selection object")
+    merged_directive = {"selection": {**base_selection, **option_selection}}
+    with engine.begin() as conn:
+        plan_row = conn.execute(
+            select(orchestration_plan).where(orchestration_plan.c.plan_id == state.plan_row_id)
+        ).one()
+        new_plan_id, new_version = apply_reselect(
+            conn,
+            project_id=project_id,
+            plan_row=plan_row,
+            plan=state.plan,
+            select_directive=merged_directive,
+        )
+    reselect_state = _SteeringState(
+        plan=state.plan,
+        plan_id=new_plan_id,
+        plan_version=new_version,
+        plan_row_id=new_plan_id,
+        chain=state.chain,
+        pause_points=state.pause_points,
+    )
+    return reselect_state, merged_directive
+
+
+def _run_select_rerun(
+    engine: Engine,
+    io: CheckInIO,
+    *,
+    project_id: uuid.UUID,
+    evidence_scope_id: uuid.UUID,
+    state: _SteeringState,
+    directive_delta: dict[str, Any],
+    backends: RunnerBackends,
+    successful_runs: dict[str, uuid.UUID],
+    blocked_discretionary: dict[str, str],
+    step_outcomes: list[RunStepOutcome],
+    flagged_events: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Re-run ``select`` after a deepening-selection steer with a new directive.
+
+    Creates a second ``select`` run under the amended plan version, applies the
+    merged directive to the scope context and threads the new selection run id
+    into ``successful_runs`` so downstream ``extract``/``group``/``synthesise``
+    reference it. The steer point is not re-entered (one adjustment cycle per
+    boundary). A failed re-run blocks the downstream deep chain, mirroring a
+    discretionary failure. Extraction has not yet spent, so this is cheap.
+
+    Returns:
+        The check-in payload for the re-run outcome (the new most-recent render).
+    """
+    rerun_step = ComponentStep(
+        component="select",
+        directive_delta=directive_delta,
+        reference_rule="characterisation_run_id <- characterise",
+    )
+    reference_kwargs = {"characterisation_run_id": successful_runs["characterise"]}
+    retry_cap = COMPONENT_RETRY_CAP
+    attempts: list[_AttemptOutcome] = []
+    for attempt_index in range(retry_cap + 1):
+        attempt = _run_step_attempt(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=evidence_scope_id,
+            plan=state.plan,
+            plan_id=state.plan_id,
+            plan_version=state.plan_version,
+            step=rerun_step,
+            directive_delta=directive_delta,
+            reference_kwargs=reference_kwargs,
+            backends=backends,
+        )
+        attempts.append(attempt)
+        if attempt.status == "succeeded":
+            break
+        if attempt_index < retry_cap:
+            flagged_events.append(
+                {
+                    "component": "select",
+                    "status": "retrying",
+                    "run_id": str(attempt.run_id),
+                    "reason": attempt.error,
+                }
+            )
+
+    final_attempt = attempts[-1]
+    retried = len(attempts) > 1
+    attempt_run_ids = [attempt.run_id for attempt in attempts]
+    if final_attempt.status == "succeeded":
+        successful_runs["select"] = final_attempt.run_id
+        outcome = RunStepOutcome(
+            component="select",
+            run_id=final_attempt.run_id,
+            status="succeeded",
+            wall_clock_s=final_attempt.wall_clock_s,
+            retried=retried,
+            attempt_run_ids=attempt_run_ids,
+        )
+    else:
+        reason = final_attempt.error or "select re-run failed"
+        successful_runs.pop("select", None)
+        blocked_discretionary["select"] = reason
+        outcome = RunStepOutcome(
+            component="select",
+            run_id=final_attempt.run_id,
+            status="failed",
+            wall_clock_s=final_attempt.wall_clock_s,
+            retried=retried,
+            reason=reason,
+            attempt_run_ids=attempt_run_ids,
+        )
+        flagged_events.append(
+            {
+                "component": "select",
+                "status": "failed",
+                "run_id": str(final_attempt.run_id),
+                "reason": reason,
+            }
+        )
+    step_outcomes.append(outcome)
+    return _check_in(io, outcome, headline_counts=final_attempt.headline_counts)
+
+
+def _resolve_unattended_boundary(
+    engine: Engine,
+    *,
+    state: _SteeringState,
+    project_id: uuid.UUID,
+    component: str,
+    flagged_events: list[dict[str, Any]],
+) -> _PauseApplied:
+    action = resolve_unattended(state.plan, DEEPENING_SELECTION_STEER_POINT)
+    rule = (
+        DEEPENING_SELECTION_STEER_POINT
+        if any(
+            default.steer_point == DEEPENING_SELECTION_STEER_POINT
+            for default in state.plan.steer_point_defaults
+        )
+        else "unconfigured_default"
+    )
+    flagged_events.append(
+        {
+            "component": component,
+            "status": "auto_resolved",
+            "rule": rule,
+            "action": action,
+        }
+    )
+    if action == "stop":
+        _abandon_plan(engine, project_id=project_id, plan_row_id=state.plan_row_id)
+        return _PauseApplied(state=state, aborted=True)
+    return _PauseApplied(state=state)
+
+
+def _remaining_steps(
+    chain: ComposedChain,
+    *,
+    completed_components: set[str],
+) -> list[ComponentStep]:
+    return [step for step in chain.steps if step.component not in completed_components]
+
+
+def _abandon_plan(
+    engine: Engine,
+    *,
+    project_id: uuid.UUID,
+    plan_row_id: uuid.UUID | None,
+) -> None:
+    if plan_row_id is None:
+        return
+    with engine.begin() as conn:
+        conn.execute(
+            orchestration_plan.update()
+            .where(orchestration_plan.c.plan_id == plan_row_id)
+            .where(orchestration_plan.c.project_id == project_id)
+            .values(status="abandoned")
+        )
+
+
+def _finish_run(
+    outcomes: list[RunStepOutcome],
+    flagged_events: list[dict[str, Any]],
+    *,
+    status: RunPlanStatus,
+) -> RunPlanOutcome:
+    collation = render_collation(flagged_events)
+    log.info("runner.collation", render=collation)
+    _log_run_summary(outcomes, status=status)
     return RunPlanOutcome(
-        status=summary_status,
-        steps=step_outcomes,
+        status=status,
+        steps=outcomes,
         flagged_events=flagged_events,
+        collation_render=collation,
     )
 
 
@@ -714,11 +1297,11 @@ def _failure_error(
 
 
 def _check_in(
-    io: OrchestratorIO,
+    io: CheckInIO,
     outcome: RunStepOutcome,
     *,
     headline_counts: dict[str, Any],
-) -> None:
+) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "component": outcome.component,
         "status": outcome.status,
@@ -735,6 +1318,7 @@ def _check_in(
     if outcome.reason is not None:
         payload["reason"] = outcome.reason
     io.check_in(outcome.component, payload)
+    return payload
 
 
 def _log_run_summary(
