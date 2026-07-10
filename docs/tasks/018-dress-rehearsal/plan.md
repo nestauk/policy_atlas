@@ -252,6 +252,14 @@ replay (the B smoke)** before Phase C opens.
   shape → planner (date inference, country line) — each change lead-authored, replayed,
   judged (user taste where prose; verdict-shift + unchanged-sample + self-certification
   fixture where judge), pinned or reverted; envelope A/B set adjudicated here.
+  **Named loop hypothesis (user, 2026-07-10): environment-context preamble** — a short
+  shared constant telling the model what Policy Atlas is, who reads its output, and
+  what upstream produced its inputs, ALWAYS paired with an explicit context-not-content
+  rule (pipeline vocabulary is known but banned from output — the arm-A leak is the
+  evidence for the ban). Candidate surfaces in order: writer (register), extractor
+  (motivates self-containedness), judge (verdict semantics, rides envelope v2);
+  screen/classify excluded (dilution). Adopted per surface only on before/after replay
+  evidence, like every other prompt change.
   **Bounds enforced: ≤3 rounds/surface, ≤30 live component replays total** (a running
   tally in verification.md); no-mission-vocabulary check + taxonomy desk review on
   every adopted prompt. — **lead** *(prompt-bearing + adjudication)*
