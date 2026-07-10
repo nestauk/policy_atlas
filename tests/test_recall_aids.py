@@ -5,6 +5,9 @@ task 4): the DOI-URL fallback in ``candidate_urls`` and the standalone
 
 from typing import Any
 
+import pytest
+
+from policy_atlas import ingest_full_text
 from policy_atlas.ingest_full_text import candidate_urls, discover_document_url
 
 # --- DOI fallback in candidate_urls ---
@@ -110,6 +113,29 @@ def test_doi_fallback_not_deduped_against_different_doi() -> None:
         "https://doi.org/10.1234/other",
         "https://doi.org/10.1234/abc123",
     ]
+
+
+def test_doi_fallback_deduped_against_unescaped_reserved_chars() -> None:
+    """Codex MINOR finding: a provider-supplied doi.org URL that left the DOI's
+    reserved characters unescaped (e.g. ``ab(c)``) must still suppress the
+    percent-encoded fallback (``ab%28c%29``) — the comparison decodes both
+    sides before comparing."""
+    meta = {
+        "backend": "overton",
+        "provider_fields": {"document_url": "https://doi.org/10.1234/ab(c)"},
+        "doi": "10.1234/ab(c)",
+    }
+    assert candidate_urls(meta) == ["https://doi.org/10.1234/ab(c)"]
+
+
+def test_doi_fallback_deduped_case_insensitively() -> None:
+    """The percent-decoded comparison is also case-insensitive."""
+    meta = {
+        "backend": "overton",
+        "provider_fields": {"document_url": "https://doi.org/10.1234/ABC123"},
+        "doi": "10.1234/abc123",
+    }
+    assert candidate_urls(meta) == ["https://doi.org/10.1234/ABC123"]
 
 
 def test_backends_without_doi_field_unaffected() -> None:
@@ -273,3 +299,30 @@ def test_fragment_on_pdf_href_ignored_when_testing_path() -> None:
         discover_document_url(html, "https://example.org/landing/")
         == "https://example.org/landing/paper.pdf#page=3"
     )
+
+
+def test_anchor_scan_bounded_by_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """016 review stack: the anchor scan is capped at ``_ANCHOR_SCAN_CAP``. A
+    same-host match within the cap is still found (and the scan stops there —
+    same-host wins unconditionally, so scanning further would be dead work),
+    but a page whose only match sits past the cap still returns cleanly
+    (no crash, no unbounded scan) rather than finding it."""
+    monkeypatch.setattr(ingest_full_text, "_ANCHOR_SCAN_CAP", 3)
+
+    within_cap = (
+        b'<html><body><a href="https://other.org/skip0">skip</a>'
+        b'<a href="https://other.org/skip1">skip</a>'
+        b'<a href="https://example.org/in-cap.pdf">match</a></body></html>'
+    )
+    assert (
+        discover_document_url(within_cap, "https://example.org/landing")
+        == "https://example.org/in-cap.pdf"
+    )
+
+    over_cap = (
+        b'<html><body><a href="https://other.org/skip0">skip</a>'
+        b'<a href="https://other.org/skip1">skip</a>'
+        b'<a href="https://other.org/skip2">skip</a>'
+        b'<a href="https://example.org/past-cap.pdf">match</a></body></html>'
+    )
+    assert discover_document_url(over_cap, "https://example.org/landing") is None

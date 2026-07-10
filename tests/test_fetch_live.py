@@ -14,14 +14,15 @@ from structlog.testing import capture_logs
 from policy_atlas import fetch_live
 from policy_atlas.fetch_live import (
     MAX_DOCUMENT_BYTES,
+    MAX_INFLIGHT_BYTES,
     PAYWALL_MARKERS,
     REDIRECT_HOP_CAP,
     RETRY_BACKOFF_S,
     LiveDocumentFetcher,
     _BlockedURL,
     _PinnedIPNetworkBackend,
-    _redact_url,
 )
+from policy_atlas.ingest_full_text import _redact_url
 
 PUBLIC_IP = "93.184.216.34"
 
@@ -129,6 +130,8 @@ def test_userinfo_refusal_blocks_without_transport() -> None:
         "240.0.0.1",
         "0.0.0.0",
         "::ffff:127.0.0.1",
+        "100.64.0.1",  # CGNAT (RFC 6598) — not previously private/reserved-flagged
+        "::ffff:100.64.0.1",
     ],
 )
 def test_refused_ip_classes_block(ip: str) -> None:
@@ -141,6 +144,21 @@ def test_refused_ip_classes_block(ip: str) -> None:
 
     assert result.status == "error"
     assert result.error == "blocked"
+
+
+def test_public_ip_still_allowed() -> None:
+    """The ``is_global`` tightening (016 review stack) must not refuse ordinary
+    public addresses — the allowed-case complement to ``test_refused_ip_classes_block``."""
+    fetcher, requests, _ = _fetcher(
+        lambda request: _ok_response(b"ok"),
+        resolver=_resolver_for({"example.com": [PUBLIC_IP]}),
+    )
+
+    result = fetcher.fetch("https://example.com/doc.pdf")
+
+    assert result.status == "ok"
+    assert len(requests) == 1
+    fetcher.release_body(len(result.body or b""))
 
 
 def test_mixed_good_and_bad_answer_set_blocks() -> None:
@@ -350,6 +368,23 @@ def test_timeout_retried_then_timeout() -> None:
     assert clock.sleeps == [RETRY_BACKOFF_S]
 
 
+def test_wrapped_blocked_url_classified_as_blocked() -> None:
+    """016 review stack: httpcore/httpx wrap a connect-phase guard failure (the
+    network backend's own TOCTOU re-check) in their own ``ConnectError`` — the
+    original ``_BlockedURL`` survives only on the ``__cause__`` chain, and must
+    still classify as ``blocked``, never the generic ``fetch_error``."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("boom") from _BlockedURL("refused address class")
+
+    fetcher, _, _ = _fetcher(handler)
+
+    result = fetcher.fetch("https://example.com/doc.pdf")
+
+    assert result.status == "error"
+    assert result.error == "blocked"
+
+
 def test_politeness_spaces_second_request_to_same_host() -> None:
     fetcher, _, clock = _fetcher(lambda request: _ok_response(b"x"))
 
@@ -497,3 +532,14 @@ def test_network_backend_classifies_before_connect(
 
     with pytest.raises(_BlockedURL):
         backend.connect_tcp("example.com", 443)
+
+
+def test_account_bytes_wedged_budget_raises_loudly(monkeypatch: pytest.MonkeyPatch) -> None:
+    """016 review stack (ponytail): a leaked byte-budget lease that never gets
+    released must fail loudly with a bounded wait, never hang the pool forever."""
+    monkeypatch.setattr(fetch_live, "BYTE_BUDGET_WAIT_TIMEOUT_S", 0.05)
+    fetcher, _, _ = _fetcher(lambda request: _ok_response(b"x"))
+    fetcher._inflight_bytes = MAX_INFLIGHT_BYTES  # simulate a wedged/leaked lease
+
+    with pytest.raises(RuntimeError, match="wedged"):
+        fetcher._account_bytes(1)

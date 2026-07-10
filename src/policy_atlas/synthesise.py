@@ -82,6 +82,7 @@ from policy_atlas.synthesis_tools import (
     ToolExchange,
     build_retrieval_scope,
     build_section_tools,
+    chunk_text_basis_case,
     gathered_ids,
     make_findings_reader,
     make_lookup_reader,
@@ -787,14 +788,11 @@ def _load_screened_chunks(
         ),
         else_=project_source_snapshot.c.source_snapshot_id,
     )
-    chunk_text_basis = sa_case(
-        (
-            (chunk_table.c.source_snapshot_id == project_source_snapshot.c.source_snapshot_id)
-            & (source_snapshot.c.text_basis != "full_text"),
-            "abstract_only",
-        ),
-        else_="full_text",
-    ).label("text_basis")
+    chunk_text_basis = chunk_text_basis_case(
+        chunk_table.c.source_snapshot_id,
+        project_source_snapshot.c.source_snapshot_id,
+        source_snapshot.c.text_basis,
+    )
     # Screened-in scope = effective-relevant join via the helper (same rule as
     # _load_corpus_profile — a second, previously-missed raw source_screening_
     # result consumer feeding the synthesise chunk lane).

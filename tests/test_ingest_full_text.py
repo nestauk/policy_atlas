@@ -65,12 +65,18 @@ from tests.helpers import (
 
 # Expected outcome distribution over the committed fixture set (the manifest's
 # outcome map is the spec these tests enforce; see contract decision 9 + plan Task 2/3).
+# Decision 8 fixture-403-parity rider (016 review stack): a recorded 403 replays as
+# blocked_by_host (no body to marker-scan), upgraded back to paywall by the OA
+# cross-check for the 3 OpenAlex docs whose envelope metadata says closed access;
+# the 1 Overton doc among the former "paywall" 403s has no OA field to cross-check
+# and now reports blocked_by_host honestly.
 EXPECTED_ELIGIBLE = 24
 EXPECTED_INGESTED = 10
 EXPECTED_FETCH_FAILED = 11
 EXPECTED_PARSE_FAILED = 3
 EXPECTED_BY_REASON = {
-    "paywall": 4,
+    "paywall": 3,
+    "blocked_by_host": 1,
     "not_found": 5,
     "too_large": 2,
     "thin_text": 1,
@@ -479,6 +485,23 @@ def test_fixture_fetcher_missing_corpus_raises_on_fetch_not_construct(
     fetcher = FixtureFetcher(root=tmp_path)  # must not raise
     with pytest.raises(FileNotFoundError, match=re.escape(str(tmp_path))):
         fetcher.fetch("https://example.org/whatever")
+
+
+def test_missing_fixture_corpus_fails_the_run_loudly(
+    conn: Connection, tmp_path: Path,
+) -> None:
+    """A configuration error (empty/missing fixture corpus) must fail the whole
+    run loudly through the real ingest entry point — never degrade to a
+    per-document ``fetch_error`` row via ``_safe_fetch``'s isolation belt
+    (016 review stack)."""
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    _seed_relevant_acquired(
+        conn, project_id, run_id, scope_id,
+        {"backend": "overton", "provider_fields": {"pdf_url": "https://example.org/x.pdf"}},
+    )
+    with pytest.raises(FileNotFoundError, match=re.escape(str(tmp_path))):
+        run_ingest(conn, project_id, run_id, scope_id, fetcher=FixtureFetcher(root=tmp_path))
 
 
 def test_fetch_failure_reason_priority_helper() -> None:
@@ -1063,8 +1086,11 @@ def test_outcome_distribution(ingested_corpus: CorpusFixture) -> None:
          "too_large", None),
         ("sanitizedorga9aa9d-c186ae531fb481b0cc4fb0dd6669476e", "fetch_failed",
          "not_found", None),
+        # Overton doc: both candidate URLs 403 and there is no OA field to
+        # cross-check (decision 8 fixture-403-parity rider), so it reports the
+        # uncorroborated blocked_by_host honestly rather than paywall.
         ("sanitizedorgdf2d12-42aba8211480495ee10e4ab8faa88047", "fetch_failed",
-         "paywall", None),
+         "blocked_by_host", None),
     ],
 )
 def test_per_link_statuses(
@@ -1160,6 +1186,28 @@ def test_html_main_content(ingested_corpus: CorpusFixture, engine: Engine) -> No
     joined = " ".join(c.content for c in chunks)
     assert NESTA_FOOTER_BOILERPLATE not in joined
     assert NESTA_REPORT_SENTENCE in joined
+
+
+def test_html_non_utf8_charset_decoded_correctly() -> None:
+    """Decision 6 pin (Codex finding): HTML bytes must reach trafilatura undecoded
+    so a declared non-UTF-8 ``<meta charset>`` is honoured by its own encoding
+    sniffer. A UTF-8-with-replace pre-decode (the ``_decode`` helper used for plain
+    text) would instead mangle every non-ASCII byte into U+FFFD before trafilatura
+    ever sees it — this pins that ``_parse_html`` never does that."""
+    # windows-1252 bytes: 0xE9 = é, 0x93/0x94 = curly open/close quotes.
+    html = (
+        b'<html><head><meta charset="windows-1252"></head><body><article>'
+        b"<p>This report examines caf\xe9 culture and the \x93important\x94 trends "
+        b"in policy analysis across many different regions and sectors of the "
+        b"economy today for readers everywhere in the world.</p></article>"
+        b"</body></html>"
+    )
+    result = parse_and_segment(html, "text/html", thin_min=0)
+    assert result["status"] == "ok"
+    joined = " ".join(c["content"] for c in result["chunks"])
+    assert "café" in joined
+    assert "“important”" in joined
+    assert "�" not in joined  # replacement char proves a mangled pre-decode
 
 
 def test_success_metadata_complete(ingested_corpus: CorpusFixture, engine: Engine) -> None:

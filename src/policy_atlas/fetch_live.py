@@ -19,7 +19,7 @@ import httpcore
 import httpx
 import structlog
 
-from policy_atlas.ingest_full_text import FetchResult
+from policy_atlas.ingest_full_text import FetchResult, _redact_url
 
 log = structlog.get_logger()
 
@@ -31,6 +31,7 @@ FETCH_MAX_CONCURRENCY = 10
 PER_HOST_MAX_CONCURRENCY = 2
 PER_HOST_MIN_INTERVAL_S = 1.0
 MAX_INFLIGHT_BYTES = 100_000_000
+BYTE_BUDGET_WAIT_TIMEOUT_S = 300.0  # ponytail: see _account_bytes
 PAYWALL_MARKERS = (
     "purchase this article",
     "institutional login",
@@ -406,6 +407,13 @@ class LiveDocumentFetcher:
                 log.warning("fetch_live.blocked", url=_redact_url(url))
                 return FetchResult(status="error", error="blocked")
             except Exception as exc:
+                if _unwraps_blocked_url(exc):
+                    # httpcore/httpx wrap a connect-phase guard failure (the
+                    # network backend's own TOCTOU re-check) in their own
+                    # ConnectError; the original _BlockedURL only survives on
+                    # the __cause__/__context__ chain (016 review stack).
+                    log.warning("fetch_live.blocked", url=_redact_url(url))
+                    return FetchResult(status="error", error="blocked")
                 if _is_timeout_error(exc):
                     if attempts < 1:
                         log.warning("fetch_live.retry", url=_redact_url(url), reason="timeout")
@@ -538,8 +546,17 @@ class LiveDocumentFetcher:
         if n_bytes <= 0:
             return
         with self._byte_condition:
+            deadline = time.monotonic() + BYTE_BUDGET_WAIT_TIMEOUT_S
             while self._inflight_bytes + n_bytes > MAX_INFLIGHT_BYTES:
-                self._byte_condition.wait()
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or not self._byte_condition.wait(timeout=remaining):
+                    # ponytail: converts a lease-accounting leak from a silent hang
+                    # into a loud failure; the budget can never legitimately stay
+                    # full this long.
+                    raise RuntimeError(
+                        f"byte budget wedged after {BYTE_BUDGET_WAIT_TIMEOUT_S:.0f}s: "
+                        f"_inflight_bytes={self._inflight_bytes}, requested={n_bytes}"
+                    )
             self._inflight_bytes += n_bytes
 
     def _release_accounted_bytes(self, n_bytes: int) -> None:
@@ -650,6 +667,7 @@ def _is_refused_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
         or ip.is_multicast
         or ip.is_reserved
         or ip.is_unspecified
+        or not ip.is_global
     )
 
 
@@ -693,6 +711,18 @@ def _has_paywall_marker(body: bytes) -> bool:
     return any(marker in head for marker in PAYWALL_MARKERS)
 
 
+def _unwraps_blocked_url(exc: BaseException) -> bool:
+    """True if ``exc`` or anything on its cause/context chain is a ``_BlockedURL``."""
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        if isinstance(current, _BlockedURL):
+            return True
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return False
+
+
 def _is_timeout_error(exc: Exception) -> bool:
     return isinstance(
         exc,
@@ -713,20 +743,3 @@ def _clone_fetch_result(result: FetchResult) -> FetchResult:
     )
 
 
-def _redact_url(url: str) -> str:
-    """Return a URL string safe for logs: scheme, host, and path only.
-
-    Args:
-        url: URL that may contain userinfo, query strings, or fragments.
-
-    Returns:
-        Redacted URL string with query, fragment, and userinfo removed.
-    """
-    try:
-        parsed = urlsplit(url)
-    except ValueError:
-        return "invalid-url"
-    host = parsed.hostname or ""
-    if not parsed.scheme:
-        return parsed.path or "invalid-url"
-    return urlunsplit((parsed.scheme, host, parsed.path, "", ""))

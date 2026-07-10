@@ -59,7 +59,10 @@ gate map (836).
   proof (loaded chunks < DB chunks; loaded chars ≤ budget + crossing chunk).
 - **Zero-egress guards**: import guard sanctions `search_live.py` +
   `fetch_live.py` only and pins `ingest_full_text.py` never imports
-  `fetch_live`; the socket-deny worker guard unchanged.
+  `fetch_live`; the socket-deny worker guard unchanged (it runs deliberately
+  narrowed to a 4-doc fixture subset covering both parser paths — the
+  full-breadth ingest runs unguarded in the module fixture; the test's
+  docstring records the narrowing).
 
 ## End-to-end command
 
@@ -237,11 +240,128 @@ in code, tests, logs recorded here, or this file.
 
 ## Rubric status / review findings
 
-To be completed by the review stack (step 7, fresh conversation) — this build
-conversation must not adjudicate its own work. Review-stack sizing pinned in
-plan.md § Review-stack sizing (medium /code-review, one security lane headlined
-by the SSRF surface, contract-verifier, Codex adversarial, live-trace content
-lane over the smoke's labelled substrate).
+Review stack ran 2026-07-10 in a fresh conversation (step 7). Lanes per
+plan.md § Review-stack sizing: contract-verifier (pinned Opus, read-only) ·
+security-auditor (SSRF headline) · Codex adversarial (read-only, family-flip
+anchored on the Claude-written surfaces per the build's provenance map) ·
+`/code-review medium` (8 lens-scoped finder angles + 1-vote verify) ·
+lead live-trace content lane. `make verify` green before and after fixes.
+
+**Rubric status:** contract-verifier reports items 1–16 SATISFIED with
+evidence (item 13 verified as internally consistent + constant-consistent,
+not re-runnable); item 17 is this stack. All verification.md / ADR 0013 /
+spec-flow-back claims confirmed against the as-built code.
+
+**Live-trace content lane (lead):** every § Live-check number reproduces
+from the raw run log. The politeness 0.84 s anomaly is confirmed as
+log-emission jitter (it directly follows a 1.22 s gap — the pair sums to two
+intervals; all other 21 hosts ≥ 1.0 s). The two live timeouts are two
+distinct documents behind one `GetDocument.aspx` endpoint (queries redacted —
+hygiene working), each showing attempt → retry-once → timeout. Log hygiene
+re-verified independently (125 fetch/fulltext lines, zero query strings).
+
+**Adopted findings (fixed in the review commit, all lanes' verdicts
+adversarially verified before adoption):**
+
+- *Security MEDIUM (unique to security lane):* IP denylist missed CGNAT
+  `100.64.0.0/10` — `_is_refused_ip` now additionally refuses
+  `not ip.is_global` (test-pinned incl. `::ffff:100.64.0.1`).
+- *Codex MAJOR (family-flip anchor):* fixture replay mapped recorded 403 →
+  `paywall`, contradicting decision 8 (an uncorroborated 403 is
+  `blocked_by_host`); `_HTTP_STATUS_REASONS` aligned + comment honest.
+- *Codex MAJOR:* stage-2 prefix hydration loaded the crossing chunk that
+  `greedy_windows` excludes from any non-empty first window — now
+  peek-before-append (byte-identical first-window equivalence tests
+  unchanged and green; loaded bound tightened to ≤ budget + oversize-first).
+- *Codex MAJOR:* the "bounded" anchor scan was unbounded — capped at 2000
+  anchors + early exit on a same-host match (test-pinned).
+- */code-review CONFIRMED:* `_safe_fetch` swallowed `FixtureFetcher`'s
+  fail-loud `FileNotFoundError` into per-document `fetch_error` —
+  configuration errors now re-raise through the isolation belt
+  (pipeline-level test added).
+- *Security LOW:* a connect-time `_BlockedURL` wrapped by httpcore surfaced
+  as `fetch_error` — now unwrapped from the cause chain and coded `blocked`.
+- *Security MEDIUM (hardening half):* `_account_bytes` waited unbounded on
+  the byte budget — now a 300 s bounded wait that fails loudly, converting
+  any future lease-accounting leak from a silent wedge into an error.
+- *Contract-verifier MINOR:* the decision-6 charset behaviour (bytes reach
+  trafilatura undecoded) was implemented but not pinned — behavioural test
+  added (windows-1252 body decodes correctly, no replacement-char mangling).
+- *Codex MINOR:* DOI-fallback dedup now compares percent-decoded,
+  case-insensitive paths. *Codex MINOR:* the section prompt's `abstract_only`
+  description now says "abstract as recorded at acquisition (for some
+  sources a provider excerpt or summary standing in for one)" — Overton has
+  no real abstract (lead-authored, prompt-bearing).
+- *Cleanup (code-review angles):* `_redact_url` deduplicated (fetch_live now
+  uses ingest_full_text's None-safe, port-preserving version); the chunk
+  `text_basis` CASE extracted to one shared `chunk_text_basis_case` helper
+  used by both read paths + a cross-path agreement test (the two copies were
+  verified semantically identical today — this pins them together);
+  `skeleton.py` assigns the selected fetcher unconditionally (drops the
+  discard-and-reconstruct); OA cross-check comment ties its `doc.reason`
+  mutation to decision 8's corroboration channel; stale "Not yet wired"
+  docstring on `discover_document_url` deleted.
+
+**Declined / refuted (recorded):**
+
+- *Byte-lease misattribution (3 finder angles converged):* REFUTED —
+  same-length lease entries are fungible; the released-set/finally
+  discipline guarantees exactly-once release, so totals always balance.
+- *Content-Length-based reservation (efficiency angle):* REFUTED as unsafe —
+  `iter_bytes()` yields decoded bytes while Content-Length is the compressed
+  transfer size, so CL-based reservation under-reserves on routinely
+  compressed responses; the full-cap reserve-then-shrink stands (effective
+  streaming concurrency ~4 is the accepted cost).
+- *Codex MAJOR "discovered PDF never followed when landing HTML parses":*
+  declined as-designed — the thin-text threshold is what routes genuine
+  full-text HTML articles that also carry `citation_pdf_url` (the
+  BMC/Frontiers shape); unconditional PDF preference would demote real
+  articles. Quality heuristic recorded in deferred.md (eval territory).
+- *Codex MAJOR "DNS resolution outside the timeout":* deferred — OS resolver
+  defaults bound it near the HTTP timeout; a resolver wrapper lands only on
+  live telemetry evidence (deferred.md).
+- *OA cross-check as priority-table bypass (altitude angle):* REFUTED as a
+  violation — OA-closed is exactly decision 8's corroboration; comment added.
+- *screen.py per-snapshot queries (2 angles converged):* the deliberate
+  memory-bound trade (server-side early stop); window-function single-query
+  form recorded in deferred.md.
+- Also declined with reasons: Makefile audit wording (deviation 1 documents
+  it; overlay over-coverage fails loud), verbatim `fetched_from` (deliberate,
+  test-pinned provenance), path-token log redaction, destination-port
+  allowlist (deferred.md), retry-vocabulary unification (deferred.md),
+  custom NetworkBackend stack (the plan-approved design), micro-efficiency
+  notes (cascade rescan / drain re-sort / 0.1 s batching knob — verified
+  immaterial or deliberate).
+
+**Flagged deviations 1–5: all explicitly confirmed as-is** — (1) audit
+command shape documented + coverage-equivalent; (2) reservation accounting
+independently verified deadlock-free by three lanes, the proposed
+alternative refuted; (3) phase-5 consolidation's residual tests exist;
+(4) httpcore promotion confirmed as the approved plan design's 2-line rider;
+(5) Codex-sandbox DB substitution — lead gate re-runs are the verification
+of record.
+
+**Fake-done sweep of this phase's fixes:** no test deleted/weakened
+(the one loosened bound — stage-2 loaded-chars — tightened, not relaxed);
+no swallowed errors introduced (two were removed); all fixes re-verified by
+full `make verify` (904 tests green — 11 added by the review fixes).
+
+**Convergence notes:** the byte-lease mechanism drew three independent
+finder angles and the security lane (all resolved to sound-with-hardening) —
+high confidence in the area's scrutiny. Unique-to-lane finds justifying each
+lane: CGNAT gap (security), fixture-403 parity + crossing-chunk +
+anchor bound (Codex, all on its anchored surfaces), swallowed
+FileNotFoundError (code-review cross-file tracer), charset pin gap
+(contract-verifier). Removed-behaviour and conventions angles returned
+clean. Token economy: reasoning-class lanes ≈ 230K (≤ 250K); the
+finder/verifier fan-out ran ≈ 1.07M fast-worker tokens (over the ≤ 500K
+proxy — 8 angles + 9 verifiers on a 4.8K-line Tier-3 diff; recorded honestly
+for the next retro).
+
+`/simplify` not run separately: the medium code-review's
+reuse/simplification/efficiency/altitude angles ran with verification and
+their adopted fixes are applied above (a second same-family cleanup pass
+would duplicate them).
 
 ## Known unverified items
 

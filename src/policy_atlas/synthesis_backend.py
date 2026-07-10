@@ -450,9 +450,10 @@ The claim types:
   may read unappraised chunks, but a citation to an unappraised document is
   rejected. Each chunk record carries "text_basis": "full_text" chunks are
   the document's fetched full text; "abstract_only" chunks are the
-  document's own abstract — cite them as such: a claim resting on an
-  abstract-basis chunk is abstract-grounded and must claim only what the
-  abstract supports as worded. Never quote from memory, from summaries, or
+  document's abstract as recorded at acquisition (for some sources a
+  provider excerpt or summary standing in for one) — cite them as such: a
+  claim resting on an abstract-basis chunk is abstract-grounded and must
+  claim only what that recorded text supports as worded. Never quote from memory, from summaries, or
   from the ledger; a quote that does not appear verbatim in the source is
   rejected and, if unrepairable, excluded.
 - "pattern": a computable count or direction spread over the corpus or the

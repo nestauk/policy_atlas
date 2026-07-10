@@ -312,6 +312,28 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Per-depth fetch budgets** (016 contract, decision 9 note) — a recorded lever of the
   tool-wide depth/time-budget gradation seam, not hard-wired in the fetcher: depth selects
   how much fetch wall-clock/volume a run buys. Arrives with the gradation seam's allocator.
+- **Landing-page boilerplate heuristic** (016 review stack, Codex adversarial finding —
+  declined as-designed): when landing HTML parses ≥ the thin threshold *and* a
+  `citation_pdf_url` was discovered, the cascade accepts the HTML parse and never follows
+  the PDF. Correct for full-text HTML articles that also carry pdf meta (the BMC/Frontiers
+  shape — reordering would demote real articles); wrong for verbose landing pages, which
+  then ingest as boilerplate `full_text`. Eval territory: content-quality evals decide
+  whether a boilerplate detector / conditional PDF preference pays its complexity.
+- **Bounded DNS resolution** (016 review stack, Codex adversarial finding): `getaddrinfo`
+  runs outside the 30 s per-request timeout in both `_guard_url` and the pinned-IP connect;
+  OS resolver defaults bound it near the same order in practice. A thread-wrapped resolver
+  timeout lands only if live telemetry ever shows resolver stalls tying up fetch workers.
+- **Destination-port allowlist** (016 review stack, security lane LOW): the SSRF guard
+  permits any port on public IPs; an 80/443 allowlist would close public-host port probing
+  at the cost of rare odd-port OA hosts. Revisit with live-corpus telemetry.
+- **Stage-2 hydration as one window-function query** (016 review stack): per-snapshot
+  streaming queries are the deliberate memory-bound trade (server-side early stop); a
+  `SUM(length) OVER (PARTITION BY …)` single-query form gets both if stage-2 telemetry ever
+  shows DB round-trips (not LLM calls) dominating wall-clock.
+- **Shared live-HTTP retry vocabulary** (016 review stack, reuse finder): `fetch_live` and
+  `search_live` duplicate the retryable-status set and retry-once/backoff shape; their
+  control flows differ enough (status-outcome objects vs exception-only) that unification
+  waits for a third live client to prove the seam.
 - **Concurrent-run write guard** — eligibility selection takes no row locks and final writes
   are unconditional, so two simultaneous ingest runs over **one scope** could interleave
   (mirrors 007's concurrent-run dedup note; Codex adversarial finding, task 008). Scoped

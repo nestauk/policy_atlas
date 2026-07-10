@@ -656,3 +656,79 @@ def test_uploaded_full_text_doc_feeds_chunk_lane(conn: Connection) -> None:
     assert row.synthesis_provenance["retrieval_scope"]["unit_count"] == 1
     assert row.counts["claims_total"]["chunk"] > 0
     assert _count(conn, citation, project_id) > 0
+
+
+def test_text_basis_matches_across_both_retrieval_paths(conn: Connection) -> None:
+    """016 review stack (item 9): synthesise.py's ``_load_screened_chunks`` and
+    synthesis_tools.py's ``build_retrieval_scope`` now share one
+    ``chunk_text_basis_case`` helper — pin that both report the identical
+    ``text_basis`` per chunk for a mixed corpus (one ingested full-text doc,
+    one abstract-only doc)."""
+    from policy_atlas.synthesis_tools import build_retrieval_scope
+    from policy_atlas.synthesise import _load_screened_chunks
+
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+
+    full_text_pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="Full-text doc")
+    seed_ingested_full_text(
+        conn, pss_id=full_text_pss_id,
+        chunks=["Full text chunk one.", "Full text chunk two."],
+    )
+
+    abstract_pss_id = seed_select_doc(
+        conn, project_id, run_id, scope_id, title="Abstract-only doc", text_basis="abstract",
+    )
+    envelope_snapshot_id = conn.execute(
+        select(project_source_snapshot.c.source_snapshot_id).where(
+            project_source_snapshot.c.project_source_snapshot_id == abstract_pss_id
+        )
+    ).scalar_one()
+    abstract_content = "Abstract-only evidence chunk."
+    abstract_chunk_id = uuid.uuid4()
+    conn.execute(
+        chunk_table.insert().values(
+            chunk_id=abstract_chunk_id,
+            source_snapshot_id=envelope_snapshot_id,
+            sequence=0,
+            content=abstract_content,
+            content_hash=content_hash(abstract_content),
+            locator={},
+            segmentation_policy="abstract_v1",
+            created_at=now(),
+        )
+    )
+    conn.execute(
+        chunk_embedding.insert().values(
+            chunk_embedding_id=uuid.uuid4(),
+            chunk_id=abstract_chunk_id,
+            embedding_profile=EMBEDDING_PROFILE,
+            unit_policy=UNIT_POLICY,
+            unit_index=0,
+            unit_locator={"start": 0, "end": len(abstract_content)},
+            vector=StubEmbeddingBackend().embed_texts([abstract_content])[0],
+            created_at=now(),
+        )
+    )
+
+    chunk_by_id, _chunks_by_pss, _basis = _load_screened_chunks(
+        conn,
+        project_id=project_id,
+        scope_id=scope_id,
+        selected_pss_ids=set(),
+        appraised_pss_ids=set(),
+    )
+    scope = build_retrieval_scope(
+        conn, project_id=project_id, scope_id=scope_id, selected_pss_ids=set()
+    )
+
+    # scope.chunks is embedding-scoped, chunk_by_id is not — every chunk here
+    # has an embedding, so the two keysets must still coincide exactly.
+    assert set(chunk_by_id) == set(scope.chunks)
+    for chunk_id, info in chunk_by_id.items():
+        assert info.text_basis == scope.chunks[chunk_id]["text_basis"]
+    assert chunk_by_id[str(abstract_chunk_id)].text_basis == "abstract_only"
+    other_bases = {
+        info.text_basis for cid, info in chunk_by_id.items() if cid != str(abstract_chunk_id)
+    }
+    assert other_bases == {"full_text"}

@@ -532,13 +532,16 @@ def _load_stage2_chunk_prefix(
 ) -> list[tuple[uuid.UUID, str]]:
     """Load only the chunk prefix the first stage-2 window can read.
 
-    ``greedy_windows`` packs chunks in ``sequence`` order until the running
-    character total reaches or exceeds ``STAGE2_WINDOW_CHAR_BUDGET`` (the
-    crossing chunk included, since an oversize crossing chunk's leading
-    ``#pN`` split parts may still enter the first window). Streaming the
-    query and stopping at that crossing point bounds peak memory by the
-    window budget rather than the document's full chunk list; the
-    discarded tail is never fetched from the client-side iterator.
+    ``greedy_windows`` packs chunks in ``sequence`` order, peeking before it
+    appends: a chunk that would push a non-empty window over
+    ``STAGE2_WINDOW_CHAR_BUDGET`` is excluded from that window entirely (the
+    first chunk is always kept even if it is itself oversize — the
+    oversize-split path needs it). This mirrors that peek-before-append rule
+    exactly, so the crossing chunk can never appear in the returned prefix
+    (016 review stack, Codex finding). Streaming the query and stopping at
+    that crossing point bounds peak memory by the window budget rather than
+    the document's full chunk list; the discarded tail is never fetched from
+    the client-side iterator beyond the one peeked-and-dropped row.
     """
     # yield_per rides the STATEMENT, never the Connection: connection-level
     # execution_options mutates the conn's defaults for every later statement
@@ -553,12 +556,11 @@ def _load_stage2_chunk_prefix(
     total = 0
     try:
         for chunk_row in stream:
-            prefix.append(
-                (cast("uuid.UUID", chunk_row.chunk_id), cast("str", chunk_row.content))
-            )
-            total += len(chunk_row.content)
-            if total >= STAGE2_WINDOW_CHAR_BUDGET:
+            content = cast("str", chunk_row.content)
+            if prefix and total + len(content) > STAGE2_WINDOW_CHAR_BUDGET:
                 break
+            prefix.append((cast("uuid.UUID", chunk_row.chunk_id), content))
+            total += len(content)
     finally:
         stream.close()
     return prefix

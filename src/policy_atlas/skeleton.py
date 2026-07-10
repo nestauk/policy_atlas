@@ -617,7 +617,7 @@ def main() -> None:
     selected_document_fetcher = select_document_fetcher(live)
     if live:
         assert selected_document_fetcher.mode == "live"
-    document_fetcher = selected_document_fetcher if live else None
+    document_fetcher = selected_document_fetcher
     if live:
         embedding_backend = OpenAIEmbeddingBackend()
         theme_grouping_backend = OpenAIThemeGroupingBackend()

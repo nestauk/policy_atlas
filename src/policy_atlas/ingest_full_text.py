@@ -36,7 +36,7 @@ from datetime import UTC, datetime
 from multiprocessing import get_context
 from pathlib import Path
 from typing import Any, Protocol
-from urllib.parse import quote, urljoin, urlsplit
+from urllib.parse import quote, unquote, urljoin, urlsplit
 
 import lxml.html  # type: ignore[import-untyped]
 import pymupdf
@@ -116,7 +116,7 @@ FAILURE_REASONS = (
     "blocked", "blocked_by_host", "fetch_error",
 )
 
-_HTTP_STATUS_REASONS = {401: "paywall", 403: "paywall", 404: "not_found", 410: "not_found"}
+_HTTP_STATUS_REASONS = {401: "paywall", 403: "blocked_by_host", 404: "not_found", 410: "not_found"}
 FETCH_FAILURE_REASON_PRIORITY = (
     "paywall",
     "blocked_by_host",
@@ -237,6 +237,11 @@ def _safe_fetch(fetcher: DocumentFetcher, url: str, *, pss_id: uuid.UUID) -> Fet
     """
     try:
         return fetcher.fetch(url)
+    except FileNotFoundError:
+        # Configuration error, not a per-document outcome (e.g. a missing/empty
+        # fixture corpus) — must fail the run loudly, never degrade to a
+        # per-document fetch_error (016 review stack).
+        raise
     except Exception as exc:
         log.warning(
             "fulltext.fetcher_escaped",
@@ -329,8 +334,14 @@ class FixtureFetcher:
             return FetchResult(status="ok", content_type=entry["content_type"], body=body)
         if outcome == "oversize":
             return FetchResult(status="error", error="too_large")
-        # http_error: map the recorded status to the reason vocabulary the same
-        # way the live fetcher will (401/403 → paywall, 404/410 → not_found).
+        # http_error: map the recorded status to the reason vocabulary (decision 8).
+        # 401 is unambiguous → paywall. A recorded 403 carries no body to
+        # marker-scan, so it replays exactly as an uncorroborated live 403 would:
+        # blocked_by_host (the live fetcher only upgrades to paywall when a
+        # paywall marker is found in the response body — see
+        # ``_response_outcome`` in fetch_live.py). The ingest-level OA
+        # cross-check (``_apply_oa_cross_check``) may still upgrade a
+        # blocked_by_host to paywall from envelope metadata. 404/410 → not_found.
         status_code = int(entry["http_status"])
         return FetchResult(status="error", error=_HTTP_STATUS_REASONS.get(status_code, "not_found"))
 
@@ -391,12 +402,19 @@ def _doi_url_already_present(urls: list[str], encoded_doi: str) -> bool:
 
     Treats ``http://`` vs ``https://`` and ``dx.doi.org`` vs ``doi.org`` as the
     same URL, so the constructed fallback never duplicates a provider-supplied
-    DOI link that only differs in scheme/host convention.
+    DOI link that only differs in scheme/host convention. Paths are compared
+    percent-decoded and case-insensitively (Codex MINOR finding): a provider
+    URL carrying the DOI's reserved characters unescaped (e.g.
+    ``10.1234/ab(c)``) must still suppress the percent-encoded fallback
+    (``10.1234/ab%28c%29``) — otherwise the two would wrongly look distinct.
     """
-    target = encoded_doi.lstrip("/")
+    target = unquote(encoded_doi.lstrip("/")).lower()
     for url in urls:
         parts = urlsplit(url)
-        if parts.netloc.lower() in _DOI_HOSTS and parts.path.lstrip("/") == target:
+        if (
+            parts.netloc.lower() in _DOI_HOSTS
+            and unquote(parts.path.lstrip("/")).lower() == target
+        ):
             return True
     return False
 
@@ -455,23 +473,28 @@ def candidate_urls(metadata: dict[str, Any]) -> list[str]:
     return urls
 
 
+_ANCHOR_SCAN_CAP = 2000  # bounds worst-case anchor scan cost on huge landing pages
+
+
 def discover_document_url(html_body: bytes, base_url: str) -> str | None:
     """Discover a document URL from a fetched HTML landing page.
 
     Pure, side-effect-free recall aid (contract decision 7): no fetching and no
     SSRF validation beyond URL shape — the caller validates any returned URL
-    before use. Not yet wired into the fetch cascade (a later task does that).
+    before use.
 
     Priority 1: ``<meta name="citation_pdf_url" content="...">`` — the
     scholarly-metadata standard (name matched case-insensitively) — returned
     absolutized against ``base_url``.
 
     Priority 2 (only when priority 1 yields nothing): a bounded scan of
-    ``<a href>`` anchors in document order, considering only those whose
-    absolutized URL path ends ``.pdf`` (case-insensitive; the query string and
-    fragment are ignored when testing the path). Same-host candidates are
-    preferred over cross-host ones: the first same-host candidate wins if any
-    exists, else the first cross-host candidate.
+    ``<a href>`` anchors in document order (capped at ``_ANCHOR_SCAN_CAP``
+    anchors), considering only those whose absolutized URL path ends ``.pdf``
+    (case-insensitive; the query string and fragment are ignored when testing
+    the path). Same-host candidates are preferred over cross-host ones: the
+    first same-host candidate wins if any exists (the scan stops there — a
+    same-host match cannot be beaten by a later candidate), else the first
+    cross-host candidate.
 
     Only http(s) results are ever returned; a candidate that absolutizes to a
     non-http(s) scheme (e.g. ``javascript:``, ``mailto:``, ``ftp:``) is
@@ -505,7 +528,9 @@ def discover_document_url(html_body: bytes, base_url: str) -> str | None:
 
     same_host_candidate: str | None = None
     cross_host_candidate: str | None = None
-    for anchor in tree.iter("a"):
+    for anchor_count, anchor in enumerate(tree.iter("a")):
+        if anchor_count >= _ANCHOR_SCAN_CAP:
+            break
         href = anchor.get("href")
         if not href:
             continue
@@ -516,9 +541,9 @@ def discover_document_url(html_body: bytes, base_url: str) -> str | None:
         if not parts.path.lower().endswith(".pdf"):
             continue
         if parts.netloc.lower() == base_host:
-            if same_host_candidate is None:
-                same_host_candidate = candidate
-        elif cross_host_candidate is None:
+            same_host_candidate = candidate
+            break  # same-host wins unconditionally — scanning further is dead work
+        if cross_host_candidate is None:
             cross_host_candidate = candidate
 
     return same_host_candidate or cross_host_candidate
@@ -847,6 +872,10 @@ def _openalex_is_oa(metadata: dict[str, Any]) -> bool | None:
 
 
 def _apply_oa_cross_check(doc: _DocState) -> None:
+    # 016 review stack decision 8's second corroboration channel: an envelope
+    # marked OA-closed corroborates a 403 that fetch-time marker-scanning could
+    # not (fetch_live has no envelope access). Reason selection is otherwise
+    # owned entirely by FETCH_FAILURE_REASON_PRIORITY.
     is_oa = _openalex_is_oa(doc.metadata)
     if is_oa is False and doc.reason == "blocked_by_host":
         doc.reason = "paywall"

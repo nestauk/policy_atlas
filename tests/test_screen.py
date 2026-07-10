@@ -650,10 +650,10 @@ def test_stage2_prefix_hydration_equivalence_large_doc(conn: Connection) -> None
 
 
 def test_stage2_prefix_hydration_only_loads_the_prefix(conn: Connection) -> None:
-    """Rev 2.4 acceptance (finding 6): the loader must not materialise the whole doc.
-
-    Loaded content is bounded by the window budget plus the one crossing chunk's
-    length, and strictly fewer chunks are loaded than exist in the database.
+    """Rev 2.4 acceptance (finding 6), tightened by the 016 review stack's
+    peek-before-append fix: the loader must not materialise the whole doc, and
+    (with no oversize first chunk in play here) loaded content never exceeds the
+    window budget — the crossing chunk itself is peeked but never appended.
     """
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
@@ -672,8 +672,7 @@ def test_stage2_prefix_hydration_only_loads_the_prefix(conn: Connection) -> None
     assert len(loaded_chunks) < total_in_db
 
     loaded_chars = sum(len(content) for _chunk_id, content in loaded_chunks)
-    crossing_chunk_len = len(loaded_chunks[-1][1])
-    assert loaded_chars <= STAGE2_WINDOW_CHAR_BUDGET + crossing_chunk_len
+    assert loaded_chars <= STAGE2_WINDOW_CHAR_BUDGET
 
 
 def test_stage2_prefix_hydration_oversize_single_chunk(conn: Connection) -> None:

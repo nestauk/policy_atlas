@@ -24,7 +24,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, NotRequired, Protocol, TypedDict, cast
 
-from sqlalchemy import case, func
+from sqlalchemy import ColumnElement, case, func
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
@@ -612,6 +612,40 @@ def _doc_record(row: Any, selected_pss_ids: set[uuid.UUID]) -> dict[str, Any]:
     return doc
 
 
+def chunk_text_basis_case(
+    chunk_snapshot_id_col: ColumnElement[uuid.UUID],
+    envelope_snapshot_id_col: ColumnElement[uuid.UUID],
+    envelope_text_basis_col: ColumnElement[str],
+) -> ColumnElement[str]:
+    """Build the ``text_basis`` CASE shared by both chunk-retrieval read paths.
+
+    A chunk is ``abstract_only`` exactly when it belongs to the envelope
+    snapshot itself (no full-text snapshot was ingested for the doc) AND the
+    envelope's own ``text_basis`` is not already ``full_text``; every other
+    chunk is ``full_text``. Extracted (016 review stack) so this module's
+    ``build_retrieval_scope`` and synthesise.py's ``_load_screened_chunks``
+    encode the rule once and can never silently drift apart.
+
+    Args:
+        chunk_snapshot_id_col: The chunk row's ``source_snapshot_id`` column.
+        envelope_snapshot_id_col: The document's envelope
+            ``source_snapshot_id`` (or an equivalent labeled column/subquery
+            reference).
+        envelope_text_basis_col: The envelope snapshot's ``text_basis`` column.
+
+    Returns:
+        A ``"text_basis"``-labeled CASE expression.
+    """
+    return case(
+        (
+            (chunk_snapshot_id_col == envelope_snapshot_id_col)
+            & (envelope_text_basis_col != "full_text"),
+            "abstract_only",
+        ),
+        else_="full_text",
+    ).label("text_basis")
+
+
 def build_retrieval_scope(
     conn: Connection,
     *,
@@ -698,14 +732,11 @@ def build_retrieval_scope(
         .where(effective.c.status == "relevant")
         .subquery()
     )
-    chunk_text_basis = case(
-        (
-            (chunk_table.c.source_snapshot_id == screened_docs.c.envelope_snapshot_id)
-            & (screened_docs.c.text_basis != "full_text"),
-            "abstract_only",
-        ),
-        else_="full_text",
-    ).label("text_basis")
+    chunk_text_basis = chunk_text_basis_case(
+        chunk_table.c.source_snapshot_id,
+        screened_docs.c.envelope_snapshot_id,
+        screened_docs.c.text_basis,
+    )
     unit_count = int(
         conn.execute(
             sa_select(func.count())
