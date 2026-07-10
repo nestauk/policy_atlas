@@ -533,12 +533,17 @@ function PlanRecap() {
   const plan = state.plan
   if (!plan?.question) return null
   const scopingNotes = plan.scoping_notes ?? []
+  const screeningCriteria = plan.screening_criteria ?? []
+  const constraints = scopeChips(plan.scope_constraints)
   const assumptions = plan.assumptions ?? []
+  const steps = plan.steps ?? []
+  // parity rule: everything the pre-run plan pane shows stays visible here
   const summary = [
     label(SEARCH_EFFORT_LABEL, plan.search_effort),
     label(ANALYSIS_DEPTH_LABEL, plan.analysis_depth),
     plan.backend_scope ? SOURCES_LABEL[plan.backend_scope] : '',
     plan.steering_mode ? `Check-ins: ${label(STEERING_MODE_LABEL, plan.steering_mode).toLowerCase()}` : '',
+    plan.time_band ?? '',
   ].filter(Boolean).join(' · ')
   return (
     <div className="mb-3">
@@ -548,14 +553,34 @@ function PlanRecap() {
       {open && (
         <div className="anim-rise mt-2 space-y-2 border hairline bg-white p-4 text-[13px]">
           <div className="font-semibold text-navy">{plan.question}</div>
-          {scopingNotes.length > 0 && (
+          {(scopingNotes.length > 0 || constraints.length > 0) && (
             <div className="flex flex-wrap gap-1.5">
               {scopingNotes.map((f) => (
                 <span key={f} className="chip chip--soft">{f}</span>
               ))}
+              {constraints.map((c) => (
+                <span key={c} className="chip chip--soft">{c}</span>
+              ))}
             </div>
           )}
+          {screeningCriteria.length > 0 && (
+            <ul className="list-disc space-y-0.5 pl-4 text-[12px] text-grey">
+              {screeningCriteria.map((c) => (
+                <li key={c}>{c}</li>
+              ))}
+            </ul>
+          )}
           {summary && <div className="text-[12.5px] text-grey">{summary}</div>}
+          {steps.length > 0 && (
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-navy-40">Agreed steps</div>
+              <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-[12px] text-grey">
+                {steps.map((s) => (
+                  <li key={s.stage}>{s.label}</li>
+                ))}
+              </ol>
+            </div>
+          )}
           {assumptions.length > 0 && (
             <div>
               <div className="text-[11px] font-bold uppercase tracking-wide text-navy-40">Assumptions</div>

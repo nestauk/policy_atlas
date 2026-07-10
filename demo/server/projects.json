@@ -241,5 +241,149 @@
   },
   "approved": null,
   "created_at": "2026-07-09T18:00:00+00:00"
+ },
+ {
+  "project_id": "2b361aad-c486-4db1-b0cd-b11208fc4791",
+  "name": "Personal optimism and national pessimism in the UK",
+  "question": "What evidence is there on the relationship between personal optimism and pessimism about the UK\u2019s national future, and what factors are associated with or may explain this personal-national outlook gap?",
+  "plan": {
+   "title": "Personal optimism and national pessimism in the UK",
+   "question": "What evidence is there on the relationship between personal optimism and pessimism about the UK\u2019s national future, and what factors are associated with or may explain this personal-national outlook gap?",
+   "scoping_notes": [
+    "UK focus requested.",
+    "Concern is the relationship between individual optimism and national pessimism.",
+    "Interest includes driving factors or explanations.",
+    "User asked for a quick search."
+   ],
+   "screening_criteria": [
+    "Include UK-focused evidence.",
+    "Include cross-national studies only if UK-specific findings are reported.",
+    "Include empirical academic studies and evidence-based reports.",
+    "Include evidence measuring personal optimism or related personal outlooks.",
+    "Include evidence measuring national pessimism or related societal outlooks.",
+    "Include evidence on factors associated with the personal-national outlook gap.",
+    "Exclude opinion pieces without empirical evidence.",
+    "Exclude sources with no UK-specific findings."
+   ],
+   "backend_scope": "both",
+   "scope_constraints": {
+    "published_after": null,
+    "published_before": null,
+    "publisher_country": null
+   },
+   "search_effort": "rapid",
+   "analysis_depth": "landscape",
+   "components": [
+    "characterise"
+   ],
+   "component_rationale": {
+    "characterise": "Included to quickly map how the evidence defines optimism, pessimism and the personal-national outlook gap across sources.",
+    "screen_stage2": "Excluded because a landscape analysis does not include the full-text confirmation pass bought by standard or deep analysis.",
+    "select": "Excluded because the question is not about interventions and their effects, so intervention-outcome document selection is not a good fit.",
+    "extract": "Excluded because schema-bound intervention-outcome extraction does not fit an associational and explanatory attitudes question.",
+    "group": "Excluded because there will be no intervention-outcome extraction to organise by intervention, outcome or population."
+   },
+   "steering_mode": "moderate",
+   "assumptions": [
+    "\u201cIndividual optimism\u201d means optimism about one\u2019s own life, prospects, wellbeing, finances, or future.",
+    "\u201cNational pessimism\u201d means pessimism about the UK\u2019s future, society, economy, politics, public services, or national direction.",
+    "The review should prioritise UK evidence but may include cross-national studies where UK-specific results are reported.",
+    "The question is associational and explanatory, not an intervention-effect question, so structured intervention-outcome extraction is not appropriate.",
+    "A quick search means a rapid search pass and a landscape-style synthesis rather than full in-depth document extraction.",
+    "No publication-date window was specified, so I have not applied one."
+   ],
+   "expected_artefact_shape": "landscape coverage, themes and gaps",
+   "time_band": "~10-15 min",
+   "steps": [
+    {
+     "label": "Searching sources",
+     "blurb": "Queries out to academic and policy databases",
+     "stage": "acquire"
+    },
+    {
+     "label": "Screening for relevance",
+     "blurb": "Every title and abstract, against your question",
+     "stage": "screen"
+    },
+    {
+     "label": "Sorting by evidence type",
+     "blurb": "Trial, review, evaluation \u2014 each source labelled",
+     "stage": "classify"
+    },
+    {
+     "label": "Appraising quality",
+     "blurb": "How much weight each source can bear",
+     "stage": "appraise"
+    },
+    {
+     "label": "Reading in full",
+     "blurb": "Fetching the documents; paywalls noted, not hidden",
+     "stage": "ingest_full_text"
+    },
+    {
+     "label": "Mapping the landscape",
+     "blurb": "What the evidence covers, and where it's thin",
+     "stage": "characterise"
+    },
+    {
+     "label": "Writing the evidence base",
+     "blurb": "Cited, checked, ready to challenge",
+     "stage": "synthesise"
+    }
+   ],
+   "ready": true
+  },
+  "approved": {
+   "title": "Personal optimism and national pessimism in the UK",
+   "question": "What evidence is there on the relationship between personal optimism and pessimism about the UK\u2019s national future, and what factors are associated with or may explain this personal-national outlook gap?",
+   "scoping_notes": [
+    "UK focus requested.",
+    "Concern is the relationship between individual optimism and national pessimism.",
+    "Interest includes driving factors or explanations.",
+    "User asked for a quick search."
+   ],
+   "screening_criteria": [
+    "Include UK-focused evidence.",
+    "Include cross-national studies only if UK-specific findings are reported.",
+    "Include empirical academic studies and evidence-based reports.",
+    "Include evidence measuring personal optimism or related personal outlooks.",
+    "Include evidence measuring national pessimism or related societal outlooks.",
+    "Include evidence on factors associated with the personal-national outlook gap.",
+    "Exclude opinion pieces without empirical evidence.",
+    "Exclude sources with no UK-specific findings."
+   ],
+   "backend_scope": "both",
+   "scope_constraints": {
+    "published_after": null,
+    "published_before": null,
+    "publisher_country": null
+   },
+   "search_effort": "rapid",
+   "analysis_depth": "landscape",
+   "components": [
+    "characterise"
+   ],
+   "component_rationale": {
+    "characterise": "Included to quickly map how the evidence defines optimism, pessimism and the personal-national outlook gap across sources.",
+    "screen_stage2": "Excluded because a landscape analysis does not include the full-text confirmation pass bought by standard or deep analysis.",
+    "select": "Excluded because the question is not about interventions and their effects, so intervention-outcome document selection is not a good fit.",
+    "extract": "Excluded because schema-bound intervention-outcome extraction does not fit an associational and explanatory attitudes question.",
+    "group": "Excluded because there will be no intervention-outcome extraction to organise by intervention, outcome or population."
+   },
+   "grouping_facet": null,
+   "steering_mode": "moderate",
+   "steer_point_defaults": [],
+   "expected_artefact_shape": "landscape coverage, themes and gaps",
+   "assumptions": [
+    "\u201cIndividual optimism\u201d means optimism about one\u2019s own life, prospects, wellbeing, finances, or future.",
+    "\u201cNational pessimism\u201d means pessimism about the UK\u2019s future, society, economy, politics, public services, or national direction.",
+    "The review should prioritise UK evidence but may include cross-national studies where UK-specific results are reported.",
+    "The question is associational and explanatory, not an intervention-effect question, so structured intervention-outcome extraction is not appropriate.",
+    "A quick search means a rapid search pass and a landscape-style synthesis rather than full in-depth document extraction.",
+    "No publication-date window was specified, so I have not applied one."
+   ],
+   "time_band": "~10-15 min"
+  },
+  "created_at": "2026-07-10T14:00:44.200768+00:00"
  }
 ]

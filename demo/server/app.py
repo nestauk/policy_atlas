@@ -13,13 +13,14 @@ from typing import Any
 
 from demo.server import orchestrator, readmodels
 from demo.server.bus import EventBus, sse_format
-from demo.server.driver import AnalysisDriver, install_log_bridge
+from demo.server.driver import AnalysisDriver, _summarise, install_log_bridge
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import func, select
 
+from policy_atlas import events
 from policy_atlas.db import get_engine
 from policy_atlas.logging import configure_logging
 from policy_atlas.orchestration_plan import OrchestrationPlan
@@ -56,6 +57,7 @@ def _load_sidecar() -> None:
             state = ProjectState(entry["project_id"], entry["name"], entry.get("question", ""))
             state.plan = entry.get("plan")
             state.approved = entry.get("approved")
+            state.turns = entry.get("turns", [])
             state.created_at = entry.get("created_at", state.created_at)
             PROJECTS[entry["project_id"]] = state
 
@@ -64,9 +66,65 @@ def _save_sidecar() -> None:
     with _LOCK:
         _SIDECAR.write_text(json.dumps([
             {"project_id": s.project_id, "name": s.name, "question": s.question,
-             "plan": s.plan, "approved": s.approved, "created_at": s.created_at}
+             "plan": s.plan, "approved": s.approved, "turns": s.turns,
+             "created_at": s.created_at}
             for s in PROJECTS.values()
         ], indent=1))
+
+
+def _hydrate_backlog(state: ProjectState, conn: Any) -> None:
+    """Rebuild the SSE backlog after a restart, from the durable record.
+
+    The bus is in-memory (RETRO §3): a restart loses the stream, but the chat
+    turns persist in the sidecar and every component outcome is in the
+    canonical event_log — so the frontend's replay-and-rebuild path works
+    unchanged on a reconstructed backlog. Live-progress ticks and narration
+    prose are gone for good (not persisted); the timeline, summaries and
+    terminal state are exact.
+    """
+    pid = uuid.UUID(state.project_id)
+    for turn in state.turns:
+        if turn.get("role") == "user":
+            state.bus.emit("user.message", {"text": turn.get("text", "")})
+        else:
+            state.bus.emit("narration", {"text": turn.get("text", "")})
+    if state.plan:
+        state.bus.emit("plan.updated", {"plan": state.plan})
+
+    stage_events = [
+        e for e in events.read(conn, pid)
+        if e["event_type"] in ("component.completed", "component.failed")
+        and e["payload"].get("component") in orchestrator.STAGES
+    ]
+    has_artefact = conn.execute(
+        select(func.count()).select_from(synthesis_result)
+        .where(synthesis_result.c.project_id == pid)
+    ).scalar_one() > 0
+    if not stage_events:
+        return
+    state.bus.emit("analysis.started", {})
+    for entry in stage_events:
+        component = entry["payload"]["component"]
+        label, blurb = orchestrator.STAGES[component]
+        if entry["event_type"] == "component.completed":
+            summary = _summarise({k: v for k, v in entry["payload"].items()
+                                  if k != "component"})
+            state.bus.emit("stage.completed", {"stage": component, "stage_label": label,
+                                               "summary": summary})
+        else:
+            state.bus.emit("stage.failed", {
+                "stage": component, "stage_label": label,
+                "reason": str(entry["payload"].get("error", "unknown")), "skipped": False,
+            })
+    if has_artefact:
+        state.bus.emit("analysis.completed", {"status": "succeeded", "collation": ""})
+    else:
+        state.bus.emit("analysis.failed", {
+            "stage": None,
+            "message": "This run didn't finish (interrupted or failed before the "
+            "write-up). Everything completed is shown; start the analysis again "
+            "to continue.",
+        })
 
 
 def _status(state: ProjectState, conn: Any) -> str:
@@ -95,6 +153,19 @@ def startup() -> None:
     configure_logging()
     install_log_bridge()
     _load_sidecar()
+    # rebuild each project's SSE backlog from the durable record; a project
+    # whose history can't hydrate still serves (read models are DB-backed)
+    import structlog
+    log = structlog.get_logger()
+    try:
+        with get_engine().connect() as conn:
+            for state in PROJECTS.values():
+                try:
+                    _hydrate_backlog(state, conn)
+                except Exception:  # noqa: BLE001
+                    log.exception("demo.hydrate_failed", project_id=state.project_id)
+    except Exception:  # noqa: BLE001 — no DB at boot: read models will fail anyway
+        log.exception("demo.hydrate_skipped")
 
 
 class ChatIn(BaseModel):
