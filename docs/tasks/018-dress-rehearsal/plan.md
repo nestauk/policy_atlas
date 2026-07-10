@@ -71,7 +71,12 @@ a common module) that omits the key when `None`; only `classify_prompt.py` sets
 fake-client test pins the emitted kwarg; **the `xhigh` literal is live-verified against
 the installed SDK before adoption — if rejected, fall back to `high` and record the
 substitution honestly**. Provider-neutral by shape (a Bedrock backend maps or ignores
-the string).
+the string). **Effort level is a hypothesis, not a setting (prompting research,
+2026-07-10: reasoning effort is NOT monotonic on judgment tasks — medium has beaten
+high on judging accuracy per dollar in published evals): classify@xhigh is verified
+against baseline-1 classification outputs like any other change, with high/medium as
+the comparison arms if it underperforms.** See
+[prompting-research-notes.md](prompting-research-notes.md).
 
 **Telemetry (A2; re-specced per plan-review findings 5 + 7):**
 - *Sessions:* **one conversation uuid minted at CLI/orchestrate start**, threaded (new
@@ -273,7 +278,12 @@ replay (the B smoke)** before Phase C opens.
   evidence, like every other prompt change.
   **Bounds enforced: ≤3 rounds/surface, ≤30 live component replays total** (a running
   tally in verification.md); no-mission-vocabulary check + taxonomy desk review on
-  every adopted prompt. — **lead** *(prompt-bearing + adjudication)*
+  every adopted prompt. **Loop method per the prompting research
+  ([prompting-research-notes.md](prompting-research-notes.md)): every touched surface
+  gets a conflict audit first; accumulated ritual/emphatic language is stripped as
+  prior-generation tech debt (fresh-minimal-baseline discipline); CoT scaffolding
+  deleted on reasoning-enabled surfaces; verbosity/format bounds made numeric;
+  hard rules carry their motivation.** — **lead** *(prompt-bearing + adjudication)*
 - C3 taxonomy pins: planner replay across the 7 v2-question categories, drawing one
   real question per category from the V2 user-question list (user-provided 2026-07-10;
   product-internal data held outside the repo — ask the owner or the lead's notes),
