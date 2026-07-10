@@ -205,3 +205,25 @@ def test_openai_planner_backend_requires_api_key(monkeypatch: pytest.MonkeyPatch
 
     with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
         OpenAIPlannerBackend()
+
+
+def test_scrub_turn_removes_nul_from_nested_plan_draft() -> None:
+    from policy_atlas.planner import _scrub_turn
+    from policy_atlas.planner_prompt import PlanDraftWire, PlannerTurnWire
+
+    turn = PlannerTurnWire(
+        reply="ok\x00",
+        plan_draft=PlanDraftWire(
+            title="T\x00itle",
+            scoping_notes=["a\x00b"],
+            component_rationale={"characterise": "c\x00d"},
+        ),
+        question=None,
+        suggested_answers=None,
+        ready=False,
+    )
+    scrubbed = _scrub_turn(turn)
+    assert scrubbed.reply == "ok"
+    assert scrubbed.plan_draft.title == "Title"
+    assert scrubbed.plan_draft.scoping_notes == ["ab"]
+    assert scrubbed.plan_draft.component_rationale == {"characterise": "cd"}

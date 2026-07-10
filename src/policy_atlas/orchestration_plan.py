@@ -14,7 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from policy_atlas.plan import COMPONENT_REGISTRY
 from policy_atlas.schema import DIRECTIVE_STRING_MAX
-from policy_atlas.screen import CRITERIA_LIST_MAX
+from policy_atlas.screen import CRITERIA_LIST_MAX, _compose_screen_intent
+from policy_atlas.screen_prompt import SCREEN_INTENT_MAX
 
 BackendScope = Literal["academic_only", "grey_lit_only", "both"]
 SearchEffort = Literal["rapid", "standard", "deep"]
@@ -29,6 +30,13 @@ DiscretionaryComponent = Literal[
 GroupingFacet = Literal["intervention", "outcome", "population"]
 SteeringMode = Literal["frequent", "moderate", "minimal", "unattended"]
 SteerAction = Literal["proceed_flag", "stop"]
+
+PUBLISHER_COUNTRY_MAX = 100
+
+# Steer points a plan may pre-declare defaults for (steering.py's
+# DEEPENING_SELECTION_STEER_POINT; the registry lives here so plan
+# validation stays fail-closed without an import cycle).
+STEER_POINTS: tuple[str, ...] = ("deepening_selection",)
 
 SPINE: tuple[str, ...] = (
     "acquire",
@@ -231,7 +239,16 @@ class ScopeConstraints(BaseModel):
         """
         if value is None:
             return None
-        return _require_clean_string(value, field_name="publisher_country")
+        value = _require_clean_string(value, field_name="publisher_country")
+        if len(value) > PUBLISHER_COUNTRY_MAX:
+            raise ValueError(
+                f"publisher_country must be at most {PUBLISHER_COUNTRY_MAX} characters"
+            )
+        if not all(ch.isalpha() or ch in " -'" for ch in value):
+            raise ValueError(
+                "publisher_country must contain only letters, spaces, hyphens or apostrophes"
+            )
+        return value
 
     @model_validator(mode="after")
     def validate_date_window(self) -> Self:
@@ -297,9 +314,12 @@ class SteerPointDefault(BaseModel):
             The validated steer-point name.
 
         Raises:
-            ValueError: If the name is empty or padded with whitespace.
+            ValueError: If the name is not a known steer point.
         """
-        return _require_clean_string(value, field_name="steer_point")
+        value = _require_clean_string(value, field_name="steer_point")
+        if value not in STEER_POINTS:
+            raise ValueError(f"steer_point must be one of {sorted(STEER_POINTS)}")
+        return value
 
 
 class OrchestrationPlan(BaseModel):
@@ -320,7 +340,6 @@ class OrchestrationPlan(BaseModel):
         grouping_facet: Optional grouping facet, valid only when ``group`` runs.
         steering_mode: Steering mode for the later runner.
         steer_point_defaults: Pre-declared steering defaults.
-        declared_hatches: Informational method notes; no runtime hatch exists.
         expected_artefact_shape: Deterministic forecast derived from components.
         assumptions: Visible assumptions and open guesses.
         time_band: Deterministic wall-clock band derived from the two axes.
@@ -341,7 +360,6 @@ class OrchestrationPlan(BaseModel):
     grouping_facet: GroupingFacet | None = None
     steering_mode: SteeringMode
     steer_point_defaults: list[SteerPointDefault] = Field(default_factory=list)
-    declared_hatches: list[str] = Field(default_factory=list)
     expected_artefact_shape: str = ""
     assumptions: list[str] = Field(default_factory=list)
     time_band: str = ""
@@ -363,7 +381,7 @@ class OrchestrationPlan(BaseModel):
         """
         return _require_clean_string(value, field_name=info.field_name)
 
-    @field_validator("scoping_notes", "screening_criteria", "declared_hatches", "assumptions")
+    @field_validator("scoping_notes", "screening_criteria", "assumptions")
     @classmethod
     def validate_text_lists(cls, values: list[str], info: Any) -> list[str]:
         """Validate plan text-list fields.
@@ -476,6 +494,27 @@ class OrchestrationPlan(BaseModel):
         if self.time_band and self.time_band != expected_time_band:
             raise ValueError("time_band does not match search_effort and analysis_depth")
         self.time_band = expected_time_band
+
+        if (
+            self.scope_constraints.publisher_country is not None
+            and self.backend_scope == "academic_only"
+        ):
+            raise ValueError(
+                "publisher_country filters the grey-literature backend, which "
+                "backend_scope 'academic_only' excludes"
+            )
+
+        # Compile-target parity for the screen prompt: the composed intent
+        # (question + criteria block, via the real composer) must fit the
+        # prompt-assembly cap, or criteria would be silently truncated away
+        # while the plan row claims they governed screening.
+        composed_intent = _compose_screen_intent(self.question, self.screening_criteria)
+        if len(composed_intent) > SCREEN_INTENT_MAX:
+            raise ValueError(
+                f"question plus screening_criteria compose to {len(composed_intent)} "
+                f"characters; the screen prompt caps its intent input at "
+                f"{SCREEN_INTENT_MAX}, so later criteria would be silently dropped"
+            )
         return self
 
 

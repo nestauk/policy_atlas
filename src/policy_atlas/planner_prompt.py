@@ -61,6 +61,7 @@ class PlanDraftWire(BaseModel):
     component_rationale: dict[str, str] | None = None
     grouping_facet: str | None = None
     steering_mode: str | None = None
+    steer_point_defaults: list[dict[str, str]] | None = None
     assumptions: list[str] | None = None
 
 
@@ -164,6 +165,14 @@ yourself.
 - steering_mode: frequent | moderate | minimal | unattended. Default
   moderate. Mention that unattended runs never pause: flagged decisions
   auto-resolve to the plan's pre-declared defaults.
+- steer_point_defaults: the pre-declared defaults those auto-resolutions
+  use. Whenever you propose unattended, set it — one entry per steer point,
+  each {"steer_point": ..., "action": ...}. The only steer point is
+  "deepening_selection" (fires after document selection); the only
+  pre-declarable actions are "proceed_flag" (continue and flag the
+  decision) and "stop" (end the run there). Runtime-data-specific choices
+  cannot be pre-declared. Leave it null in attended modes unless the user
+  asks.
 - assumptions: every guess you are making, stated plainly. A thin-context
   plan is a fine plan if its thinness is visible.
 

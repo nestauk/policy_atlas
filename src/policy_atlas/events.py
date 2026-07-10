@@ -83,3 +83,25 @@ def read(conn: Connection, project_id: uuid.UUID) -> list[dict[str, Any]]:
         )
     )
     return [dict(row._mapping) for row in rows]
+
+
+def read_for_run(
+    conn: Connection, project_id: uuid.UUID, run_id: uuid.UUID
+) -> list[dict[str, Any]]:
+    """Return all events for one run within a project, ordered by sequence.
+
+    Args:
+        conn: Open database connection.
+        project_id: Project whose events to read.
+        run_id: Run to scope the read to.
+
+    Returns:
+        Event rows as dicts, ordered by ascending sequence.
+    """
+    rows = conn.execute(
+        select(event_log)
+        .where(event_log.c.project_id == project_id)
+        .where(event_log.c.run_id == run_id)
+        .order_by(event_log.c.sequence)
+    )
+    return [dict(row._mapping) for row in rows]

@@ -41,10 +41,7 @@ def _payload(**overrides: Any) -> dict[str, Any]:
         "grouping_facet": None,
         "steering_mode": "moderate",
         "steer_point_defaults": [
-            {"steer_point": "deepening-selection", "action": "proceed_flag"}
-        ],
-        "declared_hatches": [
-            "Standard and deep search use the loop stopping rule; no runtime hatch exists"
+            {"steer_point": "deepening_selection", "action": "proceed_flag"}
         ],
         "assumptions": ["Publisher geography is publication geography"],
     }
@@ -116,6 +113,20 @@ def test_spine_is_present_in_order_for_valid_plan_matrix() -> None:
             "steer_point_defaults": [
                 {"steer_point": "deepening-selection", "action": "continue"}
             ]
+        },
+        {
+            "steer_point_defaults": [
+                {"steer_point": "not-a-steer-point", "action": "proceed_flag"}
+            ]
+        },
+        # Compile-target parity: question + criteria must fit the screen
+        # prompt's intent cap, or criteria would silently truncate mid-run.
+        {"question": "q" * 1_990, "screening_criteria": ["Exclude opinion pieces."]},
+        {"scope_constraints": {"publisher_country": "x" * 101}},
+        {"scope_constraints": {"publisher_country": "United Kingdom\x1b[2J"}},
+        {
+            "backend_scope": "academic_only",
+            "scope_constraints": {"publisher_country": "United Kingdom"},
         },
     ],
 )

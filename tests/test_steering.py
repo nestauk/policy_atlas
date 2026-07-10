@@ -6,6 +6,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
 from sqlalchemy import func, select
 from sqlalchemy.engine import Engine
 
@@ -31,7 +32,9 @@ from policy_atlas.steering import (
     Adjust,
     Continue,
     PausePoint,
+    SteeringAdjustmentError,
     SteeringResponse,
+    _validate_delta_round_trip,
     build_steer_point_options,
     pause_points,
     refuse_inexpressible,
@@ -214,6 +217,74 @@ def test_adjustment_writes_new_plan_version_and_changes_not_yet_run_group_direct
         assert facet == "population"
     finally:
         _cleanup_project(engine, project_id)
+
+
+def test_minimal_partial_delta_round_trips_despite_composer_injected_siblings(
+    engine: Engine,
+) -> None:
+    # compose() always injects sibling keys the caller need not supply
+    # (screen_stage2's {"stage": 2}); a criteria-only delta must still apply.
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan(steering_mode="frequent")
+        plan_id = _insert_plan_row(
+            engine,
+            project_id=project_id,
+            scope_id=scope_id,
+            plan=plan,
+        )
+        io = ScriptedIO(
+            [
+                Adjust(
+                    directive_deltas={
+                        "screen_stage2": {
+                            "screening": {"criteria": ["Exclude opinion pieces."]}
+                        }
+                    }
+                )
+            ]
+        )
+
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+        )
+
+        assert outcome.status == "succeeded"
+        with engine.connect() as conn:
+            rows = conn.execute(
+                select(
+                    orchestration_plan.c.version,
+                    orchestration_plan.c.status,
+                    orchestration_plan.c.payload,
+                )
+                .where(orchestration_plan.c.project_id == project_id)
+                .order_by(orchestration_plan.c.version)
+            ).all()
+        assert [(row.version, row.status) for row in rows] == [
+            (1, "superseded"),
+            (2, "approved"),
+        ]
+        assert rows[1].payload["screening_criteria"] == ["Exclude opinion pieces."]
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_delta_round_trip_still_rejects_a_request_plan_fields_cannot_express() -> None:
+    chain = compose(_base_plan())
+    with pytest.raises(SteeringAdjustmentError):
+        _validate_delta_round_trip(
+            {"screen_stage2": {"screening": {"criteria": ["A rule the plan does not hold."]}}},
+            amended_chain=chain,
+        )
 
 
 def test_adjustment_naming_already_run_component_reprompts_without_plan_write(

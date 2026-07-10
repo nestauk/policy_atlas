@@ -30,6 +30,7 @@ from policy_atlas.orchestration_plan import (
     OrchestrationPlan,
     SearchEffort,
     SteeringMode,
+    _enabled_components,
     compose,
 )
 from policy_atlas.schema import orchestration_plan, selection_result
@@ -431,6 +432,37 @@ def apply_adjustment(
     )
     _validate_delta_round_trip(adjustment.directive_deltas, amended_chain=amended_chain)
 
+    new_plan_id, new_version = _persist_new_plan_version(
+        conn,
+        project_id=project_id,
+        plan_row=plan_row,
+        payload=amended.model_dump(mode="json"),
+    )
+    return amended, new_plan_id, new_version
+
+
+def _persist_new_plan_version(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    plan_row: Any,
+    payload: dict[str, Any],
+) -> tuple[uuid.UUID, int]:
+    """Supersede the current plan row and insert a user-attributed successor.
+
+    Args:
+        conn: Open transaction for the version-row write.
+        project_id: Project owning the plan lineage.
+        plan_row: Current persisted orchestration-plan row.
+        payload: JSON payload for the new approved version row.
+
+    Returns:
+        The new plan id and new plan version.
+
+    Raises:
+        SteeringAdjustmentError: If the plan row lacks a UUID id or integer
+            version.
+    """
     prior_plan_id = _plan_row_value(plan_row, "plan_id")
     prior_version = _plan_row_value(plan_row, "version")
     evidence_scope_id = _plan_row_value(plan_row, "evidence_scope_id")
@@ -455,13 +487,13 @@ def apply_adjustment(
             evidence_scope_id=evidence_scope_id,
             version=new_version,
             status="approved",
-            payload=amended.model_dump(mode="json"),
+            payload=payload,
             created_at=now,
             created_by="user",
             approved_at=now,
         )
     )
-    return amended, new_plan_id, new_version
+    return new_plan_id, new_version
 
 
 def apply_reselect(
@@ -506,37 +538,12 @@ def apply_reselect(
     except select_module.DirectiveError as exc:
         raise SteeringAdjustmentError(str(exc)) from exc
 
-    prior_plan_id = _plan_row_value(plan_row, "plan_id")
-    prior_version = _plan_row_value(plan_row, "version")
-    evidence_scope_id = _plan_row_value(plan_row, "evidence_scope_id")
-    if not isinstance(prior_plan_id, uuid.UUID):
-        raise SteeringAdjustmentError("current plan row has no UUID plan_id")
-    if not isinstance(prior_version, int):
-        raise SteeringAdjustmentError("current plan row has no integer version")
-
-    new_plan_id = uuid.uuid4()
-    new_version = prior_version + 1
-    now = datetime.now(UTC)
-    conn.execute(
-        orchestration_plan.update()
-        .where(orchestration_plan.c.plan_id == prior_plan_id)
-        .where(orchestration_plan.c.project_id == project_id)
-        .values(status="superseded")
+    return _persist_new_plan_version(
+        conn,
+        project_id=project_id,
+        plan_row=plan_row,
+        payload=plan.model_dump(mode="json"),
     )
-    conn.execute(
-        orchestration_plan.insert().values(
-            plan_id=new_plan_id,
-            project_id=project_id,
-            evidence_scope_id=evidence_scope_id,
-            version=new_version,
-            status="approved",
-            payload=plan.model_dump(mode="json"),
-            created_at=now,
-            created_by="user",
-            approved_at=now,
-        )
-    )
-    return new_plan_id, new_version
 
 
 def _stable_value(value: Any) -> str:
@@ -597,14 +604,7 @@ def _apply_nudge(payload: dict[str, Any], nudge: str | None) -> None:
 
 
 def _clip_components_to_depth(payload: dict[str, Any], *, analysis_depth: AnalysisDepth) -> None:
-    enabled = set()
-    settings = ANALYSIS_DEPTH_TABLE[analysis_depth]
-    if settings["screen_stage2"]:
-        enabled.add("screen_stage2")
-    if settings["characterise"]:
-        enabled.add("characterise")
-    if settings["deep_chain"]:
-        enabled.update(("select", "extract", "group"))
+    enabled = _enabled_components(analysis_depth)
     payload["components"] = [
         component for component in payload.get("components", []) if component in enabled
     ]
@@ -780,10 +780,24 @@ def _validate_delta_round_trip(
 ) -> None:
     amended_by_component = {step.component: step.directive_delta for step in amended_chain.steps}
     for component, requested_delta in directive_deltas.items():
-        if requested_delta and amended_by_component.get(component) != requested_delta:
+        # compose() always injects sibling keys the caller need not supply
+        # (e.g. acquire's "depth", screen_stage2's "stage"), so the recompiled
+        # delta is checked to *contain* the request, not to equal it — a
+        # requested value the plan fields cannot express still fails closed.
+        if requested_delta and not _delta_contains(
+            amended_by_component.get(component), requested_delta
+        ):
             raise SteeringAdjustmentError(
                 f"adjustment for {component!r} cannot round-trip through plan fields"
             )
+
+
+def _delta_contains(actual: Any, requested: Any) -> bool:
+    if isinstance(requested, dict):
+        if not isinstance(actual, dict):
+            return False
+        return all(_delta_contains(actual.get(key), value) for key, value in requested.items())
+    return bool(actual == requested)
 
 
 def _plan_row_value(plan_row: Any, key: str) -> Any:

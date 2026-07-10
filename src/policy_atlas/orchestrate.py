@@ -20,7 +20,7 @@ import sys
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Protocol, cast
+from typing import Any, Literal, Protocol, cast
 
 import structlog
 from pydantic import ValidationError
@@ -42,7 +42,7 @@ from policy_atlas.ingest import ingest_upload
 from policy_atlas.logging import configure_logging
 from policy_atlas.orchestration_plan import OrchestrationPlan
 from policy_atlas.planner import OpenAIPlannerBackend, PlannerBackend, StubPlannerBackend
-from policy_atlas.planner_prompt import PlanDraftWire
+from policy_atlas.planner_prompt import PLANNER_HISTORY_TURNS_MAX, PlanDraftWire
 from policy_atlas.ranking import OpenAIRankingBackend
 from policy_atlas.runner import RunnerBackends, RunPlanOutcome, run_plan
 from policy_atlas.schema import artefact, evidence_scope, orchestration_plan, project
@@ -62,6 +62,12 @@ log = structlog.get_logger()
 # Cap the planning conversation so a planner that never returns ``ready`` (or a
 # plan that never validates) fails honestly instead of looping forever.
 MAX_PLANNER_TURNS = 10
+
+# The prompt's history window must hold every turn a conversation can have
+# accumulated when the planner is called (1 intent + 2 per completed
+# iteration): if it rotated, the original intent would silently drop and the
+# intent-sized first-turn cap would land on a mid-conversation turn.
+assert (MAX_PLANNER_TURNS - 1) * 2 + 1 <= PLANNER_HISTORY_TURNS_MAX
 
 # Exit codes. No token/cost surface — time only (contract decision 11).
 EXIT_SUCCESS = 0
@@ -108,6 +114,14 @@ class ConsoleIO(Protocol):
         ...
 
 
+def _strip_control(text: str) -> str:
+    return "".join(
+        ch
+        for ch in text
+        if ch in ("\n", "\t") or (ch >= " " and ch != "\x7f" and not ("\x80" <= ch <= "\x9f"))
+    )
+
+
 class StdConsole:
     """Real stdin/stdout console used by ``python -m policy_atlas.orchestrate``."""
 
@@ -123,12 +137,16 @@ class StdConsole:
         return input(message)
 
     def print(self, message: str) -> None:
-        """Write one line to stdout.
+        """Write one line to stdout, stripped of terminal control characters.
+
+        Planner output is untrusted model text; escape sequences could rewrite
+        or hide the very plan lines the user is approving, so everything but
+        newlines and tabs in the C0/C1/DEL ranges is dropped at this seam.
 
         Args:
             message: The text to print.
         """
-        print(message)
+        print(_strip_control(message))
 
 
 @dataclass
@@ -374,8 +392,6 @@ def _render_full_plan(plan: OrchestrationPlan) -> str:
         lines.append(
             f"  steer_point_defaults: {[d.model_dump() for d in plan.steer_point_defaults]}"
         )
-    if plan.declared_hatches:
-        lines.append(f"  declared_hatches: {plan.declared_hatches}")
     if plan.assumptions:
         lines.append(f"  assumptions: {plan.assumptions}")
     return "\n".join(lines)
@@ -541,12 +557,12 @@ def _plan_conversation(
     console: ConsoleIO,
     planner: PlannerBackend,
     turns: list[dict[str, str]],
-) -> OrchestrationPlan | None:
+) -> OrchestrationPlan | Literal["abandoned", "no_plan"]:
     """Drive the planning conversation to an approved plan, or abandonment.
 
     Returns:
-        The approved plan, or ``None`` if the user abandoned or the planner
-        never converged within the turn cap.
+        The approved plan, ``"abandoned"`` if the user abandoned, or
+        ``"no_plan"`` if the planner never converged within the turn cap.
     """
     previous_draft: dict[str, object] | None = None
     for _ in range(MAX_PLANNER_TURNS):
@@ -569,7 +585,7 @@ def _plan_conversation(
                 "Describe a revision, or type 'abandon' to stop: "
             ).strip()
             if response.lower() == "abandon":
-                return None
+                return "abandoned"
             turns.append(
                 {"role": "user", "text": f"The plan failed validation ({exc}). {response}"}
             )
@@ -581,12 +597,12 @@ def _plan_conversation(
         if normalised == "approve":
             return plan
         if normalised == "abandon":
-            return None
+            return "abandoned"
         change = console.prompt("What would you like to change? ")
         turns.append({"role": "user", "text": change})
 
     console.print("Planner did not reach an approved plan within the turn cap.")
-    return None
+    return "no_plan"
 
 
 def main(
@@ -625,9 +641,10 @@ def main(
     turns: list[dict[str, str]] = [{"role": "user", "text": intent}]
 
     plan = _plan_conversation(console, planner, turns)
-    if plan is None:
+    if isinstance(plan, str):
         console.print("No plan approved; nothing was run.")
-        return OrchestrateResult(exit_code=EXIT_ABANDONED, turns=turns)
+        exit_code = EXIT_NO_PLAN if plan == "no_plan" else EXIT_ABANDONED
+        return OrchestrateResult(exit_code=exit_code, turns=turns)
 
     project_id, scope_id, plan_id = _write_plan_row(engine, plan=plan)
     if not live:

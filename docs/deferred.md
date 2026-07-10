@@ -902,6 +902,12 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   object (`orchestration_plan` rows), not per-field conversation
   back-references; the planning transcript is ephemeral CLI state. The
   spec's provenance rule (plan-as-object) waits for the workspace cluster.
+  017 review addendum: a steer-point reselect's plan version row carries
+  attribution but no *pointer* to the commit-layer directive that motivated
+  it (the substance lives in `selection_result.selection_provenance` —
+  durable and reachable via the `plan.compiled` chain, confirmed as-designed
+  per decision 4; a version row that names its cause would make the audit
+  one hop shorter).
 - **Resume-engine design requirement** — 017 ships per-component commits, no
   resume engine (re-run-from-top accepted for 017/018; contract decision 7).
   The engine's requirement recorded from the 2026 durable-execution

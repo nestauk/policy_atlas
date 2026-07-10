@@ -19,6 +19,7 @@ from openai.types.completion_usage import CompletionUsage
 
 from policy_atlas import tracing
 from policy_atlas.embeddings import log_usage, resolve_openai_client, usage_metadata
+from policy_atlas.extract import _scrub_nul
 from policy_atlas.planner_prompt import (
     PLANNER_MAX_OUTPUT_TOKENS,
     PLANNER_PROMPT_VERSION,
@@ -121,6 +122,9 @@ def _scrub_turn(turn: PlannerTurnWire) -> PlannerTurnWire:
     updates: dict[str, Any] = {"reply": scrub_nul(turn.reply)}
     if turn.question is not None:
         updates["question"] = scrub_nul(turn.question)
+    updates["plan_draft"] = PlanDraftWire.model_validate(
+        _scrub_nul(turn.plan_draft.model_dump())
+    )
     return turn.model_copy(update=updates)
 
 

@@ -32,6 +32,7 @@ from policy_atlas.inference import StubEchoProvider
 from policy_atlas.ingest_full_text import DocumentFetcher
 from policy_atlas.orchestration_plan import (
     _REGISTRY_COMPONENT_BY_STEP,
+    SPINE,
     ComponentStep,
     ComposedChain,
     OrchestrationPlan,
@@ -77,9 +78,7 @@ LLM_BEARING_COMPONENTS = frozenset(
         "synthesise",
     }
 )
-SPINE_COMPONENTS = frozenset(
-    {"acquire", "screen", "classify", "appraise", "ingest_full_text", "synthesise"}
-)
+SPINE_COMPONENTS = frozenset(SPINE)
 DISCRETIONARY_REQUIREMENTS = {
     "select": "characterise",
     "extract": "select",
@@ -1096,7 +1095,7 @@ def _run_step_attempt(
             error=error,
         )
         with engine.connect() as conn:
-            log_entries = events.read(conn, project_id)
+            log_entries = events.read_for_run(conn, project_id, run_id)
         return _AttemptOutcome(
             run_id=run_id,
             status="failed",
@@ -1108,7 +1107,7 @@ def _run_step_attempt(
 
     with engine.connect() as conn:
         status = conn.execute(select(runs.c.status).where(runs.c.run_id == run_id)).scalar_one()
-        log_entries = events.read(conn, project_id)
+        log_entries = events.read_for_run(conn, project_id, run_id)
 
     headline_counts = _headline_counts(log_entries, registry_component, run_id=run_id)
     failure_error = _failure_error(log_entries, registry_component, run_id=run_id)

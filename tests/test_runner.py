@@ -99,10 +99,7 @@ def _base_plan(**overrides: Any) -> OrchestrationPlan:
         "grouping_facet": "outcome",
         "steering_mode": "moderate",
         "steer_point_defaults": [
-            {"steer_point": "deepening-selection", "action": "proceed_flag"}
-        ],
-        "declared_hatches": [
-            "Standard and deep search use the loop stopping rule; no runtime hatch exists"
+            {"steer_point": "deepening_selection", "action": "proceed_flag"}
         ],
         "assumptions": ["Publisher geography is publication geography"],
     }

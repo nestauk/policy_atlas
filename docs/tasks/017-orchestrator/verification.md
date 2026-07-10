@@ -252,19 +252,140 @@ locally.)
 
 ## Review findings
 
-Added after the review stack (step 7).
+Review stack ran 2026-07-10 (step 7, fresh conversation). Lanes: contract
+verifier (Opus, read-only) · `/code-review` medium (8 finder angles,
+per-angle pathspecs) · security auditor · Codex adversarial (family-flip:
+scoped to the Claude-written surfaces; Codex authored tasks 2/3/4/6) ·
+live-trace content review (lead) · OKF (in `make verify`). Live-run economy
+pin honoured: no live re-run; all live claims verified against the recorded
+transcripts + dev DB `91d2d684` (plan rows, `plan.compiled` chain, selection
+provenance) — every one corroborated.
 
-- **Contract verifier:**
-- **`/code-review`:**
-- **`/security-review`:**
-- **Adversarial review** (Tier 2+):
-- **`/simplify`:**
+**Convergent (cross-family, high-confidence) — adopted & fixed:**
+- **Screen-criteria silent truncation** (Codex HIGH + security MEDIUM,
+  proven empirically): a long `question` + valid criteria composed past
+  `SCREEN_INTENT_MAX=2000` and criteria silently vanished at prompt assembly
+  while the plan row claimed they governed screening. Fix: plan validation
+  now composes the real screen intent (same composer) and rejects when it
+  exceeds the cap — compile-target parity extended from per-criterion caps
+  to the composed whole; test-pinned.
+- **Planner history-window/first-turn coupling** (`/code-review` finder A +
+  security lane): guarded with a module assert
+  (`(MAX_PLANNER_TURNS-1)*2+1 <= PLANNER_HISTORY_TURNS_MAX`); not reachable
+  at the current constants (max 19 turns at call time vs window 20).
+
+**Unique-to-one-lane — adopted & fixed:**
+- **Steering round-trip rejected legitimate minimal deltas** (`/code-review`
+  finder A, verifier-CONFIRMED; the top correctness finding): `compose()`
+  always injects sibling keys (acquire `depth`, screen_stage2 `stage`), and
+  `_validate_delta_round_trip`'s raw `!=` rejected any partial-key
+  adjustment (e.g. criteria-only on screen_stage2) with
+  `SteeringAdjustmentError`; no test covered a partial delta. Fix:
+  containment semantics (`_delta_contains`) — the recompiled delta must
+  contain the request; inexpressible requests still fail closed. Both
+  directions test-pinned, incl. a full-runner partial-delta adjustment.
+- **Unattended `steer_point_defaults` unreachable via the product path**
+  (contract verifier, MAJOR): the runner honoured the field but
+  `PlanDraftWire` couldn't carry it, so no planner conversation could ever
+  populate it — every product-path Unattended run fell back to the
+  `unconfigured_default` flag, and the prompt promised a field the model
+  could not emit. Fix: wired through the draft (`PlanDraftWire.
+  steer_point_defaults`), prompt vocabulary added (lead-authored), and the
+  steer-point *name* registry pinned fail-closed (`STEER_POINTS`) — which
+  immediately caught two test fixtures declaring `"deepening-selection"`
+  (hyphen) against the runtime's `"deepening_selection"` (underscore): a
+  declared default that could never have matched, silently indistinguishable
+  from the fallback. Fixtures corrected; end-to-end wire test added.
+- **Turn-cap exhaustion masked as user abandonment** (Codex MEDIUM,
+  confirmed): `EXIT_NO_PLAN` was defined but never returned. Fix:
+  `_plan_conversation` now distinguishes `"abandoned"` from `"no_plan"`;
+  exit 2 on non-convergence; test-pinned.
+- **NUL scrub gap on nested draft fields** (`/code-review` finder A):
+  `_scrub_turn` scrubbed only reply/question; a NUL in any plan-draft field
+  would pass plan validation and crash at JSONB insert. Fix: recursive
+  scrub of the draft (reuses `extract._scrub_nul`); test-pinned.
+- **Terminal-escape injection at the approval gate** (security LOW):
+  planner output printed raw; escape sequences could rewrite the very plan
+  lines under approval. Fix: `StdConsole.print` strips C0/C1/DEL (bar
+  `\n`/`\t`); test-pinned.
+- **`publisher_country` unbounded + `backend_scope` cross-check missing**
+  (security LOWs): plan-valid `academic_only` + `publisher_country` failed
+  mid-run (the exact plan-valid/run-fail shape decision 8 exists to avoid),
+  and the value was an unbounded free string. Fix: length/charset caps +
+  a model-validator cross-check mirroring the steering path; test-pinned.
+- **Cleanup** (`/code-review` cleanup angles + contract verifier MINOR):
+  `runner.SPINE_COMPONENTS` now derived from `SPINE` (was an independent
+  literal that could drift and silently change run-status semantics);
+  `steering._clip_components_to_depth` reuses `_enabled_components` (was a
+  divergent copy); shared `_persist_new_plan_version` helper (two
+  near-identical supersede/insert blocks); `events.read_for_run` replaces
+  two unbounded whole-project event reads per component attempt; dead
+  `declared_hatches` field deleted (rev 2.9 dissolved the hatch; the
+  contract sanctions exactly one non-executing field).
+
+**Adjudicated — declined or deferred (with reasons):**
+- **Commit-layer steer-point placement** (flagged deviation 2; Codex HIGH
+  independently converged with the lead's trace lane): CONFIRMED as
+  designed — decision 4 deliberately keeps the fine directive out of the
+  plan payload; reconstruction works via `plan.compiled(v2)` → select
+  re-run → `selection_result.selection_provenance.directive` (all durable
+  tables, verified in the dev DB). Adopted as-is; the v2 row's lack of a
+  *pointer* to where the substance lives is noted on the existing
+  plan-provenance seam in deferred.md.
+- **Skip-reason carrier** (flagged deviation 1): adopted as-is — same
+  substrate constraint the contract adjudicated table-first for plan events;
+  skip reasons live in `RunPlanOutcome` + collation. Durable skip-reason
+  persistence rides the deferred resume/provenance seams.
+- **Mid-check prompt fixes** (flagged deviation 3): adopted — logged
+  observation→change pairs, affected conversations re-run.
+- **Pre-existing test fixes** (diff items 6–7): confirmed by the
+  removed-behaviour finder — both asserted properties preserved.
+- `_reference_kwargs` if/elif ladder (altitude): declined — thin-v1; the
+  deferred LLM EB-expert seam reworks directive authoring anyway.
+- `CliIO`/`UnattendedIO` duplicated 2-line `check_in` (simplification):
+  declined — below the action bar.
+- Unattended auto-resolve firing on a skipped/failed `select` (contract
+  verifier NOTE): declined — an honest, harmless flag.
+- TIME_BANDS single-measured-pairing (NOTE): already the recorded 018/eval
+  calibration item.
+- Security INFOs (planner session rate-limiting → web-app slice; Langfuse
+  host inside the user-operated boundary; `_scrub_turn` NUL-only parity):
+  noted, no action this slice.
+
+**Evidence corrections from the trace lane:** the transient Overton
+transport error was in the FIRST attempt's acquire (project `128c0a81`),
+recorded in the `component.completed` event's `by_backend.overton.error`
+(status `ok`, run adequate) — not in the coverage record as previously
+worded. The live run's synthesise flags also included the pre-existing 013
+repair-lane flags (`claims_rejected_structural` · `repair_path_taken` ·
+`repair_count_mismatch`) alongside the three listed — 013 honesty machinery
+behaving as designed on real output. The duplicated select/group transcript
+lines are the deliberate pause-context re-render (`runner.py` passes
+`render_check_in` back into `pause()`).
+
+- **`/simplify`:** skipped with justification — the `/code-review` pass ran
+  dedicated reuse/simplification/efficiency/altitude finder angles and their
+  adopted fixes were applied above; a separate same-family pass would
+  duplicate it.
 - **`/okf validate`:** green at every gate (46 concepts, 0 violations).
+
+**Review economy (recorded honestly):** reasoning-class ≈ 305K (contract
+verifier 169K · security 121K · Codex launcher 15K) vs the ≤250K proxy;
+fast-worker ≈ 720K (8 scoped finders 611K · 1 verifier 55K · 1 fix worker
+56K) vs the ≤500K proxy. The overrun bought a large finding set on a 9.3K-line
+diff (five adopted correctness/integrity fixes, two of them cross-family
+convergent); per-angle pathspecs were applied throughout.
 
 ## Rubric status
 
-Checked after the review stack (step 7); build-side, items 1–18's evidence is
-in place per the sections above; item 19 is the review stack itself.
+Checked after the review stack (step 7, 2026-07-10). Items 1–18: **hold** —
+the contract verifier's per-item pass (its one MAJOR, the Unattended
+defaults wiring gap, and its MINOR, the dead `declared_hatches` field, are
+both fixed above; item 18's disclosure gap is closed by this section).
+Item 19: **holds** — the Tier-3 stack ran in full (contract verifier ·
+`/code-review` medium · security lane · Codex adversarial · simplification
+folded into the code-review cleanup angles, recorded above); findings and
+adjudications in § Review findings. Post-fix `make verify` green.
 
 ## Intent & assumptions
 
@@ -286,6 +407,9 @@ in place per the sections above; item 19 is the review stack itself.
 - The steer-point's deepen-named-clusters option was not exercised live (the
   strongest-evidence option was); its compile is rank-shift/grammar
   test-pinned.
+- The planner emitting `steer_point_defaults` (wired during review) is
+  stub/test-pinned only; no live planner conversation has exercised the new
+  prompt vocabulary — a planner-only probe (pennies) fits 018's refine loop.
 
 ## Public safety
 

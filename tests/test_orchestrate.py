@@ -300,3 +300,97 @@ def test_unattended_run_never_pauses(engine: Engine) -> None:
         assert result.plan.steering_mode == "unattended"
     finally:
         _cleanup(engine, result.project_id if result else None)
+
+
+def test_turn_cap_exhaustion_exits_no_plan_not_abandoned(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A planner that never converges is a system failure, not user abandonment."""
+
+    def never_ready(
+        self: StubPlannerBackend,
+        turns: list[dict[str, str]],
+        previous_draft: dict[str, object] | None,
+    ) -> PlannerTurnWire:
+        del self, previous_draft
+        return PlannerTurnWire(
+            reply="Stub: still thinking.",
+            plan_draft=PlanDraftWire(question=turns[0]["text"]),
+            question="What is the scope?",
+            suggested_answers=None,
+            ready=False,
+        )
+
+    monkeypatch.setattr(StubPlannerBackend, "plan_turn", never_ready)
+
+    console = ScriptedConsole(
+        ["What works to reduce childhood obesity?"] + ["anything"] * 10
+    )
+    result = main(console, engine=engine, backends=_stub_backends())
+
+    assert result.exit_code == 2
+    assert result.plan is None
+    assert result.project_id is None
+    assert _printed(console, "turn cap")
+
+
+def test_planner_declared_steer_point_defaults_reach_the_plan(engine: Engine) -> None:
+    """The wire model carries steer_point_defaults through to the validated plan."""
+
+    class _DefaultsPlanner:
+        mode = "stub"
+
+        def plan_turn(
+            self,
+            turns: list[dict[str, str]],
+            previous_draft: dict[str, object] | None,
+        ) -> PlannerTurnWire:
+            del previous_draft
+            return PlannerTurnWire(
+                reply="Unattended plan with pre-declared defaults.",
+                plan_draft=PlanDraftWire(
+                    title="Unattended review",
+                    question=turns[0]["text"],
+                    backend_scope="both",
+                    search_effort="standard",
+                    analysis_depth="standard",
+                    components=["characterise", "screen_stage2", "select", "extract", "group"],
+                    grouping_facet="outcome",
+                    steering_mode="unattended",
+                    steer_point_defaults=[
+                        {"steer_point": "deepening_selection", "action": "stop"}
+                    ],
+                    assumptions=["Stub: unattended proposal."],
+                ),
+                question=None,
+                suggested_answers=None,
+                ready=True,
+            )
+
+    result = None
+    try:
+        console = ScriptedConsole(
+            ["What works to reduce childhood obesity?", "approve"]
+        )
+        result = main(
+            console,
+            engine=engine,
+            planner=_DefaultsPlanner(),
+            backends=_stub_backends(),
+        )
+
+        assert result.plan is not None
+        assert [d.model_dump() for d in result.plan.steer_point_defaults] == [
+            {"steer_point": "deepening_selection", "action": "stop"}
+        ]
+        assert _printed(console, "steer_point_defaults")
+    finally:
+        _cleanup(engine, result.project_id if result else None)
+
+
+def test_std_console_strips_terminal_control_sequences(capsys: pytest.CaptureFixture[str]) -> None:
+    from policy_atlas.orchestrate import StdConsole
+
+    StdConsole().print("Title\x1b]0;pwned\x07\x1b[2J\nsafe\tline")
+    captured = capsys.readouterr()
+    assert captured.out == "Title]0;pwned[2J\nsafe\tline\n"
