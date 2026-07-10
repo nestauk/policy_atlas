@@ -59,7 +59,7 @@ def test_stub_second_turn_returns_complete_ready_draft() -> None:
     assert draft.title == "Evidence review"
     assert draft.question == "Do school meals improve attainment?"
     assert draft.search_effort == "standard"
-    assert draft.analysis_depth == "standard"
+    assert draft.analysis_depth == "deep"
     assert draft.components == ["characterise", "screen_stage2", "select", "extract", "group"]
     assert draft.component_rationale is not None
     assert set(draft.component_rationale) == set(draft.components)

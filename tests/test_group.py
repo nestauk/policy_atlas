@@ -210,7 +210,7 @@ def _finding_values(
         "outcome": "Health outcome",
         "population": "Adults",
         "comparator": None,
-        "effect_direction": "positive",
+        "effect_direction": "increase",
         "estimate_level": "study",
         "study_design": None,
         "stratum_qualifiers": [],
@@ -300,17 +300,17 @@ def test_happy_path_writes_rollup_summary_and_provenance(conn: Connection) -> No
                     {
                         "intervention": "Alpha counseling",
                         "outcome": "Attendance",
-                        "effect_direction": "positive",
+                        "effect_direction": "increase",
                     },
                     {
                         "intervention": "Alpha coaching",
                         "outcome": "Retention",
-                        "effect_direction": "negative",
+                        "effect_direction": "decrease",
                     },
                     {
                         "intervention": "Beta home visits",
                         "outcome": "Employment",
-                        "effect_direction": "positive",
+                        "effect_direction": "increase",
                     },
                     {
                         "intervention": "Beta phone calls",
@@ -560,13 +560,13 @@ def test_all_null_population_goes_to_no_value_without_backend_call(conn: Connect
                         "intervention": "Alpha service",
                         "outcome": "Outcome A",
                         "population": None,
-                        "effect_direction": "positive",
+                        "effect_direction": "increase",
                     },
                     {
                         "intervention": "Beta service",
                         "outcome": "Outcome B",
                         "population": None,
-                        "effect_direction": "negative",
+                        "effect_direction": "decrease",
                     },
                 ],
             )
@@ -617,7 +617,7 @@ def test_mixed_unclear_directions_are_first_class_in_spreads(conn: Connection) -
                     {
                         "intervention": "Alpha programme",
                         "outcome": "Outcome B",
-                        "effect_direction": "positive",
+                        "effect_direction": "increase",
                     },
                     {
                         "intervention": "stubungroupable residual",
@@ -635,7 +635,7 @@ def test_mixed_unclear_directions_are_first_class_in_spreads(conn: Connection) -
     residual = summary["residuals"]["ungrouped"]
 
     assert group["direction_spread"]["mixed"] == 1
-    assert group["direction_spread"]["positive"] == 1
+    assert group["direction_spread"]["increase"] == 1
     assert _spread_total(group["direction_spread"]) == group["size"]
     assert residual["direction_spread"]["unclear"] == 1
     assert _spread_total(residual["direction_spread"]) == residual["finding_count"]
@@ -895,4 +895,4 @@ def test_one_bad_label_never_zeroes_the_run(conn: Connection) -> None:
 
 
 def _zero_spread() -> dict[str, int]:
-    return {"positive": 0, "negative": 0, "no_effect": 0, "mixed": 0, "unclear": 0}
+    return {"increase": 0, "decrease": 0, "no_effect": 0, "mixed": 0, "unclear": 0}

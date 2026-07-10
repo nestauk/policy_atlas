@@ -341,7 +341,12 @@ def _build_plan(draft: PlanDraftWire) -> OrchestrationPlan:
     data = draft.model_dump(exclude_none=True)
     constraints = {
         key: data.pop(key)
-        for key in ("published_after", "published_before", "publisher_country")
+        for key in (
+            "published_after",
+            "published_before",
+            "publisher_country",
+            "author_affiliation_countries",
+        )
         if key in data
     }
     if constraints:

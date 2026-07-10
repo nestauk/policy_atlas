@@ -66,7 +66,7 @@ def _record(
         "outcome": outcome,
         "population": "low-income households",
         "comparator": None,
-        "effect_direction": "positive",
+        "effect_direction": "increase",
         "estimate_level": "study",
         "study_design": "systematic review",
         "stratum_qualifiers": [],
@@ -87,7 +87,10 @@ def _base_plan(**overrides: Any) -> OrchestrationPlan:
         "backend_scope": "both",
         "scope_constraints": {},
         "search_effort": "rapid",
-        "analysis_depth": "standard",
+        # 018 regrade: select/extract/group are deep-only now, and this
+        # default component set (FULL_COMPONENTS) exercises all of them, so
+        # the default depth must be "deep", not "standard".
+        "analysis_depth": "deep",
         "components": list(FULL_COMPONENTS),
         "component_rationale": {
             "screen_stage2": "Full-text confirmation is useful for this run",
@@ -297,11 +300,13 @@ def _commit_existing_component_failed_event(
 
 
 def test_full_stub_chain_commits_each_step_and_checks_in(engine: Engine) -> None:
-    """Full standard-by-standard chain commits one run and check-in per step."""
+    """Full step-by-step chain commits one run and check-in per step."""
     project_id: uuid.UUID | None = None
     try:
         project_id, scope_id = _seed_project(engine)
-        plan = _base_plan(search_effort="standard", analysis_depth="standard")
+        # deep depth: the assertions below exercise select/extract/group,
+        # which are deep-only after the 018 regrade.
+        plan = _base_plan(search_effort="standard", analysis_depth="deep")
         plan_id = uuid.uuid4()
         io = RecordingIO()
 
@@ -940,7 +945,7 @@ def test_directive_application_replaces_only_top_level_delta_keys(
             "stage": 2,
             "criteria": ["Include empirical or policy-analysis sources"],
         }
-        assert context["selection"] == {"budget": 10}
+        assert context["selection"] == {"budget": 25}
         assert context["grouping"] == {"facet": "population"}
     finally:
         _cleanup(engine, project_id)

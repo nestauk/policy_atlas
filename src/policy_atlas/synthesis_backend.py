@@ -42,6 +42,7 @@ from policy_atlas.embeddings import (
     usage_metadata,
 )
 from policy_atlas.facet_grouping import FORBIDDEN_GROUP_LABELS
+from policy_atlas.schema import EFFECT_DIRECTIONS
 from policy_atlas.synthesis_tools import (
     REASONING_CLAIMS_MAX,
     SECTION_CAP,
@@ -270,8 +271,11 @@ QUERY_FINDINGS_TOOL_SCHEMA: dict[str, Any] = {
                 },
                 "effect_direction": {
                     "type": "string",
-                    "enum": ["positive", "negative", "no_effect", "mixed", "unclear"],
-                    "description": "Restrict to findings with this reported direction.",
+                    "enum": list(EFFECT_DIRECTIONS),
+                    "description": (
+                        "Restrict to findings whose outcome measure moved this "
+                        "way (observed movement, not desirability)."
+                    ),
                 },
             },
             "required": [],

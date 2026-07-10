@@ -67,7 +67,7 @@ def _substrate() -> SubstrateView:
         source_snapshot_id="snap-finding",
         record={
             "finding_id": "finding-1",
-            "effect_direction": "positive",
+            "effect_direction": "increase",
             "intervention": "A",
             "outcome": "B",
         },
@@ -85,7 +85,7 @@ def _substrate() -> SubstrateView:
                 ],
             }
         ],
-        effect_direction="positive",
+        effect_direction="increase",
     )
     return SubstrateView(
         characterisation={
@@ -103,7 +103,7 @@ def _substrate() -> SubstrateView:
                 {
                     "group_id": "group-1",
                     "label": "Group 1",
-                    "direction_spread": {"positive": 1},
+                    "direction_spread": {"increase": 1},
                     "member_finding_ids": ["finding-1"],
                 }
             ],

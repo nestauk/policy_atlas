@@ -55,7 +55,7 @@ def _record(
     outcome: str,
     quote: str,
     segment_id: str | None,
-    effect_direction: str = "positive",
+    effect_direction: str = "increase",
     statistics: dict[str, Any] | None = None,
     **over: Any,
 ) -> dict[str, Any]:
@@ -258,7 +258,7 @@ def test_memo_reuse(conn: Connection) -> None:
         stub_iof=[_record(
             intervention="home visiting", outcome="hospital admissions",
             quote="Home visiting reduced hospital admissions", segment_id=str(cid),
-            effect_direction="negative",
+            effect_direction="decrease",
         )],
     )
     _seed_selection(conn, project_id, sel_run, scope_id,

@@ -593,7 +593,7 @@ DIRECTIVE_STRING_MAX = 200
 
 EXTRACTION_STATUSES: tuple[str, ...] = ("extracted", "no_findings", "extraction_failed")
 EXTRACTION_BASES: tuple[str, ...] = ("full_text", "abstract_only")
-EFFECT_DIRECTIONS: tuple[str, ...] = ("positive", "negative", "no_effect", "mixed", "unclear")
+EFFECT_DIRECTIONS: tuple[str, ...] = ("increase", "decrease", "no_effect", "mixed", "unclear")
 ESTIMATE_LEVELS: tuple[str, ...] = ("study", "pooled", "claim")
 CAUSALITY_BY_DESIGN: tuple[str, ...] = (
     "attributable",

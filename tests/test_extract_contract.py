@@ -110,7 +110,7 @@ def _finding_values(
         "outcome": "Test scores",
         "population": None,
         "comparator": None,
-        "effect_direction": "positive",
+        "effect_direction": "increase",
         "estimate_level": "study",
         "study_design": None,
         "stratum_qualifiers": [],

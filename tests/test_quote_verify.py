@@ -31,7 +31,7 @@ def _wire(
     outcome: str | None = "hospital admissions",
     population: str | None = None,
     comparator: str | None = "usual care",
-    effect_direction: str = "negative",
+    effect_direction: str = "decrease",
     estimate_level: str | None = "pooled",
     study_design: str | None = None,
     stratum_qualifiers: list[IOFStratumWire] | None = None,

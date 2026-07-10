@@ -35,8 +35,10 @@ FACET_GROUPING_MODEL = "gpt-5.4-mini"
 
 # Scale guard — fail closed (contract rev 1.3): above the cap the component
 # fails structurally before any call; the large-corpus algorithm is a recorded
-# eval-gated seam, never a degraded sample/assign pass grown here.
-FACET_VALUE_CAP = 150
+# eval-gated seam, never a degraded sample/assign pass grown here. Raised in
+# 018's standard-depth regrade: demo-validated at 280 live distinct values;
+# the eval slice owns final calibration.
+FACET_VALUE_CAP = 400
 
 # One targeted repair pass, hard; still-missing values land in the counted
 # ungrouped residual, never re-asked. Budget is always 1 + REPAIR_CAP.

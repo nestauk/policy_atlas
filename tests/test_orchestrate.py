@@ -262,7 +262,8 @@ class _UnattendedPlanner:
                 question=turns[0]["text"],
                 backend_scope="both",
                 search_effort="standard",
-                analysis_depth="standard",
+                # 018 regrade: select/extract/group are deep-only now.
+                analysis_depth="deep",
                 components=["characterise", "screen_stage2", "select", "extract", "group"],
                 grouping_facet="outcome",
                 steering_mode="unattended",
@@ -353,7 +354,8 @@ def test_planner_declared_steer_point_defaults_reach_the_plan(engine: Engine) ->
                     question=turns[0]["text"],
                     backend_scope="both",
                     search_effort="standard",
-                    analysis_depth="standard",
+                    # 018 regrade: select/extract/group are deep-only now.
+                    analysis_depth="deep",
                     components=["characterise", "screen_stage2", "select", "extract", "group"],
                     grouping_facet="outcome",
                     steering_mode="unattended",
@@ -384,6 +386,56 @@ def test_planner_declared_steer_point_defaults_reach_the_plan(engine: Engine) ->
             {"steer_point": "deepening_selection", "action": "stop"}
         ]
         assert _printed(console, "steer_point_defaults")
+    finally:
+        _cleanup(engine, result.project_id if result else None)
+
+
+def test_planner_draft_author_affiliation_countries_reach_the_plan(engine: Engine) -> None:
+    """The draft's flat author_affiliation_countries folds into scope_constraints,
+    mirroring how publisher_country already folds via _build_plan.
+    """
+
+    class _ScopedPlanner:
+        mode = "stub"
+
+        def plan_turn(
+            self,
+            turns: list[dict[str, str]],
+            previous_draft: dict[str, object] | None,
+        ) -> PlannerTurnWire:
+            del previous_draft
+            return PlannerTurnWire(
+                reply="Plan scoped to GB/US author affiliations.",
+                plan_draft=PlanDraftWire(
+                    title="Scoped review",
+                    question=turns[0]["text"],
+                    backend_scope="both",
+                    search_effort="standard",
+                    analysis_depth="landscape",
+                    components=["characterise"],
+                    steering_mode="moderate",
+                    author_affiliation_countries=["gb", "us"],
+                    assumptions=["Stub: scoped proposal."],
+                ),
+                question=None,
+                suggested_answers=None,
+                ready=True,
+            )
+
+    result = None
+    try:
+        console = ScriptedConsole(
+            ["What works to reduce childhood obesity?", "approve"]
+        )
+        result = main(
+            console,
+            engine=engine,
+            planner=_ScopedPlanner(),
+            backends=_stub_backends(),
+        )
+
+        assert result.plan is not None
+        assert result.plan.scope_constraints.author_affiliation_countries == ["GB", "US"]
     finally:
         _cleanup(engine, result.project_id if result else None)
 

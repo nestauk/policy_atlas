@@ -26,7 +26,7 @@ def _valid_wire_record() -> dict[str, Any]:
         outcome="unplanned child hospital admissions",
         population=None,
         comparator="usual care",
-        effect_direction="negative",
+        effect_direction="decrease",
         estimate_level="pooled",
         study_design="pooled analysis of randomised trials",
         stratum_qualifiers=[],

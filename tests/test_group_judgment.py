@@ -206,12 +206,12 @@ def _seed_three_value_extraction(
                     {
                         "intervention": "Alpha service",
                         "outcome": "Outcome A",
-                        "effect_direction": "positive",
+                        "effect_direction": "increase",
                     },
                     {
                         "intervention": "Beta service",
                         "outcome": "Outcome B",
-                        "effect_direction": "negative",
+                        "effect_direction": "decrease",
                     },
                     {
                         "intervention": "Gamma service",
@@ -740,7 +740,7 @@ def test_socket_deny_group_round_trip(
                     {
                         "intervention": "Alpha coaching",
                         "outcome": "Attendance",
-                        "effect_direction": "positive",
+                        "effect_direction": "increase",
                     },
                     {
                         "intervention": "Alpha mentoring",
@@ -805,12 +805,12 @@ def test_key_hygiene_canary_absent_from_summary_and_grouping_row(
                     {
                         "intervention": "Alpha coaching",
                         "outcome": "Attendance",
-                        "effect_direction": "positive",
+                        "effect_direction": "increase",
                     },
                     {
                         "intervention": "Beta mentoring",
                         "outcome": "Retention",
-                        "effect_direction": "negative",
+                        "effect_direction": "decrease",
                     },
                 ],
             )

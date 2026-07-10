@@ -47,7 +47,7 @@ def _seed(
             "characterisation": {"themes": [{"theme_id": "theme-1"}]},
             "grouping": {"groups": [{"group_id": "g1"}]},
         },
-        "computed_spread": {"positive": 2, "mixed": 1},
+        "computed_spread": {"increase": 2, "mixed": 1},
     }
 
 

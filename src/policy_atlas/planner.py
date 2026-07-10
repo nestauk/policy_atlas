@@ -306,7 +306,11 @@ class StubPlannerBackend:
                 question=first_text,
                 backend_scope="both",
                 search_effort="standard",
-                analysis_depth="standard",
+                # 018 regrade: select/extract/group are deep-only now, so this
+                # full-chain stub draft (it requests all five discretionary
+                # components, with grouping) must be depth "deep", not
+                # "standard", to stay a valid OrchestrationPlan.
+                analysis_depth="deep",
                 components=components,
                 component_rationale={
                     component: _STUB_COMPONENT_RATIONALE[component] for component in components

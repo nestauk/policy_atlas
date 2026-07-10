@@ -58,7 +58,7 @@ EXAMPLE_RESPONSE = ExtractionResponse(
             outcome="unplanned child hospital admissions",
             population=None,
             comparator="usual care",
-            effect_direction="negative",
+            effect_direction="decrease",
             estimate_level="pooled",
             study_design="pooled analysis of randomised trials",
             stratum_qualifiers=[],
@@ -154,7 +154,9 @@ Grain — one record per (intervention, outcome, effect, stratum):
 What you must NOT extract — hard rules:
 - No question-relative judgements: never emit normalised magnitudes, causal
   weightings, or any judgement of whether an effect is beneficial or harmful.
-  effect_direction describes the outcome's movement, never desirability.
+  effect_direction records the outcome measure's observed movement —
+  "increase" or "decrease" in the measure itself — never desirability: a fall
+  in hospital admissions is "decrease", however welcome.
 - Nothing this document does not itself report: no cross-source claims, no
   background citations of other papers' results, no knowledge of your own.
 - Never force effect fields: if the document reports no effect estimate, leave
