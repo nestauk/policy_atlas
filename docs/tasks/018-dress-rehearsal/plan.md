@@ -196,9 +196,11 @@ path). Plus one live synthesise replay (the B smoke) before Phase C opens.
   **Bounds enforced: ≤3 rounds/surface, ≤30 live component replays total** (a running
   tally in verification.md); no-mission-vocabulary check + taxonomy desk review on
   every adopted prompt. — **lead** *(prompt-bearing + adjudication)*
-- C3 taxonomy pins: planner replay across the 7 v2-question categories; extraction/
-  synthesis spot-check on the non-mission project. — **lead** runs, **fast-worker**
-  harness if scripting needed.
+- C3 taxonomy pins: planner replay across the 7 v2-question categories, drawing one
+  real question per category from the V2 user-question list (user-provided 2026-07-10;
+  product-internal data held outside the repo — ask the owner or the lead's notes);
+  extraction/synthesis spot-check on the non-mission project. — **lead** runs,
+  **fast-worker** harness if scripting needed.
 - C4 demo surface: merge dev into `demo-live-run`, retire monkeypatches, render
   key-findings first + conclusions foot, planner-turn progress. — **codex** *(bounded
   frontend/server work on the throwaway branch; scaffold gate untouched)*
