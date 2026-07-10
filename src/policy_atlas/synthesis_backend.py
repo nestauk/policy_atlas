@@ -1,9 +1,10 @@
-"""The ``synthesise_sections_v1`` and ``synthesise_section_v1`` prompt surfaces (task 013).
+"""The ``synthesise_sections_v1`` and ``synthesise_section_v2`` prompt surfaces (task 013).
 
 The repo's fifth and sixth product prompts — lead-authored, versioned, recorded
 in synthesis provenance and event payloads. ``synthesise_sections_v1`` is a
 single bounded schema-constrained call proposing the intent-led section list.
-``synthesise_section_v1`` is the section-loop surface: one system prompt plus
+``synthesise_section_v2`` (v2, task 016: the one ``text_basis`` labelling rule)
+is the section-loop surface: one system prompt plus
 the three tool JSON schemas, **versioned as one unit** — the OpenAI form runs
 the bounded tool-calling loop (the repo's first agent loop; the loop runner and
 turn accounting live in :mod:`policy_atlas.synthesis_tools`).
@@ -52,7 +53,7 @@ from policy_atlas.synthesis_tools import (
 log = structlog.get_logger()
 
 SECTIONS_PROMPT_VERSION = "synthesise_sections_v1"
-SECTION_PROMPT_VERSION = "synthesise_section_v1"
+SECTION_PROMPT_VERSION = "synthesise_section_v2"
 
 # The contracted model floor (the 009 nano lesson is binding); section/prose
 # quality on real corpora is eval territory, not asserted by the build.
@@ -411,7 +412,8 @@ of the original rules.
 """
 
 
-# --- The section-loop prompt (synthesise_section_v1) ---
+# --- The section-loop prompt (synthesise_section_v2; v2 = the one text_basis
+# labelling rule riding task 016 decision 9 — provenance bump, wire-compatible) ---
 
 SECTION_SYSTEM_PROMPT = f"""\
 You are writing one section of a grounded evidence artefact for a policymaker,
@@ -446,9 +448,14 @@ The claim types:
   section and a quote copied EXACTLY, character for character, from that
   chunk's returned content. Cite only chunks marked "appraised": true — you
   may read unappraised chunks, but a citation to an unappraised document is
-  rejected. Never quote from memory, from summaries, or from the ledger; a
-  quote that does not appear verbatim in the source is rejected and, if
-  unrepairable, excluded.
+  rejected. Each chunk record carries "text_basis": "full_text" chunks are
+  the document's fetched full text; "abstract_only" chunks are the
+  document's abstract as recorded at acquisition (for some sources a
+  provider excerpt or summary standing in for one) — cite them as such: a
+  claim resting on an abstract-basis chunk is abstract-grounded and must
+  claim only what that recorded text supports as worded. Never quote from memory, from summaries, or
+  from the ledger; a quote that does not appear verbatim in the source is
+  rejected and, if unrepairable, excluded.
 - "pattern": a computable count or direction spread over the corpus or the
   findings. State only numbers you read from the substrate summaries or tool
   results, and reference where they are computed from; a stated count that

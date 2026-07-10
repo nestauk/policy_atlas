@@ -280,33 +280,60 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Full-text ingestion (task 008 seams)
 
-- **Live `DocumentFetcher`** — **confirmed in-scope for v3.0** (user, 2026-07-05: the product
-  cannot function as intended without live fetching), so this entry is *sequencing*, not
-  scoping-out — unlike most of this file. The seam is built (protocol +
-  `run_harness(document_fetcher=…)`); wiring live HTTP is **runtime egress**, its own gated
-  slice. Requirements carried from the 008 contract + review stack (pre-registered so they
-  aren't rediscovered in production):
-  explicit timeouts, redirect handling with an explicit protocol policy (SSRF posture for
-  provider-supplied URLs), politeness + per-host rate limiting, retry/backoff, content-type
-  sniffing (a PDF served as `application/octet-stream` must not fall through to the plain-text
-  parser — magic bytes, not headers) and charset handling (v3.0 decodes HTML as UTF-8-replace;
-  honour the declared charset or pass bytes to trafilatura), landing-page scrape + PDF-link
-  discovery, DOI-URL fallback, a **paywall-detection signal ladder** (v3.0 maps only HTTP
-  401/403) with an OA-status cross-check, per-link exception isolation (a fetcher raise must
-  become a reason-coded outcome, not a component failure — fail-loud is correct fixture-world,
-  wrong live), bounded in-flight buffering / streaming (parent-side bodies are unbounded per
-  cascade round today; fine at 24 fixture docs, an OOM risk live) and concurrent fetching
-  (v3.0 fetches serially in the parent — fine for fixture replay, sum-of-latencies live), and
-  a worker-side / OS-level egress guard in the test suite (the socket-deny test now covers
-  parent + workers; an `unshare -n`-style CI guard is the stronger durable control). A
-  `pip-audit`-style dependency check belongs in CI now that binary parsing deps (pymupdf,
-  lxml) are in the tree — CI config is its own gate. **Fixture-corpus relocation** (user
-  decision, 2026-07-05): the ~24 MB committed corpus ships inside the package only because
-  replay *is* the v3.0 product behaviour; when the live fetcher takes over as default, move
-  the documents out of `src/policy_atlas/data/fulltext/` (to `tests/` or a pinned-hash
-  release asset) so the wheel slims — the corpus itself stays in the repo as the
-  deterministic test substrate. Growth is capped meanwhile by a test-enforced ≤30 MB budget
-  (`test_licence_guard`); raising the cap means consciously choosing the corpus strategy.
+- **Live `DocumentFetcher` — DISCHARGED (task 016).** Every pre-registered requirement from
+  this entry shipped in `fetch_live.py` + the ingest pipeline, with one named exception kept
+  below: explicit timeouts · manual per-hop-validated redirects with the full SSRF guard set
+  (scheme allowlist, userinfo refusal, every A/AAAA answer classified with IPv4-mapped forms
+  unwrapped, pinned-IP connect at the httpcore NetworkBackend seam) · per-host politeness +
+  global bounded concurrency · retry/backoff (015 retry set, cap 1) · magic-byte content-type
+  sniffing (%PDF wins over any header) · charset handling (bytes pass to trafilatura
+  undecoded; UTF-8-replace only on the plain-text path) · landing-page PDF-link discovery +
+  DOI-URL fallback (the one constructed URL, validated + encoded + fully guarded) · the
+  access-failure ladder (401 → paywall; 403 → paywall only with corroboration, else
+  `blocked_by_host`; 200+markers → paywall) with the OA cross-check · per-link exception
+  isolation (an escaped raise becomes reason-coded `fetch_error`, never a component failure) ·
+  streaming size caps + reservation-based in-flight byte accounting (deadlock-impossible
+  backpressure) · bounded-parallel fetch feeding the parse pool. `make verify` stays
+  deterministic and egress-free (fixture default unchanged; the import guard sanctions
+  `fetch_live.py` alongside `search_live.py` and pins that `ingest_full_text.py` never
+  imports it). The `pip-audit` CI pre-registration also **discharged** (016 rev 2.2:
+  `make audit` + an independent CI job, ignore-list policy documented in the Makefile).
+  **Fixture-corpus relocation discharged** (016 decision 12, per the 2026-07-05 trigger):
+  corpus moved to `tests/data/fulltext` (out of the wheel, wheel-check test-pinned);
+  `FixtureFetcher` resolves via explicit root / `POLICY_ATLAS_FIXTURE_CORPUS` / repo-relative
+  default with a loud missing-corpus error; the ≤30 MB budget guard moved with it; a
+  live-flagged run never silently falls back to fixture replay (test-pinned).
+- **OS-level CI egress guard** (`unshare -n`-style) — the one 016 exception, **explicitly
+  deferred with rationale** (016 rev 2.4, adversarial finding 8): the pre-registered
+  test-level control exists as-built (the socket-deny guard covers parent + workers; the
+  import-boundary guard pins the transport homes), and the OS-level CI variant — the stronger
+  durable control — is a CI change beyond 016's one approved addition (the pip-audit job).
+  Lands as its own CI-gated change.
+- **Per-depth fetch budgets** (016 contract, decision 9 note) — a recorded lever of the
+  tool-wide depth/time-budget gradation seam, not hard-wired in the fetcher: depth selects
+  how much fetch wall-clock/volume a run buys. Arrives with the gradation seam's allocator.
+- **Landing-page boilerplate heuristic** (016 review stack, Codex adversarial finding —
+  declined as-designed): when landing HTML parses ≥ the thin threshold *and* a
+  `citation_pdf_url` was discovered, the cascade accepts the HTML parse and never follows
+  the PDF. Correct for full-text HTML articles that also carry pdf meta (the BMC/Frontiers
+  shape — reordering would demote real articles); wrong for verbose landing pages, which
+  then ingest as boilerplate `full_text`. Eval territory: content-quality evals decide
+  whether a boilerplate detector / conditional PDF preference pays its complexity.
+- **Bounded DNS resolution** (016 review stack, Codex adversarial finding): `getaddrinfo`
+  runs outside the 30 s per-request timeout in both `_guard_url` and the pinned-IP connect;
+  OS resolver defaults bound it near the same order in practice. A thread-wrapped resolver
+  timeout lands only if live telemetry ever shows resolver stalls tying up fetch workers.
+- **Destination-port allowlist** (016 review stack, security lane LOW): the SSRF guard
+  permits any port on public IPs; an 80/443 allowlist would close public-host port probing
+  at the cost of rare odd-port OA hosts. Revisit with live-corpus telemetry.
+- **Stage-2 hydration as one window-function query** (016 review stack): per-snapshot
+  streaming queries are the deliberate memory-bound trade (server-side early stop); a
+  `SUM(length) OVER (PARTITION BY …)` single-query form gets both if stage-2 telemetry ever
+  shows DB round-trips (not LLM calls) dominating wall-clock.
+- **Shared live-HTTP retry vocabulary** (016 review stack, reuse finder): `fetch_live` and
+  `search_live` duplicate the retryable-status set and retry-once/backoff shape; their
+  control flows differ enough (status-outcome objects vs exception-only) that unification
+  waits for a third live client to prove the seam.
 - **Concurrent-run write guard** — eligibility selection takes no row locks and final writes
   are unconditional, so two simultaneous ingest runs over **one scope** could interleave
   (mirrors 007's concurrent-run dedup note; Codex adversarial finding, task 008). Scoped
@@ -338,6 +365,18 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   collapsed-chunk PDFs (extract handles them via deterministic oversize subsegment splitting,
   so the full-read guarantee holds) are the **first downstream consumer signal** for gating
   this escalation — the parse-quality eval now has a measurable customer.
+- **Citation-context character clamp for oversized chunks** (016 design conversation, user
+  call 2026-07-09) — the chunk is the citation/locator grain, so a collapsed heading-light
+  chunk (tens of thousands of chars) makes clunky provenance context wherever a citation is
+  resolved to its chunk. Chunks are frozen (never re-segmented), so the fix is a character
+  clamp at the **consumption** surfaces, windowed around the cited span (embedding units
+  carry offsets — the natural anchor). Two named consumers: (a) the grounding-judge envelope
+  (`synthesis_envelope_v1` carries cited chunks' full frozen text, no clamp — a deliberate
+  013 plan call; changing judge input is prompt-bearing and eval-sensitive, so it lands with
+  eval coverage, not as a rider); (b) future read surfaces (context/dossier views — the
+  web-app slice). Cheaper mitigation than (and complementary to) the docling escalation
+  above. Trigger: live corpora making collapsed chunks common, or judge token-cost
+  observations.
 - **Time-budget-aware parser selection** — the user's stated time horizon picks the parser
   (tight → pymupdf4llm, long → ML layout); `parse_profile`-per-snapshot (ADR 0004) is the hook.
 - **Chunk-volume bias controls at the retrieve seam** — full-text documents contribute tens of
@@ -833,10 +872,12 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Classify-confidence threshold-gating** (rev 1.5, V2 `strength.py` precedent) —
   confidence is event-payload-only today; a gate that acts on it arrives with its first
   consumer.
-- **Stage-2 windowing scale efficiency** (014 review) — `_load_stage2_docs` fetches every
-  candidate chunk then keeps only the first window; fine at fixture scale under upstream
-  caps, wasteful at real corpus scale. Load only the first window's chunks when 015/016
-  bring real volumes.
+- **Stage-2 windowing scale efficiency — DISCHARGED (task 016, decision 11: the
+  pre-registered trigger fired).** `_load_stage2_docs` now hydrates only the chunk prefix the
+  first window can read (per-snapshot streamed query, stop at the budget-crossing chunk);
+  peak memory is bounded by window budgets + split-boundary slack, never corpus full-text
+  size. Behaviour-preserving, test-pinned (byte-identical first-window payload + the
+  prefix-hydration proof).
 
 ## Data model / evidence
 

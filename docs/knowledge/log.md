@@ -1,5 +1,15 @@
 # Knowledge update log
 
+## 2026-07-10 (task 016 step 8)
+* **Creation**: Added [execution-options-statement-not-connection](execution-options-statement-not-connection.md) — Connection-level `execution_options` is sticky and wrapped subsequent INSERTs in server-side cursors, red-lining three stage-2 tests at the phase-3 gate (task 016).
+* **Creation**: Added [reserve-then-shrink-byte-budgets](reserve-then-shrink-byte-budgets.md) — reserve the per-item cap up front and shrink on completion, or in-flight holders on a shared budget can deadlock; found by lead review of the composed pipeline, not any component's tests (task 016).
+* **Creation**: Added [pip-audit-environment-mode-under-uv](pip-audit-environment-mode-under-uv.md) — `pip-audit -r` SIGABRTs under uv-managed CPython on macOS; environment-mode audit over the synced lockfile is the CI-parity fix (task 016 deviation 1).
+* **Creation**: Added [httpcore-origin-pooling-pinned-ip](httpcore-origin-pooling-pinned-ip.md) — SSRF-safe IP pinning must live in a custom `NetworkBackend.connect_tcp`, not a rewritten URL, or pooling and SNI break (task 016 plan-stage review blocker #3).
+* **Creation**: Added [timing-asserts-injected-clock-logs-corroborate](timing-asserts-injected-clock-logs-corroborate.md) — politeness timing is asserted on an injected clock; live log timestamps only corroborate and can show jittered sub-interval gaps (016 live check).
+* **Creation**: Added [http-403-is-usually-bot-blocking](http-403-is-usually-bot-blocking.md) — 403s from document hosts are bot-blocking unless corroborated as a paywall; 5 of 7 016 live-check failures were bot-blocks, zero corroborated paywalls.
+* **Creation**: Added [isolation-belts-reraise-config-errors](isolation-belts-reraise-config-errors.md) — a per-item isolation belt swallowed a missing-fixture-corpus `FileNotFoundError` into per-doc `fetch_error` rows, exiting green over a systemic misconfiguration (016 review stack).
+* **Creation**: Added [ip-refusal-allowlist-not-denylist](ip-refusal-allowlist-not-denylist.md) — IP refusal is allowlist-shaped (`not ip.is_global`); Python's `is_private` misses RFC 6598 CGNAT space, found by the 016 security lane's bypass-family testing.
+
 ## 2026-07-09 (task 015 step 8)
 * **Creation**: Added
   [result-caps-need-distribution-rule](result-caps-need-distribution-rule.md) — a total

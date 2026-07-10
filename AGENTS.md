@@ -22,38 +22,36 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `015-live-search`.
+Implementation — task `016-live-fetch`.
 
-Tasks `001-walking-skeleton` through `014-llm-screen-classify` are complete
-(merged) — the EB chain runs end-to-end with live LLM screen/classify. The
-active slice is the **second of the live-demo path** (014 LLM
-screen+classify → **015 live search** → 016 live fetch/ingest → 017 demo
-dress-rehearsal → eval slice): it makes acquire a **live, depth-graded
-search capability** over OpenAlex + Overton (contract rev 2, user scope
-call): live HTTP transport behind the 007 `SearchBackend` seam carrying
-every v2-lesson requirement (timeouts · Overton 1 call/s limiter · query
-sanitizers · per-depth caps · key hygiene · no citation floor), plus the
-search capability itself — **rapid** = LLM multi-query fan-out with
-SR/RCT variants; **deep** = the Arm-B agentic loop realised as
-**acquire↔screen rounds** (contract rev 3: the loop's judge IS the
-unmodified 014 screen — reformulation from graded screened exemplars
-with token-bounded per-round inputs · citation snowballing ·
-suggestion grounding · fixed arm allocation with a diversity reserve ·
-stopping on real confident-relevant counts and discovery rate, round
-cap 3), all budget-governed; the thin-base re-search behaviour lives
-in the loop's stopping rule (rapid-thin runs escalate to one bounded
-deep continuation); pagination; `scope_filters`; the backend-scope
-field. Fixture backends stay the zero-egress defaults — `make verify`
-stays deterministic and egress-free; acquire itself never writes
-screening rows (one relevance surface). Gated changes riding this
-slice: **runtime egress** (transport + three generation surfaces,
-`search_queries_v1` · `search_reformulate_v1` · `search_suggest_v1`,
-the 11th–13th product prompts, plus the in-loop `screen_v1` call-volume
-change) · **schema** (one `ck_scov_stop_condition` CHECK widening) ·
-**public interface** (`search_backend_scope` Plan/Config field). Build
-per
-`docs/tasks/015-live-search/contract.md`. Stay within the contract's
-scope and stop conditions; live fetch (016), Semantic Scholar, Overton
-cross-backend snowballing, blend ranking and all other seams remain
-deferred (`docs/deferred.md`).
+Tasks `001-walking-skeleton` through `015-live-search` are complete
+(merged) — the EB chain runs end-to-end with live LLM screen/classify
+and live depth-graded search over OpenAlex + Overton. The active slice
+is the **third of the live-demo path** (014 LLM screen+classify → 015
+live search → **016 live fetch/ingest** → 017 demo dress-rehearsal →
+eval slice): it makes full-text ingestion **live** — a hardened live
+`DocumentFetcher` behind the unchanged 008 seam, carrying every
+pre-registered requirement from `docs/deferred.md` § Full-text
+ingestion (explicit timeouts · SSRF/redirect policy for
+provider-supplied URLs · per-host politeness + bounded-concurrency
+prefetch · retry/backoff · magic-byte content-type sniffing · charset
+handling · size caps + bounded buffering · paywall-detection signal
+ladder · landing-page PDF-link discovery + DOI fallback · per-link
+exception isolation: a fetcher raise becomes a reason-coded outcome,
+never a component failure) — plus the **chain-composition rule**
+(user call, 2026-07-09): the mandatory EB spine is acquire(search) →
+screen → classify → appraise → ingest(fetch) → synthesise; all other
+components are orchestrator-discretionary per depth gradation;
+synthesise's substrate gate is untouched. The fixture fetcher stays
+the zero-egress default — `make
+verify` stays deterministic and egress-free. Gated change riding this
+slice: **runtime egress** (live document fetching). `demo/RETRO.md`
+§4 on branch `demo-live-run` is an **anecdotal prior only** (user
+call: the demo was throwaway; no demo shape or number is design
+authority) — it names which live hazards are real (paywalls, empty
+bodies behind DOI redirects, parse failures on grey lit). Build per
+`docs/tasks/016-live-fetch/contract.md`. Stay within the contract's
+scope and stop conditions; docling/OCR parse tiers, multi-PDF Overton
+assembly, cross-run fetch caching and all other seams remain deferred
+(`docs/deferred.md`).
 

@@ -22,8 +22,8 @@ import fitz
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT_DIR = ROOT / "src" / "policy_atlas" / "data" / "fulltext"
-MANIFEST_PATH = ROOT / "src" / "policy_atlas" / "data" / "fulltext_manifest.json"
+OUT_DIR = ROOT / "tests" / "data" / "fulltext"
+MANIFEST_PATH = ROOT / "tests" / "data" / "fulltext_manifest.json"
 RECORDED_AT = "2026-07-05"
 TIMEOUT_S = 90
 MAX_TOTAL_BYTES = 26_000_000

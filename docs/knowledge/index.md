@@ -29,12 +29,15 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [Untrusted text enters prompts only as JSON-encoded records](untrusted-prompt-fields-json-records.md) - sanitization alone is not the boundary: the sanitizer preserves newlines, so raw interpolation lets a multi-line field fabricate template structure; every field rides inside `json.dumps`, allowlists re-validated at assembly (task 014 review stack, security lane).
 * [A total result cap needs a companion distribution rule](result-caps-need-distribution-rule.md) - with `max_results = remaining`, provider call #1 eats the whole cap and the fan-out silently collapses to one load-bearing query; per-call quotas via `_distribute_quota` (015 live check — scripted tests structurally could not catch it).
 * [Values embedded in a structured wire param must exclude that wire's metacharacters](embedded-values-escape-wire-grammar.md) - OpenAlex's `filter` is comma-delimited, so a comma surviving into the embedded search value opens an injectable filter clause that bypasses the fail-closed directive grammar (015 review stack, convergent Codex + security finding).
+* [Per-item exception-isolation belts must re-raise configuration errors first](isolation-belts-reraise-config-errors.md) - a blanket `except Exception` belt that swallows a config-class error (e.g. a missing fixture corpus) turns a systemic misconfiguration into N per-item failures with the component reporting green; enumerate the re-raised types explicitly and pin the loud path through the real entry point (`ingest_full_text.py::_safe_fetch`, task 016 review stack).
+* [IP refusal for SSRF safety is allowlist-shaped, not denylist-shaped](ip-refusal-allowlist-not-denylist.md) - enumerating denylist properties chases reserved ranges forever — Python's `is_private` misses RFC 6598 CGNAT space; refuse anything `not ip.is_global` after unwrapping IPv4-mapped IPv6 (`fetch_live.py::_is_refused_ip`, 016 security lane).
 
 ## Testing rules
 
 * [Audit sanitized fixtures against the raw recording](sanitized-fixtures-audit-against-raw.md) - key-based sanitizers miss list-inherited keys and rare fields; substring-audit raw vs fixture, with a neutral fake lexicon.
 * [Assert contract-required keys on the written row, not the component summary](assert-on-row-not-summary.md) - summary and row are built separately and drift; downstream readers consume rows — anchor evidence there (task 012 review stack).
 * [Guard tests must assert the real invariant, or agents satisfy their letter](guard-tests-name-real-invariant.md) - the 007 zero-egress regex was dodged with `importlib.import_module("httpx")`; the honest move is extending the guard's stated invariant, and delegated executors optimise against the checks they are given (task 015 build).
+* [Timing/politeness properties are asserted on an injected clock, not live logs](timing-asserts-injected-clock-logs-corroborate.md) - live log timestamps only corroborate; thread-scheduling jitter can put a sub-interval gap between two log lines even when the enforced spacing on the injected clock is correct (016 live check: one 0.845s/1.22s pair still summing to two 1.0s intervals).
 
 ## Invariants (verified)
 
@@ -55,6 +58,7 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [Same-run re-execution fails loud before the first write](fail-loud-before-first-write.md) - a DB-error failure poisons the transaction and kills the harness's own component.failed event write; pre-write guards keep declared failure modes off the constraint path (task 013 review stack).
 * [Every screening consumer resolves the effective row — including write paths](effective-screen-row-read-rule.md) - highest-stage non-failed via `effective_screen_rows()`; raw `status='relevant'` joins re-admit demoted docs, and classification-driven write paths (appraise) are the shape grep audits miss (task 014 review stack, adversarial lane).
 * [Every EB run terminates in synthesise; every other component is a plan choice](synthesise-is-run-terminus.md) - synthesise mints the artefact, so no valid chain ends before it; characterise is orchestrator-discretionary ("a grounded answer, not an evidence report"); trim mid-chain legs for cost, never the terminus (recurring mistake, captured at the 015 contract gate; verified against components.md §9 + the merged 013 skeleton).
+* [Byte/resource budgets must reserve-then-shrink, never grow-on-release](reserve-then-shrink-byte-budgets.md) - reserve the full per-item cap up front while holding nothing, stream, then shrink to the actual size on completion, or in-flight holders can deadlock waiting on releases only other blocked holders can produce (`fetch_live.py::_read_capped_body`; found by 016 lead review of the composed pipeline, not any single component's tests).
 
 ## Integration quirks (model / telemetry providers)
 
@@ -62,3 +66,13 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [Langfuse keys without a host silently export to the SaaS cloud](langfuse-host-must-be-explicit.md) - the SDK defaults to cloud.langfuse.com; with full-I/O traces that is a boundary violation, so `get_langfuse()` requires an explicit host and is loud on partial config.
 * [On reasoning models, max_completion_tokens covers reasoning + output](reasoning-model-output-cap.md) - a cap tuned for output alone truncates real answers on gpt-5-class models (LengthFinishReasonError, task 011 live run 1); keep the cap explicit and fingerprinted, size it for both.
 * [Postgres rejects NUL (U+0000) in TEXT/JSONB — scrub model output at the backend boundary](model-output-nul-scrub.md) - LLMs emit NUL-bearing strings; psycopg aborts at INSERT; strip once where records come off the wire (task 011 live run 2).
+
+## Integration quirks (infra / tooling)
+
+* [SQLAlchemy execution_options belong on the statement, not the Connection](execution-options-statement-not-connection.md) - `.execution_options(yield_per=...)` set on a Connection is sticky and wraps every later statement executed on it; set it on the statement instead (`screen.py::_load_stage2_chunk_prefix`; three stage-2 tests went red at the 016 phase-3 gate before the fix).
+* [pip-audit's -r mode SIGABRTs under uv-managed CPython on macOS](pip-audit-environment-mode-under-uv.md) - `-r` mode unconditionally builds a throwaway venv via ensurepip; environment-mode audit over the already-synced lockfile closure (`make audit`) gives identical local/CI coverage without the crash (016 deviation 1, confirmed by the review stack).
+* [SSRF-safe IP pinning belongs in the NetworkBackend, not a rewritten URL](httpcore-origin-pooling-pinned-ip.md) - httpcore pools by URL origin and derives SNI/Host from it, not the dial target; pin the resolved IP in a custom `NetworkBackend.connect_tcp` (`fetch_live.py::_PinnedIPNetworkBackend`) rather than swapping the host in the URL, which corrupts pooling and SNI (016 plan-stage adversarial review blocker #3; also closes the TOCTOU re-resolve window).
+
+## Live behaviour
+
+* [A 403 from a document host is usually bot-blocking, not a paywall](http-403-is-usually-bot-blocking.md) - 5 of 7 live fetch failures in 016's live check were `blocked_by_host`, zero corroborated paywalls; 403 counts as a paywall only with corroboration (body markers or the OA cross-check), else `blocked_by_host` (`fetch_live.py::_response_outcome`).
