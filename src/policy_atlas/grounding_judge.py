@@ -35,7 +35,7 @@ ENVELOPE_VERSION = "synthesis_envelope_v1"
 
 # The contracted model floor; judge calibration is eval-workstream territory —
 # this slice's bar is mechanism correctness.
-JUDGE_MODEL = "gpt-5-mini"
+JUDGE_MODEL = "gpt-5.4-mini"
 
 VERDICTS = ("tier_1", "tier_2", "tier_3", "tier_4", "unsupported_mis_cited")
 

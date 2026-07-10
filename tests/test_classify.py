@@ -1,6 +1,8 @@
 """Tests for the classify component — schema, backend seam, round-trips, harness integration."""
 
 import uuid
+from dataclasses import dataclass
+from typing import Any, cast
 
 import pytest
 import sqlalchemy as sa
@@ -9,13 +11,20 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
 from policy_atlas import events
-from policy_atlas.classification_backend import StubClassificationBackend
+from policy_atlas.classification_backend import (
+    OpenAIClassificationBackend,
+    StubClassificationBackend,
+)
 from policy_atlas.classify import ClassifyContext, classify_sources
 from policy_atlas.classify_prompt import (
+    CLASSIFY_MODEL,
+    CLASSIFY_REASONING_EFFORT,
     TAG_MAX_CHARS,
     TAGS_MAX_PER_DOC,
     ClassifyEnvelopePayload,
+    ClassifyWire,
 )
+from policy_atlas.embeddings import openai_kwargs
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.plan import Plan, compile
@@ -572,3 +581,82 @@ def test_delete_project_data_removes_classification(conn: Connection) -> None:
         .where(source_classification_result.c.project_id == pid)
     ).scalar_one()
     assert count_after == 0
+
+
+# --- Model constant + reasoning-effort seam (018 A1) ---
+
+
+@dataclass
+class _FakeParsedMessage:
+    parsed: Any
+
+
+@dataclass
+class _FakeChoice:
+    message: _FakeParsedMessage
+
+
+@dataclass
+class _FakeResponse:
+    choices: list[_FakeChoice]
+    usage: None = None
+
+
+class _FakeCompletions:
+    def __init__(self, parsed: Any) -> None:
+        self._parsed = parsed
+        self.calls: list[dict[str, Any]] = []
+
+    def parse(self, **kwargs: Any) -> _FakeResponse:
+        self.calls.append(kwargs)
+        return _FakeResponse(choices=[_FakeChoice(message=_FakeParsedMessage(self._parsed))])
+
+
+class _FakeChat:
+    def __init__(self, parsed: Any) -> None:
+        self.completions = _FakeCompletions(parsed)
+
+
+class _FakeOpenAIClient:
+    def __init__(self, parsed: Any) -> None:
+        self.chat = _FakeChat(parsed)
+
+
+def test_classify_backend_passes_model_and_reasoning_effort() -> None:
+    wire = ClassifyWire(
+        primary_evidence_type="RCTs and Quasi-Experimental Studies",
+        tags=[],
+        confidence=0.8,
+        reason="Randomized trial.",
+    )
+    backend: OpenAIClassificationBackend = object.__new__(OpenAIClassificationBackend)
+    fake_client = _FakeOpenAIClient(wire)
+    cast("Any", backend)._client = fake_client
+    cast("Any", backend)._langfuse_client = None
+
+    result = backend.classify(
+        ClassifyEnvelopePayload(
+            pss_id=str(uuid.uuid4()),
+            title="A randomized trial",
+            abstract="Abstract text.",
+            priors={},
+        )
+    )
+
+    assert result.primary_evidence_type == "RCTs and Quasi-Experimental Studies"
+    [kwargs] = fake_client.chat.completions.calls
+    assert kwargs["model"] == "gpt-5.4-mini"
+    assert kwargs["model"] == CLASSIFY_MODEL
+    assert kwargs["reasoning_effort"] == "xhigh"
+    assert kwargs["reasoning_effort"] == CLASSIFY_REASONING_EFFORT
+
+
+def test_openai_kwargs_omits_reasoning_effort_when_none() -> None:
+    kwargs = openai_kwargs("gpt-5.4-mini")
+    assert kwargs == {"model": "gpt-5.4-mini"}
+    assert "reasoning_effort" not in kwargs
+
+
+def test_openai_kwargs_includes_reasoning_effort_when_set() -> None:
+    kwargs = openai_kwargs("gpt-5.4-mini", reasoning_effort="xhigh")
+    assert kwargs == {"model": "gpt-5.4-mini", "reasoning_effort": "xhigh"}

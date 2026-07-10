@@ -19,7 +19,7 @@ from policy_atlas.grouping import GroupingDoc
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.plan import Plan, compile
-from policy_atlas.ranking import RankedDoc, StubRankingBackend
+from policy_atlas.ranking import RERANK_MODEL, RankedDoc, StubRankingBackend
 from policy_atlas.schema import (
     DIRECTIVE_STRING_MAX,
     TOPIC_THEME,
@@ -678,7 +678,7 @@ def test_llm_rerank_contested_scope_and_fallback_ordering(conn: Connection) -> N
     provenance = row._mapping["selection_provenance"]
     assert provenance["strategy_version"] == "llm_rerank_v1"
     assert provenance["prompt_version"] == "select_rerank_v1"
-    assert provenance["model"] == "gpt-5-mini"
+    assert provenance["model"] == RERANK_MODEL
     assert provenance["call_budget"] == {"baseline": 1, "maximum": 2, "used": 1}
     assert provenance["retry_count"] == 0
     assert provenance["fallback_count"] == 3
@@ -712,7 +712,7 @@ def test_empty_scope_rerank_provenance_carries_call_budget(conn: Connection) -> 
     # KeyError on this live path when those keys were missing), and no
     # selection row is persisted for an empty scope.
     assert summary["provenance"]["call_budget"] == {"baseline": 0, "maximum": 0, "used": 0}
-    assert summary["provenance"]["model"] == "gpt-5-mini"
+    assert summary["provenance"]["model"] == RERANK_MODEL
     assert summary["provenance"]["prompt_version"] == "select_rerank_v1"
     assert _selection_row_count(conn, pid) == 0
 

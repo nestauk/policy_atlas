@@ -57,7 +57,7 @@ SECTION_PROMPT_VERSION = "synthesise_section_v2"
 
 # The contracted model floor (the 009 nano lesson is binding); section/prose
 # quality on real corpora is eval territory, not asserted by the build.
-SYNTHESIS_MODEL = "gpt-5-mini"
+SYNTHESIS_MODEL = "gpt-5.5"
 
 # Bounds on proposal output (deterministic output-checking beyond prompt
 # rules — the 009 validate_themes precedent; enforced by the Task-5 validator).

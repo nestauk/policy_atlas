@@ -13,12 +13,18 @@ from policy_atlas.classify_prompt import (
     CLASSIFY_MAX_OUTPUT_TOKENS,
     CLASSIFY_MODEL,
     CLASSIFY_PROMPT_VERSION,
+    CLASSIFY_REASONING_EFFORT,
     ClassifyEnvelopePayload,
     ClassifyWire,
     EvidenceType,
     build_classify_messages,
 )
-from policy_atlas.embeddings import log_usage, resolve_openai_client, usage_metadata
+from policy_atlas.embeddings import (
+    log_usage,
+    openai_kwargs,
+    resolve_openai_client,
+    usage_metadata,
+)
 from policy_atlas.prompt_fields import confidence_is_valid, scrub_nul
 
 
@@ -92,7 +98,7 @@ class OpenAIClassificationBackend:
         messages: list[ChatCompletionMessageParam],
     ) -> tuple[ClassifyWire, CompletionUsage | None]:
         response = self._client.chat.completions.parse(
-            model=CLASSIFY_MODEL,
+            **openai_kwargs(CLASSIFY_MODEL, reasoning_effort=CLASSIFY_REASONING_EFFORT),
             messages=messages,
             response_format=ClassifyWire,
             max_completion_tokens=CLASSIFY_MAX_OUTPUT_TOKENS,

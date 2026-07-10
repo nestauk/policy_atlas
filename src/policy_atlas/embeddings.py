@@ -154,6 +154,18 @@ def resolve_openai_client(
     return OpenAI(api_key=resolved_key, timeout=timeout, max_retries=max_retries)
 
 
+def openai_kwargs(model: str, *, reasoning_effort: str | None = None) -> dict[str, Any]:
+    """Request kwargs shared by OpenAI chat-completions call sites.
+
+    Omits reasoning_effort when None so non-reasoning call sites are byte-identical.
+    Provider-neutral by shape: a future Bedrock backend maps or ignores the string.
+    """
+    kwargs: dict[str, Any] = {"model": model}
+    if reasoning_effort is not None:
+        kwargs["reasoning_effort"] = reasoning_effort
+    return kwargs
+
+
 def usage_metadata(usage: CompletionUsage | None) -> dict[str, int | None]:
     """Token usage as log/span metadata; all-``None`` when the API omitted usage.
 

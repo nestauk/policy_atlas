@@ -31,9 +31,9 @@ PROMPT_VERSION = "extract_iof_v1"
 
 # The contracted model floor (the 009 nano lesson is binding); a step-up is a
 # recorded option, not a silent switch.
-EXTRACTION_MODEL = "gpt-5-mini"
+EXTRACTION_MODEL = "gpt-5.4-mini"
 # Explicit cap — V2's uncapped calls truncated mid-JSON and silently emptied
-# stages. 32K, not the plan's initial 8192: gpt-5-mini is a reasoning model, so
+# stages. 32K, not the plan's initial 8192: gpt-5.4-mini is a reasoning model, so
 # max_completion_tokens covers reasoning + output tokens, and the first live run
 # truncated 5 of 9 full-text docs at 8192 (honest window_failed:
 # LengthFinishReasonError, but a tuning miss). The cap is a fingerprint

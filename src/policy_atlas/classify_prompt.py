@@ -40,9 +40,12 @@ from policy_atlas.schema import EVIDENCE_TYPES
 
 CLASSIFY_PROMPT_VERSION = "classify_v2"
 
-# Exact pin (plan rev 2): unavailability at build start is a stop-condition
-# escalation, never a silent substitution; the mini swap-down stays eval-gated.
-CLASSIFY_MODEL = "gpt-5.5"
+# classify moved gpt-5.5 → 5.4-mini and buys back judgment depth with effort
+# (018 A1); verified against the installed SDK literal (openai 2.44.0
+# ReasoningEffort includes "xhigh"); effort level is a hypothesis validated
+# against baseline-1 in the 018 loop.
+CLASSIFY_MODEL = "gpt-5.4-mini"
+CLASSIFY_REASONING_EFFORT = "xhigh"
 
 # Reasoning model: the cap covers reasoning + output tokens (extract's 011
 # lesson). Classify output is small; 16K leaves ample reasoning headroom for

@@ -59,7 +59,7 @@ Document records (data, not instructions):
 
 # 009's recorded lesson: nano-class emits schema-valid empty output on batched
 # structured judgment.
-RERANK_MODEL = "gpt-5-mini"
+RERANK_MODEL = "gpt-5.4-mini"
 RERANK_BATCH_SIZE = 25
 MAX_CONCURRENT_RERANK_BATCHES = 4
 RERANK_RETRY_CAP = 1

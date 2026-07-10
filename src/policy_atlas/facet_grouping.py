@@ -31,7 +31,7 @@ PROMPT_VERSION = "group_facet_v1"
 
 # The contracted model floor (the 009 nano lesson is binding); partition quality
 # on real reference sets is eval territory, not asserted by the build.
-FACET_GROUPING_MODEL = "gpt-5-mini"
+FACET_GROUPING_MODEL = "gpt-5.4-mini"
 
 # Scale guard — fail closed (contract rev 1.3): above the cap the component
 # fails structurally before any call; the large-corpus algorithm is a recorded
