@@ -795,8 +795,8 @@ def artefact(conn: Connection, project_id: uuid.UUID) -> dict[str, Any] | None:
             if snapshot_id is None or snapshot_id not in snapshot_meta:
                 continue
             own = snapshot_meta[snapshot_id]
-            title = own.get("title") or ""
-            if title.startswith(("http://", "https://")) or not title:
+            own_title = own.get("title") or ""
+            if own_title.startswith(("http://", "https://")) or not own_title:
                 snapshot_meta[snapshot_id] = {**own, **{
                     k: v for k, v in envelope.items() if v not in (None, "")
                 }}
