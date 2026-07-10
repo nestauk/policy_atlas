@@ -1,9 +1,12 @@
-"""Demo analysis driver: walks the EB chain live, streaming progress to the bus.
+"""Demo analysis driver: wraps the REAL 017 runner, streaming progress to the bus.
 
-The fixed driver executes the compiled plan (execution-orchestration spec: plan-time
-authority); the orchestrator LLM narrates stage completions and mediates check-ins
-into the same thread that planned the analysis. One transaction per stage so read
-models see committed state as each stage lands.
+Execution is `runner.run_plan` — composition, depth gating, per-component
+commits, retry-once on LLM-bearing components and failure chaining are all the
+real backend's. This module owns only the demo surfaces the backend defers
+(component progress protocol, narration): the structlog→SSE bridge, a
+step-start observability shim over the named `leg_directive` seam, and
+`DemoSSEIO`, the `OrchestratorIO` implementation that turns steering pauses
+into SSE check-ins and HTTP answers into real `SteeringResponse`s.
 
 ponytail: module-level bus/stage globals — one live analysis at a time. Per-project
 buses if the demo ever runs two analyses concurrently.
@@ -13,39 +16,18 @@ import threading
 import time
 import uuid
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any
 
 import structlog
 from demo.server import orchestrator
 from demo.server.bus import EventBus
-from demo.server.fetcher import DemoLiveFetcher
-from sqlalchemy import select
-from sqlalchemy.engine import Connection
 
-from policy_atlas import events, search_generation, search_live, search_loop, tracing
-from policy_atlas.acquire import SearchBackend
-from policy_atlas.classification_backend import OpenAIClassificationBackend
+from policy_atlas import runner, tracing
 from policy_atlas.db import get_engine
-from policy_atlas.embeddings import OpenAIEmbeddingBackend
-from policy_atlas.extraction_backend import OpenAIExtractionBackend
-from policy_atlas.facet_grouping import OpenAIFacetGroupingBackend
-from policy_atlas.grounding_judge import OpenAIGroundingJudgeBackend
-from policy_atlas.grouping import OpenAIThemeGroupingBackend
-from policy_atlas.harness import run_harness
-from policy_atlas.inference import StubEchoProvider
-from policy_atlas.ingest_full_text import candidate_urls
-from policy_atlas.plan import Plan
-from policy_atlas.plan import compile as compile_plan
-from policy_atlas.ranking import OpenAIRankingBackend
-from policy_atlas.schema import (
-    evidence_scope,
-    project,
-    project_source_snapshot,
-    runs,
-    source_snapshot,
-)
-from policy_atlas.screening_backend import OpenAIScreeningBackend
-from policy_atlas.synthesis_backend import OpenAISynthesisBackend
+from policy_atlas.orchestrate import _live_planner_and_backends
+from policy_atlas.orchestration_plan import OrchestrationPlan
+from policy_atlas.schema import evidence_scope, orchestration_plan, project
+from policy_atlas.steering import Abort, Adjust, Continue, SteeringResponse
 
 log = structlog.get_logger()
 
@@ -148,26 +130,33 @@ def install_log_bridge() -> None:
         structlog.configure(processors=[_bridge_processor] + processors)
 
 
-# --- stage vocabulary (user-facing labels; component names never reach the UI) ---
+# --- step-start shim over the runner's named directive seam ---
+# The runner has no per-step start hook (the component progress protocol is a
+# deferred seam, docs/deferred.md). `leg_directive` is the documented per-step
+# seam and fires exactly once per composed step before its attempts — the shim
+# observes the boundary for the timeline and returns the directive unchanged.
 
-STAGES: dict[str, tuple[str, str]] = {
-    "acquire": ("Searching sources", "Queries out to academic and policy databases"),
-    "screen": ("Screening for relevance", "Every title and abstract, against your question"),
-    "classify": ("Sorting by evidence type", "Trial, review, evaluation — each source labelled"),
-    "appraise": ("Appraising quality", "How much weight each source can bear"),
-    "ingest_full_text": ("Reading in full", "Fetching the documents; paywalls noted, not hidden"),
-    "characterise": ("Mapping the landscape", "What the evidence covers, and where it's thin"),
-    "select": ("Shortlisting", "The strongest, most varied set for close reading"),
-    "extract": ("Extracting findings", "Each claim pulled out with its exact quote"),
-    "group": ("Grouping findings", "Findings that answer the same question, together"),
-    "synthesise": ("Writing the evidence base", "Cited, checked, ready to challenge"),
-}
+_ORIG_LEG_DIRECTIVE = runner.leg_directive
+
+
+def _observing_leg_directive(
+    plan: OrchestrationPlan, step: Any, upstream_state: dict[str, Any]
+) -> dict[str, Any]:
+    _set_stage(step.component)
+    if _BUS is not None:
+        label, blurb = orchestrator.STAGES[step.component]
+        _BUS.emit("stage.started", {"stage": step.component, "stage_label": label,
+                                    "stage_blurb": blurb})
+    return _ORIG_LEG_DIRECTIVE(plan, step, upstream_state)
+
+
+runner.leg_directive = _observing_leg_directive
 
 _SUMMARY_DROP = ("docs", "selected", "excluded", "groups", "themes", "distributions", "rounds")
 
 
 def _summarise(payload: dict[str, Any] | None) -> dict[str, Any]:
-    """Counts-only trim of a component.completed payload for SSE / narration.
+    """Counts-only trim of a check-in payload for SSE / narration.
 
     User-facing: numbers read as progress; strings (ids, versions, vocab
     values) read as internals — numbers only, capped, one level deep.
@@ -187,13 +176,58 @@ def _summarise(payload: dict[str, Any] | None) -> dict[str, Any]:
     return {k: v for k, v in list(out.items())[:8]}
 
 
+class DemoSSEIO:
+    """`OrchestratorIO` over the SSE bus: real steering, browser transport.
+
+    `check_in` turns runner boundary payloads into `stage.completed`/`stage.failed`
+    events; `pause` emits a `checkin` event carrying the REAL steering options
+    and blocks until `POST /checkin/{id}` maps the answer to a real
+    `SteeringResponse` (Continue / Adjust / Abort).
+    """
+
+    _NARRATED = ("characterise", "synthesise")
+
+    def __init__(self, driver: "AnalysisDriver") -> None:
+        self._driver = driver
+
+    def check_in(self, component: str, payload: dict[str, Any]) -> None:
+        driver = self._driver
+        label, _blurb = orchestrator.STAGES[component]
+        status = payload.get("status")
+        if status == "succeeded":
+            summary = _summarise(payload.get("headline_counts") or {})
+            if isinstance(payload.get("wall_clock_s"), (int, float)):
+                summary["seconds"] = round(payload["wall_clock_s"], 1)
+            driver.bus.emit("stage.completed", {"stage": component, "stage_label": label,
+                                                "summary": summary})
+            if component in self._NARRATED:
+                driver.narrate(label, summary)
+            return
+        reason = str(payload.get("reason", "unknown"))
+        driver.bus.emit("stage.failed", {"stage": component, "stage_label": label,
+                                         "reason": reason,
+                                         "skipped": bool(payload.get("skipped"))})
+        # honest, visible, non-fatal: the runner chains off successful
+        # predecessors; a failed or skipped stage is reported, never hidden
+        verb = "was skipped" if payload.get("skipped") else "hit a limit and stopped"
+        driver.bus.emit("narration", {
+            "text": f"{label} {verb}: {reason}. Recorded — carrying on with "
+            "what the analysis has.",
+        })
+
+    def pause(self, point: dict[str, Any], render: str) -> SteeringResponse:
+        return self._driver.pause(point, render)
+
+
 class AnalysisDriver:
-    """Runs one live analysis for one project, in a background thread."""
+    """Runs one approved orchestration plan for one project, in a background thread."""
+
+    CHECKIN_TIMEOUT_S = 1800  # unattended-safe: a forgotten pause never hangs the run
 
     def __init__(
         self,
         project_id: uuid.UUID,
-        plan: dict[str, Any],
+        plan: OrchestrationPlan,
         bus: EventBus,
         create_project_row: bool = False,
     ) -> None:
@@ -201,11 +235,11 @@ class AnalysisDriver:
         self.plan = plan
         self.bus = bus
         self.create_project_row = create_project_row
-        self.scope_id: uuid.UUID | None = None
         self.thread: threading.Thread | None = None
         self.failed: str | None = None
         self.done = False
-        self._checkin_replies: dict[str, str] = {}
+        self.paused = False
+        self._checkin_replies: dict[str, dict[str, Any]] = {}
         self._checkin_event = threading.Event()
 
     # -- public --
@@ -218,8 +252,9 @@ class AnalysisDriver:
     def running(self) -> bool:
         return self.thread is not None and self.thread.is_alive()
 
-    def answer_checkin(self, checkin_id: str, reply: str) -> None:
-        self._checkin_replies[checkin_id] = reply
+    def answer_checkin(self, checkin_id: str, reply: str,
+                       params: dict[str, Any] | None = None) -> None:
+        self._checkin_replies[checkin_id] = {"reply": reply, "params": params or {}}
         self._checkin_event.set()
 
     # -- internals --
@@ -229,8 +264,33 @@ class AnalysisDriver:
         _BUS = self.bus
         try:
             self.bus.emit("analysis.started", {})
-            self._walk_chain()
-            self.bus.emit("analysis.completed", {})
+            engine = get_engine()
+            scope_id, plan_row_id = self._write_rows(engine)
+            langfuse_client = tracing.get_langfuse()
+            _planner, backends = _live_planner_and_backends(langfuse_client)
+            outcome = runner.run_plan(
+                engine,
+                project_id=self.project_id,
+                evidence_scope_id=scope_id,
+                plan=self.plan,
+                plan_id=plan_row_id,
+                plan_version=1,
+                plan_row_id=plan_row_id,
+                backends=backends,
+                io=DemoSSEIO(self),
+            )
+            if outcome.status == "failed":
+                self.failed = outcome.collation_render
+                self.bus.emit("analysis.failed", {"stage": _STAGE,
+                                                  "message": "The run failed.",
+                                                  "collation": outcome.collation_render})
+            elif outcome.status == "aborted":
+                self.bus.emit("analysis.aborted", {"collation": outcome.collation_render})
+            else:
+                # succeeded or degraded — flags rendered honestly either way
+                self.bus.emit("analysis.completed", {
+                    "status": outcome.status, "collation": outcome.collation_render,
+                })
         except Exception as exc:  # noqa: BLE001 — surface honestly, never hang the stream
             log.exception("demo.analysis_failed")
             self.failed = f"{type(exc).__name__}: {exc}"
@@ -240,307 +300,108 @@ class AnalysisDriver:
             _set_stage(None)
             _BUS = None
 
-    def _walk_chain(self) -> None:
-        question = self.plan["question"]
-        engine = get_engine()
-        langfuse_client = tracing.get_langfuse()
-        backends = {
-            "embedding_backend": tracing.TracedEmbeddingBackend(
-                OpenAIEmbeddingBackend(), langfuse_client
-            ) if langfuse_client else OpenAIEmbeddingBackend(),
-            "theme_grouping_backend": tracing.TracedThemeGroupingBackend(
-                OpenAIThemeGroupingBackend(), langfuse_client
-            ) if langfuse_client else OpenAIThemeGroupingBackend(),
-            "screening_backend": OpenAIScreeningBackend(langfuse_client=langfuse_client),
-            "classification_backend": OpenAIClassificationBackend(langfuse_client=langfuse_client),
-            "ranking_backend": OpenAIRankingBackend(langfuse_client=langfuse_client),
-            "extraction_backend": OpenAIExtractionBackend(langfuse_client=langfuse_client),
-            "facet_grouping_backend": OpenAIFacetGroupingBackend(langfuse_client=langfuse_client),
-            "synthesis_backend": OpenAISynthesisBackend(langfuse_client=langfuse_client),
-            "grounding_judge_backend": OpenAIGroundingJudgeBackend(langfuse_client=langfuse_client),
-            "search_backends": cast(
-                "list[SearchBackend]", search_live.live_search_backends()
-            ),
-            "search_generation_backend": search_generation.OpenAISearchGenerationBackend(
-                langfuse_client=langfuse_client
-            ),
-        }
-        self._langfuse = langfuse_client
-        self._backends = backends
+    def _write_rows(self, engine: Any) -> tuple[uuid.UUID, uuid.UUID]:
+        """Project (for fresh runs) + scope + approved plan row, one transaction.
 
-        # Scope (and project row for seed runs) — searches always start rapid; the
-        # deep leg runs as acquire↔screen rounds after the first sift.
+        Mirrors `orchestrate._write_plan_row`, which mints its own project id —
+        the demo's projects exist before their run does.
+        """
+        scope_id = uuid.uuid4()
+        plan_row_id = uuid.uuid4()
+        now = datetime.now(UTC)
         with engine.begin() as conn:
             if self.create_project_row:
                 conn.execute(project.insert().values(
-                    project_id=self.project_id, created_at=datetime.now(UTC),
+                    project_id=self.project_id, created_at=now,
                 ))
-            self.scope_id = uuid.uuid4()
             conn.execute(evidence_scope.insert().values(
-                evidence_scope_id=self.scope_id,
+                evidence_scope_id=scope_id,
                 project_id=self.project_id,
-                intent=question,
-                context={"search": {"depth": "rapid"}, "focus": self.plan.get("focus", [])},
-                created_at=datetime.now(UTC),
+                intent=self.plan.question,
+                context={},
+                created_at=now,
             ))
+            conn.execute(orchestration_plan.insert().values(
+                plan_id=plan_row_id,
+                project_id=self.project_id,
+                evidence_scope_id=scope_id,
+                version=1,
+                status="approved",
+                payload=self.plan.model_dump(mode="json"),
+                created_at=now,
+                created_by="user",
+                approved_at=now,
+            ))
+        return scope_id, plan_row_id
 
-        # 1. Search + sift (rapid leg)
-        self._stage(engine, "acquire")
-        screen_summary = self._stage(engine, "screen")
-
-        # 2. Deep leg: user asked for deep, or the rapid pass came back thin
-        with engine.connect() as conn:
-            escalate = search_loop.should_escalate(
-                conn, project_id=self.project_id, scope_id=self.scope_id
-            )
-        if self.plan.get("search_depth") == "deep" or escalate:
-            if escalate and self.plan.get("search_depth") != "deep":
-                self._checkin("thin_evidence", question, screen_summary,
-                              ["Search deeper", "Continue with what we have"])
-            self._deep_episode(engine)
-
-        # 3. Quality-check + read. Quick runs stay light: no full-document
-        # fetching, close reading or findings extraction — the write-up works
-        # from titles and abstracts, and the plan says so.
-        quick = self.plan.get("search_depth") == "quick"
-        self._stage(engine, "classify")
-        self._stage(engine, "appraise")
-        if not quick:
-            self._prefetch(engine)
-            self._stage(engine, "ingest_full_text")
-
-        # 4. Landscape + check-in (the frame-04 moment). Discovery is the known
-        # live wobbler (invalid-output rejections) — one full stage retry before
-        # accepting the failure.
-        landscape = self._stage(engine, "characterise", narrate=True)
-        if "characterise" not in self._run_ids:
-            self.bus.emit("narration", {
-                "text": "The landscape mapping stumbled — running it once more.",
-            })
-            landscape = self._stage(engine, "characterise", narrate=True)
-        if self.plan.get("check_in", "moderate") != "minimal":
-            self._checkin("landscape", question, landscape,
-                          ["Continue as planned", "Adjust the focus"])
-
-        # 5. Deep read + findings + the artefact (deep runs only). Each stage
-        # chains only off a SUCCESSFUL predecessor; synthesise runs on the
-        # deepest reference that exists (its refs are optional by design).
-        if not quick and "characterise" in self._run_ids:
-            select_summary = self._stage(
-                engine, "select", characterisation_run_id=self._run_ids["characterise"],
-            )
-            if self.plan.get("check_in") == "frequent" and "select" in self._run_ids:
-                self._checkin("selection", question, select_summary,
-                              ["Continue", "Change the shortlist"])
-        if not quick and "select" in self._run_ids:
-            self._stage(engine, "extract", selection_run_id=self._run_ids["select"])
-        if not quick and "extract" in self._run_ids:
-            self._stage(engine, "group", extraction_run_id=self._run_ids["extract"])
-        synth_ref: dict[str, uuid.UUID] = {}
-        for stage_name, ref_key in (
-            ("group", "grouping_run_id"), ("extract", "extraction_run_id"),
-            ("select", "selection_run_id"), ("characterise", "characterisation_run_id"),
-        ):
-            if stage_name in self._run_ids:
-                synth_ref = {ref_key: self._run_ids[stage_name]}
-                break
-        if not synth_ref:
-            # zero substrate is a guaranteed structural refusal — say so instead
-            self.bus.emit("narration", {
-                "text": "There isn't enough mapped evidence to write from — the "
-                "landscape step failed twice, so no evidence base was produced "
-                "this run. Everything found and screened is saved; running the "
-                "analysis again will pick it up.",
-            })
-            return
-        self._stage(engine, "synthesise", narrate=True, **synth_ref)
-
-    _run_ids: dict[str, uuid.UUID]
-
-    def _stage(
-        self,
-        engine: Any,
-        component: str,
-        narrate: bool = False,
-        **plan_refs: uuid.UUID,
-    ) -> dict[str, Any]:
-        if not hasattr(self, "_run_ids"):
-            self._run_ids = {}
-        label, blurb = STAGES[component]
-        _set_stage(component)
-        self.bus.emit("stage.started", {"stage": component, "stage_label": label,
-                                        "stage_blurb": blurb})
-        started = time.monotonic()
-        with engine.begin() as conn:
-            run_id, payload, failure = self._execute(conn, component, **plan_refs)
-        if failure is not None:
-            # honest, visible, non-fatal: the chain continues on the deepest
-            # successful reference; the failed stage never enters _run_ids
-            self.bus.emit("stage.failed", {"stage": component, "stage_label": label,
-                                           "reason": failure})
-            self.bus.emit("narration", {
-                "text": f"{label} hit a limit and stopped: {failure}. Recorded — "
-                "carrying on with what the analysis has.",
-            })
-            return {}
-        self._run_ids[component] = run_id
-        summary = _summarise(payload)
-        summary["seconds"] = round(time.monotonic() - started, 1)
-        self.bus.emit("stage.completed", {"stage": component, "stage_label": label,
-                                          "summary": summary})
-        if narrate:
-            self._narrate(label, summary)
-        return summary
-
-    def _execute(
-        self, conn: Connection, component: str, **plan_refs: uuid.UUID
-    ) -> tuple[uuid.UUID, dict[str, Any] | None]:
-        """One run: run row + plan.compiled + harness execution (skeleton recipe)."""
-        run_id = uuid.uuid4()
-        conn.execute(runs.insert().values(
-            run_id=run_id, project_id=self.project_id, status="running",
-            started_at=datetime.now(UTC),
-        ))
-        events.append(conn, project_id=self.project_id, run_id=run_id,
-                      event_type="run.started", payload={})
-        config = compile_plan(Plan(
-            component=component,
-            evidence_scope_id=self.scope_id,
-            search_backend_scope=self.plan.get("evidence_sources", "both"),
-            **plan_refs,
-        ))
-        events.append(conn, project_id=self.project_id, run_id=run_id,
-                      event_type="plan.compiled",
-                      payload={"component": component,
-                               "evidence_scope_id": str(self.scope_id),
-                               **{k: str(v) for k, v in plan_refs.items()}})
-        with tracing.component_span(
-            self._langfuse, run_id=run_id, project_id=self.project_id, component=component
-        ):
-            run_harness(
-                conn, config=config, project_id=self.project_id, run_id=run_id,
-                provider=StubEchoProvider(),
-                document_fetcher=getattr(self, "_fetcher", None),
-                **self._backends,
-            )
-        log_entries = events.read(conn, self.project_id)
-        payload = next(
-            (e["payload"] for e in reversed(log_entries)
-             if e["event_type"] == "component.completed"
-             and e["payload"].get("component") == component and e["run_id"] == run_id),
-            None,
-        )
-        failure: str | None = None
-        if payload is None:
-            failure_payload = next(
-                (e["payload"] for e in reversed(log_entries)
-                 if e["event_type"] == "component.failed"
-                 and e["payload"].get("component") == component and e["run_id"] == run_id),
-                None,
-            )
-            if failure_payload is not None:
-                failure = str(failure_payload.get("error", "unknown"))
-        return run_id, payload, failure
-
-    def _deep_episode(self, engine: Any) -> None:
-        """The acquire↔screen deep rounds, one transaction (loop state spans rounds)."""
-        label = "Searching deeper"
-        self.bus.emit("stage.started", {"stage": "deep_search", "stage_label": label,
-                                        "stage_blurb": "Reformulating from what the first "
-                                        "pass taught; following citation trails"})
-        with engine.begin() as conn:
-            context = dict(conn.execute(
-                select(evidence_scope.c.context)
-                .where(evidence_scope.c.evidence_scope_id == self.scope_id)
-            ).scalar_one())
-            context["search"] = {**context.get("search", {}), "depth": "deep"}
-            conn.execute(evidence_scope.update()
-                         .where(evidence_scope.c.evidence_scope_id == self.scope_id)
-                         .values(context=context))
-
-            def acquire_round() -> dict[str, Any]:
-                _set_stage("acquire")
-                run_id, payload, _failure = self._execute(conn, "acquire")
-                self._run_ids["acquire"] = run_id
-                return payload or {}
-
-            def screen_round() -> dict[str, Any]:
-                _set_stage("screen")
-                run_id, payload, _failure = self._execute(conn, "screen")
-                self._run_ids["screen"] = run_id
-                return payload or {}
-
-            deep_summary = search_loop.run_deep_rounds(
-                conn, project_id=self.project_id, scope_id=self.scope_id,
-                acquire_round=acquire_round, screen_round=screen_round, start_round=2,
-            )
-        _set_stage(None)
-        self.bus.emit("stage.completed", {
-            "stage": "deep_search", "stage_label": label,
-            "summary": {
-                "rounds": len(deep_summary["rounds"]),
-                "stop_condition": deep_summary["stop_condition"],
-                "confident_relevant": deep_summary["confident_relevant"],
-                "seconds": round(deep_summary["wall_clock_s"], 1),
-            },
-        })
-        self._narrate(label, _summarise({
-            "confident_relevant": deep_summary["confident_relevant"],
-            "rounds": deep_summary["rounds"],
-            "stop_condition": deep_summary["stop_condition"],
-        }))
-
-    def _prefetch(self, engine: Any) -> None:
-        """Warm the fetch cache in parallel before the serial ingest walk."""
-        self._fetcher = DemoLiveFetcher()
-        with engine.connect() as conn:
-            rows = conn.execute(
-                select(source_snapshot.c.metadata)
-                .select_from(project_source_snapshot.join(
-                    source_snapshot,
-                    project_source_snapshot.c.source_snapshot_id
-                    == source_snapshot.c.source_snapshot_id,
-                ))
-                .where(project_source_snapshot.c.project_id == self.project_id,
-                       project_source_snapshot.c.origin == "acquired",
-                       project_source_snapshot.c.full_text_status == "not_attempted")
-            ).fetchall()
-        # first two candidates per doc cover the cascade's common path; misses
-        # fall back to inline fetch during ingest
-        urls = [u for row in rows for u in candidate_urls(row.metadata)[:2]]
-        _set_stage("ingest_full_text")
-
-        def on_progress(done: int, ok: int, failed: int, total: int) -> None:
-            if done % 5 == 0 or done == total:
-                self.bus.emit("stage.progress", {"stage": "ingest_full_text",
-                                                 "kind": "fetch", "ok": ok,
-                                                 "failed": failed, "total": total})
-
-        self._fetcher.prefetch(urls, on_progress=on_progress)
-
-    def _narrate(self, label: str, summary: dict[str, Any]) -> None:
+    def narrate(self, label: str, summary: dict[str, Any]) -> None:
         try:
-            text = orchestrator.narrate(label, self.plan["question"], summary)
+            text = orchestrator.narrate(label, self.plan.question, summary)
             self.bus.emit("narration", {"text": text})
         except Exception:  # noqa: BLE001 — narration is garnish, never fatal
             log.exception("demo.narration_failed")
 
-    def _checkin(
-        self, kind: str, question: str, summary: dict[str, Any], options: list[str]
-    ) -> None:
+    def pause(self, point: dict[str, Any], render: str) -> SteeringResponse:
+        """One steering pause: real options out, real SteeringResponse back."""
         checkin_id = str(uuid.uuid4())
+        kind = str(point.get("kind", "check_in"))
         try:
-            text = orchestrator.checkin(kind, question, summary)
-        except Exception:  # noqa: BLE001
-            text = "Pausing to check in — happy for me to continue?"
+            text = orchestrator.checkin_prose(self.plan.question, render, kind)
+        except Exception:  # noqa: BLE001 — prose is garnish; the render is the content
+            text = render
+        options = [{"id": "continue", "label": "Continue",
+                    "description": "Carry on as planned.", "requires_user_input": False}]
+        for option in point.get("options") or []:
+            if option["id"] == "as_proposed":
+                continue  # semantically identical to the leading Continue
+            options.append({k: option[k] for k in
+                            ("id", "label", "description", "requires_user_input")})
+        options.append({"id": "abort", "label": "Stop the analysis",
+                        "description": "End the run cleanly; everything done so far is kept.",
+                        "requires_user_input": False})
         self._checkin_event.clear()
-        self.bus.emit("checkin", {"checkin_id": checkin_id, "text": text,
-                                  "options": options})
-        # ponytail: 30-min wait then continue-as-planned, so an unattended run
-        # never hangs forever
-        self._checkin_event.wait(timeout=1800)
-        reply = self._checkin_replies.get(checkin_id, options[0])
-        self.bus.emit("narration", {"text": f"Noted — {reply.lower()}. Carrying on."})
+        self.paused = True
+        self.bus.emit("checkin", {"checkin_id": checkin_id, "kind": kind,
+                                  "text": text, "render": render, "options": options,
+                                  "triggers": point.get("triggers") or []})
+        try:
+            self._checkin_event.wait(timeout=self.CHECKIN_TIMEOUT_S)
+        finally:
+            self.paused = False
+        answer = self._checkin_replies.pop(checkin_id, None)
+        if answer is None:
+            self.bus.emit("narration", {"text": "No answer in time — carrying on as planned."})
+            return Continue()
+        return self._map_reply(point, answer["reply"], answer["params"])
+
+    def _map_reply(
+        self, point: dict[str, Any], reply: str, params: dict[str, Any]
+    ) -> SteeringResponse:
+        if reply == "abort":
+            self.bus.emit("narration", {"text": "Stopping the analysis — everything "
+                                        "done so far is kept."})
+            return Abort()
+        by_id = {o["id"]: o for o in point.get("options") or []}
+        option = by_id.get(reply)
+        if reply == "continue" or option is None or option["id"] == "as_proposed":
+            self.bus.emit("narration", {"text": "Noted — carrying on."})
+            return Continue()
+        delta: dict[str, Any] = option.get("delta") or {}
+        if option["id"] == "adjust_budget":
+            budget = params.get("budget")
+            if not isinstance(budget, int) or budget < 1:
+                self.bus.emit("narration", {"text": "That budget didn't parse — "
+                                            "carrying on unchanged."})
+                return Continue()
+            delta = {"selection": {"budget": budget}}
+        elif option["id"] == "deepen_clusters":
+            delta = {"selection": {
+                "priority_strata": [s for s in params.get("strata", []) if s],
+                "must_include_ids": [d for d in params.get("docs", []) if d],
+            }}
+        self.bus.emit("narration", {"text": f"Noted — {option['label'].lower()}. "
+                                    "Re-running the shortlist."})
+        return Adjust(directive_deltas={"select": delta})
 
 
 def _set_stage(stage: str | None) -> None:

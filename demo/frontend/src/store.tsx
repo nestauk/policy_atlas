@@ -8,16 +8,25 @@ import {
 } from 'react'
 import { api } from './api'
 import type {
-  Coverage, DemoEvent, Funnel, Groups, Landscape, Plan, ProgressData,
+  CheckinOption, CheckinParams, CheckinTrigger, Coverage, DemoEvent, Funnel, Groups,
+  Landscape, Plan, ProgressData,
 } from './api'
 
-export type Phase = 'planning' | 'analysing' | 'complete' | 'failed'
+export type Phase = 'planning' | 'analysing' | 'complete' | 'failed' | 'aborted'
 
 export interface ThreadMsg {
   id: number
   role: 'user' | 'assistant'
   text: string
-  checkin?: { checkin_id: string; options: string[]; resolved: boolean; reply?: string }
+  checkin?: {
+    checkin_id: string
+    kind: 'steer_point' | 'check_in'
+    render: string
+    options: CheckinOption[]
+    triggers: CheckinTrigger[]
+    resolved: boolean
+    reply?: string
+  }
 }
 
 export interface StageInfo {
@@ -27,6 +36,7 @@ export interface StageInfo {
   status: 'active' | 'done' | 'failed'
   summary?: Record<string, number>
   reason?: string
+  skipped?: boolean
 }
 
 export interface ActivityLine {
@@ -50,12 +60,16 @@ interface State {
   groups: Groups | null
   coverage: Coverage | null
   failure: string | null
+  completionStatus: 'succeeded' | 'degraded' | null
+  collation: string | null
+  suggestions: string[]
 }
 
 const initial: State = {
   phase: 'planning', plan: null, thread: [], thinking: false,
   stages: {}, stageOrder: [], activity: [], search: {}, paused: false,
   funnel: null, landscape: null, groups: null, coverage: null, failure: null,
+  completionStatus: null, collation: null, suggestions: [],
 }
 
 let seq = 1
@@ -73,7 +87,6 @@ function progressLine(d: ProgressData): string | null {
   if (d.kind === 'search_query' && d.query) return `→ ${title(d.backend)}: “${d.query}”`
   if (d.kind === 'results' && d.count != null) return `← ${title(d.backend)}: ${d.count} results`
   if (d.kind === 'round') return `Search round ${d.round ?? 2}: ${d.new_relevant ?? '?'} newly relevant (${d.total_relevant ?? '?'} total)`
-  if (d.kind === 'fetch') return `Fetched ${d.ok ?? 0} of ${d.total ?? '?'} documents — ${d.failed ?? 0} unavailable`
   if (d.note) return String(d.note)
   return null
 }
@@ -91,7 +104,10 @@ function reduce(state: State, action: Action): State {
       // state, keep fetched read-models (they refetch on the next completion)
       return { ...state, thread: [], stages: {}, stageOrder: [], activity: [], search: {}, paused: false }
     case 'user.sent':
-      return { ...state, thinking: true, thread: [...state.thread, { id: nid(), role: 'user', text: action.text }] }
+      return {
+        ...state, thinking: true, suggestions: [],
+        thread: [...state.thread, { id: nid(), role: 'user', text: action.text }],
+      }
     case 'thinking':
       return { ...state, thinking: action.on }
     case 'checkin.answered':
@@ -123,20 +139,32 @@ function onEvent(state: State, ev: DemoEvent): State {
       return {
         ...state, thinking: false,
         thread: [...state.thread, { id: nid(), role: 'assistant', text: ev.data.text }],
+        suggestions: ev.data.suggestions ?? state.suggestions,
       }
     case 'analysis.started':
-      return { ...state, phase: 'analysing' }
+      return { ...state, phase: 'analysing', suggestions: [] }
     case 'analysis.completed':
-      return { ...state, phase: 'complete', paused: false }
+      return {
+        ...state, phase: 'complete', paused: false,
+        completionStatus: ev.data.status, collation: ev.data.collation,
+      }
     case 'analysis.failed':
-      return { ...state, phase: 'failed', paused: false, failure: ev.data.message }
+      return {
+        ...state, phase: 'failed', paused: false, failure: ev.data.message,
+        collation: ev.data.collation ?? state.collation,
+      }
+    case 'analysis.aborted':
+      return { ...state, phase: 'aborted', paused: false, collation: ev.data.collation }
     case 'checkin': {
       if (state.thread.some((m) => m.checkin?.checkin_id === ev.data.checkin_id)) return state
       return {
         ...state, paused: true,
         thread: [...state.thread, {
           id: nid(), role: 'assistant', text: ev.data.text,
-          checkin: { checkin_id: ev.data.checkin_id, options: ev.data.options, resolved: false },
+          checkin: {
+            checkin_id: ev.data.checkin_id, kind: ev.data.kind, render: ev.data.render,
+            options: ev.data.options, triggers: ev.data.triggers, resolved: false,
+          },
         }],
       }
     }
@@ -167,13 +195,14 @@ function onEvent(state: State, ev: DemoEvent): State {
       }
     }
     case 'stage.failed': {
-      const { stage, stage_label, reason } = ev.data
+      const { stage, stage_label, reason, skipped } = ev.data
+      // non-fatal: mark this timeline row failed, the run continues off other predecessors
       return {
         ...state,
         stageOrder: state.stages[stage] ? state.stageOrder : [...state.stageOrder, stage],
         stages: {
           ...state.stages,
-          [stage]: { stage, label: stage_label, blurb: state.stages[stage]?.blurb ?? '', status: 'failed', reason },
+          [stage]: { stage, label: stage_label, blurb: state.stages[stage]?.blurb ?? '', status: 'failed', reason, skipped },
         },
       }
     }
@@ -207,7 +236,7 @@ interface Store {
   state: State
   sendChat(text: string): Promise<void>
   startAnalysis(): Promise<void>
-  answerCheckin(checkinId: string, reply: string): Promise<void>
+  answerCheckin(checkinId: string, reply: string, params?: CheckinParams): Promise<void>
 }
 
 const Ctx = createContext<Store | null>(null)
@@ -263,8 +292,8 @@ export function ProjectProvider({ projectId, children }: { projectId: string; ch
   const sendChat = useCallback(async (text: string) => {
     dispatch({ type: 'user.sent', text })
     try {
-      const { reply, plan } = await api.chat(idRef.current, text)
-      dispatch({ type: 'sse', event: { type: 'narration', data: { text: reply } } })
+      const { reply, plan, suggestions } = await api.chat(idRef.current, text)
+      dispatch({ type: 'sse', event: { type: 'narration', data: { text: reply, suggestions } } })
       dispatch({ type: 'data', key: 'plan', value: plan })
     } catch {
       dispatch({ type: 'thinking', on: false })
@@ -279,9 +308,9 @@ export function ProjectProvider({ projectId, children }: { projectId: string; ch
     await api.start(idRef.current)
   }, [])
 
-  const answerCheckin = useCallback(async (checkinId: string, reply: string) => {
+  const answerCheckin = useCallback(async (checkinId: string, reply: string, params?: CheckinParams) => {
     dispatch({ type: 'checkin.answered', checkinId, reply })
-    await api.answerCheckin(idRef.current, checkinId, reply)
+    await api.answerCheckin(idRef.current, checkinId, reply, params)
   }, [])
 
   const store = useMemo(

@@ -26,8 +26,8 @@ export const liveApi: DemoApi = {
   start: async (id) => {
     await post(`/projects/${id}/start`)
   },
-  answerCheckin: async (id, checkinId, reply) => {
-    await post(`/projects/${id}/checkin/${checkinId}`, { reply })
+  answerCheckin: async (id, checkinId, reply, params) => {
+    await post(`/projects/${id}/checkin/${checkinId}`, params === undefined ? { reply } : { reply, params })
   },
   openEvents: (id, onEvent, onReset) => {
     let source: EventSource | null = null

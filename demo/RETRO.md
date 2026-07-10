@@ -1,5 +1,15 @@
 # Demo build retro — carry-back for the real front-end / web-app slice
 
+> **2026-07-10 addendum (post-016/017 rewire):** this branch has since been rebuilt on
+> the merged real backend — the hand-rolled planner/driver/fetcher this retro describes
+> are gone (`demo/server` now wraps `planner`, `orchestration_plan.compose`,
+> `runner.run_plan`, `steering`, `fetch_live`), check-ins use the real steering
+> vocabulary and are functional, and the plan shape is the real `OrchestrationPlan`.
+> §§1–3's descriptions of the demo's own orchestration are therefore historical;
+> the product decisions (§2), contract-discipline lessons (§3) and live-run numbers
+> (§4) still stand. Narration + check-in prose + the model/cap monkeypatches were
+> kept as demo-only glue by explicit owner decision.
+
 **Audience:** the implementation agent of the future web-app / front-end task-cycle slice
 (and the 016 live-fetch, eval, and orchestrator slices, each of which gets a section).
 **Status of this branch (`demo-live-run`):** throwaway, never merges; everything here is

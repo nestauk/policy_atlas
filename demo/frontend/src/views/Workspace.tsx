@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import type { CheckinParams } from '../api'
 import { useProject, type StageInfo, type ThreadMsg } from '../store'
 import { CountUp, Dot, formatElapsed, HBar, PaneH, Spinner, Tip } from '../ui'
 import Charts from './Charts'
@@ -19,6 +20,7 @@ export default function Workspace() {
     >
       <section className="flex min-w-0 flex-col border-r hairline bg-white">
         <Thread />
+        <SuggestionChips />
         <Composer />
       </section>
       <section className="min-w-0 bg-ground">{planning ? <PlanPane /> : <Journey />}</section>
@@ -29,7 +31,7 @@ export default function Workspace() {
 /* ---------------- thread ---------------- */
 
 function Thread() {
-  const { state, answerCheckin } = useProject()
+  const { state } = useProject()
   const endRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
@@ -41,7 +43,7 @@ function Thread() {
         <p className="max-w-[52ch] text-[14px] text-navy">What are you trying to do?</p>
       )}
       {state.thread.map((m) => (
-        <Message key={m.id} msg={m} onAnswer={answerCheckin} />
+        <Message key={m.id} msg={m} />
       ))}
       {state.thinking && (
         <div className="flex items-center gap-2 text-[13px] text-grey">
@@ -53,7 +55,16 @@ function Thread() {
   )
 }
 
-function Message({ msg, onAnswer }: { msg: ThreadMsg; onAnswer: (id: string, reply: string) => void }) {
+const TRIGGER_COPY: Record<string, string> = {
+  excluded_large_stratum: 'A large group of sources was left out of the shortlist',
+  excluded_user_nominated: "Something you named didn't make the shortlist",
+  thin_base: 'The shortlist base is thin',
+}
+const triggerCopy = (trigger: string) => TRIGGER_COPY[trigger] ?? trigger.replace(/_/g, ' ')
+
+const splitCsv = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean)
+
+function Message({ msg }: { msg: ThreadMsg }) {
   if (msg.role === 'user') {
     return (
       <div className="anim-rise flex justify-end">
@@ -63,37 +74,113 @@ function Message({ msg, onAnswer }: { msg: ThreadMsg; onAnswer: (id: string, rep
       </div>
     )
   }
-  if (msg.checkin) {
-    const c = msg.checkin
-    return (
-      <div className="anim-glow border-l-[3px] border-orange bg-yellow-tint p-5">
-        <PaneH className="mb-2">Check-in</PaneH>
-        <p className="max-w-[52ch] text-[13.5px] leading-relaxed text-navy">{msg.text}</p>
-        {c.resolved ? (
-          <div className="mt-3 flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-green-text">
-            <Dot tone="done" /> Answered{c.reply ? ` — ${c.reply}` : ''}
-          </div>
-        ) : (
-          <div className="mt-4 flex flex-col items-start gap-2.5">
-            {c.options[0] && (
-              <button className="btn" onClick={() => onAnswer(c.checkin_id, c.options[0])}>
-                {c.options[0]}
-              </button>
-            )}
-            {c.options[1] && (
-              <button className="btn btn--sec" onClick={() => onAnswer(c.checkin_id, c.options[1])}>
-                {c.options[1]}
-              </button>
-            )}
-            <button className="btn btn--ghost" onClick={() => onAnswer(c.checkin_id, 'Skip')}>
-              Skip — note it and carry on
-            </button>
-          </div>
-        )}
-      </div>
-    )
-  }
+  if (msg.checkin) return <CheckinBlock msg={msg} />
   return <p className="anim-rise max-w-[52ch] whitespace-pre-line text-[14px] leading-relaxed text-navy">{msg.text}</p>
+}
+
+function CheckinBlock({ msg }: { msg: ThreadMsg }) {
+  const { answerCheckin } = useProject()
+  const c = msg.checkin!
+  const [openInput, setOpenInput] = useState<string | null>(null)
+  const [budget, setBudget] = useState('')
+  const [strata, setStrata] = useState('')
+  const [docs, setDocs] = useState('')
+
+  const submit = (optionId: string, params?: CheckinParams) => {
+    setOpenInput(null)
+    void answerCheckin(c.checkin_id, optionId, params)
+  }
+
+  const answeredLabel = c.reply ? (c.options.find((o) => o.id === c.reply)?.label ?? c.reply) : ''
+
+  return (
+    <div className="anim-glow border-l-[3px] border-orange bg-yellow-tint p-5">
+      <PaneH className="mb-2">Check-in</PaneH>
+      <p className="max-w-[52ch] text-[13.5px] leading-relaxed text-navy">{msg.text}</p>
+      {!c.resolved && c.triggers.length > 0 && (
+        <div className="mt-2 space-y-1">
+          {c.triggers.map((t, i) => (
+            <p key={i} className="text-[12px] text-orange-text">⚠ {triggerCopy(t.trigger)}</p>
+          ))}
+        </div>
+      )}
+      {c.resolved ? (
+        <div className="mt-3 flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-green-text">
+          <Dot tone="done" /> Answered{answeredLabel ? ` — ${answeredLabel}` : ''}
+        </div>
+      ) : (
+        <div className="mt-4 flex flex-col items-start gap-3">
+          {c.options.map((opt) => (
+            <div key={opt.id} className="w-full max-w-[52ch]">
+              <button
+                className={opt.id === 'abort' ? 'btn btn--ghost' : opt.id === 'continue' ? 'btn' : 'btn btn--sec'}
+                title={opt.description}
+                onClick={() => (opt.requires_user_input ? setOpenInput(openInput === opt.id ? null : opt.id) : submit(opt.id))}
+              >
+                {opt.label}
+              </button>
+              {opt.description && <p className="mt-1 text-[11.5px] text-grey">{opt.description}</p>}
+              {opt.requires_user_input && openInput === opt.id && opt.id === 'adjust_budget' && (
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    type="number"
+                    className="h-8 w-28 border hairline px-2 text-[13px] text-navy outline-none focus:border-blue"
+                    placeholder="Budget"
+                    value={budget}
+                    onChange={(e) => setBudget(e.target.value)}
+                  />
+                  <button
+                    className="btn btn--sec !py-1 !text-[12px]"
+                    disabled={!budget}
+                    onClick={() => submit(opt.id, { budget: Number(budget) })}
+                  >
+                    Confirm
+                  </button>
+                </div>
+              )}
+              {opt.requires_user_input && openInput === opt.id && opt.id === 'deepen_clusters' && (
+                <div className="mt-2 flex flex-col gap-2">
+                  <input
+                    className="h-8 border hairline px-2 text-[13px] text-navy outline-none focus:border-blue"
+                    placeholder="Cluster ids, comma-separated"
+                    value={strata}
+                    onChange={(e) => setStrata(e.target.value)}
+                  />
+                  <input
+                    className="h-8 border hairline px-2 text-[13px] text-navy outline-none focus:border-blue"
+                    placeholder="Document ids, comma-separated"
+                    value={docs}
+                    onChange={(e) => setDocs(e.target.value)}
+                  />
+                  <button
+                    className="btn btn--sec self-start !py-1 !text-[12px]"
+                    disabled={!strata && !docs}
+                    onClick={() => submit(opt.id, { strata: splitCsv(strata), docs: splitCsv(docs) })}
+                  >
+                    Confirm
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SuggestionChips() {
+  const { state, sendChat } = useProject()
+  if (state.phase === 'analysing' || state.suggestions.length === 0) return null
+  return (
+    <div className="flex flex-wrap gap-2 border-t hairline bg-white px-8 pt-4">
+      {state.suggestions.map((s) => (
+        <button key={s} className="chip chip--soft" onClick={() => void sendChat(s)}>
+          {s}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 function Composer() {
@@ -124,15 +211,42 @@ function Composer() {
 
 /* ---------------- plan pane (planning phase) ---------------- */
 
-const SOURCES_LABEL = {
+const SOURCES_LABEL: Record<string, string> = {
   academic_only: 'Academic research (OpenAlex)',
   grey_lit_only: 'Policy literature (Overton)',
   both: 'Academic + policy (OpenAlex, Overton)',
 }
-const CHECKIN_LABEL = {
-  minimal: "Only if it can't proceed",
-  moderate: 'When something needs your judgement',
+const SEARCH_EFFORT_LABEL: Record<string, string> = {
+  rapid: 'Rapid — top sources, fast pass',
+  standard: 'Standard — a balanced sweep',
+  deep: 'Deep — systematic-style sweep',
+}
+const ANALYSIS_DEPTH_LABEL: Record<string, string> = {
+  landscape: 'Landscape — mapping the terrain',
+  standard: 'Standard — full write-up, every claim cited',
+  deep: 'Deep — the closest reading',
+}
+const STEERING_MODE_LABEL: Record<string, string> = {
   frequent: 'At every step',
+  moderate: 'When something needs your judgement',
+  minimal: "Only if it can't proceed",
+  unattended: 'Unattended (no pauses)',
+}
+
+const label = (map: Record<string, string>, key?: string | null): string => (key ? map[key] ?? key : '')
+
+function yearOf(iso: string): string {
+  const m = /^(\d{4})/.exec(iso)
+  return m ? m[1] : iso
+}
+
+function scopeChips(sc?: { published_after?: string | null; published_before?: string | null; publisher_country?: string | null } | null): string[] {
+  if (!sc) return []
+  const chips: string[] = []
+  if (sc.published_after) chips.push(`Published after ${yearOf(sc.published_after)}`)
+  if (sc.published_before) chips.push(`Published before ${yearOf(sc.published_before)}`)
+  if (sc.publisher_country) chips.push(`Publisher country: ${sc.publisher_country}`)
+  return chips
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -163,14 +277,21 @@ function PlanPane() {
     )
   }
 
+  const scopingNotes = plan.scoping_notes ?? []
+  const screeningCriteria = plan.screening_criteria ?? []
+  const constraints = scopeChips(plan.scope_constraints)
+
   return (
     <div className="thin-scroll h-full space-y-5 overflow-y-auto px-7 py-6">
       <div>
         <div className="flex items-center justify-between">
           <PaneH>Plan</PaneH>
-          <span className={`chip ${plan.ready ? 'chip--green' : 'chip--soft'}`}>
-            {plan.ready ? 'ready' : 'forming…'}
-          </span>
+          <div className="flex items-center gap-2">
+            {plan.time_band && <span className="text-[12px] text-grey">{plan.time_band}</span>}
+            <span className={`chip ${plan.ready ? 'chip--green' : 'chip--soft'}`}>
+              {plan.ready ? 'ready' : 'forming…'}
+            </span>
+          </div>
         </div>
         <p className="mt-1.5 text-[12.5px] text-grey">
           Agreed here before anything runs. The analysis follows it.
@@ -183,34 +304,64 @@ function PlanPane() {
         </p>
       </Field>
 
-      {plan.focus.length > 0 && (
+      {scopingNotes.length > 0 && (
         <Field label="Focus">
           <div className="flex flex-wrap gap-2">
-            {plan.focus.map((f) => (
+            {scopingNotes.map((f) => (
               <span key={f} className="chip chip--soft">{f}</span>
+            ))}
+          </div>
+          {screeningCriteria.length > 0 && (
+            <ul className="mt-2 list-disc space-y-0.5 pl-4 text-[12px] text-grey">
+              {screeningCriteria.map((c) => (
+                <li key={c}>{c}</li>
+              ))}
+            </ul>
+          )}
+        </Field>
+      )}
+
+      {constraints.length > 0 && (
+        <Field label="Constraints">
+          <div className="flex flex-wrap gap-2">
+            {constraints.map((c) => (
+              <span key={c} className="chip chip--soft">{c}</span>
             ))}
           </div>
         </Field>
       )}
 
-      <Field label="Search">
-        <span className="text-sm font-medium text-navy">
-          {plan.search_depth === 'deep' ? 'Deep — systematic-style sweep' : 'Quick — top sources, headline answer'}
-        </span>
-      </Field>
-      <Field label="Sources">
-        <span className="text-sm font-medium text-navy">{SOURCES_LABEL[plan.evidence_sources]}</span>
-      </Field>
-      <Field label="Check-ins">
-        <span className="text-sm font-medium text-navy">{CHECKIN_LABEL[plan.check_in]}</span>
-      </Field>
+      {plan.search_effort && (
+        <Field label="Search effort">
+          <span className="text-sm font-medium text-navy">{label(SEARCH_EFFORT_LABEL, plan.search_effort)}</span>
+        </Field>
+      )}
+      {plan.analysis_depth && (
+        <Field label="Analysis depth">
+          <span className="text-sm font-medium text-navy">{label(ANALYSIS_DEPTH_LABEL, plan.analysis_depth)}</span>
+        </Field>
+      )}
+      {plan.backend_scope && (
+        <Field label="Sources">
+          <span className="text-sm font-medium text-navy">{SOURCES_LABEL[plan.backend_scope]}</span>
+        </Field>
+      )}
+      {plan.steering_mode && (
+        <Field label="Check-ins">
+          <span className="text-sm font-medium text-navy">{label(STEERING_MODE_LABEL, plan.steering_mode)}</span>
+        </Field>
+      )}
 
       {steps.length > 0 && (
         <Field label="Steps">
           <ol className="space-y-2.5">
             {steps.map((s) => (
-              <li key={s.stage} className="flex items-center gap-2.5 text-[13px] text-navy">
-                <span className="h-3 w-3 shrink-0 border hairline" /> {s.label}
+              <li key={s.stage} className="flex items-start gap-2.5 text-[13px] text-navy">
+                <span className="mt-0.5 h-3 w-3 shrink-0 border hairline" />
+                <div>
+                  <div>{s.label}</div>
+                  {s.blurb && <div className="text-[12px] text-grey">{s.blurb}</div>}
+                </div>
               </li>
             ))}
           </ol>
@@ -229,7 +380,9 @@ function PlanPane() {
           >
             {starting ? 'Starting…' : 'Start the analysis'}
           </button>
-          <p className="mt-2 text-center text-[12px] text-grey">You can steer or pause at any check-in.</p>
+          <p className="mt-2 text-center text-[12px] text-grey">
+            {plan.time_band ? `${plan.time_band} · ` : ''}You can steer or pause at any check-in.
+          </p>
         </div>
       )}
     </div>
@@ -243,9 +396,8 @@ function Journey() {
   const { id } = useParams<{ id: string }>()
   const scrollRef = useRef<HTMLDivElement>(null)
   const complete = state.phase === 'complete'
-  const searching = ['acquire', 'screen', 'deep_search'].some(
-    (s) => state.stages[s]?.status === 'active',
-  )
+  const aborted = state.phase === 'aborted'
+  const searching = ['acquire', 'screen'].some((s) => state.stages[s]?.status === 'active')
   const hasLandscape = !!state.landscape && Object.keys(state.landscape.evidence_types).length > 0
   const hasGroups = !!state.groups && state.groups.facets.length > 0
 
@@ -277,8 +429,18 @@ function Journey() {
       </div>
 
       <h2 className="mb-4 font-display text-[20px] font-semibold text-navy">
-        {complete ? 'Analysis complete' : state.phase === 'failed' ? 'Analysis stopped' : 'Analysing the evidence…'}
+        {complete ? 'Analysis complete' : aborted ? 'Analysis stopped' : state.phase === 'failed' ? 'Analysis stopped' : 'Analysing the evidence…'}
       </h2>
+      {complete && state.completionStatus === 'degraded' && (
+        <p className="mb-4 border-l-[3px] border-orange bg-orange-tint p-3 text-[13px] text-navy">
+          Completed with some flagged events — recorded, not hidden. See the details below.
+        </p>
+      )}
+      {aborted && (
+        <p className="mb-4 border-l-[3px] border-orange bg-orange-tint p-3 text-[13px] text-navy">
+          You stopped this run. Everything completed so far is kept below.
+        </p>
+      )}
       {state.phase === 'failed' && state.failure && (
         <p className="mb-4 border-l-[3px] border-orange bg-orange-tint p-3 text-[13px] text-navy">
           {state.failure}
@@ -292,13 +454,19 @@ function Journey() {
           {searching && <SearchCard />}
           {state.phase === 'analysing' && <ActivityCard />}
           <div className="card anim-rise">
-            <PaneH className="mb-3">{complete ? 'How it got there' : 'The plan in motion'}</PaneH>
+            <PaneH className="mb-3">{complete || aborted ? 'How it got there' : 'The plan in motion'}</PaneH>
             <Timeline />
           </div>
           {state.funnel?.found != null && (
             <div className="card anim-rise">
               <PaneH className="mb-3">From sources to evidence</PaneH>
               <Funnel />
+            </div>
+          )}
+          {(complete || aborted) && state.collation && (
+            <div className="card anim-rise">
+              <PaneH className="mb-2">Flagged events</PaneH>
+              <pre className="thin-scroll max-h-40 overflow-auto whitespace-pre-wrap text-[12px] leading-relaxed text-navy">{state.collation}</pre>
             </div>
           )}
         </div>
@@ -364,6 +532,14 @@ function PlanRecap() {
   const [open, setOpen] = useState(false)
   const plan = state.plan
   if (!plan?.question) return null
+  const scopingNotes = plan.scoping_notes ?? []
+  const assumptions = plan.assumptions ?? []
+  const summary = [
+    label(SEARCH_EFFORT_LABEL, plan.search_effort),
+    label(ANALYSIS_DEPTH_LABEL, plan.analysis_depth),
+    plan.backend_scope ? SOURCES_LABEL[plan.backend_scope] : '',
+    plan.steering_mode ? `Check-ins: ${label(STEERING_MODE_LABEL, plan.steering_mode).toLowerCase()}` : '',
+  ].filter(Boolean).join(' · ')
   return (
     <div className="mb-3">
       <button className="chip chip--soft" onClick={() => setOpen(!open)} aria-expanded={open}>
@@ -372,17 +548,24 @@ function PlanRecap() {
       {open && (
         <div className="anim-rise mt-2 space-y-2 border hairline bg-white p-4 text-[13px]">
           <div className="font-semibold text-navy">{plan.question}</div>
-          {plan.focus.length > 0 && (
+          {scopingNotes.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
-              {plan.focus.map((f) => (
+              {scopingNotes.map((f) => (
                 <span key={f} className="chip chip--soft">{f}</span>
               ))}
             </div>
           )}
-          <div className="text-[12.5px] text-grey">
-            {plan.search_depth === 'deep' ? 'Deep — systematic-style sweep' : 'Quick — top sources'} ·{' '}
-            {SOURCES_LABEL[plan.evidence_sources]} · Check-ins: {CHECKIN_LABEL[plan.check_in].toLowerCase()}
-          </div>
+          {summary && <div className="text-[12.5px] text-grey">{summary}</div>}
+          {assumptions.length > 0 && (
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-navy-40">Assumptions</div>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[12px] text-grey">
+                {assumptions.map((a) => (
+                  <li key={a}>{a}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -443,7 +626,11 @@ function Timeline() {
               </Tip>
               {status === 'done' && summary && <span className="ml-1.5 text-grey">— {summary}</span>}
               {status === 'done' && secs != null && <span className="ml-1.5 text-grey">· {formatElapsed(secs)}</span>}
-              {status === 'failed' && <span className="ml-1.5 text-orange-text">stopped — recorded, carrying on</span>}
+              {status === 'failed' && (
+                <span className="ml-1.5 text-orange-text">
+                  {info?.skipped ? 'skipped — a prior step failed' : 'stopped — recorded, carrying on'}
+                </span>
+              )}
               {status === 'active' && info?.blurb && <div className="text-[12px] text-grey">{info.blurb}</div>}
             </div>
           </li>

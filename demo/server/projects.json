@@ -1,271 +1,149 @@
 [
  {
-  "project_id": "33c39c6d-8493-41da-8f75-99810af02e5b",
-  "name": "Finance ministries",
-  "question": "What is the evidence on how different structures of finance and economic ministries support economic growth?",
+  "project_id": "91d2d684-47ff-4bb3-8d3a-c6f94a7a961d",
+  "name": "Interventions to increase heat pump adoption in UK homes",
+  "question": "What interventions are effective at increasing heat pump adoption in UK homes?",
   "plan": {
-   "check_in": "moderate",
-   "evidence_sources": "both",
-   "focus": [
-    "finance and economic ministry structures",
-    "economic growth objective"
+   "title": "Interventions to increase heat pump adoption in UK homes",
+   "question": "What interventions are effective at increasing heat pump adoption in UK homes?",
+   "scoping_notes": [
+    "Population/setting: UK homes/domestic housing.",
+    "Intervention focus: policies, incentives, advice, financing, regulation, service models or other measures intended to increase heat pump adoption.",
+    "Outcome focus: heat pump adoption, installation, uptake, purchase intention or closely related conversion decisions."
    ],
-   "question": "What is the evidence on how different structures of finance and economic ministries support economic growth?",
-   "ready": false,
-   "search_depth": "deep",
+   "screening_criteria": [
+    "Include UK domestic housing evidence.",
+    "Include interventions targeting heat pump adoption or uptake.",
+    "Include empirical, evaluation, modelling or policy-analysis evidence.",
+    "Include outcomes on adoption, installation, uptake or purchase intention.",
+    "Exclude non-domestic buildings.",
+    "Exclude documents only about heat pump technical performance.",
+    "Exclude documents with no intervention-outcome evidence.",
+    "Exclude opinion pieces without evidence or analysis."
+   ],
+   "backend_scope": "both",
+   "scope_constraints": {
+    "published_after": null,
+    "published_before": null,
+    "publisher_country": null
+   },
+   "search_effort": "standard",
+   "analysis_depth": "standard",
+   "components": [
+    "characterise",
+    "screen_stage2",
+    "select",
+    "extract",
+    "group"
+   ],
+   "component_rationale": {
+    "group": "Included to organise extracted findings by intervention type for a policy-useful synthesis.",
+    "select": "Included because this is an intervention-effectiveness question, so a subset of relevant documents should be selected for structured extraction.",
+    "extract": "Included because intervention-outcome findings can be captured in the schema for effects on heat pump adoption.",
+    "characterise": "Included to map intervention types, evidence coverage, UK relevance and gaps across the corpus.",
+    "screen_stage2": "Included because standard depth supports a full-text precision check before synthesis."
+   },
+   "steering_mode": "moderate",
+   "assumptions": [
+    "The review is about interventions intended to increase domestic heat pump adoption, not technical heat pump performance.",
+    "UK homes includes owner-occupied, private rented and social housing unless later narrowed.",
+    "Adoption includes installation, uptake, purchase intention or conversion from fossil-fuel heating where the source links it to likely uptake.",
+    "No publication date limit is imposed unless you request a recency window.",
+    "Grey-literature publisher geography is not restricted; UK relevance will be assessed from the document text.",
+    "The run may find evaluation evidence, modelling, surveys and policy analyses; only documents with evidence relevant to adoption will be retained."
+   ],
+   "expected_artefact_shape": "facet-organised synthesis over extracted findings",
+   "time_band": "~30-45 min",
    "steps": [
     {
-     "label": "Search academic research and policy literature \u2014 systematic-style sweep",
+     "label": "Searching sources",
+     "blurb": "Queries out to academic and policy databases",
      "stage": "acquire"
     },
     {
-     "label": "Sift for relevance",
+     "label": "Screening for relevance",
+     "blurb": "Every title and abstract, against your question",
      "stage": "screen"
     },
     {
-     "label": "Quality-check what's kept",
+     "label": "Sorting by evidence type",
+     "blurb": "Trial, review, evaluation \u2014 each source labelled",
+     "stage": "classify"
+    },
+    {
+     "label": "Appraising quality",
+     "blurb": "How much weight each source can bear",
      "stage": "appraise"
     },
     {
-     "label": "Read the strongest in full",
+     "label": "Reading in full",
+     "blurb": "Fetching the documents; paywalls noted, not hidden",
      "stage": "ingest_full_text"
     },
     {
-     "label": "Map the landscape",
+     "label": "Screening the full texts",
+     "blurb": "A second relevance pass, now over the documents themselves",
+     "stage": "screen_stage2"
+    },
+    {
+     "label": "Mapping the landscape",
+     "blurb": "What the evidence covers, and where it's thin",
      "stage": "characterise"
     },
     {
-     "label": "Extract and group the findings",
+     "label": "Shortlisting",
+     "blurb": "The strongest, most varied set for close reading",
+     "stage": "select"
+    },
+    {
+     "label": "Extracting findings",
+     "blurb": "Each claim pulled out with its exact quote",
      "stage": "extract"
     },
     {
-     "label": "Write the evidence base \u2014 every claim cited",
+     "label": "Grouping findings",
+     "blurb": "Findings that answer the same question, together",
+     "stage": "group"
+    },
+    {
+     "label": "Writing the evidence base",
+     "blurb": "Cited, checked, ready to challenge",
      "stage": "synthesise"
     }
-   ]
-  },
-  "created_at": "2026-07-09T09:58:22.899090+00:00"
- },
- {
-  "project_id": "47fc6618-531a-46ef-bffb-b188a9e62927",
-  "name": "Untitled project",
-  "question": "",
-  "plan": null,
-  "created_at": "2026-07-09T09:58:56.147090+00:00"
- },
- {
-  "project_id": "eacd7380-fbd7-434c-827b-6fd850d7dfce",
-  "name": "Untitled project",
-  "question": "",
-  "plan": null,
-  "created_at": "2026-07-09T09:59:35.354667+00:00"
- },
- {
-  "project_id": "cd784bb8-b325-4b74-b620-607506704bc0",
-  "name": "Untitled project",
-  "question": "What is the evidence on how the structure and mandates of finance and economic ministries affect economic growth in OECD countries?",
-  "plan": {
-   "check_in": "moderate",
-   "evidence_sources": "both",
-   "focus": [
-    "structures of finance and economic ministries",
-    "promotion of economic growth",
-    "OECD countries",
-    "quick first look",
-    "no extraction stage needed"
    ],
-   "question": "What is the evidence on how the structure and mandates of finance and economic ministries affect economic growth in OECD countries?",
-   "ready": true,
-   "search_depth": "quick",
-   "steps": [
-    {
-     "label": "Search academic research and policy literature \u2014 quick pass, top sources",
-     "stage": "acquire"
-    },
-    {
-     "label": "Sift for relevance",
-     "stage": "screen"
-    },
-    {
-     "label": "Quality-check what's kept",
-     "stage": "appraise"
-    },
-    {
-     "label": "Read the strongest in full",
-     "stage": "ingest_full_text"
-    },
-    {
-     "label": "Map the landscape",
-     "stage": "characterise"
-    },
-    {
-     "label": "Extract and group the findings",
-     "stage": "extract"
-    },
-    {
-     "label": "Write the evidence base \u2014 every claim cited",
-     "stage": "synthesise"
-    }
-   ]
+   "ready": true
   },
-  "created_at": "2026-07-09T10:19:05.815573+00:00"
- },
- {
-  "project_id": "d3a76a1c-cc09-46fa-8900-2f679cd482f0",
-  "name": "Untitled project",
-  "question": "",
-  "plan": null,
-  "created_at": "2026-07-09T10:20:45.236155+00:00"
- },
- {
-  "project_id": "25804f7b-4c23-4dc4-8bba-2a44b58a0b03",
-  "name": "Untitled project",
-  "question": "",
-  "plan": null,
-  "created_at": "2026-07-09T10:48:51.610773+00:00"
- },
- {
-  "project_id": "2b2c85da-457f-4fd3-83b8-1c34174e018f",
-  "name": "Untitled project",
-  "question": "What is the international evidence on how structuring finance and economic ministries \u2014 mandates, authority, coordination, and analytic capacity \u2014 can promote economic growth?",
-  "plan": {
-   "check_in": "moderate",
-   "evidence_sources": "both",
-   "focus": [
-    "finance and economic ministries",
-    "institutional structure linked to economic growth",
-    "international evidence"
-   ],
-   "question": "What is the international evidence on how structuring finance and economic ministries \u2014 mandates, authority, coordination, and analytic capacity \u2014 can promote economic growth?",
-   "ready": true,
-   "search_depth": "deep",
-   "steps": [
-    {
-     "label": "Search academic research and policy literature \u2014 systematic-style sweep",
-     "stage": "acquire"
-    },
-    {
-     "label": "Sift for relevance",
-     "stage": "screen"
-    },
-    {
-     "label": "Quality-check what's kept",
-     "stage": "appraise"
-    },
-    {
-     "label": "Read the strongest in full",
-     "stage": "ingest_full_text"
-    },
-    {
-     "label": "Map the landscape",
-     "stage": "characterise"
-    },
-    {
-     "label": "Extract and group the findings",
-     "stage": "extract"
-    },
-    {
-     "label": "Write the evidence base \u2014 every claim cited",
-     "stage": "synthesise"
-    }
-   ]
-  },
-  "created_at": "2026-07-09T10:49:37.638792+00:00"
- },
- {
-  "project_id": "e8ac8418-c679-4831-b8ce-4aac2052c790",
-  "name": "Untitled project",
-  "question": "What is the evidence from international experience on how national finance and economic ministries can be structured to promote economic growth?",
-  "plan": {
-   "check_in": "moderate",
-   "evidence_sources": "both",
-   "focus": [
-    "finance and economic ministry structures",
-    "aim is promoting economic growth",
-    "international focus"
-   ],
-   "question": "What is the evidence from international experience on how national finance and economic ministries can be structured to promote economic growth?",
-   "ready": true,
-   "search_depth": "deep",
-   "steps": [
-    {
-     "label": "Search academic research and policy literature \u2014 systematic-style sweep",
-     "stage": "acquire"
-    },
-    {
-     "label": "Sift for relevance",
-     "stage": "screen"
-    },
-    {
-     "label": "Quality-check what's kept",
-     "stage": "appraise"
-    },
-    {
-     "label": "Read the strongest in full",
-     "stage": "ingest_full_text"
-    },
-    {
-     "label": "Map the landscape",
-     "stage": "characterise"
-    },
-    {
-     "label": "Extract and group the findings",
-     "stage": "extract"
-    },
-    {
-     "label": "Write the evidence base \u2014 every claim cited",
-     "stage": "synthesise"
-    }
-   ]
-  },
-  "created_at": "2026-07-09T11:14:06.139846+00:00"
+  "approved": null,
+  "created_at": "2026-07-10T11:35:47.863443+00:00"
  },
  {
   "project_id": "01d4d670-b72a-4b10-9cd6-119c1f5bf516",
   "name": "Reducing childhood obesity",
   "question": "What works across all settings to reduce childhood obesity?",
   "plan": {
-   "check_in": "moderate",
-   "evidence_sources": "both",
-   "focus": [
+   "title": null,
+   "question": "What works across all settings to reduce childhood obesity?",
+   "scoping_notes": [
     "all settings",
     "rapid search"
    ],
-   "question": "What works across all settings to reduce childhood obesity?",
-   "ready": true,
-   "search_depth": "quick",
-   "title": "Reducing childhood obesity",
-   "steps": [
-    {
-     "label": "Search academic research and policy literature \u2014 quick pass, top sources",
-     "stage": "acquire"
-    },
-    {
-     "label": "Screen for relevance",
-     "stage": "screen"
-    },
-    {
-     "label": "Quality-check what's kept",
-     "stage": "appraise"
-    },
-    {
-     "label": "Read the strongest in full",
-     "stage": "ingest_full_text"
-    },
-    {
-     "label": "Map the landscape",
-     "stage": "characterise"
-    },
-    {
-     "label": "Extract and group the findings",
-     "stage": "extract"
-    },
-    {
-     "label": "Write the evidence base \u2014 every claim cited",
-     "stage": "synthesise"
-    }
-   ]
+   "screening_criteria": [],
+   "backend_scope": "both",
+   "scope_constraints": {},
+   "search_effort": "rapid",
+   "analysis_depth": "landscape",
+   "components": [
+    "characterise"
+   ],
+   "component_rationale": {},
+   "steering_mode": "moderate",
+   "assumptions": [],
+   "expected_artefact_shape": null,
+   "time_band": null,
+   "steps": [],
+   "ready": false
   },
+  "approved": null,
   "created_at": "2026-07-09T11:59:40.507299+00:00"
  },
  {
@@ -273,40 +151,30 @@
   "name": "Childhood obesity interventions",
   "question": "What works to reduce childhood obesity across intervention types?",
   "plan": {
-   "check_in": "moderate",
-   "evidence_sources": "both",
-   "focus": [
+   "title": null,
+   "question": "What works to reduce childhood obesity across intervention types?",
+   "scoping_notes": [
     "childhood obesity reduction interventions",
     "all intervention types",
     "rapid search"
    ],
-   "question": "What works to reduce childhood obesity across intervention types?",
-   "ready": true,
-   "search_depth": "quick",
-   "title": "Childhood obesity interventions",
-   "steps": [
-    {
-     "label": "Search academic research and policy literature \u2014 quick pass, top sources",
-     "stage": "acquire"
-    },
-    {
-     "label": "Screen for relevance",
-     "stage": "screen"
-    },
-    {
-     "label": "Quality-check what's kept",
-     "stage": "appraise"
-    },
-    {
-     "label": "Map the landscape",
-     "stage": "characterise"
-    },
-    {
-     "label": "Write a headline evidence base \u2014 from titles and abstracts",
-     "stage": "synthesise"
-    }
-   ]
+   "screening_criteria": [],
+   "backend_scope": "both",
+   "scope_constraints": {},
+   "search_effort": "rapid",
+   "analysis_depth": "landscape",
+   "components": [
+    "characterise"
+   ],
+   "component_rationale": {},
+   "steering_mode": "moderate",
+   "assumptions": [],
+   "expected_artefact_shape": null,
+   "time_band": null,
+   "steps": [],
+   "ready": false
   },
+  "approved": null,
   "created_at": "2026-07-09T18:47:57.252748+00:00"
  },
  {
@@ -314,39 +182,64 @@
   "name": "Reducing childhood obesity",
   "question": "What works to reduce childhood obesity across school, family, healthcare, community, and policy settings?",
   "plan": {
-   "check_in": "moderate",
-   "evidence_sources": "both",
-   "focus": [
+   "title": null,
+   "question": "What works to reduce childhood obesity across school, family, healthcare, community, and policy settings?",
+   "scoping_notes": [
     "all intervention settings",
     "fast first look"
    ],
-   "question": "What works to reduce childhood obesity across school, family, healthcare, community, and policy settings?",
-   "ready": true,
-   "search_depth": "quick",
-   "title": "Reducing childhood obesity",
-   "steps": [
-    {
-     "label": "Search academic research and policy literature \u2014 quick pass, top sources",
-     "stage": "acquire"
-    },
-    {
-     "label": "Screen for relevance",
-     "stage": "screen"
-    },
-    {
-     "label": "Quality-check what's kept",
-     "stage": "appraise"
-    },
-    {
-     "label": "Map the landscape",
-     "stage": "characterise"
-    },
-    {
-     "label": "Write a headline evidence base \u2014 from titles and abstracts",
-     "stage": "synthesise"
-    }
-   ]
+   "screening_criteria": [],
+   "backend_scope": "both",
+   "scope_constraints": {},
+   "search_effort": "rapid",
+   "analysis_depth": "landscape",
+   "components": [
+    "characterise"
+   ],
+   "component_rationale": {},
+   "steering_mode": "moderate",
+   "assumptions": [],
+   "expected_artefact_shape": null,
+   "time_band": null,
+   "steps": [],
+   "ready": false
   },
+  "approved": null,
   "created_at": "2026-07-09T19:25:14.301165+00:00"
+ },
+ {
+  "project_id": "e8ac8418-c679-4831-b8ce-4aac2052c790",
+  "name": "Finance ministry structures & growth",
+  "question": "What is the evidence from international experience on how national finance and economic ministries can be structured to promote economic growth?",
+  "plan": {
+   "title": "Finance ministry structures & growth",
+   "question": "What is the evidence from international experience on how national finance and economic ministries can be structured to promote economic growth?",
+   "scoping_notes": [
+    "finance and economic ministry structures",
+    "aim is promoting economic growth",
+    "international focus"
+   ],
+   "screening_criteria": [],
+   "backend_scope": "both",
+   "scope_constraints": {},
+   "search_effort": "deep",
+   "analysis_depth": "deep",
+   "components": [
+    "screen_stage2",
+    "characterise",
+    "select",
+    "extract",
+    "group"
+   ],
+   "component_rationale": {},
+   "steering_mode": "moderate",
+   "assumptions": [],
+   "expected_artefact_shape": null,
+   "time_band": null,
+   "steps": [],
+   "ready": false
+  },
+  "approved": null,
+  "created_at": "2026-07-09T18:00:00+00:00"
  }
 ]

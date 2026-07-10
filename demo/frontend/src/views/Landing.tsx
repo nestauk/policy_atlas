@@ -10,6 +10,7 @@ const STATUS: Record<Project['status'], { tone: 'progress' | 'done' | 'paused' |
   new: { tone: 'idle', label: 'New' },
   planning: { tone: 'idle', label: 'Planning' },
   running: { tone: 'progress', label: 'Analysing' },
+  paused: { tone: 'paused', label: 'Paused — waiting on your input' },
   complete: { tone: 'done', label: 'Complete' },
   failed: { tone: 'paused', label: 'Stopped' },
 }

@@ -1,7 +1,7 @@
 // The demo API contract — mirrors demo/API.md exactly. The mock implements the
 // same interface as the live client, so every UI behaviour is rehearsable.
 
-export type ProjectStatus = 'new' | 'planning' | 'running' | 'complete' | 'failed'
+export type ProjectStatus = 'new' | 'planning' | 'running' | 'paused' | 'complete' | 'failed'
 
 export interface Project {
   project_id: string
@@ -9,21 +9,41 @@ export interface Project {
   question: string | null
   status: ProjectStatus
   created_at: string
+  updated_at: string
   source_count: number
 }
 
 export interface PlanStep {
   label: string
+  blurb: string
   stage: string
 }
 
+export interface ScopeConstraints {
+  published_after?: string | null
+  published_before?: string | null
+  publisher_country?: string | null
+}
+
+export type SearchEffort = 'rapid' | 'standard' | 'deep'
+export type AnalysisDepth = 'landscape' | 'standard' | 'deep'
+export type SteeringMode = 'frequent' | 'moderate' | 'minimal' | 'unattended'
+
 export interface Plan {
-  question: string | null
-  focus: string[]
-  search_depth: 'quick' | 'deep'
-  evidence_sources: 'academic_only' | 'grey_lit_only' | 'both'
-  check_in: 'minimal' | 'moderate' | 'frequent'
-  title?: string
+  title?: string | null
+  question?: string | null
+  scoping_notes?: string[] | null
+  screening_criteria?: string[] | null
+  backend_scope?: 'academic_only' | 'grey_lit_only' | 'both' | null
+  scope_constraints?: ScopeConstraints | null
+  search_effort?: SearchEffort | null
+  analysis_depth?: AnalysisDepth | null
+  components?: string[] | null
+  component_rationale?: Record<string, string> | null
+  steering_mode?: SteeringMode | null
+  assumptions?: string[] | null
+  expected_artefact_shape?: string | null
+  time_band?: string | null
   steps: PlanStep[]
   ready: boolean
 }
@@ -50,6 +70,8 @@ export interface Landscape {
   years: Record<string, number>
   themes: Theme[]
   publication_countries?: Record<string, number>
+  geographies?: Record<string, number>
+  tags?: Record<string, Record<string, number>>
 }
 
 export interface FacetGroup {
@@ -181,23 +203,46 @@ export interface ChunkContext {
 
 // --- SSE events ---
 
+export interface CheckinOption {
+  id: string
+  label: string
+  description: string
+  requires_user_input: boolean
+}
+
+export interface CheckinTrigger {
+  trigger: string
+  detail: Record<string, unknown>
+}
+
 export type DemoEvent =
   | { type: 'plan.updated'; data: { plan: Plan } }
   | { type: 'analysis.started'; data: Record<string, never> }
   | { type: 'stage.started'; data: { stage: string; stage_label: string; stage_blurb: string } }
   | { type: 'stage.progress'; data: ProgressData }
   | { type: 'stage.completed'; data: { stage: string; stage_label: string; summary: Record<string, number> } }
-  | { type: 'stage.failed'; data: { stage: string; stage_label: string; reason: string } }
-  | { type: 'narration'; data: { text: string } }
+  | { type: 'stage.failed'; data: { stage: string; stage_label: string; reason: string; skipped: boolean } }
+  | { type: 'narration'; data: { text: string; suggestions?: string[] } }
   | { type: 'user.message'; data: { text: string } }
-  | { type: 'checkin'; data: { checkin_id: string; text: string; options: string[] } }
+  | {
+      type: 'checkin'
+      data: {
+        checkin_id: string
+        kind: 'steer_point' | 'check_in'
+        text: string
+        render: string
+        options: CheckinOption[]
+        triggers: CheckinTrigger[]
+      }
+    }
   | { type: 'checkin.resolved'; data: { checkin_id: string; reply: string } }
-  | { type: 'analysis.completed'; data: Record<string, never> }
-  | { type: 'analysis.failed'; data: { stage: string | null; message: string } }
+  | { type: 'analysis.completed'; data: { status: 'succeeded' | 'degraded'; collation: string } }
+  | { type: 'analysis.failed'; data: { stage?: string | null; message: string; collation?: string } }
+  | { type: 'analysis.aborted'; data: { collation: string } }
 
 export interface ProgressData {
   stage: string | null
-  kind: 'search_query' | 'results' | 'round' | 'fetch' | 'tick'
+  kind: 'search_query' | 'results' | 'round' | 'tick'
   backend?: string
   query?: string
   count?: number
@@ -208,15 +253,17 @@ export interface ProgressData {
 export const EVENT_TYPES: DemoEvent['type'][] = [
   'plan.updated', 'analysis.started', 'stage.started', 'stage.progress',
   'stage.completed', 'stage.failed', 'narration', 'user.message', 'checkin',
-  'checkin.resolved', 'analysis.completed', 'analysis.failed',
+  'checkin.resolved', 'analysis.completed', 'analysis.failed', 'analysis.aborted',
 ]
+
+export type CheckinParams = { budget?: number } | { strata?: string[]; docs?: string[] }
 
 export interface DemoApi {
   listProjects(): Promise<Project[]>
   createProject(name: string): Promise<{ project_id: string }>
-  chat(projectId: string, message: string): Promise<{ reply: string; plan: Plan }>
+  chat(projectId: string, message: string): Promise<{ reply: string; plan: Plan; suggestions: string[] }>
   start(projectId: string): Promise<void>
-  answerCheckin(projectId: string, checkinId: string, reply: string): Promise<void>
+  answerCheckin(projectId: string, checkinId: string, reply: string, params?: CheckinParams): Promise<void>
   openEvents(projectId: string, onEvent: (e: DemoEvent) => void, onReset: () => void): { close(): void }
   getPlan(projectId: string): Promise<Plan>
   getFunnel(projectId: string): Promise<Funnel>

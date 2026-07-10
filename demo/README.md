@@ -5,6 +5,15 @@ quality-check → read → findings → evidence base) behind a React front-end,
 orchestrator narrating and checking in mid-run. Laissez-faire by agreement: no tests,
 no contract docs; the API contract is `API.md`.
 
+> **Rewired onto the real backend (2026-07-10, post-016/017 merge):** planning is the
+> real 017 planner (`policy_atlas.planner`), execution is the real runner
+> (`runner.run_plan` over `orchestration_plan.compose`, per-component commits,
+> real steering check-ins with functional answers), full-text fetch is 016's
+> `LiveDocumentFetcher`. The demo's own planner/chain-walker/fetcher are gone.
+> Still demo-only glue, kept by explicit decision: LLM narration + check-in prose,
+> the SSE bus + structlog→SSE bridge + `leg_directive` step-start shim, stage labels,
+> and the gpt-5.5-synthesis / facet-cap-400 monkeypatches.
+
 ## Run it
 
 Prereqs: DB container up (`docker compose up -d db`), migrations applied, and in the
@@ -23,7 +32,7 @@ cd demo/frontend && VITE_MOCK=1 npm run dev
 # seed the pre-run fallback project (run the morning of the demo)
 uv run --group demo python -m demo.server.seed \
   "What works to reduce childhood obesity in the UK?" \
-  --name "Childhood obesity — what works" --depth deep
+  --name "Childhood obesity — what works" --band deeper
 ```
 
 ## Demo arc (~12 min)

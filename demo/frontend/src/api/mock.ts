@@ -4,51 +4,88 @@
 
 import type {
   Artefact, Block, ChunkContext, Claim, DemoApi, DemoEvent, DecisionEntry,
-  EvidenceRow, Finding, Funnel, Groups, Landscape, Plan, Project, SourceDossier,
+  EvidenceRow, Finding, Funnel, Groups, Landscape, Plan, PlanStep, Project, SourceDossier,
 } from './types'
 
 const QUESTION = 'What works to reduce childhood obesity in the UK?'
 const TITLE = 'Childhood obesity — what works'
 
 // ---------- plan ----------
+// Real 017 OrchestrationPlan shape — drafted field-by-field as the chat converges.
 
-const STEPS = [
-  { label: 'Search academic research and policy literature — systematic-style sweep', stage: 'acquire' },
-  { label: 'Screen for relevance', stage: 'screen' },
-  { label: "Quality-check what's kept", stage: 'appraise' },
-  { label: 'Read the strongest in full', stage: 'ingest_full_text' },
-  { label: 'Map the landscape', stage: 'characterise' },
-  { label: 'Extract and group the findings', stage: 'extract' },
-  { label: 'Write the evidence base — every claim cited', stage: 'synthesise' },
+const STEPS: PlanStep[] = [
+  { label: 'Searching sources', stage: 'acquire', blurb: 'Queries out to academic and policy databases, deep-search rounds included.' },
+  { label: 'Screening for relevance', stage: 'screen', blurb: 'Every title and abstract, read against your question.' },
+  { label: 'Sorting by evidence type', stage: 'classify', blurb: 'Trial, review, evaluation — each source labelled.' },
+  { label: 'Appraising quality', stage: 'appraise', blurb: 'How much weight each source can bear.' },
+  { label: 'Reading in full', stage: 'ingest_full_text', blurb: 'Fetching the documents; paywalls noted, not hidden.' },
+  { label: 'Screening the full text', stage: 'screen_stage2', blurb: 'A second, closer relevance pass now the full text is in.' },
+  { label: 'Mapping the landscape', stage: 'characterise', blurb: "What the evidence covers, and where it's thin." },
+  { label: 'Shortlisting', stage: 'select', blurb: 'The strongest, most varied set chosen for close reading.' },
+  { label: 'Extracting findings', stage: 'extract', blurb: 'Each claim pulled out with its exact quote.' },
+  { label: 'Grouping findings', stage: 'group', blurb: 'Findings that answer the same question, together.' },
+  { label: 'Writing the evidence base', stage: 'synthesise', blurb: 'Cited, checked, ready to challenge.' },
 ]
 
-const emptyPlan: Plan = {
-  question: null, focus: [], search_depth: 'deep', evidence_sources: 'both',
-  check_in: 'moderate', steps: [], ready: false,
+const emptyPlan: Plan = { steps: [], ready: false }
+
+const draftPlan1: Plan = {
+  title: TITLE,
+  question: QUESTION,
+  steps: [],
+  ready: false,
+}
+
+const draftPlan2: Plan = {
+  title: TITLE,
+  question: QUESTION,
+  scoping_notes: ['UK evidence prioritised', 'All intervention types', 'Schools flagged as a particular interest'],
+  screening_criteria: ['Excludes pharmaceutical interventions'],
+  backend_scope: 'both',
+  scope_constraints: { published_after: '2015-01-01' },
+  steps: [],
+  ready: false,
 }
 
 const readyPlan: Plan = {
-  question: QUESTION,
   title: TITLE,
-  focus: ['UK evidence prioritised', 'All intervention types', 'Schools a particular interest'],
-  search_depth: 'deep', evidence_sources: 'both', check_in: 'moderate',
-  steps: STEPS, ready: true,
+  question: QUESTION,
+  scoping_notes: draftPlan2.scoping_notes,
+  screening_criteria: draftPlan2.screening_criteria,
+  backend_scope: 'both',
+  scope_constraints: { published_after: '2015-01-01' },
+  search_effort: 'deep',
+  analysis_depth: 'deep',
+  components: ['screen_stage2', 'characterise', 'select', 'extract', 'group'],
+  component_rationale: {
+    select: 'Focuses close reading on the strongest, most varied sources within budget.',
+  },
+  steering_mode: 'moderate',
+  assumptions: [
+    'UK evidence is prioritised where both UK and international evidence exist',
+    'Grey literature includes national and local government publications',
+  ],
+  expected_artefact_shape: 'A cited evidence base grouped by intervention type, with a coverage snapshot and flagged gaps.',
+  time_band: '~30-45 min',
+  steps: STEPS,
+  ready: true,
 }
 
-const chatTurns: { reply: string; plan: Plan }[] = [
+const chatTurns: { reply: string; plan: Plan; suggestions?: string[] }[] = [
   {
     reply:
       'I can build that evidence base. One scoping question first — should I look at all intervention types (schools, fiscal measures, food environment, family programmes), or a particular area? And should UK evidence lead, with international brought in where it’s stronger?',
-    plan: { ...emptyPlan, question: QUESTION, title: TITLE, steps: STEPS },
+    plan: draftPlan1,
+    suggestions: ['All intervention types, UK-led', 'Focus on schools only'],
   },
   {
     reply:
-      'Noted — UK evidence leads, all intervention types, schools flagged as your priority. How thorough should I be? Quick: top sources, headline answer, about two minutes. Deep: a systematic-style sweep, about six minutes — you’ll see everything I keep and everything I set aside, with reasons.',
-    plan: { ...readyPlan, ready: false },
+      'Noted — UK evidence leads, all intervention types, schools flagged as your priority. How thorough should I be? Standard gives a full write-up in around fifteen minutes; deep is a systematic-style sweep, closer to forty-five — you’ll see everything I keep and everything I set aside, with reasons.',
+    plan: draftPlan2,
   },
   {
     reply:
-      'Deep it is. The plan is on the right — search, screen, quality-check, read the strongest in full, then write it up with every claim traced to its source. I’ll pause when something needs your judgement. Start when you’re ready.',
+      'Deep it is. The plan is on the right — search, screen, quality-check, read the strongest in full, then write it up with every claim traced to its source. I’ll check in when something needs your judgement. Start when you’re ready.',
     plan: readyPlan,
   },
 ]
@@ -419,7 +456,7 @@ const completed = (stage: string, label: string, summary: Record<string, number>
   ({ type: 'stage.completed', data: { stage, stage_label: label, summary } })
 const say = (text: string): DemoEvent => ({ type: 'narration', data: { text } })
 
-const CHECKIN_ID = 'checkin-early-years'
+const CHECKIN_ID = 'checkin-deepen-selection'
 
 function script(): Step[] {
   return [
@@ -445,24 +482,47 @@ function script(): Step[] {
     { delay: 900, event: p('screen', 'round', { round: 2, new_relevant: 9, total_relevant: 67 }) },
     { delay: 700, event: say('First pass kept 58. I reformulated my queries using what those taught me and followed their citation trails — 9 more, 67 in all. 147 screened out, each with a reason you can inspect.') },
     { delay: 800, event: completed('screen', 'Screening for relevance', { relevant: 67, screened_out: 147, seconds: 41 }), funnel: { relevant: 67, screened_out: 147 } },
-    { delay: 1000, event: { type: 'checkin', data: { checkin_id: CHECKIN_ID, text: 'The base looks strong on fiscal measures and school programmes, thin on early-years interventions — 8 sources so far. I can dig further on early years, which adds a few minutes, or carry on and record it as a gap. Your call.', options: ['Search deeper on early years', 'Carry on — record the gap'] } } },
-    { delay: 0, waitForCheckin: CHECKIN_ID },
-    { delay: 600, event: say('Recorded. Carrying on.') },
     { delay: 600, event: started('classify', 'Sorting by evidence type', 'Trial, review, evaluation — each source labelled') },
     { delay: 2400, event: completed('classify', 'Sorting by evidence type', { classified: 67, seconds: 22 }), funnel: { quality_checked: 67 } },
     { delay: 500, event: started('appraise', 'Appraising quality', 'How much weight each source can bear') },
     { delay: 1600, event: completed('appraise', 'Appraising quality', { appraised: 67, seconds: 9 }) },
     { delay: 500, event: started('ingest_full_text', 'Reading in full', 'Fetching the documents; paywalls noted, not hidden') },
-    { delay: 1500, event: p('ingest_full_text', 'fetch', { ok: 18, failed: 1, total: 44 }) },
-    { delay: 1500, event: p('ingest_full_text', 'fetch', { ok: 35, failed: 2, total: 44 }) },
-    { delay: 1200, event: p('ingest_full_text', 'fetch', { ok: 41, failed: 3, total: 44 }) },
+    { delay: 900, event: p('ingest_full_text', 'tick', { note: 'Read a document in full' }) },
+    { delay: 900, event: p('ingest_full_text', 'tick', { note: 'Read a document in full' }) },
+    { delay: 700, event: p('ingest_full_text', 'tick', { note: "A document couldn't be fetched — recorded" }) },
+    { delay: 900, event: p('ingest_full_text', 'tick', { note: 'Read a document in full' }) },
     { delay: 700, event: say('Full documents in for 41 of the 67 — three paywalled or dead links, each noted in the sources table, not glossed over.') },
     { delay: 600, event: completed('ingest_full_text', 'Reading in full', { ingested: 41, failed: 3, seconds: 75 }), funnel: { read_in_full: 41 } },
+    { delay: 600, event: started('screen_stage2', 'Screening the full text', 'A second, closer relevance pass now the full text is in') },
+    { delay: 1400, event: completed('screen_stage2', 'Screening the full text', { relevant: 67, seconds: 14 }) },
     { delay: 600, event: started('characterise', 'Mapping the landscape', "What the evidence covers, and where it's thin") },
     { delay: 2600, event: completed('characterise', 'Mapping the landscape', { themes: 4, seconds: 27 }) },
     { delay: 600, event: say('The landscape is mapped: strongest around fiscal measures, school programmes well covered, early-years thin as flagged. Now shortlisting for close reading.') },
     { delay: 600, event: started('select', 'Shortlisting', 'The strongest, most varied set for close reading') },
     { delay: 1400, event: completed('select', 'Shortlisting', { selected: 24, seconds: 19 }), funnel: { selected: 24 } },
+    {
+      delay: 1000,
+      event: {
+        type: 'checkin',
+        data: {
+          checkin_id: CHECKIN_ID,
+          kind: 'steer_point',
+          text: 'The shortlist left out a fairly large cluster of sources on food-environment interventions. I can deepen on that cluster, widen toward the strongest evidence or the most relevant matches, adjust the shortlist budget, or continue as planned.',
+          render: 'select: succeeded | wall_clock=36.9s | counts: selected=10',
+          options: [
+            { id: 'continue', label: 'Continue as planned', description: 'Keep the current shortlist and carry on.', requires_user_input: false },
+            { id: 'deepen_clusters', label: 'Deepen specific clusters', description: 'Re-run the shortlist including more from clusters or documents you name.', requires_user_input: true },
+            { id: 'strongest_evidence', label: 'Deepen on the strongest evidence', description: 'Widen the shortlist toward the highest-appraised sources.', requires_user_input: false },
+            { id: 'most_relevant', label: 'Deepen on the most relevant', description: 'Widen the shortlist toward the most relevant matches.', requires_user_input: false },
+            { id: 'adjust_budget', label: 'Adjust the shortlist budget', description: 'Change how many sources go forward for close reading.', requires_user_input: true },
+            { id: 'abort', label: 'Stop here', description: 'End the run now; keep everything completed so far.', requires_user_input: false },
+          ],
+          triggers: [{ trigger: 'excluded_large_stratum', detail: { facet: 'intervention', group: 'food environment', excluded: 14 } }],
+        },
+      },
+    },
+    { delay: 0, waitForCheckin: CHECKIN_ID },
+    { delay: 600, event: say('Recorded. Carrying on with the shortlist as it stands.') },
     { delay: 500, event: started('extract', 'Extracting findings', 'Each claim pulled out with its exact quote') },
     { delay: 1600, event: p('extract', 'tick', { note: 'Reading closely and pulling out findings' }) },
     { delay: 1600, event: p('extract', 'tick', { note: 'Reading closely and pulling out findings' }) },
@@ -473,7 +533,16 @@ function script(): Step[] {
     { delay: 3000, event: p('synthesise', 'tick', { note: 'Drafting the next section' }) },
     { delay: 2600, event: completed('synthesise', 'Writing the evidence base', { section_count: 3, seconds: 39 }), funnel: { cited: 8 } },
     { delay: 700, event: say('Done. 67 sources included, 8 cited in the write-up. The evidence base is ready to read — and to challenge: every claim opens to its source.') },
-    { delay: 400, event: { type: 'analysis.completed', data: {} } },
+    {
+      delay: 400,
+      event: {
+        type: 'analysis.completed',
+        data: {
+          status: 'succeeded',
+          collation: 'Flagged event collation\nfailures: none\nretries: none\nskips: none\nauto-resolutions: none',
+        },
+      },
+    },
   ]
 }
 
@@ -487,14 +556,14 @@ function completeBacklog(): DemoEvent[] {
   ]
   userTurns.forEach((text, i) => {
     events.push({ type: 'user.message', data: { text } })
-    events.push({ type: 'narration', data: { text: chatTurns[i].reply } })
+    events.push({ type: 'narration', data: { text: chatTurns[i].reply, suggestions: chatTurns[i].suggestions } })
   })
   events.push({ type: 'plan.updated', data: { plan: readyPlan } })
   for (const step of script()) {
     if (!step.event) continue
     events.push(step.event)
     if (step.event.type === 'checkin') {
-      events.push({ type: 'checkin.resolved', data: { checkin_id: CHECKIN_ID, reply: 'Carry on — record the gap' } })
+      events.push({ type: 'checkin.resolved', data: { checkin_id: CHECKIN_ID, reply: 'continue' } })
     }
   }
   return events
@@ -520,8 +589,8 @@ const emptyFunnel: Funnel = {
 }
 
 const projects: Project[] = [
-  { project_id: 'demo-complete', name: TITLE, question: QUESTION, status: 'complete', created_at: '2026-07-07T09:12:00Z', source_count: 214 },
-  { project_id: 'demo-new', name: 'A healthy life for all', question: null, status: 'new', created_at: '2026-07-09T08:00:00Z', source_count: 0 },
+  { project_id: 'demo-complete', name: TITLE, question: QUESTION, status: 'complete', created_at: '2026-07-07T09:12:00Z', updated_at: '2026-07-07T10:02:00Z', source_count: 214 },
+  { project_id: 'demo-new', name: 'A healthy life for all', question: null, status: 'new', created_at: '2026-07-09T08:00:00Z', updated_at: '2026-07-09T08:00:00Z', source_count: 0 },
 ]
 
 const states = new Map<string, MockState>()
@@ -532,7 +601,7 @@ function state(id: string): MockState {
     const known = projects.find((x) => x.project_id === id)
     const complete = known?.status === 'complete'
     s = {
-      project: known ?? { project_id: id, name: 'Untitled project', question: null, status: 'new', created_at: new Date().toISOString(), source_count: 0 },
+      project: known ?? { project_id: id, name: 'Untitled project', question: null, status: 'new', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), source_count: 0 },
       plan: complete ? readyPlan : { ...emptyPlan },
       turn: 0,
       funnel: complete ? { ...finalFunnel } : { ...emptyFunnel },
@@ -596,12 +665,13 @@ export const mockApi: DemoApi = {
     const turn = chatTurns[Math.min(s.turn, chatTurns.length - 1)]
     s.turn += 1
     s.plan = turn.plan
-    if (s.plan.title) s.project.name = s.plan.title
-    s.project.question = s.plan.question
+    if (turn.plan.title) s.project.name = turn.plan.title
+    s.project.question = turn.plan.question ?? null
     s.project.status = 'planning'
-    emit(s, { type: 'narration', data: { text: turn.reply } })
+    const suggestions = turn.suggestions ?? []
+    emit(s, { type: 'narration', data: { text: turn.reply, suggestions } })
     emit(s, { type: 'plan.updated', data: { plan: turn.plan } })
-    return { reply: turn.reply, plan: turn.plan }
+    return { reply: turn.reply, plan: turn.plan, suggestions }
   },
   async start(projectId) {
     const s = state(projectId)
@@ -611,7 +681,7 @@ export const mockApi: DemoApi = {
       run(s)
     }
   },
-  async answerCheckin(id, checkinId, reply) {
+  async answerCheckin(id, checkinId, reply, _params) {
     const s = state(id)
     emit(s, { type: 'checkin.resolved', data: { checkin_id: checkinId, reply } })
     const resume = s.resume

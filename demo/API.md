@@ -2,6 +2,14 @@
 
 Backend: FastAPI at `http://localhost:8100`. Frontend dev server proxies `/api` there.
 
+> **Post-016/017 rewire (2026-07-10):** the server now wraps the REAL backend —
+> planning turns are `policy_atlas.planner` (017), execution is
+> `policy_atlas.runner.run_plan` over `orchestration_plan.compose` (017), full-text
+> fetching is `fetch_live.LiveDocumentFetcher` (016). Check-ins are the real steering
+> vocabulary and their answers are functional. Demo-only glue that remains, by
+> explicit decision: LLM narration/check-in prose, the SSE bus + structlog bridge,
+> stage labels, and the gpt-5.5-synthesis/facet-cap monkeypatches.
+
 ## User-visible vocabulary (locked)
 - CTA: **"Start the analysis"** (never "Build"/"Run"). In-progress: **"Analysing the evidence…"**
 - plan → "plan" (approved term) · rerun → "refresh the analysis" · artefact → "evidence base"
@@ -11,19 +19,30 @@ Backend: FastAPI at `http://localhost:8100`. Frontend dev server proxies `/api` 
 ## REST
 
 ### `GET /api/projects`
-`[{project_id, name, question, status: "new"|"planning"|"running"|"complete"|"failed", created_at, source_count, updated_at}]`
+`[{project_id, name, question, status: "new"|"planning"|"running"|"paused"|"complete"|"failed", created_at, source_count, updated_at}]`
+`paused` = a run is blocked on a steering check-in (Landing shows "Paused — waiting on your input").
 
 ### `POST /api/projects` `{name}` → `{project_id}`
 
-### `POST /api/projects/{id}/chat` `{message}` → `{reply, plan}`
-One planning-conversation turn. `plan` is the full current draft (see Plan shape). The
-conversation history lives server-side.
+### `POST /api/projects/{id}/chat` `{message}` → `{reply, plan, suggestions: [string]}`
+One REAL planner turn (017 `planner_v1`, ~20–30 s). `plan` is the full current draft
+(see Plan shape). `suggestions` are the planner's suggested answers to its clarifying
+question (empty when none) — render as tappable quick-reply chips that send as a chat
+message. History lives server-side. When the planner marks the draft ready it is
+validated fail-closed into an `OrchestrationPlan`; a validation failure appends an
+honest explanation to `reply` and `ready` stays false.
 
 ### `POST /api/projects/{id}/start` → `{ok: true}`
-Compiles the plan and starts the analysis in the background. Progress arrives on the SSE stream.
+Writes the approved plan row and starts the real runner in the background
+(400 if the plan hasn't validated ready). Progress arrives on the SSE stream.
 
-### `POST /api/projects/{id}/checkin/{checkin_id}` `{reply}` → `{ok: true}`
-Answer a pending check-in; the analysis resumes.
+### `POST /api/projects/{id}/checkin/{checkin_id}` `{reply, params?}` → `{ok: true}`
+Answer a pending steering pause. `reply` is an option **id** from the `checkin` event.
+For `requires_user_input` options, `params` carries the fill-in:
+- `adjust_budget` → `{budget: <int>}`
+- `deepen_clusters` → `{strata: [<cluster id>...], docs: [<doc id>...]}`
+Answers are FUNCTIONAL: they map to real steering responses (Continue / Adjust —
+which re-runs the shortlist with the new directive — / Abort).
 
 ### Read models (poll after each `stage.completed`, or on view mount)
 - `GET /api/projects/{id}/plan` → Plan shape
@@ -49,34 +68,71 @@ first (so refresh mid-run rebuilds state), then live events follow.
   - `kind:"search_query"` `{backend, query}` — a query going out
   - `kind:"results"` `{backend, count}` — a result batch landing
   - `kind:"round"` `{round, new_relevant, total_relevant}` — deep-loop round summary
-  - `kind:"verdict"` `{relevant, not_relevant, screened_so_far, total}` — screening tick
-  - `kind:"fetch"` `{ok, failed, total}` — full-text fetching tick
   - `kind:"tick"` `{note}` — anything else worth a line in the activity feed
+    (full-text fetch progress arrives as per-document ticks: "Read a document in
+    full" / "A document couldn't be fetched — recorded")
 - `stage.completed` `{stage, stage_label, summary}` — summary is stage-specific counts
-- `narration` `{text}` — orchestrator speaking in the thread (markdown)
-- `checkin` `{checkin_id, text, options: [string]}` — analysis paused awaiting the user
-- `analysis.completed` `{}` · `analysis.failed` `{stage, message}`
+  (from the runner's deterministic check-in payload; `summary.seconds` = wall clock)
+- `stage.failed` `{stage, stage_label, reason, skipped}` — honest, non-fatal; the runner
+  chains the rest of the run off successful predecessors (`skipped:true` = never ran
+  because its prerequisite failed)
+- `narration` `{text, suggestions?}` — orchestrator speaking in the thread (markdown);
+  planning-turn replays carry the turn's suggestion chips
+- `checkin` `{checkin_id, kind: "steer_point"|"check_in", text, render, options, triggers}`
+  — analysis paused awaiting the user. `text` is the LLM-prose wrap (demo glue);
+  `render` is the deterministic steering render (the content of record). `options` is
+  `[{id, label, description, requires_user_input}]` — ALWAYS server-supplied, never
+  invent options client-side. At the deepening-selection steer point the ids are the
+  017 intent vocabulary (`deepen_clusters`, `strongest_evidence`, `most_relevant`,
+  `adjust_budget`) plus `continue` and `abort`; a plain check-in offers
+  `continue`/`abort` only. `triggers` lists fired steer-point triggers
+  `[{trigger, detail}]` (e.g. `excluded_large_stratum`).
+- `analysis.completed` `{status: "succeeded"|"degraded", collation}` — `collation` is the
+  runner's flagged-event render (failures/retries/skips), shown honestly on completion
+- `analysis.failed` `{stage, message, collation?}` · `analysis.aborted` `{collation}`
 
-## Plan shape
+## Plan shape (the real 017 `OrchestrationPlan`, drafted field-by-field)
+
+Every field except `steps`/`ready` may be **null/empty while drafting** — the planner
+fills them as the conversation converges. Never trust an optional field.
+
 ```json
 {
+  "title": "Childhood obesity — what works",
   "question": "What works to reduce childhood obesity in the UK?",
-  "focus": ["UK evidence prioritised", "interventions in schools"],
-  "search_depth": "quick" | "deep",
-  "evidence_sources": "academic_only" | "grey_lit_only" | "both",
-  "check_in": "minimal" | "moderate" | "frequent",
-  "steps": [{"label": "Search academic + policy sources", "stage": "acquire"},
-             {"label": "Screen for relevance", "stage": "screen"}, ...],
+  "scoping_notes": ["UK evidence prioritised", "interventions in schools"],
+  "screening_criteria": ["Excludes pharmaceutical interventions"],
+  "backend_scope": "academic_only" | "grey_lit_only" | "both",
+  "scope_constraints": {"published_after": "2015-01-01", "publisher_country": "GB"},
+  "search_effort": "rapid" | "standard" | "deep",
+  "analysis_depth": "landscape" | "standard" | "deep",
+  "components": ["screen_stage2", "characterise", "select", "extract", "group"],
+  "component_rationale": {"select": "…why this component fits the intent…"},
+  "steering_mode": "frequent" | "moderate" | "minimal" | "unattended",
+  "assumptions": ["…"],
+  "expected_artefact_shape": "…",
+  "time_band": "~30-45 min",
+  "steps": [{"label": "Searching sources", "blurb": "…", "stage": "acquire"}, ...],
   "ready": false
 }
 ```
-`ready:true` once the orchestrator considers the plan complete enough to start.
+
+- The old `search_depth` quick/deep is GONE — depth is the two-axis
+  `search_effort` × `analysis_depth` gradation. `time_band` and
+  `expected_artefact_shape` are derived server-side (measured bands, never invented).
+- `check_in` is GONE — `steering_mode` has FOUR modes including `unattended`
+  (auto-resolves steer points to visible plan defaults; nothing pauses).
+- `steps` is the REAL composed chain (`orchestration_plan.compose`) with demo labels —
+  populated only once `ready:true`; empty while drafting.
+- `ready:true` means the draft validated fail-closed into an executable plan.
 
 ## Stage order (for the journey timeline)
-acquire → screen → (deep rounds may repeat acquire/screen) → classify → appraise →
-ingest_full_text → characterise → select → extract → group → synthesise.
-UI labels come from `stage_label`; the deep loop surfaces as repeated search/screen ticks
-inside one "Searching" stage group, per `stage.progress kind:"round"`.
+Order = `plan.steps` (the composed chain). Full standard/deep chain:
+acquire → screen → classify → appraise → ingest_full_text → screen_stage2 →
+characterise → select → extract → group → synthesise. Landscape depth drops
+screen_stage2/select/extract/group. Deep search rounds run INSIDE acquire/screen
+(surfacing as `stage.progress kind:"round"` ticks); a steering adjustment can re-run
+select (`stage.started` for select may repeat). UI labels come from `stage_label`.
 
 ## Added read models (feature-showcase pass)
 
