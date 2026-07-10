@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **APPROVED rev 2.4 · amended revs 2.5 (ack'd) · 2.6 (micro-clarification) · 2.7–2.8 (plan-gate user calls)** — contract approved (before
+> **Status:** **APPROVED rev 2.4 · amended revs 2.5 (ack'd) · 2.6 (micro-clarification) · 2.7–2.9 (plan-gate user calls)** — contract approved (before
 > planning): **2026-07-10 · Shabeer Rauf** (covering the gated set:
 > runtime egress — the planner LLM surface; one CLI entrypoint; the
 > `orchestration_plan` schema addition; the Unattended steering-mode
@@ -29,6 +29,20 @@ specs in [docs/specs/](../../specs/index.md).
 > the **component config** to keep the three apart.
 >
 > **Revision history:**
+> - **rev 2.9** (2026-07-10, user call at the plan 🛑, round 3 —
+>   confirmed after the latency question was answered from measured
+>   anchors: one-pass ≈ 1 min live (016: acquire 24 s + screen 36 s);
+>   full deep episode ≈ 5.7 min live (015: 343 s)): search-effort
+>   rungs re-cut — **rapid = non-agentic one-pass · standard = the
+>   latency-optimised agentic loop (round cap 2, reformulate +
+>   diversity arms, bounded budget; est. ~2.5–3.5 min) · deep = the
+>   full loop**; "adaptive" dropped as uninterpretable; the runtime
+>   thin-base hatch dissolves into plan-chosen composition (the
+>   loop's stopping rule is the declared method at standard+; rapid
+>   flags thinness honestly); scope gains the additive
+>   `search_loop.py` constants row the 015 extensible table
+>   pre-sanctioned; diagonals re-paired rapid×landscape ·
+>   standard×standard · deep×deep.
 > - **rev 2.8** (2026-07-10, user calls at the plan 🛑, round 2):
 >   **(a) Search axis renamed and given three rungs** — "search
 >   breadth (focused/broad)" → **search effort (rapid / adaptive /
@@ -347,6 +361,11 @@ PR landing:
   adjustments · collation).
 - `plan.py`: additive extension only if composition needs it (the
   component config and registry semantics are reused, not reshaped).
+- `search_loop.py` *(rev 2.9)*: one **additive** `standard` row in
+  the extensible per-depth constants table + a loop arm-selection
+  parameter for the trimmed variant — the extension the 015 design
+  pre-sanctioned; no logic change; `parse_search_directive` admits
+  the new depth value by construction.
 - Event vocabulary: `plan.compiled` payloads gain plan id + version;
   steering-resolution events ride the run context they occur in
   (event payloads, zero-schema — the 001 event-log substrate; plan
@@ -474,10 +493,10 @@ PR landing:
    **steering mode** (decision 6) · **the anticipated steer-points'
    default resolutions** (visible plan content — what Unattended
    auto-applies and every mode falls back to; rev 2b) · **the declared
-   escape hatch** (the thin-base search escalation, as-built in
-   `search_loop` — declared rather than firing undeclared; rev 2f;
-   armed at search-effort `adaptive`+, disarmed-with-honest-flag at
-   `rapid` — rev 2.8) ·
+   method note** *(was "declared hatch", rev 2f; dissolved rev 2.9)*:
+   escalation is plan-chosen via the effort axis — the agentic loop's
+   stopping rule is the declared sanctioned method at `standard`+;
+   at `rapid` thinness flags honestly; no armed runtime hatch in v1 ·
    **expected artefact shape** (a forecast-level, non-executing field
    derived deterministically from the composed chain: landscape
    coverage/themes/gaps iff characterise; facet-organised synthesis
@@ -561,17 +580,27 @@ PR landing:
      snowball, suggest arms — as much as volume, so the axis measures
      acquisition effort, not width; enacts the spec's
      breadth/depth-independence line and instantiates the deferred
-     depth-spectrum seam's v1 rungs)*: **search effort**
-     (`rapid` — one-pass multi-query fan-out, rapid caps, thin-base
-     hatch disarmed by plan with thinness flagged honestly ·
-     `adaptive` — rapid pass + the declared thin-base hatch armed
-     (the as-built `should_escalate` → one bounded deep continuation)
-     · `deep` — the full agentic loop from round 1, all arms, round
-     cap 3, deep caps) × **analysis depth** (`landscape` · `standard`
+     depth-spectrum seam's v1 rungs; rungs re-cut rev 2.9, user
+     call — "adaptive" was uninterpretable, and the honest split is
+     non-agentic vs two loop variants)*: **search effort**
+     (`rapid` — the non-agentic one-pass multi-query fan-out, rapid
+     caps, thinness flagged honestly — no runtime escalation ·
+     `standard` — the **latency-optimised agentic loop**: round cap
+     2, trimmed arms (reformulate + diversity reserve), bounded
+     episode budget — a new **additive row in the extensible
+     per-depth constants table** the 015 design pre-sanctioned,
+     values plan-pinned; measured anchors put the episode at
+     ~2.5–3.5 min vs ~1 min one-pass and ~6 min full loop ·
+     `deep` — the full agentic loop, all arms, round cap 3, deep
+     caps) × **analysis depth** (`landscape` · `standard`
      · `deep` — discretionary components, stage-2 screen, selection
-     budget, facet). Named pairings survive as authoring convenience
+     budget, facet). Escalation thereby stops being a runtime escape
+     hatch and becomes **plan-chosen composition**: the loop's own
+     stopping rule (spec'd + as-built) is the declared sanctioned
+     method at `standard`+; v1 ships no armed runtime hatch. Named
+     pairings survive as authoring convenience
      (the lighter/standard/deeper diagonal = rapid×landscape ·
-     adaptive×standard · deep×deep — never a user-facing dial), and
+     standard×standard · deep×deep — never a user-facing dial), and
      the planner composes **off-diagonal** shapes where intent
      warrants: narrow-and-deep (rapid search, full extraction) and
      the horizon scan (deep search, landscape only). User-facing

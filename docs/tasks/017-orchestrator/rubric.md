@@ -31,8 +31,10 @@ in progress, not done. (Rev 2.5 — tracks contract rev 2.5.)
 9. [ ] **Gradation compile bounded, two-axis, and the nudge anchored**: search effort
        × analysis depth compile only to existing directive surfaces (search depth ·
        stage-2 screen · characterise · deep chain · selection budget · grouping facet);
-       off-diagonal compositions (narrow-and-deep, horizon-scan) compose validly; the
-       thin-base hatch is armed at adaptive+ and disarmed-with-honest-flag at rapid;
+       off-diagonal compositions (narrow-and-deep, horizon-scan) compose validly; rapid
+       flags thinness honestly (no runtime escalation — escalation is plan-chosen via
+       the standard/deep loop rungs); the additive standard DEPTH_CONSTANTS row leaves
+       rapid/deep behaviour byte-identical;
        nothing compiles into the synthesis section directive; the fixed
        lighter/as-proposed/deeper options each re-derive a valid full plan with its own
        concrete proposal + measured time band; the default proposal is the middle

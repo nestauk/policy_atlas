@@ -1,6 +1,13 @@
 # Plan: 017-orchestrator
 
-> **Status:** rev 4 — plan-🛑 round-2 user calls folded (contract rev
+> **Status:** **rev 5 — APPROVED (plan confirmed): 2026-07-10 ·
+> Shabeer Rauf.** Round-3 user call folded (contract rev 2.9):
+> search-effort rungs re-cut — rapid = non-agentic one-pass ·
+> standard = latency-optimised agentic loop (new additive
+> `DEPTH_CONSTANTS` row, values pinned below) · deep = full loop;
+> "adaptive" dropped; runtime hatch dissolved into plan-chosen
+> composition; task 5b added. ADR 0014 written at this confirmation.
+> Rev 4 — plan-🛑 round-2 user calls folded (contract rev
 > 2.8): search axis renamed **search effort** with three rungs
 > (rapid / adaptive / deep — `adaptive` = the as-built thin-base
 > escalation as the middle rung; hatch disarmed + honest flag at
@@ -61,9 +68,9 @@ never stall.
     `filters` grammar: recency under `shared`, geography under
     `overton` only; OpenAlex has no as-built geography key, stated
     in the plan's assumptions when a geography constraint is set) ·
-    `search_effort` (`rapid|adaptive|deep`) · `analysis_depth`
+    `search_effort` (`rapid|standard|deep`) · `analysis_depth`
     (`landscape|standard|deep`) — the two independent gradation axes
-    (contract revs 2.7–2.8); `lighter|standard|deeper` survive as
+    (contract revs 2.7–2.9); `lighter|standard|deeper` survive as
     named diagonal pairings the planner defaults to, never a
     user-facing dial · `components: list[str]` + `component_
     rationale` (intent-fit × gradation, visible) · `grouping_facet` ·
@@ -77,13 +84,20 @@ never stall.
   - The two-axis compile tables (rev 3; intent-fit strikes the deep
     chain / facet regardless of either axis):
 
-    **Search effort** → search directive + hatch posture (all three
-    rungs compose existing machinery — no new search code):
-    | effort | search behaviour | thin-base hatch |
+    **Search effort** → search directive (rev 5 — rapid is the only
+    non-agentic rung; standard/deep are loop variants; escalation is
+    plan-chosen, no runtime hatch):
+    | effort | search behaviour | thinness |
     |---|---|---|
-    | `rapid` | one-pass rapid (caps 50/backend) | disarmed — thinness flagged honestly |
-    | `adaptive` | rapid, escalating via as-built `should_escalate` to one bounded deep continuation | armed (the declared hatch) |
-    | `deep` | full agentic loop from round 1 (reformulation/snowball/suggest arms, round cap 3, caps 150/backend) | n/a (already deep) |
+    | `rapid` | non-agentic one-pass (caps 50/backend, `RAPID_WALL_CLOCK_S` 30) | flagged honestly, never escalated |
+    | `standard` | latency-optimised loop — **new additive `DEPTH_CONSTANTS` row**: `round_cap 2` · arms reformulate + diversity reserve (snowball/suggest off) · `wall_clock_s 75` · `result_cap_per_backend 75` · `http_budget {openalex: 30, overton: 8}` · `generation_call_cap 4` | loop stopping rule (declared method) |
+    | `deep` | full loop — as-built deep row (all arms, `ROUND_CAP` 3, budget 150 s, caps 150/backend) | loop stopping rule |
+
+    Measured anchors: one-pass ≈ 1 min live (016); full episode ≈
+    5.7 min live (015: 343 s); standard estimated ~2.5–3.5 min.
+    The `standard` row is the extensible-table extension the 015
+    design pre-sanctioned; `parse_search_directive` admits the value
+    by construction; the arm-selection parameter is additive.
 
     **Analysis depth** → component set + budgets:
     | depth | stage-2 | characterise | deep chain | selection budget |
@@ -93,7 +107,7 @@ never stall.
     | `deep` | on | on | on | 25 (`DEFAULT_SELECTION_BUDGET`) |
 
     Named diagonal pairings (planner defaults): `lighter` =
-    rapid×landscape · `standard` = adaptive×standard · `deeper` =
+    rapid×landscape · `standard` = standard×standard · `deeper` =
     deep×deep. Off-diagonal composition is legitimate
     (narrow-and-deep = rapid×deep; horizon scan = deep×landscape).
     **Time-band targets (user call): lighter ≤ ~10 min · standard
@@ -282,6 +296,11 @@ reader contact: task 5 touches `screen.py`)**
    DB-abort component → `component.failed` survives on a fresh
    transaction; retry fires once. — **codex** *(same subsystem as 3,
    separate brief so each has one concern)*
+5b. `search_loop.py`: the additive `standard` `DEPTH_CONSTANTS` row
+   + loop arm-selection parameter (exact values in the constants
+   block); directive round-trips `depth="standard"`; existing rapid/
+   deep behaviour byte-identical (test-pinned). — **fast-worker**
+   *(exact constants, additive; rev 5)*
 5. `screen.py`: screening-directive grammar widening (`{stage?,
    criteria?}`, fail-closed, caps per the constants block) + criteria
    input composition + isolation tests (screen payload gains the
