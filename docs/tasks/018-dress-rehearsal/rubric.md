@@ -35,10 +35,15 @@ The task is **done only if every box holds** — otherwise it is in progress, no
         headline claims) and the separate bottom conclusions block (evidence-descriptive,
         no recommendations) both exist as distinct grounded blocks; spec flow-back
         (capability.md + provenance-grounding.md + log entry) recorded.
-13a. [ ] Writer-envelope fields (year / evidence type / appraisal label / author
-        institution / venue …) were adopted per A/B replay evidence — any field without
-        evidence of benefit stayed out (noise guard); judge envelope v2 changes carry
-        before/after evidence.
+13a. [ ] Writer envelope: the default set (year · evidence type · appraisal label ·
+        venue · cited-by · `is_retracted` flag) landed terse-and-adjacent; A/B-set
+        fields (author institution first) adopted only with replay evidence.
+13b. [ ] Judge envelope v2 changes carry the verification-grade check: verdict
+        distributions diffed on the same replayed claim set, every flipped verdict
+        hand-inspected (intent-leniency watched for), findings recorded.
+13c. [ ] The slice-wide discipline held: no LLM prompt or envelope surface changed
+        without before/after replay evidence (generation → output quality;
+        verification → verdict-shift inspection).
 
 ### Loop discipline (Phase C)
 

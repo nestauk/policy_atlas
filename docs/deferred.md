@@ -212,8 +212,10 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   priors (`record_type`, source typing, `indexed_in`, `title_source`) plus the tag layer
   as its uniform label-prior surface (`{tag, tag_type, asserted_by}` visible — ADR 0012
   decision 8; OpenAlex keywords deliberately exited the prompt). Still open:
-  `is_retracted` retained-but-unread (a visible flag in the deferred appraisal second
-  pass, flag-not-block); non-English handling beyond English-first title selection.
+  `is_retracted` retained-but-unread — **first reader scheduled (018): a visible flag in
+  the synthesis writer envelope's default metadata set, flag-not-block (PaperQA2
+  precedent)**; the appraisal-second-pass reading remains its own seam. Non-English
+  handling beyond English-first title selection still open.
 
 ## Live search / depth-graded loop (task 015 seams)
 

@@ -79,6 +79,26 @@ the literature *endorses* (verification-guided revision beats unverified generat
 everywhere it's measured — Self-RAG, OpenScholar, RARR). The fork is only about where
 the prose surface lives, never about weakening validation.
 
+## Owner adjudication of the patterns (2026-07-10, post-research)
+
+- **Write-then-attribute (pattern a) is disfavoured as our primary mechanism.** Anthropic
+  et al. are frontier, but their research products aren't robust research tools with
+  citations as a core product feature — for Policy Atlas grounding IS the product, and a
+  claim authored before its evidence is located is the `unsupported_mis_cited` class by
+  construction. Post-hoc revision survives only as the repair loop's shape (RARR-like),
+  which it already is.
+- **PaperQA2's gather-then-author (pattern c) is the closest architectural analogue** —
+  and the section loop is already half of it: evidence units are gathered by tool turns
+  before emission. Option B's pinned form: keep the gather phase, author prose over the
+  gathered units, span-anchor claims as written (pattern b's anchoring), validation
+  machinery unchanged in authority.
+- **Envelope metadata**: default-adopt the PaperQA2-precedented set + own quality ladder
+  (year · evidence type · appraisal label · venue · cited-by · `is_retracted` flag);
+  A/B the rest (author institution first). Terse, adjacent to the evidence unit.
+- **Judge envelope changes get a verification-grade test** (verdict-distribution diff +
+  flipped-verdict inspection), not an output-taste A/B; full calibration stays with the
+  eval workstream.
+
 ## Thin/absent evidence flags
 
 Perplexity internals (secondary sources only) · ledger/state-tracking value in

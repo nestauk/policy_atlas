@@ -116,10 +116,18 @@ the ceiling actually binds at the quality bar is an open question, and the redes
 - **Option A — prompt-first, structure kept.** Claim texts written as flowing,
   takeaway-first prose; ordering guidance; the demo voice rules carried into src;
   possibly softer joins. Cheapest; annotation layer unchanged by construction.
-- **Option B — prose-first, claims as spans.** The writer authors section prose
-  answering the intent; typed claims anchor as **char-offset spans into that prose**
-  (`addressable_unit` locators already carry start/end — no DB migration expected);
-  span-binding validated deterministically (exact substring); salvage lanes preserved.
+- **Option B — gather-then-author prose, claims as spans.** Shape pinned by the
+  product posture (user, 2026-07-10): grounding IS the product, so **write-then-attribute
+  (Anthropic-CitationAgent-style post-hoc citation retrofit) is disfavoured as the
+  primary mechanism** — a claim that exists before its evidence is found is the
+  `unsupported_mis_cited` class by construction. Option B's correct form is
+  PaperQA2-shaped and already half-built: the section loop's **gather phase stays as
+  is** (`search_chunks`/`query_findings` turns collect evidence units first); the writer
+  then authors section prose *over the gathered units*, anchoring typed claims as
+  **char-offset spans into that prose** as it writes (`addressable_unit` locators
+  already carry start/end — no DB migration expected); span-binding validated
+  deterministically (exact substring); salvage + bounded repair lanes preserved
+  (post-hoc revision survives only as the repair loop's shape, which it already is).
   Structurally removes the ceiling; more machinery, and the annotation layer must be
   re-proven.
 
@@ -154,19 +162,30 @@ assertion — the judge rubric owns that line.
     provenance-grounding's compound "key-findings/conclusion block" phrase) — the
     two-block structure is an owner decision (2026-07-10) flowing back into
     capability.md + provenance-grounding.md with a log entry.
-- **Judge envelope v2**: for finding claims the judge additionally sees the finding's
-  verified source quote *and its chunk text*, plus the intent/section focus (today it
-  judges claim text against cited chunks blind to the question). Eval-sensitive by
-  record — the per-surface replay loop is the coverage that licenses touching it now.
-- **Writer envelope widening — evidence-gated, not assumed.** Candidate metadata on
-  `query_findings` records and `search_chunks` results (today: document title only, not
-  even year): publication year · evidence type · appraisal label · **author
-  institution(s)** · publisher/venue · possibly cited-by/FWCI. Hypothesis: the writer
-  triages citations better when it can see recency/quality/provenance. Risk: context
-  noise that degrades prose or distracts citation choice. The plan step designs a
-  minimal A/B (same substrate, envelope with vs without the added fields, judged on
-  citation choice + prose); fields are adopted per evidence, not wholesale. Web-research
-  input on metadata-enriched writer contexts feeds the field shortlist.
+- **Judge envelope v2 — evidence-gated with a verification-grade test (user,
+  2026-07-10).** Candidate additions: for finding claims the finding's verified source
+  quote *and its chunk text*, plus the intent/section focus (today the judge is blind to
+  the question). The judge is a **verification surface**, so its A/B is not output
+  taste: replay the same claim set through both envelopes, diff the verdict
+  distributions, and **hand-inspect every flipped verdict** — watching specifically for
+  intent-induced leniency (on-topic-but-unsupported claims drifting up-tier). Full judge
+  calibration remains eval-workstream property; this is the honest 018-level check.
+- **Writer envelope widening — default set + A/B set (user, 2026-07-10).**
+  *Default-adopt* (PaperQA2-precedented + the product's own quality ladder):
+  publication year · evidence type · **appraisal label** (our journal-quality analogue,
+  done properly) · venue/publisher · cited-by count · **`is_retracted`** as a visible
+  flag (flag-not-block — gives the recorded retained-but-unread field its first reader).
+  *A/B-gated* (adopted per replay evidence): **author institution(s)** (first in the
+  queue) · FWCI · further fields the loop suggests. All fields terse, structured, and
+  attached **adjacent to the evidence unit they describe** (never mid-context bulk — the
+  measured distraction shape). Rationale + evidence in
+  [synthesis-research-notes.md](synthesis-research-notes.md); the noise question has no
+  controlled literature answer, so the A/B set stays experimental by design.
+- **Slice-wide prompt-change discipline (generalised from the loop rule):** every LLM
+  prompt or envelope change on any surface in this slice ships with before/after replay
+  evidence on pinned inputs — **generation surfaces judged on output quality,
+  verification surfaces on verdict-shift inspection**. This is the pattern that flows
+  back as the eval-slice convention.
 
 ### Phase C — refine-replay loop + rehearsal
 
