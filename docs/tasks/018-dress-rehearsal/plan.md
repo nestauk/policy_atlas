@@ -309,7 +309,8 @@ scripts excluded from review diffs.
 | Boundary | Gate | Why |
 |---|---|---|
 | Phase 0 open | full `make verify` | mandatory baseline class |
-| Phase A exit | full `make verify` | schema migration (mandatory class) |
+| Phase A-model exit | `make verify-fast` | constants + helper only |
+| Phase A-rest exit | full `make verify` | schema migration (mandatory class) |
 | Phase B exit | full `make verify` + live smoke | synthesise write-path (reader contact) |
 | Phase C landings | `make verify-fast` | prompt/envelope iterations |
 | Phase C exit | full `make verify` | pre-rehearsal consolidation |
