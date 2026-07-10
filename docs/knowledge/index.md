@@ -31,6 +31,9 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [Values embedded in a structured wire param must exclude that wire's metacharacters](embedded-values-escape-wire-grammar.md) - OpenAlex's `filter` is comma-delimited, so a comma surviving into the embedded search value opens an injectable filter clause that bypasses the fail-closed directive grammar (015 review stack, convergent Codex + security finding).
 * [Per-item exception-isolation belts must re-raise configuration errors first](isolation-belts-reraise-config-errors.md) - a blanket `except Exception` belt that swallows a config-class error (e.g. a missing fixture corpus) turns a systemic misconfiguration into N per-item failures with the component reporting green; enumerate the re-raised types explicitly and pin the loud path through the real entry point (`ingest_full_text.py::_safe_fetch`, task 016 review stack).
 * [IP refusal for SSRF safety is allowlist-shaped, not denylist-shaped](ip-refusal-allowlist-not-denylist.md) - enumerating denylist properties chases reserved ranges forever — Python's `is_private` misses RFC 6598 CGNAT space; refuse anything `not ip.is_global` after unwrapping IPv4-mapped IPv6 (`fetch_live.py::_is_refused_ip`, 016 security lane).
+* [Structured-output prompts pin exact key vocabulary and hard cross-field rules](structured-output-prompts-pin-key-vocabulary.md) - models invent compound dict keys and pair schema-uncross-constrainable fields; `extra="forbid"` is the net, the prompt is the fix, the fail-closed loop is the recovery surface (017 live check, both failures observed and re-run clean).
+* [The event log's run-id FK decides what can carry audit state](run-id-fk-shapes-audit-carriers.md) - no run, no event: plan lifecycle went table-first, skip reasons ride the outcome object + collation, steering substance rides the re-run's selection provenance — the constraint resurfaced three times in task 017.
+* [A runner above self-catching components must distinguish evented failure from escaped exception](two-phase-run-lifecycle-evented-vs-escaped.md) - an escaped exception means the transaction rolled back; committing run identity first (two-phase lifecycle) makes the fresh-transaction `component.failed` backstop's FK trivially valid (017, contract decision 8).
 
 ## Testing rules
 
@@ -38,6 +41,8 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [Assert contract-required keys on the written row, not the component summary](assert-on-row-not-summary.md) - summary and row are built separately and drift; downstream readers consume rows — anchor evidence there (task 012 review stack).
 * [Guard tests must assert the real invariant, or agents satisfy their letter](guard-tests-name-real-invariant.md) - the 007 zero-egress regex was dodged with `importlib.import_module("httpx")`; the honest move is extending the guard's stated invariant, and delegated executors optimise against the checks they are given (task 015 build).
 * [Timing/politeness properties are asserted on an injected clock, not live logs](timing-asserts-injected-clock-logs-corroborate.md) - live log timestamps only corroborate; thread-scheduling jitter can put a sub-interval gap between two log lines even when the enforced spacing on the injected clock is correct (016 live check: one 0.845s/1.22s pair still summing to two 1.0s intervals).
+* [Migration-roundtrip tests pin explicit revision targets and never hold seed rows across DDL](alembic-roundtrip-explicit-revisions.md) - a relative `"-1"` target silently retargets when later migrations land; uncommitted seeds on one connection block another connection's FK-dependent DDL — a 14-minute silent hang, not an error (017 build).
+* [A deadline clock starting at Process.start() asserts "spawn + import < deadline"](process-start-deadlines-need-spawn-headroom.md) - under host load, child spawn plus package import alone can exceed a tight deadline, mislabelling a healthy worker as the timeout the test rules out; add spawn headroom or a start-signal handshake (017 build, 5s→20s).
 
 ## Invariants (verified)
 
@@ -59,6 +64,7 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [Every screening consumer resolves the effective row — including write paths](effective-screen-row-read-rule.md) - highest-stage non-failed via `effective_screen_rows()`; raw `status='relevant'` joins re-admit demoted docs, and classification-driven write paths (appraise) are the shape grep audits miss (task 014 review stack, adversarial lane).
 * [Every EB run terminates in synthesise; every other component is a plan choice](synthesise-is-run-terminus.md) - synthesise mints the artefact, so no valid chain ends before it; characterise is orchestrator-discretionary ("a grounded answer, not an evidence report"); trim mid-chain legs for cost, never the terminus (recurring mistake, captured at the 015 contract gate; verified against components.md §9 + the merged 013 skeleton).
 * [Byte/resource budgets must reserve-then-shrink, never grow-on-release](reserve-then-shrink-byte-budgets.md) - reserve the full per-item cap up front while holding nothing, stream, then shrink to the actual size on completion, or in-flight holders can deadlock waiting on releases only other blocked holders can produce (`fetch_live.py::_read_capped_body`; found by 016 lead review of the composed pipeline, not any single component's tests).
+* [Compile-target parity is checked on the composed whole, with the real composer](compile-target-parity-covers-composed-wholes.md) - per-field caps let a valid plan compose past a downstream cap and silently truncate (criteria vanished while provenance claimed they applied); round-trips against canonicalising composers use containment, not byte equality; runtime-consumed names pin to a registry (017 review stack — three instances of one failure class in one slice).
 
 ## Integration quirks (model / telemetry providers)
 
@@ -76,3 +82,7 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 ## Live behaviour
 
 * [A 403 from a document host is usually bot-blocking, not a paywall](http-403-is-usually-bot-blocking.md) - 5 of 7 live fetch failures in 016's live check were `blocked_by_host`, zero corroborated paywalls; 403 counts as a paywall only with corroboration (body markers or the OA cross-check), else `blocked_by_host` (`fetch_live.py::_response_outcome`).
+
+## Runbooks
+
+* [macOS swap exhaustion presents as a Docker daemon wedge](macos-swap-presents-as-docker-wedge.md) - Docker Desktop's VM wedges (API 500s, vCPU spin) with nothing naming memory; `sysctl vm.swapusage` first when Docker "breaks" mid-suite (017 build: ~15.8/17 GB swap, load ~240, two restarts burned before the reading explained both symptom families).

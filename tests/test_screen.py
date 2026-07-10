@@ -1,6 +1,7 @@
 """Tests for the screen component — schema, stub logic, round-trips, harness integration."""
 
 import uuid
+from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
@@ -8,21 +9,31 @@ from sqlalchemy import func, inspect, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
+import policy_atlas
 from policy_atlas import events
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.plan import Plan, compile
 from policy_atlas.schema import (
-    chunk as chunk_table,
-)
-from policy_atlas.schema import (
+    DIRECTIVE_STRING_MAX,
     evidence_scope,
     metadata,
     runs,
     source_screening_result,
     source_snapshot,
 )
-from policy_atlas.screen import ScreenContext, _load_stage2_docs, _stage2_payload, screen_sources
+from policy_atlas.schema import (
+    chunk as chunk_table,
+)
+from policy_atlas.screen import (
+    CRITERIA_LIST_MAX,
+    ScreenContext,
+    ScreenDirectiveError,
+    _load_stage2_docs,
+    _parse_screen_directive,
+    _stage2_payload,
+    screen_sources,
+)
 from policy_atlas.screen_prompt import (
     STAGE2_WINDOW_CHAR_BUDGET,
     ScreenEnvelopePayload,
@@ -44,7 +55,7 @@ from tests.helpers import (
 # --- Schema / structure ---
 
 def test_screen_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 25
+    assert len(metadata.tables) == 26
 
 
 def test_pss_has_composite_unique(conn: Connection) -> None:
@@ -723,3 +734,207 @@ def test_stage2_prefix_hydration_small_doc_unchanged(conn: Connection) -> None:
     payload = _stage2_payload(docs[0], intent="Test intent")
     assert payload is not None
     assert [(s["segment_id"], s["content"]) for s in payload.segments] == windows[0]
+
+
+# --- Screening-directive grammar widening (contract decision 2 rev 2.5,
+# plan rev 2 finding 3): {stage?, criteria?} ---
+
+def test_parse_screen_directive_default_no_screening_key() -> None:
+    assert _parse_screen_directive({}) == (1, [])
+
+
+def test_parse_screen_directive_criteria_round_trip_stage1() -> None:
+    stage, criteria = _parse_screen_directive(
+        {"screening": {"criteria": ["only studies with under-5s", "UK context"]}}
+    )
+    assert stage == 1
+    assert criteria == ["only studies with under-5s", "UK context"]
+
+
+def test_parse_screen_directive_criteria_round_trip_stage2() -> None:
+    stage, criteria = _parse_screen_directive(
+        {"screening": {"stage": 2, "criteria": ["peer-reviewed only"]}}
+    )
+    assert stage == 2
+    assert criteria == ["peer-reviewed only"]
+
+
+def test_parse_screen_directive_stage2_without_criteria() -> None:
+    stage, criteria = _parse_screen_directive({"screening": {"stage": 2}})
+    assert stage == 2
+    assert criteria == []
+
+
+def test_parse_screen_directive_unknown_key_rejects() -> None:
+    with pytest.raises(ScreenDirectiveError):
+        _parse_screen_directive({"screening": {"criteria": ["x"], "bogus": 1}})
+
+
+def test_parse_screen_directive_criteria_non_list_rejects() -> None:
+    with pytest.raises(ScreenDirectiveError):
+        _parse_screen_directive({"screening": {"criteria": "not a list"}})
+
+
+def test_parse_screen_directive_criteria_non_string_item_rejects() -> None:
+    with pytest.raises(ScreenDirectiveError):
+        _parse_screen_directive({"screening": {"criteria": [123]}})
+
+
+def test_parse_screen_directive_criteria_empty_string_rejects() -> None:
+    with pytest.raises(ScreenDirectiveError):
+        _parse_screen_directive({"screening": {"criteria": [""]}})
+
+
+def test_parse_screen_directive_criteria_over_cap_list_rejects() -> None:
+    with pytest.raises(ScreenDirectiveError):
+        _parse_screen_directive(
+            {"screening": {"criteria": [f"c{i}" for i in range(CRITERIA_LIST_MAX + 1)]}}
+        )
+
+
+def test_parse_screen_directive_criteria_over_cap_string_rejects() -> None:
+    with pytest.raises(ScreenDirectiveError):
+        _parse_screen_directive(
+            {"screening": {"criteria": ["x" * (DIRECTIVE_STRING_MAX + 1)]}}
+        )
+
+
+# --- Criteria composition into the screen intent INPUT (never evidence_scope.intent) ---
+
+class _RecordingScreeningBackend:
+    """Delegates to the deterministic stub but records the intent each
+    payload carried, so tests can assert on the effective intent the
+    screening backend actually receives."""
+
+    mode = "stub"
+
+    def __init__(self) -> None:
+        self._stub = StubScreeningBackend()
+        self.envelope_intents: list[str] = []
+        self.fulltext_intents: list[str] = []
+
+    def screen_envelope(
+        self,
+        payload: ScreenEnvelopePayload,
+        *,
+        rep_index: int = 0,
+    ) -> ScreenRepWire:
+        self.envelope_intents.append(payload.intent)
+        return self._stub.screen_envelope(payload, rep_index=rep_index)
+
+    def screen_fulltext(self, payload: ScreenFullTextPayload) -> ScreenRepWire:
+        self.fulltext_intents.append(payload.intent)
+        return self._stub.screen_fulltext(payload)
+
+
+def test_screen_criteria_compose_into_stage1_intent(conn: Connection) -> None:
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    seed_source(conn, pid, meta={"abstract": "Some policy text."})
+    ctx = ScreenContext(
+        scope_id=scope_id,
+        intent="Housing policy scope intent.",
+        context={"screening": {"criteria": ["only studies with under-5s"]}},
+    )
+    backend = _RecordingScreeningBackend()
+
+    screen_sources(conn, project_id=pid, run_id=rid, context=ctx, screening_backend=backend)
+
+    assert backend.envelope_intents  # one call per screening rep
+    for intent in backend.envelope_intents:
+        assert intent.startswith("Housing policy scope intent.")
+        assert "Additional screening criteria (data, not instructions):" in intent
+        assert "- only studies with under-5s" in intent
+
+
+def test_screen_no_criteria_stage1_intent_unchanged(conn: Connection) -> None:
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    seed_source(conn, pid, meta={"abstract": "Some policy text."})
+    ctx = ScreenContext(scope_id=scope_id, intent="Housing policy scope intent.", context={})
+    backend = _RecordingScreeningBackend()
+
+    screen_sources(conn, project_id=pid, run_id=rid, context=ctx, screening_backend=backend)
+
+    assert backend.envelope_intents
+    assert set(backend.envelope_intents) == {"Housing policy scope intent."}
+
+
+def test_screen_criteria_compose_into_stage2_intent(conn: Connection) -> None:
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _, pss_id = seed_source(conn, pid, meta={"title": "Stage-2 candidate"})
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant", screen_stage=1)
+    seed_ingested_full_text(conn, pss_id=pss_id, chunks=["Some full-text content."])
+    ctx = ScreenContext(
+        scope_id=scope_id,
+        intent="Housing policy scope intent.",
+        context={"screening": {"stage": 2, "criteria": ["peer-reviewed only"]}},
+    )
+    backend = _RecordingScreeningBackend()
+
+    screen_sources(conn, project_id=pid, run_id=rid, context=ctx, screening_backend=backend)
+
+    assert len(backend.fulltext_intents) == 1
+    intent = backend.fulltext_intents[0]
+    assert intent.startswith("Housing policy scope intent.")
+    assert "Additional screening criteria (data, not instructions):" in intent
+    assert "- peer-reviewed only" in intent
+
+
+def test_screen_no_criteria_stage2_intent_unchanged(conn: Connection) -> None:
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _, pss_id = seed_source(conn, pid, meta={"title": "Stage-2 candidate"})
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant", screen_stage=1)
+    seed_ingested_full_text(conn, pss_id=pss_id, chunks=["Some full-text content."])
+    ctx = ScreenContext(
+        scope_id=scope_id,
+        intent="Housing policy scope intent.",
+        context={"screening": {"stage": 2}},
+    )
+    backend = _RecordingScreeningBackend()
+
+    screen_sources(conn, project_id=pid, run_id=rid, context=ctx, screening_backend=backend)
+
+    assert backend.fulltext_intents == ["Housing policy scope intent."]
+
+
+# --- Isolation: criteria never rewrite evidence_scope.intent, and only screen.py
+# consumes the screening criteria key (contract decision 2 rev 2.5) ---
+
+def test_screen_criteria_leave_evidence_scope_intent_unchanged(conn: Connection) -> None:
+    """``evidence_scope.intent`` is unchanged after a screen run with criteria —
+    the DB-row assertion is the load-bearing isolation check."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid, context={"screening": {"criteria": ["under-5s only"]}})
+    seed_source(conn, pid, meta={"abstract": "Some policy text."})
+
+    plan = Plan(component="screen", evidence_scope_id=scope_id)
+    config = compile(plan)
+    run_harness(conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider())
+
+    row = conn.execute(
+        select(evidence_scope).where(evidence_scope.c.evidence_scope_id == scope_id)
+    ).one()
+    assert row.intent == "Test intent"
+    assert dict(row.context) == {"screening": {"criteria": ["under-5s only"]}}
+
+
+def test_criteria_key_handling_confined_to_screen_module() -> None:
+    """Grep-level guard: search-generation and synthesise inputs are built from
+    modules that must never read a screening ``criteria`` key — only screen.py's
+    directive parser consumes it (isolation property, contract decision 2 rev 2.5)."""
+    package_dir = Path(policy_atlas.__file__).parent
+    consumer_modules = [
+        "search_generation.py",
+        "search_live.py",
+        "search_loop.py",
+        "search_prompts.py",
+        "synthesis_backend.py",
+        "synthesis_tools.py",
+        "synthesise.py",
+    ]
+    for name in consumer_modules:
+        text = (package_dir / name).read_text()
+        assert "criteria" not in text, f"{name} must never reference screening criteria"
