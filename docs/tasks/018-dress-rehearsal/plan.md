@@ -27,8 +27,11 @@
 > labels → Phase E exit; direction-rename check scoped to effect-direction *values*
 > (search-reformulate positive/negative example fields are exempt, named).
 > **Fork resolved at the gate (2026-07-10 · user): OPTION B** — gather-then-author
-> prose with span-anchored claims, arm-B voice rules carried into the prose prompt
-> (probe evidence: [fork-probe.md](fork-probe.md)). The Option A task rows below stay
+> prose with span-anchored claims (probe evidence: [fork-probe.md](fork-probe.md)).
+> **Voice posture (user, same gate): the demo voice rules are a validated LESSON, not
+> a copy source** — they were written without deliberation; the writer's voice is
+> re-authored deliberately at B-B2 (lead), informed by the probe + research notes,
+> and validated in the C2 loop. The Option A task rows below stay
 > as the recorded FALLBACK (fires only via the Phase B stop condition — invariants
 > failing to re-prove). Plan 🛑 still pending (user: revisions first).
 > Contract: [contract.md](contract.md) · research:
@@ -234,7 +237,13 @@ stop condition):*
   green on the new wire, span round-trip property tests, repair-offset property test,
   unspanned-assertion fixture)*
 - B-B2 writer prompt v2 (authored-prose instructions over gathered units, connective
-  -tissue rule) + repair prompt v2. — **lead** *(prompt-bearing)*
+  -tissue rule) + repair prompt v2, **including the deliberate voice design** (user
+  pin, 2026-07-10): the demo rules are evidence of what works (register ban, analyst
+  number restatement, takeaway-first) but are re-thought from scratch — audience,
+  environment-context preamble (context-not-content), register, and argument/narrative
+  structure designed as one coherent voice, then validated against baseline-1 in the
+  C2 loop like any prompt change. — **lead** *(prompt-bearing; the slice's
+  taste-bearing core)*
 - B-B3 envelope default set + judge-envelope **plumbing** + the two new blocks (as
   B-A2, plus the envelope carries span context). — **codex**
 - B-B4 judge prompt + envelope semantics + the in-B verdict-shift/unchanged-sample/

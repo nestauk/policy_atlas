@@ -225,8 +225,10 @@ assertion — the judge rubric owns that line.
   either bound breached = the stop condition fires.
 - **Surfaces in the loop**: extraction rules (validating the RETRO's never-validated
   fixes: self-contained naming, expanded acronyms, no hortatory statements, concrete
-  outcomes), synthesis prose/voice on the new shape, planner (incl.
-  publication-date-range inference from intent/topic).
+  outcomes), synthesis prose/voice on the new shape (**the demo voice rules are a
+  validated lesson, never a copy source — the voice is re-authored deliberately,
+  lead-only**; user pin 2026-07-10), planner (incl. publication-date-range inference
+  from intent/topic).
 - **Anti-overfit pins**: each refined prompt is checked against at least one question
   per v2-question-taxonomy category (7 categories) at planner level, and
   extraction/synthesis spot-checks run on the *other* recorded project (different

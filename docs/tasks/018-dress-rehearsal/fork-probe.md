@@ -59,8 +59,11 @@ contract's private boundary — pointers below, register described not quoted at
   voice rules become part of B's prose prompt), the writer demonstrably grounds well
   at 5.5, and B's remaining novelty is the span-binding mechanics + repair v2 +
   unspanned-prose check — machinery, not model behaviour.
-- **Lead recommendation: Option B**, carrying arm B's voice rules into the prose
-  prompt. Grounds: the residual gap is exactly the contract's core complaint
+- **Lead recommendation: Option B.** The voice *lesson* transfers (register ban /
+  analyst restatement / takeaway-first, proven grounding-neutral) but the demo rules
+  are not carried verbatim — the writer's voice is re-authored deliberately at B-B2
+  (owner pin, 2026-07-10; the demo rules were written without deliberation). Grounds
+  for B: the residual gap is exactly the contract's core complaint
   (answer-shaped authored prose), it is structural by construction and now by
   observation, and the probe has de-risked the model-behaviour half of B. Option A
   survives as the recorded fallback if B's build hits its stop condition (the
