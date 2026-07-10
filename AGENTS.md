@@ -49,7 +49,7 @@ slot is the future LLM EB-expert's drop-in seam), and the
 **steering structural core** (four modes — Frequent · Moderate ·
 Minimal · Unattended — deterministic-content check-ins, the
 deepening-selection steer-point with intent-vocabulary options,
-bounded un-run-legs-only adjustments, clean abort; Unattended
+bounded not-yet-run-components-only adjustments, clean abort; Unattended
 auto-resolves to visible plan defaults, everything flagged +
 collated — a spec refinement to execution-orchestration rides the
 flow-back). Gated changes riding this slice: **runtime egress** (the
