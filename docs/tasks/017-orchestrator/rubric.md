@@ -14,7 +14,8 @@ in progress, not done. (Rev 2 — tracks contract rev 2.)
 5. [ ] No tests deleted, skipped or weakened without written justification.
 6. [ ] **Spine enforcement test-pinned**: no composable orchestration plan omits or
        reorders a mandatory-spine leg (acquire → screen → classify → appraise →
-       ingest → synthesise); discretionary selection matches the approved gradation.
+       ingest → synthesise); discretionary selection matches the approved plan
+       (intent-fit × gradation, decision 4).
 7. [ ] **Fail-closed compile test-pinned**: unknown components, parameters or directives
        reject at validation — a caught error, never a silent run; approved plan and
        executed config are provably the same (round-trip property, amendments included).
@@ -58,7 +59,9 @@ in progress, not done. (Rev 2 — tracks contract rev 2.)
         the refinement.
 16. [ ] The pinned live check ran and is evidenced in
         [verification.md](verification.md): (a) planner-only review across V2
-        question-taxonomy intents incl. one anchored-nudge re-derivation; (b) one
+        question-taxonomy intents incl. one anchored-nudge re-derivation, one
+        non-intervention intent composing without the deep chain (intent-fit
+        probe) and one compiled scope constraint; (b) one
         composed end-to-end run at modest gradation, at Moderate, with the
         deepening-selection steer-point exercised live and one intent-vocabulary
         adjustment landing as `plan.amended`, plan↔chain equivalence, per-leg

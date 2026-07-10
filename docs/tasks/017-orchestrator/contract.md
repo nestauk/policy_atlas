@@ -20,6 +20,26 @@ specs in [docs/specs/](../../specs/index.md).
 > the **component config** to keep the three apart.
 >
 > **Revision history:**
+> - **rev 2.1** (2026-07-10, user gate probes — four holds): **(a)
+>   Intent-fit component selection** — rev 2 derived the discretionary
+>   set from the gradation alone; the user challenge held (extraction
+>   is intervention–outcome schema-bound — irrelevant to
+>   non-intervention intents at any depth). Decision 4 restructured:
+>   selection = **intent-fit × gradation**, the planner reasoning over
+>   declared component descriptions; live check gains the
+>   non-intervention composition probe. **(b) Scope constraints
+>   first-class** — recency/geography/language plan fields compiled to
+>   the existing search `scope_filters` grammar, defaulted visibly and
+>   asked only when shape-changing; publication-vs-study-geography
+>   honesty caveat; structured screening inclusion/exclusion criteria
+>   named as the existing 014 seam. **(c)** Events-not-schema rationale
+>   sentence added to decision 2 (the durable plan entity belongs to
+>   the workspace/versioning cluster; the event log is already the
+>   decision log). **(d)** "Deepest successful reference" wording
+>   corrected in the goal + decision 8: synthesise composes over the
+>   **entire successful upstream chain** (transitive resolution from
+>   the deepest successful reference — the passing mechanism, not the
+>   substrate).
 > - **rev 2** (2026-07-10, user gate conversation — six adjudications):
 >   **(a) Steering folded in as the structural core** (resolving rev 1's
 >   ❓ decision 6a — the user challenged the exclusion and the challenge
@@ -87,14 +107,17 @@ profile, and the throwaway demo branch's planner is de-authorised.
 2. **Composer** (deterministic): compiles an approved orchestration
    plan into a chain composition — fail-closed against the component
    registry, always containing the ADR 0013 mandatory spine, with
-   discretionary components selected per the depth gradation.
+   discretionary components selected by **intent-fit × gradation**
+   (decision 4: relevance to the question decides *which*; depth
+   decides *how much*).
 3. **EB capability-runner** (serial, deterministic): the execution
    half the orchestrator delegates to — walks the composed chain over
    the existing components in topological order with per-component
    commits, authors each component's directive from the plan (the
    commit layer), surfaces check-ins and the deepening-selection
    steer-point back through the orchestrator, and chains run
-   references only off successful predecessors.
+   references only off successful predecessors — so synthesise always
+   composes over the entire successful upstream chain.
 4. **Steering, structural core** (rev 2a/2b): four modes — Frequent ·
    Moderate · Minimal · **Unattended** — governing check-in frequency;
    check-ins with deterministic content and bounded, contextual
@@ -264,9 +287,21 @@ PR landing:
 2. **The orchestration plan is a structured selection, persisted as
    events — no schema.** A pydantic model over: refined question ·
    scoping notes (user-expressed only, never invented) · backend
-   scope (existing `search_backend_scope` vocabulary) · depth
+   scope (existing `search_backend_scope` vocabulary) · **scope
+   constraints** *(rev 2.1b)* — recency window · geography · language —
+   compiled into the existing search `scope_filters` grammar
+   (`published_after`/`published_before` · `languages`/`language` ·
+   `publisher_country`; the as-built 015 directive surface), each
+   **defaulted visibly** (assumptions field) and asked about only when
+   shape-changing, with one honesty caveat carried: a geography
+   constraint is **publication** geography — study geography lives in
+   the text and is a recorded extraction seam, and the plan must never
+   imply otherwise; structured screening inclusion/exclusion criteria
+   stay the recorded 014 seam (free-text scoping notes ride the intent
+   the screen judges against, as-built) · depth
    gradation (decision 4's bundle) · discretionary component set
-   (derived from the bundle, visible in the plan) · grouping facet ·
+   (decision 4's intent-fit × gradation selection, visible in the
+   plan) · grouping facet ·
    **steering mode** (decision 6) · **the anticipated steer-points'
    default resolutions** (visible plan content — what Unattended
    auto-applies and every mode falls back to; rev 2b) · **the declared
@@ -285,8 +320,18 @@ PR landing:
    Persistence: `plan.proposed` / `plan.approved` / `plan.amended`
    events carry the full plan payload — the plan is the first
    decision-log entry; per-component `plan.compiled` events continue
-   unchanged. The capability-run entity stays deferred; the run's
-   identity in v1 is the project + scope + its event trail.
+   unchanged. *Why events, not a plan table (rev 2.1c)*: the durable
+   plan entity's behaviours (editing, versioning, re-runs — the
+   plan-as-object's artefact-like face) are workspace-cluster
+   territory, and "model only what behaves" says don't commit a table
+   shape before its behaviours exist; the event log is already the
+   ordered, attributed decision-log substrate, and v1's only readers
+   (the run, audit) are fully served by it. Named trade-off: "the
+   current plan" is the latest plan event, not a keyed row — fine
+   while one project has one run; promotion to a first-class table
+   arrives through the schema gate with the versioning UX. The
+   capability-run entity stays deferred; the run's identity in v1 is
+   the project + scope + its event trail.
 
 3. **Composition: the ADR 0013 spine is enforced by construction and
    test-pinned.** Every composed chain executes acquire(`search`) →
@@ -295,12 +340,32 @@ PR landing:
    group are selected per gradation; structural dependencies ride
    the existing fail-closed registry (select requires a
    characterisation reference, extract a selection, group an
-   extraction; synthesise takes the deepest successful reference).
-   Tests pin: no composable plan omits or reorders a spine leg; an
-   unknown component or parameter rejects at validation.
+   extraction; synthesise's references are all optional and resolve
+   transitively from the deepest given — passing the deepest
+   successful reference hands it the entire successful upstream
+   chain, cross-checked; rev 2.1d). Tests pin: no composable plan
+   omits or reorders a spine leg; an unknown component or parameter
+   rejects at validation.
 
-4. **Depth gradation: a thin slice of the tool-wide seam; the nudge
-   is anchored and its vocabulary is pinned** *(rev 2e)*. Graded
+4. **Component selection is intent-fit × gradation; the nudge is
+   anchored and its vocabulary is pinned** *(restructured rev 2.1a;
+   rev 2e)*. Two independent factors select the discretionary set,
+   per the spec's breadth/depth independence:
+   - **Intent-fit** *(rev 2.1a — user challenge held)*: the planner
+     reasons over the **declared component descriptions** (what each
+     component does and what question shapes it serves — the
+     execution-orchestration "reading declared capability specs"
+     rule) to decide which discretionary components are *relevant* to
+     the question at all. The canonical case: extract is
+     intervention–outcome **schema-bound** (components §7/§9), so a
+     non-intervention intent (stats/fact-finding, stakeholder
+     mapping, landscape-only questions) composes **without the deep
+     chain at any depth** — served by characterise + chunk-grounded
+     synthesis; depth then buys search breadth and synthesis
+     thoroughness instead. Irrelevant-component reasoning is visible
+     in the plan (the discretionary set + a why), and composition
+     stays fail-closed regardless of what the planner reasons.
+   - **Gradation**: how much of what's relevant. Graded
    bundles are an orchestrator-authoring convenience (never a
    user-facing absolute dial); the user-facing controls are the
    concrete proposal and the relative nudge. Pinned now: **the
@@ -326,9 +391,13 @@ PR landing:
 5. **The planner is the slice's one new prompt surface — lead-
    authored, judgment-class.** Conversational: refines intent into an
    evidence question, asks **only when a missing piece would change
-   the plan's shape** (enough-context-to-propose), updates a visible
+   the plan's shape** (enough-context-to-propose — shape includes the
+   intent-fit component selection and any shape-determining scope
+   constraint; detail unknowns become visible defaults, never
+   questions; rev 2.1a/b), updates a visible
    plan draft each turn, sets a ready flag; proposal anchored per
-   decision 4. Structured output validated fail-closed (pydantic; the
+   decision 4; carries the declared component descriptions as its
+   reasoning substrate. Structured output validated fail-closed (pydantic; the
    planner cannot smuggle components or parameters past the
    registry). Honesty rules carried from the product voice: never
    promise findings, never state what the evidence says, assumptions
@@ -407,9 +476,12 @@ PR landing:
    legs — a run that cannot screen has nothing true to synthesise).
    **Discretionary-leg failure degrades**: the leg's failure is
    evented + flagged, downstream discretionary legs that require it
-   are skipped with reason, and synthesise runs on the deepest
-   successful reference (ADR 0010's every-upstream-reference-optional
-   design absorbs this by construction). LLM-bearing legs get **one
+   are skipped with reason, and synthesise composes over the **entire
+   successful upstream chain** — the runner passes the deepest
+   *successful* reference and the rest resolves transitively, so only
+   the failed leg and its dependents drop (ADR 0010's
+   every-upstream-reference-optional design absorbs this by
+   construction; rev 2.1d). LLM-bearing legs get **one
    bounded retry** before failing (which legs, plan-pinned; the
    characterise twice-in-a-row wobble is the motivating prior). All
    outcomes reason-coded in events; nothing silently absorbed.
@@ -428,11 +500,15 @@ PR landing:
     2026-07-08): changed surfaces + one cheap full-chain smoke —
     (a) **planner surface**: 5–7 intents sampled across the V2
     question-taxonomy categories → proposed plans lead-reviewed for
-    shape (sharp question, honest assumptions, sane gradation +
-    composition + expected-artefact-shape, ask-only-on-shape
-    behaviour); planner conversations only, **no chains run**; at
-    least one conversation exercises the anchored nudge and shows the
-    whole plan re-derived with its new time band.
+    shape (sharp question, honest assumptions + visible defaults,
+    sane intent-fit selection × gradation + expected-artefact-shape,
+    ask-only-on-shape behaviour); planner conversations only, **no
+    chains run**; at least one conversation exercises the anchored
+    nudge and shows the whole plan re-derived with its new time band;
+    **at least one non-intervention intent composes without the deep
+    chain** (rev 2.1a — the intent-fit probe); at least one
+    conversation carries a scope constraint (e.g. recency) landing as
+    a compiled `scope_filters` field (rev 2.1b).
     (b) **one composed end-to-end run**: a real Nesta-mission
     question through the product path — planner → approval → composer
     → runner → artefact — at a **modest gradation** (deep enough to
