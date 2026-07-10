@@ -22,36 +22,37 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `016-live-fetch`.
+Implementation — task `017-orchestrator`.
 
-Tasks `001-walking-skeleton` through `015-live-search` are complete
-(merged) — the EB chain runs end-to-end with live LLM screen/classify
-and live depth-graded search over OpenAlex + Overton. The active slice
-is the **third of the live-demo path** (014 LLM screen+classify → 015
-live search → **016 live fetch/ingest** → 017 demo dress-rehearsal →
-eval slice): it makes full-text ingestion **live** — a hardened live
-`DocumentFetcher` behind the unchanged 008 seam, carrying every
-pre-registered requirement from `docs/deferred.md` § Full-text
-ingestion (explicit timeouts · SSRF/redirect policy for
-provider-supplied URLs · per-host politeness + bounded-concurrency
-prefetch · retry/backoff · magic-byte content-type sniffing · charset
-handling · size caps + bounded buffering · paywall-detection signal
-ladder · landing-page PDF-link discovery + DOI fallback · per-link
-exception isolation: a fetcher raise becomes a reason-coded outcome,
-never a component failure) — plus the **chain-composition rule**
-(user call, 2026-07-09): the mandatory EB spine is acquire(search) →
-screen → classify → appraise → ingest(fetch) → synthesise; all other
-components are orchestrator-discretionary per depth gradation;
-synthesise's substrate gate is untouched. The fixture fetcher stays
-the zero-egress default — `make
-verify` stays deterministic and egress-free. Gated change riding this
-slice: **runtime egress** (live document fetching). `demo/RETRO.md`
-§4 on branch `demo-live-run` is an **anecdotal prior only** (user
-call: the demo was throwaway; no demo shape or number is design
-authority) — it names which live hazards are real (paywalls, empty
-bodies behind DOI redirects, parse failures on grey lit). Build per
-`docs/tasks/016-live-fetch/contract.md`. Stay within the contract's
-scope and stop conditions; docling/OCR parse tiers, multi-PDF Overton
-assembly, cross-run fetch caching and all other seams remain deferred
+Tasks `001-walking-skeleton` through `016-live-fetch` are complete
+(merged) — the EB chain runs end-to-end live: LLM screen/classify,
+depth-graded search over OpenAlex + Overton, hardened live full-text
+fetch/ingest, and synthesise minting chunk-cited claims over live
+text. The active slice is the **fourth of the live-demo path**
+(014 → 015 → 016 → **017 orchestrator/planning** → 018 demo
+dress-rehearsal → eval slice), re-sequenced by the user 2026-07-10:
+nothing in product code turns a user intent into a chain — chains
+exist only as test-harness profiles in `skeleton.py`, and the demo's
+planner is de-authorised throwaway. 017 lands the **thin v1
+orchestrator**: a lead-authored LLM **planner** (intent →
+depth-graded plan proposal, ask-only-on-shape, relative
+lighter/deeper nudge), a deterministic **composer** (plan → chain
+composition, fail-closed against the component registry, honouring
+the ADR 0013 mandatory spine acquire(search) → screen → classify →
+appraise → ingest(fetch) → synthesise with all other components
+orchestrator-discretionary per depth gradation), and a serial
+**driver** (topological walk over the existing components,
+per-component commits, failure chaining off successful predecessors
+only). Gated changes riding this slice: **runtime egress** (the
+planner LLM call — one new lead-authored prompt surface) and one new
+CLI entrypoint. Adjudicated at the contract 🛑: retrieval-boost
+grammar v2 (recommendation: stays eval-gated, not in 017) and the
+steering/durability posture (recommendation: Minimal-only steering +
+per-component commits, no resume engine). `demo/RETRO.md` on branch
+`demo-live-run` is an **anecdotal prior only**. Build per
+`docs/tasks/017-orchestrator/contract.md`. Stay within the
+contract's scope and stop conditions; the durability/resume engine,
+check-in mediation surfaces, section-directive compile, component
+progress protocol and all other seams remain deferred
 (`docs/deferred.md`).
 
