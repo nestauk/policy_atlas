@@ -8,16 +8,16 @@ specs in [docs/specs/](../../specs/index.md).
 > runtime egress — the planner LLM surface; one CLI entrypoint; the
 > `orchestration_plan` schema addition; the Unattended steering-mode
 > spec refinement in principle — and ratifying the gate adjudications
-> recorded in revs 2–2.4). Contract-stage adversarial review next
-> (Tier 3), then planning. Companions:
+> recorded in revs 2–2.4). Companions:
 > [v2-wizard-study.md](v2-wizard-study.md) (rev 2.2c evidence) ·
 > [orchestration-research-notes.md](orchestration-research-notes.md)
 > (rev 2.4 evidence).
-> **Rev 2.5** (adversarial review adjudicated, 8/8 adopted) awaits the
-> user's ack of the two flagged items (findings 1 + 7) before planning.
-> Plan approved (before implementation): _pending_ ·
-> ADR: expected (the v1 orchestrator carve + the Unattended steering-mode
-> refinement; drafted at step 4).
+> Contract-stage adversarial review adjudicated rev 2.5 — 8/8
+> adopted; the two flagged items (findings 1 + 7) **ack'd by the
+> user**. **Plan approved (before implementation): 2026-07-10 ·
+> Shabeer Rauf (plan rev 5)** · ADR:
+> [0014](../../adr/0014-thin-v1-orchestrator.md) **Accepted**.
+> **Design phase complete; build next (conversation B).**
 >
 > **Terminology note — two "plans" collide on this slice.** The
 > **orchestration plan** (plan-as-object spec) is the product object
