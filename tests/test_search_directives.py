@@ -47,6 +47,10 @@ def test_parse_search_directive_depth_deep_ok() -> None:
     assert parse_search_directive({"search": {"depth": "deep"}}) == ("deep", None)
 
 
+def test_parse_search_directive_depth_standard_ok() -> None:
+    assert parse_search_directive({"search": {"depth": "standard"}}) == ("standard", None)
+
+
 def test_parse_search_directive_null_filters_rejected() -> None:
     with pytest.raises(SearchDirectiveError):
         parse_search_directive({"search": {"filters": None}})

@@ -38,7 +38,7 @@ from policy_atlas.search_prompts import (
     validated_suggestions,
 )
 
-SearchDepth = Literal["rapid", "deep"]
+SearchDepth = Literal["rapid", "standard", "deep"]
 QueryOrigin = Literal[
     "generated",
     "variant_sr",
@@ -62,6 +62,7 @@ CallStatus = Literal["ok", "error"]
 ArmName = Literal["reformulate", "snowball", "suggest", "diversity"]
 
 RAPID_WALL_CLOCK_S = 30
+STANDARD_WALL_CLOCK_S = 75
 DEEP_WALL_CLOCK_S = 150
 ROUND_CAP = 3
 POS_EXEMPLARS = 8
@@ -91,6 +92,11 @@ class DepthConstants(TypedDict):
     # deep round × round_cap) cannot exceed it. If arms ever become dynamic,
     # enforce this at the generation call sites (015 review adjudication).
     generation_call_cap: int
+    # Deep-round-loop arm selection (017, contract rev 2.9): which of the
+    # four deep-round arms run at this depth. Not applicable to "rapid" —
+    # rapid's single round_cap never reaches the deep-round loop — so its
+    # value is the empty set.
+    arms: frozenset[ArmName]
 
 
 DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
@@ -100,6 +106,15 @@ DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
         "round_cap": 1,
         "http_budget": {"openalex": 20, "overton": 5},
         "generation_call_cap": 1,
+        "arms": frozenset(),
+    },
+    "standard": {
+        "result_cap_per_backend": 75,
+        "wall_clock_s": STANDARD_WALL_CLOCK_S,
+        "round_cap": 2,
+        "http_budget": {"openalex": 30, "overton": 8},
+        "generation_call_cap": 4,
+        "arms": frozenset({"reformulate", "diversity"}),
     },
     "deep": {
         "result_cap_per_backend": 150,
@@ -107,6 +122,7 @@ DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
         "round_cap": ROUND_CAP,
         "http_budget": {"openalex": 50, "overton": 15},
         "generation_call_cap": 8,
+        "arms": frozenset({"reformulate", "snowball", "suggest", "diversity"}),
     },
 }
 
@@ -429,7 +445,9 @@ def parse_search_directive(context: dict[str, Any]) -> tuple[SearchDepth, Any | 
     if "depth" in raw:
         raw_depth = raw["depth"]
         if not isinstance(raw_depth, str) or raw_depth not in DEPTH_CONSTANTS:
-            raise SearchDirectiveError("search directive depth must be 'rapid' or 'deep'")
+            raise SearchDirectiveError(
+                "search directive depth must be 'rapid', 'standard', or 'deep'"
+            )
         depth = raw_depth
     if "filters" in raw and raw["filters"] is None:
         raise SearchDirectiveError("search directive filters must be an object")
@@ -863,6 +881,7 @@ def _prior_deep_usage(
     project_id: uuid.UUID,
     scope_id: uuid.UUID,
     backend_names: list[str],
+    depth: SearchDepth,
 ) -> tuple[dict[str, int], dict[str, int]]:
     http_calls = dict.fromkeys(backend_names, 0)
     result_counts = dict.fromkeys(backend_names, 0)
@@ -871,7 +890,7 @@ def _prior_deep_usage(
         .where(event_log.c.project_id == project_id)
         .where(event_log.c.event_type == "search.executed")
         .where(event_log.c.payload.op("->>")("evidence_scope_id") == str(scope_id))
-        .where(event_log.c.payload.op("->>")("depth") == "deep")
+        .where(event_log.c.payload.op("->>")("depth") == depth)
     ).fetchall()
     for row in rows:
         payload = _metadata(row.payload)
@@ -1102,7 +1121,8 @@ def run_search(
         project_id=project_id,
         scope_id=context.scope_id,
         backend_names=backend_names,
-    ) if depth == "deep" else (
+        depth=depth,
+    ) if depth in ("deep", "standard") else (
         dict.fromkeys(backend_names, 0),
         dict.fromkeys(backend_names, 0),
     )
@@ -1215,7 +1235,7 @@ def run_search(
             execute_plan(backend, _PlannedCall(backend.name, context.intent, "verbatim"))
             if stop_all:
                 break
-    elif depth == "deep" and round_index >= 2:
+    elif depth in ("deep", "standard") and round_index >= 2:
         positive_records, _negative_records, positive_exemplars, negative_exemplars = (
             _read_exemplars(
                 conn,
@@ -1276,7 +1296,7 @@ def run_search(
             ),
             None,
         )
-        if openalex_backend is not None and not stop_all:
+        if "snowball" in constants["arms"] and openalex_backend is not None and not stop_all:
             seeds = [
                 record for record in positive_records
                 if record.metadata.get("backend") == "openalex"
@@ -1365,7 +1385,7 @@ def run_search(
             ),
             None,
         )
-        if suggest_backend is not None and not stop_all:
+        if "suggest" in constants["arms"] and suggest_backend is not None and not stop_all:
             try:
                 generation_calls += 1
                 suggestions = validated_suggestions(

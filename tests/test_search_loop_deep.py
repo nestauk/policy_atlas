@@ -265,6 +265,14 @@ def _deep_context(scope_id: uuid.UUID, *, intent: str = "Test intent") -> Acquir
     )
 
 
+def _standard_context(scope_id: uuid.UUID, *, intent: str = "Test intent") -> AcquireContext:
+    return AcquireContext(
+        scope_id=scope_id,
+        intent=intent,
+        context={"search": {"depth": "standard"}},
+    )
+
+
 def _index(text: str) -> dict[str, list[int]]:
     index: dict[str, list[int]] = {}
     for position, token in enumerate(text.split()):
@@ -1008,6 +1016,80 @@ def test_deep_round_fixed_allocation_snowball_suggest_and_diversity(
         1, int(DEPTH_CONSTANTS["deep"]["result_cap_per_backend"] * DIVERSITY_FRACTION)
     )
     assert diversity_calls[0].max_results == expected_reserve
+
+
+def test_standard_round_two_trims_snowball_and_suggest_arms(
+    conn: Connection,
+) -> None:
+    """The 017 standard depth (contract rev 2.9) reuses the deep-round loop at
+    round 2 but with a trimmed arm set: reformulate + diversity only. The
+    backend below is fully snowball/suggest-capable, so the absence of those
+    calls proves it is the depth's arm selection doing the trimming, not a
+    capability gap.
+    """
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id, context={"search": {"depth": "standard"}})
+    intent = "Map digital skills training programmes."
+    _seed_coverage_row(
+        conn,
+        project_id=project_id,
+        scope_id=scope_id,
+        run_id=run_id,
+        depth="standard",
+    )
+    for index in range(6):
+        _seed_screened_source(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            scope_id=scope_id,
+            title=f"Seed positive {index}",
+            confidence=0.9 - index / 100,
+            backend_record_id=f"https://openalex.org/Wstd{index}",
+            referenced_works=[f"https://openalex.org/Wref{index}"],
+        )
+    generation = ScriptedGenerationBackend(
+        reformulations=[_wire_queries(["reformulated standard query"])],
+    )
+    backend = ScriptedBackend(
+        caps=BackendCaps(has_snowball=True, has_title_lookup=True, has_doi_lookup=True),
+        scripts={"search": [[oa_record("std-reform", title="Reformulated hit")], []]},
+    )
+
+    counts = run_search(
+        conn,
+        project_id=project_id,
+        run_id=seed_run(conn, project_id),
+        context=_standard_context(scope_id, intent=intent),
+        backends=[backend],
+        generation_backend=generation,
+    )
+
+    assert DEPTH_CONSTANTS["standard"]["round_cap"] == 2
+    assert counts["search"]["depth"] == "standard"
+    assert counts["search"]["round_index"] == 2
+    assert counts["search"]["arm_calls"]["reformulate"] >= 1
+    assert counts["search"]["arm_calls"]["diversity"] >= 1
+    assert counts["search"]["arm_calls"]["snowball"] == 0
+    assert counts["search"]["arm_calls"]["suggest"] == 0
+    # Suggest gating happens before generation_backend.suggest is ever called.
+    assert generation.suggest_payloads == []
+
+    calls_by_verb: dict[str, list[BackendCall]] = {}
+    for call in backend.calls:
+        calls_by_verb.setdefault(call.verb, []).append(call)
+    assert "fetch_citations" not in calls_by_verb
+    assert "fetch_references" not in calls_by_verb
+    assert "lookup_dois" not in calls_by_verb
+    assert "lookup_title" not in calls_by_verb
+
+    origins = {payload["query_origin"] for payload in _search_payloads(conn, project_id)}
+    assert not origins & {
+        "snowball_forward",
+        "snowball_backward",
+        "suggestion_doi",
+        "suggestion_title",
+    }
 
 
 def test_suggestion_grounding_matrix_and_screened_out_counter(
