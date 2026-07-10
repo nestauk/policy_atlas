@@ -14,34 +14,36 @@ in progress, not done. (Rev 2.5 — tracks contract rev 2.5.)
 4. [ ] No generated files or secrets edited by hand.
 5. [ ] No tests deleted, skipped or weakened without written justification.
 6. [ ] **Spine enforcement test-pinned**: no composable orchestration plan omits or
-       reorders a mandatory-spine leg (acquire → screen → classify → appraise →
+       reorders a mandatory-spine component (acquire → screen → classify → appraise →
        ingest → synthesise); discretionary selection matches the approved plan
        (intent-fit × gradation, decision 4).
 7. [ ] **Fail-closed compile test-pinned**: unknown components, parameters or directives
        reject at validation — a caught error, never a silent run; approved plan and
        executed config are provably the same (round-trip property, amendments included).
-8. [ ] **Failure semantics test-pinned** (fault-injected): spine-leg failure fails the
-       run honestly with no downstream legs; discretionary-leg failure degrades with
+8. [ ] **Failure semantics test-pinned** (fault-injected): spine-component failure fails the
+       run honestly with no downstream components; discretionary-component failure degrades with
        reason-coded events and synthesise takes the deepest successful reference
        (transitive resolution — the whole surviving chain feeds the artefact); a
        failed stage's run id never feeds downstream; the bounded-retry rule fires as
        plan-pinned; a DB-error failure still records its `component.failed` event
        (rollback first, fresh transaction — contract decision 8 rev 2.5), unless the
        escape valve was taken with written justification.
-9. [ ] **Depth compile bounded and the nudge anchored**: gradation bundles compile only
-       to existing directive surfaces (search depth · stage-2 screen · characterise ·
-       deep chain · selection budget · grouping facet); nothing compiles into the
-       synthesis section directive; the fixed lighter/as-proposed/deeper options each
-       re-derive a valid full plan with its own concrete proposal + time band; the
-       default proposal is the middle gradation.
+9. [ ] **Gradation compile bounded, two-axis, and the nudge anchored**: search breadth
+       × analysis depth compile only to existing directive surfaces (search depth ·
+       stage-2 screen · characterise · deep chain · selection budget · grouping facet);
+       off-diagonal compositions (narrow-and-deep, broad-and-shallow) compose validly;
+       nothing compiles into the synthesis section directive; the fixed
+       lighter/as-proposed/deeper options each re-derive a valid full plan with its own
+       concrete proposal + measured time band; the default proposal is the middle
+       pairing.
 10. [ ] **Steering core test-pinned**: mode → pause-set compile for all four modes;
         the deepening-selection steer-point fires on its computable triggers and pauses
         in every mode except Unattended; its intent-vocabulary options (clusters ·
         strongest · most-relevant · budget · as-proposed) compile to the declared
         selection grammar with inexpressible intents refused honestly; steering
-        adjustments touch only not-yet-run legs and land as user-attributed plan
+        adjustments touch only not-yet-run components and land as user-attributed plan
         version rows; Unattended auto-resolves to the plan's visible defaults
-        with every resolution flagged + collated; abort leaves committed legs and an
+        with every resolution flagged + collated; abort leaves committed components and an
         honestly-abandoned run with no artefact.
 11. [ ] **Sub-agent boundary real**: the orchestrator delegates execution to the EB
         capability-runner; steer-points surface only through the orchestrator; the
@@ -62,7 +64,7 @@ in progress, not done. (Rev 2.5 — tracks contract rev 2.5.)
         carry plan id + version; plan rows + events together reconstruct the run —
         including every steering interaction — with no orphan state in either.
 14. [ ] **Posture honesty**: per-component commit shape verified (mid-chain failure
-        leaves prior legs committed and the run honestly failed); no resume implied;
+        leaves prior components' state committed and the run honestly failed); no resume implied;
         substance never silent in any mode.
 15. [ ] **Spec refinement landed**: execution-orchestration § Steering modes carries the
         Unattended pre-declared-visible-defaults path, with a `log.md` entry, and the
@@ -75,7 +77,7 @@ in progress, not done. (Rev 2.5 — tracks contract rev 2.5.)
         probe) and one compiled scope constraint; (b) one
         composed end-to-end run at modest gradation, at Moderate, with the
         deepening-selection steer-point exercised live and one intent-vocabulary
-        adjustment landing as a new plan version row, plan↔chain equivalence, per-leg
+        adjustment landing as a new plan version row, plan↔chain equivalence, per-component
         wall-clocks and intact honesty labels; (c) fault-injected failure-semantics +
         scripted Unattended tests (no live fault probe).
 17. [ ] Gate adjudications recorded (steering core + Unattended mode · durability

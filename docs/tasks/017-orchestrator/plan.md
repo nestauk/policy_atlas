@@ -1,6 +1,12 @@
 # Plan: 017-orchestrator
 
-> **Status:** rev 2 — plan-stage adversarial review adjudicated
+> **Status:** rev 3 — plan-🛑 user calls folded (contract rev 2.7):
+> gradation split into the two-axis compile (search breadth ×
+> analysis depth; diagonal pairings as planner defaults; off-diagonal
+> legitimate); time-band targets pinned (≤10 / 15–30 / ~90 min) with
+> displayed-band-is-measured discipline + standard budget 12 → 10;
+> "leg" terminology swept to repo-standard "component".
+> Rev 2 — plan-stage adversarial review adjudicated
 > (Codex, 6 findings: 2 blocker · 3 major · 1 minor, **6/6 adopted**,
 > all verified in as-built code). Blockers: (1) `weight_emphasis` is
 > **multiplicative** on the default weights, never renormalised
@@ -8,16 +14,16 @@
 > as multipliers with rank-shift tests; (2) the failure-event
 > backstop needed a **two-phase run lifecycle** — the run row (+
 > `run.started` + `plan.compiled`) commits in its own short
-> transaction BEFORE leg work, so it survives a leg rollback and the
+> transaction BEFORE component work, so it survives a component rollback and the
 > fresh-transaction `component.failed` keeps FK validity
 > (`schema.py:101/113`, `harness.py:579`). Majors: the screening
 > directive parser rejects unknown keys (`screen.py:165-171`) — task
 > 5 now owns widening the grammar to `{stage?, criteria?}`; token
 > usage is trace-only as-built (backends discard `_usage`) — the dev
-> summary log narrows to wall-clock, per-leg tokens read from
+> summary log narrows to wall-clock, per-component tokens read from
 > Langfuse, single-line aggregation recorded as a seam (contract
 > decision 11 micro-clarified, rev 2.6); task 3's brief gains the
-> full per-leg run lifecycle + component reference-kwargs map (the
+> full per-component run lifecycle + component reference-kwargs map (the
 > 015 brief-self-sufficiency lesson). Minor: ADR 0014 ownership
 > pinned — lead authors it at plan confirmation (step 4), before the
 > build.
@@ -48,8 +54,11 @@ never stall.
     `filters` grammar: recency under `shared`, geography under
     `overton` only; OpenAlex has no as-built geography key, stated
     in the plan's assumptions when a geography constraint is set) ·
-    `gradation` (`lighter|standard|deeper` — internal bundle names,
-    never a user-facing dial) · `components: list[str]` + `component_
+    `search_breadth` (`focused|broad`) · `analysis_depth`
+    (`landscape|standard|deep`) — the two independent gradation axes
+    (contract rev 2.7); `lighter|standard|deeper` survive as named
+    diagonal pairings the planner defaults to, never a user-facing
+    dial · `components: list[str]` + `component_
     rationale` (intent-fit × gradation, visible) · `grouping_facet` ·
     `steering_mode` (`frequent|moderate|minimal|unattended`) ·
     `steer_point_defaults` (pre-declarable rules only; schema forbids
@@ -58,22 +67,37 @@ never stall.
     `declared_hatches` (v1: the thin-base search escalation, always
     declared) · `expected_artefact_shape` (derived, non-executing) ·
     `assumptions: list[str]` · `time_band` (derived) · `title`.
-  - `GRADATION_BUNDLES` (the compile table; intent-fit strikes the
-    deep chain / facet from any bundle):
+  - The two-axis compile tables (rev 3; intent-fit strikes the deep
+    chain / facet regardless of either axis):
 
-    | bundle | search depth | stage-2 | characterise | deep chain | selection budget | band (derived) |
-    |---|---|---|---|---|---|---|
-    | `lighter` | rapid | off | on | off | — | ~10–20 min |
-    | `standard` (default) | rapid (+ thin-base hatch, as-built) | on | on | on | 12 | ~30–60 min |
-    | `deeper` | deep | on | on | on | 25 (`DEFAULT_SELECTION_BUDGET`) | ~90–150 min |
+    **Search breadth** → search directive:
+    | breadth | search depth | result caps |
+    |---|---|---|
+    | `focused` | rapid (+ thin-base hatch, as-built) | as-built rapid caps (50/backend) |
+    | `broad` | deep | as-built deep caps (150/backend) |
 
-    Bands from the 016 verification wall-clocks (ingest 134.8 s,
-    synthesise 589.9 s on a 32-doc corpus) + the demo deep-run prior
-    (~95 min); worded as ranges, recomputed per composition
-    (`TIME_BANDS` constant beside the bundles).
-  - `compose(plan) -> ComposedChain`: ordered leg specs (component ·
-    per-leg directive deltas · reference-threading rule). Spine
-    enforced by construction (the leg list is built from the spine
+    **Analysis depth** → component set + budgets:
+    | depth | stage-2 | characterise | deep chain | selection budget |
+    |---|---|---|---|---|
+    | `landscape` | off | on | off | — |
+    | `standard` | on | on | on | 10 |
+    | `deep` | on | on | on | 25 (`DEFAULT_SELECTION_BUDGET`) |
+
+    Named diagonal pairings (planner defaults): `lighter` =
+    focused×landscape · `standard` = focused×standard · `deeper` =
+    broad×deep. Off-diagonal composition is legitimate
+    (narrow-and-deep = focused×deep; horizon scan = broad×landscape).
+    **Time-band targets (user call): lighter ≤ ~10 min · standard
+    ~15–30 min · deeper ~90 min.** Displayed bands are MEASURED
+    (`TIME_BANDS` seeded from the 016 wall-clocks — ingest 134.8 s,
+    synthesise 589.9 s on 32 docs — + the demo deep prior ~95 min,
+    re-seeded from the build live check); arithmetic says standard
+    at budget 12 risked ~40 min, hence budget 10; residual
+    target-vs-measured divergence is recorded at the depth seam for
+    018/eval tuning, never hidden in the band.
+  - `compose(plan) -> ComposedChain`: ordered component-step specs (component ·
+    per-component directive deltas · reference-threading rule). Spine
+    enforced by construction (the component list is built from the spine
     constant + discretionary inserts, never free-assembled);
     validation errors are caught errors, never silent runs.
 - `planner.py` — `PlannerBackend` protocol · `OpenAIPlannerBackend`
@@ -92,12 +116,12 @@ never stall.
   scoping/criteria suggestions gated on intent-fit; never promises
   findings; assumptions first-class.
 - `runner.py` — the EB capability-runner: `run_plan(engine, plan,
-  backends, io: OrchestratorIO)`. Per-leg `engine.begin()`
-  transactions (block-boundary commits) with the **two-phase per-leg
+  backends, io: OrchestratorIO)`. Per-component `engine.begin()`
+  transactions (block-boundary commits) with the **two-phase per-component
   run lifecycle** (rev 2, blocker 2): phase A — a short transaction
   creates the `runs` row + appends `run.started` + `plan.compiled`
-  (payload incl. plan_id/plan_version + the leg's reference kwargs)
-  and COMMITS; phase B — the leg's work transaction. A leg failure
+  (payload incl. plan_id/plan_version + the component's reference kwargs)
+  and COMMITS; phase B — the component's work transaction. A component failure
   rolls back phase B only; the committed run row keeps
   `event_log`'s composite FK valid, so the fresh-transaction
   `component.failed` append + run-status update always lands.
@@ -106,23 +130,23 @@ never stall.
   ranking_backend) · extract ← selection_run_id · group ←
   extraction_run_id · synthesise ← deepest successful reference.
   The directive-authoring slot
-  is one function — `leg_directive(plan, leg, upstream_state) ->
-  dict` (scope-context deltas per leg: search depth+filters ·
+  is one function — `leg_directive(plan, component, upstream_state) ->
+  dict` (scope-context deltas per component: search depth+filters ·
   screening stage/criteria · selection budget/emphasis/strata ·
   grouping facet) — **the named seam the future LLM EB-expert drops
   into**. Reference threading: deepest-successful + transitive
-  (as-built synthesise semantics). `LEG_RETRY_CAP = 1` for LLM-bearing
-  legs (screen · classify · characterise · select · extract · group ·
+  (as-built synthesise semantics). `COMPONENT_RETRY_CAP = 1` for LLM-bearing
+  components (screen · classify · characterise · select · extract · group ·
   synthesise; acquire owns its own round/retry machinery). Failure
   semantics per contract decision 8, including the **fresh-transaction
-  failure-event backstop**: on leg exception, roll back the leg
+  failure-event backstop**: on component exception, roll back the component
   transaction, open a short fresh transaction, append
   `component.failed` (idempotent — check-before-insert against the
   harness's own write) + set run status. End-of-run: collation of
   flagged events + one structured dev summary log line carrying
-  **per-leg wall-clocks** (rev 2, finding 4: token usage is
+  **per-component wall-clocks** (rev 2, finding 4: token usage is
   trace-only as-built — every backend discards `_usage` after
-  tracing, so per-leg tokens are read in **Langfuse**, where they
+  tracing, so per-component tokens are read in **Langfuse**, where they
   already exist per call; both surfaces are developer-side, honouring
   the contract; a runner-visible usage aggregate is a recorded seam —
   arrives with a usage-return refactor or the component-progress
@@ -163,7 +187,7 @@ not needed while events carry it). Amendment = new row at version n+1
 (`created_by='user'`), prior row → `superseded`.
 
 **Steering pause sets (mode → boundaries):**
-- `frequent`: every leg boundary.
+- `frequent`: every component boundary.
 - `moderate`: the deepening-selection steer-point (post-`select`,
   pre-`extract`) + the landscape→synthesis crossing (pre-`synthesise`).
 - `minimal`: the steer-point only (substance).
@@ -183,7 +207,7 @@ by emphasis values and sums unnormalised — there is no
 renormalisation; the earlier target-weight framing was wrong).
 Rank-shift tests prove each option reorders a fixture candidate set
 the intended way. · budget → `budget` · as-proposed → no delta.
-After adjustment: new plan version row → recompose remaining legs →
+After adjustment: new plan version row → recompose remaining components →
 re-run `select`.
 
 **Screening-criteria compose (contract decision 2 rev 2.5):**
@@ -216,7 +240,7 @@ schema class, mandatory)**
 2. `orchestration_plan.py`: model + `GRADATION_BUNDLES` + `compose()`
    + expected-shape/time-band derivation + validation; tests pinning
    spine-by-construction (no composable plan omits/reorders a spine
-   leg), fail-closed unknowns, intent-fit strike behaviour,
+   component), fail-closed unknowns, intent-fit strike behaviour,
    steer-point-defaults schema (pre-declarable rules only), round-trip
    (approved payload ↔ composed chain equivalence). — **codex**
    *(judgment-bearing model/composer coherence; machine-verifiable
@@ -225,20 +249,20 @@ schema class, mandatory)**
 
 **Phase 2 — the EB capability-runner (full `make verify` gate —
 reader contact: task 5 touches `screen.py`)**
-3. `runner.py` core: chain walk with the **two-phase per-leg run
+3. `runner.py` core: chain walk with the **two-phase per-component run
    lifecycle** (run row + `run.started` + `plan.compiled` w/
-   plan_id/version + reference kwargs committed before leg work — the
+   plan_id/version + reference kwargs committed before component work — the
    constants block pins the shape and the per-component kwargs map),
    reference threading, `leg_directive` authoring slot, retry cap,
    degrade/skip matrix, end-of-run collation + the wall-clock dev
    summary log. `run_harness` stays a one-component dispatcher — the
    runner owns everything `skeleton._run_component` does today, per
-   plan, per leg. — **codex** *(the slice's core; multi-constraint
+   plan, per component. — **codex** *(the slice's core; multi-constraint
    coherence; fault-injection tests specced below make done
    machine-verifiable; rev 2 — brief made self-sufficient on the run
    lifecycle, the 015 lesson)*
 4. Failure semantics + the fresh-transaction failure-event backstop;
-   fault-injected tests: spine-leg fail → run fail, no downstream;
+   fault-injected tests: spine-component fail → run fail, no downstream;
    discretionary fail → degrade + deepest-successful synthesise;
    DB-abort component → `component.failed` survives on a fresh
    transaction; retry fires once. — **codex** *(same subsystem as 3,
@@ -256,7 +280,7 @@ over Phase-2 seams, no schema/reader contact)**
 6. Mode → pause-set compile · deterministic check-in renders (reuse
    the `skeleton.py` render-helper pattern) · bounded adjustment
    application (grammar-validated → plan version row → recompose
-   remaining legs) · abort · Unattended auto-resolve + flags ·
+   remaining components) · abort · Unattended auto-resolve + flags ·
    end-of-run collation render. — **codex**
 7. Deepening-selection steer-point: trigger computation, option
    mapping per the pinned table, select re-run flow, honest
@@ -310,10 +334,10 @@ question was shape-necessary. Cost: pennies (planner turns only).
 (b) **One composed end-to-end run**: real Nesta-mission question,
 `standard` bundle, **Moderate**; the deepening-selection steer-point
 exercised live with one intent-vocabulary option (plan version row
-observed); plan↔chain equivalence from the audit trail; per-leg
+observed); plan↔chain equivalence from the audit trail; per-component
 wall-clocks + dev token roll-up recorded; artefact honesty labels
 spot-checked. Expected wall: ~30–60 min; cost: low single-digit
-dollars (mini-class legs + judgment-class planner/synthesis).
+dollars (mini-class components + judgment-class planner/synthesis).
 (c) Failure semantics + Unattended: **test-level only** (Phase 2/3
 fault-injected + scripted tests) — no live fault probe.
 

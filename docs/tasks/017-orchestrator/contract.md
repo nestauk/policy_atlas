@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md);
 specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** **APPROVED rev 2.4 · amended rev 2.5 (ack'd) + rev 2.6 (micro-clarification)** — contract approved (before
+> **Status:** **APPROVED rev 2.4 · amended revs 2.5 (ack'd) · 2.6 (micro-clarification) · 2.7 (plan-gate user calls)** — contract approved (before
 > planning): **2026-07-10 · Shabeer Rauf** (covering the gated set:
 > runtime egress — the planner LLM surface; one CLI entrypoint; the
 > `orchestration_plan` schema addition; the Unattended steering-mode
@@ -29,10 +29,24 @@ specs in [docs/specs/](../../specs/index.md).
 > the **component config** to keep the three apart.
 >
 > **Revision history:**
+> - **rev 2.7** (2026-07-10, user calls at the plan 🛑 — three):
+>   **(a) Gradation split into two independent axes** — search
+>   breadth (evidence-base size) × analysis depth (component set +
+>   budgets) — enacting capability.md's breadth/depth independence;
+>   named bundles = the diagonal, off-diagonal composition
+>   (narrow-and-deep · broad-and-shallow horizon scan) now
+>   expressible; user-facing exposure unchanged (proposal + band +
+>   one nudge over both axes, per-axis movement via conversation/
+>   edits/check-ins). **(b) Time-band targets pinned** (lighter
+>   ≤ ~10 min · standard ~15–30 · deeper ~90) with the
+>   displayed-band-is-measured discipline; standard selection budget
+>   dropped 12 → 10 toward the target. **(c) Terminology aligned to
+>   repo vocabulary** — "leg" (this contract's coinage) swept to
+>   "component" throughout contract/plan/rubric.
 > - **rev 2.6** (2026-07-10, micro-clarification from the PLAN-stage
 >   adversarial review, finding 4): decision 11's developer-side
 >   roll-up precised — wall-clocks in the end-of-run summary log;
->   per-leg tokens via Langfuse (usage is trace-only as-built); the
+>   per-component tokens via Langfuse (usage is trace-only as-built); the
 >   single-line aggregate is a recorded seam. No settled decision
 >   changed.
 > - **rev 2.5** (2026-07-10, contract-stage adversarial review
@@ -80,7 +94,7 @@ specs in [docs/specs/](../../specs/index.md).
 >   review focus + rubric). **(b) Resume-seam design note** (decision
 >   7): the deferred resume engine's requirement recorded — checkpoint
 >   state serialization + an idempotency key persisted before any
->   interruption. **(c) Per-leg token/cost roll-up** joins wall-clocks
+>   interruption. **(c) Per-component token/cost roll-up** joins wall-clocks
 >   in the run record (decision 11) — **developer-side only** (user
 >   call): users see time bands, never tokens or cost; cost data may
 >   inform the bands invisibly. Confirmations recorded, not
@@ -195,7 +209,7 @@ specs in [docs/specs/](../../specs/index.md).
 >   ADR 0013 (the composition rule this slice compiles), the
 >   plan-as-object + execution-orchestration system contracts (the
 >   spec cluster this slice cuts a thin v1 from), the as-built
->   `plan.py`/`skeleton.py`/`search_loop.py` seams, 016's per-leg
+>   `plan.py`/`skeleton.py`/`search_loop.py` seams, 016's per-component
 >   wall-clocks, and `demo/RETRO.md` + `demo/server/orchestrator.py`
 >   (branch `demo-live-run`) as **anecdotal prior only** (standing
 >   user call: the demo was throwaway; no demo shape, prompt or
@@ -256,9 +270,9 @@ PR landing:
   deepening-selection steer-point + intent-vocabulary options,
   bounded steering application recorded as user-attributed events,
   abort, end-of-run collation.
-- Failure semantics productionised (decision 8): spine-leg failure
-  fails the run honestly; discretionary-leg failure degrades with
-  flags; bounded retry for LLM-bearing legs.
+- Failure semantics productionised (decision 8): spine-component failure
+  fails the run honestly; discretionary-component failure degrades with
+  flags; bounded retry for LLM-bearing components.
 - Plan persistence (decision 2, rev 2.2; table-first rev 2.5): the
   minimal `orchestration_plan` table (the one approved schema
   addition) — status transitions + immutable version rows are the
@@ -299,7 +313,7 @@ PR landing:
   and the declared thin-base hatch), `select.py` (directive grammar:
   budget/boosts/must-includes — the steer-point's compile target),
   `harness.py` (`run_harness`, the one-component dispatcher)
-- 016 `verification.md` per-leg wall-clocks (feeds the gradation bands
+- 016 `verification.md` per-component wall-clocks (feeds the gradation bands
   and time bands)
 - `demo/RETRO.md` + `demo/server/orchestrator.py` + `demo/server/driver.py`
   (branch `demo-live-run`) — **anecdotal prior only**: which live
@@ -503,7 +517,7 @@ PR landing:
    transitively from the deepest given — passing the deepest
    successful reference hands it the entire successful upstream
    chain, cross-checked; rev 2.1d). Tests pin: no composable plan
-   omits or reorders a spine leg; an unknown component or parameter
+   omits or reorders a spine component; an unknown component or parameter
    rejects at validation.
 
 4. **Component selection is intent-fit × gradation; the nudge is
@@ -524,18 +538,36 @@ PR landing:
      thoroughness instead. Irrelevant-component reasoning is visible
      in the plan (the discretionary set + a why), and composition
      stays fail-closed regardless of what the planner reasons.
-   - **Gradation**: how much of what's relevant. Graded
-   bundles are an orchestrator-authoring convenience (never a
-   user-facing absolute dial); the user-facing controls are the
-   concrete proposal and the relative nudge. Pinned now: **the
+   - **Gradation — two independent axes** *(rev 2.7, user call at
+     the plan gate; enacts the spec's breadth/depth independence —
+     capability.md: "breadth and depth are independent parameters";
+     the EB handoff maps the wireframe Quick/Deep control to a
+     search-breadth signal)*: **search breadth** (how big the
+     evidence base gets — search depth rapid/deep, per-backend result
+     caps) × **analysis depth** (how far the analysis goes —
+     discretionary components, stage-2 screen, selection budget,
+     facet). Named pairings survive as authoring convenience (the
+     lighter/standard/deeper diagonal — never a user-facing dial),
+     and the planner composes **off-diagonal** shapes where intent
+     warrants: narrow-and-deep (focused search, full extraction) and
+     broad-and-shallow (wide sweep, landscape only — the horizon-scan
+     shape). User-facing exposure unchanged: the concrete proposal +
+     time band; the single nudge re-derives both axes coherently;
+     either axis moves individually via conversation, plan edits, or
+     bounded check-in adjustments. Pinned now: **the
    default proposal is a middle gradation**, anchored to concrete
    numbers + a time band; the nudge vocabulary is fixed as
    **lighter / as proposed / deeper** (constant across all projects
    and runs — it lives in one prompt artifact and the plan schema);
    **every nudge option is presented with its own re-derived concrete
-   proposal + time band** ("Lighter — skip deep extraction, ~15 min ·
-   Deeper — extract ~40 docs, ~90 min"), so the choice is always
-   between anchored proposals, never labels. Conversational effort
+   proposal + time band**, so the choice is always
+   between anchored proposals, never labels. **Time-band targets**
+   *(user call, rev 2.7)*: lighter ≤ ~10 min · standard ~15–30 min ·
+   deeper ~90 min — targets, not claims: the **displayed** band
+   derives from measured wall-clocks (016 + build live check), never
+   the target; target-vs-measured divergence is a recorded
+   depth-seam calibration item (tuning constants toward targets is
+   018/eval work, never silent band inflation). Conversational effort
    signals ("quick first look") absorb into the proposal — expected
    rare; the anchored default carries the common case. v1 compile
    targets, all existing: search depth (`rapid`/`deep`, 015
@@ -545,7 +577,7 @@ PR landing:
    per-depth fetch budgets, synthesis caps, parser tiers — recorded
    levers of the gradation seam, which this decision opens but does
    not finish. Exact bundle table plan-pinned, informed by 016's
-   per-leg wall-clocks.
+   per-component wall-clocks.
 
 5. **The planner is the slice's one new prompt surface — lead-
    authored, judgment-class.** Conversational: refines intent into an
@@ -654,20 +686,20 @@ PR landing:
      After adjustment, `select` re-runs cheaply; `extract` has not
      yet spent.
    - **Bounded steering application, everywhere**: at any pause the
-     user may continue · adjust not-yet-run legs' directives within
-     the declared grammar (incl. the remaining-legs nudge and a mode
-     change) · **stop the run** (clean abort: committed legs stand,
+     user may continue · adjust not-yet-run components' directives within
+     the declared grammar (incl. the remaining-components nudge and a mode
+     change) · **stop the run** (clean abort: committed components stand,
      run honestly marked abandoned, no artefact — synthesise is the
-     minting terminus). Never re-runs completed legs, never free-text
+     minting terminus). Never re-runs completed components, never free-text
      replanning. Every steering response persists as a new
      user-attributed plan version row (the spec's "human substance
      enters honestly in provenance"; table-first, rev 2.5).
-   - **Minimal/Unattended collation**: flagged events (degraded legs,
+   - **Minimal/Unattended collation**: flagged events (degraded components,
      hatch firings, retries, auto-resolutions, coverage caveats)
      collate into an end-of-run review.
 
 7. **Durability: per-component commits, no resume engine —
-   adjudicated at this gate** *(rev 2, user-confirmed)*. Each leg
+   adjudicated at this gate** *(rev 2, user-confirmed)*. Each component
    commits as it lands (the durability spec's block-boundary-commit
    direction; also what a future read surface needs to watch a run);
    a failed run reports honestly and is re-run from the top. The
@@ -685,18 +717,18 @@ PR landing:
 
 8. **Failure semantics (the RETRO priors, productionised as code
    rules).** A failed stage never feeds its run id downstream: stages
-   chain only off successful predecessors. **Spine-leg failure fails
+   chain only off successful predecessors. **Spine-component failure fails
    the run honestly** (evented, run status failed, no downstream
-   legs — a run that cannot screen has nothing true to synthesise).
-   **Discretionary-leg failure degrades**: the leg's failure is
-   evented + flagged, downstream discretionary legs that require it
+   components — a run that cannot screen has nothing true to synthesise).
+   **Discretionary-component failure degrades**: the component's failure is
+   evented + flagged, downstream discretionary components that require it
    are skipped with reason, and synthesise composes over the **entire
    successful upstream chain** — the runner passes the deepest
    *successful* reference and the rest resolves transitively, so only
-   the failed leg and its dependents drop (ADR 0010's
+   the failed component and its dependents drop (ADR 0010's
    every-upstream-reference-optional design absorbs this by
-   construction; rev 2.1d). LLM-bearing legs get **one
-   bounded retry** before failing (which legs, plan-pinned; the
+   construction; rev 2.1d). LLM-bearing components get **one
+   bounded retry** before failing (which components, plan-pinned; the
    characterise twice-in-a-row wobble is the motivating prior). All
    outcomes reason-coded in events; nothing silently absorbed —
    **including DB-error failures** *(rev 2.5, adversarial finding 7,
@@ -746,8 +778,8 @@ PR landing:
     deepening-selection steer-point fires live and one steering
     adjustment (an intent-vocabulary option) is exercised and lands
     as a new plan version row. Recorded: the composed chain vs the
-    approved plan (provably the same — the audit point), per-leg
-    wall-clocks, failure/degrade behaviour if any leg wobbles, the
+    approved plan (provably the same — the audit point), per-component
+    wall-clocks, failure/degrade behaviour if any component wobbles, the
     minted artefact's honesty labels intact.
     (c) **failure-semantics + Unattended evidence at test level**
     (fault-injected runner tests per decision 8; a scripted
@@ -761,8 +793,8 @@ PR landing:
     (rev 2.5): `orchestration_plan` status transitions + version rows,
     joined to execution via per-component `plan.compiled` events
     carrying plan id + version, with steering-resolution events on
-    their run context. Per-leg wall-clocks are emitted in an end-of-run
-    structured-log summary; per-leg token usage is read in Langfuse,
+    their run context. Per-component wall-clocks are emitted in an end-of-run
+    structured-log summary; per-component token usage is read in Langfuse,
     where the existing telemetry already records it per call *(rev
     2.4c; carrier pinned rev 2.5, adversarial finding 8; split
     precised rev 2.6 — plan-stage review, finding 4: as-built
@@ -850,7 +882,7 @@ planner keeps the suite egress-free.
   with the one spec-sanctioned exception named: the expected-artefact-shape field is
   explicitly non-executing annotation (plan-as-object's execution-bearing vs
   free-text-context split).
-- **Flag, don't drop** — a degraded run says which legs failed and why; auto-resolved
+- **Flag, don't drop** — a degraded run says which components failed and why; auto-resolved
   steer-points are flagged, never silent; the artefact's honesty labels (`text_basis`,
   coverage bases) ride through untouched.
 - **Honest absence** — the plan states its assumptions rather than hiding thin context;
@@ -877,7 +909,7 @@ the blocker; don't push through.
   green, deterministic, zero-egress (stub planner; fixture defaults
   unchanged).
 - Unit/integration tests pin: spine enforcement (no composed plan
-  omits/reorders a spine leg) · fail-closed compile (unknown
+  omits/reorders a spine component) · fail-closed compile (unknown
   component/parameter/directive rejects — caught error, never a
   silent run) · approved-plan ↔ executed-config equivalence (the
   round-trip property, amendment version rows included) · depth bundles
@@ -885,19 +917,19 @@ the blocker; don't push through.
   (each option yields a valid full plan + band) · steering: mode →
   pause-set compile; the deepening-selection triggers (fault-injected
   selection shapes); intent-vocabulary options compile to the
-  declared grammar; adjustments touch only un-run legs; Unattended
-  auto-resolution flagged + collated; abort leaves committed legs +
+  declared grammar; adjustments touch only un-run components; Unattended
+  auto-resolution flagged + collated; abort leaves committed components +
   an honestly-abandoned run · failure semantics (decision 8's three
   rules, fault-injected) · plan/steering events emitted in order ·
   runner per-component commit shape (a mid-chain failure leaves prior
-  legs' committed state visible and the run honestly failed).
+  components' committed state visible and the run honestly failed).
 - The pinned live check (decision 10), evidenced in verification.md.
 
 ## Verification evidence expected
 
 Command results; the live-check record (planner-review notes across
 taxonomy intents, the composed-run trace: plan payload → composed
-chain → steer-point firing + amendment → per-leg outcomes +
+chain → steer-point firing + amendment → per-component outcomes +
 wall-clocks); diff summary; public-safety confirmation; known gaps +
 deferred updates (including the gate adjudications and the spec
 refinement recorded).
@@ -916,7 +948,7 @@ mandatory-attempt semantics) · failure-chaining honesty (no failed
 run id ever feeds downstream; degrade vs fail boundaries per
 decision 8) · steering honesty (substance never silent in any mode;
 Unattended resolutions visibly pre-declared + flagged; adjustments
-bounded to un-run legs) · prompt surface review (lead-authored
+bounded to un-run components) · prompt surface review (lead-authored
 planner prompt: injection posture on user intent text, no promised
 findings) · transaction-shape change (decision 7: per-component
 commits vs the skeleton's single transaction — partial-state

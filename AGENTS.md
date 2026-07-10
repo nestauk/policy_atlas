@@ -41,7 +41,7 @@ nudge), a deterministic **composer** (plan → chain composition,
 fail-closed against the component registry, honouring the ADR 0013
 mandatory spine acquire(search) → screen → classify → appraise →
 ingest(fetch) → synthesise with all other components
-orchestrator-discretionary by intent-fit × depth gradation), a serial **EB
+orchestrator-discretionary by intent-fit × the two-axis gradation, search breadth × analysis depth), a serial **EB
 capability-runner** the orchestrator delegates to (the sub-agent
 boundary made real; topological walk, per-component commits, failure
 chaining off successful predecessors only; its directive-authoring
