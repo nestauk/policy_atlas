@@ -1,4 +1,4 @@
-"""The ``extract_iof_v2`` prompt — the repo's third product prompt (task 011).
+"""The ``extract_iof_v3`` prompt — the repo's third product prompt (task 011).
 
 Lead-authored and versioned; recorded in extraction provenance and the event
 payload. Field documentation is generated from the wire models (one source of
@@ -27,7 +27,7 @@ from policy_atlas.extraction_records import (
     render_field_docs,
 )
 
-PROMPT_VERSION = "extract_iof_v2"
+PROMPT_VERSION = "extract_iof_v3"
 
 # The contracted model floor (the 009 nano lesson is binding); a step-up is a
 # recorded option, not a silent switch.
@@ -192,9 +192,13 @@ What you must NOT extract — hard rules:
   "committing to" or "encouraging" something, a communiqué "reaffirming" a
   goal, or a study calling for "carefully designed support mechanisms" reports
   an aspiration, not an effect. A finding requires the document to report that
-  something happened (or did not happen) to an outcome. A stated effect
-  without numbers is still a finding (estimate_level "claim"); a hope, plan or
-  recommendation is not, however concrete its wording.
+  something happened (or did not happen) to an outcome. Reported programme
+  results pass that bar: administrative or monitoring data tying a scheme to
+  what it delivered ("the fund supported 3,000 apprenticeships in its first
+  year", "median delivery cost fell since launch") report outcomes that
+  happened, however descriptive the framing. A stated effect without numbers
+  is still a finding (estimate_level "claim"); a hope, plan or recommendation
+  is not, however concrete its wording.
 - Pure prevalence statements with no intervention (for example "one in five
   children are obese") are not findings — skip them. When a statement does tie
   an intervention to an outcome but you are unsure whether it is an effect
@@ -311,7 +315,7 @@ def _preflight_validate_example() -> None:
             match = matcher.find(anchor.quote)
             if match.status == "failed":
                 raise RuntimeError(
-                    "extract_iof_v2 few-shot example is invalid: finding "
+                    "extract_iof_v3 few-shot example is invalid: finding "
                     f"{finding_index} carries a quote that is not verbatim in "
                     f"its example text: {anchor.quote!r}"
                 )
