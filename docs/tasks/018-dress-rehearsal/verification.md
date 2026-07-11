@@ -428,6 +428,14 @@
   *planner date-tempo*: stats questions want current values (recent-tempo
   fits); explicit horizons respected (probe q2); slow domains stretch
   naturally (pin 6). No misfire found on any shape.
+- **C3 synthesis spot-check on the non-mission project** (replay 13, run
+  `8c2b5f2e`, artefact `25dbb39a`, pinned section_v5; blocks in `c-loop/`):
+  the voice generalizes — analyst register, connected argument, quoted
+  anchors, labelled inferences, NO mission-vocabulary bleed,
+  span_bind_failures 0. Thinner corpus shows honestly (tier_1 18 vs the
+  mission project's 33; 19/198 unverified citations on a 60%-abstract
+  substrate). Usage 3.42M tokens, 24% cached (consistent with v5's cache
+  profile). PASS.
 - **C3 extraction spot-check on the non-mission project** (replay 9, run
   `c333f2c3`, 215 findings): v4 behaviour on the finance intent is rich and
   question-appropriate — communiqué stays 0 ✓, meaty ERDF programme-delivery
@@ -491,8 +499,10 @@ trade, not adopted here.)
 | 10 | C2 writer r3 | synthesise `91d2d684` (run `347e3a2f`, artefact `64143a9d`, section_v5 multi-read) | counted |
 | 11 | C5 adoption | extract `91d2d684` with junk judge live (run `df216bce`, extract_iof_v5) | counted |
 | 12 | C2 classify | xhigh-uncapped experiment, 26 docs (user-requested; offline A/B, no DB writes) | counted |
+| 13 | C3 spot-check | synthesise `e8ac8418` (run `8c2b5f2e`, artefact `25dbb39a`, pinned section_v5) | counted |
+| – | C2 sections | 4 proposal-only probes (v1/v2 × both projects) | excluded (single bounded calls, planner-probe class) |
 
-Running total: **12 / 30**.
+Running total: **13 / 30**.
 
 ## Loop protocol notes (flow-back candidates for the eval-slice convention)
 
