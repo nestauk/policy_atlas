@@ -1379,13 +1379,14 @@ def _usage_totals(
     )
     usage = payload.get("usage_totals") if isinstance(payload, dict) else None
     if not isinstance(usage, dict):
-        return {"prompt": 0, "completion": 0, "total": 0}
+        return {"prompt": 0, "completion": 0, "total": 0, "cached": 0}
     return {
         "prompt": usage["prompt"] if isinstance(usage.get("prompt"), int) else 0,
         "completion": usage["completion"]
         if isinstance(usage.get("completion"), int)
         else 0,
         "total": usage["total"] if isinstance(usage.get("total"), int) else 0,
+        "cached": usage["cached"] if isinstance(usage.get("cached"), int) else 0,
     }
 
 

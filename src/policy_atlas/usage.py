@@ -15,11 +15,14 @@ class TokenUsage:
         prompt: Prompt/input token count, when provided by the backend.
         completion: Completion/output token count, when provided by the backend.
         total: Total token count, when provided by the backend.
+        cached: Cached prompt token count (provider prompt-cache hits), when provided by
+            the backend.
     """
 
     prompt: int | None
     completion: int | None
     total: int | None
+    cached: int | None = None
 
 
 type UsageResult[T] = tuple[T, TokenUsage | None]
@@ -32,6 +35,7 @@ class UsageAccumulator:
         self.prompt = 0
         self.completion = 0
         self.total = 0
+        self.cached = 0
 
     def add(self, usage: TokenUsage | None) -> None:
         """Add one call's usage counts, ignoring unavailable fields.
@@ -44,6 +48,7 @@ class UsageAccumulator:
         self.prompt += usage.prompt or 0
         self.completion += usage.completion or 0
         self.total += usage.total or 0
+        self.cached += usage.cached or 0
 
     def add_payload(self, totals: Mapping[str, int]) -> None:
         """Add a pre-aggregated usage payload.
@@ -54,17 +59,19 @@ class UsageAccumulator:
         self.prompt += int(totals.get("prompt", 0))
         self.completion += int(totals.get("completion", 0))
         self.total += int(totals.get("total", 0))
+        self.cached += int(totals.get("cached", 0))
 
     def payload(self) -> dict[str, int]:
         """Return JSON-ready component totals.
 
         Returns:
-            ``{"prompt": int, "completion": int, "total": int}``.
+            ``{"prompt": int, "completion": int, "total": int, "cached": int}``.
         """
         return {
             "prompt": self.prompt,
             "completion": self.completion,
             "total": self.total,
+            "cached": self.cached,
         }
 
 
@@ -80,10 +87,12 @@ def token_usage_from_provider(usage: Any | None) -> TokenUsage | None:
     """
     if usage is None:
         return None
+    details = getattr(usage, "prompt_tokens_details", None)
     return TokenUsage(
         prompt=_int_or_none(getattr(usage, "prompt_tokens", None)),
         completion=_int_or_none(getattr(usage, "completion_tokens", None)),
         total=_int_or_none(getattr(usage, "total_tokens", None)),
+        cached=_int_or_none(getattr(details, "cached_tokens", None)),
     )
 
 
@@ -101,11 +110,13 @@ def usage_metadata(usage: TokenUsage | None) -> dict[str, int | None]:
             "prompt_tokens": None,
             "completion_tokens": None,
             "total_tokens": None,
+            "cached_tokens": None,
         }
     return {
         "prompt_tokens": usage.prompt,
         "completion_tokens": usage.completion,
         "total_tokens": usage.total,
+        "cached_tokens": usage.cached,
     }
 
 

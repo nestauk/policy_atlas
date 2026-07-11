@@ -368,6 +368,7 @@ def test_full_stub_chain_commits_each_step_and_checks_in(engine: Engine) -> None
                 "prompt": 0,
                 "completion": 0,
                 "total": 0,
+                "cached": 0,
             }
             assert isinstance(timing_payload["headline_counts"], dict)
 
@@ -604,6 +605,7 @@ def test_spine_failure_after_retry_stops_without_downstream_runs(
                 "prompt": 0,
                 "completion": 0,
                 "total": 0,
+                "cached": 0,
             }
         compiled_components = [
             event["payload"]["component"] for event in _plan_compiled_events(engine, project_id)

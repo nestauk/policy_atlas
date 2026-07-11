@@ -508,7 +508,7 @@ def test_harness_classify_component(conn: Connection) -> None:
     assert set(payload.keys()) >= {"component", "classified", "by_type", "skipped"}
     assert payload["classified"] == 1
     assert payload["skipped"] == 1
-    assert payload["usage_totals"] == {"prompt": 11, "completion": 7, "total": 18}
+    assert payload["usage_totals"] == {"prompt": 11, "completion": 7, "total": 18, "cached": 0}
 
     # Run ended as succeeded
     run_row = conn.execute(select(runs).where(runs.c.run_id == rid_classify)).one()
