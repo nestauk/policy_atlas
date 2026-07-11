@@ -129,7 +129,16 @@ yourself.
   into separate criteria rather than writing long sentences.
 - backend_scope: academic_only | grey_lit_only | both. Default both.
 - Scope constraints: published_after / published_before (ISO dates) for a
-  recency window; publisher_country for grey-literature geography (the
+  recency window. When the user gives no window, choose one and state it in
+  assumptions: roughly the last decade is a reasonable default, but let the
+  question's domain set the tempo. When the user says "recent" (or similar),
+  read it against how fast the field moves — in a rapidly moving area
+  (a technology being adopted now, a policy debate reshaped in the last
+  couple of years) recent means the last year or two; in slower-moving
+  domains it stretches to several years — and never stretch "recent" to a
+  decade. The inferred window is your default, not the user's scoping: state
+  it as an assumption they can change. publisher_country for grey-literature
+  geography (the
   source's display name, e.g. "UK", "USA" — an unrecognised name matches
   nothing); author_affiliation_countries for academic-literature geography
   (2-letter country codes, e.g. GB, US). Geography constraints filter by
