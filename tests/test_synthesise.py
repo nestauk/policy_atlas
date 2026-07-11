@@ -40,6 +40,7 @@ from policy_atlas.synthesis_backend import (
 )
 from policy_atlas.synthesis_tools import ToolExchange
 from policy_atlas.synthesise import SynthesiseContext, SynthesiseFailure, synthesise_scope
+from policy_atlas.usage import UsageResult
 from tests.helpers import (
     delete_project_data,
     now,
@@ -410,9 +411,9 @@ class _BoundarySpanBackend:
         intent: str,
         substrate: dict[str, Any],
         rejection: list[str] | None = None,
-    ) -> SectionProposalWire:
+    ) -> UsageResult[SectionProposalWire]:
         del intent, substrate, rejection
-        return self._proposal
+        return self._proposal, None
 
     def section_turn(
         self,
@@ -420,13 +421,13 @@ class _BoundarySpanBackend:
         transcript: list[ToolExchange],
         *,
         force_emit: bool,
-    ) -> SectionTurn:
+    ) -> UsageResult[SectionTurn]:
         del force_emit
         if not transcript:
             return {
                 "tool_calls": [{"tool": "search_chunks", "arguments": {"query": "rate"}}],
                 "claims": None,
-            }
+            }, None
         chunks = transcript[0]["result"]["chunks"]
         chunk_id = chunks[0]["chunk_record_id"]
         return {
@@ -445,7 +446,7 @@ class _BoundarySpanBackend:
                     )
                 ]
             ),
-        }
+        }, None
 
     def repair_section(
         self,
@@ -453,7 +454,7 @@ class _BoundarySpanBackend:
         transcript: list[ToolExchange],
         *,
         failing: list[dict[str, Any]],
-    ) -> SectionClaimsWire:
+    ) -> UsageResult[SectionClaimsWire]:
         raise AssertionError("repair_section should not be called for a verified quote")
 
 
@@ -658,11 +659,11 @@ class _GapCorpusAbsenceBackend:
         intent: str,
         substrate: dict[str, Any],
         rejection: list[str] | None = None,
-    ) -> SectionProposalWire:
+    ) -> UsageResult[SectionProposalWire]:
         del intent, substrate, rejection
         return SectionProposalWire(
             sections=[SectionWire(title="Corpus coverage", focus="What the search covered")]
-        )
+        ), None
 
     def section_turn(
         self,
@@ -670,7 +671,7 @@ class _GapCorpusAbsenceBackend:
         transcript: list[ToolExchange],
         *,
         force_emit: bool,
-    ) -> SectionTurn:
+    ) -> UsageResult[SectionTurn]:
         del seed, transcript, force_emit
         return {
             "tool_calls": [],
@@ -687,7 +688,7 @@ class _GapCorpusAbsenceBackend:
                     )
                 ]
             ),
-        }
+        }, None
 
     def repair_section(
         self,
@@ -695,7 +696,7 @@ class _GapCorpusAbsenceBackend:
         transcript: list[ToolExchange],
         *,
         failing: list[dict[str, Any]],
-    ) -> SectionClaimsWire:
+    ) -> UsageResult[SectionClaimsWire]:
         raise AssertionError("repair_section should not be called")
 
 

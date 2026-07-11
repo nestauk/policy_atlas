@@ -60,22 +60,27 @@ def test_stub_facet_grouping_is_deterministic_and_covers_group_shapes() -> None:
     }
 
     assert backend.mode == "stub"
-    assert backend.partition(_values(), facet="intervention") == expected
-    assert backend.partition(_values(), facet="intervention") == expected
-    assert (
-        backend.repair(
-            _values(),
-            facet="intervention",
-            accepted_groups=[
-                {
-                    "label": "accepted",
-                    "description": "Ignored by the stub.",
-                    "member_ids": ["old"],
-                }
-            ],
-        )
-        == expected
+    first, first_usage = backend.partition(_values(), facet="intervention")
+    second, second_usage = backend.partition(_values(), facet="intervention")
+    assert first == expected
+    assert second == expected
+    assert first_usage is None
+    assert second_usage is None
+    repaired, repair_usage = backend.repair(
+        _values(),
+        facet="intervention",
+        accepted_groups=[
+            {
+                "label": "accepted",
+                "description": "Ignored by the stub.",
+                "member_ids": ["old"],
+            }
+        ],
     )
+    assert (
+        repaired == expected
+    )
+    assert repair_usage is None
 
 
 def test_stub_facet_grouping_failure_sentinel() -> None:

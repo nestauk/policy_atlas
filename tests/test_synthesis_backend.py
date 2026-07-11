@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from types import TracebackType
 from typing import Any, Literal, cast
 
@@ -83,11 +84,12 @@ def _finding_exchange() -> ToolExchange:
 
 def test_stub_proposal_default_shape_and_group_assignment() -> None:
     backend = StubSynthesisBackend()
-    proposal = backend.propose_sections(
+    proposal, usage = backend.propose_sections(
         intent="Housing\u0007 support for families",
         substrate={"grouping": {"groups": [{"group_id": "g1"}, {"id": "g2"}]}},
     )
 
+    assert usage is None
     assert isinstance(proposal, SectionProposalWire)
     assert len(proposal.sections) == 2
     assert proposal.sections[0].title == "Evidence on: Housing support for families"
@@ -99,13 +101,15 @@ def test_stub_section_turn_default_tool_ordering_is_gated() -> None:
     backend = StubSynthesisBackend()
     seed = _seed(available_tools=["lookup", "search_chunks"])
 
-    first = backend.section_turn(seed, [], force_emit=False)
+    first, first_usage = backend.section_turn(seed, [], force_emit=False)
+    assert first_usage is None
     assert first == {
         "tool_calls": [{"tool": "search_chunks", "arguments": {"query": "Housing outcomes"}}],
         "claims": None,
     }
 
-    second = backend.section_turn(seed, [_search_exchange()], force_emit=False)
+    second, second_usage = backend.section_turn(seed, [_search_exchange()], force_emit=False)
+    assert second_usage is None
     assert second == {
         "tool_calls": [{"tool": "lookup", "arguments": {"kind": "characterisation_summary"}}],
         "claims": None,
@@ -153,12 +157,13 @@ def test_stub_emission_respects_available_claim_types() -> None:
     backend = StubSynthesisBackend()
     seed = _seed(available_claim_types=["finding", "gap"])
 
-    turn = backend.section_turn(
+    turn, usage = backend.section_turn(
         seed,
         [_search_exchange(), _finding_exchange()],
         force_emit=True,
     )
 
+    assert usage is None
     assert turn["claims"] is not None
     assert [claim.claim_type for claim in turn["claims"].claims] == ["finding", "gap"]
 
@@ -167,21 +172,23 @@ def test_stub_chunk_quote_is_verbatim_and_fabrication_sentinel_breaks_it() -> No
     backend = StubSynthesisBackend()
     content = "A" * 150
 
-    normal = backend.section_turn(
+    normal, normal_usage = backend.section_turn(
         _seed(available_claim_types=["chunk"]),
         [_search_exchange(content)],
         force_emit=True,
     )
+    assert normal_usage is None
     assert normal["claims"] is not None
     quote = normal["claims"].claims[0].citations[0].quote
     assert quote == content[:120]
     assert quote in content
 
-    fabricated = backend.section_turn(
+    fabricated, fabricated_usage = backend.section_turn(
         _seed(intent="stubfabricate this quote", available_claim_types=["chunk"]),
         [_search_exchange(content)],
         force_emit=True,
     )
+    assert fabricated_usage is None
     assert fabricated["claims"] is not None
     fabricated_quote = fabricated["claims"].claims[0].citations[0].quote
     assert fabricated_quote == "This quote is fabricated entirely and appears nowhere."
@@ -200,7 +207,8 @@ def test_stub_repair_rewords_down_and_repairs_or_keeps_fabricated_quote() -> Non
         }
     ]
 
-    repaired = backend.repair_section(_seed(), transcript, failing=failing)
+    repaired, repair_usage = backend.repair_section(_seed(), transcript, failing=failing)
+    assert repair_usage is None
     assert repaired.claims[0].text == "Reworded down: Too strong."
     assert repaired.claims[0].citations[0].quote == transcript[0]["result"]["chunks"][0][
         "content"
@@ -219,14 +227,18 @@ def test_stub_repair_rewords_down_and_repairs_or_keeps_fabricated_quote() -> Non
             "rationale": "Quote not found.",
         }
     ]
-    unrepaired = backend.repair_section(_seed(), transcript, failing=fabricated)
+    unrepaired, unrepaired_usage = backend.repair_section(
+        _seed(), transcript, failing=fabricated
+    )
+    assert unrepaired_usage is None
     assert unrepaired.claims[0].citations[0].quote == "This fabricated quote is absent."
 
-    repairable = backend.repair_section(
+    repairable, repairable_usage = backend.repair_section(
         _seed(intent="stubrepairable"),
         transcript,
         failing=fabricated,
     )
+    assert repairable_usage is None
     assert repairable.claims[0].citations[0].quote == transcript[0]["result"]["chunks"][0][
         "content"
     ][:60]
@@ -273,8 +285,9 @@ def test_stub_grounding_judge_verdict_routing() -> None:
         chunks=[{"chunk_record_id": "chunk-1", "content": "source"}],
     )
 
-    result = backend.judge_block(envelope)
+    result, usage = backend.judge_block(envelope)
 
+    assert usage is None
     assert [verdict.claim_id for verdict in result.verdicts] == [
         "chunk",
         "fabricated",
@@ -324,8 +337,13 @@ def test_custom_stub_payloads_are_returned() -> None:
     )
     backend = StubSynthesisBackend(proposal=proposal, repair_claims=repair_claims)
 
-    assert backend.propose_sections(intent="x", substrate={}) is proposal
-    assert backend.repair_section(_seed(), [], failing=[]) is repair_claims
+    returned_proposal, proposal_usage = backend.propose_sections(intent="x", substrate={})
+    returned_repair, repair_usage = backend.repair_section(_seed(), [], failing=[])
+
+    assert returned_proposal is proposal
+    assert proposal_usage is None
+    assert returned_repair is repair_claims
+    assert repair_usage is None
 
 
 def test_traced_call_no_client_path_calls_through() -> None:
@@ -369,11 +387,15 @@ class _FakeObservation:
 class _FakeLangfuse:
     def __init__(self) -> None:
         self.spans: list[tuple[str, str, _FakeSpan]] = []
+        self.sessions: list[str] = []
 
     def start_as_current_observation(self, *, name: str, as_type: str) -> _FakeObservation:
         span = _FakeSpan()
         self.spans.append((name, as_type, span))
         return _FakeObservation(span)
+
+    def update_current_trace(self, *, session_id: str) -> None:
+        self.sessions.append(session_id)
 
 
 def test_traced_call_after_hook_runs_inside_span() -> None:
@@ -393,6 +415,25 @@ def test_traced_call_after_hook_runs_inside_span() -> None:
     assert events == [("update", False), ("after", False)]
     assert fake_client.spans[0][0:2] == ("generated", "generation")
     assert fake_client.spans[0][2].closed is True
+
+
+def test_component_span_applies_langfuse_session() -> None:
+    fake_client = _FakeLangfuse()
+    session_id = uuid.uuid4()
+
+    with tracing.component_span(
+        cast(Any, fake_client),
+        run_id=uuid.uuid4(),
+        project_id=uuid.uuid4(),
+        component="synthesise",
+        session_id=session_id,
+    ):
+        pass
+
+    assert fake_client.sessions == [str(session_id)]
+    assert fake_client.spans[0][0].startswith("run:synthesise:")
+    assert [span[1] for span in fake_client.spans] == ["span", "span"]
+    assert fake_client.spans[1][0] == "component:synthesise"
 
 
 def test_salvage_claims_caps_emission_at_max() -> None:

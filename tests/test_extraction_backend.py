@@ -90,9 +90,11 @@ def test_stub_determinism() -> None:
     backend = StubExtractionBackend()
     payload = _payload(metadata={"_stub_iof": [_valid_wire_record()]})
 
-    first = backend.extract(payload)
-    second = backend.extract(payload)
+    first, first_usage = backend.extract(payload)
+    second, second_usage = backend.extract(payload)
 
+    assert first_usage is None
+    assert second_usage is None
     assert [f.model_dump() for f in first.findings] == [f.model_dump() for f in second.findings]
 
 
@@ -100,8 +102,9 @@ def test_no_sentinel_returns_empty_findings() -> None:
     backend = StubExtractionBackend()
     payload = _payload(metadata={})
 
-    result = backend.extract(payload)
+    result, usage = backend.extract(payload)
 
+    assert usage is None
     assert result.findings == []
 
 
@@ -117,9 +120,15 @@ def test_stub_iof_sentinel_only_on_window_zero() -> None:
     backend = StubExtractionBackend()
     record = _valid_wire_record()
 
-    window_zero = backend.extract(_payload(window_index=0, metadata={"_stub_iof": [record]}))
-    window_one = backend.extract(_payload(window_index=1, metadata={"_stub_iof": [record]}))
+    window_zero, zero_usage = backend.extract(
+        _payload(window_index=0, metadata={"_stub_iof": [record]})
+    )
+    window_one, one_usage = backend.extract(
+        _payload(window_index=1, metadata={"_stub_iof": [record]})
+    )
 
+    assert zero_usage is None
+    assert one_usage is None
     assert [f.model_dump() for f in window_zero.findings] == [record]
     assert window_one.findings == []
 
@@ -131,10 +140,13 @@ def test_stub_iof_windows_sentinel_routes_per_window_index() -> None:
     record_one["intervention"] = "a different intervention"
     metadata = {"_stub_iof_windows": {"0": [record_zero], "1": [record_one]}}
 
-    window_zero = backend.extract(_payload(window_index=0, metadata=metadata))
-    window_one = backend.extract(_payload(window_index=1, metadata=metadata))
-    window_two = backend.extract(_payload(window_index=2, metadata=metadata))
+    window_zero, zero_usage = backend.extract(_payload(window_index=0, metadata=metadata))
+    window_one, one_usage = backend.extract(_payload(window_index=1, metadata=metadata))
+    window_two, two_usage = backend.extract(_payload(window_index=2, metadata=metadata))
 
+    assert zero_usage is None
+    assert one_usage is None
+    assert two_usage is None
     assert [f.model_dump() for f in window_zero.findings] == [record_zero]
     assert [f.model_dump() for f in window_one.findings] == [record_one]
     assert window_two.findings == []

@@ -38,6 +38,7 @@ from policy_atlas.schema import (
 )
 from policy_atlas.screen import effective_screen_rows
 from policy_atlas.tags import insert_source_tags
+from policy_atlas.usage import UsageAccumulator
 
 log = structlog.get_logger()
 
@@ -492,31 +493,39 @@ def _discover_themes(
     min_themes: int,
     max_themes: int,
     budget: _CallBudget,
-) -> tuple[list[Theme], int]:
+) -> tuple[list[Theme], int, dict[str, int], list[str]]:
+    usage_totals = UsageAccumulator()
+    rejection_details: list[str] = []
     for attempt in range(grouping.DISCOVERY_RETRY_CAP + 1):
         budget.reserve()
         try:
+            raw_themes, usage = backend.discover(
+                docs,
+                intent=intent,
+                min_themes=min_themes,
+                max_themes=max_themes,
+            )
+            usage_totals.add(usage)
             themes = validate_themes(
-                backend.discover(
-                    docs,
-                    intent=intent,
-                    min_themes=min_themes,
-                    max_themes=max_themes,
-                ),
+                raw_themes,
                 min_themes=min_themes,
                 max_themes=max_themes,
             )
         except InvalidDiscoveryOutput as exc:
             error_type = type(exc).__name__
+            error_detail = str(exc)
+            rejection_details.append(error_detail)
         except Exception as exc:
             error_type = type(exc).__name__
+            error_detail = type(exc).__name__
         else:
-            return themes, attempt
+            return themes, attempt, usage_totals.payload(), rejection_details
         log.warning(
             "characterise.discovery_invalid",
             attempt=attempt + 1,
             retry_cap=grouping.DISCOVERY_RETRY_CAP,
             error_type=error_type,
+            error=error_detail,
         )
     raise CharacteriseFailure(
         coverage=budget.coverage,
@@ -571,11 +580,12 @@ def _run_first_assignment_round(
     batches: list[list[GroupingDoc]],
     themes: list[Theme],
     budget: _CallBudget,
-) -> list[_AssignmentAttempt]:
+) -> tuple[list[_AssignmentAttempt], dict[str, int]]:
     for _ in batches:
         budget.reserve()
 
-    submitted: list[tuple[int, list[GroupingDoc], Future[dict[str, str]]]] = []
+    submitted: list[tuple[int, list[GroupingDoc], Future[Any]]] = []
+    usage_totals = UsageAccumulator()
     with ThreadPoolExecutor(max_workers=grouping.MAX_CONCURRENT_BATCHES) as executor:
         for batch_index, batch in enumerate(batches, start=1):
             submitted.append(
@@ -586,7 +596,8 @@ def _run_first_assignment_round(
     attempts: list[_AssignmentAttempt] = []
     for batch_index, batch, future in submitted:
         try:
-            assignments = future.result()
+            assignments, usage = future.result()
+            usage_totals.add(usage)
         except Exception as exc:
             log.warning(
                 "characterise.assignment_batch_failed",
@@ -611,7 +622,7 @@ def _run_first_assignment_round(
                     error_type=None,
                 )
             )
-    return attempts
+    return attempts, usage_totals.payload()
 
 
 def _resolve_assignment_batch(
@@ -621,7 +632,8 @@ def _resolve_assignment_batch(
     themes: list[Theme],
     theme_names: set[str],
     budget: _CallBudget,
-) -> tuple[dict[str, str], bool]:
+) -> tuple[dict[str, str], bool, dict[str, int]]:
+    usage_totals = UsageAccumulator()
     # A failed first call (assignments None) validates as an empty mapping: the
     # whole batch becomes missing residue, identical to the hand-built case.
     validation = _validate_assignments(
@@ -631,7 +643,7 @@ def _resolve_assignment_batch(
     )
 
     if not validation.residue:
-        return validation.valid, False
+        return validation.valid, False, usage_totals.payload()
 
     log.info(
         "characterise.assignment_repair",
@@ -644,7 +656,8 @@ def _resolve_assignment_batch(
     )
     budget.reserve()
     try:
-        repair_assignments = backend.assign(validation.residue, themes=themes)
+        repair_assignments, usage = backend.assign(validation.residue, themes=themes)
+        usage_totals.add(usage)
     except Exception as exc:
         raise CharacteriseFailure(
             coverage=budget.coverage,
@@ -666,7 +679,7 @@ def _resolve_assignment_batch(
         )
     merged = dict(validation.valid)
     merged.update(repair_validation.valid)
-    return merged, True
+    return merged, True, usage_totals.payload()
 
 
 def _assign_docs(
@@ -675,9 +688,9 @@ def _assign_docs(
     docs: list[GroupingDoc],
     themes: list[Theme],
     budget: _CallBudget,
-) -> tuple[dict[str, str], int]:
+) -> tuple[dict[str, str], int, dict[str, int]]:
     theme_names = {theme["name"] for theme in themes}
-    first_round = _run_first_assignment_round(
+    first_round, first_round_usage = _run_first_assignment_round(
         backend=backend,
         batches=_batches(docs),
         themes=themes,
@@ -685,17 +698,20 @@ def _assign_docs(
     )
     assignments: dict[str, str] = {}
     repair_calls_used = 0
+    usage_totals = UsageAccumulator()
+    usage_totals.add_payload(first_round_usage)
     for attempt in first_round:
-        batch_assignments, repaired = _resolve_assignment_batch(
+        batch_assignments, repaired, repair_usage = _resolve_assignment_batch(
             backend=backend,
             attempt=attempt,
             themes=themes,
             theme_names=theme_names,
             budget=budget,
         )
+        usage_totals.add_payload(repair_usage)
         assignments.update(batch_assignments)
         repair_calls_used += 1 if repaired else 0
-    return assignments, repair_calls_used
+    return assignments, repair_calls_used, usage_totals.payload()
 
 
 def _grouping_provenance(
@@ -703,6 +719,7 @@ def _grouping_provenance(
     backend: ThemeGroupingBackend,
     discovery_retries_used: int,
     repair_calls_used: int,
+    discovery_rejections: list[str],
 ) -> dict[str, Any]:
     model = grouping.DISCOVERY_MODEL if backend.mode == "live" else "stub"
     assignment_model = grouping.ASSIGNMENT_MODEL if backend.mode == "live" else "stub"
@@ -714,6 +731,7 @@ def _grouping_provenance(
         "discovery_retry_cap": grouping.DISCOVERY_RETRY_CAP,
         "assignment_repair_cap": grouping.ASSIGNMENT_REPAIR_CAP,
         "discovery_retries_used": discovery_retries_used,
+        "discovery_rejections": discovery_rejections,
         "repair_calls_used": repair_calls_used,
         "backend_mode": backend.mode,
     }
@@ -769,6 +787,7 @@ def _summary(
     n: int,
     flags: list[str],
     provenance: dict[str, Any],
+    usage_totals: dict[str, int],
 ) -> dict[str, Any]:
     unclustered_ids = theme_payload["unclustered_ids"]
     return {
@@ -787,6 +806,7 @@ def _summary(
         },
         "flags": flags,
         "provenance": provenance,
+        "usage_totals": usage_totals,
     }
 
 
@@ -826,7 +846,9 @@ def characterise_scope(
     n = len(docs)
     flags: list[str] = []
     discovery_retries_used = 0
+    discovery_rejections: list[str] = []
     repair_calls_used = 0
+    usage_accumulator = UsageAccumulator()
 
     if n == 0:
         flags.append("empty_scope")
@@ -837,7 +859,12 @@ def characterise_scope(
         _, baseline, maximum = _call_budget(n)
         log.info("characterise.call_budget", baseline=baseline, maximum=maximum)
         budget = _CallBudget(maximum=maximum, coverage=coverage)
-        themes, discovery_retries_used = _discover_themes(
+        (
+            themes,
+            discovery_retries_used,
+            discovery_usage,
+            discovery_rejections,
+        ) = _discover_themes(
             backend=theme_grouping_backend,
             docs=docs,
             intent=context.intent,
@@ -845,12 +872,14 @@ def characterise_scope(
             max_themes=max_themes,
             budget=budget,
         )
-        assignments, repair_calls_used = _assign_docs(
+        usage_accumulator.add_payload(discovery_usage)
+        assignments, repair_calls_used, assignment_usage = _assign_docs(
             backend=theme_grouping_backend,
             docs=docs,
             themes=themes,
             budget=budget,
         )
+        usage_accumulator.add_payload(assignment_usage)
         if repair_calls_used:
             flags.append("repair_path_taken")
 
@@ -869,6 +898,7 @@ def characterise_scope(
         backend=theme_grouping_backend,
         discovery_retries_used=discovery_retries_used,
         repair_calls_used=repair_calls_used,
+        discovery_rejections=discovery_rejections,
     )
     theme_payload = _theme_payload(themes, assignments)
     now = datetime.now(UTC)
@@ -897,4 +927,5 @@ def characterise_scope(
         n=n,
         flags=flags,
         provenance=provenance,
+        usage_totals=usage_accumulator.payload(),
     )

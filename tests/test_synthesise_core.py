@@ -40,6 +40,7 @@ from policy_atlas.synthesis_backend import (
     StubSynthesisBackend,
 )
 from policy_atlas.synthesise import SynthesiseContext, SynthesiseFailure, synthesise_scope
+from policy_atlas.usage import UsageResult
 from tests.helpers import (
     now,
     run_select,
@@ -190,7 +191,7 @@ class _SearchAndCiteBackend:
 
     def propose_sections(
         self, *, intent: str, substrate: dict[str, Any], rejection: list[str] | None = None
-    ) -> SectionProposalWire:
+    ) -> UsageResult[SectionProposalWire]:
         del intent, substrate, rejection
         return SectionProposalWire(
             sections=[
@@ -199,11 +200,11 @@ class _SearchAndCiteBackend:
                     focus="Evidence visible from abstract-basis chunks.",
                 )
             ]
-        )
+        ), None
 
     def section_turn(
         self, seed: dict[str, Any], transcript: list[Any], *, force_emit: bool
-    ) -> SectionTurn:
+    ) -> UsageResult[SectionTurn]:
         del seed
         chunks = [
             chunk
@@ -216,7 +217,7 @@ class _SearchAndCiteBackend:
             return {
                 "tool_calls": [{"tool": "search_chunks", "arguments": {"query": "subsidy"}}],
                 "claims": None,
-            }
+            }, None
         chunk_id = chunks[0]["chunk_record_id"] if chunks else "missing"
         return {
             "tool_calls": [],
@@ -231,13 +232,13 @@ class _SearchAndCiteBackend:
                     )
                 ]
             ),
-        }
+        }, None
 
     def repair_section(
         self, seed: dict[str, Any], transcript: list[Any], *, failing: list[dict[str, Any]]
-    ) -> SectionClaimsWire:
+    ) -> UsageResult[SectionClaimsWire]:
         del seed, transcript, failing
-        return SectionClaimsWire(claims=[])
+        return SectionClaimsWire(claims=[]), None
 
 
 class _CapturingJudgeBackend:
@@ -247,7 +248,7 @@ class _CapturingJudgeBackend:
         self.envelopes: list[dict[str, Any]] = []
         self._delegate = StubGroundingJudgeBackend()
 
-    def judge_block(self, envelope: dict[str, Any]) -> JudgeResponseWire:
+    def judge_block(self, envelope: dict[str, Any]) -> UsageResult[JudgeResponseWire]:
         self.envelopes.append(envelope)
         return self._delegate.judge_block(envelope)
 

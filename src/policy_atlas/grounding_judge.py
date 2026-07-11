@@ -19,7 +19,6 @@ import json
 from typing import Any, Literal, Protocol
 
 from langfuse import Langfuse
-from openai.types.completion_usage import CompletionUsage
 from pydantic import BaseModel, ConfigDict
 
 from policy_atlas import tracing
@@ -29,6 +28,7 @@ from policy_atlas.embeddings import (
     resolve_openai_client,
     usage_metadata,
 )
+from policy_atlas.usage import UsageResult, token_usage_from_provider
 
 JUDGE_PROMPT_VERSION = "grounding_judge_v1"
 ENVELOPE_VERSION = "synthesis_envelope_v1"
@@ -185,14 +185,14 @@ class GroundingJudgeBackend(Protocol):
         """``"live"`` or ``"stub"``; read-only so wrappers can proxy it."""
         ...
 
-    def judge_block(self, envelope: dict[str, Any]) -> JudgeResponseWire:
+    def judge_block(self, envelope: dict[str, Any]) -> UsageResult[JudgeResponseWire]:
         """Judge one block's cited + reasoning claims in a single batched call.
 
         Args:
             envelope: The ``synthesis_envelope_v1`` payload.
 
         Returns:
-            Raw structurally parsed verdicts.
+            Raw structurally parsed verdicts plus token usage.
         """
         ...
 
@@ -234,7 +234,7 @@ class OpenAIGroundingJudgeBackend:
     def _judge_once(
         self,
         messages: list[dict[str, Any]],
-    ) -> tuple[JudgeResponseWire, CompletionUsage | None]:
+    ) -> UsageResult[JudgeResponseWire]:
         completions: Any = self._client.chat.completions
         response = completions.parse(
             model=JUDGE_MODEL,
@@ -245,25 +245,23 @@ class OpenAIGroundingJudgeBackend:
         parsed_model: JudgeResponseWire = require_parsed(
             response, label="grounding judge"
         )
-        return parsed_model, response.usage
+        return parsed_model, token_usage_from_provider(response.usage)
 
-    def judge_block(self, envelope: dict[str, Any]) -> JudgeResponseWire:
+    def judge_block(self, envelope: dict[str, Any]) -> UsageResult[JudgeResponseWire]:
         """Judge one envelope through structured OpenAI output.
 
         Args:
             envelope: The ``synthesis_envelope_v1`` payload.
 
         Returns:
-            Raw structurally parsed judge verdicts.
+            Raw structurally parsed judge verdicts plus token usage.
 
         Raises:
             RuntimeError: If the response cannot be parsed into the expected shape.
         """
         messages = build_judge_messages(envelope)
 
-        def _update(
-            span: Any, result: tuple[JudgeResponseWire, CompletionUsage | None]
-        ) -> None:
+        def _update(span: Any, result: UsageResult[JudgeResponseWire]) -> None:
             verdicts, usage = result
             span.update(
                 input={"messages": messages},
@@ -275,14 +273,14 @@ class OpenAIGroundingJudgeBackend:
                 },
             )
 
-        verdicts, _usage = tracing.traced_call(
+        verdicts, usage = tracing.traced_call(
             self._langfuse_client,
             name="synthesise:judge",
             as_type="generation",
             call=lambda: self._judge_once(messages),
             update=_update,
         )
-        return verdicts
+        return verdicts, usage
 
 
 class StubGroundingJudgeBackend:
@@ -298,14 +296,15 @@ class StubGroundingJudgeBackend:
         """
         self._fail = fail
 
-    def judge_block(self, envelope: dict[str, Any]) -> JudgeResponseWire:
+    def judge_block(self, envelope: dict[str, Any]) -> UsageResult[JudgeResponseWire]:
         """Return deterministic verdicts for the envelope's claims.
 
         Args:
             envelope: The ``synthesis_envelope_v1`` payload.
 
         Returns:
-            Verdicts for exactly the supplied claim ids in order.
+            Verdicts for exactly the supplied claim ids in order, plus no token
+            usage.
 
         Raises:
             RuntimeError: If the failure sentinel is enabled.
@@ -369,4 +368,4 @@ class StubGroundingJudgeBackend:
                 )
             )
 
-        return JudgeResponseWire(verdicts=verdicts)
+        return JudgeResponseWire(verdicts=verdicts), None

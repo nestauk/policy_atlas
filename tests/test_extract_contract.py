@@ -1235,7 +1235,7 @@ def test_summary_payload_shape(conn: Connection) -> None:
 
     assert set(summary.keys()) == {
         "docs", "counts", "findings", "basis", "field_coverage",
-        "selection_run_id", "flags", "provenance",
+        "selection_run_id", "flags", "provenance", "usage_totals",
     }
     for doc in summary["docs"]:
         assert set(doc.keys()) == {

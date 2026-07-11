@@ -37,6 +37,7 @@ from policy_atlas.synthesis_tools import (
     parse_synthesis_directive,
     run_section_loop,
 )
+from policy_atlas.usage import UsageResult
 from tests.helpers import (
     now,
     seed_project_and_run,
@@ -91,7 +92,7 @@ class ScriptedBackend:
         transcript: list[dict[str, Any]],
         *,
         force_emit: bool,
-    ) -> dict[str, Any]:
+    ) -> UsageResult[dict[str, Any]]:
         self.calls.append({
             "seed": seed,
             "transcript_len": len(transcript),
@@ -99,8 +100,8 @@ class ScriptedBackend:
         })
         index = len(self.calls) - 1
         if index >= len(self.turns):
-            return {"tool_calls": [], "claims": SectionClaimsWire(claims=[])}
-        return self.turns[index]
+            return {"tool_calls": [], "claims": SectionClaimsWire(claims=[])}, None
+        return self.turns[index], None
 
 
 def _claims(text: str = "x") -> SectionClaimsWire:
@@ -693,13 +694,13 @@ def test_loop_runner_malformed_emission_consumes_turn_and_recovers() -> None:
             transcript: list[ToolExchange],
             *,
             force_emit: bool,
-        ) -> Any:
+        ) -> UsageResult[Any]:
             del seed
             if not transcript:
                 raise MalformedEmissionError("gap.sparsity: Input should be an object")
             assert transcript[0]["tool"] == "emit_claims"
             assert "invalid" in transcript[0]["result"]["error"]
-            return {"tool_calls": [], "claims": SectionClaimsWire(claims=[])}
+            return {"tool_calls": [], "claims": SectionClaimsWire(claims=[])}, None
 
     result = run_section_loop(_Backend(), seed={}, tools={})
     assert result["claims"] is not None
@@ -715,7 +716,7 @@ def test_loop_runner_malformed_emission_consumes_turn_and_recovers() -> None:
             transcript: list[ToolExchange],
             *,
             force_emit: bool,
-        ) -> Any:
+        ) -> UsageResult[Any]:
             del seed, transcript, force_emit
             raise MalformedEmissionError("still malformed")
 

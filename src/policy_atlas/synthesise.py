@@ -90,6 +90,7 @@ from policy_atlas.synthesis_tools import (
     run_section_loop,
 )
 from policy_atlas.tags import has_control_character
+from policy_atlas.usage import UsageAccumulator
 
 log = structlog.get_logger()
 
@@ -1876,10 +1877,10 @@ def _judge_claims(
     claims: Sequence[ClaimDraft],
     substrate: SubstrateView,
     grounding_judge_backend: GroundingJudgeBackend,
-) -> int:
+) -> tuple[int, dict[str, int]]:
     judged = [claim for claim in claims if claim.claim_type in JUDGED_TYPES]
     if not judged:
-        return 0
+        return 0, UsageAccumulator().payload()
     envelope_claims: list[dict[str, Any]] = []
     chunk_ids: set[str] = set()
     for claim in judged:
@@ -1904,7 +1905,9 @@ def _judge_claims(
         if chunk_id in substrate.chunk_by_id
     ]
     envelope = build_envelope(claims=envelope_claims, chunks=chunks)
-    response = grounding_judge_backend.judge_block(envelope)
+    response, usage = grounding_judge_backend.judge_block(envelope)
+    usage_totals = UsageAccumulator()
+    usage_totals.add(usage)
     verdicts = response.verdicts
     expected = {claim.claim_id for claim in judged}
     actual = {verdict.claim_id for verdict in verdicts}
@@ -1920,7 +1923,7 @@ def _judge_claims(
         claim.weakly_grounded = claim.weakly_grounded or verdict.weakly_grounded
         claim.rationale = verdict.rationale
         claim.judge_io_ref = judge_io_ref
-    return 1
+    return 1, usage_totals.payload()
 
 
 def _failing_records(
@@ -2045,8 +2048,9 @@ def _section_claims(
     grounding_judge_backend: GroundingJudgeBackend,
     available_claim_types: set[str],
     accounting: SectionAccounting,
-) -> tuple[list[ClaimDraft], dict[str, int]]:
+) -> tuple[list[ClaimDraft], dict[str, int], dict[str, int]]:
     call_counts = {"judge": 0, "repair": 0, "rejudge": 0}
+    usage_totals = UsageAccumulator()
     initial = validate_claims(
         raw_claims.claims,
         substrate=substrate,
@@ -2056,20 +2060,23 @@ def _section_claims(
         citable_chunk_ids=citable_chunk_ids,
         available_claim_types=available_claim_types,
     )
-    call_counts["judge"] += _judge_claims(
+    judge_calls, judge_usage = _judge_claims(
         claims=initial.drafts,
         substrate=substrate,
         grounding_judge_backend=grounding_judge_backend,
     )
+    call_counts["judge"] += judge_calls
+    usage_totals.add_payload(judge_usage)
     failing = _failing_records(initial.rejected, initial.drafts)
     replacements: ClaimValidationBatch | None = None
     if failing:
         accounting.repair_taken = True
         call_counts["repair"] += 1
         try:
-            repair_claims = synthesis_backend.repair_section(
+            repair_claims, repair_usage = synthesis_backend.repair_section(
                 seed, transcript, failing=failing
             )
+            usage_totals.add(repair_usage)
         except MalformedEmissionError:
             # The one repair call produced structurally unparseable output —
             # the repair is loop-free and unrepeatable, so the failing claims
@@ -2100,11 +2107,13 @@ def _section_claims(
                 available_claim_types=available_claim_types,
                 reasoning_count_start=surviving_reasoning,
             )
-            call_counts["rejudge"] += _judge_claims(
+            rejudge_calls, rejudge_usage = _judge_claims(
                 claims=replacements.drafts,
                 substrate=substrate,
                 grounding_judge_backend=grounding_judge_backend,
             )
+            call_counts["rejudge"] += rejudge_calls
+            usage_totals.add_payload(rejudge_usage)
     final = _finalize_claims(
         initial=initial,
         replacements=replacements,
@@ -2116,7 +2125,7 @@ def _section_claims(
             accounting.gap_claims_degraded += 1
         if claim.verdict == "unsupported_mis_cited" and "unsupported_mis_cited" not in claim.flags:
             claim.flags.append("unsupported_mis_cited")
-    return final, call_counts
+    return final, call_counts, usage_totals.payload()
 
 
 def _claim_counts(claims: Sequence[ClaimDraft]) -> dict[str, int]:
@@ -2544,6 +2553,7 @@ def synthesise_scope(
         "repair": 0,
         "rejudge": 0,
     }
+    usage_totals = UsageAccumulator()
     refs = _resolve_references(conn, project_id=project_id, context=context)
     corpus = _load_corpus_profile(conn, project_id=project_id, scope_id=context.scope_id)
     if not refs.any_resolved() and corpus.screened_docs == 0:
@@ -2630,9 +2640,10 @@ def synthesise_scope(
     else:
         try:
             _reserve_generation(call_counts, "proposal")
-            proposal = synthesis_backend.propose_sections(
+            proposal, usage = synthesis_backend.propose_sections(
                 intent=context.intent, substrate=summaries
             )
+            usage_totals.add(usage)
         except RuntimeError as exc:
             raise SynthesiseFailure(
                 # Our own RuntimeError messages are bounded and reduced by
@@ -2648,9 +2659,10 @@ def synthesise_scope(
         if reasons:
             try:
                 _reserve_generation(call_counts, "proposal_repair")
-                repaired = synthesis_backend.propose_sections(
+                repaired, usage = synthesis_backend.propose_sections(
                     intent=context.intent, substrate=summaries, rejection=reasons
                 )
+                usage_totals.add(usage)
             except RuntimeError as exc:
                 raise SynthesiseFailure(
                     f"{type(exc).__name__}: {str(exc)[:200]}",
@@ -2751,6 +2763,7 @@ def synthesise_scope(
                 seed=seed,
                 tools=tools,
             )
+            usage_totals.add_payload(loop_result["usage_totals"])
         except RuntimeError as exc:
             raise SynthesiseFailure(type(exc).__name__, blocks_written=blocks_written) from exc
         call_counts["section_turns"] += int(loop_result["turns_used"])
@@ -2772,7 +2785,7 @@ def synthesise_scope(
         )
         raw_claims = loop_result["claims"] or SectionClaimsWire(claims=[])
         try:
-            claims, section_call_counts = _section_claims(
+            claims, section_call_counts, section_usage = _section_claims(
                 section_index=section_index,
                 raw_claims=raw_claims,
                 seed=seed,
@@ -2786,6 +2799,7 @@ def synthesise_scope(
                 available_claim_types=available_claim_types,
                 accounting=accounting,
             )
+            usage_totals.add_payload(section_usage)
         except SynthesiseFailure as exc:
             raise SynthesiseFailure(
                 exc.error, blocks_written=blocks_written or exc.blocks_written
@@ -2944,4 +2958,5 @@ def synthesise_scope(
         "counts": counts,
         "flags": flags,
         "substrate_profile": _substrate_profile(refs, corpus),
+        "usage_totals": usage_totals.payload(),
     }

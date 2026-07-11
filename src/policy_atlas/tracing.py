@@ -20,6 +20,7 @@ from langfuse import Langfuse
 from policy_atlas import embeddings, grouping
 from policy_atlas.embeddings import EmbeddingBackend
 from policy_atlas.grouping import GroupingDoc, Theme, ThemeGroupingBackend
+from policy_atlas.usage import UsageResult
 
 _ObservationType = Literal["embedding", "generation", "span"]
 
@@ -92,6 +93,7 @@ def traced_call[T](
     name: str,
     as_type: _ObservationType,
     call: Callable[[], T],
+    session_id: uuid.UUID | None = None,
     update: Callable[[Any, T], None] | None = None,
     after: Callable[[Any, T], None] | None = None,
 ) -> T:
@@ -103,6 +105,7 @@ def traced_call[T](
         as_type: Langfuse observation type.
         call: Zero-argument function that performs the provider call and returns
             the parsed site-specific result.
+        session_id: Optional Langfuse session id to attach to the current trace.
         update: Optional callback that records input/output/model/metadata on
             the open observation.
         after: Optional callback for extra work that must run before the
@@ -115,12 +118,27 @@ def traced_call[T](
         return call()
 
     with _observation(client, name=name, as_type=as_type) as span:
+        _set_current_trace_session(client, session_id)
         result = call()
         if update is not None:
             update(span, result)
         if after is not None:
             after(span, result)
         return result
+
+
+def _set_current_trace_session(client: Langfuse, session_id: uuid.UUID | None) -> None:
+    """Attach a Langfuse session id when the installed SDK exposes the helper.
+
+    Args:
+        client: Langfuse client with an active current trace.
+        session_id: Conversation/session id to attach, or ``None``.
+    """
+    if session_id is None:
+        return
+    update_current_trace = getattr(client, "update_current_trace", None)
+    if callable(update_current_trace):
+        update_current_trace(session_id=str(session_id))
 
 
 class TracedEmbeddingBackend:
@@ -210,7 +228,7 @@ class TracedThemeGroupingBackend:
         intent: str,
         min_themes: int,
         max_themes: int,
-    ) -> list[Theme]:
+    ) -> UsageResult[list[Theme]]:
         """Discover themes and trace full generation I/O.
 
         Args:
@@ -220,10 +238,10 @@ class TracedThemeGroupingBackend:
             max_themes: Requested maximum theme count.
 
         Returns:
-            Themes returned by the wrapped backend.
+            Themes and token usage returned by the wrapped backend.
         """
         with _observation(self._client, name="discover", as_type="generation") as span:
-            themes = self._backend.discover(
+            themes, usage = self._backend.discover(
                 docs,
                 intent=intent,
                 min_themes=min_themes,
@@ -237,12 +255,15 @@ class TracedThemeGroupingBackend:
                     "doc_count": len(docs),
                     "min_themes": min_themes,
                     "max_themes": max_themes,
+                    **embeddings.usage_metadata(usage),
                 },
                 model=grouping.DISCOVERY_MODEL,
             )
-            return themes
+            return themes, usage
 
-    def assign(self, batch: list[GroupingDoc], *, themes: list[Theme]) -> dict[str, str]:
+    def assign(
+        self, batch: list[GroupingDoc], *, themes: list[Theme]
+    ) -> UsageResult[dict[str, str]]:
         """Assign documents and trace full generation I/O.
 
         Args:
@@ -250,7 +271,7 @@ class TracedThemeGroupingBackend:
             themes: Fixed theme list.
 
         Returns:
-            Assignments returned by the wrapped backend.
+            Assignments and token usage returned by the wrapped backend.
         """
         assign_index = self._next_assign_index()
         with _observation(
@@ -258,17 +279,18 @@ class TracedThemeGroupingBackend:
             name=f"assign:call{assign_index}",
             as_type="generation",
         ) as span:
-            assignments = self._backend.assign(batch, themes=themes)
+            assignments, usage = self._backend.assign(batch, themes=themes)
             span.update(
                 input={"themes": list(themes), "records": list(batch)},
                 output={"assignments": assignments},
                 metadata={
                     "prompt_version": grouping.PROMPT_VERSION,
                     "batch_size": len(batch),
+                    **embeddings.usage_metadata(usage),
                 },
                 model=grouping.ASSIGNMENT_MODEL,
             )
-            return assignments
+            return assignments, usage
 
 
 @contextmanager
@@ -278,6 +300,7 @@ def component_span(
     run_id: uuid.UUID,
     project_id: uuid.UUID,
     component: str,
+    session_id: uuid.UUID | None = None,
 ) -> Iterator[Any]:
     """Open run and component spans when tracing is enabled.
 
@@ -286,16 +309,20 @@ def component_span(
         run_id: Current run id.
         project_id: Current project id.
         component: Component name.
+        session_id: Optional Langfuse session id shared across one conversation.
 
     Yields:
-        The root ``run:{run_id}`` span (trace-level input/output derive from the
-        root observation in the OTel SDK), or ``None`` when tracing is off.
+        The root ``run:{component}:{run_id}`` span (trace-level input/output
+        derive from the root observation in the OTel SDK; the component in the
+        name makes the Langfuse trace list scannable without opening traces),
+        or ``None`` when tracing is off.
     """
     if client is None:
         yield None
         return
 
-    with _observation(client, name=f"run:{run_id}", as_type="span") as run_span:
+    with _observation(client, name=f"run:{component}:{run_id}", as_type="span") as run_span:
+        _set_current_trace_session(client, session_id)
         run_span.update(metadata={"project_id": str(project_id), "run_id": str(run_id)})
         with _observation(
             client,
@@ -323,7 +350,8 @@ def score_summary(
         client: Langfuse client, or ``None`` for no-op tracing.
         summary: Characterise landscape summary — becomes the trace output.
         intent: Evidence-scope intent — becomes the trace input.
-        root_span: The ``run:{run_id}`` root span yielded by ``component_span``.
+        root_span: The ``run:{component}:{run_id}`` root span yielded by
+            ``component_span``.
     """
     if client is None:
         return
@@ -358,7 +386,8 @@ def extraction_score_summary(
     Args:
         client: Langfuse client, or ``None`` for no-op tracing.
         summary: Extract component summary payload — becomes the trace output.
-        root_span: The ``run:{run_id}`` root span yielded by ``component_span``.
+        root_span: The ``run:{component}:{run_id}`` root span yielded by
+            ``component_span``.
     """
     if client is None:
         return
@@ -407,7 +436,8 @@ def grouping_score_summary(
     Args:
         client: Langfuse client, or ``None`` for no-op tracing.
         summary: Group component summary payload — becomes the trace output.
-        root_span: The ``run:{run_id}`` root span yielded by ``component_span``.
+        root_span: The ``run:{component}:{run_id}`` root span yielded by
+            ``component_span``.
     """
     if client is None:
         return
@@ -467,7 +497,8 @@ def synthesis_score_summary(
     Args:
         client: Langfuse client, or ``None`` for no-op tracing.
         summary: Synthesise component summary payload — becomes the trace output.
-        root_span: The ``run:{run_id}`` root span yielded by ``component_span``.
+        root_span: The ``run:{component}:{run_id}`` root span yielded by
+            ``component_span``.
     """
     if client is None:
         return
@@ -552,7 +583,8 @@ def screening_score_summary(
     Args:
         client: Langfuse client, or ``None`` for no-op tracing.
         summary: Screen component summary payload — becomes the trace output.
-        root_span: The ``run:{run_id}`` root span yielded by ``component_span``.
+        root_span: The ``run:{component}:{run_id}`` root span yielded by
+            ``component_span``.
     """
     if client is None:
         return
@@ -610,7 +642,8 @@ def classification_score_summary(
     Args:
         client: Langfuse client, or ``None`` for no-op tracing.
         summary: Classify component summary payload — becomes the trace output.
-        root_span: The ``run:{run_id}`` root span yielded by ``component_span``.
+        root_span: The ``run:{component}:{run_id}`` root span yielded by
+            ``component_span``.
     """
     if client is None:
         return

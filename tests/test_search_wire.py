@@ -16,6 +16,7 @@ from policy_atlas.schema import search_coverage_record
 from policy_atlas.search_live import OpenAlexLiveBackend, OvertonLiveBackend
 from policy_atlas.search_loop import overton_wire_params, run_search, to_wire_params
 from policy_atlas.search_prompts import QueriesPayload, SearchQueriesWire
+from policy_atlas.usage import UsageResult
 from tests.helpers import seed_project_and_run, seed_scope
 
 
@@ -48,14 +49,17 @@ class ScriptedGenerationBackend:
     def __init__(self) -> None:
         self.payloads: list[QueriesPayload] = []
 
-    def generate_queries(self, payload: QueriesPayload) -> SearchQueriesWire:
+    def generate_queries(self, payload: QueriesPayload) -> UsageResult[SearchQueriesWire]:
         self.payloads.append(payload)
-        return SearchQueriesWire(
-            queries=["housing retrofit", "fuel poverty"],
-            overton_paraphrases=["Policy evidence about housing retrofit."],
+        return (
+            SearchQueriesWire(
+                queries=["housing retrofit", "fuel poverty"],
+                overton_paraphrases=["Policy evidence about housing retrofit."],
+            ),
+            None,
         )
 
-    def reformulate(self, payload: Any) -> SearchQueriesWire:
+    def reformulate(self, payload: Any) -> UsageResult[SearchQueriesWire]:
         raise AssertionError("wire test runs rapid search only")
 
     def suggest(self, payload: Any) -> Any:

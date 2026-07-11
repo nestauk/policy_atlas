@@ -255,6 +255,19 @@ def _component_failed_payloads(
         ]
 
 
+def _component_timing_payloads(
+    engine: Engine,
+    project_id: uuid.UUID,
+    run_id: uuid.UUID,
+) -> list[dict[str, Any]]:
+    with engine.connect() as conn:
+        return [
+            entry["payload"]
+            for entry in events.read(conn, project_id)
+            if entry["run_id"] == run_id and entry["event_type"] == "component.timing"
+        ]
+
+
 def _abort_current_transaction(
     conn: Connection,
     *,
@@ -308,6 +321,7 @@ def test_full_stub_chain_commits_each_step_and_checks_in(engine: Engine) -> None
         # which are deep-only after the 018 regrade.
         plan = _base_plan(search_effort="standard", analysis_depth="deep")
         plan_id = uuid.uuid4()
+        session_id = uuid.uuid4()
         io = RecordingIO()
 
         outcome = run_plan(
@@ -319,6 +333,7 @@ def test_full_stub_chain_commits_each_step_and_checks_in(engine: Engine) -> None
             plan_version=3,
             backends=_runner_backends(),
             io=io,
+            session_id=session_id,
         )
 
         expected_components = compose(plan).components
@@ -343,6 +358,23 @@ def test_full_stub_chain_commits_each_step_and_checks_in(engine: Engine) -> None
             assert step.run_id is not None
             assert "run.started" in event_types_by_run[step.run_id]
             assert "plan.compiled" in event_types_by_run[step.run_id]
+            timing_payloads = _component_timing_payloads(engine, project_id, step.run_id)
+            assert len(timing_payloads) == 1
+            timing_payload = timing_payloads[0]
+            assert timing_payload["component"] == step.component
+            assert timing_payload["status"] == "succeeded"
+            assert timing_payload["wall_clock_s"] >= 0
+            assert timing_payload["usage_totals"] == {
+                "prompt": 0,
+                "completion": 0,
+                "total": 0,
+            }
+            assert isinstance(timing_payload["headline_counts"], dict)
+
+        started_payloads = [
+            entry["payload"] for entry in log_entries if entry["event_type"] == "run.started"
+        ]
+        assert {payload["session_id"] for payload in started_payloads} == {str(session_id)}
 
         payloads = _payloads_by_component(engine, project_id)
         assert payloads["acquire"][0]["plan_id"] == str(plan_id)
@@ -561,6 +593,18 @@ def test_spine_failure_after_retry_stops_without_downstream_runs(
         assert screen_outcome.status == "failed"
         assert screen_outcome.retried is True
         assert len(screen_outcome.attempt_run_ids) == 2
+        for attempt_run_id in screen_outcome.attempt_run_ids:
+            timing_payloads = _component_timing_payloads(engine, project_id, attempt_run_id)
+            assert len(timing_payloads) == 1
+            assert timing_payloads[0]["component"] == "screen"
+            assert timing_payloads[0]["registry_component"] == "screen"
+            assert timing_payloads[0]["status"] == "failed"
+            assert timing_payloads[0]["wall_clock_s"] >= 0
+            assert timing_payloads[0]["usage_totals"] == {
+                "prompt": 0,
+                "completion": 0,
+                "total": 0,
+            }
         compiled_components = [
             event["payload"]["component"] for event in _plan_compiled_events(engine, project_id)
         ]

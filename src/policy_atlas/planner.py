@@ -10,6 +10,7 @@ decision 5, sequencing invariant).
 from __future__ import annotations
 
 import os
+import uuid
 from typing import Any, Protocol
 
 import structlog
@@ -57,6 +58,8 @@ class PlannerBackend(Protocol):
         self,
         turns: list[dict[str, str]],
         previous_draft: dict[str, object] | None,
+        *,
+        session_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
         """Advance the planning conversation by one turn.
 
@@ -65,6 +68,7 @@ class PlannerBackend(Protocol):
                 ``{"role": "user"|"planner", "text": ...}`` dicts.
             previous_draft: The prior turn's plan draft dump, or ``None`` on
                 the first turn.
+            session_id: Optional Langfuse session id shared by the conversation.
 
         Returns:
             One parsed planner turn.
@@ -179,6 +183,8 @@ class OpenAIPlannerBackend:
         self,
         turns: list[dict[str, str]],
         previous_draft: dict[str, object] | None,
+        *,
+        session_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
         """Advance the planning conversation through structured OpenAI output.
 
@@ -187,6 +193,7 @@ class OpenAIPlannerBackend:
                 ``{"role": "user"|"planner", "text": ...}`` dicts.
             previous_draft: The prior turn's plan draft dump, or ``None`` on
                 the first turn.
+            session_id: Optional Langfuse session id shared by the conversation.
 
         Returns:
             One parsed planner turn, with suggestions degraded if malformed.
@@ -218,6 +225,7 @@ class OpenAIPlannerBackend:
             name=f"planner:turn{turn_number}",
             as_type="generation",
             call=lambda: self._parse_once(messages),
+            session_id=session_id,
             update=_update,
         )
         return _degrade_suggestions(turn)
@@ -249,6 +257,8 @@ class StubPlannerBackend:
         self,
         turns: list[dict[str, str]],
         previous_draft: dict[str, object] | None,
+        *,
+        session_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
         """Return a deterministic planner turn.
 
@@ -258,11 +268,12 @@ class StubPlannerBackend:
                 turn a complete, registry-valid draft is returned.
             previous_draft: Accepted for protocol compatibility; ignored by
                 the stub, which derives its output from ``turns`` alone.
+            session_id: Accepted for tracing compatibility; ignored by the stub.
 
         Returns:
             A deterministic planner turn.
         """
-        del previous_draft
+        del previous_draft, session_id
         if len(turns) <= 1:
             intent = turns[0]["text"] if turns else ""
             return PlannerTurnWire(

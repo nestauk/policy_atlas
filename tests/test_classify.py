@@ -36,6 +36,7 @@ from policy_atlas.schema import (
     source_screening_result,
     source_tag,
 )
+from policy_atlas.usage import TokenUsage, UsageResult
 from tests.helpers import (
     now,
     seed_project_and_run,
@@ -54,7 +55,7 @@ def test_table_count(conn: Connection) -> None:
 # --- Stub logic (pure Python, no DB) ---
 
 def _stub_classify(metadata: dict[str, object]) -> str:
-    wire = StubClassificationBackend().classify(
+    wire, usage = StubClassificationBackend().classify(
         ClassifyEnvelopePayload(
             pss_id=str(uuid.uuid4()),
             title="",
@@ -63,6 +64,7 @@ def _stub_classify(metadata: dict[str, object]) -> str:
             metadata=dict(metadata),
         )
     )
+    assert usage is None
     return wire.primary_evidence_type
 
 
@@ -444,6 +446,23 @@ def test_classify_sources_doc_exception_isolated(conn: Connection) -> None:
 
 # --- Harness integration ---
 
+
+class _UsageClassificationBackend:
+    mode = "stub"
+
+    def classify(self, payload: ClassifyEnvelopePayload) -> UsageResult[ClassifyWire]:
+        del payload
+        return (
+            ClassifyWire(
+                primary_evidence_type="Qualitative & Contextual Evidence",
+                tags=[],
+                confidence=0.8,
+                reason="Fake backend with token usage.",
+            ),
+            TokenUsage(prompt=11, completion=7, total=18),
+        )
+
+
 def test_harness_classify_component(conn: Connection) -> None:
     pid, rid_screen = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
@@ -464,7 +483,12 @@ def test_harness_classify_component(conn: Connection) -> None:
     plan = Plan(component="classify", evidence_scope_id=scope_id)
     config = compile(plan)
     run_harness(
-        conn, config=config, project_id=pid, run_id=rid_classify, provider=StubEchoProvider()
+        conn,
+        config=config,
+        project_id=pid,
+        run_id=rid_classify,
+        provider=StubEchoProvider(),
+        classification_backend=_UsageClassificationBackend(),
     )
 
     # One classification row (only the relevant source)
@@ -484,6 +508,7 @@ def test_harness_classify_component(conn: Connection) -> None:
     assert set(payload.keys()) >= {"component", "classified", "by_type", "skipped"}
     assert payload["classified"] == 1
     assert payload["skipped"] == 1
+    assert payload["usage_totals"] == {"prompt": 11, "completion": 7, "total": 18}
 
     # Run ended as succeeded
     run_row = conn.execute(select(runs).where(runs.c.run_id == rid_classify)).one()
@@ -634,7 +659,7 @@ def test_classify_backend_passes_model_and_reasoning_effort() -> None:
     cast("Any", backend)._client = fake_client
     cast("Any", backend)._langfuse_client = None
 
-    result = backend.classify(
+    result, usage = backend.classify(
         ClassifyEnvelopePayload(
             pss_id=str(uuid.uuid4()),
             title="A randomized trial",
@@ -644,6 +669,7 @@ def test_classify_backend_passes_model_and_reasoning_effort() -> None:
     )
 
     assert result.primary_evidence_type == "RCTs and Quasi-Experimental Studies"
+    assert usage is None
     [kwargs] = fake_client.chat.completions.calls
     assert kwargs["model"] == "gpt-5.4-mini"
     assert kwargs["model"] == CLASSIFY_MODEL

@@ -44,6 +44,7 @@ from policy_atlas.select import (
     select_scope,
 )
 from policy_atlas.tags import insert_source_tags
+from policy_atlas.usage import UsageResult
 from tests.helpers import (
     EVIDENCE_TYPE,
     delete_project_data,
@@ -621,12 +622,12 @@ class _PartialRankingBackend:
         self.calls: list[list[str]] = []
         self.scored_id: str | None = None
 
-    def rank(self, batch: list[GroupingDoc], *, intent: str) -> list[RankedDoc]:
+    def rank(self, batch: list[GroupingDoc], *, intent: str) -> UsageResult[list[RankedDoc]]:
         del intent
         ids = [doc["id"] for doc in batch]
         self.calls.append(ids)
         self.scored_id = ids[0]
-        return [{"doc_id": ids[0], "score": 0, "reason": "Only valid scored doc."}]
+        return [{"doc_id": ids[0], "score": 0, "reason": "Only valid scored doc."}], None
 
 
 def test_llm_rerank_contested_scope_and_fallback_ordering(conn: Connection) -> None:
@@ -1426,7 +1427,7 @@ def test_summary_payload_shape_is_frozen(conn: Connection) -> None:
 
     assert set(summary.keys()) == {
         "strata", "selected", "excluded", "base", "characterisation_run_id",
-        "flags", "provenance",
+        "flags", "provenance", "usage_totals",
     }
     assert summary["strata"], "fixture must produce at least one stratum"
     for stratum in summary["strata"]:

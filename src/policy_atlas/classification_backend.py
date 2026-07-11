@@ -6,7 +6,6 @@ from typing import Any, Protocol, cast
 
 from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
-from openai.types.completion_usage import CompletionUsage
 
 from policy_atlas import tracing
 from policy_atlas.classify_prompt import (
@@ -26,6 +25,7 @@ from policy_atlas.embeddings import (
     usage_metadata,
 )
 from policy_atlas.prompt_fields import confidence_is_valid, scrub_nul
+from policy_atlas.usage import UsageResult, token_usage_from_provider
 
 
 class ClassificationBackend(Protocol):
@@ -41,14 +41,14 @@ class ClassificationBackend(Protocol):
         """``"live"`` or ``"stub"``; read-only so wrappers can proxy it."""
         ...
 
-    def classify(self, payload: ClassifyEnvelopePayload) -> ClassifyWire:
+    def classify(self, payload: ClassifyEnvelopePayload) -> UsageResult[ClassifyWire]:
         """Classify one document envelope.
 
         Args:
             payload: The document envelope plus provider priors.
 
         Returns:
-            Raw structurally parsed classification output.
+            Raw structurally parsed classification output plus token usage.
 
         Raises:
             RuntimeError: If the backend cannot produce a valid classification.
@@ -96,7 +96,7 @@ class OpenAIClassificationBackend:
     def _classify_once(
         self,
         messages: list[ChatCompletionMessageParam],
-    ) -> tuple[ClassifyWire, CompletionUsage | None]:
+    ) -> UsageResult[ClassifyWire]:
         response = self._client.chat.completions.parse(
             **openai_kwargs(CLASSIFY_MODEL, reasoning_effort=CLASSIFY_REASONING_EFFORT),
             messages=messages,
@@ -110,16 +110,16 @@ class OpenAIClassificationBackend:
         if parsed is None:
             raise RuntimeError("OpenAI classification response was not parsed.")
         parsed_model: ClassifyWire = parsed
-        return _scrub_classification(parsed_model), response.usage
+        return _scrub_classification(parsed_model), token_usage_from_provider(response.usage)
 
-    def classify(self, payload: ClassifyEnvelopePayload) -> ClassifyWire:
+    def classify(self, payload: ClassifyEnvelopePayload) -> UsageResult[ClassifyWire]:
         """Classify one document envelope through structured OpenAI output.
 
         Args:
             payload: The document envelope plus provider priors.
 
         Returns:
-            Raw structurally parsed classification output.
+            Raw structurally parsed classification output plus token usage.
 
         Raises:
             RuntimeError: If the response cannot be parsed or has invalid confidence.
@@ -129,7 +129,7 @@ class OpenAIClassificationBackend:
 
         def _update(
             span: Any,
-            result: tuple[ClassifyWire, CompletionUsage | None],
+            result: UsageResult[ClassifyWire],
         ) -> None:
             wire, usage = result
             span.update(
@@ -146,7 +146,7 @@ class OpenAIClassificationBackend:
 
         def _score_trace(
             _span: Any,
-            result: tuple[ClassifyWire, CompletionUsage | None],
+            result: UsageResult[ClassifyWire],
         ) -> None:
             if langfuse_client is None:
                 return
@@ -163,7 +163,7 @@ class OpenAIClassificationBackend:
                 data_type="NUMERIC",
             )
 
-        wire, _usage = tracing.traced_call(
+        wire, usage = tracing.traced_call(
             langfuse_client,
             name=f"classify:{payload.pss_id[:8]}",
             as_type="generation",
@@ -176,7 +176,7 @@ class OpenAIClassificationBackend:
                 "OpenAI classification response confidence out of range "
                 f"for pss_id={payload.pss_id!r}: {wire.confidence}."
             )
-        return wire
+        return wire, usage
 
 
 # Maps metadata sentinel keys to evidence types; first matching sentinel wins.
@@ -208,7 +208,7 @@ class StubClassificationBackend:
 
     mode = "stub"
 
-    def classify(self, payload: ClassifyEnvelopePayload) -> ClassifyWire:
+    def classify(self, payload: ClassifyEnvelopePayload) -> UsageResult[ClassifyWire]:
         """Return sentinel-driven classification output.
 
         Args:
@@ -216,7 +216,7 @@ class StubClassificationBackend:
                 it never enters live prompts.
 
         Returns:
-            Deterministic classification output driven by ``payload.metadata``.
+            Deterministic classification output plus no token usage.
 
         Raises:
             RuntimeError: If ``_stub_classify_failed`` is truthy.
@@ -228,15 +228,21 @@ class StubClassificationBackend:
         tags = _stub_tags(metadata)
         for sentinel, evidence_type in _STUB_MAP:
             if metadata.get(sentinel):
-                return ClassifyWire(
-                    primary_evidence_type=evidence_type,
-                    tags=tags,
-                    confidence=0.9,
-                    reason="Deterministic stub classification.",
+                return (
+                    ClassifyWire(
+                        primary_evidence_type=evidence_type,
+                        tags=tags,
+                        confidence=0.9,
+                        reason="Deterministic stub classification.",
+                    ),
+                    None,
                 )
-        return ClassifyWire(
-            primary_evidence_type=_UNKNOWN_EVIDENCE_TYPE,
-            tags=tags,
-            confidence=0.9,
-            reason="Deterministic stub classification.",
+        return (
+            ClassifyWire(
+                primary_evidence_type=_UNKNOWN_EVIDENCE_TYPE,
+                tags=tags,
+                confidence=0.9,
+                reason="Deterministic stub classification.",
+            ),
+            None,
         )

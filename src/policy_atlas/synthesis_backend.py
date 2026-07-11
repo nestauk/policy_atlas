@@ -30,7 +30,6 @@ from typing import Any, Literal, NotRequired, Protocol, TypedDict
 
 import structlog
 from langfuse import Langfuse
-from openai.types.completion_usage import CompletionUsage
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from policy_atlas import tracing
@@ -50,6 +49,7 @@ from policy_atlas.synthesis_tools import (
     ToolCallRequest,
     ToolExchange,
 )
+from policy_atlas.usage import UsageResult, token_usage_from_provider
 
 log = structlog.get_logger()
 
@@ -679,7 +679,7 @@ class SynthesisBackend(Protocol):
         intent: str,
         substrate: dict[str, Any],
         rejection: list[str] | None = None,
-    ) -> SectionProposalWire:
+    ) -> UsageResult[SectionProposalWire]:
         """Propose the intent-led section list (``synthesise_sections_v1``).
 
         Args:
@@ -688,7 +688,7 @@ class SynthesisBackend(Protocol):
             rejection: Validation errors driving the one bounded repair call.
 
         Returns:
-            Raw structurally parsed proposal.
+            Raw structurally parsed proposal plus token usage.
         """
         ...
 
@@ -698,7 +698,7 @@ class SynthesisBackend(Protocol):
         transcript: list[ToolExchange],
         *,
         force_emit: bool,
-    ) -> SectionTurn:
+    ) -> UsageResult[SectionTurn]:
         """Produce one loop turn: a single tool call, or the claims emission.
 
         Args:
@@ -707,7 +707,8 @@ class SynthesisBackend(Protocol):
             force_emit: True on the final turn — the backend must emit claims.
 
         Returns:
-            The turn: exactly one of ``tool_calls`` (length 1) or ``claims``.
+            The turn plus token usage: exactly one of ``tool_calls`` (length 1)
+            or ``claims``.
         """
         ...
 
@@ -717,7 +718,7 @@ class SynthesisBackend(Protocol):
         transcript: list[ToolExchange],
         *,
         failing: list[dict[str, Any]],
-    ) -> SectionClaimsWire:
+    ) -> UsageResult[SectionClaimsWire]:
         """One loop-free reword-down regeneration of the failing claims only.
 
         Args:
@@ -726,8 +727,9 @@ class SynthesisBackend(Protocol):
             failing: Failing claims with their verification rationales.
 
         Returns:
-            Raw structurally parsed replacement claims (failing claims only —
-            passing siblings survive verbatim; enforced by the caller).
+            Raw structurally parsed replacement claims plus token usage
+            (failing claims only — passing siblings survive verbatim; enforced
+            by the caller).
         """
         ...
 
@@ -970,7 +972,7 @@ class OpenAISynthesisBackend:
     def _parse_proposal_once(
         self,
         messages: list[dict[str, Any]],
-    ) -> tuple[SectionProposalWire, CompletionUsage | None]:
+    ) -> UsageResult[SectionProposalWire]:
         completions: Any = self._client.chat.completions
         response = completions.parse(
             model=SYNTHESIS_MODEL,
@@ -981,7 +983,7 @@ class OpenAISynthesisBackend:
         parsed_model: SectionProposalWire = require_parsed(
             response, label="synthesis section proposal"
         )
-        return parsed_model, response.usage
+        return parsed_model, token_usage_from_provider(response.usage)
 
     def propose_sections(
         self,
@@ -989,7 +991,7 @@ class OpenAISynthesisBackend:
         intent: str,
         substrate: dict[str, Any],
         rejection: list[str] | None = None,
-    ) -> SectionProposalWire:
+    ) -> UsageResult[SectionProposalWire]:
         """Propose sections through structured OpenAI output.
 
         Args:
@@ -998,7 +1000,7 @@ class OpenAISynthesisBackend:
             rejection: Optional rejected-proposal reasons for the bounded repair call.
 
         Returns:
-            Raw structurally parsed section proposal.
+            Raw structurally parsed section proposal plus token usage.
 
         Raises:
             RuntimeError: If the provider response is empty or unparsed.
@@ -1010,7 +1012,7 @@ class OpenAISynthesisBackend:
         )
 
         def _update(
-            span: Any, result: tuple[SectionProposalWire, CompletionUsage | None]
+            span: Any, result: UsageResult[SectionProposalWire]
         ) -> None:
             proposal, usage = result
             span.update(
@@ -1023,21 +1025,21 @@ class OpenAISynthesisBackend:
                 },
             )
 
-        proposal, _usage = tracing.traced_call(
+        proposal, usage = tracing.traced_call(
             self._langfuse_client,
             name="synthesise:proposal",
             as_type="generation",
             call=lambda: self._parse_proposal_once(messages),
             update=_update,
         )
-        return proposal
+        return proposal, usage
 
     def _create_section_turn_once(
         self,
         messages: list[dict[str, Any]],
         *,
         force_emit: bool,
-    ) -> tuple[SectionTurn, CompletionUsage | None]:
+    ) -> UsageResult[SectionTurn]:
         tool_choice: str | dict[str, dict[str, str] | str]
         if force_emit:
             tool_choice = {"type": "function", "function": {"name": "emit_claims"}}
@@ -1066,11 +1068,11 @@ class OpenAISynthesisBackend:
             turn: SectionTurn = {"tool_calls": [], "claims": claims}
             if malformed:
                 turn["malformed_claims"] = malformed
-            return turn, response.usage
+            return turn, token_usage_from_provider(response.usage)
         return {
             "tool_calls": [{"tool": name, "arguments": _json_object_or_empty(arguments)}],
             "claims": None,
-        }, response.usage
+        }, token_usage_from_provider(response.usage)
 
     def section_turn(
         self,
@@ -1078,7 +1080,7 @@ class OpenAISynthesisBackend:
         transcript: list[ToolExchange],
         *,
         force_emit: bool,
-    ) -> SectionTurn:
+    ) -> UsageResult[SectionTurn]:
         """Produce one OpenAI tool-forced section-loop turn.
 
         Args:
@@ -1087,7 +1089,7 @@ class OpenAISynthesisBackend:
             force_emit: Whether this is the final forced-emission turn.
 
         Returns:
-            One tool call request or a claims emission.
+            One tool call request or a claims emission plus token usage.
 
         Raises:
             RuntimeError: If the provider response violates the one-tool-call protocol.
@@ -1095,7 +1097,7 @@ class OpenAISynthesisBackend:
         messages = build_section_messages(seed, transcript, force_emit=force_emit)
         turn_index = self._next_turn_index() if self._langfuse_client is not None else 0
 
-        def _update(span: Any, result: tuple[SectionTurn, CompletionUsage | None]) -> None:
+        def _update(span: Any, result: UsageResult[SectionTurn]) -> None:
             turn, usage = result
             span.update(
                 input={"messages": messages},
@@ -1109,19 +1111,19 @@ class OpenAISynthesisBackend:
                 },
             )
 
-        turn, _usage = tracing.traced_call(
+        turn, usage = tracing.traced_call(
             self._langfuse_client,
             name=f"synthesise:section_turn{turn_index}",
             as_type="generation",
             call=lambda: self._create_section_turn_once(messages, force_emit=force_emit),
             update=_update,
         )
-        return turn
+        return turn, usage
 
     def _repair_once(
         self,
         messages: list[dict[str, Any]],
-    ) -> tuple[SectionClaimsWire, CompletionUsage | None]:
+    ) -> UsageResult[SectionClaimsWire]:
         completions: Any = self._client.chat.completions
         response = completions.create(
             model=SYNTHESIS_MODEL,
@@ -1141,7 +1143,7 @@ class OpenAISynthesisBackend:
         # lands the failing claims per the exhaustion rules (soft-flag / the
         # counted exclusions), never a whole-component failure.
         claims, _malformed = _salvage_claims(arguments)
-        return claims, response.usage
+        return claims, token_usage_from_provider(response.usage)
 
     def repair_section(
         self,
@@ -1149,7 +1151,7 @@ class OpenAISynthesisBackend:
         transcript: list[ToolExchange],
         *,
         failing: list[dict[str, Any]],
-    ) -> SectionClaimsWire:
+    ) -> UsageResult[SectionClaimsWire]:
         """Repair failing claims through one emit-forced OpenAI call.
 
         Args:
@@ -1158,7 +1160,7 @@ class OpenAISynthesisBackend:
             failing: Failing claim records with rationales.
 
         Returns:
-            Replacement claims for the failing records.
+            Replacement claims for the failing records plus token usage.
 
         Raises:
             RuntimeError: If the provider response does not emit claims.
@@ -1166,7 +1168,7 @@ class OpenAISynthesisBackend:
         messages = build_section_repair_messages(seed, transcript, failing=failing)
 
         def _update(
-            span: Any, result: tuple[SectionClaimsWire, CompletionUsage | None]
+            span: Any, result: UsageResult[SectionClaimsWire]
         ) -> None:
             claims, usage = result
             span.update(
@@ -1180,14 +1182,14 @@ class OpenAISynthesisBackend:
                 },
             )
 
-        claims, _usage = tracing.traced_call(
+        claims, usage = tracing.traced_call(
             self._langfuse_client,
             name="synthesise:repair",
             as_type="generation",
             call=lambda: self._repair_once(messages),
             update=_update,
         )
-        return claims
+        return claims, usage
 
 
 class StubSynthesisBackend:
@@ -1226,7 +1228,7 @@ class StubSynthesisBackend:
         intent: str,
         substrate: dict[str, Any],
         rejection: list[str] | None = None,
-    ) -> SectionProposalWire:
+    ) -> UsageResult[SectionProposalWire]:
         """Return a fixed or deterministic two-section proposal.
 
         Args:
@@ -1235,7 +1237,8 @@ class StubSynthesisBackend:
             rejection: Ignored by the deterministic stub.
 
         Returns:
-            The configured proposal, or the default two-section proposal.
+            The configured proposal, or the default two-section proposal, plus
+            no token usage.
 
         Raises:
             RuntimeError: If the failure sentinel is enabled.
@@ -1243,22 +1246,25 @@ class StubSynthesisBackend:
         self._raise_if_failed()
         del rejection
         if self._proposal is not None:
-            return self._proposal
+            return self._proposal, None
 
         bounded_intent = _strip_control_chars(intent[:80])
         group_ids = _group_ids_from_substrate(substrate)
-        return SectionProposalWire(
-            sections=[
-                SectionWire(
-                    title=f"Evidence on: {bounded_intent}",
-                    focus=f"What the assembled evidence says about: {bounded_intent}",
-                    group_ids=group_ids,
-                ),
-                SectionWire(
-                    title="Coverage and gaps in the assembled evidence",
-                    focus="The corpus's shape, spread and absences.",
-                ),
-            ]
+        return (
+            SectionProposalWire(
+                sections=[
+                    SectionWire(
+                        title=f"Evidence on: {bounded_intent}",
+                        focus=f"What the assembled evidence says about: {bounded_intent}",
+                        group_ids=group_ids,
+                    ),
+                    SectionWire(
+                        title="Coverage and gaps in the assembled evidence",
+                        focus="The corpus's shape, spread and absences.",
+                    ),
+                ]
+            ),
+            None,
         )
 
     def _scripted_turn(
@@ -1290,7 +1296,7 @@ class StubSynthesisBackend:
         transcript: list[ToolExchange],
         *,
         force_emit: bool,
-    ) -> SectionTurn:
+    ) -> UsageResult[SectionTurn]:
         """Return the next scripted turn, default tool call, or deterministic claims.
 
         Args:
@@ -1299,7 +1305,8 @@ class StubSynthesisBackend:
             force_emit: Whether this is the final forced-emission turn.
 
         Returns:
-            One tool call request or a deterministic claims emission.
+            One tool call request or a deterministic claims emission, plus no
+            token usage.
 
         Raises:
             RuntimeError: If the failure sentinel is enabled.
@@ -1307,7 +1314,7 @@ class StubSynthesisBackend:
         self._raise_if_failed()
         scripted = self._scripted_turn(seed, transcript, force_emit=force_emit)
         if scripted is not None:
-            return scripted
+            return scripted, None
 
         available_tools = [
             tool
@@ -1324,9 +1331,12 @@ class StubSynthesisBackend:
                 arguments = {"kind": "characterisation_summary"}
             else:
                 arguments = {"kind": "coverage_records"}
-            return {"tool_calls": [{"tool": tool_name, "arguments": arguments}], "claims": None}
+            return (
+                {"tool_calls": [{"tool": tool_name, "arguments": arguments}], "claims": None},
+                None,
+            )
 
-        return {"tool_calls": [], "claims": self._emit_claims(seed, transcript)}
+        return {"tool_calls": [], "claims": self._emit_claims(seed, transcript)}, None
 
     def _emit_claims(
         self,
@@ -1440,7 +1450,7 @@ class StubSynthesisBackend:
         transcript: list[ToolExchange],
         *,
         failing: list[dict[str, Any]],
-    ) -> SectionClaimsWire:
+    ) -> UsageResult[SectionClaimsWire]:
         """Return fixed repair claims or deterministic reworded replacements.
 
         Args:
@@ -1449,14 +1459,15 @@ class StubSynthesisBackend:
             failing: Failing claim records with rationales.
 
         Returns:
-            The configured repair claims, or deterministic reworded claims.
+            The configured repair claims, or deterministic reworded claims,
+            plus no token usage.
 
         Raises:
             RuntimeError: If the failure sentinel is enabled.
         """
         self._raise_if_failed()
         if self._repair_claims is not None:
-            return self._repair_claims
+            return self._repair_claims, None
 
         content_by_id = _chunk_content_by_id(transcript)
         repaired: list[ClaimWire] = []
@@ -1483,4 +1494,4 @@ class StubSynthesisBackend:
                     })
                 updated["citations"] = updated_citations
             repaired.append(ClaimWire.model_validate(updated))
-        return SectionClaimsWire(claims=repaired)
+        return SectionClaimsWire(claims=repaired), None

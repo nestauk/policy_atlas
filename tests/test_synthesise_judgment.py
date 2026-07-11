@@ -60,6 +60,7 @@ from policy_atlas.synthesise import (
     generation_budget_max,
     synthesise_scope,
 )
+from policy_atlas.usage import UsageResult
 from tests.helpers import (
     now,
     seed_characterisation,
@@ -169,7 +170,7 @@ class _CapCountingBackend:
         transcript: list[Any],
         *,
         force_emit: bool,
-    ) -> SectionTurn:
+    ) -> UsageResult[SectionTurn]:
         self.calls += 1
         if force_emit:
             return {
@@ -183,13 +184,13 @@ class _CapCountingBackend:
                         )
                     ]
                 ),
-            }
+            }, None
         return {
             "tool_calls": [
                 {"tool": "lookup", "arguments": {"kind": "coverage_records"}}
             ],
             "claims": None,
-        }
+        }, None
 
 
 def test_caps_bind() -> None:
@@ -278,7 +279,7 @@ class _SiblingRepairBackend:
 
     def propose_sections(
         self, *, intent: str, substrate: dict[str, Any], rejection: list[str] | None = None
-    ) -> SectionProposalWire:
+    ) -> UsageResult[SectionProposalWire]:
         return SectionProposalWire(
             sections=[
                 SectionWire(
@@ -286,11 +287,11 @@ class _SiblingRepairBackend:
                     focus="What the corpus states about rough sleeping outcomes.",
                 )
             ]
-        )
+        ), None
 
     def section_turn(
         self, seed: dict[str, Any], transcript: list[Any], *, force_emit: bool
-    ) -> SectionTurn:
+    ) -> UsageResult[SectionTurn]:
         chunks: list[dict[str, Any]] = []
         for exchange in transcript:
             if exchange["tool"] == "search_chunks":
@@ -299,7 +300,7 @@ class _SiblingRepairBackend:
             return {
                 "tool_calls": [{"tool": "search_chunks", "arguments": {"query": "programme"}}],
                 "claims": None,
-            }
+            }, None
         chunk_id = chunks[0]["chunk_record_id"] if chunks else "missing"
         return {
             "tool_calls": [],
@@ -321,18 +322,18 @@ class _SiblingRepairBackend:
                     ),
                 ]
             ),
-        }
+        }, None
 
     def repair_section(
         self, seed: dict[str, Any], transcript: list[Any], *, failing: list[dict[str, Any]]
-    ) -> SectionClaimsWire:
+    ) -> UsageResult[SectionClaimsWire]:
         # Return the failing claim unchanged — the fabricated quote stays fabricated.
         claims: list[ClaimWire] = []
         for record in failing:
             raw = record.get("claim", record)
             claim_data = {k: v for k, v in raw.items() if k in ClaimWire.model_fields}
             claims.append(ClaimWire.model_validate(claim_data))
-        return SectionClaimsWire(claims=claims)
+        return SectionClaimsWire(claims=claims), None
 
 
 def test_sibling_repair_guard(conn: Connection) -> None:
@@ -563,17 +564,17 @@ class _CrossSectionBackend:
 
     def propose_sections(
         self, *, intent: str, substrate: dict[str, Any], rejection: list[str] | None = None
-    ) -> SectionProposalWire:
+    ) -> UsageResult[SectionProposalWire]:
         return SectionProposalWire(
             sections=[
                 SectionWire(title="First section evidence", focus="Section zero evidence."),
                 SectionWire(title="Second section evidence", focus="Section one evidence."),
             ]
-        )
+        ), None
 
     def section_turn(
         self, seed: dict[str, Any], transcript: list[Any], *, force_emit: bool
-    ) -> SectionTurn:
+    ) -> UsageResult[SectionTurn]:
         section_index = seed.get("section_index", 0)
         if section_index == 0:
             chunks: list[dict[str, Any]] = []
@@ -586,7 +587,7 @@ class _CrossSectionBackend:
                         {"tool": "search_chunks", "arguments": {"query": "evidence"}}
                     ],
                     "claims": None,
-                }
+                }, None
             chunk_id = chunks[0]["chunk_record_id"]
             self.section0_chunk_id = chunk_id
             return {
@@ -602,7 +603,7 @@ class _CrossSectionBackend:
                         )
                     ]
                 ),
-            }
+            }, None
         # Section 1: emit immediately, citing section 0's gathered chunk id.
         assert self.section0_chunk_id is not None
         return {
@@ -620,17 +621,17 @@ class _CrossSectionBackend:
                     )
                 ]
             ),
-        }
+        }, None
 
     def repair_section(
         self, seed: dict[str, Any], transcript: list[Any], *, failing: list[dict[str, Any]]
-    ) -> SectionClaimsWire:
+    ) -> UsageResult[SectionClaimsWire]:
         claims: list[ClaimWire] = []
         for record in failing:
             raw = record.get("claim", record)
             claim_data = {k: v for k, v in raw.items() if k in ClaimWire.model_fields}
             claims.append(ClaimWire.model_validate(claim_data))
-        return SectionClaimsWire(claims=claims)
+        return SectionClaimsWire(claims=claims), None
 
 
 def test_ledger_cross_section_citation_rejected(conn: Connection) -> None:
@@ -809,7 +810,7 @@ class _WrongIdJudge:
 
     mode = "stub"
 
-    def judge_block(self, envelope: dict[str, Any]) -> JudgeResponseWire:
+    def judge_block(self, envelope: dict[str, Any]) -> UsageResult[JudgeResponseWire]:
         return JudgeResponseWire(
             verdicts=[
                 ClaimVerdictWire(
@@ -819,7 +820,7 @@ class _WrongIdJudge:
                     rationale="x",
                 )
             ]
-        )
+        ), None
 
 
 def test_judge_coverage_violation_fails_honestly(conn: Connection) -> None:

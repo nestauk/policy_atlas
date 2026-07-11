@@ -48,6 +48,7 @@ from policy_atlas.schema import (
 from policy_atlas.schema import chunk as chunk_table
 from policy_atlas.screen import effective_screen_rows
 from policy_atlas.tags import has_control_character
+from policy_atlas.usage import UsageAccumulator
 
 if TYPE_CHECKING:
     from policy_atlas.synthesis_backend import SectionClaimsWire
@@ -329,6 +330,7 @@ class SectionLoopResult(TypedDict):
     # and were salvaged away (backend per-claim salvage) — counted, never
     # silent; the component lands them in claims_rejected_structural.
     malformed_claims: int
+    usage_totals: dict[str, int]
 
 
 _DIRECTIVE_KEYS = {"sections", "retrieval_boosts"}
@@ -1724,11 +1726,13 @@ def run_section_loop(
     tool_call_counts: dict[str, int] = {}
     rejected_tool_calls = 0
     malformed_claims = 0
+    usage_totals = UsageAccumulator()
 
     for turn in range(1, turn_cap + 1):
         force_emit = turn == turn_cap
         try:
-            result = backend.section_turn(seed, transcript, force_emit=force_emit)
+            result, usage = backend.section_turn(seed, transcript, force_emit=force_emit)
+            usage_totals.add(usage)
         except MalformedEmissionError as exc:
             if force_emit:
                 raise RuntimeError(
@@ -1753,6 +1757,7 @@ def run_section_loop(
                 "rejected_tool_calls": rejected_tool_calls,
                 "turn_cap_hit": force_emit,
                 "malformed_claims": malformed_claims,
+                "usage_totals": usage_totals.payload(),
             }
         if force_emit and tool_calls:
             raise RuntimeError("backend returned tool call on forced emit turn")

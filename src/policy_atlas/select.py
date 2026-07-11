@@ -34,6 +34,7 @@ from policy_atlas.schema import (
     source_tag,
 )
 from policy_atlas.tags import has_control_character
+from policy_atlas.usage import UsageAccumulator
 
 log = structlog.get_logger()
 
@@ -196,6 +197,7 @@ class SelectionOutcome:
         notable_exclusions: Notable exclusion rationale records.
         flags: Fired trigger flags.
         provenance: Strategy provenance excluding IO wrapper fields.
+        usage_totals: Component-level token totals.
         selected_by_reason: Selected counts by reason.
         not_in_characterisation: Eligible docs absent from the referenced run.
     """
@@ -208,6 +210,7 @@ class SelectionOutcome:
     notable_exclusions: list[dict[str, str]]
     flags: dict[str, Any]
     provenance: dict[str, Any]
+    usage_totals: dict[str, int]
     selected_by_reason: dict[str, int]
     not_in_characterisation: int
 
@@ -739,7 +742,7 @@ def _rerank_infos(
     signal_docs: dict[uuid.UUID, _SignalDoc],
     ranking_backend: RankingBackend,
     intent: str,
-) -> tuple[dict[uuid.UUID, _RankInfo], _RerankStats]:
+) -> tuple[dict[uuid.UUID, _RankInfo], _RerankStats, dict[str, int]]:
     baseline = math.ceil(len(contested_ids) / RERANK_BATCH_SIZE)
     maximum = baseline * (1 + RERANK_RETRY_CAP)
     # Contract decision 10: judging degrades to title-only where the envelope
@@ -760,7 +763,8 @@ def _rerank_infos(
     fallback_count = 0
     retry_count = 0
     batches = _batches(contested_ids)
-    submitted: list[tuple[list[uuid.UUID], Future[list[RankedDoc]]]] = []
+    submitted: list[tuple[list[uuid.UUID], Future[Any]]] = []
+    usage_totals = UsageAccumulator()
 
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_RERANK_BATCHES) as executor:
         for batch in batches:
@@ -773,7 +777,8 @@ def _rerank_infos(
 
     for batch, future in submitted:
         try:
-            output = future.result()
+            output, usage = future.result()
+            usage_totals.add(usage)
         except Exception as exc:
             log.warning(
                 "select.rerank_batch_failed",
@@ -783,10 +788,11 @@ def _rerank_infos(
             if budget.reserve():
                 retry_count += 1
                 try:
-                    output = ranking_backend.rank(
+                    output, usage = ranking_backend.rank(
                         [_doc_for_rerank(signal_docs[pss_id]) for pss_id in batch],
                         intent=intent,
                     )
+                    usage_totals.add(usage)
                 except Exception as retry_exc:
                     log.warning(
                         "select.rerank_batch_retry_failed",
@@ -809,13 +815,17 @@ def _rerank_infos(
                 rank_infos=rank_infos,
             )
 
-    return rank_infos, _RerankStats(
-        baseline=baseline,
-        maximum=maximum,
-        used=budget.used,
-        retry_count=retry_count,
-        fallback_count=fallback_count,
-        title_only_count=title_only_count,
+    return (
+        rank_infos,
+        _RerankStats(
+            baseline=baseline,
+            maximum=maximum,
+            used=budget.used,
+            retry_count=retry_count,
+            fallback_count=fallback_count,
+            title_only_count=title_only_count,
+        ),
+        usage_totals.payload(),
     )
 
 
@@ -1115,6 +1125,7 @@ def select_documents(
     }
     rank_infos: dict[uuid.UUID, _RankInfo] = {}
     rerank_stats: _RerankStats | None = None
+    usage_totals = UsageAccumulator().payload()
     if strategy == "llm_rerank_v1":
         contested_ids = [
             pss_id
@@ -1122,7 +1133,7 @@ def select_documents(
             if stratum.name in contested_strata
             for pss_id in sorted(rankable_by_stratum[stratum.name], key=str)
         ]
-        rank_infos, rerank_stats = _rerank_infos(
+        rank_infos, rerank_stats, usage_totals = _rerank_infos(
             contested_ids=contested_ids,
             signal_docs=signal_docs,
             ranking_backend=cast("RankingBackend", ranking_backend),
@@ -1254,6 +1265,7 @@ def select_documents(
         notable_exclusions=notable_exclusions,
         flags=flags,
         provenance=provenance,
+        usage_totals=usage_totals,
         selected_by_reason=_reason_counts(selected),
         not_in_characterisation=not_in_characterisation,
     )
@@ -1429,6 +1441,7 @@ def _summary(
         "characterisation_run_id": str(characterisation_run_id),
         "flags": outcome.flags,
         "provenance": provenance,
+        "usage_totals": outcome.usage_totals,
     }
 
 
@@ -1478,6 +1491,7 @@ def _empty_summary(
         "characterisation_run_id": str(characterisation_run_id),
         "flags": {"empty_scope": {"eligible": 0}},
         "provenance": provenance,
+        "usage_totals": UsageAccumulator().payload(),
     }
 
 

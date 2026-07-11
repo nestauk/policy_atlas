@@ -31,6 +31,7 @@ from policy_atlas.schema import (
     selection_result,
     source_extraction_record,
 )
+from policy_atlas.usage import UsageResult
 
 from .helpers import now, seed_project_and_run, seed_run, seed_scope, seed_source
 
@@ -61,10 +62,10 @@ class CountingFacetGroupingBackend:
 
     def partition(
         self, values: list[FacetValueRecord], *, facet: str
-    ) -> PartitionResult:
+    ) -> UsageResult[PartitionResult]:
         del values, facet
         self.partition_calls += 1
-        return self.partition_result
+        return self.partition_result, None
 
     def repair(
         self,
@@ -72,10 +73,10 @@ class CountingFacetGroupingBackend:
         *,
         facet: str,
         accepted_groups: list[ProposedGroup],
-    ) -> PartitionResult:
+    ) -> UsageResult[PartitionResult]:
         del missing_values, facet, accepted_groups
         self.repair_calls += 1
-        return self.repair_result
+        return self.repair_result, None
 
 
 def seed_extraction(
@@ -345,6 +346,7 @@ def test_happy_path_writes_rollup_summary_and_provenance(conn: Connection) -> No
         "extraction_run_id",
         "flags",
         "provenance",
+        "usage_totals",
     }
     assert row["facet"] == "intervention"
     assert row["flags"] == ["ungrouped_values"]

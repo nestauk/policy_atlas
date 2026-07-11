@@ -210,8 +210,10 @@ def test_validation_failure_is_fail_closed_and_runs_nothing(
         self: StubPlannerBackend,
         turns: list[dict[str, str]],
         previous_draft: dict[str, object] | None,
+        *,
+        session_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
-        del self, previous_draft
+        del self, previous_draft, session_id
         return PlannerTurnWire(
             reply="Stub: emitting an intentionally invalid draft.",
             plan_draft=PlanDraftWire(
@@ -253,8 +255,10 @@ class _UnattendedPlanner:
         self,
         turns: list[dict[str, str]],
         previous_draft: dict[str, object] | None,
+        *,
+        session_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
-        del previous_draft
+        del previous_draft, session_id
         return PlannerTurnWire(
             reply="Unattended plan proposed.",
             plan_draft=PlanDraftWire(
@@ -312,8 +316,10 @@ def test_turn_cap_exhaustion_exits_no_plan_not_abandoned(
         self: StubPlannerBackend,
         turns: list[dict[str, str]],
         previous_draft: dict[str, object] | None,
+        *,
+        session_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
-        del self, previous_draft
+        del self, previous_draft, session_id
         return PlannerTurnWire(
             reply="Stub: still thinking.",
             plan_draft=PlanDraftWire(question=turns[0]["text"]),
@@ -345,8 +351,10 @@ def test_planner_declared_steer_point_defaults_reach_the_plan(engine: Engine) ->
             self,
             turns: list[dict[str, str]],
             previous_draft: dict[str, object] | None,
+            *,
+            session_id: uuid.UUID | None = None,
         ) -> PlannerTurnWire:
-            del previous_draft
+            del previous_draft, session_id
             return PlannerTurnWire(
                 reply="Unattended plan with pre-declared defaults.",
                 plan_draft=PlanDraftWire(
@@ -402,8 +410,10 @@ def test_planner_draft_author_affiliation_countries_reach_the_plan(engine: Engin
             self,
             turns: list[dict[str, str]],
             previous_draft: dict[str, object] | None,
+            *,
+            session_id: uuid.UUID | None = None,
         ) -> PlannerTurnWire:
-            del previous_draft
+            del previous_draft, session_id
             return PlannerTurnWire(
                 reply="Plan scoped to GB/US author affiliations.",
                 plan_draft=PlanDraftWire(

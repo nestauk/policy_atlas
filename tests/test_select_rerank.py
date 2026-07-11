@@ -34,6 +34,7 @@ from policy_atlas.schema import (
     source_snapshot,
     source_tag,
 )
+from policy_atlas.usage import UsageResult
 from tests.helpers import (
     now,
     run_select,
@@ -126,15 +127,18 @@ class _CountingRankingBackend:
         self.calls: list[list[str]] = []
         self._lock = Lock()
 
-    def rank(self, batch: list[GroupingDoc], *, intent: str) -> list[RankedDoc]:
+    def rank(self, batch: list[GroupingDoc], *, intent: str) -> UsageResult[list[RankedDoc]]:
         del intent
         ids = [doc["id"] for doc in batch]
         with self._lock:
             self.calls.append(ids)
-        return [
-            {"doc_id": doc_id, "score": 5, "reason": f"Valid rank for {doc_id}."}
-            for doc_id in ids
-        ]
+        return (
+            [
+                {"doc_id": doc_id, "score": 5, "reason": f"Valid rank for {doc_id}."}
+                for doc_id in ids
+            ],
+            None,
+        )
 
 
 class _RaisingRankingBackend:
@@ -144,7 +148,7 @@ class _RaisingRankingBackend:
         self.calls: list[list[str]] = []
         self._lock = Lock()
 
-    def rank(self, batch: list[GroupingDoc], *, intent: str) -> list[RankedDoc]:
+    def rank(self, batch: list[GroupingDoc], *, intent: str) -> UsageResult[list[RankedDoc]]:
         del intent
         ids = [doc["id"] for doc in batch]
         with self._lock:
@@ -165,19 +169,22 @@ class _SubsetRankingBackend:
         self.reasons = reasons or {}
         self.calls: list[list[str]] = []
 
-    def rank(self, batch: list[GroupingDoc], *, intent: str) -> list[RankedDoc]:
+    def rank(self, batch: list[GroupingDoc], *, intent: str) -> UsageResult[list[RankedDoc]]:
         del intent
         ids = [doc["id"] for doc in batch]
         self.calls.append(ids)
-        return [
-            {
-                "doc_id": doc_id,
-                "score": self.scores[doc_id],
-                "reason": self.reasons.get(doc_id, f"Scored {doc_id}."),
-            }
-            for doc_id in ids
-            if doc_id in self.scores
-        ]
+        return (
+            [
+                {
+                    "doc_id": doc_id,
+                    "score": self.scores[doc_id],
+                    "reason": self.reasons.get(doc_id, f"Scored {doc_id}."),
+                }
+                for doc_id in ids
+                if doc_id in self.scores
+            ],
+            None,
+        )
 
 
 class _MisbehavingRankingBackend:
@@ -199,18 +206,21 @@ class _MisbehavingRankingBackend:
         self.conflict = conflict
         self.calls: list[list[str]] = []
 
-    def rank(self, batch: list[GroupingDoc], *, intent: str) -> list[RankedDoc]:
+    def rank(self, batch: list[GroupingDoc], *, intent: str) -> UsageResult[list[RankedDoc]]:
         del intent
         self.calls.append([doc["id"] for doc in batch])
-        return [
-            {"doc_id": self.valid_high, "score": 10, "reason": "Strong fit."},
-            {"doc_id": self.valid_zero, "score": 0, "reason": "Still in play."},
-            {"doc_id": self.out_of_range, "score": 11, "reason": "Invalid high."},
-            {"doc_id": self.bool_score, "score": True, "reason": "Bool is invalid."},
-            {"doc_id": self.conflict, "score": 6, "reason": "First version."},
-            {"doc_id": self.conflict, "score": 7, "reason": "Conflicting version."},
-            {"doc_id": "invented-doc-id", "score": 9, "reason": "Invented id."},
-        ]
+        return (
+            [
+                {"doc_id": self.valid_high, "score": 10, "reason": "Strong fit."},
+                {"doc_id": self.valid_zero, "score": 0, "reason": "Still in play."},
+                {"doc_id": self.out_of_range, "score": 11, "reason": "Invalid high."},
+                {"doc_id": self.bool_score, "score": True, "reason": "Bool is invalid."},
+                {"doc_id": self.conflict, "score": 6, "reason": "First version."},
+                {"doc_id": self.conflict, "score": 7, "reason": "Conflicting version."},
+                {"doc_id": "invented-doc-id", "score": 9, "reason": "Invented id."},
+            ],
+            None,
+        )
 
 
 def _deny_socket_task10(*args: Any, **kwargs: Any) -> Any:

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import uuid
+from types import TracebackType
+from typing import Any, Literal, cast
+
 import pytest
 
 from policy_atlas.orchestration_plan import OrchestrationPlan
@@ -205,6 +209,92 @@ def test_openai_planner_backend_requires_api_key(monkeypatch: pytest.MonkeyPatch
 
     with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
         OpenAIPlannerBackend()
+
+
+class _FakeParsedMessage:
+    def __init__(self, parsed: PlannerTurnWire) -> None:
+        self.parsed = parsed
+
+
+class _FakeChoice:
+    def __init__(self, parsed: PlannerTurnWire) -> None:
+        self.message = _FakeParsedMessage(parsed)
+
+
+class _FakeResponse:
+    usage = None
+
+    def __init__(self, parsed: PlannerTurnWire) -> None:
+        self.choices = [_FakeChoice(parsed)]
+
+
+class _FakeCompletions:
+    def __init__(self, parsed: PlannerTurnWire) -> None:
+        self._parsed = parsed
+
+    def parse(self, **kwargs: Any) -> _FakeResponse:
+        del kwargs
+        return _FakeResponse(self._parsed)
+
+
+class _FakeChat:
+    def __init__(self, parsed: PlannerTurnWire) -> None:
+        self.completions = _FakeCompletions(parsed)
+
+
+class _FakeOpenAIClient:
+    def __init__(self, parsed: PlannerTurnWire) -> None:
+        self.chat = _FakeChat(parsed)
+
+
+class _FakeSpan:
+    def update(self, **payload: Any) -> None:
+        del payload
+
+
+class _FakeObservation:
+    def __enter__(self) -> _FakeSpan:
+        return _FakeSpan()
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> Literal[False]:
+        del exc_type, exc, traceback
+        return False
+
+
+class _FakeLangfuse:
+    def __init__(self) -> None:
+        self.sessions: list[str] = []
+
+    def start_as_current_observation(self, *, name: str, as_type: str) -> _FakeObservation:
+        del name, as_type
+        return _FakeObservation()
+
+    def update_current_trace(self, *, session_id: str) -> None:
+        self.sessions.append(session_id)
+
+
+def test_openai_planner_turn_sets_langfuse_session() -> None:
+    session_id = uuid.uuid4()
+    parsed = PlannerTurnWire(
+        reply="Ready.",
+        plan_draft=PlanDraftWire(title="Session test", question="Q?"),
+        question=None,
+        suggested_answers=None,
+        ready=False,
+    )
+    backend: OpenAIPlannerBackend = object.__new__(OpenAIPlannerBackend)
+    fake_langfuse = _FakeLangfuse()
+    cast("Any", backend)._client = _FakeOpenAIClient(parsed)
+    cast("Any", backend)._langfuse_client = fake_langfuse
+
+    backend.plan_turn([_turn("Q?")], None, session_id=session_id)
+
+    assert fake_langfuse.sessions == [str(session_id)]
 
 
 def test_scrub_turn_removes_nul_from_nested_plan_draft() -> None:

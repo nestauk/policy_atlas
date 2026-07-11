@@ -64,6 +64,7 @@ from policy_atlas.schema import (
     source_extraction_record,
     source_snapshot,
 )
+from policy_atlas.usage import UsageAccumulator
 from policy_atlas.windowing import greedy_windows as _shared_greedy_windows
 
 log = structlog.get_logger()
@@ -542,7 +543,12 @@ def _run_windows(
     *,
     extraction_backend: ExtractionBackend,
 ) -> tuple[
-    dict[int, dict[int, list[IOFRecordWire]]], dict[int, Exception], int, _ExtractCallBudget, int
+    dict[int, dict[int, list[IOFRecordWire]]],
+    dict[int, Exception],
+    int,
+    _ExtractCallBudget,
+    int,
+    dict[str, int],
 ]:
     """Run every extractable window through the backend with one retry per window.
 
@@ -567,6 +573,7 @@ def _run_windows(
 
     results: dict[tuple[int, int], list[IOFRecordWire]] = {}
     errors: dict[tuple[int, int], Exception] = {}
+    usage_totals = UsageAccumulator()
 
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_EXTRACT) as executor:
         submitted: list[tuple[tuple[int, int], Future[Any]]] = []
@@ -578,7 +585,9 @@ def _run_windows(
         wait([future for _, future in submitted])
         for key, future in submitted:
             try:
-                results[key] = _scrub_findings(list(future.result().findings))
+                response, usage = future.result()
+                results[key] = _scrub_findings(list(response.findings))
+                usage_totals.add(usage)
             except Exception as exc:  # noqa: BLE001 — reduced to a type name for the record
                 errors[key] = exc
 
@@ -588,9 +597,9 @@ def _run_windows(
             continue
         retry_count += 1
         try:
-            results[key] = _scrub_findings(
-                list(extraction_backend.extract(payloads[key]).findings)
-            )
+            response, usage = extraction_backend.extract(payloads[key])
+            results[key] = _scrub_findings(list(response.findings))
+            usage_totals.add(usage)
         except Exception as exc:  # noqa: BLE001
             errors[key] = exc
         else:
@@ -604,7 +613,7 @@ def _run_windows(
     for doc_index, window_index in sorted(errors):
         doc_errors.setdefault(doc_index, errors[(doc_index, window_index)])
 
-    return per_doc, doc_errors, baseline, budget, retry_count
+    return per_doc, doc_errors, baseline, budget, retry_count, usage_totals.payload()
 
 
 # --- Per-document pipeline --------------------------------------------------
@@ -797,6 +806,7 @@ def _build_summary(
     budget_maximum: int,
     budget_used: int,
     retry_count: int,
+    usage_totals: dict[str, int],
 ) -> dict[str, Any]:
     selected = len(docs)
     counts = {
@@ -859,6 +869,7 @@ def _build_summary(
         "selection_run_id": str(selection_run_id),
         "flags": flags,
         "provenance": provenance,
+        "usage_totals": usage_totals,
     }
 
 
@@ -915,6 +926,7 @@ def extract_scope(
             budget_maximum=0,
             budget_used=0,
             retry_count=0,
+            usage_totals=UsageAccumulator().payload(),
         )
         _write_rollup(
             conn,
@@ -938,7 +950,7 @@ def extract_scope(
         _resolve_basis(doc)
     _apply_memo(conn, project_id=project_id, fingerprint=fingerprint, docs=docs)
 
-    per_doc, doc_errors, baseline, budget, retry_count = _run_windows(
+    per_doc, doc_errors, baseline, budget, retry_count, usage_totals = _run_windows(
         docs, extraction_backend=extraction_backend
     )
     for doc_index, doc in enumerate(docs):
@@ -975,6 +987,7 @@ def extract_scope(
         budget_maximum=budget.maximum,
         budget_used=budget.used,
         retry_count=retry_count,
+        usage_totals=usage_totals,
     )
     # The roll-up is the LAST fallible statement (the 010 pattern): the harness
     # catches without rollback, so nothing may fail after this insert.

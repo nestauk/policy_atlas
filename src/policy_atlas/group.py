@@ -49,6 +49,7 @@ from policy_atlas.schema import (
     grouping_result,
     intervention_outcome_finding,
 )
+from policy_atlas.usage import UsageAccumulator
 
 log = structlog.get_logger()
 
@@ -138,6 +139,7 @@ def group_findings(
     repair_count = 0
     rejection_reasons: list[str] = []
     flags: list[str] = []
+    usage_totals = UsageAccumulator().payload()
 
     if not views:
         flags.append("empty_findings")
@@ -161,12 +163,17 @@ def group_findings(
 
         log.info("group.call_budget", baseline=1, maximum=1 + REPAIR_CAP)
         records = value_records(values)
-        final_groups, ungrouped_value_ids, call_count, repair_count, rejection_reasons = (
-            _partition_values(
-                records,
-                facet=facet,
-                facet_grouping_backend=facet_grouping_backend,
-            )
+        (
+            final_groups,
+            ungrouped_value_ids,
+            call_count,
+            repair_count,
+            rejection_reasons,
+            usage_totals,
+        ) = _partition_values(
+            records,
+            facet=facet,
+            facet_grouping_backend=facet_grouping_backend,
         )
 
     payload = _build_valid_payload(
@@ -210,6 +217,7 @@ def group_findings(
         extraction_run_id=context.extraction_run_id,
         flags=flags,
         provenance=provenance,
+        usage_totals=usage_totals,
     )
 
     conn.execute(
@@ -348,15 +356,17 @@ def _partition_values(
     *,
     facet: str,
     facet_grouping_backend: FacetGroupingBackend,
-) -> tuple[list[AcceptedGroup], set[str], int, int, list[str]]:
+) -> tuple[list[AcceptedGroup], set[str], int, int, list[str], dict[str, int]]:
     call_count = 0
     repair_count = 0
     all_value_ids = [record["id"] for record in records]
     rejection_reasons: list[str] = []
+    usage_totals = UsageAccumulator()
 
     try:
         call_count += 1
-        raw = facet_grouping_backend.partition(records, facet=facet)
+        raw, usage = facet_grouping_backend.partition(records, facet=facet)
+        usage_totals.add(usage)
     except Exception as exc:
         raise GroupError(f"facet grouping backend failed: {type(exc).__name__}") from exc
 
@@ -390,11 +400,12 @@ def _partition_values(
     if repair_records:
         repair_count += 1
         try:
-            repair_raw = facet_grouping_backend.repair(
+            repair_raw, usage = facet_grouping_backend.repair(
                 repair_records,
                 facet=facet,
                 accepted_groups=repair_accepted_groups,
             )
+            usage_totals.add(usage)
         except Exception as exc:
             raise GroupError(f"facet grouping backend failed: {type(exc).__name__}") from exc
 
@@ -413,7 +424,14 @@ def _partition_values(
         ungroupable_ids.update(still_missing_ids)
 
     bounded_reasons = [reason[:200] for reason in rejection_reasons[:REJECTION_REASON_CAP]]
-    return accepted, ungroupable_ids, call_count, repair_count, bounded_reasons
+    return (
+        accepted,
+        ungroupable_ids,
+        call_count,
+        repair_count,
+        bounded_reasons,
+        usage_totals.payload(),
+    )
 
 
 def _proposed_groups(groups: Sequence[AcceptedGroup]) -> list[ProposedGroup]:
@@ -552,6 +570,7 @@ def _build_summary(
     extraction_run_id: uuid.UUID,
     flags: list[str],
     provenance: dict[str, Any],
+    usage_totals: dict[str, int],
 ) -> dict[str, Any]:
     groups = cast("list[dict[str, Any]]", payload["groups"])
     ungrouped = cast("dict[str, Any]", payload["ungrouped"])
@@ -586,4 +605,5 @@ def _build_summary(
         "extraction_run_id": str(extraction_run_id),
         "flags": flags,
         "provenance": provenance,
+        "usage_totals": usage_totals,
     }
