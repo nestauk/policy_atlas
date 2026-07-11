@@ -3,13 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from types import SimpleNamespace
 from typing import Any
 
+from policy_atlas.grounding_judge import (
+    StubGroundingJudgeBackend,
+    build_envelope,
+    build_judge_messages,
+)
 from policy_atlas.quote_verify import build_basis
 from policy_atlas.synthesis_backend import (
     ClaimWire,
     GapPayloadWire,
     PatternPayloadWire,
+    SectionProposalWire,
+    SectionWire,
     SparsitySignalWire,
     ThemePayloadWire,
 )
@@ -18,16 +26,23 @@ from policy_atlas.synthesis_tools import (
     REASONING_CLAIMS_MAX,
     SECTION_CAP,
     SECTION_TURN_CAP,
+    _doc_record,
+    _finding_record,
 )
 from policy_atlas.synthesise import (
+    CONCLUSIONS_TITLE,
     ChunkInfo,
     ClaimDraft,
     CorpusProfile,
     CoverageRecord,
     FindingInfo,
+    SectionSpec,
     SpliceItem,
     SubstrateView,
     _anchor_counts,
+    _conclusions_focus,
+    _judge_claims,
+    _validate_sections,
     bind_spans,
     build_ledger,
     derive_artefact_title,
@@ -185,7 +200,9 @@ def test_artefact_title_strips_control_chars_and_truncates() -> None:
 
 
 def test_budget_formula_and_ledger_marker() -> None:
-    assert generation_budget_max() == 2 + SECTION_CAP * (SECTION_TURN_CAP + 3)
+    # +1 conclusions section (rides above SECTION_CAP) + the key-findings pass
+    # (emission + judge/repair/rejudge) — ADR 0015 §8.
+    assert generation_budget_max() == 2 + (SECTION_CAP + 1) * (SECTION_TURN_CAP + 3) + 4
 
     ledger = build_ledger(
         [
@@ -573,3 +590,215 @@ def test_splice_and_rebind_repaired_text_not_substring_is_validation_failure() -
     ]
     _new_prose, span_map = splice_and_rebind(prose, items)
     assert span_map[1] is None
+
+
+# --- ADR 0015 §8 / B-B3: default metadata set (owner-adopted) ---
+
+
+def test_doc_record_default_metadata_present_and_absent() -> None:
+    present = SimpleNamespace(
+        pss_id="11111111-1111-1111-1111-111111111111",
+        origin="uploaded",
+        primary_evidence_type="rct",
+        text_basis="full_text",
+        quality_score=3,
+        metadata={
+            "title": "Doc with metadata",
+            "year": 2024,
+            "publisher_org": "Example Journal",
+            "provider_fields": {"cited_by_count": 42},
+        },
+    )
+    doc = _doc_record(present, set())
+    assert doc["year"] == 2024
+    assert doc["primary_evidence_type"] == "rct"
+    assert doc["appraisal_tier"] == "3"
+    assert doc["venue"] == "Example Journal"
+    assert doc["cited_by"] == 42
+    # is_retracted is never surfaced.
+    assert "is_retracted" not in doc
+
+    absent = SimpleNamespace(
+        pss_id="22222222-2222-2222-2222-222222222222",
+        origin="uploaded",
+        primary_evidence_type=None,
+        text_basis="full_text",
+        quality_score=None,
+        metadata={"title": "Bare doc"},
+    )
+    bare = _doc_record(absent, set())
+    for key in ("year", "publication_year", "venue", "cited_by"):
+        assert key not in bare
+    assert bare["primary_evidence_type"] is None
+    assert bare["appraisal_tier"] is None
+    assert "is_retracted" not in bare
+
+
+def test_finding_record_default_metadata_present_and_absent() -> None:
+    present = SimpleNamespace(
+        finding_id="finding-1",
+        project_source_snapshot_id="11111111-1111-1111-1111-111111111111",
+        intervention="A",
+        outcome="B",
+        population=None,
+        comparator=None,
+        effect_direction="increase",
+        estimate_level=None,
+        study_design=None,
+        stratum_qualifiers=[],
+        statistics={},
+        causality_by_design=None,
+        is_primary=None,
+        field_coverage={},
+        primary_evidence_type="systematic_review",
+        quality_score=2,
+        metadata={
+            "title": "Finding doc",
+            "publication_year": 2019,
+            "publisher_org": "Review Press",
+            "provider_fields": {"cited_by_count": 7},
+        },
+    )
+    record = _finding_record(present)
+    assert record["year"] == 2019
+    assert record["evidence_type"] == "systematic_review"
+    assert record["appraisal_label"] == "2"
+    assert record["venue"] == "Review Press"
+    assert record["cited_by"] == 7
+    assert "is_retracted" not in record
+
+    absent = SimpleNamespace(
+        finding_id="finding-2",
+        project_source_snapshot_id="22222222-2222-2222-2222-222222222222",
+        intervention="A",
+        outcome="B",
+        population=None,
+        comparator=None,
+        effect_direction="increase",
+        estimate_level=None,
+        study_design=None,
+        stratum_qualifiers=[],
+        statistics={},
+        causality_by_design=None,
+        is_primary=None,
+        field_coverage={},
+        primary_evidence_type=None,
+        quality_score=None,
+        metadata={"title": "Bare finding doc"},
+    )
+    bare = _finding_record(absent)
+    for key in ("year", "evidence_type", "appraisal_label", "venue", "cited_by"):
+        assert key not in bare
+    assert "is_retracted" not in bare
+
+
+# --- ADR 0015 §2 / B-B3: judge envelope v2 (intent + section_focus + finding
+# anchored chunk text) ---
+
+
+def test_build_envelope_carries_intent_and_section_focus() -> None:
+    envelope = build_envelope(
+        claims=[],
+        chunks=[],
+        section_prose="prose",
+        span_map=[],
+        intent="What works?",
+        section_focus="key findings",
+    )
+    assert envelope["intent"] == "What works?"
+    assert envelope["section_focus"] == "key findings"
+    messages = build_judge_messages(envelope)
+    user = messages[1]["content"]
+    assert "What works?" in user
+    assert "key findings" in user
+
+
+class _CapturingJudge(StubGroundingJudgeBackend):
+    def __init__(self) -> None:
+        super().__init__()
+        self.envelopes: list[dict[str, Any]] = []
+
+    def judge_block(self, envelope: dict[str, Any]) -> Any:
+        self.envelopes.append(envelope)
+        return super().judge_block(envelope)
+
+
+def test_judge_envelope_includes_finding_anchor_chunks_deduped_and_context() -> None:
+    substrate = _substrate()
+    anchored_chunk_id = "11111111-1111-1111-1111-111111111111"
+    finding_claim = ClaimDraft(
+        claim_id="s0c0",
+        claim_index=0,
+        claim_type="finding",
+        text="Finding claim.",
+        annotation_type="citation",
+        payload={
+            "cited_finding_ids": ["finding-1"],
+            "anchors": [
+                {
+                    "finding_id": "finding-1",
+                    "quote": "finding anchor quote",
+                    "match_status": "exact",
+                    "spans": [
+                        {"chunk_id": anchored_chunk_id, "start": 0, "end": 20}
+                    ],
+                }
+            ],
+        },
+        # Deliberately empty: the anchored chunk must still reach the envelope
+        # from the anchors, not only from judge_chunk_ids.
+        judge_chunk_ids=set(),
+        span=(0, 14),
+    )
+    chunk_claim = ClaimDraft(
+        claim_id="s0c1",
+        claim_index=1,
+        claim_type="chunk",
+        text="Chunk claim.",
+        annotation_type="citation",
+        payload={"citations": [{"cited_chunk_record_id": anchored_chunk_id}]},
+        judge_chunk_ids={anchored_chunk_id},
+        span=(15, 27),
+    )
+    judge = _CapturingJudge()
+    calls, _usage, _unspanned = _judge_claims(
+        claims=[finding_claim, chunk_claim],
+        substrate=substrate,
+        grounding_judge_backend=judge,
+        section_prose="Finding claim. Chunk claim.",
+        intent="The intent",
+        section_focus="A focus",
+    )
+    assert calls == 1
+    envelope = judge.envelopes[0]
+    assert envelope["intent"] == "The intent"
+    assert envelope["section_focus"] == "A focus"
+    chunk_ids = [chunk["chunk_record_id"] for chunk in envelope["chunks"]]
+    # The anchored chunk is present exactly once (deduped against the chunk claim).
+    assert chunk_ids.count(anchored_chunk_id) == 1
+    anchored = next(
+        chunk for chunk in envelope["chunks"] if chunk["chunk_record_id"] == anchored_chunk_id
+    )
+    assert anchored["content"] == "alpha quoted evidence appears here"
+    assert anchored["text_basis"] == "abstract_only"
+    assert anchored["segmentation_policy"] == "manual_v1"
+
+
+# --- ADR 0015 §8 / B-B3: conclusions exemption + focus ---
+
+
+def test_proposed_conclusion_title_rejected_but_injected_title_is_exempt() -> None:
+    proposal = SectionProposalWire(
+        sections=[SectionWire(title="Conclusion", focus="A verdict on the evidence.")]
+    )
+    _sections, reasons, _norm = _validate_sections(proposal, grouping_group_ids=None)
+    assert any("title_forbidden" in reason for reason in reasons)
+    # The code-injected conclusions section is exempt by construction — it never
+    # passes through _validate_sections, so its title is not checked.
+    injected = SectionSpec(
+        title=CONCLUSIONS_TITLE, focus=_conclusions_focus("What works?"), role="conclusions"
+    )
+    assert injected.title == "Conclusions"
+    assert injected.role == "conclusions"
+    assert "What works?" in injected.focus
+    assert "recommendations" in injected.focus

@@ -39,6 +39,7 @@ from policy_atlas.synthesis_backend import (
     ClaimWire,
     GapPayloadWire,
     SectionProposalWire,
+    SectionProseWire,
     SectionRepairWire,
     SectionTurn,
     SectionWire,
@@ -71,7 +72,7 @@ from tests.helpers import (
     seed_screening_result,
     seed_select_doc,
 )
-from tests.synthesis_wire import prose_section, repair_wire
+from tests.synthesis_wire import empty_key_findings, prose_section, repair_wire
 
 
 def _count(conn: Connection, table: Any, project_id: uuid.UUID) -> int:
@@ -211,7 +212,9 @@ def test_caps_bind() -> None:
         inspect.signature(run_section_loop).parameters["turn_cap"].default
         is SECTION_TURN_CAP
     )
-    assert generation_budget_max() == 2 + SECTION_CAP * (SECTION_TURN_CAP + 3)
+    # The code-injected conclusions section rides above SECTION_CAP and the
+    # final key-findings pass adds one emission + judge/repair/rejudge (ADR 0015 §8).
+    assert generation_budget_max() == 2 + (SECTION_CAP + 1) * (SECTION_TURN_CAP + 3) + 4
 
 
 # --- Test 2: unknown and injection-shaped tool names never execute ---
@@ -335,6 +338,9 @@ class _SiblingRepairBackend:
             claim_data = {k: v for k, v in raw.items() if k in ClaimWire.model_fields}
             claims.append(ClaimWire.model_validate(claim_data))
         return repair_wire(claims=claims), None
+
+    def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
+        return empty_key_findings(seed)
 
 
 def test_sibling_repair_guard(conn: Connection) -> None:
@@ -633,6 +639,9 @@ class _CrossSectionBackend:
             claim_data = {k: v for k, v in raw.items() if k in ClaimWire.model_fields}
             claims.append(ClaimWire.model_validate(claim_data))
         return repair_wire(claims=claims), None
+
+    def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
+        return empty_key_findings(seed)
 
 
 def test_ledger_cross_section_citation_rejected(conn: Connection) -> None:

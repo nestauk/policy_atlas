@@ -54,6 +54,7 @@ from policy_atlas.schema import citation as citation_table
 from policy_atlas.screen import effective_screen_rows
 from policy_atlas.synthesis_backend import (
     FORBIDDEN_SECTION_TITLES,
+    KEY_FINDINGS_PROMPT_VERSION,
     SECTION_FOCUS_MAX,
     SECTION_PROMPT_VERSION,
     SECTION_TITLE_MAX,
@@ -66,6 +67,7 @@ from policy_atlas.synthesis_backend import (
     SectionProseWire,
     SectionRepairWire,
     SynthesisBackend,
+    _chunk_content_by_id,
 )
 from policy_atlas.synthesis_tools import (
     ARTEFACT_TITLE_MAX,
@@ -113,6 +115,32 @@ ANNOTATION_BY_CLAIM_TYPE = {
     "gap": "gap",
     "reasoning": "reasoning",
 }
+
+# The two new grounded block kinds (ADR 0015 §8). Both are ordinary grounded
+# blocks (annotations, citations, judge) distinguished only by section role.
+CONCLUSIONS_TITLE = "Conclusions"
+KEY_FINDINGS_TITLE = "Key findings"
+KEY_FINDINGS_FOCUS = "The report's headline claims."
+# Section focus the judge sees for the key-findings pass (envelope v2).
+KEY_FINDINGS_SECTION_FOCUS = "key findings"
+# The headline evidence claim types the key-findings pass may re-state — no
+# theme/gap/reasoning (headline evidence only), intersected with the run's
+# available claim types.
+KEY_FINDINGS_CLAIM_TYPES = {"finding", "chunk", "pattern"}
+
+
+def _conclusions_focus(intent: str) -> str:
+    """Return the code-injected conclusions section focus (ADR 0015 §8).
+
+    Evidence-descriptive by construction — weigh the assembled evidence as a
+    whole, never a recommendation or a verdict (EB scope).
+    """
+    return (
+        f"What this evidence amounts to against the question: {intent}. "
+        "Weigh the assembled evidence as a whole — where it is strong, where it "
+        "is thin, where it conflicts, and what remains unanswered — "
+        "descriptively, never as recommendations or a verdict."
+    )
 
 
 def _spans_overlap(a: tuple[int, int], bound: Sequence[tuple[int, int]]) -> bool:
@@ -297,6 +325,10 @@ class SectionSpec:
     title: str
     focus: str
     group_ids: list[str] = field(default_factory=list)
+    # Composition role (ADR 0015 §8): "standard" for proposed/directive
+    # sections, "conclusions" for the code-injected foot section, "key_findings"
+    # for the final key-findings pass. Roll-up only — never a block-table column.
+    role: str = "standard"
 
     def as_seed(self) -> dict[str, Any]:
         """Return the prompt-facing section record."""
@@ -552,8 +584,15 @@ def derive_artefact_title(intent: str) -> str:
 
 
 def generation_budget_max() -> int:
-    """Return the binding maximum generation-call count for this slice."""
-    return 2 + SECTION_CAP * (SECTION_TURN_CAP + 3)
+    """Return the binding maximum generation-call count for this slice.
+
+    Two proposal calls (propose + one bounded repair), one generation lane per
+    proposed section (``SECTION_CAP``) plus the code-injected conclusions
+    section — which rides above ``SECTION_CAP`` by construction (ADR 0015 §8) —
+    each lane being its turns plus judge/repair/rejudge, plus the final
+    key-findings pass (one emission plus judge/repair/rejudge).
+    """
+    return 2 + (SECTION_CAP + 1) * (SECTION_TURN_CAP + 3) + (1 + 3)
 
 
 def build_ledger(claims: Sequence[ClaimDraft]) -> list[dict[str, Any]]:
@@ -2048,6 +2087,8 @@ def _judge_claims(
     substrate: SubstrateView,
     grounding_judge_backend: GroundingJudgeBackend,
     section_prose: str,
+    intent: str = "",
+    section_focus: str = "",
 ) -> tuple[int, dict[str, int], list[dict[str, Any]]]:
     judged = [claim for claim in claims if claim.claim_type in JUDGED_TYPES]
     if not judged:
@@ -2070,6 +2111,21 @@ def _judge_claims(
             span_map.append(
                 {"claim_id": claim.claim_id, "start": claim.span[0], "end": claim.span[1]}
             )
+    # Envelope chunks, sourced from the substrate's stored chunk data
+    # (SubstrateView), de-duped by id. In addition to the chunk claims' cited
+    # chunks, each FINDING claim's verified anchors point into chunk records —
+    # the judge must see that anchored text, not just the anchor quote
+    # (ADR 0015 §8 / B-B3).
+    for claim in judged:
+        if claim.claim_type != "finding":
+            continue
+        for anchor in claim.payload.get("anchors", []):
+            if not isinstance(anchor, dict):
+                continue
+            for span in anchor.get("spans", []):
+                anchored_id = span.get("chunk_id") if isinstance(span, dict) else None
+                if isinstance(anchored_id, str):
+                    chunk_ids.add(anchored_id)
     chunks = [
         {
             "chunk_record_id": chunk_id,
@@ -2085,6 +2141,8 @@ def _judge_claims(
         chunks=chunks,
         section_prose=section_prose,
         span_map=span_map,
+        intent=intent,
+        section_focus=section_focus,
     )
     response, usage = grounding_judge_backend.judge_block(envelope)
     usage_totals = UsageAccumulator()
@@ -2272,6 +2330,8 @@ def _apply_and_rebuild(
     available_claim_types: set[str],
     grounding_judge_backend: GroundingJudgeBackend,
     accounting: SectionAccounting,
+    intent: str = "",
+    section_focus: str = "",
 ) -> tuple[list[ClaimDraft], str, int, dict[str, int], list[dict[str, Any]]]:
     """Apply the prose-splice repair: rebuild prose in one pass, re-validate and
     re-judge the repaired claims, and rebind span-bind failures (ADR 0015 §4).
@@ -2448,6 +2508,8 @@ def _apply_and_rebuild(
         substrate=substrate,
         grounding_judge_backend=grounding_judge_backend,
         section_prose=new_prose,
+        intent=intent,
+        section_focus=section_focus,
     )
 
     final_by_index: dict[int, ClaimDraft] = {
@@ -2473,6 +2535,8 @@ def _section_claims(
     grounding_judge_backend: GroundingJudgeBackend,
     available_claim_types: set[str],
     accounting: SectionAccounting,
+    intent: str = "",
+    section_focus: str = "",
 ) -> tuple[list[ClaimDraft], str, list[dict[str, Any]], dict[str, int], dict[str, int]]:
     call_counts = {"judge": 0, "repair": 0, "rejudge": 0}
     usage_totals = UsageAccumulator()
@@ -2493,6 +2557,8 @@ def _section_claims(
         substrate=substrate,
         grounding_judge_backend=grounding_judge_backend,
         section_prose=prose,
+        intent=intent,
+        section_focus=section_focus,
     )
     call_counts["judge"] += judge_calls
     usage_totals.add_payload(judge_usage)
@@ -2541,6 +2607,8 @@ def _section_claims(
                 available_claim_types=available_claim_types,
                 grounding_judge_backend=grounding_judge_backend,
                 accounting=accounting,
+                intent=intent,
+                section_focus=section_focus,
             )
             call_counts["rejudge"] += rejudge_calls
             usage_totals.add_payload(rejudge_usage)
@@ -2841,6 +2909,7 @@ def _blocks_rollup(
     return {
         "title": section.title,
         "focus": section.focus,
+        "role": section.role,
         "block_id": block_id,
         "group_ids": section.group_ids,
         "tool_call_count": accounting.tool_call_count,
@@ -2975,6 +3044,156 @@ def _reserve_generation(call_counts: dict[str, int], phase: str) -> None:
     call_counts[phase] = call_counts.get(phase, 0) + 1
 
 
+def _key_findings_ledger(
+    section_claim_groups: Sequence[tuple[SectionSpec, Sequence[ClaimDraft]]],
+) -> list[dict[str, Any]]:
+    """Build the key-findings seed ledger: surviving claims WITH evidence.
+
+    Per section: title, role, and each surviving claim's ``text``,
+    ``claim_type``, ``verdict``, ``cited_finding_ids`` and chunk citations
+    (``chunk_record_id`` + ``quote``) — data, not instructions (ADR 0015 §8).
+    """
+    ledger: list[dict[str, Any]] = []
+    for section, claims in section_claim_groups:
+        entries: list[dict[str, Any]] = []
+        for claim in claims:
+            chunk_citations = [
+                {
+                    "chunk_record_id": citation["cited_chunk_record_id"],
+                    "quote": citation.get("quote"),
+                }
+                for citation in claim.payload.get("citations", [])
+                if isinstance(citation, dict) and citation.get("cited_chunk_record_id")
+            ]
+            entries.append(
+                {
+                    "text": claim.text,
+                    "claim_type": claim.claim_type,
+                    "verdict": claim.verdict,
+                    "cited_finding_ids": list(claim.payload.get("cited_finding_ids", [])),
+                    "chunk_citations": chunk_citations,
+                }
+            )
+        ledger.append(
+            {"title": section.title, "role": section.role, "claims": entries}
+        )
+    return ledger
+
+
+def _key_findings_pass(
+    conn: Connection,
+    *,
+    artefact_id: uuid.UUID,
+    intent: str,
+    section_claim_groups: Sequence[tuple[SectionSpec, Sequence[ClaimDraft]]],
+    all_claims: Sequence[ClaimDraft],
+    substrate: SubstrateView,
+    synthesis_backend: SynthesisBackend,
+    grounding_judge_backend: GroundingJudgeBackend,
+    run_chunk_content: dict[str, str],
+    available_claim_types: set[str],
+    kf_section_index: int,
+    created_at: datetime,
+) -> dict[str, Any]:
+    """Run the final key-findings pass (produced last, shown first).
+
+    A schema-constrained emission over the run's surviving claims ledger, then
+    the ordinary ``_section_claims`` grounding path with a synthetic seed and
+    empty transcript. Conditional-required (ADR 0015 §8): an empty emission
+    (empty/whitespace prose AND zero claims) mints NO block.
+
+    Returns a result dict: ``present`` plus, when present, the minted
+    ``block_id``, its ``claims``, ``block_rollup``, ``accounting`` and the
+    ``call_counts``/``usage`` of the pass; when absent, ``reason``. Emission
+    call count is always ``1`` (the pass ran).
+    """
+    kf_available = KEY_FINDINGS_CLAIM_TYPES & available_claim_types
+    citable_finding_ids = {
+        cited_id
+        for claim in all_claims
+        if claim.claim_type == "finding"
+        for cited_id in claim.cited_ids
+    }
+    citable_chunk_ids = {
+        cited_id
+        for claim in all_claims
+        if claim.claim_type == "chunk"
+        for cited_id in claim.cited_ids
+    }
+    seed = {
+        "intent": intent,
+        "available_claim_types": sorted(kf_available),
+        "ledger": _key_findings_ledger(section_claim_groups),
+        # Run-level chunk-content map (union of every section's transcript
+        # chunks) — the pass's evidence surface, since it runs transcript-free.
+        "chunk_content_by_id": run_chunk_content,
+    }
+    usage_totals = UsageAccumulator()
+    raw_kf, kf_usage = synthesis_backend.write_key_findings(seed)
+    usage_totals.add(kf_usage)
+    # The explicit absence path (test-owned): nothing is forced.
+    if not raw_kf.prose.strip() and not raw_kf.claims:
+        return {
+            "present": False,
+            "reason": "no_headline_claims",
+            "emission_calls": 1,
+            "usage": usage_totals.payload(),
+        }
+
+    section_spec = SectionSpec(
+        title=KEY_FINDINGS_TITLE, focus=KEY_FINDINGS_FOCUS, role="key_findings"
+    )
+    accounting = SectionAccounting(
+        tool_call_counts={},
+        tool_call_count=0,
+        gathered_id_hash=_gathered_hash({"finding_ids": set(), "chunk_ids": set()}),
+        turns_used=0,
+        turn_cap_hit=False,
+    )
+    claims, final_prose, minted_unspanned, call_counts, section_usage = _section_claims(
+        section_index=kf_section_index,
+        raw_claims=raw_kf,
+        seed=seed,
+        transcript=[],
+        substrate=substrate,
+        section_group_ids=set(),
+        citable_finding_ids=citable_finding_ids,
+        citable_chunk_ids=citable_chunk_ids,
+        synthesis_backend=synthesis_backend,
+        grounding_judge_backend=grounding_judge_backend,
+        available_claim_types=kf_available,
+        accounting=accounting,
+        intent=intent,
+        section_focus=KEY_FINDINGS_SECTION_FOCUS,
+    )
+    usage_totals.add_payload(section_usage)
+    block_id = _write_section(
+        conn,
+        artefact_id=artefact_id,
+        prose=final_prose,
+        claims=claims,
+        unspanned=minted_unspanned,
+        substrate=substrate,
+        created_at=created_at,
+    )
+    block_rollup = _blocks_rollup(
+        section=section_spec,
+        block_id=block_id,
+        claims=claims,
+        accounting=accounting,
+    )
+    return {
+        "present": True,
+        "block_id": block_id,
+        "claims": claims,
+        "block_rollup": block_rollup,
+        "accounting": accounting,
+        "emission_calls": 1,
+        "call_counts": call_counts,
+        "usage": usage_totals.payload(),
+    }
+
+
 def synthesise_scope(
     conn: Connection,
     *,
@@ -3028,6 +3247,12 @@ def synthesise_scope(
         "judge": 0,
         "repair": 0,
         "rejudge": 0,
+        # The final key-findings pass (ADR 0015 §8): emission + judge/repair/
+        # rejudge, named consistently with the section lanes.
+        "key_findings": 0,
+        "key_findings_judge": 0,
+        "key_findings_repair": 0,
+        "key_findings_rejudge": 0,
     }
     usage_totals = UsageAccumulator()
     refs = _resolve_references(conn, project_id=project_id, context=context)
@@ -3163,6 +3388,21 @@ def synthesise_scope(
             )
         section_source = "proposal"
 
+    # Code-inject the conclusions section LAST (ADR 0015 §8): it rides above
+    # SECTION_CAP and is exempt from the FORBIDDEN_SECTION_TITLES check by
+    # construction — proposals are validated BEFORE this injection, so a
+    # PROPOSED "Conclusion(s)" title is still rejected; only this role-injected
+    # section carries the "Conclusions" title. It runs through the normal
+    # section loop (tools + ledger; its claims enter the ledger).
+    sections = [
+        *sections,
+        SectionSpec(
+            title=CONCLUSIONS_TITLE,
+            focus=_conclusions_focus(context.intent),
+            role="conclusions",
+        ),
+    ]
+
     assigned_groups = {group_id for section in sections for group_id in section.group_ids}
     groups_unsectioned = len(substrate.grouping_group_ids - assigned_groups)
 
@@ -3191,6 +3431,10 @@ def synthesise_scope(
 
     available_claim_types = available_claim_types_for_substrate(substrate)
     all_claims: list[ClaimDraft] = []
+    # Per-section (spec, surviving claims) for the key-findings ledger, and the
+    # run-level chunk-content map (union of every section's transcript chunks).
+    section_claim_groups: list[tuple[SectionSpec, list[ClaimDraft]]] = []
+    run_chunk_content: dict[str, str] = {}
     section_rollups: list[dict[str, Any]] = []
     section_provenance: list[dict[str, Any]] = []
     total_chunk_rejections = 0
@@ -3283,6 +3527,8 @@ def synthesise_scope(
                 grounding_judge_backend=grounding_judge_backend,
                 available_claim_types=available_claim_types,
                 accounting=accounting,
+                intent=context.intent,
+                section_focus=section.focus,
             )
             usage_totals.add_payload(section_usage)
         except SynthesiseFailure as exc:
@@ -3337,6 +3583,58 @@ def synthesise_scope(
             }
         )
         all_claims.extend(claims)
+        section_claim_groups.append((section, claims))
+        run_chunk_content.update(_chunk_content_by_id(transcript))
+
+    # The final key-findings pass (ADR 0015 §8): produced LAST (after every
+    # section incl. conclusions), shown FIRST. Conditional-required — an empty
+    # emission mints no block and nothing is forced.
+    key_findings_result = _key_findings_pass(
+        conn,
+        artefact_id=artefact_id,
+        intent=context.intent,
+        section_claim_groups=section_claim_groups,
+        all_claims=all_claims,
+        substrate=substrate,
+        synthesis_backend=synthesis_backend,
+        grounding_judge_backend=grounding_judge_backend,
+        run_chunk_content=run_chunk_content,
+        available_claim_types=available_claim_types,
+        kf_section_index=len(sections),
+        created_at=created_at,
+    )
+    call_counts["key_findings"] += int(key_findings_result.get("emission_calls", 0))
+    usage_totals.add_payload(key_findings_result.get("usage", UsageAccumulator().payload()))
+    key_findings_rollup: dict[str, Any]
+    if key_findings_result["present"]:
+        kf_call_counts = key_findings_result["call_counts"]
+        call_counts["key_findings_judge"] += kf_call_counts.get("judge", 0)
+        call_counts["key_findings_repair"] += kf_call_counts.get("repair", 0)
+        call_counts["key_findings_rejudge"] += kf_call_counts.get("rejudge", 0)
+        kf_accounting: SectionAccounting = key_findings_result["accounting"]
+        kf_claims: list[ClaimDraft] = list(key_findings_result["claims"])
+        # Roll-up order is presentation order: the key-findings block leads.
+        # Production order stays evidenced by provenance (it was written last).
+        section_rollups.insert(0, key_findings_result["block_rollup"])
+        blocks_written.append(key_findings_result["block_id"])
+        total_chunk_rejections += kf_accounting.chunk_claims_rejected
+        total_structural_rejections += kf_accounting.claims_rejected_structural
+        total_gap_degraded += kf_accounting.gap_claims_degraded
+        total_span_bind_failures += kf_accounting.span_bind_failures
+        total_unspanned_assertions += kf_accounting.unspanned_assertions
+        total_unspanned_unbound += kf_accounting.unspanned_unbound
+        repair_path_taken = repair_path_taken or kf_accounting.repair_taken
+        repair_count_mismatch_any = (
+            repair_count_mismatch_any or kf_accounting.repair_count_mismatch
+        )
+        repair_unparseable_any = repair_unparseable_any or kf_accounting.repair_unparseable
+        all_claims.extend(kf_claims)
+        key_findings_rollup = {"present": True}
+    else:
+        key_findings_rollup = {
+            "present": False,
+            "reason": key_findings_result["reason"],
+        }
 
     retrieval_provenance = retriever.provenance() if retriever is not None else {}
     retrieval_scope_payload = {
@@ -3359,6 +3657,7 @@ def synthesise_scope(
         "prompt_versions": {
             "sections": SECTIONS_PROMPT_VERSION,
             "section": SECTION_PROMPT_VERSION,
+            "key_findings": KEY_FINDINGS_PROMPT_VERSION,
             "judge": JUDGE_PROMPT_VERSION,
             "tool_schemas": {
                 "version_note": "versioned with section prompt",
@@ -3413,6 +3712,9 @@ def synthesise_scope(
         unspanned_unbound=total_unspanned_unbound,
         tool_calls_total=total_tool_calls,
     )
+    # Conditional-required key-findings marker (ADR 0015 §8): present iff a
+    # block was minted; the absence path records why nothing was forced.
+    counts["key_findings"] = key_findings_rollup
     flags = _rollup_flags(
         groups_unsectioned=groups_unsectioned,
         all_claims=all_claims,

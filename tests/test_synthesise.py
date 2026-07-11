@@ -60,7 +60,7 @@ from tests.helpers import (
     seed_select_doc,
     seed_source,
 )
-from tests.synthesis_wire import prose_section
+from tests.synthesis_wire import empty_key_findings, prose_section
 
 
 def _count(conn: Connection, table: Any, project_id: uuid.UUID) -> int:
@@ -431,6 +431,10 @@ class _BoundarySpanBackend:
         force_emit: bool,
     ) -> UsageResult[SectionTurn]:
         del force_emit
+        # The code-injected conclusions section (ADR 0015 §8) is not part of
+        # this double's scenario — emit nothing for it.
+        if seed.get("section_index", 0) != 0:
+            return {"tool_calls": [], "claims": SectionProseWire(prose="", claims=[])}, None
         if not transcript:
             return {
                 "tool_calls": [{"tool": "search_chunks", "arguments": {"query": "rate"}}],
@@ -464,6 +468,9 @@ class _BoundarySpanBackend:
         failing: list[dict[str, Any]],
     ) -> UsageResult[SectionRepairWire]:
         raise AssertionError("repair_section should not be called for a verified quote")
+
+    def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
+        return empty_key_findings(seed)
 
 
 def test_boundary_spanning_quote_writes_row_per_chunk(conn: Connection) -> None:
@@ -706,6 +713,9 @@ class _GapCorpusAbsenceBackend:
         failing: list[dict[str, Any]],
     ) -> UsageResult[SectionRepairWire]:
         raise AssertionError("repair_section should not be called")
+
+    def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
+        return empty_key_findings(seed)
 
 
 def test_gap_corpus_caveat_and_degradation(conn: Connection) -> None:
@@ -1016,7 +1026,11 @@ class _SpanBindBackend:
     def section_turn(
         self, seed: dict[str, Any], transcript: list[ToolExchange], *, force_emit: bool
     ) -> UsageResult[SectionTurn]:
-        del seed, transcript, force_emit
+        del transcript, force_emit
+        # The code-injected conclusions section (ADR 0015 §8) is outside this
+        # double's span-bind scenario — emit nothing for it.
+        if seed.get("section_index", 0) != 0:
+            return {"tool_calls": [], "claims": SectionProseWire(prose="", claims=[])}, None
         return {
             "tool_calls": [],
             "claims": SectionProseWire(
@@ -1043,6 +1057,9 @@ class _SpanBindBackend:
             ]
         ), None
 
+    def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
+        return empty_key_findings(seed)
+
 
 def test_span_not_found_repairs_and_rebinds_into_unchanged_prose(conn: Connection) -> None:
     project_id, run_id = seed_project_and_run(conn)
@@ -1063,11 +1080,14 @@ def test_span_not_found_repairs_and_rebinds_into_unchanged_prose(conn: Connectio
     )
 
     assert summary["counts"]["span_bind_failures"] == 0
+    # Two blocks now exist (the section + the empty code-injected conclusions);
+    # target the section's block by its prose content.
     block_row = conn.execute(
         select(block).where(
             block.c.artefact_id.in_(
                 select(artefact.c.artefact_id).where(artefact.c.project_id == project_id)
-            )
+            ),
+            block.c.content == _SpanBindBackend._PROSE,
         )
     ).one()
     # Prose is untouched by the span-bind lane.
@@ -1103,15 +1123,18 @@ def test_exhausted_span_bind_failure_is_counted_prose_untouched(conn: Connection
 
     assert summary["counts"]["span_bind_failures"] == 1
     assert summary["flags"].get("span_bind_failed") is True
+    # Two blocks now exist (the section + the empty code-injected conclusions);
+    # target the section's block by its prose content.
     block_row = conn.execute(
         select(block).where(
             block.c.artefact_id.in_(
                 select(artefact.c.artefact_id).where(artefact.c.project_id == project_id)
-            )
+            ),
+            block.c.content == _SpanBindBackend._PROSE,
         )
     ).one()
     assert block_row.content == _SpanBindBackend._PROSE
-    # No claim survived — no addressable unit was minted.
+    # No claim survived — no addressable unit was minted (both blocks empty of units).
     assert _count(conn, addressable_unit, project_id) == 0
 
 
@@ -1161,28 +1184,268 @@ def test_unspanned_assertion_bound_minted_unbound_counted(conn: Connection) -> N
         judge_backend=_UnspannedJudge(),
     )
 
-    assert summary["counts"]["unspanned_assertions"] == 1
-    assert summary["counts"]["unspanned_unbound"] == 1
+    # Two blocks now carry stub claims (the proposed section + the code-injected
+    # conclusions section, ADR 0015 §8); the judge flags the same bound + unbound
+    # excerpt on each, so the run-level counts are two of each.
+    assert summary["counts"]["unspanned_assertions"] == 2
+    assert summary["counts"]["unspanned_unbound"] == 2
     assert summary["flags"].get("unspanned_assertions_present") is True
 
-    block_row = conn.execute(
-        select(block).where(
-            block.c.artefact_id.in_(
-                select(artefact.c.artefact_id).where(artefact.c.project_id == project_id)
-            )
+    block_ids = select(block.c.block_id).where(
+        block.c.artefact_id.in_(
+            select(artefact.c.artefact_id).where(artefact.c.project_id == project_id)
         )
-    ).one()
+    )
+    block_contents = {
+        row.block_id: row.content
+        for row in conn.execute(
+            select(block.c.block_id, block.c.content).where(block.c.block_id.in_(block_ids))
+        )
+    }
     unspanned_units = conn.execute(
-        select(addressable_unit, annotation.c.payload, annotation.c.annotation_type)
+        select(
+            addressable_unit,
+            annotation.c.payload,
+            annotation.c.block_id,
+        )
         .join(annotation, annotation.c.unit_id == addressable_unit.c.unit_id)
-        .where(annotation.c.block_id == block_row.block_id)
+        .where(annotation.c.block_id.in_(block_ids))
         .where(annotation.c.annotation_type == "unspanned_assertion")
     ).all()
-    assert len(unspanned_units) == 1
-    row = unspanned_units[0]
-    assert row.payload["rationale"] == "bound excerpt"
-    assert row.content == _UnspannedJudge._BOUND
-    start, end = int(row.locator["start"]), int(row.locator["end"])
-    assert block_row.content[start:end] == _UnspannedJudge._BOUND
-    # The unbound excerpt minted no annotation.
-    assert _UnspannedJudge._UNBOUND not in block_row.content
+    # One bound excerpt minted per block; the unbound excerpt never binds.
+    assert len(unspanned_units) == 2
+    for row in unspanned_units:
+        assert row.payload["rationale"] == "bound excerpt"
+        assert row.content == _UnspannedJudge._BOUND
+        start, end = int(row.locator["start"]), int(row.locator["end"])
+        assert block_contents[row.block_id][start:end] == _UnspannedJudge._BOUND
+    # The unbound excerpt minted no annotation in any block.
+    assert all(
+        _UnspannedJudge._UNBOUND not in content for content in block_contents.values()
+    )
+
+
+# --- ADR 0015 §8 / B-B3: conclusions + key-findings blocks ---
+
+
+class _CapturingJudge(StubGroundingJudgeBackend):
+    """Stub judge that records every envelope it is handed."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.envelopes: list[dict[str, Any]] = []
+
+    def judge_block(self, envelope: dict[str, Any]) -> UsageResult[JudgeResponseWire]:
+        self.envelopes.append(envelope)
+        return super().judge_block(envelope)
+
+
+def _blocks_by_role(row: Any) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for entry in row.blocks:
+        grouped.setdefault(entry["role"], []).append(entry)
+    return grouped
+
+
+def test_conclusions_and_key_findings_composition(conn: Connection) -> None:
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="Composition doc")
+    seed_ingested_full_text(
+        conn,
+        pss_id=pss_id,
+        chunks=[
+            "Composition evidence says alpha quoted evidence appears here.",
+            "Further composition evidence appears in a second chunk.",
+        ],
+    )
+    judge = _CapturingJudge()
+
+    _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        intent="What does the evidence say?",
+        judge_backend=judge,
+    )
+
+    row = conn.execute(
+        select(synthesis_result).where(synthesis_result.c.project_id == project_id)
+    ).one()
+
+    # Every roll-up block entry carries a role.
+    assert all("role" in entry for entry in row.blocks)
+
+    # Key-findings block leads the presentation order (shown first) and the
+    # conclusions block is last.
+    assert row.blocks[0]["role"] == "key_findings"
+    assert row.blocks[0]["title"] == "Key findings"
+    assert row.blocks[-1]["role"] == "conclusions"
+    assert row.blocks[-1]["title"] == "Conclusions"
+    assert row.counts["key_findings"] == {"present": True}
+
+    # The conclusions focus is evidence-descriptive, never a recommendation.
+    conclusions = _blocks_by_role(row)["conclusions"][0]
+    assert "What this evidence amounts to against the question" in conclusions["focus"]
+    assert "recommendations" in conclusions["focus"]
+
+    # The key-findings block re-cites a section's chunk claim, verified anew.
+    key_findings = _blocks_by_role(row)["key_findings"][0]
+    assert key_findings["citations_verified"] >= 1
+
+    # The judge saw the run intent and each block's section focus, including the
+    # key-findings pass (section_focus == "key findings").
+    assert judge.envelopes
+    assert all(env["intent"] == "What does the evidence say?" for env in judge.envelopes)
+    focuses = {env["section_focus"] for env in judge.envelopes}
+    assert "key findings" in focuses
+
+    # Provenance records the key-findings prompt version and its call counts.
+    provenance = row.synthesis_provenance
+    assert provenance["prompt_versions"]["key_findings"] == "synthesise_key_findings_v1"
+    call_counts = provenance["call_counts"]
+    assert call_counts["key_findings"] == 1
+    assert call_counts["key_findings_judge"] >= 1
+
+
+def test_key_findings_absence_path_mints_no_block(conn: Connection) -> None:
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="Absence doc")
+    seed_ingested_full_text(
+        conn,
+        pss_id=pss_id,
+        chunks=["Absence evidence says alpha quoted evidence appears here."],
+    )
+
+    # The stub sentinel forces the no-headline emission even though a citable
+    # chunk claim exists in the ledger.
+    _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        intent="stubnoheadline: what does the evidence say?",
+    )
+
+    row = conn.execute(
+        select(synthesis_result).where(synthesis_result.c.project_id == project_id)
+    ).one()
+    assert row.counts["key_findings"] == {"present": False, "reason": "no_headline_claims"}
+    assert all(entry["role"] != "key_findings" for entry in row.blocks)
+    # The conclusions section still rides — the absence path is only the
+    # key-findings block.
+    assert any(entry["role"] == "conclusions" for entry in row.blocks)
+
+
+class _UncitedKeyFindingsBackend:
+    """Section 0 cites its own gathered chunk; the key-findings pass cites a
+    chunk id no section cited — structurally uncitable, rejected + counted."""
+
+    mode = "stub"
+
+    def __init__(self) -> None:
+        self.section0_chunk_id: str | None = None
+
+    def propose_sections(
+        self, *, intent: str, substrate: dict[str, Any], rejection: list[str] | None = None
+    ) -> UsageResult[SectionProposalWire]:
+        del intent, substrate, rejection
+        return SectionProposalWire(
+            sections=[SectionWire(title="Uncited-union evidence", focus="What is gathered")]
+        ), None
+
+    def section_turn(
+        self, seed: dict[str, Any], transcript: list[ToolExchange], *, force_emit: bool
+    ) -> UsageResult[SectionTurn]:
+        del force_emit
+        if seed.get("section_index", 0) != 0:
+            return {"tool_calls": [], "claims": SectionProseWire(prose="", claims=[])}, None
+        chunks = [
+            chunk
+            for exchange in transcript
+            if exchange["tool"] == "search_chunks"
+            for chunk in exchange["result"].get("chunks", [])
+        ]
+        if not chunks:
+            return {
+                "tool_calls": [{"tool": "search_chunks", "arguments": {"query": "evidence"}}],
+                "claims": None,
+            }, None
+        chunk = next((record for record in chunks if record.get("appraised")), chunks[0])
+        self.section0_chunk_id = chunk["chunk_record_id"]
+        return {
+            "tool_calls": [],
+            "claims": prose_section(
+                claims=[
+                    ClaimWire(
+                        claim_type="chunk",
+                        text="Section cites its own gathered chunk (stub).",
+                        citations=[
+                            ChunkCitationWire(
+                                chunk_record_id=chunk["chunk_record_id"],
+                                quote=chunk["content"][:20],
+                            )
+                        ],
+                    )
+                ]
+            ),
+        }, None
+
+    def repair_section(
+        self, seed: dict[str, Any], transcript: list[ToolExchange], *, failing: list[dict[str, Any]]
+    ) -> UsageResult[SectionRepairWire]:
+        del seed, transcript, failing
+        # The uncitable claim cannot be repaired; the pass lands it as a counted
+        # structural rejection.
+        return SectionRepairWire(repairs=[]), None
+
+    def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
+        return SectionProseWire(
+            prose="Headline citing an uncited chunk id (stub).",
+            claims=[
+                ClaimWire(
+                    claim_type="chunk",
+                    text="Headline citing an uncited chunk id (stub).",
+                    citations=[
+                        ChunkCitationWire(
+                            chunk_record_id="00000000-0000-0000-0000-000000000000",
+                            quote="never gathered by any section",
+                        )
+                    ],
+                )
+            ],
+        ), None
+
+
+def test_key_findings_claim_citing_uncited_id_is_rejected_and_counted(
+    conn: Connection,
+) -> None:
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="Union doc")
+    seed_ingested_full_text(
+        conn,
+        pss_id=pss_id,
+        chunks=["Union evidence says alpha quoted evidence appears here."],
+    )
+
+    _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        backend=_UncitedKeyFindingsBackend(),
+    )
+
+    row = conn.execute(
+        select(synthesis_result).where(synthesis_result.c.project_id == project_id)
+    ).one()
+    # The key-findings block is minted (its prose is non-empty), but its claim
+    # citing a chunk no section cited is rejected + counted — never persisted.
+    assert row.counts["key_findings"]["present"] is True
+    assert row.counts["claims_rejected_structural"] >= 1
+    assert row.flags.get("claims_rejected_structural") is True
+    # Exactly the one section chunk claim survives (not the uncited key-findings one).
+    assert row.counts["claims_total"].get("chunk", 0) == 1

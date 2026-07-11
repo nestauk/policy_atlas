@@ -34,6 +34,7 @@ from policy_atlas.synthesis_backend import (
     ChunkCitationWire,
     ClaimWire,
     SectionProposalWire,
+    SectionProseWire,
     SectionRepairWire,
     SectionTurn,
     SectionWire,
@@ -51,7 +52,7 @@ from tests.helpers import (
     seed_scope,
     seed_select_doc,
 )
-from tests.synthesis_wire import prose_section, repair_wire
+from tests.synthesis_wire import empty_key_findings, prose_section, repair_wire
 
 
 def _count(conn: Connection, table: Any, project_id: uuid.UUID) -> int:
@@ -206,7 +207,10 @@ class _SearchAndCiteBackend:
     def section_turn(
         self, seed: dict[str, Any], transcript: list[Any], *, force_emit: bool
     ) -> UsageResult[SectionTurn]:
-        del seed
+        # The code-injected conclusions section (ADR 0015 §8) is outside this
+        # double's single-section scenario — emit nothing for it.
+        if seed.get("section_index", 0) != 0:
+            return {"tool_calls": [], "claims": SectionProseWire(prose="", claims=[])}, None
         chunks = [
             chunk
             for exchange in transcript
@@ -240,6 +244,9 @@ class _SearchAndCiteBackend:
     ) -> UsageResult[SectionRepairWire]:
         del seed, transcript, failing
         return repair_wire(claims=[]), None
+
+    def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
+        return empty_key_findings(seed)
 
 
 class _CapturingJudgeBackend:
@@ -298,7 +305,8 @@ def test_all_fetch_failed_abstract_basis_corpus_synthesises_with_labels(
         grounding_judge_backend=judge,
     )
 
-    assert summary["section_count"] == 1
+    # One proposed section + the code-injected (empty) conclusions section.
+    assert summary["section_count"] == 2
     assert backend.seen_chunks
     assert {chunk["text_basis"] for chunk in backend.seen_chunks} == {"abstract_only"}
     assert backend.seen_chunks[0]["chunk_record_id"] == str(chunk_id)
@@ -345,9 +353,10 @@ def test_characterisation_only_stub_writes_substrate_and_rollup(conn: Connection
         characterisation_run_id=characterisation_run_id,
     )
 
-    assert summary["section_count"] == 2
+    # Two proposed sections + the code-injected conclusions section (ADR 0015 §8).
+    assert summary["section_count"] == 3
     assert _count(conn, artefact, project_id) == 1
-    assert _count(conn, block, project_id) == 2
+    assert _count(conn, block, project_id) == 3
     assert _count(conn, addressable_unit, project_id) > 0
     assert _count(conn, annotation, project_id) > 0
     row = conn.execute(
@@ -363,6 +372,9 @@ def test_characterisation_only_stub_writes_substrate_and_rollup(conn: Connection
     assert claim_types <= {"pattern", "theme", "gap", "reasoning"}
     assert "chunk" not in claim_types
     assert "finding" not in claim_types
+    # No headline finding/chunk claims survive, so the key-findings pass mints
+    # no block — the explicit absence path (ADR 0015 §8).
+    assert row.counts["key_findings"] == {"present": False, "reason": "no_headline_claims"}
 
 
 def test_chunk_substrate_writes_verified_unselected_citations(conn: Connection) -> None:

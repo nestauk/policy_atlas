@@ -8,12 +8,24 @@ test fixtures terse while guaranteeing every claim text binds as a span.
 
 from __future__ import annotations
 
+from typing import Any
+
 from policy_atlas.synthesis_backend import (
     ClaimWire,
     RepairItemWire,
     SectionProseWire,
     SectionRepairWire,
 )
+from policy_atlas.usage import UsageResult
+
+
+def empty_key_findings(_seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
+    """The absence-path key-findings emission (empty prose + no claims).
+
+    A ``write_key_findings`` for section-focused test backends that do not
+    exercise the key-findings pass — no headline block is minted (ADR 0015 §8).
+    """
+    return SectionProseWire(prose="", claims=[]), None
 
 
 def prose_section(*, claims: list[ClaimWire]) -> SectionProseWire:

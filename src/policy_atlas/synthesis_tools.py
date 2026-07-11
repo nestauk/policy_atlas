@@ -139,6 +139,14 @@ class ChunkSearchResult(TypedDict):
     # rejects, so the record says which is which.
     appraised: bool
     fused_score: float
+    # Owner-adopted default metadata set (ADR 0015 §8 / B-B3): terse, attached
+    # on the record itself, each key present ONLY when its value exists
+    # (omit-if-absent). ``is_retracted`` is deliberately not surfaced.
+    year: NotRequired[Any]
+    evidence_type: NotRequired[str]
+    appraisal_label: NotRequired[str]
+    venue: NotRequired[str]
+    cited_by: NotRequired[Any]
 
 
 class FindingRecord(TypedDict):
@@ -163,6 +171,12 @@ class FindingRecord(TypedDict):
     causality_by_design: str | None
     is_primary: bool | None
     field_coverage: dict[str, str]
+    # Owner-adopted default metadata set (ADR 0015 §8 / B-B3): omit-if-absent.
+    year: NotRequired[Any]
+    evidence_type: NotRequired[str]
+    appraisal_label: NotRequired[str]
+    venue: NotRequired[str]
+    cited_by: NotRequired[Any]
 
 
 class ToolCallRequest(TypedDict):
@@ -596,6 +610,37 @@ def _metadata_title(metadata: Any, pss_id: uuid.UUID) -> str:
     return f"source {pss_id}"
 
 
+def _metadata_year(metadata: Any) -> Any:
+    """Return a document's year from metadata, or ``None`` if absent."""
+    if not isinstance(metadata, dict):
+        return None
+    for key in ("year", "publication_year"):
+        value = metadata.get(key)
+        if value is not None:
+            return value
+    return None
+
+
+def _metadata_venue(metadata: Any) -> Any:
+    """Return a document's publishing venue from metadata, or ``None``."""
+    if not isinstance(metadata, dict):
+        return None
+    return metadata.get("publisher_org")
+
+
+def _metadata_cited_by(metadata: Any) -> Any:
+    """Return a document's citation count from ``provider_fields``, or ``None``.
+
+    Guards a non-dict / absent ``provider_fields`` (never null-noise).
+    """
+    if not isinstance(metadata, dict):
+        return None
+    provider_fields = metadata.get("provider_fields")
+    if not isinstance(provider_fields, dict):
+        return None
+    return provider_fields.get("cited_by_count")
+
+
 def _doc_record(row: Any, selected_pss_ids: set[uuid.UUID]) -> dict[str, Any]:
     metadata = row.metadata if isinstance(row.metadata, dict) else {}
     doc: dict[str, Any] = {
@@ -611,6 +656,12 @@ def _doc_record(row: Any, selected_pss_ids: set[uuid.UUID]) -> dict[str, Any]:
         value = metadata.get(key)
         if value is not None:
             doc[key] = value
+    venue = _metadata_venue(metadata)
+    if venue is not None:
+        doc["venue"] = venue
+    cited_by = _metadata_cited_by(metadata)
+    if cited_by is not None:
+        doc["cited_by"] = cited_by
     return doc
 
 
@@ -1004,7 +1055,7 @@ class ChunkRetriever:
         chunk = self._scope.chunks[chunk_id]
         pss_id = cast("str", chunk["pss_id"])
         doc = self._scope.docs[pss_id]
-        return {
+        result: ChunkSearchResult = {
             "chunk_record_id": chunk_id,
             "pss_id": pss_id,
             "document_title": cast("str", doc["title"]),
@@ -1015,6 +1066,24 @@ class ChunkRetriever:
             "appraised": doc.get("appraisal_tier") is not None,
             "fused_score": score,
         }
+        # Owner-adopted default metadata set (ADR 0015 §8 / B-B3), sourced from
+        # the doc record, omit-if-absent (no null-noise).
+        year = doc.get("year", doc.get("publication_year"))
+        if year is not None:
+            result["year"] = year
+        evidence_type = doc.get("primary_evidence_type")
+        if evidence_type is not None:
+            result["evidence_type"] = cast("str", evidence_type)
+        appraisal_label = doc.get("appraisal_tier")
+        if appraisal_label is not None:
+            result["appraisal_label"] = cast("str", appraisal_label)
+        venue = doc.get("venue")
+        if venue is not None:
+            result["venue"] = venue
+        cited_by = doc.get("cited_by")
+        if cited_by is not None:
+            result["cited_by"] = cited_by
+        return result
 
     def _soft_prior(self, chunk_id: str) -> float:
         chunk = self._scope.chunks[chunk_id]
@@ -1197,7 +1266,7 @@ def _record_ids_from_docs(docs: Sequence[dict[str, Any]]) -> list[uuid.UUID]:
 def _finding_record(row: Any) -> FindingRecord:
     metadata = row.metadata if isinstance(row.metadata, dict) else {}
     pss_id = cast("uuid.UUID", row.project_source_snapshot_id)
-    return {
+    record: FindingRecord = {
         "finding_id": str(row.finding_id),
         "pss_id": str(pss_id),
         "document_title": _metadata_title(metadata, pss_id),
@@ -1214,6 +1283,23 @@ def _finding_record(row: Any) -> FindingRecord:
         "is_primary": cast("bool | None", row.is_primary),
         "field_coverage": cast("dict[str, str]", row.field_coverage),
     }
+    # Owner-adopted default metadata set (ADR 0015 §8 / B-B3), omit-if-absent.
+    year = _metadata_year(metadata)
+    if year is not None:
+        record["year"] = year
+    evidence_type = getattr(row, "primary_evidence_type", None)
+    if evidence_type is not None:
+        record["evidence_type"] = cast("str", evidence_type)
+    quality_score = getattr(row, "quality_score", None)
+    if quality_score is not None:
+        record["appraisal_label"] = str(quality_score)
+    venue = _metadata_venue(metadata)
+    if venue is not None:
+        record["venue"] = venue
+    cited_by = _metadata_cited_by(metadata)
+    if cited_by is not None:
+        record["cited_by"] = cited_by
+    return record
 
 
 def _group_member_ids(grouping_groups: list[dict[str, Any]] | None) -> dict[str, set[str]]:
@@ -1277,6 +1363,8 @@ def make_findings_reader(
                 intervention_outcome_finding.c.field_coverage,
                 source_extraction_record.c.project_source_snapshot_id,
                 source_snapshot.c.metadata,
+                source_classification_result.c.primary_evidence_type,
+                source_appraisal_result.c.quality_score,
             )
             .select_from(intervention_outcome_finding)
             .join(
@@ -1301,6 +1389,28 @@ def make_findings_reader(
                     source_snapshot.c.source_snapshot_id
                     == project_source_snapshot.c.source_snapshot_id
                 ),
+            )
+            # Classification + appraisal for the default metadata set (ADR 0015
+            # §8 / B-B3), scoped to project + evidence scope, outerjoin (the
+            # build_retrieval_scope pattern) so an unclassified/unappraised
+            # finding still returns.
+            .outerjoin(
+                source_classification_result,
+                (
+                    source_classification_result.c.project_source_snapshot_id
+                    == project_source_snapshot.c.project_source_snapshot_id
+                )
+                & (source_classification_result.c.project_id == project_id)
+                & (source_classification_result.c.evidence_scope_id == evidence_scope_id),
+            )
+            .outerjoin(
+                source_appraisal_result,
+                (
+                    source_appraisal_result.c.project_source_snapshot_id
+                    == project_source_snapshot.c.project_source_snapshot_id
+                )
+                & (source_appraisal_result.c.project_id == project_id)
+                & (source_appraisal_result.c.evidence_scope_id == evidence_scope_id),
             )
             .where(intervention_outcome_finding.c.project_id == project_id)
             .where(
