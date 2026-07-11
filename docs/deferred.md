@@ -440,6 +440,20 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Characterise / embeddings / telemetry (task 009 seams)
 
+- **Langfuse trace grouping — "group as much as possible" (owner direction,
+  2026-07-11, 018 review conversation)** — per-doc/window LLM calls made inside
+  `ThreadPoolExecutor` workers (extract windows, screening fan-outs) mint DETACHED
+  root traces because the Langfuse context does not propagate into threads — the
+  009-recorded wart, now user-visible next to properly-nested calls (the finding
+  vetter nests under `run:extract:{run_id}` precisely because it runs sequentially
+  on the main thread). Fix: propagate the component-span context into submitted
+  workers (explicit parent trace/span id in the closure, or a per-worker context
+  manager) so per-doc generations nest under the component root. Second half:
+  planner turns are deliberately separate traces (B2 record), session-correlated —
+  consider one conversation-root trace per orchestrate process with turn spans, or
+  accept the session view as the grouping. Bounded telemetry rider; the
+  capability-run entity seam (§ Select) remains the structural home.
+
 - **EB artefact composition — LANDED with revised ownership (task 013, ADRs 0009 + 0010).**
   Synthesise (not the orchestrator) composes the one EB artefact at the run terminus —
   capability-composes; the orchestrator shapes sections at plan time. What remains
@@ -613,6 +627,21 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Extract / findings layer (task 011 seams)
 
+- **Modelled vs observed effect basis at the finding grain (owner, 2026-07-11, 018
+  review conversation)** — the IOF schema cannot cleanly separate a modelled/projected
+  effect from an observed one: `causality_by_design` folds modelling into
+  `descriptive` (alongside observed descriptive statistics), and `study_design` is
+  free text, null-when-unreported (61/122 not_extracted on the step-9 replay). The
+  vetter correctly keeps modelled RESULTS (targets are flagged as aspirations), and
+  the writer narrates "projected" when the quote makes it obvious — but nothing
+  structured lets a surface render "this is a projection, not something that
+  happened". Candidate: a new `effect_basis` enum (`observed` | `modelled`, null
+  if indeterminate) on the IOF wire + row — a ⚠️ schema-gate item needing its own
+  contract approval, plus extraction-prompt guidance (lead, replay-evidenced), the
+  writer-envelope field (terse-adjacent), and annotation-layer rendering. Extending
+  the `causality_by_design` vocabulary instead was considered and disliked: causal
+  identification and evidence basis are different dimensions (a model calibrated on
+  RCTs is still modelled).
 - **Finding-vetter per-doc calls run sequentially (018 review stack, efficiency lane;
   component renamed from "junk judge" at 018 step 9, owner call)** —
   `_apply_finding_vetter` loops one live mini call per extracted doc right after
@@ -1013,6 +1042,11 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   prefix-hydration proof).
 
 ## Orchestrator (task 017 seams)
+
+- **`_REGISTRY_COMPONENT_BY_STEP` simplification candidate (owner, 2026-07-11)** —
+  ten of eleven rows are identity; only `screen_stage2 → screen` differs. Collapse
+  to a one-line function + keep the startup parity assert. Queued for the planned
+  ponytail audit / next slice touching `orchestration_plan.py`.
 
 - **The LLM EB-expert capability agent** — the JIT directive-authoring expert
   sub-agent (system-prompted as an evidence-review expert; reads upstream
