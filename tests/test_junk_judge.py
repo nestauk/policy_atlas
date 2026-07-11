@@ -308,6 +308,47 @@ def test_junk_flagged_excluded_from_persistence_and_accounted(conn: Connection) 
     assert judge.payloads[0]["findings"][0]["index"] == 0
 
 
+def test_all_junk_doc_reports_no_findings_status(conn: Connection) -> None:
+    """A doc whose every finding is junk-flagged is no_findings, never a
+    zero-finding "extracted" that inflates the extracted tally; the
+    junk_flagged count keeps it distinguishable from a genuinely-empty doc."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    cid = uuid.uuid4()
+    pss_id, _ = _seed_full_text_doc(
+        conn, project_id, sel_run, scope_id, title="All-junk doc",
+        chunk_content="This Plan will reduce costs. This Strategy will boost uptake.",
+        chunk_id=cid,
+    )
+    _seed_selection(
+        conn, project_id, sel_run, scope_id, [{"pss_id": str(pss_id), "text_basis": "full_text"}]
+    )
+    backend = _FixedBackend([
+        _record(
+            intervention="this Plan", outcome="costs",
+            quote="This Plan will reduce costs", segment_id=str(cid),
+        ),
+        _record(
+            intervention="this Strategy", outcome="uptake",
+            quote="This Strategy will boost uptake", segment_id=str(cid),
+        ),
+    ])
+    judge = _ScriptedJudgeBackend({0, 1}, junk_class="deictic_naming", reason="Deictic.")
+
+    summary, _ = _run_with_judge(
+        conn, project_id, scope_id, sel_run,
+        extraction_backend=backend, junk_judge_backend=judge,
+    )
+
+    assert summary["docs"][0]["status"] == "no_findings"
+    assert summary["docs"][0]["finding_count"] == 0
+    assert summary["docs"][0]["junk_flagged"] == 2
+    assert summary["counts"]["extracted"] == 0
+    assert summary["counts"]["no_findings"] == 1
+    assert summary["junk_flagged"]["total"] == 2
+    assert _findings(conn, project_id) == []
+
+
 def test_junk_judge_failure_fails_open_and_counts(conn: Connection) -> None:
     """A judge call failure never blocks extraction: the doc persists unfiltered."""
     project_id, sel_run = seed_project_and_run(conn)

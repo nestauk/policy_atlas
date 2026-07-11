@@ -121,6 +121,7 @@ def usage_metadata(usage: TokenUsage | None) -> dict[str, int | None]:
 
 
 def _int_or_none(value: Any) -> int | None:
-    if isinstance(value, int):
+    # bool is an int subclass — a True/False usage field is invalid, not 1/0.
+    if isinstance(value, int) and not isinstance(value, bool):
         return value
     return None

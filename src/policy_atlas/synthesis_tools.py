@@ -62,6 +62,11 @@ SECTION_CAP = 8
 # SECTION_TURN_CAP-th turn (plan review M4): at most SECTION_TURN_CAP - 1 tool
 # turns occur, so the pre-run budget maximum is exact, never exceeded.
 SECTION_TURN_CAP = 6
+# Read-tool calls EXECUTED per turn. The writer prompt asks for "up to 6" —
+# this is the code-side enforcement: overflow calls get an error result and
+# count as rejected, so a degenerate 30-call turn cannot blow the per-turn
+# retrieval/transcript envelope (turn_cap bounds turns, not work per turn).
+READ_CALLS_PER_TURN_CAP = 6
 REPAIR_ROUND_CAP = 1
 SYNTH_CHUNK_TOP_K = 8
 SYNTH_CHUNK_CHAR_BUDGET = 24_000
@@ -1874,6 +1879,7 @@ def run_section_loop(
         if not tool_calls:
             raise RuntimeError("backend returned no claims or tool calls")
 
+        executed_this_turn = 0
         for call in tool_calls:
             tool_name = call.get("tool")
             arguments = call.get("arguments", {})
@@ -1881,6 +1887,19 @@ def run_section_loop(
                 tool_name = "invalid"
             if not isinstance(arguments, dict):
                 arguments = {}
+            if executed_this_turn >= READ_CALLS_PER_TURN_CAP:
+                transcript.append({
+                    "tool": tool_name,
+                    "arguments": cast("dict[str, Any]", arguments),
+                    "result": {
+                        "error": (
+                            f"read batch limit ({READ_CALLS_PER_TURN_CAP} per turn) "
+                            "exceeded; call not executed — re-request next turn"
+                        )
+                    },
+                })
+                rejected_tool_calls += 1
+                continue
             if tool_name not in tools:
                 transcript.append({
                     "tool": tool_name,
@@ -1905,6 +1924,7 @@ def run_section_loop(
                 "result": tool_result,
             })
             tool_call_counts[tool_name] = tool_call_counts.get(tool_name, 0) + 1
+            executed_this_turn += 1
 
     raise RuntimeError("section loop exhausted without emission")
 

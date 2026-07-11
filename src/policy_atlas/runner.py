@@ -1190,7 +1190,7 @@ def _record_component_timing(
     registry_component: str,
     wall_clock_s: float,
     status: Literal["succeeded", "failed"],
-    usage_totals: dict[str, int],
+    usage_totals: dict[str, int] | None,
     headline_counts: dict[str, Any],
 ) -> None:
     payload = {
@@ -1370,7 +1370,12 @@ def _usage_totals(
     registry_component: str,
     *,
     run_id: uuid.UUID,
-) -> dict[str, int]:
+) -> dict[str, int] | None:
+    """Usage totals from the run's ``component.completed`` payload.
+
+    ``None`` when no completed payload carries usage — a failed attempt spent
+    tokens the summary never recorded, so absent stays absent, never zero.
+    """
     payload = next(
         (
             entry["payload"]
@@ -1383,7 +1388,7 @@ def _usage_totals(
     )
     usage = payload.get("usage_totals") if isinstance(payload, dict) else None
     if not isinstance(usage, dict):
-        return {"prompt": 0, "completion": 0, "total": 0, "cached": 0}
+        return None
     return {
         "prompt": usage["prompt"] if isinstance(usage.get("prompt"), int) else 0,
         "completion": usage["completion"]

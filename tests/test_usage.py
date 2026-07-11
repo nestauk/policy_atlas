@@ -79,3 +79,18 @@ def test_usage_metadata_none_includes_cached_tokens_none() -> None:
         "total_tokens": None,
         "cached_tokens": None,
     }
+
+
+def test_token_usage_from_provider_rejects_boolean_fields() -> None:
+    """bool is an int subclass: a True/False usage field is invalid data and
+    must land as None (absent), never be coerced to 1/0."""
+
+    class _BoolUsage:
+        prompt_tokens = True
+        completion_tokens = 10
+        total_tokens = 60
+
+    usage = token_usage_from_provider(_BoolUsage())
+    assert usage is not None
+    assert usage.prompt is None
+    assert usage.completion == 10

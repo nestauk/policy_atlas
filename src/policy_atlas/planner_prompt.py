@@ -26,7 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.prompt_fields import sanitize_prompt_field
 
-PLANNER_PROMPT_VERSION = "planner_v1"
+PLANNER_PROMPT_VERSION = "planner_v2"
 
 # Input-side caps at prompt assembly. Generous for legitimate intents; a
 # bound, not a filter (the screen prompt's M10 discipline).
@@ -152,8 +152,9 @@ yourself.
   searching).
 - analysis_depth: landscape (map the evidence base: coverage, themes, gaps —
   no per-document extraction) | standard (screen, appraise and synthesise
-  with a selection of ~10 documents extracted in depth) | deep (~25
-  documents extracted in depth).
+  over the corpus's full text — no per-document findings extraction; the
+  extraction chain is what deep buys) | deep (adds the findings chain: a
+  selection of ~25 documents extracted in depth).
 - components: which discretionary steps run. The mandatory spine always
   runs: search -> screen -> classify -> appraise -> fetch full text ->
   synthesise. Discretionary, chosen by you for intent-fit:
@@ -163,7 +164,9 @@ yourself.
     analysis_depth is standard or deep — never with landscape (the landscape
     rung does not buy the full-text confirmation pass).
   - select -> extract -> group (the deep chain, in that order, all or
-    none from select onward): extract pulls structured intervention-outcome
+    none from select onward): ONLY available when analysis_depth is deep —
+    never with landscape or standard (those depths do not buy the
+    findings-extraction chain). extract pulls structured intervention-outcome
     findings from selected documents and group organises them by facet.
     Extraction is intervention-outcome schema-bound: for questions that are
     NOT about interventions and their effects (statistics or fact-finding,
@@ -253,6 +256,12 @@ def build_planner_messages(
     previous_draft: dict[str, object] | None,
 ) -> list[ChatCompletionMessageParam]:
     """Assemble the planner prompt as a true message array for one conversation turn.
+
+    PROVENANCE INVARIANT: a turn's ``"planner"`` role label puts its text in an
+    assistant-role message — a position models treat as their own prior output.
+    Callers MUST only label text ``"planner"`` when it is verbatim prior model
+    output (as ``orchestrate`` does); never accept role labels from a client
+    or any external payload.
 
     Every untrusted field is sanitized at assembly. Each bounded conversation
     turn becomes its own chat message, oldest first — "user" turns as user

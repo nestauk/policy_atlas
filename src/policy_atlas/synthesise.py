@@ -565,6 +565,15 @@ class SectionAccounting:
     span_bind_failures: int = 0
     unspanned_assertions: int = 0
     unspanned_unbound: int = 0
+    # Tool calls the section loop refused to execute (unknown tool, invalid
+    # arguments, per-turn read-batch overflow) — counted so protocol drift is
+    # visible next to the successful tool_call_count.
+    rejected_tool_calls: int = 0
+    # True when the block's final prose was never scanned by the unspanned-
+    # assertion judge lane (no judged-type claims, or a splice changed the
+    # prose after the last judge call): a zero unspanned count then means
+    # "not looked at", not "clean" (ADR 0015 §5 honest-accounting).
+    unspanned_lane_skipped: bool = False
 
 
 def derive_artefact_title(intent: str) -> str:
@@ -654,7 +663,14 @@ def validate_claims(
     Returns:
         Validated drafts and rejected claims.
     """
-    available = available_claim_types or available_claim_types_for_substrate(substrate)
+    # `is not None`, not truthiness: an explicitly EMPTY gate (e.g. the
+    # key-findings intersection on a thin substrate) must reject, never
+    # silently reopen to the full substrate set.
+    available = (
+        available_claim_types
+        if available_claim_types is not None
+        else available_claim_types_for_substrate(substrate)
+    )
     drafts: list[ClaimDraft] = []
     rejected: list[RejectedClaim] = []
     reasoning_count = reasoning_count_start
@@ -2288,16 +2304,21 @@ def _bind_unspanned(
     prose: str,
     *,
     accounting: SectionAccounting,
+    claim_spans: Sequence[tuple[int, int]] = (),
 ) -> list[dict[str, Any]]:
     """Bind judge-returned unspanned excerpts into the final prose (flag-not-drop).
 
     Bound excerpts become addressable-unit + annotation mint records; unbound
     excerpts are counted (``unspanned_unbound``) and logged. Prose is never
-    modified by this lane (ADR 0015 §5).
+    modified by this lane (ADR 0015 §5). ``claim_spans`` are blocked: an
+    excerpt may not bind inside claimed prose — the lane flags text OUTSIDE
+    claim spans by definition, so a claim-overlapping excerpt counts as
+    unbound rather than double-covering claimed text.
     """
-    spans = bind_spans(prose, [str(record["excerpt"]) for record in records])
+    blocked: list[tuple[int, int]] = list(claim_spans)
     minted: list[dict[str, Any]] = []
-    for record, span in zip(records, spans, strict=False):
+    for record in records:
+        span = _bind_into(prose, str(record["excerpt"]), blocked)
         if span is None:
             accounting.unspanned_unbound += 1
             log.info(
@@ -2306,6 +2327,7 @@ def _bind_unspanned(
             )
             continue
         accounting.unspanned_assertions += 1
+        blocked.append(span)
         minted.append(
             {
                 "excerpt": record["excerpt"],
@@ -2619,7 +2641,21 @@ def _section_claims(
             accounting.gap_claims_degraded += 1
         if claim.verdict == "unsupported_mis_cited" and "unsupported_mis_cited" not in claim.flags:
             claim.flags.append("unsupported_mis_cited")
-    minted_unspanned = _bind_unspanned(unspanned, final_prose, accounting=accounting)
+    # Honest accounting for the unspanned lane (ADR 0015 §5): the lane rides
+    # the judge call, so prose that no judge call scanned — no judged-type
+    # claims at all, or a splice rebuilt the prose and the rejudge had nothing
+    # to judge — reports "skipped", never a clean zero.
+    scanning_calls = (
+        call_counts["rejudge"] if final_prose != prose else call_counts["judge"]
+    )
+    if final_prose.strip() and scanning_calls == 0:
+        accounting.unspanned_lane_skipped = True
+    minted_unspanned = _bind_unspanned(
+        unspanned,
+        final_prose,
+        accounting=accounting,
+        claim_spans=[claim.span for claim in final if claim.span is not None],
+    )
     return final, final_prose, minted_unspanned, call_counts, usage_totals.payload()
 
 
@@ -2930,6 +2966,8 @@ def _blocks_rollup(
         "repair_count_mismatch": accounting.repair_count_mismatch,
         "repair_unparseable": accounting.repair_unparseable,
         "turn_cap_hit": accounting.turn_cap_hit,
+        "rejected_tool_calls": accounting.rejected_tool_calls,
+        "unspanned_lane_skipped": accounting.unspanned_lane_skipped,
     }
 
 
@@ -3505,6 +3543,7 @@ def synthesise_scope(
             # Claim objects the live emission carried that failed structural
             # validation (backend per-claim salvage) — counted, never silent.
             claims_rejected_structural=int(loop_result.get("malformed_claims", 0)),
+            rejected_tool_calls=int(loop_result.get("rejected_tool_calls", 0)),
         )
         raw_claims = loop_result["claims"] or SectionProseWire(prose="", claims=[])
         try:
@@ -3589,20 +3628,27 @@ def synthesise_scope(
     # The final key-findings pass (ADR 0015 §8): produced LAST (after every
     # section incl. conclusions), shown FIRST. Conditional-required — an empty
     # emission mints no block and nothing is forced.
-    key_findings_result = _key_findings_pass(
-        conn,
-        artefact_id=artefact_id,
-        intent=context.intent,
-        section_claim_groups=section_claim_groups,
-        all_claims=all_claims,
-        substrate=substrate,
-        synthesis_backend=synthesis_backend,
-        grounding_judge_backend=grounding_judge_backend,
-        run_chunk_content=run_chunk_content,
-        available_claim_types=available_claim_types,
-        kf_section_index=len(sections),
-        created_at=created_at,
-    )
+    try:
+        key_findings_result = _key_findings_pass(
+            conn,
+            artefact_id=artefact_id,
+            intent=context.intent,
+            section_claim_groups=section_claim_groups,
+            all_claims=all_claims,
+            substrate=substrate,
+            synthesis_backend=synthesis_backend,
+            grounding_judge_backend=grounding_judge_backend,
+            run_chunk_content=run_chunk_content,
+            available_claim_types=available_claim_types,
+            kf_section_index=len(sections),
+            created_at=created_at,
+        )
+    except SynthesiseFailure as exc:
+        raise SynthesiseFailure(
+            exc.error, blocks_written=blocks_written or exc.blocks_written
+        ) from exc
+    except RuntimeError as exc:
+        raise SynthesiseFailure(type(exc).__name__, blocks_written=blocks_written) from exc
     call_counts["key_findings"] += int(key_findings_result.get("emission_calls", 0))
     usage_totals.add_payload(key_findings_result.get("usage", UsageAccumulator().payload()))
     key_findings_rollup: dict[str, Any]

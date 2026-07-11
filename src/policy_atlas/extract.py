@@ -798,6 +798,11 @@ def _apply_junk_judge(doc: _Doc, junk_judge_backend: JunkJudgeBackend) -> TokenU
     doc.groundings = kept_groundings
     doc.coverage_by_survivor = kept_coverage
     doc.finding_count = len(kept_survivors)
+    if not kept_survivors:
+        # Every finding was junk-flagged: the doc contributes no usable
+        # evidence, so its status says so honestly — `junk_flagged_count`
+        # preserves the distinction from a genuinely-empty extraction.
+        doc.status = "no_findings"
     return usage
 
 
@@ -1089,11 +1094,11 @@ def extract_scope(
         _resolve_basis(doc)
     _apply_memo(conn, project_id=project_id, fingerprint=fingerprint, docs=docs)
 
-    per_doc, doc_errors, baseline, budget, retry_count, usage_totals = _run_windows(
+    per_doc, doc_errors, baseline, budget, retry_count, window_usage_totals = _run_windows(
         docs, extraction_backend=extraction_backend
     )
     usage_accumulator = UsageAccumulator()
-    usage_accumulator.add_payload(usage_totals)
+    usage_accumulator.add_payload(window_usage_totals)
     for doc_index, doc in enumerate(docs):
         if not doc.extractable:
             continue

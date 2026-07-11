@@ -364,12 +364,13 @@ def test_full_stub_chain_commits_each_step_and_checks_in(engine: Engine) -> None
             assert timing_payload["component"] == step.component
             assert timing_payload["status"] == "succeeded"
             assert timing_payload["wall_clock_s"] >= 0
-            assert timing_payload["usage_totals"] == {
-                "prompt": 0,
-                "completion": 0,
-                "total": 0,
-                "cached": 0,
-            }
+            # LLM-backed components report the stub accumulator's zero dict;
+            # components whose completed payload carries no usage report None
+            # (absent, not zero) — both are honest here.
+            assert timing_payload["usage_totals"] in (
+                None,
+                {"prompt": 0, "completion": 0, "total": 0, "cached": 0},
+            )
             assert isinstance(timing_payload["headline_counts"], dict)
 
         started_payloads = [
@@ -601,12 +602,9 @@ def test_spine_failure_after_retry_stops_without_downstream_runs(
             assert timing_payloads[0]["registry_component"] == "screen"
             assert timing_payloads[0]["status"] == "failed"
             assert timing_payloads[0]["wall_clock_s"] >= 0
-            assert timing_payloads[0]["usage_totals"] == {
-                "prompt": 0,
-                "completion": 0,
-                "total": 0,
-                "cached": 0,
-            }
+            # A failed attempt has no component.completed payload: its spend is
+            # unknown, and unknown is None, never a zero that reads as "free".
+            assert timing_payloads[0]["usage_totals"] is None
         compiled_components = [
             event["payload"]["component"] for event in _plan_compiled_events(engine, project_id)
         ]

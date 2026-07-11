@@ -18,6 +18,7 @@ from policy_atlas.synthesis_tools import (
     BOOST_CLAMP_MAX,
     BOOST_CLAMP_MIN,
     CANDIDATE_POOL_PER_LEG,
+    READ_CALLS_PER_TURN_CAP,
     RETRIEVAL_UNIT_CAP,
     SECTION_TURN_CAP,
     SYNTH_CHUNK_TOP_K,
@@ -587,6 +588,34 @@ def test_loop_runner_rejects_validation_errors() -> None:
     assert result["rejected_tool_calls"] == 1
     assert result["tool_call_counts"] == {}
     assert result["transcript"][0]["result"] == {"error": "bad args"}
+
+
+def test_loop_runner_caps_read_calls_per_turn() -> None:
+    """Calls past READ_CALLS_PER_TURN_CAP in one turn are refused with an
+    error result and counted rejected — the prompt's "up to 6" rule is
+    code-enforced, so one degenerate turn cannot blow the retrieval envelope."""
+    executed: list[int] = []
+
+    def ok(args: dict[str, Any]) -> dict[str, Any]:
+        executed.append(int(args["i"]))
+        return {}
+
+    overflow = READ_CALLS_PER_TURN_CAP + 3
+    backend = ScriptedBackend([
+        {
+            "tool_calls": [
+                {"tool": "ok", "arguments": {"i": i}} for i in range(overflow)
+            ],
+            "claims": None,
+        },
+        {"tool_calls": [], "claims": _claims()},
+    ])
+    result = run_section_loop(backend, seed={}, tools={"ok": ok})
+    assert executed == list(range(READ_CALLS_PER_TURN_CAP))
+    assert result["tool_call_counts"] == {"ok": READ_CALLS_PER_TURN_CAP}
+    assert result["rejected_tool_calls"] == 3
+    refused = result["transcript"][READ_CALLS_PER_TURN_CAP]["result"]
+    assert "read batch limit" in refused["error"]
 
 
 def test_loop_runner_executes_multiple_read_calls_in_one_turn() -> None:

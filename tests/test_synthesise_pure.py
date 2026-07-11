@@ -17,8 +17,10 @@ from policy_atlas.synthesis_backend import (
     GapPayloadWire,
     PatternPayloadWire,
     SectionProposalWire,
+    SectionProseWire,
     SectionWire,
     SparsitySignalWire,
+    StubSynthesisBackend,
     ThemePayloadWire,
 )
 from policy_atlas.synthesis_tools import (
@@ -36,12 +38,14 @@ from policy_atlas.synthesise import (
     CorpusProfile,
     CoverageRecord,
     FindingInfo,
+    SectionAccounting,
     SectionSpec,
     SpliceItem,
     SubstrateView,
     _anchor_counts,
     _conclusions_focus,
     _judge_claims,
+    _section_claims,
     _validate_sections,
     bind_spans,
     build_ledger,
@@ -802,3 +806,104 @@ def test_proposed_conclusion_title_rejected_but_injected_title_is_exempt() -> No
     assert injected.role == "conclusions"
     assert "What works?" in injected.focus
     assert "recommendations" in injected.focus
+
+
+# --- Review-stack fixes (018 step 7): empty gate + unspanned-lane honesty ---
+
+
+def test_empty_claim_type_gate_rejects_never_reopens() -> None:
+    """An explicitly EMPTY claim-type gate rejects every gated type — it must
+    never be treated as "unset" and silently reopen to the full substrate set
+    (the key-findings intersection can be empty on a thin substrate)."""
+    assert (
+        _rejected_reason(
+            _claim(
+                {
+                    "claim_type": "chunk",
+                    "text": "Chunk claim.",
+                    "citations": [
+                        {
+                            "chunk_record_id": "11111111-1111-1111-1111-111111111111",
+                            "quote": "alpha quoted evidence",
+                        }
+                    ],
+                }
+            ),
+            available_claim_types=set(),
+        )
+        == "substrate_ungated_type"
+    )
+
+
+def _accounting() -> SectionAccounting:
+    return SectionAccounting(
+        tool_call_counts={},
+        tool_call_count=0,
+        gathered_id_hash="",
+        turns_used=0,
+        turn_cap_hit=False,
+    )
+
+
+def _run_section_claims(
+    wire: SectionProseWire,
+    accounting: SectionAccounting,
+    *,
+    available_claim_types: set[str] | None = None,
+) -> None:
+    _section_claims(
+        section_index=0,
+        raw_claims=wire,
+        seed={},
+        transcript=[],
+        substrate=_substrate(),
+        section_group_ids={"group-1"},
+        citable_finding_ids=set(),
+        citable_chunk_ids={"11111111-1111-1111-1111-111111111111"},
+        synthesis_backend=StubSynthesisBackend(),
+        grounding_judge_backend=StubGroundingJudgeBackend(),
+        available_claim_types=available_claim_types or {"gap", "chunk"},
+        accounting=accounting,
+    )
+
+
+def test_unspanned_lane_skipped_flag_set_when_no_judged_claims() -> None:
+    """Prose carried only by non-judged claim types is never scanned by the
+    unspanned lane: the accounting says "skipped", never a clean zero."""
+    prose = "Evidence here is thin (stub inference). A further assertive sentence."
+    wire = SectionProseWire(
+        prose=prose,
+        claims=[
+            _claim(
+                {
+                    "claim_type": "gap",
+                    "text": "Evidence here is thin (stub inference).",
+                    "gap": {"grade": "inferred", "coverage_base": "screened"},
+                }
+            )
+        ],
+    )
+    accounting = _accounting()
+    _run_section_claims(wire, accounting)
+    assert accounting.unspanned_lane_skipped is True
+    assert accounting.unspanned_assertions == 0
+
+
+def test_unspanned_lane_not_skipped_when_judge_scanned() -> None:
+    """A judged-type claim fires the judge lane over the prose: the skipped
+    flag stays False on the scanned path."""
+    prose = "As reasoning, the strands point one way (stub inference)."
+    wire = SectionProseWire(
+        prose=prose,
+        claims=[
+            _claim(
+                {
+                    "claim_type": "reasoning",
+                    "text": "As reasoning, the strands point one way (stub inference).",
+                }
+            )
+        ],
+    )
+    accounting = _accounting()
+    _run_section_claims(wire, accounting, available_claim_types={"gap", "reasoning"})
+    assert accounting.unspanned_lane_skipped is False
