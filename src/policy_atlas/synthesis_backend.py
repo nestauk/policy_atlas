@@ -1,10 +1,11 @@
-"""The ``synthesise_sections_v1`` and ``synthesise_section_v2`` prompt surfaces (task 013).
+"""The ``synthesise_sections_v1`` and ``synthesise_section_v4`` prompt surfaces (task 013).
 
 The repo's fifth and sixth product prompts — lead-authored, versioned, recorded
 in synthesis provenance and event payloads. ``synthesise_sections_v1`` is a
 single bounded schema-constrained call proposing the intent-led section list.
-``synthesise_section_v2`` (v2, task 016: the one ``text_basis`` labelling rule)
-is the section-loop surface: one system prompt plus
+``synthesise_section_v4`` (v3, task 018 B-B2: the deliberate voice design; v4,
+018 C2 round 2: repetition/label-translation rules) is the section-loop
+surface: one system prompt plus
 the three tool JSON schemas, **versioned as one unit** — the OpenAI form runs
 the bounded tool-calling loop (the repo's first agent loop; the loop runner and
 turn accounting live in :mod:`policy_atlas.synthesis_tools`).
@@ -55,7 +56,7 @@ from policy_atlas.usage import UsageResult, token_usage_from_provider
 log = structlog.get_logger()
 
 SECTIONS_PROMPT_VERSION = "synthesise_sections_v1"
-SECTION_PROMPT_VERSION = "synthesise_section_v3"
+SECTION_PROMPT_VERSION = "synthesise_section_v4"
 KEY_FINDINGS_PROMPT_VERSION = "synthesise_key_findings_v1"
 
 # The contracted model floor (the 009 nano lesson is binding); section/prose
@@ -471,8 +472,8 @@ of the original rules.
 """
 
 
-# --- The section-loop prompt (synthesise_section_v2; v2 = the one text_basis
-# labelling rule riding task 016 decision 9 — provenance bump, wire-compatible) ---
+# --- The section-loop prompt (synthesise_section_v4; v3 = the 018 B-B2 voice
+# design; v4 = 018 C2 round 2 repetition/label-translation rules) ---
 
 SECTION_SYSTEM_PROMPT = f"""\
 You are writing one section of an evidence report for senior policy makers in
@@ -533,10 +534,22 @@ Writing the prose:
 - Write a connected argument, never a sequence of standalone observations.
   Relate each piece of evidence to what came before it — corroboration,
   tension, a different population, a different outcome — so the reader can
-  follow why the paragraph holds together.
+  follow why the paragraph holds together. Every sentence advances the
+  argument: never restate the previous sentence with light rewording to carry
+  another claim — distinct claims that share a sentence's support are
+  anchored as separate non-overlapping spans of that one sentence.
 - Restate numbers the way an analyst briefing a minister would: "eleven of
   the fifteen evaluations reported reductions", never counts or spreads
-  recited as data. State each figure once, where it does its work.
+  recited as data. State each figure once, where it does its work — and that
+  means once in the report, not once per section: a count or spread the
+  ledger shows an earlier section already stated is not restated as new;
+  refer to it in passing or omit it. Corpus-shape numbers (how many documents
+  of which type, the appraisal mix) belong in at most one section — the one
+  whose focus is the evidence base itself.
+- Translate classification and appraisal vocabulary into plain reader terms:
+  "commentary rather than research evidence", "documents whose type could not
+  be determined", "the strongest appraisal band" — never raw category labels
+  ("Other (Non-evidence documents)") or bare scale digits ("rated 2").
 - Descriptive, never evaluative: no recommendations, no verdicts, no "the
   evidence supports adopting X". Describe what the evidence contains, its
   strength, its spread and its limits, and let the reader judge.
