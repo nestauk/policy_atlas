@@ -41,11 +41,13 @@ from policy_atlas.schema import EVIDENCE_TYPES
 CLASSIFY_PROMPT_VERSION = "classify_v2"
 
 # classify moved gpt-5.5 → 5.4-mini and buys back judgment depth with effort
-# (018 A1); verified against the installed SDK literal (openai 2.44.0
-# ReasoningEffort includes "xhigh"); effort level is a hypothesis validated
-# against baseline-1 in the 018 loop.
+# (018 A1). The A1 xhigh hypothesis FAILED its 018 C2 validation: at xhigh the
+# model exhausted the full 16K completion cap on reasoning alone
+# (LengthFinishReasonError on a 2.2K-token doc) before emitting an answer;
+# at high, all 26 pinned-project docs completed with 4/26 plausible boundary
+# flips vs the recorded gpt-5.5 labels (evidence: 018 C2 classify A/B).
 CLASSIFY_MODEL = "gpt-5.4-mini"
-CLASSIFY_REASONING_EFFORT = "xhigh"
+CLASSIFY_REASONING_EFFORT = "high"
 
 # Reasoning model: the cap covers reasoning + output tokens (extract's 011
 # lesson). Classify output is small; 16K leaves ample reasoning headroom for
