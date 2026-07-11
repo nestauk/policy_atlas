@@ -19,6 +19,7 @@ from policy_atlas.facet_values import (
     InvalidPartitionOutput,
     assert_grouping_invariants,
     build_groups_payload,
+    direction_spread,
     extract_facet_values,
     merge_repair,
     normalize_value,
@@ -26,14 +27,14 @@ from policy_atlas.facet_values import (
     validate_partition,
     value_records,
 )
-from policy_atlas.schema import DIRECTIVE_STRING_MAX
+from policy_atlas.schema import DIRECTIVE_STRING_MAX, EFFECT_DIRECTIONS
 
 
 def finding(
     finding_id: str,
     facet_value: str | None,
     counterpart_value: str | None = None,
-    effect_direction: str = "positive",
+    effect_direction: str = "increase",
 ) -> FindingFacetView:
     return FindingFacetView(
         finding_id=finding_id,
@@ -346,7 +347,7 @@ def test_merge_repair_merges_casefold_label_matches_and_appends_new_groups() -> 
 
 def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() -> None:
     findings = [
-        finding("f1", "Housing First", "rough sleeping", "positive"),
+        finding("f1", "Housing First", "rough sleeping", "increase"),
         finding("f2", "housing first", "tenancy", "mixed"),
         finding("f3", "Rapid rehousing", "homelessness", "unclear"),
         finding("f4", "Breakfast clubs", "attendance", "unclear"),
@@ -375,8 +376,8 @@ def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() 
             "member_finding_ids": ["f4"],
             "size": 1,
             "direction_spread": {
-                "positive": 0,
-                "negative": 0,
+                "increase": 0,
+                "decrease": 0,
                 "no_effect": 0,
                 "mixed": 0,
                 "unclear": 1,
@@ -389,8 +390,8 @@ def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() 
             "member_finding_ids": ["f1", "f2"],
             "size": 2,
             "direction_spread": {
-                "positive": 1,
-                "negative": 0,
+                "increase": 1,
+                "decrease": 0,
                 "no_effect": 0,
                 "mixed": 1,
                 "unclear": 0,
@@ -401,8 +402,8 @@ def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() 
         "values": ["Rapid rehousing"],
         "finding_ids": ["f3"],
         "direction_spread": {
-            "positive": 0,
-            "negative": 0,
+            "increase": 0,
+            "decrease": 0,
             "no_effect": 0,
             "mixed": 0,
             "unclear": 1,
@@ -411,8 +412,8 @@ def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() 
     assert payload["no_value"] == {
         "finding_ids": ["f5", "f6"],
         "direction_spread": {
-            "positive": 0,
-            "negative": 0,
+            "increase": 0,
+            "decrease": 0,
             "no_effect": 1,
             "mixed": 1,
             "unclear": 0,
@@ -429,8 +430,8 @@ def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() 
                 "member_finding_ids": ["f4", "f4"],
                 "size": 2,
                 "direction_spread": {
-                    "positive": 0,
-                    "negative": 0,
+                    "increase": 0,
+                    "decrease": 0,
                     "no_effect": 0,
                     "mixed": 0,
                     "unclear": 2,
@@ -450,8 +451,8 @@ def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() 
             **payload["no_value"],
             "finding_ids": ["f5"],
             "direction_spread": {
-                "positive": 0,
-                "negative": 0,
+                "increase": 0,
+                "decrease": 0,
                 "no_effect": 1,
                 "mixed": 0,
                 "unclear": 0,
@@ -462,3 +463,12 @@ def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() 
         assert_grouping_invariants(
             dropped, finding_ids=[finding.finding_id for finding in findings]
         )
+
+
+def test_direction_spread_keys_come_from_the_schema_tuple_not_hardcoded_strings() -> None:
+    """direction_spread must zero-fill from EFFECT_DIRECTIONS, never a literal list —
+    otherwise a future vocabulary change (as in task 018 rider A5) silently
+    stops flowing through this reader.
+    """
+    assert set(direction_spread([]).keys()) == set(EFFECT_DIRECTIONS)
+    assert direction_spread([]) == dict.fromkeys(EFFECT_DIRECTIONS, 0)

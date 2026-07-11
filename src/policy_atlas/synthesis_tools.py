@@ -48,9 +48,10 @@ from policy_atlas.schema import (
 from policy_atlas.schema import chunk as chunk_table
 from policy_atlas.screen import effective_screen_rows
 from policy_atlas.tags import has_control_character
+from policy_atlas.usage import UsageAccumulator
 
 if TYPE_CHECKING:
-    from policy_atlas.synthesis_backend import SectionClaimsWire
+    from policy_atlas.synthesis_backend import SectionProseWire
 
 # --- Plan-pinned constants (plan.md rev 2 — binding; the caps-bind test
 # asserts these module constants are the values enforced on the live path,
@@ -61,6 +62,11 @@ SECTION_CAP = 8
 # SECTION_TURN_CAP-th turn (plan review M4): at most SECTION_TURN_CAP - 1 tool
 # turns occur, so the pre-run budget maximum is exact, never exceeded.
 SECTION_TURN_CAP = 6
+# Read-tool calls EXECUTED per turn. The writer prompt asks for "up to 6" —
+# this is the code-side enforcement: overflow calls get an error result and
+# count as rejected, so a degenerate 30-call turn cannot blow the per-turn
+# retrieval/transcript envelope (turn_cap bounds turns, not work per turn).
+READ_CALLS_PER_TURN_CAP = 6
 REPAIR_ROUND_CAP = 1
 SYNTH_CHUNK_TOP_K = 8
 SYNTH_CHUNK_CHAR_BUDGET = 24_000
@@ -138,6 +144,14 @@ class ChunkSearchResult(TypedDict):
     # rejects, so the record says which is which.
     appraised: bool
     fused_score: float
+    # Owner-adopted default metadata set (ADR 0015 §8 / B-B3): terse, attached
+    # on the record itself, each key present ONLY when its value exists
+    # (omit-if-absent). ``is_retracted`` is deliberately not surfaced.
+    year: NotRequired[Any]
+    evidence_type: NotRequired[str]
+    appraisal_label: NotRequired[str]
+    venue: NotRequired[str]
+    cited_by: NotRequired[Any]
 
 
 class FindingRecord(TypedDict):
@@ -162,6 +176,12 @@ class FindingRecord(TypedDict):
     causality_by_design: str | None
     is_primary: bool | None
     field_coverage: dict[str, str]
+    # Owner-adopted default metadata set (ADR 0015 §8 / B-B3): omit-if-absent.
+    year: NotRequired[Any]
+    evidence_type: NotRequired[str]
+    appraisal_label: NotRequired[str]
+    venue: NotRequired[str]
+    cited_by: NotRequired[Any]
 
 
 class ToolCallRequest(TypedDict):
@@ -307,7 +327,7 @@ class ToolValidationError(Exception):
 class MalformedEmissionError(Exception):
     """A claims emission whose arguments failed structural validation.
 
-    Raised by live backends when the provider's ``emit_claims`` arguments do
+    Raised by live backends when the provider's ``emit_section`` arguments do
     not parse into the wire models (strict constrained decoding is unavailable
     for the pattern claim's counts map). The loop runner treats it as a
     turn-consuming error exchange — the model reads the bounded validation
@@ -319,7 +339,7 @@ class MalformedEmissionError(Exception):
 class SectionLoopResult(TypedDict):
     """Outcome of one bounded section tool-calling loop."""
 
-    claims: SectionClaimsWire | None
+    claims: SectionProseWire | None
     transcript: list[ToolExchange]
     turns_used: int
     tool_call_counts: dict[str, int]
@@ -329,6 +349,7 @@ class SectionLoopResult(TypedDict):
     # and were salvaged away (backend per-claim salvage) — counted, never
     # silent; the component lands them in claims_rejected_structural.
     malformed_claims: int
+    usage_totals: dict[str, int]
 
 
 _DIRECTIVE_KEYS = {"sections", "retrieval_boosts"}
@@ -594,6 +615,37 @@ def _metadata_title(metadata: Any, pss_id: uuid.UUID) -> str:
     return f"source {pss_id}"
 
 
+def _metadata_year(metadata: Any) -> Any:
+    """Return a document's year from metadata, or ``None`` if absent."""
+    if not isinstance(metadata, dict):
+        return None
+    for key in ("year", "publication_year"):
+        value = metadata.get(key)
+        if value is not None:
+            return value
+    return None
+
+
+def _metadata_venue(metadata: Any) -> Any:
+    """Return a document's publishing venue from metadata, or ``None``."""
+    if not isinstance(metadata, dict):
+        return None
+    return metadata.get("publisher_org")
+
+
+def _metadata_cited_by(metadata: Any) -> Any:
+    """Return a document's citation count from ``provider_fields``, or ``None``.
+
+    Guards a non-dict / absent ``provider_fields`` (never null-noise).
+    """
+    if not isinstance(metadata, dict):
+        return None
+    provider_fields = metadata.get("provider_fields")
+    if not isinstance(provider_fields, dict):
+        return None
+    return provider_fields.get("cited_by_count")
+
+
 def _doc_record(row: Any, selected_pss_ids: set[uuid.UUID]) -> dict[str, Any]:
     metadata = row.metadata if isinstance(row.metadata, dict) else {}
     doc: dict[str, Any] = {
@@ -609,6 +661,12 @@ def _doc_record(row: Any, selected_pss_ids: set[uuid.UUID]) -> dict[str, Any]:
         value = metadata.get(key)
         if value is not None:
             doc[key] = value
+    venue = _metadata_venue(metadata)
+    if venue is not None:
+        doc["venue"] = venue
+    cited_by = _metadata_cited_by(metadata)
+    if cited_by is not None:
+        doc["cited_by"] = cited_by
     return doc
 
 
@@ -1002,7 +1060,7 @@ class ChunkRetriever:
         chunk = self._scope.chunks[chunk_id]
         pss_id = cast("str", chunk["pss_id"])
         doc = self._scope.docs[pss_id]
-        return {
+        result: ChunkSearchResult = {
             "chunk_record_id": chunk_id,
             "pss_id": pss_id,
             "document_title": cast("str", doc["title"]),
@@ -1013,6 +1071,24 @@ class ChunkRetriever:
             "appraised": doc.get("appraisal_tier") is not None,
             "fused_score": score,
         }
+        # Owner-adopted default metadata set (ADR 0015 §8 / B-B3), sourced from
+        # the doc record, omit-if-absent (no null-noise).
+        year = doc.get("year", doc.get("publication_year"))
+        if year is not None:
+            result["year"] = year
+        evidence_type = doc.get("primary_evidence_type")
+        if evidence_type is not None:
+            result["evidence_type"] = cast("str", evidence_type)
+        appraisal_label = doc.get("appraisal_tier")
+        if appraisal_label is not None:
+            result["appraisal_label"] = cast("str", appraisal_label)
+        venue = doc.get("venue")
+        if venue is not None:
+            result["venue"] = venue
+        cited_by = doc.get("cited_by")
+        if cited_by is not None:
+            result["cited_by"] = cited_by
+        return result
 
     def _soft_prior(self, chunk_id: str) -> float:
         chunk = self._scope.chunks[chunk_id]
@@ -1195,7 +1271,7 @@ def _record_ids_from_docs(docs: Sequence[dict[str, Any]]) -> list[uuid.UUID]:
 def _finding_record(row: Any) -> FindingRecord:
     metadata = row.metadata if isinstance(row.metadata, dict) else {}
     pss_id = cast("uuid.UUID", row.project_source_snapshot_id)
-    return {
+    record: FindingRecord = {
         "finding_id": str(row.finding_id),
         "pss_id": str(pss_id),
         "document_title": _metadata_title(metadata, pss_id),
@@ -1212,6 +1288,23 @@ def _finding_record(row: Any) -> FindingRecord:
         "is_primary": cast("bool | None", row.is_primary),
         "field_coverage": cast("dict[str, str]", row.field_coverage),
     }
+    # Owner-adopted default metadata set (ADR 0015 §8 / B-B3), omit-if-absent.
+    year = _metadata_year(metadata)
+    if year is not None:
+        record["year"] = year
+    evidence_type = getattr(row, "primary_evidence_type", None)
+    if evidence_type is not None:
+        record["evidence_type"] = cast("str", evidence_type)
+    quality_score = getattr(row, "quality_score", None)
+    if quality_score is not None:
+        record["appraisal_label"] = str(quality_score)
+    venue = _metadata_venue(metadata)
+    if venue is not None:
+        record["venue"] = venue
+    cited_by = _metadata_cited_by(metadata)
+    if cited_by is not None:
+        record["cited_by"] = cited_by
+    return record
 
 
 def _group_member_ids(grouping_groups: list[dict[str, Any]] | None) -> dict[str, set[str]]:
@@ -1275,6 +1368,8 @@ def make_findings_reader(
                 intervention_outcome_finding.c.field_coverage,
                 source_extraction_record.c.project_source_snapshot_id,
                 source_snapshot.c.metadata,
+                source_classification_result.c.primary_evidence_type,
+                source_appraisal_result.c.quality_score,
             )
             .select_from(intervention_outcome_finding)
             .join(
@@ -1299,6 +1394,28 @@ def make_findings_reader(
                     source_snapshot.c.source_snapshot_id
                     == project_source_snapshot.c.source_snapshot_id
                 ),
+            )
+            # Classification + appraisal for the default metadata set (ADR 0015
+            # §8 / B-B3), scoped to project + evidence scope, outerjoin (the
+            # build_retrieval_scope pattern) so an unclassified/unappraised
+            # finding still returns.
+            .outerjoin(
+                source_classification_result,
+                (
+                    source_classification_result.c.project_source_snapshot_id
+                    == project_source_snapshot.c.project_source_snapshot_id
+                )
+                & (source_classification_result.c.project_id == project_id)
+                & (source_classification_result.c.evidence_scope_id == evidence_scope_id),
+            )
+            .outerjoin(
+                source_appraisal_result,
+                (
+                    source_appraisal_result.c.project_source_snapshot_id
+                    == project_source_snapshot.c.project_source_snapshot_id
+                )
+                & (source_appraisal_result.c.project_id == project_id)
+                & (source_appraisal_result.c.evidence_scope_id == evidence_scope_id),
             )
             .where(intervention_outcome_finding.c.project_id == project_id)
             .where(
@@ -1724,20 +1841,22 @@ def run_section_loop(
     tool_call_counts: dict[str, int] = {}
     rejected_tool_calls = 0
     malformed_claims = 0
+    usage_totals = UsageAccumulator()
 
     for turn in range(1, turn_cap + 1):
         force_emit = turn == turn_cap
         try:
-            result = backend.section_turn(seed, transcript, force_emit=force_emit)
+            result, usage = backend.section_turn(seed, transcript, force_emit=force_emit)
+            usage_totals.add(usage)
         except MalformedEmissionError as exc:
             if force_emit:
                 raise RuntimeError(
                     "malformed claims emission on the forced final turn"
                 ) from exc
             transcript.append({
-                "tool": "emit_claims",
+                "tool": "emit_section",
                 "arguments": {},
-                "result": {"error": f"emit_claims arguments invalid: {exc}"},
+                "result": {"error": f"emit_section arguments invalid: {exc}"},
             })
             rejected_tool_calls += 1
             continue
@@ -1753,53 +1872,59 @@ def run_section_loop(
                 "rejected_tool_calls": rejected_tool_calls,
                 "turn_cap_hit": force_emit,
                 "malformed_claims": malformed_claims,
+                "usage_totals": usage_totals.payload(),
             }
         if force_emit and tool_calls:
             raise RuntimeError("backend returned tool call on forced emit turn")
         if not tool_calls:
             raise RuntimeError("backend returned no claims or tool calls")
-        if len(tool_calls) != 1:
-            first = tool_calls[0] if tool_calls else {"tool": "invalid"}
-            name = first.get("tool", "invalid")
-            transcript.append({
-                "tool": name if isinstance(name, str) else "invalid",
-                "arguments": {},
-                "result": {"error": "one tool call per turn"},
-            })
-            rejected_tool_calls += 1
-            continue
 
-        call = tool_calls[0]
-        tool_name = call.get("tool")
-        arguments = call.get("arguments", {})
-        if not isinstance(tool_name, str):
-            tool_name = "invalid"
-        if not isinstance(arguments, dict):
-            arguments = {}
-        if tool_name not in tools:
+        executed_this_turn = 0
+        for call in tool_calls:
+            tool_name = call.get("tool")
+            arguments = call.get("arguments", {})
+            if not isinstance(tool_name, str):
+                tool_name = "invalid"
+            if not isinstance(arguments, dict):
+                arguments = {}
+            if executed_this_turn >= READ_CALLS_PER_TURN_CAP:
+                transcript.append({
+                    "tool": tool_name,
+                    "arguments": cast("dict[str, Any]", arguments),
+                    "result": {
+                        "error": (
+                            f"read batch limit ({READ_CALLS_PER_TURN_CAP} per turn) "
+                            "exceeded; call not executed — re-request next turn"
+                        )
+                    },
+                })
+                rejected_tool_calls += 1
+                continue
+            if tool_name not in tools:
+                transcript.append({
+                    "tool": tool_name,
+                    "arguments": cast("dict[str, Any]", arguments),
+                    "result": {"error": f"unknown tool {tool_name!r}"},
+                })
+                rejected_tool_calls += 1
+                continue
+            try:
+                tool_result = tools[tool_name](cast("dict[str, Any]", arguments))
+            except ToolValidationError as exc:
+                transcript.append({
+                    "tool": tool_name,
+                    "arguments": cast("dict[str, Any]", arguments),
+                    "result": {"error": str(exc)},
+                })
+                rejected_tool_calls += 1
+                continue
             transcript.append({
                 "tool": tool_name,
                 "arguments": cast("dict[str, Any]", arguments),
-                "result": {"error": f"unknown tool {tool_name!r}"},
+                "result": tool_result,
             })
-            rejected_tool_calls += 1
-            continue
-        try:
-            tool_result = tools[tool_name](cast("dict[str, Any]", arguments))
-        except ToolValidationError as exc:
-            transcript.append({
-                "tool": tool_name,
-                "arguments": cast("dict[str, Any]", arguments),
-                "result": {"error": str(exc)},
-            })
-            rejected_tool_calls += 1
-            continue
-        transcript.append({
-            "tool": tool_name,
-            "arguments": cast("dict[str, Any]", arguments),
-            "result": tool_result,
-        })
-        tool_call_counts[tool_name] = tool_call_counts.get(tool_name, 0) + 1
+            tool_call_counts[tool_name] = tool_call_counts.get(tool_name, 0) + 1
+            executed_this_turn += 1
 
     raise RuntimeError("section loop exhausted without emission")
 

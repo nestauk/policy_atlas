@@ -1,6 +1,8 @@
 """Tests for the classify component — schema, backend seam, round-trips, harness integration."""
 
 import uuid
+from dataclasses import dataclass
+from typing import Any, cast
 
 import pytest
 import sqlalchemy as sa
@@ -9,13 +11,20 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
 from policy_atlas import events
-from policy_atlas.classification_backend import StubClassificationBackend
+from policy_atlas.classification_backend import (
+    OpenAIClassificationBackend,
+    StubClassificationBackend,
+)
 from policy_atlas.classify import ClassifyContext, classify_sources
 from policy_atlas.classify_prompt import (
+    CLASSIFY_MODEL,
+    CLASSIFY_REASONING_EFFORT,
     TAG_MAX_CHARS,
     TAGS_MAX_PER_DOC,
     ClassifyEnvelopePayload,
+    ClassifyWire,
 )
+from policy_atlas.embeddings import openai_kwargs
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.plan import Plan, compile
@@ -27,6 +36,7 @@ from policy_atlas.schema import (
     source_screening_result,
     source_tag,
 )
+from policy_atlas.usage import TokenUsage, UsageResult
 from tests.helpers import (
     now,
     seed_project_and_run,
@@ -45,7 +55,7 @@ def test_table_count(conn: Connection) -> None:
 # --- Stub logic (pure Python, no DB) ---
 
 def _stub_classify(metadata: dict[str, object]) -> str:
-    wire = StubClassificationBackend().classify(
+    wire, usage = StubClassificationBackend().classify(
         ClassifyEnvelopePayload(
             pss_id=str(uuid.uuid4()),
             title="",
@@ -54,6 +64,7 @@ def _stub_classify(metadata: dict[str, object]) -> str:
             metadata=dict(metadata),
         )
     )
+    assert usage is None
     return wire.primary_evidence_type
 
 
@@ -435,6 +446,23 @@ def test_classify_sources_doc_exception_isolated(conn: Connection) -> None:
 
 # --- Harness integration ---
 
+
+class _UsageClassificationBackend:
+    mode = "stub"
+
+    def classify(self, payload: ClassifyEnvelopePayload) -> UsageResult[ClassifyWire]:
+        del payload
+        return (
+            ClassifyWire(
+                primary_evidence_type="Qualitative & Contextual Evidence",
+                tags=[],
+                confidence=0.8,
+                reason="Fake backend with token usage.",
+            ),
+            TokenUsage(prompt=11, completion=7, total=18),
+        )
+
+
 def test_harness_classify_component(conn: Connection) -> None:
     pid, rid_screen = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
@@ -455,7 +483,12 @@ def test_harness_classify_component(conn: Connection) -> None:
     plan = Plan(component="classify", evidence_scope_id=scope_id)
     config = compile(plan)
     run_harness(
-        conn, config=config, project_id=pid, run_id=rid_classify, provider=StubEchoProvider()
+        conn,
+        config=config,
+        project_id=pid,
+        run_id=rid_classify,
+        provider=StubEchoProvider(),
+        classification_backend=_UsageClassificationBackend(),
     )
 
     # One classification row (only the relevant source)
@@ -475,6 +508,7 @@ def test_harness_classify_component(conn: Connection) -> None:
     assert set(payload.keys()) >= {"component", "classified", "by_type", "skipped"}
     assert payload["classified"] == 1
     assert payload["skipped"] == 1
+    assert payload["usage_totals"] == {"prompt": 11, "completion": 7, "total": 18, "cached": 0}
 
     # Run ended as succeeded
     run_row = conn.execute(select(runs).where(runs.c.run_id == rid_classify)).one()
@@ -572,3 +606,83 @@ def test_delete_project_data_removes_classification(conn: Connection) -> None:
         .where(source_classification_result.c.project_id == pid)
     ).scalar_one()
     assert count_after == 0
+
+
+# --- Model constant + reasoning-effort seam (018 A1) ---
+
+
+@dataclass
+class _FakeParsedMessage:
+    parsed: Any
+
+
+@dataclass
+class _FakeChoice:
+    message: _FakeParsedMessage
+
+
+@dataclass
+class _FakeResponse:
+    choices: list[_FakeChoice]
+    usage: None = None
+
+
+class _FakeCompletions:
+    def __init__(self, parsed: Any) -> None:
+        self._parsed = parsed
+        self.calls: list[dict[str, Any]] = []
+
+    def parse(self, **kwargs: Any) -> _FakeResponse:
+        self.calls.append(kwargs)
+        return _FakeResponse(choices=[_FakeChoice(message=_FakeParsedMessage(self._parsed))])
+
+
+class _FakeChat:
+    def __init__(self, parsed: Any) -> None:
+        self.completions = _FakeCompletions(parsed)
+
+
+class _FakeOpenAIClient:
+    def __init__(self, parsed: Any) -> None:
+        self.chat = _FakeChat(parsed)
+
+
+def test_classify_backend_passes_model_and_reasoning_effort() -> None:
+    wire = ClassifyWire(
+        primary_evidence_type="RCTs and Quasi-Experimental Studies",
+        tags=[],
+        confidence=0.8,
+        reason="Randomized trial.",
+    )
+    backend: OpenAIClassificationBackend = object.__new__(OpenAIClassificationBackend)
+    fake_client = _FakeOpenAIClient(wire)
+    cast("Any", backend)._client = fake_client
+    cast("Any", backend)._langfuse_client = None
+
+    result, usage = backend.classify(
+        ClassifyEnvelopePayload(
+            pss_id=str(uuid.uuid4()),
+            title="A randomized trial",
+            abstract="Abstract text.",
+            priors={},
+        )
+    )
+
+    assert result.primary_evidence_type == "RCTs and Quasi-Experimental Studies"
+    assert usage is None
+    [kwargs] = fake_client.chat.completions.calls
+    assert kwargs["model"] == "gpt-5.4-mini"
+    assert kwargs["model"] == CLASSIFY_MODEL
+    assert kwargs["reasoning_effort"] == "high"
+    assert kwargs["reasoning_effort"] == CLASSIFY_REASONING_EFFORT
+
+
+def test_openai_kwargs_omits_reasoning_effort_when_none() -> None:
+    kwargs = openai_kwargs("gpt-5.4-mini")
+    assert kwargs == {"model": "gpt-5.4-mini"}
+    assert "reasoning_effort" not in kwargs
+
+
+def test_openai_kwargs_includes_reasoning_effort_when_set() -> None:
+    kwargs = openai_kwargs("gpt-5.4-mini", reasoning_effort="xhigh")
+    assert kwargs == {"model": "gpt-5.4-mini", "reasoning_effort": "xhigh"}

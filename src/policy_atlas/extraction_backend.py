@@ -1,4 +1,4 @@
-"""Extraction backend seam for the extract_iof_v1 IOF extraction call."""
+"""Extraction backend seam for the extract_iof_v5 IOF extraction call."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ from typing import Any, Protocol
 
 import structlog
 from langfuse import Langfuse
-from openai.types.completion_usage import CompletionUsage
 
 from policy_atlas import tracing
 from policy_atlas.embeddings import log_usage, resolve_openai_client, usage_metadata
@@ -17,6 +16,7 @@ from policy_atlas.extract_prompt import (
     build_extract_messages,
 )
 from policy_atlas.extraction_records import ExtractionResponse, ExtractionWindowPayload
+from policy_atlas.usage import UsageResult, token_usage_from_provider
 
 log = structlog.get_logger()
 
@@ -34,14 +34,14 @@ class ExtractionBackend(Protocol):
         """``"live"`` or ``"stub"``; read-only so wrappers can proxy it."""
         ...
 
-    def extract(self, payload: ExtractionWindowPayload) -> ExtractionResponse:
+    def extract(self, payload: ExtractionWindowPayload) -> UsageResult[ExtractionResponse]:
         """Extract findings from one window of one document's basis text.
 
         Args:
             payload: The window's basis segments plus envelope context.
 
         Returns:
-            Raw structurally parsed extraction output.
+            Raw structurally parsed extraction output plus token usage.
         """
         ...
 
@@ -77,7 +77,7 @@ class OpenAIExtractionBackend:
     def _extract_once(
         self,
         payload: ExtractionWindowPayload,
-    ) -> tuple[ExtractionResponse, CompletionUsage | None]:
+    ) -> UsageResult[ExtractionResponse]:
         messages = build_extract_messages(payload)
         response = self._client.chat.completions.parse(
             model=EXTRACTION_MODEL,
@@ -92,22 +92,22 @@ class OpenAIExtractionBackend:
         if parsed is None:
             raise RuntimeError("OpenAI extraction response was not parsed.")
         parsed_model: ExtractionResponse = parsed
-        return parsed_model, response.usage
+        return parsed_model, token_usage_from_provider(response.usage)
 
-    def extract(self, payload: ExtractionWindowPayload) -> ExtractionResponse:
+    def extract(self, payload: ExtractionWindowPayload) -> UsageResult[ExtractionResponse]:
         """Extract findings through structured OpenAI output.
 
         Args:
             payload: The window's basis segments plus envelope context.
 
         Returns:
-            Raw structurally parsed extraction output.
+            Raw structurally parsed extraction output plus token usage.
 
         Raises:
             RuntimeError: If the response cannot be parsed into the expected shape.
         """
         def _update(
-            span: Any, result: tuple[ExtractionResponse, CompletionUsage | None]
+            span: Any, result: UsageResult[ExtractionResponse]
         ) -> None:
             response, usage = result
             span.update(
@@ -124,14 +124,14 @@ class OpenAIExtractionBackend:
                 },
             )
 
-        response, _usage = tracing.traced_call(
+        response, usage = tracing.traced_call(
             self._langfuse_client,
             name=f"extract:{payload.pss_id[:8]}:w{payload.window_index}",
             as_type="generation",
             call=lambda: self._extract_once(payload),
             update=_update,
         )
-        return response
+        return response, usage
 
 
 class StubExtractionBackend:
@@ -139,7 +139,7 @@ class StubExtractionBackend:
 
     mode = "stub"
 
-    def extract(self, payload: ExtractionWindowPayload) -> ExtractionResponse:
+    def extract(self, payload: ExtractionWindowPayload) -> UsageResult[ExtractionResponse]:
         """Return sentinel-driven findings from the payload's envelope metadata.
 
         Args:
@@ -148,8 +148,7 @@ class StubExtractionBackend:
                 stub's ``_stub_*`` sentinels; it never enters the live prompt.
 
         Returns:
-            Deterministic extraction output driven by whichever sentinel (if
-            any) is present in ``payload.metadata``.
+            Deterministic extraction output plus no token usage.
 
         Raises:
             RuntimeError: If ``_stub_extract_failed`` is truthy.
@@ -159,15 +158,21 @@ class StubExtractionBackend:
 
         if "_stub_iof_windows" in payload.metadata:
             windows = payload.metadata["_stub_iof_windows"]
-            return ExtractionResponse.model_validate(
-                {"findings": windows.get(str(payload.window_index), [])}
+            return (
+                ExtractionResponse.model_validate(
+                    {"findings": windows.get(str(payload.window_index), [])}
+                ),
+                None,
             )
 
         if "_stub_iof" in payload.metadata:
             if payload.window_index == 0:
-                return ExtractionResponse.model_validate(
-                    {"findings": payload.metadata["_stub_iof"]}
+                return (
+                    ExtractionResponse.model_validate(
+                        {"findings": payload.metadata["_stub_iof"]}
+                    ),
+                    None,
                 )
-            return ExtractionResponse(findings=[])
+            return ExtractionResponse(findings=[]), None
 
-        return ExtractionResponse(findings=[])
+        return ExtractionResponse(findings=[]), None

@@ -11,7 +11,6 @@ from typing import Any, Protocol, TypeVar
 
 from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
-from openai.types.completion_usage import CompletionUsage
 from pydantic import BaseModel
 
 from policy_atlas import tracing
@@ -33,6 +32,7 @@ from policy_atlas.search_prompts import (
     build_reformulate_messages,
     build_suggest_messages,
 )
+from policy_atlas.usage import UsageResult, token_usage_from_provider
 
 WireT = TypeVar("WireT", bound=BaseModel)
 
@@ -45,42 +45,42 @@ class SearchGenerationBackend(Protocol):
         """``"live"`` or ``"stub"``; read-only so wrappers can proxy it."""
         ...
 
-    def generate_queries(self, payload: QueriesPayload) -> SearchQueriesWire:
+    def generate_queries(self, payload: QueriesPayload) -> UsageResult[SearchQueriesWire]:
         """Generate rapid/deep round-1 query fan-out candidates.
 
         Args:
             payload: Scope intent payload for the ``search_queries_v1`` prompt.
 
         Returns:
-            Parsed query wire output.
+            Parsed query wire output plus token usage.
 
         Raises:
             RuntimeError: If the backend cannot produce parsed structured output.
         """
         ...
 
-    def reformulate(self, payload: ReformulatePayload) -> SearchQueriesWire:
+    def reformulate(self, payload: ReformulatePayload) -> UsageResult[SearchQueriesWire]:
         """Generate later-round reformulated queries.
 
         Args:
             payload: Intent plus bounded screened exemplars.
 
         Returns:
-            Parsed reformulation wire output.
+            Parsed reformulation wire output plus token usage.
 
         Raises:
             RuntimeError: If the backend cannot produce parsed structured output.
         """
         ...
 
-    def suggest(self, payload: SuggestPayload) -> SearchSuggestWire:
+    def suggest(self, payload: SuggestPayload) -> UsageResult[SearchSuggestWire]:
         """Suggest likely papers for grounding.
 
         Args:
             payload: Intent plus positive screened exemplars.
 
         Returns:
-            Parsed suggestion wire output.
+            Parsed suggestion wire output plus token usage.
 
         Raises:
             RuntimeError: If the backend cannot produce parsed structured output.
@@ -124,7 +124,7 @@ class OpenAISearchGenerationBackend:
         response_format: type[WireT],
         usage_event: str,
         label: str,
-    ) -> tuple[WireT, CompletionUsage | None]:
+    ) -> UsageResult[WireT]:
         response = self._client.chat.completions.parse(
             model=model,
             messages=messages,
@@ -137,7 +137,7 @@ class OpenAISearchGenerationBackend:
         parsed = response.choices[0].message.parsed
         if parsed is None:
             raise RuntimeError(f"OpenAI {label} response was not parsed.")
-        return parsed, response.usage
+        return parsed, token_usage_from_provider(response.usage)
 
     def _call_wire(
         self,
@@ -149,10 +149,10 @@ class OpenAISearchGenerationBackend:
         usage_event: str,
         trace_name: str,
         label: str,
-    ) -> WireT:
+    ) -> UsageResult[WireT]:
         langfuse_client = self._langfuse_client
 
-        def _update(span: Any, result: tuple[WireT, CompletionUsage | None]) -> None:
+        def _update(span: Any, result: UsageResult[WireT]) -> None:
             wire, usage = result
             span.update(
                 input={"messages": messages},
@@ -164,7 +164,7 @@ class OpenAISearchGenerationBackend:
                 },
             )
 
-        wire, _usage = tracing.traced_call(
+        wire, usage = tracing.traced_call(
             langfuse_client,
             name=trace_name,
             as_type="generation",
@@ -177,16 +177,16 @@ class OpenAISearchGenerationBackend:
             ),
             update=_update,
         )
-        return wire
+        return wire, usage
 
-    def generate_queries(self, payload: QueriesPayload) -> SearchQueriesWire:
+    def generate_queries(self, payload: QueriesPayload) -> UsageResult[SearchQueriesWire]:
         """Generate query fan-out candidates through structured OpenAI output.
 
         Args:
             payload: Scope intent payload for the ``search_queries_v1`` prompt.
 
         Returns:
-            Parsed query wire output.
+            Parsed query wire output plus token usage.
 
         Raises:
             RuntimeError: If the response cannot be parsed.
@@ -201,14 +201,14 @@ class OpenAISearchGenerationBackend:
             label="search query-generation",
         )
 
-    def reformulate(self, payload: ReformulatePayload) -> SearchQueriesWire:
+    def reformulate(self, payload: ReformulatePayload) -> UsageResult[SearchQueriesWire]:
         """Generate reformulated queries through structured OpenAI output.
 
         Args:
             payload: Intent plus bounded screened exemplars.
 
         Returns:
-            Parsed reformulation wire output.
+            Parsed reformulation wire output plus token usage.
 
         Raises:
             RuntimeError: If the response cannot be parsed.
@@ -223,14 +223,14 @@ class OpenAISearchGenerationBackend:
             label="search reformulation",
         )
 
-    def suggest(self, payload: SuggestPayload) -> SearchSuggestWire:
+    def suggest(self, payload: SuggestPayload) -> UsageResult[SearchSuggestWire]:
         """Generate paper suggestions through structured OpenAI output.
 
         Args:
             payload: Intent plus positive screened exemplars.
 
         Returns:
-            Parsed suggestion wire output.
+            Parsed suggestion wire output plus token usage.
 
         Raises:
             RuntimeError: If the response cannot be parsed.
@@ -251,43 +251,49 @@ class StubSearchGenerationBackend:
 
     mode = "stub"
 
-    def generate_queries(self, payload: QueriesPayload) -> SearchQueriesWire:
+    def generate_queries(self, payload: QueriesPayload) -> UsageResult[SearchQueriesWire]:
         """Return a deterministic query set derived from the intent.
 
         Args:
             payload: Scope intent payload.
 
         Returns:
-            Deterministic query wire output.
+            Deterministic query wire output plus no token usage.
         """
         intent = payload.intent.strip()
-        return SearchQueriesWire(
-            queries=[intent, f"{intent} evidence", f"{intent} evaluation"][:3],
-            overton_paraphrases=[f"Evidence about {intent}"],
+        return (
+            SearchQueriesWire(
+                queries=[intent, f"{intent} evidence", f"{intent} evaluation"][:3],
+                overton_paraphrases=[f"Evidence about {intent}"],
+            ),
+            None,
         )
 
-    def reformulate(self, payload: ReformulatePayload) -> SearchQueriesWire:
+    def reformulate(self, payload: ReformulatePayload) -> UsageResult[SearchQueriesWire]:
         """Return a deterministic later-round query variation.
 
         Args:
             payload: Intent plus bounded screened exemplars.
 
         Returns:
-            Deterministic reformulation wire output.
+            Deterministic reformulation wire output plus no token usage.
         """
         intent = payload.intent.strip()
-        return SearchQueriesWire(
-            queries=[f"{intent} further evidence", f"{intent} additional studies"],
-            overton_paraphrases=[f"Further evidence about {intent}"],
+        return (
+            SearchQueriesWire(
+                queries=[f"{intent} further evidence", f"{intent} additional studies"],
+                overton_paraphrases=[f"Further evidence about {intent}"],
+            ),
+            None,
         )
 
-    def suggest(self, payload: SuggestPayload) -> SearchSuggestWire:
+    def suggest(self, payload: SuggestPayload) -> UsageResult[SearchSuggestWire]:
         """Return no suggestions.
 
         Args:
             payload: Intent plus positive screened exemplars; ignored by the stub.
 
         Returns:
-            Empty suggestion wire output.
+            Empty suggestion wire output plus no token usage.
         """
-        return SearchSuggestWire(papers=[])
+        return SearchSuggestWire(papers=[]), None

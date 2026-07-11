@@ -33,6 +33,7 @@ from policy_atlas.facet_grouping import (
 from policy_atlas.facet_values import validate_partition
 from policy_atlas.group import GroupContext, GroupError, group_findings
 from policy_atlas.schema import grouping_result
+from policy_atlas.usage import UsageResult
 
 from .helpers import seed_project_and_run, seed_run, seed_scope
 from .test_group import SeededExtraction, seed_extraction
@@ -58,7 +59,7 @@ class _RecordingStubFacetGroupingBackend:
 
     def partition(
         self, values: list[FacetValueRecord], *, facet: str
-    ) -> PartitionResult:
+    ) -> UsageResult[PartitionResult]:
         self.partition_calls += 1
         self.partition_payloads.append(_copy_values(values))
         self.partition_facets.append(facet)
@@ -70,7 +71,7 @@ class _RecordingStubFacetGroupingBackend:
         *,
         facet: str,
         accepted_groups: list[ProposedGroup],
-    ) -> PartitionResult:
+    ) -> UsageResult[PartitionResult]:
         self.repair_calls += 1
         self.repair_payloads.append(_copy_values(missing_values))
         return self._inner.repair(
@@ -98,11 +99,11 @@ class _SequencedFacetGroupingBackend:
 
     def partition(
         self, values: list[FacetValueRecord], *, facet: str
-    ) -> PartitionResult:
+    ) -> UsageResult[PartitionResult]:
         del facet
         self.partition_calls += 1
         self.partition_payloads.append(_copy_values(values))
-        return self.partition_result
+        return self.partition_result, None
 
     def repair(
         self,
@@ -110,7 +111,7 @@ class _SequencedFacetGroupingBackend:
         *,
         facet: str,
         accepted_groups: list[ProposedGroup],
-    ) -> PartitionResult:
+    ) -> UsageResult[PartitionResult]:
         del facet
         self.repair_calls += 1
         self.repair_payloads.append(_copy_values(missing_values))
@@ -119,7 +120,7 @@ class _SequencedFacetGroupingBackend:
             raise AssertionError("unexpected repair call")
         if isinstance(self.repair_result, BaseException):
             raise self.repair_result
-        return self.repair_result
+        return self.repair_result, None
 
 
 def _copy_values(values: list[FacetValueRecord]) -> list[FacetValueRecord]:
@@ -206,12 +207,12 @@ def _seed_three_value_extraction(
                     {
                         "intervention": "Alpha service",
                         "outcome": "Outcome A",
-                        "effect_direction": "positive",
+                        "effect_direction": "increase",
                     },
                     {
                         "intervention": "Beta service",
                         "outcome": "Outcome B",
-                        "effect_direction": "negative",
+                        "effect_direction": "decrease",
                     },
                     {
                         "intervention": "Gamma service",
@@ -740,7 +741,7 @@ def test_socket_deny_group_round_trip(
                     {
                         "intervention": "Alpha coaching",
                         "outcome": "Attendance",
-                        "effect_direction": "positive",
+                        "effect_direction": "increase",
                     },
                     {
                         "intervention": "Alpha mentoring",
@@ -805,12 +806,12 @@ def test_key_hygiene_canary_absent_from_summary_and_grouping_row(
                     {
                         "intervention": "Alpha coaching",
                         "outcome": "Attendance",
-                        "effect_direction": "positive",
+                        "effect_direction": "increase",
                     },
                     {
                         "intervention": "Beta mentoring",
                         "outcome": "Retention",
-                        "effect_direction": "negative",
+                        "effect_direction": "decrease",
                     },
                 ],
             )

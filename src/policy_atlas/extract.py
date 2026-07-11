@@ -2,7 +2,7 @@
 
 Per selected document: load the selection row, resolve the extraction basis
 (full-text chunks or the envelope abstract), check the durable memo, window and
-fan out the ``extract_iof_v1`` calls, validate / verify / dedup the emitted
+fan out the ``extract_iof_v5`` calls, validate / verify / dedup the emitted
 records, then write the durable ``source_extraction_record`` +
 ``intervention_outcome_finding`` rows and, last of all, the run-scoped
 ``extraction_result`` roll-up.
@@ -43,6 +43,13 @@ from policy_atlas.extraction_records import (
     IOFRecord,
     IOFRecordWire,
 )
+from policy_atlas.finding_vetter import (
+    FINDING_VETTER_MAX_OUTPUT_TOKENS,
+    FINDING_VETTER_PROMPT_VERSION,
+    FindingVetterBackend,
+    VetterVerdictWire,
+    validate_verdict_coverage,
+)
 from policy_atlas.quote_verify import (
     FIELD_RULES_VERSION,
     QUOTE_VERIFIER_VERSION,
@@ -64,6 +71,7 @@ from policy_atlas.schema import (
     source_extraction_record,
     source_snapshot,
 )
+from policy_atlas.usage import TokenUsage, UsageAccumulator
 from policy_atlas.windowing import greedy_windows as _shared_greedy_windows
 
 log = structlog.get_logger()
@@ -77,6 +85,10 @@ OVERSIZE_POLICY = "char_split_v1"
 EXTRACT_RETRY_CAP = 1
 MAX_CONCURRENT_EXTRACT = 4
 EXTRACTION_PROFILE = PROFILE_ID
+
+# 018 C5 finding vetter: component.completed payload record cap (flag-not-drop —
+# every flagged finding is counted; only the displayed record list is capped).
+VETTED_OUT_RECORDS_CAP = 50
 
 
 class ExtractError(Exception):
@@ -111,7 +123,9 @@ class ExtractContext:
     selection_run_id: uuid.UUID
 
 
-def extraction_fingerprint(mode: str) -> tuple[str, dict[str, Any]]:
+def extraction_fingerprint(
+    mode: str, *, finding_vetter_active: bool = False
+) -> tuple[str, dict[str, Any]]:
     """Build the extraction fingerprint and its canonical component map.
 
     The digest is the **full** sha256 hex (no truncation — the column is TEXT)
@@ -124,6 +138,8 @@ def extraction_fingerprint(mode: str) -> tuple[str, dict[str, Any]]:
     Args:
         mode: The backend mode (``"live"`` or ``"stub"``), from
             ``backend.mode`` — a stub result can never masquerade as a live one.
+        finding_vetter_active: Whether a finding-vetter backend was supplied. Vetted
+            and unvetted runs never reuse each other's records (018 C5).
 
     Returns:
         A ``(fingerprint_hex, components)`` pair. ``components`` is recorded
@@ -146,6 +162,14 @@ def extraction_fingerprint(mode: str) -> tuple[str, dict[str, Any]]:
         },
         "max_output_tokens": EXTRACT_MAX_OUTPUT_TOKENS,
         "retry_cap": EXTRACT_RETRY_CAP,
+        "finding_vetter": (
+            {
+                "prompt": FINDING_VETTER_PROMPT_VERSION,
+                "max_output_tokens": FINDING_VETTER_MAX_OUTPUT_TOKENS,
+            }
+            if finding_vetter_active
+            else None
+        ),
     }
     canonical = json.dumps(components, sort_keys=True, separators=(",", ":"))
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -202,6 +226,11 @@ class _Doc:
     invalid_dropped: int = 0
     dedup_collapsed: int = 0
     quote_unverified: int = 0
+
+    # Finding vetter (018 C5) — flag-not-drop accounting for this document.
+    vetted_out_count: int = 0
+    vetted_out_records: list[dict[str, Any]] = field(default_factory=list)
+    vetting_failed: bool = False
 
     @property
     def title(self) -> str:
@@ -542,7 +571,12 @@ def _run_windows(
     *,
     extraction_backend: ExtractionBackend,
 ) -> tuple[
-    dict[int, dict[int, list[IOFRecordWire]]], dict[int, Exception], int, _ExtractCallBudget, int
+    dict[int, dict[int, list[IOFRecordWire]]],
+    dict[int, Exception],
+    int,
+    _ExtractCallBudget,
+    int,
+    dict[str, int],
 ]:
     """Run every extractable window through the backend with one retry per window.
 
@@ -567,6 +601,7 @@ def _run_windows(
 
     results: dict[tuple[int, int], list[IOFRecordWire]] = {}
     errors: dict[tuple[int, int], Exception] = {}
+    usage_totals = UsageAccumulator()
 
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_EXTRACT) as executor:
         submitted: list[tuple[tuple[int, int], Future[Any]]] = []
@@ -578,7 +613,9 @@ def _run_windows(
         wait([future for _, future in submitted])
         for key, future in submitted:
             try:
-                results[key] = _scrub_findings(list(future.result().findings))
+                response, usage = future.result()
+                results[key] = _scrub_findings(list(response.findings))
+                usage_totals.add(usage)
             except Exception as exc:  # noqa: BLE001 — reduced to a type name for the record
                 errors[key] = exc
 
@@ -588,9 +625,9 @@ def _run_windows(
             continue
         retry_count += 1
         try:
-            results[key] = _scrub_findings(
-                list(extraction_backend.extract(payloads[key]).findings)
-            )
+            response, usage = extraction_backend.extract(payloads[key])
+            results[key] = _scrub_findings(list(response.findings))
+            usage_totals.add(usage)
         except Exception as exc:  # noqa: BLE001
             errors[key] = exc
         else:
@@ -604,7 +641,7 @@ def _run_windows(
     for doc_index, window_index in sorted(errors):
         doc_errors.setdefault(doc_index, errors[(doc_index, window_index)])
 
-    return per_doc, doc_errors, baseline, budget, retry_count
+    return per_doc, doc_errors, baseline, budget, retry_count, usage_totals.payload()
 
 
 # --- Per-document pipeline --------------------------------------------------
@@ -689,6 +726,96 @@ def _process_doc(doc: _Doc, window_findings: dict[int, list[IOFRecordWire]]) -> 
     doc.quote_unverified = quote_unverified
 
 
+# --- Finding vetter (018 C5) --------------------------------------------------
+
+
+def _judge_payload_entry(index: int, record: IOFRecord) -> dict[str, Any]:
+    """Build one dedup survivor's id-keyed judge input entry."""
+    return {
+        "index": index,
+        "intervention": record.intervention,
+        "outcome": record.outcome,
+        "effect_direction": record.effect_direction,
+        "estimate_level": record.estimate_level,
+        "stratum_qualifiers": [
+            {"type": stratum.type, "value": stratum.value}
+            for stratum in record.stratum_qualifiers
+        ],
+        "quotes": [anchor.quote for anchor in record.anchors],
+    }
+
+
+def _apply_finding_vetter(
+    doc: _Doc, finding_vetter_backend: FindingVetterBackend
+) -> TokenUsage | None:
+    """Vet one document's dedup survivors, excluding clear non-findings (flag-not-drop).
+
+    Runs AFTER ``dedup_records`` and BEFORE the IOF insert (``doc.survivors``
+    etc. are mutated in place, so ``_write_docs`` never sees excluded
+    findings). A judge call/parse/coverage failure is fail-open: the document
+    persists unfiltered and ``doc.vetting_failed`` is set for accounting —
+    the filter is an enhancement, never an extraction blocker.
+
+    Args:
+        doc: An ``extracted`` document with dedup survivors already resolved.
+        finding_vetter_backend: The judge seam.
+
+    Returns:
+        The judge call's token usage, or ``None`` on failure or no usage.
+    """
+    findings = [_judge_payload_entry(index, record) for index, record in enumerate(doc.survivors)]
+    try:
+        response, usage = finding_vetter_backend.judge({"findings": findings})
+        validate_verdict_coverage(findings, response.verdicts)
+    except Exception as exc:  # noqa: BLE001 — reduced to a type name for the record
+        doc.vetting_failed = True
+        log.warning(
+            "extract.vetting_failed", pss_id=str(doc.pss_id), error=type(exc).__name__
+        )
+        return None
+
+    vetted_out_by_index: dict[int, VetterVerdictWire] = {
+        verdict.finding_index: verdict
+        for verdict in response.verdicts
+        if verdict.verdict == "flagged"
+    }
+    if not vetted_out_by_index:
+        return usage
+
+    kept_survivors: list[IOFRecord] = []
+    kept_groundings: list[list[dict[str, Any]]] = []
+    kept_coverage: list[dict[str, str]] = []
+    for index, (record, grounding, coverage) in enumerate(
+        zip(doc.survivors, doc.groundings, doc.coverage_by_survivor, strict=True)
+    ):
+        verdict = vetted_out_by_index.get(index)
+        if verdict is None:
+            kept_survivors.append(record)
+            kept_groundings.append(grounding)
+            kept_coverage.append(coverage)
+            continue
+        doc.vetted_out_records.append(
+            {
+                "intervention": record.intervention,
+                "outcome": record.outcome,
+                "flag_class": verdict.flag_class,
+                "reason": verdict.reason,
+            }
+        )
+
+    doc.vetted_out_count = len(doc.vetted_out_records)
+    doc.survivors = kept_survivors
+    doc.groundings = kept_groundings
+    doc.coverage_by_survivor = kept_coverage
+    doc.finding_count = len(kept_survivors)
+    if not kept_survivors:
+        # Every finding was vetted out: the doc contributes no usable
+        # evidence, so its status says so honestly — `vetted_out_count`
+        # preserves the distinction from a genuinely-empty extraction.
+        doc.status = "no_findings"
+    return usage
+
+
 # --- Writes -----------------------------------------------------------------
 
 
@@ -755,8 +882,8 @@ def _write_docs(
 # --- Summary / invariants ---------------------------------------------------
 
 
-def _doc_summary(doc: _Doc) -> dict[str, Any]:
-    return {
+def _doc_summary(doc: _Doc, *, finding_vetter_active: bool) -> dict[str, Any]:
+    summary: dict[str, Any] = {
         "pss_id": str(doc.pss_id),
         "status": doc.status,
         "basis": doc.basis,
@@ -765,6 +892,9 @@ def _doc_summary(doc: _Doc) -> dict[str, Any]:
         "error": doc.error,
         "extraction_record_id": str(doc.extraction_record_id),
     }
+    if finding_vetter_active:
+        summary["vetted_out"] = doc.vetted_out_count
+    return summary
 
 
 def _assert_invariants(docs: list[_Doc], *, selected_count: int) -> None:
@@ -797,6 +927,8 @@ def _build_summary(
     budget_maximum: int,
     budget_used: int,
     retry_count: int,
+    usage_totals: dict[str, int],
+    finding_vetter_active: bool,
 ) -> dict[str, Any]:
     selected = len(docs)
     counts = {
@@ -807,6 +939,8 @@ def _build_summary(
         "fresh": sum(1 for doc in docs if not doc.reused),
         "reused": sum(1 for doc in docs if doc.reused),
     }
+    if finding_vetter_active:
+        counts["vetting_failed"] = sum(1 for doc in docs if doc.vetting_failed)
     findings = {
         "total": sum(doc.finding_count for doc in docs if doc.status == "extracted"),
         "quote_unverified": sum(doc.quote_unverified for doc in docs if not doc.reused),
@@ -832,11 +966,30 @@ def _build_summary(
                 field_coverage.setdefault(name, {})
                 field_coverage[name][marker] = field_coverage[name].get(marker, 0) + 1
 
+    vetted_out: dict[str, Any] | None = None
+    if finding_vetter_active:
+        vetted_out_by_class: dict[str, int] = {}
+        vetted_out_records: list[dict[str, Any]] = []
+        for doc in docs:
+            for record in doc.vetted_out_records:
+                flag_class = cast("str", record["flag_class"])
+                vetted_out_by_class[flag_class] = vetted_out_by_class.get(flag_class, 0) + 1
+                vetted_out_records.append(record)
+        vetted_out = {
+            "total": len(vetted_out_records),
+            "by_class": vetted_out_by_class,
+            "records": vetted_out_records[:VETTED_OUT_RECORDS_CAP],
+        }
+        if len(vetted_out_records) > VETTED_OUT_RECORDS_CAP:
+            vetted_out["records_truncated"] = True
+
     flags: list[str] = []
     if counts["failed"] > 0:
         flags.append("extraction_failures")
     if selected == 0:
         flags.append("empty_selection")
+    if vetted_out is not None and vetted_out["total"] > 0:
+        flags.append("vetted_out_present")
     # thin_extraction is deliberately NOT computed in v1 (contract "where computed").
 
     provenance = {
@@ -850,8 +1003,8 @@ def _build_summary(
         },
         "retry_count": retry_count,
     }
-    return {
-        "docs": [_doc_summary(doc) for doc in docs],
+    summary: dict[str, Any] = {
+        "docs": [_doc_summary(doc, finding_vetter_active=finding_vetter_active) for doc in docs],
         "counts": counts,
         "findings": findings,
         "basis": basis,
@@ -859,7 +1012,11 @@ def _build_summary(
         "selection_run_id": str(selection_run_id),
         "flags": flags,
         "provenance": provenance,
+        "usage_totals": usage_totals,
     }
+    if vetted_out is not None:
+        summary["vetted_out"] = vetted_out
+    return summary
 
 
 # --- Public entry point -----------------------------------------------------
@@ -872,6 +1029,7 @@ def extract_scope(
     run_id: uuid.UUID,
     context: ExtractContext,
     extraction_backend: ExtractionBackend,
+    finding_vetter_backend: FindingVetterBackend | None = None,
 ) -> dict[str, Any]:
     """Extract intervention-outcome findings for one evidence scope's selection.
 
@@ -886,6 +1044,9 @@ def extract_scope(
         run_id: Run writing the extraction result.
         context: Scope-level extract input (carries the explicit selection run).
         extraction_backend: The extraction seam (stub by default; live on key).
+        finding_vetter_backend: The 018 C5 post-extract finding vetter (per-doc, after
+            dedup, before the IOF insert). ``None`` (the default) turns judging
+            off entirely — byte-identical behaviour to the pre-018-C5 pipeline.
 
     Returns:
         The extraction summary payload for ``component.completed``.
@@ -894,7 +1055,10 @@ def extract_scope(
         ExtractError: If the selection row is missing, a selected pss lacks its
             snapshot row, or a coverage invariant fails.
     """
-    fingerprint, components = extraction_fingerprint(extraction_backend.mode)
+    finding_vetter_active = finding_vetter_backend is not None
+    fingerprint, components = extraction_fingerprint(
+        extraction_backend.mode, finding_vetter_active=finding_vetter_active
+    )
     selected = _load_selection(
         conn,
         project_id=project_id,
@@ -915,6 +1079,8 @@ def extract_scope(
             budget_maximum=0,
             budget_used=0,
             retry_count=0,
+            usage_totals=UsageAccumulator().payload(),
+            finding_vetter_active=finding_vetter_active,
         )
         _write_rollup(
             conn,
@@ -938,9 +1104,11 @@ def extract_scope(
         _resolve_basis(doc)
     _apply_memo(conn, project_id=project_id, fingerprint=fingerprint, docs=docs)
 
-    per_doc, doc_errors, baseline, budget, retry_count = _run_windows(
+    per_doc, doc_errors, baseline, budget, retry_count, window_usage_totals = _run_windows(
         docs, extraction_backend=extraction_backend
     )
+    usage_accumulator = UsageAccumulator()
+    usage_accumulator.add_payload(window_usage_totals)
     for doc_index, doc in enumerate(docs):
         if not doc.extractable:
             continue
@@ -952,6 +1120,9 @@ def extract_scope(
             log.info("extract.doc_failed", pss_id=str(doc.pss_id), error=doc.error)
             continue
         _process_doc(doc, per_doc.get(doc_index, {}))
+        if finding_vetter_backend is not None and doc.status == "extracted" and doc.survivors:
+            usage_accumulator.add(_apply_finding_vetter(doc, finding_vetter_backend))
+    usage_totals = usage_accumulator.payload()
 
     # Asserted BEFORE any row is written: the harness catches without rollback,
     # so a violation raising here must precede the writes it would indict.
@@ -975,6 +1146,8 @@ def extract_scope(
         budget_maximum=budget.maximum,
         budget_used=budget.used,
         retry_count=retry_count,
+        usage_totals=usage_totals,
+        finding_vetter_active=finding_vetter_active,
     )
     # The roll-up is the LAST fallible statement (the 010 pattern): the harness
     # catches without rollback, so nothing may fail after this insert.

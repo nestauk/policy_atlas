@@ -13,16 +13,17 @@ from pydantic import BaseModel, ConfigDict
 
 from policy_atlas.embeddings import resolve_openai_client
 from policy_atlas.tags import has_control_character
+from policy_atlas.usage import UsageResult, token_usage_from_provider
 
 log = structlog.get_logger()
 
 PROMPT_VERSION = "characterise_grouping_v1"
-DISCOVERY_MODEL = "gpt-5-mini"
+DISCOVERY_MODEL = "gpt-5.4-mini"
 # Plan pinned gpt-5-nano; flipped to gpt-5-mini on live evidence (2026-07-06): nano
 # emits an empty assignments list on realistic 25-doc batches at any reasoning effort
 # (16K reasoning tokens -> `{"assignments":[]}`), mini assigns 25/25 cleanly. Deviation
 # flagged in verification.md; the nano-class pin was plan-gate detail, not contract.
-ASSIGNMENT_MODEL = "gpt-5-mini"
+ASSIGNMENT_MODEL = "gpt-5.4-mini"
 BATCH_SIZE = 40
 MAX_CONCURRENT_BATCHES = 4
 DISCOVERY_RETRY_CAP = 1
@@ -254,7 +255,7 @@ class ThemeGroupingBackend(Protocol):
         intent: str,
         min_themes: int,
         max_themes: int,
-    ) -> list[Theme]:
+    ) -> UsageResult[list[Theme]]:
         """Discover candidate themes for a document set.
 
         Args:
@@ -264,11 +265,13 @@ class ThemeGroupingBackend(Protocol):
             max_themes: Requested maximum theme count.
 
         Returns:
-            Raw structurally parsed themes.
+            Raw structurally parsed themes plus token usage.
         """
         ...
 
-    def assign(self, batch: list[GroupingDoc], *, themes: list[Theme]) -> dict[str, str]:
+    def assign(
+        self, batch: list[GroupingDoc], *, themes: list[Theme]
+    ) -> UsageResult[dict[str, str]]:
         """Assign one batch of documents to fixed themes.
 
         Args:
@@ -276,7 +279,8 @@ class ThemeGroupingBackend(Protocol):
             themes: Fixed theme list.
 
         Returns:
-            Mapping from document id to a theme name or ``UNCLUSTERED``.
+            Mapping from document id to a theme name or ``UNCLUSTERED``, plus
+            token usage.
         """
         ...
 
@@ -309,7 +313,7 @@ class OpenAIThemeGroupingBackend:
         intent: str,
         min_themes: int,
         max_themes: int,
-    ) -> list[Theme]:
+    ) -> UsageResult[list[Theme]]:
         """Discover candidate themes through structured OpenAI output.
 
         Args:
@@ -319,7 +323,7 @@ class OpenAIThemeGroupingBackend:
             max_themes: Requested maximum theme count.
 
         Returns:
-            Raw structurally parsed themes.
+            Raw structurally parsed themes plus token usage.
 
         Raises:
             RuntimeError: If the response cannot be parsed into the expected shape.
@@ -347,12 +351,17 @@ class OpenAIThemeGroupingBackend:
         parsed = response.choices[0].message.parsed
         if parsed is None:
             raise RuntimeError("OpenAI discovery response was not parsed.")
-        return [
-            {"name": theme.name, "description": theme.description}
-            for theme in parsed.themes
-        ]
+        return (
+            [
+                {"name": theme.name, "description": theme.description}
+                for theme in parsed.themes
+            ],
+            token_usage_from_provider(response.usage),
+        )
 
-    def assign(self, batch: list[GroupingDoc], *, themes: list[Theme]) -> dict[str, str]:
+    def assign(
+        self, batch: list[GroupingDoc], *, themes: list[Theme]
+    ) -> UsageResult[dict[str, str]]:
         """Assign documents through structured OpenAI output.
 
         Args:
@@ -361,7 +370,8 @@ class OpenAIThemeGroupingBackend:
 
         Returns:
             Mapping from document id to a theme name or ``UNCLUSTERED``. Conflicting
-            duplicate ids are dropped so callers naturally see them as residue.
+            duplicate ids are dropped so callers naturally see them as residue,
+            plus token usage.
 
         Raises:
             RuntimeError: If the response cannot be parsed into the expected shape.
@@ -412,7 +422,7 @@ class OpenAIThemeGroupingBackend:
                 conflict_count=conflict_count,
                 duplicate_same_theme_count=duplicate_same_theme_count,
             )
-        return assignments
+        return assignments, token_usage_from_provider(response.usage)
 
 
 def _stub_marker(abstract: str | None) -> str | None:
@@ -451,7 +461,7 @@ class StubThemeGroupingBackend:
         intent: str,
         min_themes: int,
         max_themes: int,
-    ) -> list[Theme]:
+    ) -> UsageResult[list[Theme]]:
         """Discover themes from stub markers or title keys.
 
         Args:
@@ -461,7 +471,7 @@ class StubThemeGroupingBackend:
             max_themes: Maximum themes to return.
 
         Returns:
-            Deterministic stub themes.
+            Deterministic stub themes plus no token usage.
         """
         del intent, min_themes
         values: list[str] = []
@@ -471,12 +481,20 @@ class StubThemeGroupingBackend:
         if not values:
             for doc in docs:
                 _append_distinct(values, _title_key(doc["title"]), seen)
-        return [
-            {"name": value, "description": f"Documents grouped by stub key '{value}'"}
-            for value in values[:max_themes]
-        ]
+        return (
+            [
+                {
+                    "name": value,
+                    "description": f"Documents grouped by stub key '{value}'",
+                }
+                for value in values[:max_themes]
+            ],
+            None,
+        )
 
-    def assign(self, batch: list[GroupingDoc], *, themes: list[Theme]) -> dict[str, str]:
+    def assign(
+        self, batch: list[GroupingDoc], *, themes: list[Theme]
+    ) -> UsageResult[dict[str, str]]:
         """Assign each document to a stub theme or ``UNCLUSTERED``.
 
         Args:
@@ -484,7 +502,8 @@ class StubThemeGroupingBackend:
             themes: Fixed theme list.
 
         Returns:
-            Exhaustive mapping from every batch id to a theme name or ``UNCLUSTERED``.
+            Exhaustive mapping from every batch id to a theme name or
+            ``UNCLUSTERED``, plus no token usage.
         """
         theme_names = {theme["name"] for theme in themes}
         assignments: dict[str, str] = {}
@@ -498,4 +517,4 @@ class StubThemeGroupingBackend:
                 assignments[doc["id"]] = title_key
             else:
                 assignments[doc["id"]] = UNCLUSTERED
-        return assignments
+        return assignments, None

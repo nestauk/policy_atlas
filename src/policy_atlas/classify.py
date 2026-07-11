@@ -31,6 +31,7 @@ from policy_atlas.schema import (
 )
 from policy_atlas.screen import effective_screen_rows
 from policy_atlas.tags import has_control_character, insert_source_tags
+from policy_atlas.usage import UsageAccumulator
 
 log = structlog.get_logger()
 
@@ -222,22 +223,25 @@ def _run_classification_calls(
     docs: list[_ClassifyDoc],
     *,
     classification_backend: ClassificationBackend,
-) -> tuple[dict[int, ClassifyWire], dict[int, Exception], int]:
+) -> tuple[dict[int, ClassifyWire], dict[int, Exception], int, dict[str, int]]:
     baseline = len(docs)
     maximum = baseline * (1 + CLASSIFY_RETRY_CAP)
     log.info("classify.call_budget", baseline=baseline, maximum=maximum)
 
     results: dict[int, ClassifyWire] = {}
     errors: dict[int, Exception] = {}
+    usage_totals = UsageAccumulator()
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_CLASSIFY) as executor:
-        submitted: list[tuple[int, Future[ClassifyWire]]] = [
+        submitted: list[tuple[int, Future[Any]]] = [
             (doc_index, executor.submit(classification_backend.classify, doc.payload))
             for doc_index, doc in enumerate(docs)
         ]
         wait([future for _, future in submitted])
         for doc_index, future in submitted:
             try:
-                results[doc_index] = future.result()
+                wire, usage = future.result()
+                results[doc_index] = wire
+                usage_totals.add(usage)
             except Exception as exc:  # noqa: BLE001 — reduced to type name after retry.
                 errors[doc_index] = exc
 
@@ -245,13 +249,15 @@ def _run_classification_calls(
     for doc_index in list(errors):
         retries += 1
         try:
-            results[doc_index] = classification_backend.classify(docs[doc_index].payload)
+            wire, usage = classification_backend.classify(docs[doc_index].payload)
+            results[doc_index] = wire
+            usage_totals.add(usage)
         except Exception as exc:  # noqa: BLE001
             errors[doc_index] = exc
         else:
             del errors[doc_index]
 
-    return results, errors, retries
+    return results, errors, retries, usage_totals.payload()
 
 
 def _bounded_tags(tags: list[str]) -> tuple[list[str], int]:
@@ -320,7 +326,7 @@ def classify_sources(
     tags_written = 0
     tags_rejected = 0
 
-    results, errors, retries = _run_classification_calls(
+    results, errors, retries, usage_totals = _run_classification_calls(
         docs, classification_backend=classification_backend
     )
 
@@ -407,4 +413,5 @@ def classify_sources(
         "tags_written": tags_written,
         "tags_rejected": tags_rejected,
         "retries": retries,
+        "usage_totals": usage_totals,
     }

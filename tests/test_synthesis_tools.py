@@ -13,11 +13,12 @@ from policy_atlas.embeddings import EMBEDDING_DIMENSIONS, EMBEDDING_PROFILE, UNI
 from policy_atlas.grounding import content_hash
 from policy_atlas.schema import chunk as chunk_table
 from policy_atlas.schema import chunk_embedding, project_source_snapshot
-from policy_atlas.synthesis_backend import SectionClaimsWire
+from policy_atlas.synthesis_backend import SectionProseWire
 from policy_atlas.synthesis_tools import (
     BOOST_CLAMP_MAX,
     BOOST_CLAMP_MIN,
     CANDIDATE_POOL_PER_LEG,
+    READ_CALLS_PER_TURN_CAP,
     RETRIEVAL_UNIT_CAP,
     SECTION_TURN_CAP,
     SYNTH_CHUNK_TOP_K,
@@ -37,12 +38,14 @@ from policy_atlas.synthesis_tools import (
     parse_synthesis_directive,
     run_section_loop,
 )
+from policy_atlas.usage import UsageResult
 from tests.helpers import (
     now,
     seed_project_and_run,
     seed_scope,
     seed_screening_result,
     seed_select_doc,
+    seed_source,
 )
 
 
@@ -91,7 +94,7 @@ class ScriptedBackend:
         transcript: list[dict[str, Any]],
         *,
         force_emit: bool,
-    ) -> dict[str, Any]:
+    ) -> UsageResult[dict[str, Any]]:
         self.calls.append({
             "seed": seed,
             "transcript_len": len(transcript),
@@ -99,13 +102,13 @@ class ScriptedBackend:
         })
         index = len(self.calls) - 1
         if index >= len(self.turns):
-            return {"tool_calls": [], "claims": SectionClaimsWire(claims=[])}
-        return self.turns[index]
+            return {"tool_calls": [], "claims": SectionProseWire(prose="", claims=[])}, None
+        return self.turns[index], None
 
 
-def _claims(text: str = "x") -> SectionClaimsWire:
-    return SectionClaimsWire.model_validate(
-        {"claims": [{"claim_type": "reasoning", "text": text}]}
+def _claims(text: str = "x") -> SectionProseWire:
+    return SectionProseWire.model_validate(
+        {"prose": text, "claims": [{"claim_type": "reasoning", "text": text}]}
     )
 
 
@@ -572,15 +575,8 @@ def test_loop_runner_unknown_tool_rejected_and_not_executed() -> None:
     assert result["transcript"][0]["result"] == {"error": "unknown tool 'missing'"}
 
 
-def test_loop_runner_rejects_two_tool_calls_and_validation_errors() -> None:
+def test_loop_runner_rejects_validation_errors() -> None:
     backend = ScriptedBackend([
-        {
-            "tool_calls": [
-                {"tool": "ok", "arguments": {}},
-                {"tool": "ok", "arguments": {}},
-            ],
-            "claims": None,
-        },
         {"tool_calls": [{"tool": "bad", "arguments": {"x": 1}}], "claims": None},
         {"tool_calls": [], "claims": _claims()},
     ])
@@ -589,10 +585,94 @@ def test_loop_runner_rejects_two_tool_calls_and_validation_errors() -> None:
         raise ToolValidationError("bad args")
 
     result = run_section_loop(backend, seed={}, tools={"bad": bad})
-    assert result["rejected_tool_calls"] == 2
+    assert result["rejected_tool_calls"] == 1
     assert result["tool_call_counts"] == {}
-    assert result["transcript"][0]["result"] == {"error": "one tool call per turn"}
-    assert result["transcript"][1]["result"] == {"error": "bad args"}
+    assert result["transcript"][0]["result"] == {"error": "bad args"}
+
+
+def test_loop_runner_caps_read_calls_per_turn() -> None:
+    """Calls past READ_CALLS_PER_TURN_CAP in one turn are refused with an
+    error result and counted rejected — the prompt's "up to 6" rule is
+    code-enforced, so one degenerate turn cannot blow the retrieval envelope."""
+    executed: list[int] = []
+
+    def ok(args: dict[str, Any]) -> dict[str, Any]:
+        executed.append(int(args["i"]))
+        return {}
+
+    overflow = READ_CALLS_PER_TURN_CAP + 3
+    backend = ScriptedBackend([
+        {
+            "tool_calls": [
+                {"tool": "ok", "arguments": {"i": i}} for i in range(overflow)
+            ],
+            "claims": None,
+        },
+        {"tool_calls": [], "claims": _claims()},
+    ])
+    result = run_section_loop(backend, seed={}, tools={"ok": ok})
+    assert executed == list(range(READ_CALLS_PER_TURN_CAP))
+    assert result["tool_call_counts"] == {"ok": READ_CALLS_PER_TURN_CAP}
+    assert result["rejected_tool_calls"] == 3
+    refused = result["transcript"][READ_CALLS_PER_TURN_CAP]["result"]
+    assert "read batch limit" in refused["error"]
+
+
+def test_loop_runner_executes_multiple_read_calls_in_one_turn() -> None:
+    """A single turn may batch several independent read-tool calls (018 C2
+    round 3 cost rider): all execute, in order, within the same turn."""
+    backend = ScriptedBackend([
+        {
+            "tool_calls": [
+                {"tool": "ok", "arguments": {"i": 0}},
+                {"tool": "ok", "arguments": {"i": 1}},
+                {"tool": "ok", "arguments": {"i": 2}},
+            ],
+            "claims": None,
+        },
+        {"tool_calls": [], "claims": _claims()},
+    ])
+    result = run_section_loop(
+        backend, seed={}, tools={"ok": lambda args: {"ok": args["i"]}}
+    )
+    assert result["turns_used"] == 2
+    assert len(result["transcript"]) == 3
+    assert [entry["result"] for entry in result["transcript"]] == [
+        {"ok": 0},
+        {"ok": 1},
+        {"ok": 2},
+    ]
+    assert result["tool_call_counts"] == {"ok": 3}
+    assert result["rejected_tool_calls"] == 0
+
+
+def test_loop_runner_one_valid_read_and_one_unknown_tool_in_same_turn() -> None:
+    """A batched turn mixing a valid read with an unknown tool executes the
+    valid call and rejects only the unknown one — the loop continues."""
+    called: list[int] = []
+
+    def known(args: dict[str, Any]) -> dict[str, Any]:
+        called.append(args["i"])
+        return {"ok": args["i"]}
+
+    backend = ScriptedBackend([
+        {
+            "tool_calls": [
+                {"tool": "known", "arguments": {"i": 0}},
+                {"tool": "missing", "arguments": {}},
+            ],
+            "claims": None,
+        },
+        {"tool_calls": [], "claims": _claims()},
+    ])
+    result = run_section_loop(backend, seed={}, tools={"known": known})
+    assert called == [0]
+    assert result["rejected_tool_calls"] == 1
+    assert result["tool_call_counts"] == {"known": 1}
+    assert len(result["transcript"]) == 2
+    assert result["transcript"][0]["result"] == {"ok": 0}
+    assert result["transcript"][1]["result"] == {"error": "unknown tool 'missing'"}
+    assert result["turns_used"] == 2
 
 
 def test_loop_runner_rejects_tool_calls_on_forced_emit_turn() -> None:
@@ -678,7 +758,7 @@ def test_loop_runner_malformed_emission_consumes_turn_and_recovers() -> None:
     """A MalformedEmissionError is a turn-consuming error exchange (the model
     reads the bounded error as data and re-emits); on the forced final turn it
     is a structural failure, never an extension."""
-    from policy_atlas.synthesis_backend import SectionClaimsWire
+    from policy_atlas.synthesis_backend import SectionProseWire
     from policy_atlas.synthesis_tools import (
         MalformedEmissionError,
         run_section_loop,
@@ -693,13 +773,13 @@ def test_loop_runner_malformed_emission_consumes_turn_and_recovers() -> None:
             transcript: list[ToolExchange],
             *,
             force_emit: bool,
-        ) -> Any:
+        ) -> UsageResult[Any]:
             del seed
             if not transcript:
                 raise MalformedEmissionError("gap.sparsity: Input should be an object")
-            assert transcript[0]["tool"] == "emit_claims"
+            assert transcript[0]["tool"] == "emit_section"
             assert "invalid" in transcript[0]["result"]["error"]
-            return {"tool_calls": [], "claims": SectionClaimsWire(claims=[])}
+            return {"tool_calls": [], "claims": SectionProseWire(prose="", claims=[])}, None
 
     result = run_section_loop(_Backend(), seed={}, tools={})
     assert result["claims"] is not None
@@ -715,7 +795,7 @@ def test_loop_runner_malformed_emission_consumes_turn_and_recovers() -> None:
             transcript: list[ToolExchange],
             *,
             force_emit: bool,
-        ) -> Any:
+        ) -> UsageResult[Any]:
             del seed, transcript, force_emit
             raise MalformedEmissionError("still malformed")
 
@@ -836,3 +916,255 @@ def test_build_retrieval_scope_exposes_abstract_basis_search_chunks(
     assert scope.chunks[str(chunk_id)]["text_basis"] == "abstract_only"
     assert result["chunks"][0]["chunk_record_id"] == str(chunk_id)
     assert result["chunks"][0]["text_basis"] == "abstract_only"
+
+
+def _seed_chunk_and_embed(
+    conn: Connection, *, snapshot_id: uuid.UUID, content: str
+) -> uuid.UUID:
+    chunk_id = uuid.uuid4()
+    conn.execute(
+        chunk_table.insert().values(
+            chunk_id=chunk_id,
+            source_snapshot_id=snapshot_id,
+            sequence=0,
+            content=content,
+            content_hash=content_hash(content),
+            locator={},
+            segmentation_policy="manual_v1",
+            created_at=now(),
+        )
+    )
+    conn.execute(
+        chunk_embedding.insert().values(
+            chunk_embedding_id=uuid.uuid4(),
+            chunk_id=chunk_id,
+            embedding_profile=EMBEDDING_PROFILE,
+            unit_policy=UNIT_POLICY,
+            unit_index=0,
+            unit_locator={"start": 0, "end": len(content)},
+            vector=_vector(1.0),
+            created_at=now(),
+        )
+    )
+    return chunk_id
+
+
+def test_search_chunks_result_carries_default_metadata_set_present_and_absent(
+    conn: Connection,
+) -> None:
+    """ADR 0015 §8 / B-B3: chunk search results carry the owner-adopted default
+    metadata set (year, evidence_type, appraisal_label, venue, cited_by) when
+    each value exists and OMIT each when absent — no is_retracted anywhere."""
+    from sqlalchemy import update
+
+    from policy_atlas.schema import source_snapshot
+
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+
+    # Rich doc: classification + appraisal + year + venue + cited_by.
+    rich_pss = seed_select_doc(
+        conn, project_id, run_id, scope_id, title="Rich metadata doc", year=2024
+    )
+    rich_snap = conn.execute(
+        select(project_source_snapshot.c.source_snapshot_id).where(
+            project_source_snapshot.c.project_source_snapshot_id == rich_pss
+        )
+    ).scalar_one()
+    conn.execute(
+        update(source_snapshot)
+        .where(source_snapshot.c.source_snapshot_id == rich_snap)
+        .values(
+            metadata={
+                "title": "Rich metadata doc",
+                "abstract": "Rich abstract.",
+                "year": 2024,
+                "publisher_org": "Example Journal",
+                "provider_fields": {"cited_by_count": 42},
+            }
+        )
+    )
+    rich_chunk = _seed_chunk_and_embed(
+        conn, snapshot_id=rich_snap, content="rich subsidy evidence appears here."
+    )
+
+    # Bare doc: no classification, no appraisal, no year/venue/cited_by.
+    bare_snap, bare_pss = seed_source(
+        conn, project_id, meta={"title": "Bare doc"}
+    )
+    seed_screening_result(conn, project_id, run_id, scope_id, bare_pss, status="relevant")
+    bare_chunk = _seed_chunk_and_embed(
+        conn, snapshot_id=bare_snap, content="bare subsidy evidence appears here."
+    )
+
+    scope = build_retrieval_scope(
+        conn, project_id=project_id, scope_id=scope_id, selected_pss_ids=set()
+    )
+    retriever = ChunkRetriever(
+        scope,
+        embedder=FakeEmbedder({"subsidy": _vector(1.0)}),
+        directive=SynthesisDirective(),
+        reranker=PassThroughChunkReranker(),
+    )
+    tools = build_section_tools(
+        retriever=retriever,
+        findings_reader=None,
+        lookup_reader=lambda args: {"kind": args["kind"], "result": {}},
+    )
+    results = {
+        chunk["chunk_record_id"]: chunk
+        for chunk in tools["search_chunks"]({"query": "subsidy"})["chunks"]
+    }
+
+    rich = results[str(rich_chunk)]
+    assert rich["year"] == 2024
+    assert rich["evidence_type"]  # the seeded classification value
+    assert rich["appraisal_label"] == "3"
+    assert rich["venue"] == "Example Journal"
+    assert rich["cited_by"] == 42
+    assert "is_retracted" not in rich
+
+    bare = results[str(bare_chunk)]
+    for key in ("year", "evidence_type", "appraisal_label", "venue", "cited_by"):
+        assert key not in bare
+    assert "is_retracted" not in bare
+
+
+def test_make_findings_reader_record_carries_default_metadata_set(
+    conn: Connection,
+) -> None:
+    """ADR 0015 §8 / B-B3: the findings reader joins classification + appraisal
+    (scoped to project + evidence scope, outerjoin) and attaches the default
+    metadata set to each finding record, omit-if-absent."""
+    from policy_atlas.schema import (
+        extraction_result,
+        intervention_outcome_finding,
+        selection_result,
+        source_appraisal_result,
+        source_classification_result,
+        source_extraction_record,
+    )
+    from policy_atlas.synthesis_tools import make_findings_reader
+    from tests.helpers import EVIDENCE_TYPE
+
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    snap_id, pss_id = seed_source(
+        conn,
+        project_id,
+        meta={
+            "title": "Finding doc",
+            "year": 2021,
+            "publisher_org": "Study Press",
+            "provider_fields": {"cited_by_count": 9},
+        },
+    )
+    seed_screening_result(conn, project_id, run_id, scope_id, pss_id, status="relevant")
+    conn.execute(
+        source_classification_result.insert().values(
+            source_classification_result_id=uuid.uuid4(),
+            evidence_scope_id=scope_id,
+            project_source_snapshot_id=pss_id,
+            project_id=project_id,
+            classified_by_run_id=run_id,
+            primary_evidence_type=EVIDENCE_TYPE,
+            classified_at=now(),
+        )
+    )
+    conn.execute(
+        source_appraisal_result.insert().values(
+            source_appraisal_result_id=uuid.uuid4(),
+            evidence_scope_id=scope_id,
+            project_source_snapshot_id=pss_id,
+            project_id=project_id,
+            appraised_by_run_id=run_id,
+            quality_score=4,
+            rubric_version="test-rubric",
+            appraised_at=now(),
+        )
+    )
+    extraction_record_id = uuid.uuid4()
+    finding_id = uuid.uuid4()
+    conn.execute(
+        source_extraction_record.insert().values(
+            extraction_record_id=extraction_record_id,
+            project_id=project_id,
+            source_snapshot_id=snap_id,
+            project_source_snapshot_id=pss_id,
+            extraction_fingerprint="fp-findings-reader",
+            status="extracted",
+            basis="full_text",
+            error=None,
+            finding_count=1,
+            run_id=run_id,
+            created_at=now(),
+        )
+    )
+    conn.execute(
+        intervention_outcome_finding.insert().values(
+            finding_id=finding_id,
+            project_id=project_id,
+            extraction_record_id=extraction_record_id,
+            intervention="Coaching",
+            outcome="Scores",
+            population=None,
+            comparator=None,
+            effect_direction="increase",
+            estimate_level="study",
+            study_design=None,
+            stratum_qualifiers=[],
+            statistics={},
+            causality_by_design=None,
+            is_primary=None,
+            is_prevalence_only=None,
+            field_coverage={},
+            grounding=[],
+            created_at=now(),
+        )
+    )
+    conn.execute(
+        selection_result.insert().values(
+            selection_result_id=uuid.uuid4(),
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            run_id=run_id,
+            strategy="coverage_stratified_v1",
+            budget=1,
+            selection_provenance={},
+            selected=[],
+            excluded={},
+            flags={},
+            created_at=now(),
+        )
+    )
+    conn.execute(
+        extraction_result.insert().values(
+            extraction_result_id=uuid.uuid4(),
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            run_id=run_id,
+            selection_run_id=run_id,
+            extraction_provenance={"fingerprint": "t"},
+            docs=[{"extraction_record_id": str(extraction_record_id)}],
+            counts={"findings": {"total": 1}},
+            flags={},
+            created_at=now(),
+        )
+    )
+
+    reader = make_findings_reader(
+        conn,
+        project_id=project_id,
+        extraction_run_id=run_id,
+        evidence_scope_id=scope_id,
+        grouping_groups=None,
+    )
+    findings = reader({})["findings"]
+    assert len(findings) == 1
+    record = findings[0]
+    assert record["year"] == 2021
+    assert record["evidence_type"] == EVIDENCE_TYPE
+    assert record["appraisal_label"] == "4"
+    assert record["venue"] == "Study Press"
+    assert record["cited_by"] == 9
+    assert "is_retracted" not in record

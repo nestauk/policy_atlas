@@ -25,6 +25,7 @@ from policy_atlas.classification_backend import ClassificationBackend
 from policy_atlas.embeddings import EmbeddingBackend
 from policy_atlas.extraction_backend import ExtractionBackend
 from policy_atlas.facet_grouping import FacetGroupingBackend
+from policy_atlas.finding_vetter import FindingVetterBackend
 from policy_atlas.grounding_judge import GroundingJudgeBackend
 from policy_atlas.grouping import ThemeGroupingBackend
 from policy_atlas.harness import run_harness
@@ -101,6 +102,7 @@ class RunnerBackends:
         classification: Optional classification backend.
         ranking: Optional selection reranking backend.
         extraction: Optional extraction backend.
+        finding_vetter: Optional post-extract finding vetter (``None`` = off).
         facet_grouping: Optional facet-grouping backend.
         synthesis: Optional synthesis backend.
         grounding_judge: Optional grounding-judge backend.
@@ -116,6 +118,7 @@ class RunnerBackends:
     classification: ClassificationBackend | None = None
     ranking: RankingBackend | None = None
     extraction: ExtractionBackend | None = None
+    finding_vetter: FindingVetterBackend | None = None
     facet_grouping: FacetGroupingBackend | None = None
     synthesis: SynthesisBackend | None = None
     grounding_judge: GroundingJudgeBackend | None = None
@@ -296,6 +299,7 @@ def run_plan(
     plan_row_id: uuid.UUID | None = None,
     backends: RunnerBackends | None = None,
     io: CheckInIO | None = None,
+    session_id: uuid.UUID | None = None,
 ) -> RunPlanOutcome:
     """Execute an approved orchestration plan with per-component commits.
 
@@ -312,6 +316,8 @@ def run_plan(
             makes abort a run-local stop only.
         backends: Optional backend seam bundle. ``None`` uses harness defaults.
         io: Optional orchestrator IO seam. ``None`` uses ``NullIO``.
+        session_id: Optional Langfuse session id shared by the planner and all
+            component attempts for one orchestrator conversation.
 
     Returns:
         Overall status, ordered step outcomes and collated flags.
@@ -419,6 +425,7 @@ def run_plan(
                 directive_delta=directive_delta,
                 reference_kwargs=reference_kwargs,
                 backends=backend_bundle,
+                session_id=session_id,
             )
             attempts.append(attempt)
             if attempt.status == "succeeded":
@@ -485,6 +492,7 @@ def run_plan(
                     state=steering_state,
                     directive_delta=pause_result.reselect["directive"],
                     backends=backend_bundle,
+                    session_id=session_id,
                     successful_runs=successful_runs,
                     blocked_discretionary=blocked_discretionary,
                     step_outcomes=step_outcomes,
@@ -787,6 +795,7 @@ def _run_select_rerun(
     state: _SteeringState,
     directive_delta: dict[str, Any],
     backends: RunnerBackends,
+    session_id: uuid.UUID | None,
     successful_runs: dict[str, uuid.UUID],
     blocked_discretionary: dict[str, str],
     step_outcomes: list[RunStepOutcome],
@@ -824,6 +833,7 @@ def _run_select_rerun(
             directive_delta=directive_delta,
             reference_kwargs=reference_kwargs,
             backends=backends,
+            session_id=session_id,
         )
         attempts.append(attempt)
         if attempt.status == "succeeded":
@@ -994,6 +1004,7 @@ def _run_step_attempt(
     directive_delta: dict[str, Any],
     reference_kwargs: dict[str, uuid.UUID],
     backends: RunnerBackends,
+    session_id: uuid.UUID | None,
 ) -> _AttemptOutcome:
     registry_component = _REGISTRY_COMPONENT_BY_STEP[step.component]
     run_id = uuid.uuid4()
@@ -1025,6 +1036,10 @@ def _run_step_attempt(
                 "registry_component": registry_component,
                 "plan_id": str(plan_id),
                 "plan_version": plan_version,
+                # The Langfuse session key, persisted so a DB row joins
+                # straight to its trace session (018 A2; None on session-less
+                # paths, e.g. replay drivers).
+                "session_id": str(session_id) if session_id is not None else None,
             },
         )
         events.append(
@@ -1057,6 +1072,7 @@ def _run_step_attempt(
                 run_id=run_id,
                 project_id=project_id,
                 component=step.component,
+                session_id=session_id,
             ):
                 run_harness(
                     conn,
@@ -1070,6 +1086,7 @@ def _run_step_attempt(
                     classification_backend=backends.classification,
                     ranking_backend=backends.ranking,
                     extraction_backend=backends.extraction,
+                    finding_vetter_backend=backends.finding_vetter,
                     facet_grouping_backend=backends.facet_grouping,
                     synthesis_backend=backends.synthesis,
                     grounding_judge_backend=backends.grounding_judge,
@@ -1096,11 +1113,24 @@ def _run_step_attempt(
         )
         with engine.connect() as conn:
             log_entries = events.read_for_run(conn, project_id, run_id)
+        headline_counts = _headline_counts(log_entries, registry_component, run_id=run_id)
+        usage_totals = _usage_totals(log_entries, registry_component, run_id=run_id)
+        _record_component_timing(
+            engine,
+            project_id=project_id,
+            run_id=run_id,
+            component=step.component,
+            registry_component=registry_component,
+            wall_clock_s=wall_clock_s,
+            status="failed",
+            usage_totals=usage_totals,
+            headline_counts=headline_counts,
+        )
         return _AttemptOutcome(
             run_id=run_id,
             status="failed",
             wall_clock_s=wall_clock_s,
-            headline_counts=_headline_counts(log_entries, registry_component, run_id=run_id),
+            headline_counts=headline_counts,
             error=error,
         )
     wall_clock_s = time.monotonic() - started
@@ -1110,8 +1140,20 @@ def _run_step_attempt(
         log_entries = events.read_for_run(conn, project_id, run_id)
 
     headline_counts = _headline_counts(log_entries, registry_component, run_id=run_id)
+    usage_totals = _usage_totals(log_entries, registry_component, run_id=run_id)
     failure_error = _failure_error(log_entries, registry_component, run_id=run_id)
     if status == "succeeded":
+        _record_component_timing(
+            engine,
+            project_id=project_id,
+            run_id=run_id,
+            component=step.component,
+            registry_component=registry_component,
+            wall_clock_s=wall_clock_s,
+            status="succeeded",
+            usage_totals=usage_totals,
+            headline_counts=headline_counts,
+        )
         return _AttemptOutcome(
             run_id=run_id,
             status="succeeded",
@@ -1119,12 +1161,62 @@ def _run_step_attempt(
             headline_counts=headline_counts,
             error=None,
         )
+    _record_component_timing(
+        engine,
+        project_id=project_id,
+        run_id=run_id,
+        component=step.component,
+        registry_component=registry_component,
+        wall_clock_s=wall_clock_s,
+        status="failed",
+        usage_totals=usage_totals,
+        headline_counts=headline_counts,
+    )
     return _AttemptOutcome(
         run_id=run_id,
         status="failed",
         wall_clock_s=wall_clock_s,
         headline_counts=headline_counts,
         error=failure_error,
+    )
+
+
+def _record_component_timing(
+    engine: Engine,
+    *,
+    project_id: uuid.UUID,
+    run_id: uuid.UUID,
+    component: str,
+    registry_component: str,
+    wall_clock_s: float,
+    status: Literal["succeeded", "failed"],
+    usage_totals: dict[str, int] | None,
+    headline_counts: dict[str, Any],
+) -> None:
+    payload = {
+        "component": component,
+        "registry_component": registry_component,
+        "wall_clock_s": wall_clock_s,
+        "status": status,
+        "usage_totals": usage_totals,
+        "headline_counts": headline_counts,
+    }
+    with engine.begin() as conn:
+        events.append(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            event_type="component.timing",
+            payload=payload,
+        )
+    log.info(
+        "runner.component_usage",
+        component=component,
+        registry_component=registry_component,
+        run_id=str(run_id),
+        status=status,
+        usage_totals=usage_totals,
+        headline_counts=headline_counts,
     )
 
 
@@ -1270,6 +1362,40 @@ def _headline_counts(
         for key, value in payload.items()
         if key not in {"component", "flags", "provenance"}
         and isinstance(value, (int, float, str, bool))
+    }
+
+
+def _usage_totals(
+    log_entries: list[dict[str, Any]],
+    registry_component: str,
+    *,
+    run_id: uuid.UUID,
+) -> dict[str, int] | None:
+    """Usage totals from the run's ``component.completed`` payload.
+
+    ``None`` when no completed payload carries usage — a failed attempt spent
+    tokens the summary never recorded, so absent stays absent, never zero.
+    """
+    payload = next(
+        (
+            entry["payload"]
+            for entry in reversed(log_entries)
+            if entry["event_type"] == "component.completed"
+            and entry["run_id"] == run_id
+            and entry["payload"].get("component") == registry_component
+        ),
+        None,
+    )
+    usage = payload.get("usage_totals") if isinstance(payload, dict) else None
+    if not isinstance(usage, dict):
+        return None
+    return {
+        "prompt": usage["prompt"] if isinstance(usage.get("prompt"), int) else 0,
+        "completion": usage["completion"]
+        if isinstance(usage.get("completion"), int)
+        else 0,
+        "total": usage["total"] if isinstance(usage.get("total"), int) else 0,
+        "cached": usage["cached"] if isinstance(usage.get("cached"), int) else 0,
     }
 
 

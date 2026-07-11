@@ -4,6 +4,51 @@ Recurring issues encountered during the task cycle. Each entry: what happened, r
 
 ---
 
+## 2026-07-11 — Prompt capability text went stale against a code regrade: three taxonomy pins recorded compile-invalid plans
+
+**Task:** 018 (A3 regrade → C3 pins), caught by the review stack (Codex adversarial + trace lane + contract verifier, convergent).
+
+**What happened:** A3 regraded standard depth to `deep_chain=False`, but the planner
+prompt's depth menu still described standard as "~10 documents extracted in depth". The
+live planner obliged: C3 taxonomy pins 1/3/5 recorded drafts proposing
+select/extract/group at standard — plans the validator rejects. The per-category
+"adequate" verdicts were judged on draft shape; single-turn probes never compile. A live
+standard run on an intervention-shaped question (the rehearsal's own shape) would have
+failed at plan validation.
+
+**Root cause:** two coupled misses. (1) Prompt capability descriptions are *readers* of
+the component/depth registry, but no step swept prompts for the changed semantics when
+the regrade rider landed. (2) The probe harness stopped at draft JSON — structured
+outputs were never run through their real validator, so "adequate" meant "reads well".
+
+**Fix:** planner prompt corrected (planner_v2) with after-probes re-recorded
+compile-valid; doctrine installed in `docs/specs/system/prompting.md` — a
+semantics-changing rider greps every prompt for the old vocabulary, and probe drafts
+must COMPILE, not just read well.
+
+---
+
+## 2026-07-11 — Review-stack agents ran `make verify` concurrently with the lead's: 10-test flake on the shared test DB
+
+**Task:** 018 (review conversation C).
+
+**What happened:** The step-7 self-verify `make verify` failed 10 tests with psycopg
+INERROR/closed-cursor errors. A review-lane agent had started its own `make verify`
+in parallel (the brief said "confirm make verify green"); two suites contended on the
+one shared test DB — the same class as the B2/B4 build-side flakes (concurrent
+worker-lane suites), now reproduced from the reviewer side. Serial re-run: green.
+
+**Root cause:** the one-suite-runner-at-a-time constraint lived in verification.md's
+loop notes, not in the reviewer briefs; "verify green" in a brief invites the agent to
+run it.
+
+**Fix:** reviewer briefs must state "do NOT run the test suite — the lead coordinates
+the one suite run" (applied to the relaunched contract-verifier brief mid-stack, which
+then relied on reading + recorded gates). Longer-term option stays in deferred.md's
+lane-partition note: per-lane DATABASE_URLs.
+
+---
+
 ## 2026-07-08 — Step-8 knowledge drifted review-biased: build lessons died at the B→C conversation boundary
 
 **Task:** 012–014 pattern, spotted by the user at the 014 review close.

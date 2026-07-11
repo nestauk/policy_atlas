@@ -28,6 +28,15 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **Options Assessment** consumes EB output + the findings layer to resolve descriptive
   intervention clusters into named, comparable options — the decision-relative step EB explicitly
   leaves out.
+- **Question-shape → future-capability mapping (user posture, 2026-07-10, recorded at the
+  018 gate).** Two real-user question shapes from the V2 taxonomy have their ideal homes in
+  capabilities that don't exist yet: **opinions / stakeholder mapping** (a proposed
+  public-opinion / stakeholder-mapping capability) and **statistics / fact-finding**
+  (potentially a baseline-analysis capability). Interim posture: EB — the most
+  general-purpose capability — must still produce **something somewhat useful** for these
+  shapes (honest intent-fit composition, evidence-descriptive output), but v3.0 prompt/eval
+  work deliberately does NOT overbias toward them; optimisation for these shapes arrives
+  with their capabilities.
 
 ## Product / output
 
@@ -212,10 +221,30 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   priors (`record_type`, source typing, `indexed_in`, `title_source`) plus the tag layer
   as its uniform label-prior surface (`{tag, tag_type, asserted_by}` visible — ADR 0012
   decision 8; OpenAlex keywords deliberately exited the prompt). Still open:
-  `is_retracted` retained-but-unread (a visible flag in the deferred appraisal second
-  pass, flag-not-block); non-English handling beyond English-first title selection.
+  `is_retracted` retained-but-unread — a 018-gate proposal to surface it in the writer
+  envelope was **struck (user, 2026-07-10): its likely home is earlier in the pipeline,
+  probably screening** (a retracted document arguably should not screen in at all) —
+  that is an eligibility change with flag-not-drop implications, so it needs its own
+  gate when taken up; the appraisal-second-pass visible-flag reading also remains open.
+  Non-English handling beyond English-first title selection still open.
 
 ## Live search / depth-graded loop (task 015 seams)
+
+- **Country filter allowlists + deterministic country-group expansion (owner,
+  2026-07-11, 018 review conversation)** — current validation is shape-only:
+  OpenAlex `author_affiliation_countries` accepts any 2-letter alpha pair (`XX`
+  passes; the provider then silently returns nothing) and Overton
+  `publisher_country` accepts near-arbitrary text with the display-name hazard
+  recorded (silent zero on ISO codes / "United Kingdom"). Upgrade both to
+  fail-closed allowlists: a static ISO-3166 set for OpenAlex; a probed
+  display-name list for Overton. Then the real user vocabulary — groupings
+  ("OECD countries", "G7"/"G20", "EU"/"Europe", "developing") — via
+  deterministic membership tables compiled in the grammar: the planner emits a
+  group token, compile expands it from a static provenance-stamped table, NEVER
+  the LLM listing members inline. "Developing" needs a pinned definition (e.g.
+  World Bank income groups) or an honest planner decline. Touches grammar +
+  both wire mappings + the planner capability line (prompt-bearing half is
+  lead-only, replay-evidenced).
 
 Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
@@ -411,6 +440,20 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Characterise / embeddings / telemetry (task 009 seams)
 
+- **Langfuse trace grouping — "group as much as possible" (owner direction,
+  2026-07-11, 018 review conversation)** — per-doc/window LLM calls made inside
+  `ThreadPoolExecutor` workers (extract windows, screening fan-outs) mint DETACHED
+  root traces because the Langfuse context does not propagate into threads — the
+  009-recorded wart, now user-visible next to properly-nested calls (the finding
+  vetter nests under `run:extract:{run_id}` precisely because it runs sequentially
+  on the main thread). Fix: propagate the component-span context into submitted
+  workers (explicit parent trace/span id in the closure, or a per-worker context
+  manager) so per-doc generations nest under the component root. Second half:
+  planner turns are deliberately separate traces (B2 record), session-correlated —
+  consider one conversation-root trace per orchestrate process with turn spans, or
+  accept the session view as the grouping. Bounded telemetry rider; the
+  capability-run entity seam (§ Select) remains the structural home.
+
 - **EB artefact composition — LANDED with revised ownership (task 013, ADRs 0009 + 0010).**
   Synthesise (not the orchestrator) composes the one EB artefact at the run terminus —
   capability-composes; the orchestrator shapes sections at plan time. What remains
@@ -465,7 +508,13 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   quotation-verified assignment, at the grouping-quality eval seam (contract § Research
   grounding).
 - **Provider-signal prompt enrichment** — provider topics as per-doc grouping hints;
-  taxonomy-bias risk → enters via the eval seam, never as a silent default.
+  taxonomy-bias risk → enters via the eval seam, never as a silent default. Same family
+  (user, 2026-07-10, recorded at the 018 gate): **characterise theme outputs as
+  facet-grouping hints** (cross-component enrichment — quality unmeasurable before the
+  grouping-quality evals) and **mapper-produced per-document open tags for the document
+  layer** — the latter additionally aggravates the tag-fragmentation trigger recorded at
+  the tag-consolidation entry (more open-vocabulary tag writers before consolidation
+  exists); both enter via the eval seam.
 - **`group`-component inheritance — discharged (task 012)** — v2's theming lessons
   transferred when `group` was built; each recorded defect closed structurally: dead
   critique stage → no critique stage built (one schema-constrained partition + one
@@ -507,6 +556,12 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   explicit `base` ladder and **no absence claims** (test-asserted).
 - **Bedrock routes** — both seams (`EmbeddingBackend`, `ThemeGroupingBackend`) swap
   implementations; first pass OpenAI → target Bedrock is the documented v3.0 posture.
+  **Infra ready on the DevOps side (user, 2026-07-10)** — the migration is now a pull
+  decision, deliberately sequenced **after the eval slice**: it is a model-family swap
+  (Bedrock does not serve the OpenAI models), which re-opens every empirically-settled
+  model-routing choice, so the eval harness is the regression net that licenses it.
+  Standing constraint until then (018 contract): nothing new couples to
+  OpenAI-specific API surface (e.g. no Responses-API server-side conversation state).
 - **Upload audit-event seam** — when the web-app slice gives uploads a real surface they
   get their own audit event + observable processing (incl. embed counts, currently a
   structured log line `ingest_upload.embed_counts`) — an app-boundary event, not a run
@@ -523,6 +578,15 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   stratum with zero selections), `must_include_conflict`, `thin_base` (honestly
   stub-constant until the LLM screen tool lands), `thin_full_text` (extraction-shaping).
   The pause slice reads these flags; no new signal computation needed.
+- **Corpus-conditioned selection budget (owner, 2026-07-11, 018 review conversation)** —
+  `ANALYSIS_DEPTH_TABLE`'s `selection_budget: 25` at deep is a plan-pinned cost CEILING
+  (allocation fills up to it, capped by eligible capacity), not a quality judgment.
+  The evolution: condition the executed budget on the corpus (screened/full-text counts,
+  strata shape, question breadth) rather than a constant — it lands naturally in the
+  agent-authored `SelectionDirective` seam below (the just-in-time post-characterise
+  author sees exactly those signals), with the depth-table constant demoted to the hard
+  ceiling. Needs eval evidence for the conditioning function; the steer-point flags
+  (`thin_base`, `large_stratum_excluded`, …) are the ready-made inputs.
 - **Agent-authored directives** — the capability agent authors the `SelectionDirective`
   **just-in-time at invocation, post-characterise** (plan-as-object § forecast-vs-commit:
   the up-front plan is a non-compiling forecast, never the executed directive). v3.0
@@ -563,6 +627,29 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Extract / findings layer (task 011 seams)
 
+- **Modelled vs observed effect basis at the finding grain (owner, 2026-07-11, 018
+  review conversation)** — the IOF schema cannot cleanly separate a modelled/projected
+  effect from an observed one: `causality_by_design` folds modelling into
+  `descriptive` (alongside observed descriptive statistics), and `study_design` is
+  free text, null-when-unreported (61/122 not_extracted on the step-9 replay). The
+  vetter correctly keeps modelled RESULTS (targets are flagged as aspirations), and
+  the writer narrates "projected" when the quote makes it obvious — but nothing
+  structured lets a surface render "this is a projection, not something that
+  happened". Candidate: a new `effect_basis` enum (`observed` | `modelled`, null
+  if indeterminate) on the IOF wire + row — a ⚠️ schema-gate item needing its own
+  contract approval, plus extraction-prompt guidance (lead, replay-evidenced), the
+  writer-envelope field (terse-adjacent), and annotation-layer rendering. Extending
+  the `causality_by_design` vocabulary instead was considered and disliked: causal
+  identification and evidence basis are different dimensions (a model calibrated on
+  RCTs is still modelled).
+- **Finding-vetter per-doc calls run sequentially (018 review stack, efficiency lane;
+  component renamed from "junk judge" at 018 step 9, owner call)** —
+  `_apply_finding_vetter` loops one live mini call per extracted doc right after
+  `_run_windows`' 4-wide `ThreadPoolExecutor` fan-out of the same kind of call.
+  Bounded today (~10–25 docs, mini-tier, seconds each); parallelize with the existing
+  executor pattern (plus a thread-safe usage accumulation story) if D-phase timing
+  shows extract wall-clock matters.
+
 - **The extraction service + evidence dataset snapshots** — profile resolution against
   existing records, per-source task objects, capability commits declaring extraction
   profiles, and pinned point-in-time dataset consumption. 011 shipped the minimal honest
@@ -592,6 +679,15 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   subset makes `no_findings`/`not_extracted` unverifiable (a silent new base-ladder rung —
   false-absence machinery EB exists to prevent) and inverts the recall-critical trade. Any
   future retrieval scoping must be an explicit, recorded coverage-base rung, never silent.
+- **RAG-based findings layer for quick/standard runs** (user, 2026-07-10, recorded at the
+  018 gate) — a retrieval-grounded findings/extraction surface for runs that skip the deep
+  extract chain (and a more generic variant for non-intervention-shaped intents). This is
+  exactly the explicit coverage-base rung the entry above reserves: legitimate only with
+  its own recorded rung and honest absence semantics, so it needs its own design gate —
+  never a silent quick-run shortcut. Adjacent gradation fact (018): standard analysis
+  depth no longer runs select/extract/group, so this seam is the recorded path to
+  findings-shaped content at sub-deep depths if evals show envelope-basis synthesis
+  insufficient there.
 - **Generic finding container — declined** (contract rev 1.1a) — typed tables with
   CHECK-enforced vocabularies won ("coherent typed record, dimensions intact and
   queryable"); revisit only if a third finding schema is specced.
@@ -688,10 +784,29 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   and/or embedding-assisted value clustering over the landed chunk vectors. Eval-gated —
   a head sample cannot discover tail-only groups, which is why the sample-discover/assign
   shape was rejected at contract rev 1.3 and stays rejected until evals exist.
+  **Owner note (2026-07-11, during 018 C):** characterise's discovery-model +
+  assignment-model split works well in practice — when the eval slice reopens this seam,
+  weigh that two-stage shape as a candidate for facets too, against the recorded
+  tail-discovery risk and the partition-exactness invariant a split must preserve.
 - **Agent-authored grouping directive** — the same seam as select's agent-authored
   directives (above): the capability agent authors `context["grouping"]` just-in-time at
   invocation; the `group` facade signature is already the tool call, so arrival is a
   parameter-authoring change, zero re-plumbing.
+- **EB report-shape boundary vs future capabilities (owner steer, 2026-07-11, 018 C)** —
+  V2's templated report grammar (core answer ending in an imperative directive,
+  fixed background section, interventions table, "exactly 3-4 actionable policy
+  recommendations") is the recorded anti-pattern: too intervention-focused and too
+  rigid for v3.0's intent diversity. v3.0 EB stays intent-led discovery with an
+  evidence-descriptive role menu (synthesise_sections_v2: policy/delivery context
+  under specific titles, cross-cutting patterns, enablers-and-barriers-as-described).
+  Several V2 template sections belong to FUTURE capabilities, not EB:
+  recommendations → options assessment; stakeholder perspectives → stakeholder
+  capability; impact framing → impact assessment; cost comparisons → value-for-money.
+  When those capability contracts are drafted, they should reclaim their section
+  types from the V2 template rather than EB growing them. The `section_role` seam
+  (SectionSpec, 018 B) is the extension point — roles extend without schema change.
+  Eval slice: judge composition quality across the 7 intent shapes with this
+  boundary in mind.
 - **Cross-schema reference-mediated linkage** — activates with
   `implementation_context_finding` (EB internals entry): the shared source-named
   vocabulary means a facet group's member values can link findings across schemas by
@@ -723,6 +838,44 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Synthesise (task 013 seams)
 
+- **Unspanned-lane full decoupling (018 review stack, security lane MEDIUM)** — the
+  unspanned-assertion judge scan rides the grounding-judge call, so a block whose final
+  prose no judge call scanned (no judged-type claims; or a splice rebuilt the prose and
+  the rejudge had nothing to judge) mints unscanned. 018 closed the *honesty* half:
+  `unspanned_lane_skipped` on the accounting + rollup distinguishes "not looked at" from
+  "clean". The *coverage* half — a judge call fired solely for the unspanned lane on
+  those paths — is eval-slice work (it adds a per-affected-section LLM call and needs
+  the flag-volume calibration that workstream owns). Until then, consumers of
+  `unspanned_assertions == 0` must check the skip flag.
+- **Pre-synthesise steer point → `context["synthesis"]` directive (owner-confirmed seam,
+  2026-07-11, 018 review conversation)** — a check-in after grouping/characterise and
+  before synthesise (or at section-proposal time): show the proposed sections and
+  discovered themes/facet groups; the user prunes/boosts ("only these themes", "prefer
+  strongest evidence types"); the response compiles into the EXISTING fail-closed
+  `context["synthesis"]` directive (sections + `group_ids` + `retrieval_boosts`) — the
+  compile target below that nothing authors yet. Parameter authoring on built machinery,
+  zero re-plumbing; pairs with the `deepening_selection` steer point the same way select
+  pairs with extract.
+- **Selection prior at standard depth + `SELECTION_PRIOR_BOOST` calibration (owner
+  questions, 2026-07-11)** — (1) select currently runs deep-only (018 regrade), so
+  standard-depth synthesis retrieval gets no selection prior; if the prior earns its
+  keep, select-at-standard (without extract) is a legitimate re-composition — weigh
+  against select's cost and the honest question of what selection means without the
+  findings layer. (2) The prior itself is a flat 2.0× multiplicative boost on the fused
+  retrieval score — could over-suppress an unselected-but-highly-relevant chunk for a
+  specific section. Mitigations already in place: it is a soft prior never a filter,
+  unselected docs stay in both retrieval legs, and citations record
+  `origin: selected|unselected_screened` so the effect is measurable. Eval-slice
+  measurement: citation quality/rate by origin as a function of the boost value.
+- **Writer read-tool scoping arguments (owner direction, 2026-07-11)** — `search_chunks`
+  takes only a query today; `query_findings` already scopes (`group_id`, `finding_ids`,
+  `effect_direction`) and `lookup` by `doc_id`/`tag`. Give `search_chunks` optional
+  fail-closed scope filters (tags, doc ids, facet-group members, evidence types —
+  validated against the closed vocabularies like the directive boosts) so the writer can
+  gather strategically per section instead of relying on global boosts — "act like a
+  researcher". Interacts with the Cohere/Bedrock cross-encoder rerank recorded at the
+  `retrieve` seam; prompt guidance for WHEN to scope is the prompt-bearing half
+  (lead-only, replay-evidenced).
 - **Plan-compile section machinery** — the fail-closed `context["synthesis"]` directive
   (sections + retrieval_boosts, normative grammar per contract rev 8 M5) is the compile
   target the future plan-shaped-sections machinery and the source/evidence policy compile
@@ -890,6 +1043,11 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Orchestrator (task 017 seams)
 
+- **`_REGISTRY_COMPONENT_BY_STEP` simplification candidate (owner, 2026-07-11)** —
+  ten of eleven rows are identity; only `screen_stage2 → screen` differs. Collapse
+  to a one-line function + keep the startup parity assert. Queued for the planned
+  ponytail audit / next slice touching `orchestration_plan.py`.
+
 - **The LLM EB-expert capability agent** — the JIT directive-authoring expert
   sub-agent (system-prompted as an evidence-review expert; reads upstream
   outputs to author each component's directive; makes reasoned
@@ -925,7 +1083,20 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   carries wall-clocks only; per-component tokens are read in Langfuse. A
   runner-visible single-line usage aggregate needs a usage-return refactor —
   arrives with that refactor or the component-progress protocol (contract
-  decision 11, rev 2.6).
+  decision 11, rev 2.6). **Scheduled: 018 Phase A telemetry sweep** (usage-return
+  refactor + durable per-component wall-clock/counts).
+- **Component-name rename `screen`→`screen_abstract` / `screen_stage2`→`screen_full`**
+  (user, 2026-07-10) — the DB already stores stage as an integer (`ck_ssr_stage`), so
+  this touches only the plan-vocabulary strings (`DiscretionaryComponent`, runner step
+  lists, persisted `orchestration_plan` rows and event payloads that carry step names).
+  Cosmetic (component names never reach the UI — demo/RETRO §2), so it waits for the
+  next slice that touches the screen/plan vocabulary anyway; renaming persisted plan/event
+  vocabulary needs a data migration or a read-side alias, decided then.
+- **Direct plan editing on the plan pane** (user, 2026-07-10) — editing the proposed
+  plan directly (not only conversationally), with edits synced back to the planner
+  conversation and a confirm-changes step before the run button arms. Web-app-slice
+  feature: it needs the durable plan surface + a plan-patch grammar and the planner's
+  acknowledgement turn. The conversational half stays the only editing path until then.
 
 ## Data model / evidence
 
@@ -967,6 +1138,13 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Execution / collaboration / ops
 
+- **Per-lane test-DB partition (018 B2/C)** — concurrent `make verify` runs against the
+  one shared test DB flake (migration round-trip + steering tests, psycopg INERROR);
+  seen from worker lanes (B2/B4) and from a review-lane agent (step 7). Convention today:
+  one suite runner at a time, stated in reviewer/worker briefs. If parallel suite runs
+  become routine, give lanes separate DATABASE_URLs (disposable per-lane DBs) instead of
+  policing serialization.
+
 - **Harness failure-event write on an aborted transaction — DISCHARGED for the
   product path (task 017)** (013 review stack, 2026-07-08) — every `run_harness`
   node's exception handler appends the `component.failed` event on the same
@@ -997,7 +1175,11 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   committed **judge calibration scheme** (owned by the eval workstream; v3.0 only persists judge
   I/O for eval-readiness).
 - **Time/cost estimate model** (the plan drives an estimate; the model is deferred — a coarse band
-  suffices in v3.0).
+  suffices in v3.0). Sharpened (user, 2026-07-10): the eventual model is per-component roll-up,
+  conditioned on corpus size and the plan's component set (search effort × analysis depth) —
+  which needs to know which components scale with corpus size and which are near-invariant.
+  **Data accrual starts in 018** (durable per-component wall-clock + in/out counts on every
+  run); the model itself is eval-slice-or-later work over that accrued telemetry.
 - **Forecast/prewarm extraction** — modelled only if built (no inert forecast object otherwise).
 - **`structlog.contextvars.bind_contextvars` for ambient run/project correlation** —
   `logging.py` wires `merge_contextvars` into the processor chain but nothing calls

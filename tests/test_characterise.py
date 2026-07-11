@@ -10,6 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
+from structlog.testing import capture_logs
 
 from policy_atlas import events, grouping, tracing
 from policy_atlas.acquire import (
@@ -48,6 +49,7 @@ from policy_atlas.schema import (
     source_snapshot,
     source_tag,
 )
+from policy_atlas.usage import UsageResult
 from tests.helpers import (
     delete_project_data,
     now,
@@ -86,10 +88,12 @@ class _RaisingDiscoverBackend:
         intent: str,
         min_themes: int,
         max_themes: int,
-    ) -> list[Theme]:
+    ) -> UsageResult[list[Theme]]:
         raise RuntimeError("discovery boom")
 
-    def assign(self, batch: list[GroupingDoc], *, themes: list[Theme]) -> dict[str, str]:
+    def assign(
+        self, batch: list[GroupingDoc], *, themes: list[Theme]
+    ) -> UsageResult[dict[str, str]]:
         raise AssertionError("assign must never be called when discovery always fails")
 
 
@@ -619,7 +623,9 @@ def test_landscape_summary_structure(conn: Connection) -> None:
         theme_grouping_backend=StubThemeGroupingBackend(),
     )
 
-    assert set(summary.keys()) == {"coverage", "themes", "unclustered", "flags", "provenance"}
+    assert set(summary.keys()) == {
+        "coverage", "themes", "unclustered", "flags", "provenance", "usage_totals",
+    }
     assert set(summary["unclustered"].keys()) == {"count", "share"}
     for theme in summary["themes"]:
         assert set(theme.keys()) == {"name", "description", "size"}
@@ -832,17 +838,19 @@ class _InventedIdBackend:
         intent: str,
         min_themes: int,
         max_themes: int,
-    ) -> list[Theme]:
-        return _valid_themes()
+    ) -> UsageResult[list[Theme]]:
+        return _valid_themes(), None
 
-    def assign(self, batch: list[GroupingDoc], *, themes: list[Theme]) -> dict[str, str]:
+    def assign(
+        self, batch: list[GroupingDoc], *, themes: list[Theme]
+    ) -> UsageResult[dict[str, str]]:
         self.assign_batches.append([doc["id"] for doc in batch])
         assignments = {
             doc["id"]: themes[index % len(themes)]["name"]
             for index, doc in enumerate(batch)
         }
         assignments[self.invented_id] = themes[0]["name"]
-        return assignments
+        return assignments, None
 
 
 class _MissingUnknownRepairBackend:
@@ -858,15 +866,20 @@ class _MissingUnknownRepairBackend:
         intent: str,
         min_themes: int,
         max_themes: int,
-    ) -> list[Theme]:
-        return _valid_themes()
+    ) -> UsageResult[list[Theme]]:
+        return _valid_themes(), None
 
-    def assign(self, batch: list[GroupingDoc], *, themes: list[Theme]) -> dict[str, str]:
+    def assign(
+        self, batch: list[GroupingDoc], *, themes: list[Theme]
+    ) -> UsageResult[dict[str, str]]:
         batch_ids = [doc["id"] for doc in batch]
         self.assign_batches.append(batch_ids)
         if len(self.assign_batches) == 1:
-            return {batch_ids[0]: "Housing", batch_ids[1]: "Nonexistent Theme"}
-        return {doc_id: themes[index + 1]["name"] for index, doc_id in enumerate(batch_ids)}
+            return {batch_ids[0]: "Housing", batch_ids[1]: "Nonexistent Theme"}, None
+        return (
+            {doc_id: themes[index + 1]["name"] for index, doc_id in enumerate(batch_ids)},
+            None,
+        )
 
 
 class _RepairExhaustedBackend:
@@ -879,11 +892,13 @@ class _RepairExhaustedBackend:
         intent: str,
         min_themes: int,
         max_themes: int,
-    ) -> list[Theme]:
-        return _valid_themes()
+    ) -> UsageResult[list[Theme]]:
+        return _valid_themes(), None
 
-    def assign(self, batch: list[GroupingDoc], *, themes: list[Theme]) -> dict[str, str]:
-        return {doc["id"]: "Housing" for doc in batch[:-1]}
+    def assign(
+        self, batch: list[GroupingDoc], *, themes: list[Theme]
+    ) -> UsageResult[dict[str, str]]:
+        return {doc["id"]: "Housing" for doc in batch[:-1]}, None
 
 
 class _FlakyDiscoveryBackend:
@@ -900,14 +915,16 @@ class _FlakyDiscoveryBackend:
         intent: str,
         min_themes: int,
         max_themes: int,
-    ) -> list[Theme]:
+    ) -> UsageResult[list[Theme]]:
         self.discover_calls += 1
         if self.always_invalid or self.discover_calls == 1:
-            return _invalid_theme_count()
-        return _valid_themes()
+            return _invalid_theme_count(), None
+        return _valid_themes(), None
 
-    def assign(self, batch: list[GroupingDoc], *, themes: list[Theme]) -> dict[str, str]:
-        return {doc["id"]: themes[0]["name"] for doc in batch}
+    def assign(
+        self, batch: list[GroupingDoc], *, themes: list[Theme]
+    ) -> UsageResult[dict[str, str]]:
+        return {doc["id"]: themes[0]["name"] for doc in batch}, None
 
 
 class _BudgetMaxBackend:
@@ -928,17 +945,19 @@ class _BudgetMaxBackend:
         intent: str,
         min_themes: int,
         max_themes: int,
-    ) -> list[Theme]:
+    ) -> UsageResult[list[Theme]]:
         self.discover_calls += 1
         if self.discover_calls == 1:
-            return _invalid_theme_count()
-        return _valid_themes()
+            return _invalid_theme_count(), None
+        return _valid_themes(), None
 
-    def assign(self, batch: list[GroupingDoc], *, themes: list[Theme]) -> dict[str, str]:
+    def assign(
+        self, batch: list[GroupingDoc], *, themes: list[Theme]
+    ) -> UsageResult[dict[str, str]]:
         self.assign_calls += 1
         if self.assign_calls == 1:
-            return {doc["id"]: themes[0]["name"] for doc in batch[:-1]}
-        return {doc["id"]: themes[1]["name"] for doc in batch}
+            return {doc["id"]: themes[0]["name"] for doc in batch[:-1]}, None
+        return {doc["id"]: themes[1]["name"] for doc in batch}, None
 
 
 class _InvalidThemeBackend:
@@ -955,11 +974,13 @@ class _InvalidThemeBackend:
         intent: str,
         min_themes: int,
         max_themes: int,
-    ) -> list[Theme]:
+    ) -> UsageResult[list[Theme]]:
         self.discover_calls += 1
-        return [self.theme]
+        return [self.theme], None
 
-    def assign(self, batch: list[GroupingDoc], *, themes: list[Theme]) -> dict[str, str]:
+    def assign(
+        self, batch: list[GroupingDoc], *, themes: list[Theme]
+    ) -> UsageResult[dict[str, str]]:
         raise AssertionError("assign must not run for invalid discovery output")
 
 
@@ -976,11 +997,13 @@ class _InstructionThemeBackend:
         intent: str,
         min_themes: int,
         max_themes: int,
-    ) -> list[Theme]:
-        return [{"name": self.theme_name, "description": "A printable inert label."}]
+    ) -> UsageResult[list[Theme]]:
+        return [{"name": self.theme_name, "description": "A printable inert label."}], None
 
-    def assign(self, batch: list[GroupingDoc], *, themes: list[Theme]) -> dict[str, str]:
-        return {doc["id"]: self.theme_name for doc in batch}
+    def assign(
+        self, batch: list[GroupingDoc], *, themes: list[Theme]
+    ) -> UsageResult[dict[str, str]]:
+        return {doc["id"]: self.theme_name for doc in batch}, None
 
 
 class _ParsedAssignment:
@@ -1120,16 +1143,30 @@ def test_judgment_invalid_discovery_retried_once(conn: Connection) -> None:
     _seed_three_docs(conn, pid, rid, scope_id)
     backend = _FlakyDiscoveryBackend()
 
-    summary = characterise_scope(
-        conn,
-        project_id=pid,
-        run_id=rid,
-        context=CharacteriseContext(scope_id=scope_id, intent="Test", context={}),
-        theme_grouping_backend=backend,
-    )
+    expected_rejection = "theme count 13 outside bounds [3, 3]"
+    with capture_logs() as logs:
+        summary = characterise_scope(
+            conn,
+            project_id=pid,
+            run_id=rid,
+            context=CharacteriseContext(scope_id=scope_id, intent="Test", context={}),
+            theme_grouping_backend=backend,
+        )
 
     assert backend.discover_calls == 2
     assert summary["provenance"]["discovery_retries_used"] == 1
+    assert summary["provenance"]["discovery_rejections"] == [expected_rejection]
+    assert any(
+        entry["event"] == "characterise.discovery_invalid"
+        and entry["error"] == expected_rejection
+        for entry in logs
+    )
+    persisted_provenance = conn.execute(
+        select(characterisation_result.c.grouping_provenance)
+        .where(characterisation_result.c.project_id == pid)
+        .where(characterisation_result.c.run_id == rid)
+    ).scalar_one()
+    assert persisted_provenance["discovery_rejections"] == [expected_rejection]
 
     pid2, rid2 = seed_project_and_run(conn)
     scope_id2 = seed_scope(conn, pid2)
@@ -1162,7 +1199,7 @@ def test_judgment_duplicate_same_theme_deduped_at_openai_grouping_seam(
 
     monkeypatch.setattr(backend._client.chat.completions, "parse", fake_parse)
 
-    assignments = backend.assign(
+    assignments, usage = backend.assign(
         [
             {"id": "doc-1", "title": "One", "abstract": None},
             {"id": "doc-2", "title": "Two", "abstract": None},
@@ -1170,6 +1207,7 @@ def test_judgment_duplicate_same_theme_deduped_at_openai_grouping_seam(
         themes=_valid_themes(),
     )
 
+    assert usage is None
     assert assignments == {"doc-1": "Housing", "doc-2": "Health"}
     assert len(calls) == 1
 

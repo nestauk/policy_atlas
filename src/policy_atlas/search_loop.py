@@ -37,6 +37,7 @@ from policy_atlas.search_prompts import (
     validated_queries,
     validated_suggestions,
 )
+from policy_atlas.usage import UsageAccumulator
 
 SearchDepth = Literal["rapid", "standard", "deep"]
 QueryOrigin = Literal[
@@ -1148,6 +1149,7 @@ def run_search(
     wall_clock_breached = False
     stop_all = False
     generation_calls = 0
+    usage_totals = UsageAccumulator()
 
     def execute_call(
         backend: acquire.SearchBackend,
@@ -1244,7 +1246,7 @@ def run_search(
             )
         )
 
-        wire = generation_backend.reformulate(
+        wire, usage = generation_backend.reformulate(
             ReformulatePayload(
                 intent=context.intent,
                 round_index=round_index,
@@ -1252,6 +1254,7 @@ def run_search(
                 negative=negative_exemplars,
             )
         )
+        usage_totals.add(usage)
         generation_calls += 1
         queries, overton_paraphrases = validated_queries(wire)
 
@@ -1388,11 +1391,11 @@ def run_search(
         if "suggest" in constants["arms"] and suggest_backend is not None and not stop_all:
             try:
                 generation_calls += 1
-                suggestions = validated_suggestions(
-                    generation_backend.suggest(
-                        SuggestPayload(intent=context.intent, positive=positive_exemplars)
-                    )
+                suggest_wire, usage = generation_backend.suggest(
+                    SuggestPayload(intent=context.intent, positive=positive_exemplars)
                 )
+                usage_totals.add(usage)
+                suggestions = validated_suggestions(suggest_wire)
             except Exception:
                 suggest_failures += 1
                 suggestions = []
@@ -1516,7 +1519,8 @@ def run_search(
                     max_records=reserve,
                 )
     else:
-        wire = generation_backend.generate_queries(QueriesPayload(intent=context.intent))
+        wire, usage = generation_backend.generate_queries(QueriesPayload(intent=context.intent))
+        usage_totals.add(usage)
         generation_calls = 1
         queries, overton_paraphrases = validated_queries(wire)
 
@@ -1609,6 +1613,7 @@ def run_search(
         },
         "prior_http_calls": prior_http_calls,
     }
+    counts["usage_totals"] = usage_totals.payload()
     return counts
 
 

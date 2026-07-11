@@ -35,6 +35,7 @@ from policy_atlas.embeddings import EmbeddingBackend, OpenAIEmbeddingBackend
 from policy_atlas.extraction_backend import OpenAIExtractionBackend
 from policy_atlas.facet_grouping import OpenAIFacetGroupingBackend
 from policy_atlas.fetch_live import LiveDocumentFetcher
+from policy_atlas.finding_vetter import OpenAIFindingVetterBackend
 from policy_atlas.fixtures import get_source
 from policy_atlas.grounding_judge import OpenAIGroundingJudgeBackend
 from policy_atlas.grouping import OpenAIThemeGroupingBackend, ThemeGroupingBackend
@@ -164,6 +165,7 @@ class OrchestrateResult:
         runner_io: The steering IO used for the run (``CliIO``/``UnattendedIO``),
             or ``None`` if no run was launched.
         artefact_present: Whether a synthesis artefact row exists for the project.
+        conversation_id: Langfuse session id minted for this orchestrator conversation.
     """
 
     exit_code: int
@@ -175,6 +177,7 @@ class OrchestrateResult:
     turns: list[dict[str, str]] = field(default_factory=list)
     runner_io: CliIO | UnattendedIO | None = None
     artefact_present: bool = False
+    conversation_id: uuid.UUID | None = None
 
 
 class CliIO:
@@ -341,7 +344,12 @@ def _build_plan(draft: PlanDraftWire) -> OrchestrationPlan:
     data = draft.model_dump(exclude_none=True)
     constraints = {
         key: data.pop(key)
-        for key in ("published_after", "published_before", "publisher_country")
+        for key in (
+            "published_after",
+            "published_before",
+            "publisher_country",
+            "author_affiliation_countries",
+        )
         if key in data
     }
     if constraints:
@@ -452,6 +460,7 @@ def _live_planner_and_backends(
         classification=OpenAIClassificationBackend(langfuse_client=langfuse_client),
         ranking=OpenAIRankingBackend(langfuse_client=langfuse_client),
         extraction=OpenAIExtractionBackend(langfuse_client=langfuse_client),
+        finding_vetter=OpenAIFindingVetterBackend(langfuse_client=langfuse_client),
         facet_grouping=OpenAIFacetGroupingBackend(langfuse_client=langfuse_client),
         synthesis=OpenAISynthesisBackend(langfuse_client=langfuse_client),
         grounding_judge=OpenAIGroundingJudgeBackend(langfuse_client=langfuse_client),
@@ -557,6 +566,8 @@ def _plan_conversation(
     console: ConsoleIO,
     planner: PlannerBackend,
     turns: list[dict[str, str]],
+    *,
+    session_id: uuid.UUID,
 ) -> OrchestrationPlan | Literal["abandoned", "no_plan"]:
     """Drive the planning conversation to an approved plan, or abandonment.
 
@@ -566,7 +577,7 @@ def _plan_conversation(
     """
     previous_draft: dict[str, object] | None = None
     for _ in range(MAX_PLANNER_TURNS):
-        turn = planner.plan_turn(turns, previous_draft)
+        turn = planner.plan_turn(turns, previous_draft, session_id=session_id)
         console.print(turn.reply)
         console.print(_render_draft(turn.plan_draft))
         previous_draft = turn.plan_draft.model_dump()
@@ -623,6 +634,7 @@ def main(
         The structured session result, including the process exit code.
     """
     configure_logging()
+    conversation_id = uuid.uuid4()
     console = console if console is not None else StdConsole()
     engine = engine if engine is not None else get_engine()
 
@@ -635,16 +647,24 @@ def main(
         default_backends = RunnerBackends()
     planner = planner if planner is not None else default_planner
     backends = backends if backends is not None else default_backends
-    log.info("orchestrate.start", mode="live" if live else "stub")
+    log.info(
+        "orchestrate.start",
+        mode="live" if live else "stub",
+        session_id=str(conversation_id),
+    )
 
     intent = console.prompt("Describe the evidence review you want: ")
     turns: list[dict[str, str]] = [{"role": "user", "text": intent}]
 
-    plan = _plan_conversation(console, planner, turns)
+    plan = _plan_conversation(console, planner, turns, session_id=conversation_id)
     if isinstance(plan, str):
         console.print("No plan approved; nothing was run.")
         exit_code = EXIT_NO_PLAN if plan == "no_plan" else EXIT_ABANDONED
-        return OrchestrateResult(exit_code=exit_code, turns=turns)
+        return OrchestrateResult(
+            exit_code=exit_code,
+            turns=turns,
+            conversation_id=conversation_id,
+        )
 
     project_id, scope_id, plan_id = _write_plan_row(engine, plan=plan)
     if not live:
@@ -663,6 +683,7 @@ def main(
         plan_row_id=plan_id,
         backends=backends,
         io=runner_io,
+        session_id=conversation_id,
     )
 
     console.print(outcome.collation_render)
@@ -680,6 +701,7 @@ def main(
         turns=turns,
         runner_io=runner_io,
         artefact_present=artefact_present,
+        conversation_id=conversation_id,
     )
 
 

@@ -26,6 +26,13 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.schema import chunk as chunk_table
 from policy_atlas.schema import chunk_embedding, project_source_snapshot
+from policy_atlas.usage import (
+    TokenUsage,
+    token_usage_from_provider,
+)
+from policy_atlas.usage import (
+    usage_metadata as token_usage_metadata,
+)
 
 log = structlog.get_logger()
 
@@ -154,25 +161,29 @@ def resolve_openai_client(
     return OpenAI(api_key=resolved_key, timeout=timeout, max_retries=max_retries)
 
 
-def usage_metadata(usage: CompletionUsage | None) -> dict[str, int | None]:
+def openai_kwargs(model: str, *, reasoning_effort: str | None = None) -> dict[str, Any]:
+    """Request kwargs shared by OpenAI chat-completions call sites.
+
+    Omits reasoning_effort when None so non-reasoning call sites are byte-identical.
+    Provider-neutral by shape: a future Bedrock backend maps or ignores the string.
+    """
+    kwargs: dict[str, Any] = {"model": model}
+    if reasoning_effort is not None:
+        kwargs["reasoning_effort"] = reasoning_effort
+    return kwargs
+
+
+def usage_metadata(usage: CompletionUsage | TokenUsage | None) -> dict[str, int | None]:
     """Token usage as log/span metadata; all-``None`` when the API omitted usage.
 
     Shared by the live chat backends so the usage shape lives in one place.
 
     Args:
-        usage: The response's usage block, or ``None``.
+        usage: The response's usage block, provider-neutral usage, or ``None``.
     """
-    if usage is None:
-        return {
-            "prompt_tokens": None,
-            "completion_tokens": None,
-            "total_tokens": None,
-        }
-    return {
-        "prompt_tokens": usage.prompt_tokens,
-        "completion_tokens": usage.completion_tokens,
-        "total_tokens": usage.total_tokens,
-    }
+    if isinstance(usage, TokenUsage):
+        return token_usage_metadata(usage)
+    return token_usage_metadata(token_usage_from_provider(usage))
 
 
 def log_usage(event: str, usage: CompletionUsage | None) -> None:

@@ -27,7 +27,7 @@ SCHEMA_VERSION = "iof_v1"  # covers the wire AND stored model layers
 # chunk_id null at write (contract decision 4, abstract-envelope location).
 ABSTRACT_SEGMENT_ID = "abstract"
 
-EffectDirection = Literal["positive", "negative", "no_effect", "mixed", "unclear"]
+EffectDirection = Literal["increase", "decrease", "no_effect", "mixed", "unclear"]
 EstimateLevel = Literal["study", "pooled", "claim"]
 CausalityByDesign = Literal["attributable", "plausibly_causal", "associational", "descriptive"]
 StratumType = Literal["timepoint", "subgroup", "setting"]
@@ -149,7 +149,7 @@ class IOFRecordWire(BaseModel):
     effect_direction: EffectDirection = Field(
         description=(
             "Direction of the reported effect on the outcome measure relative to the "
-            "comparator: 'positive' (the outcome increased), 'negative' (the outcome "
+            "comparator: 'increase' (the outcome increased), 'decrease' (the outcome "
             "decreased), 'no_effect' (a reported null result — a finding, not a "
             "gap), 'mixed' (direction differs within this single reported claim), "
             "'unclear' (an effect is reported but its direction cannot be "

@@ -34,7 +34,7 @@ SCREEN_FULLTEXT_PROMPT_VERSION = "screen_fulltext_v1"
 
 # The contracted model floor (the 009 nano lesson is binding); consensus reps
 # add redundancy at stage 1, full text carries the signal at stage 2.
-SCREEN_MODEL = "gpt-5-mini"
+SCREEN_MODEL = "gpt-5.4-mini"
 
 # Consensus shape (contract decisions 3/10, plan-pinned).
 SCREEN_REPS = 3
