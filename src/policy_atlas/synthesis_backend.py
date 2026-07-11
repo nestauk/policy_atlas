@@ -1,7 +1,8 @@
-"""The ``synthesise_sections_v1`` and ``synthesise_section_v5`` prompt surfaces (task 013).
+"""The ``synthesise_sections_v2`` and ``synthesise_section_v5`` prompt surfaces (task 013).
 
 The repo's fifth and sixth product prompts — lead-authored, versioned, recorded
-in synthesis provenance and event payloads. ``synthesise_sections_v1`` is a
+in synthesis provenance and event payloads. ``synthesise_sections_v2`` (v2, 018 C2:
+the evidence-descriptive role menu — owner-scoped addition) is a
 single bounded schema-constrained call proposing the intent-led section list.
 ``synthesise_section_v5`` (v3, task 018 B-B2: the deliberate voice design; v4,
 018 C2 round 2: repetition/label-translation rules; v5 = 018 C2 round 3
@@ -55,7 +56,7 @@ from policy_atlas.usage import UsageResult, token_usage_from_provider
 
 log = structlog.get_logger()
 
-SECTIONS_PROMPT_VERSION = "synthesise_sections_v1"
+SECTIONS_PROMPT_VERSION = "synthesise_sections_v2"
 SECTION_PROMPT_VERSION = "synthesise_section_v5"
 KEY_FINDINGS_PROMPT_VERSION = "synthesise_key_findings_v1"
 
@@ -436,6 +437,15 @@ Instructions:
 - Where the intent asks a direct question, an answer-shaped lead section
   ("what the evidence shows on <the question>" — descriptive, fully cited,
   synthesising across the substrate) is encouraged as the first section.
+- Beyond the question's own aspects, consider whether the evidence supports
+  sections playing these roles, and propose them only when it does: the
+  policy or delivery context the documents themselves describe (under a
+  specific title naming the actual policies, never a generic "Background");
+  cross-cutting patterns computable across the evidence (directions,
+  populations, settings, timeframes); and enablers and barriers as the
+  evidence reports them — described, never turned into recommendations.
+  These are roles a strong evidence report often needs, not required
+  sections: the intent and the substrate decide.
 - Never propose a verdict-section: a section whose premise is an evaluative
   conclusion or recommendation (for example "X is the best option" or "why Y
   should be adopted"). The artefact describes what the evidence contains; it
