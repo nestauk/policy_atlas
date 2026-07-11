@@ -15,7 +15,11 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.embeddings import StubEmbeddingBackend
 from policy_atlas.grounding import content_hash
-from policy_atlas.grounding_judge import StubGroundingJudgeBackend
+from policy_atlas.grounding_judge import (
+    JudgeResponseWire,
+    StubGroundingJudgeBackend,
+    UnspannedAssertionWire,
+)
 from policy_atlas.schema import (
     addressable_unit,
     annotation,
@@ -31,8 +35,10 @@ from policy_atlas.synthesis_backend import (
     ChunkCitationWire,
     ClaimWire,
     GapPayloadWire,
-    SectionClaimsWire,
+    RepairItemWire,
     SectionProposalWire,
+    SectionProseWire,
+    SectionRepairWire,
     SectionTurn,
     SectionWire,
     StubSynthesisBackend,
@@ -54,6 +60,7 @@ from tests.helpers import (
     seed_select_doc,
     seed_source,
 )
+from tests.synthesis_wire import prose_section
 
 
 def _count(conn: Connection, table: Any, project_id: uuid.UUID) -> int:
@@ -125,6 +132,7 @@ def _run_synthesise(
     extraction_run_id: uuid.UUID | None = None,
     grouping_run_id: uuid.UUID | None = None,
     backend: SynthesisBackend | None = None,
+    judge_backend: Any | None = None,
 ) -> dict[str, Any]:
     return synthesise_scope(
         conn,
@@ -140,7 +148,7 @@ def _run_synthesise(
             grouping_run_id=grouping_run_id,
         ),
         synthesis_backend=backend or StubSynthesisBackend(),
-        grounding_judge_backend=StubGroundingJudgeBackend(),
+        grounding_judge_backend=judge_backend or StubGroundingJudgeBackend(),
         embedding_backend=StubEmbeddingBackend(),
     )
 
@@ -432,7 +440,7 @@ class _BoundarySpanBackend:
         chunk_id = chunks[0]["chunk_record_id"]
         return {
             "tool_calls": [],
-            "claims": SectionClaimsWire(
+            "claims": prose_section(
                 claims=[
                     ClaimWire(
                         claim_type="chunk",
@@ -454,7 +462,7 @@ class _BoundarySpanBackend:
         transcript: list[ToolExchange],
         *,
         failing: list[dict[str, Any]],
-    ) -> UsageResult[SectionClaimsWire]:
+    ) -> UsageResult[SectionRepairWire]:
         raise AssertionError("repair_section should not be called for a verified quote")
 
 
@@ -675,7 +683,7 @@ class _GapCorpusAbsenceBackend:
         del seed, transcript, force_emit
         return {
             "tool_calls": [],
-            "claims": SectionClaimsWire(
+            "claims": prose_section(
                 claims=[
                     ClaimWire(
                         claim_type="gap",
@@ -696,7 +704,7 @@ class _GapCorpusAbsenceBackend:
         transcript: list[ToolExchange],
         *,
         failing: list[dict[str, Any]],
-    ) -> UsageResult[SectionClaimsWire]:
+    ) -> UsageResult[SectionRepairWire]:
         raise AssertionError("repair_section should not be called")
 
 
@@ -927,7 +935,13 @@ def test_groups_unsectioned_counted(conn: Connection) -> None:
     assert row.flags.get("groups_unsectioned") is True
 
 
-def test_block_content_is_joined_claim_texts(conn: Connection) -> None:
+def test_block_content_is_authored_prose_and_units_are_span_anchored(
+    conn: Connection,
+) -> None:
+    """ADR 0015 §3/§7: the block content IS the authored prose, and every
+    persisted addressable unit satisfies block.content[start:end] == unit.content.
+    The content is more than the bare "\\n\\n" join of claim texts (the stub
+    splices a connective sentence between claims)."""
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     characterisation_run_id = seed_run(conn, project_id)
@@ -955,16 +969,220 @@ def test_block_content_is_joined_claim_texts(conn: Connection) -> None:
         )
     ).all()
     assert block_rows
+    saw_multi_claim_block = False
     for block_row in block_rows:
         unit_rows = conn.execute(
             select(addressable_unit).where(addressable_unit.c.block_id == block_row.block_id)
         ).all()
         assert unit_rows
-        ordered_units = sorted(unit_rows, key=lambda u: int(u.locator["start"]))
-        expected_content = "\n\n".join(u.content for u in ordered_units)
-        assert block_row.content == expected_content
-        assert block_row.content_hash == content_hash(expected_content)
-        for unit_row in ordered_units:
+        # content_hash is over the block content (the authored prose).
+        assert block_row.content_hash == content_hash(block_row.content)
+        # Every unit's locator round-trips into the block content.
+        for unit_row in unit_rows:
             start = int(unit_row.locator["start"])
             end = int(unit_row.locator["end"])
             assert block_row.content[start:end] == unit_row.content
+        # The block content is NOT the bare join of the claim unit texts — the
+        # prose carries connective tissue between claims (ADR 0015).
+        claim_units = sorted(unit_rows, key=lambda u: int(u.locator["start"]))
+        if len(claim_units) > 1:
+            saw_multi_claim_block = True
+            assert block_row.content != "\n\n".join(u.content for u in claim_units)
+    assert saw_multi_claim_block
+
+
+# --- ADR 0015: span-bind repair lane + unspanned-assertion plumbing ---
+
+
+class _SpanBindBackend:
+    """Emits a single reasoning claim whose text is NOT a substring of the
+    prose (a span-bind failure), then repairs it with a rewritten claim text
+    that is/ isn't present in the (unchanged) prose."""
+
+    mode = "stub"
+    _PROSE = "Alpha reasoning sentence. Beta reasoning sentence."
+
+    def __init__(self, *, repair_text: str) -> None:
+        self._repair_text = repair_text
+
+    def propose_sections(
+        self, *, intent: str, substrate: dict[str, Any], rejection: list[str] | None = None
+    ) -> UsageResult[SectionProposalWire]:
+        del intent, substrate, rejection
+        return SectionProposalWire(
+            sections=[SectionWire(title="Span bind evidence", focus="What binds")]
+        ), None
+
+    def section_turn(
+        self, seed: dict[str, Any], transcript: list[ToolExchange], *, force_emit: bool
+    ) -> UsageResult[SectionTurn]:
+        del seed, transcript, force_emit
+        return {
+            "tool_calls": [],
+            "claims": SectionProseWire(
+                prose=self._PROSE,
+                claims=[
+                    ClaimWire(
+                        claim_type="reasoning",
+                        text="GAMMA sentence absent from the prose.",
+                    )
+                ],
+            ),
+        }, None
+
+    def repair_section(
+        self, seed: dict[str, Any], transcript: list[ToolExchange], *, failing: list[dict[str, Any]]
+    ) -> UsageResult[SectionRepairWire]:
+        del seed, transcript, failing
+        return SectionRepairWire(
+            repairs=[
+                RepairItemWire(
+                    replacement_segment="",
+                    claim=ClaimWire(claim_type="reasoning", text=self._repair_text),
+                )
+            ]
+        ), None
+
+
+def test_span_not_found_repairs_and_rebinds_into_unchanged_prose(conn: Connection) -> None:
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    characterisation_run_id = seed_run(conn, project_id)
+    seed_characterisation(
+        conn, project_id, scope_id, characterisation_run_id, themes={"theme-a": []}
+    )
+
+    # The repair rewrites the claim to a sentence that IS a substring of the prose.
+    summary = _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        characterisation_run_id=characterisation_run_id,
+        backend=_SpanBindBackend(repair_text="Alpha reasoning sentence."),
+    )
+
+    assert summary["counts"]["span_bind_failures"] == 0
+    block_row = conn.execute(
+        select(block).where(
+            block.c.artefact_id.in_(
+                select(artefact.c.artefact_id).where(artefact.c.project_id == project_id)
+            )
+        )
+    ).one()
+    # Prose is untouched by the span-bind lane.
+    assert block_row.content == _SpanBindBackend._PROSE
+    unit_rows = conn.execute(
+        select(addressable_unit).where(addressable_unit.c.block_id == block_row.block_id)
+    ).all()
+    assert len(unit_rows) == 1
+    unit = unit_rows[0]
+    assert unit.content == "Alpha reasoning sentence."
+    start, end = int(unit.locator["start"]), int(unit.locator["end"])
+    assert block_row.content[start:end] == unit.content
+
+
+def test_exhausted_span_bind_failure_is_counted_prose_untouched(conn: Connection) -> None:
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    characterisation_run_id = seed_run(conn, project_id)
+    seed_characterisation(
+        conn, project_id, scope_id, characterisation_run_id, themes={"theme-a": []}
+    )
+
+    # The repair rewrites to a sentence STILL absent from the prose — the claim
+    # is excluded (span_bind_failures) and the prose is left untouched.
+    summary = _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        characterisation_run_id=characterisation_run_id,
+        backend=_SpanBindBackend(repair_text="Still absent from the prose."),
+    )
+
+    assert summary["counts"]["span_bind_failures"] == 1
+    assert summary["flags"].get("span_bind_failed") is True
+    block_row = conn.execute(
+        select(block).where(
+            block.c.artefact_id.in_(
+                select(artefact.c.artefact_id).where(artefact.c.project_id == project_id)
+            )
+        )
+    ).one()
+    assert block_row.content == _SpanBindBackend._PROSE
+    # No claim survived — no addressable unit was minted.
+    assert _count(conn, addressable_unit, project_id) == 0
+
+
+class _UnspannedJudge(StubGroundingJudgeBackend):
+    """The stub judge plus a bound + an unbound unspanned assertion, to exercise
+    the flag-not-drop persistence lane (ADR 0015 §5)."""
+
+    _BOUND = "the section observes the following"
+    _UNBOUND = "THIS EXCERPT IS ABSENT FROM THE PROSE"
+
+    def judge_block(self, envelope: dict[str, Any]) -> UsageResult[JudgeResponseWire]:
+        response, usage = super().judge_block(envelope)
+        prose = envelope.get("section_prose", "")
+        extra: list[UnspannedAssertionWire] = []
+        if isinstance(prose, str) and self._BOUND in prose:
+            extra.append(
+                UnspannedAssertionWire(excerpt=self._BOUND, rationale="bound excerpt")
+            )
+        extra.append(
+            UnspannedAssertionWire(excerpt=self._UNBOUND, rationale="unbound excerpt")
+        )
+        return JudgeResponseWire(
+            verdicts=response.verdicts, unspanned_assertions=extra
+        ), usage
+
+
+def test_unspanned_assertion_bound_minted_unbound_counted(conn: Connection) -> None:
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    characterisation_run_id = seed_run(conn, project_id)
+    seed_characterisation(
+        conn, project_id, scope_id, characterisation_run_id, themes={"theme-a": []}
+    )
+
+    backend = StubSynthesisBackend(
+        proposal=SectionProposalWire(
+            sections=[SectionWire(title="Unspanned evidence", focus="What is asserted")]
+        )
+    )
+    summary = _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        characterisation_run_id=characterisation_run_id,
+        backend=backend,
+        judge_backend=_UnspannedJudge(),
+    )
+
+    assert summary["counts"]["unspanned_assertions"] == 1
+    assert summary["counts"]["unspanned_unbound"] == 1
+    assert summary["flags"].get("unspanned_assertions_present") is True
+
+    block_row = conn.execute(
+        select(block).where(
+            block.c.artefact_id.in_(
+                select(artefact.c.artefact_id).where(artefact.c.project_id == project_id)
+            )
+        )
+    ).one()
+    unspanned_units = conn.execute(
+        select(addressable_unit, annotation.c.payload, annotation.c.annotation_type)
+        .join(annotation, annotation.c.unit_id == addressable_unit.c.unit_id)
+        .where(annotation.c.block_id == block_row.block_id)
+        .where(annotation.c.annotation_type == "unspanned_assertion")
+    ).all()
+    assert len(unspanned_units) == 1
+    row = unspanned_units[0]
+    assert row.payload["rationale"] == "bound excerpt"
+    assert row.content == _UnspannedJudge._BOUND
+    start, end = int(row.locator["start"]), int(row.locator["end"])
+    assert block_row.content[start:end] == _UnspannedJudge._BOUND
+    # The unbound excerpt minted no annotation.
+    assert _UnspannedJudge._UNBOUND not in block_row.content

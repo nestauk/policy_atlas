@@ -16,11 +16,12 @@ from policy_atlas.synthesis_backend import (
     EMISSION_CLAIMS_MAX,
     ClaimWire,
     GapPayloadWire,
-    SectionClaimsWire,
+    RepairItemWire,
     SectionProposalWire,
+    SectionRepairWire,
     SectionTurn,
     StubSynthesisBackend,
-    _salvage_claims,
+    _salvage_section,
 )
 from policy_atlas.synthesis_tools import ToolExchange, run_section_loop
 
@@ -209,8 +210,12 @@ def test_stub_repair_rewords_down_and_repairs_or_keeps_fabricated_quote() -> Non
 
     repaired, repair_usage = backend.repair_section(_seed(), transcript, failing=failing)
     assert repair_usage is None
-    assert repaired.claims[0].text == "Reworded down: Too strong."
-    assert repaired.claims[0].citations[0].quote == transcript[0]["result"]["chunks"][0][
+    repaired_claim = repaired.repairs[0].claim
+    assert repaired_claim is not None
+    assert repaired_claim.text == "Reworded down: Too strong."
+    # The claim text is an exact substring of the spliced replacement segment.
+    assert repaired_claim.text in repaired.repairs[0].replacement_segment
+    assert repaired_claim.citations[0].quote == transcript[0]["result"]["chunks"][0][
         "content"
     ][:60]
 
@@ -231,7 +236,9 @@ def test_stub_repair_rewords_down_and_repairs_or_keeps_fabricated_quote() -> Non
         _seed(), transcript, failing=fabricated
     )
     assert unrepaired_usage is None
-    assert unrepaired.claims[0].citations[0].quote == "This fabricated quote is absent."
+    unrepaired_claim = unrepaired.repairs[0].claim
+    assert unrepaired_claim is not None
+    assert unrepaired_claim.citations[0].quote == "This fabricated quote is absent."
 
     repairable, repairable_usage = backend.repair_section(
         _seed(intent="stubrepairable"),
@@ -239,9 +246,31 @@ def test_stub_repair_rewords_down_and_repairs_or_keeps_fabricated_quote() -> Non
         failing=fabricated,
     )
     assert repairable_usage is None
-    assert repairable.claims[0].citations[0].quote == transcript[0]["result"]["chunks"][0][
+    repairable_claim = repairable.repairs[0].claim
+    assert repairable_claim is not None
+    assert repairable_claim.citations[0].quote == transcript[0]["result"]["chunks"][0][
         "content"
     ][:60]
+
+
+def test_stub_grounding_judge_emits_unspanned_per_stubunspanned_line() -> None:
+    """ADR 0015 §5: the stub judge flags one unspanned assertion per prose line
+    containing ``stubunspanned`` (excerpt = the full line)."""
+    backend = StubGroundingJudgeBackend()
+    prose = "A grounded sentence.\nAn ungrounded stubunspanned assertion.\nAnother line."
+    envelope = build_envelope(
+        claims=[{"claim_id": "c1", "claim_type": "reasoning", "text": "t"}],
+        chunks=[],
+        section_prose=prose,
+        span_map=[{"claim_id": "c1", "start": 0, "end": 1}],
+    )
+
+    result, _usage = backend.judge_block(envelope)
+
+    assert [a.excerpt for a in result.unspanned_assertions] == [
+        "An ungrounded stubunspanned assertion."
+    ]
+    assert result.unspanned_assertions[0].rationale == "Stub unspanned assertion."
 
 
 def test_stub_grounding_judge_verdict_routing() -> None:
@@ -326,23 +355,26 @@ def test_custom_stub_payloads_are_returned() -> None:
     proposal = SectionProposalWire.model_validate(
         {"sections": [{"title": "Custom", "focus": "Custom focus."}]}
     )
-    repair_claims = SectionClaimsWire(
-        claims=[
-            ClaimWire(
-                claim_type="gap",
-                text="Custom repair.",
-                gap=GapPayloadWire(grade="inferred", coverage_base="screened"),
+    repair = SectionRepairWire(
+        repairs=[
+            RepairItemWire(
+                replacement_segment="Custom repair.",
+                claim=ClaimWire(
+                    claim_type="gap",
+                    text="Custom repair.",
+                    gap=GapPayloadWire(grade="inferred", coverage_base="screened"),
+                ),
             )
         ]
     )
-    backend = StubSynthesisBackend(proposal=proposal, repair_claims=repair_claims)
+    backend = StubSynthesisBackend(proposal=proposal, repair=repair)
 
     returned_proposal, proposal_usage = backend.propose_sections(intent="x", substrate={})
     returned_repair, repair_usage = backend.repair_section(_seed(), [], failing=[])
 
     assert returned_proposal is proposal
     assert proposal_usage is None
-    assert returned_repair is repair_claims
+    assert returned_repair is repair
     assert repair_usage is None
 
 
@@ -436,36 +468,54 @@ def test_component_span_applies_langfuse_session() -> None:
     assert fake_client.spans[1][0] == "component:synthesise"
 
 
-def test_salvage_claims_caps_emission_at_max() -> None:
+def test_salvage_section_caps_emission_at_max() -> None:
     """One oversized emission must not drive unbounded writes: overflow claims
     beyond EMISSION_CLAIMS_MAX are salvaged as malformed, never validated."""
     overflow = 7
     total = EMISSION_CLAIMS_MAX + overflow
     arguments = json.dumps({
+        "prose": "Prose.",
         "claims": [
             {"claim_type": "reasoning", "text": f"Reasoning claim {index}."}
             for index in range(total)
         ]
     })
 
-    claims, malformed = _salvage_claims(arguments)
+    section, malformed = _salvage_section(arguments)
 
-    assert len(claims.claims) == EMISSION_CLAIMS_MAX
+    assert len(section.claims) == EMISSION_CLAIMS_MAX
     assert malformed == overflow
 
 
-def test_salvage_claims_rejects_oversized_claim_text() -> None:
+def test_salvage_section_rejects_oversized_claim_text() -> None:
     """A claim whose text exceeds CLAIM_TEXT_MAX is counted malformed and
     dropped, not returned as a valid claim."""
     long_text = "x" * (CLAIM_TEXT_MAX + 1)
     arguments = json.dumps({
+        "prose": "Short claim.",
         "claims": [
             {"claim_type": "reasoning", "text": "Short claim."},
             {"claim_type": "reasoning", "text": long_text},
         ]
     })
 
-    claims, malformed = _salvage_claims(arguments)
+    section, malformed = _salvage_section(arguments)
 
-    assert [claim.text for claim in claims.claims] == ["Short claim."]
+    assert [claim.text for claim in section.claims] == ["Short claim."]
     assert malformed == 1
+
+
+def test_salvage_section_rejects_missing_and_oversized_prose() -> None:
+    """Missing/non-str prose and over-cap prose are turn-consuming malformed
+    emissions (ADR 0015 §1)."""
+    from policy_atlas.synthesis_backend import SECTION_PROSE_MAX
+    from policy_atlas.synthesis_tools import MalformedEmissionError
+
+    with pytest.raises(MalformedEmissionError):
+        _salvage_section(json.dumps({"claims": []}))
+    with pytest.raises(MalformedEmissionError):
+        _salvage_section(json.dumps({"prose": 5, "claims": []}))
+    with pytest.raises(MalformedEmissionError):
+        _salvage_section(
+            json.dumps({"prose": "x" * (SECTION_PROSE_MAX + 1), "claims": []})
+        )

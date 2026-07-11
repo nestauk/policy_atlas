@@ -14,7 +14,7 @@ import json
 import uuid
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -61,8 +61,10 @@ from policy_atlas.synthesis_backend import (
     SECTIONS_PROMPT_VERSION,
     SYNTHESIS_MODEL,
     ClaimWire,
-    SectionClaimsWire,
+    RepairItemWire,
     SectionProposalWire,
+    SectionProseWire,
+    SectionRepairWire,
     SynthesisBackend,
 )
 from policy_atlas.synthesis_tools import (
@@ -111,6 +113,135 @@ ANNOTATION_BY_CLAIM_TYPE = {
     "gap": "gap",
     "reasoning": "reasoning",
 }
+
+
+def _spans_overlap(a: tuple[int, int], bound: Sequence[tuple[int, int]]) -> bool:
+    """Return True if span ``a`` overlaps any span in ``bound``."""
+    return any(a[0] < end and start < a[1] for start, end in bound)
+
+
+def bind_spans(prose: str, texts: list[str]) -> list[tuple[int, int] | None]:
+    """Bind each claim text to a char-offset span into ``prose`` (ADR 0015 §2).
+
+    Ordered-cursor binding: each text is located from the running cursor; a text
+    not found forward falls back to the first occurrence NOT overlapping any
+    already-bound span. Empty text never binds. Overlapping spans are forbidden
+    (fail-closed). By construction ``prose[start:end] == text`` for every bound
+    span.
+
+    Args:
+        prose: The authored section prose.
+        texts: Claim texts to bind, in emission order.
+
+    Returns:
+        One span ``(start, end)`` per text, or ``None`` on bind failure.
+    """
+    spans: list[tuple[int, int] | None] = []
+    bound: list[tuple[int, int]] = []
+    cursor = 0
+    for text in texts:
+        if not text:
+            spans.append(None)
+            continue
+        index = prose.find(text, cursor)
+        if index == -1:
+            # Fall back to any occurrence not overlapping an already-bound span.
+            search = 0
+            index = -1
+            while True:
+                candidate = prose.find(text, search)
+                if candidate == -1:
+                    break
+                span_candidate = (candidate, candidate + len(text))
+                if not _spans_overlap(span_candidate, bound):
+                    index = candidate
+                    break
+                search = candidate + 1
+        if index == -1:
+            spans.append(None)
+            continue
+        span = (index, index + len(text))
+        if _spans_overlap(span, bound):
+            spans.append(None)
+            continue
+        spans.append(span)
+        bound.append(span)
+        cursor = max(cursor, index + len(text))
+    return spans
+
+
+@dataclass(frozen=True)
+class SpliceItem:
+    """One positioned claim for :func:`splice_and_rebind`.
+
+    ``replacement`` is ``None`` to keep the original prose segment verbatim, or
+    a string to splice in its place. ``claim_text`` is the text whose new span
+    is recorded (located inside the emitted segment): for a kept segment it is
+    the segment itself; for a replacement it is the rewritten claim's text, or
+    ``None`` when the segment carries no claim (assertion removed/deleted).
+    """
+
+    key: int
+    span: tuple[int, int]
+    replacement: str | None
+    claim_text: str | None
+
+
+def splice_and_rebind(
+    prose: str, items: Sequence[SpliceItem]
+) -> tuple[str, dict[int, tuple[int, int] | None]]:
+    """Rebuild prose in one pass, recomputing every span by construction.
+
+    Walks all positioned claims ascending by start: inter-claim prose is emitted
+    verbatim; a kept claim re-emits its original segment (span recorded); a
+    replaced claim emits its ``replacement`` and records the new span by locating
+    ``claim_text`` inside it. No delta arithmetic — offsets are recomputed from
+    the emitted pieces (ADR 0015 §4).
+
+    Args:
+        prose: The original section prose.
+        items: Positioned claims (kept + repaired); order-independent input.
+
+    Returns:
+        ``(new_prose, new_span_map)`` where ``new_span_map`` maps each item key
+        to its new span, or ``None`` when the item carries a claim whose text is
+        not a substring of its replacement segment (a repair validation failure).
+        Keys for segments carrying no claim are absent.
+    """
+    ordered = sorted(items, key=lambda item: item.span[0])
+    pieces: list[str] = []
+    span_map: dict[int, tuple[int, int] | None] = {}
+    cursor = 0
+    out_len = 0
+    for item in ordered:
+        start, end = item.span
+        inter = prose[cursor:start]
+        pieces.append(inter)
+        out_len += len(inter)
+        if item.replacement is None:
+            segment = prose[start:end]
+            seg_start = out_len
+            pieces.append(segment)
+            out_len += len(segment)
+            span_map[item.key] = (seg_start, out_len)
+        else:
+            segment = item.replacement
+            seg_base = out_len
+            pieces.append(segment)
+            out_len += len(segment)
+            if item.claim_text is not None and item.claim_text != "":
+                rel = segment.find(item.claim_text)
+                if rel == -1:
+                    span_map[item.key] = None
+                else:
+                    span_map[item.key] = (
+                        seg_base + rel,
+                        seg_base + rel + len(item.claim_text),
+                    )
+        cursor = end
+    tail = prose[cursor:]
+    pieces.append(tail)
+    return "".join(pieces), span_map
 
 
 @dataclass(frozen=True)
@@ -350,6 +481,8 @@ class ClaimDraft:
     rationale: str | None = None
     judge_io_ref: str | None = None
     flags: list[str] = field(default_factory=list)
+    # The claim's bound char-offset span into the section prose (ADR 0015).
+    span: tuple[int, int] | None = None
 
 
 @dataclass(frozen=True)
@@ -362,6 +495,13 @@ class RejectedClaim:
     reason: str
     structural: bool = True
     chunk_quote_failed: bool = False
+    # True when the claim's text could not be bound as a span into the prose
+    # (mirrors ``chunk_quote_failed``); routes to the repair lane and, when
+    # exhausted, counts into ``span_bind_failures``.
+    span_bind_failed: bool = False
+    # The claim's bound span when it bound but failed a per-type validator
+    # (a structural rejection carries its span so repair can splice it).
+    span: tuple[int, int] | None = None
 
 
 @dataclass(frozen=True)
@@ -387,6 +527,12 @@ class SectionAccounting:
     chunk_claims_rejected: int = 0
     claims_rejected_structural: int = 0
     gap_claims_degraded: int = 0
+    # Span-anchored counters (ADR 0015): claims whose text never bound into the
+    # prose (exhausted); judge-flagged unspanned assertions bound into the prose;
+    # unspanned excerpts the judge returned that did not bind.
+    span_bind_failures: int = 0
+    unspanned_assertions: int = 0
+    unspanned_unbound: int = 0
 
 
 def derive_artefact_title(intent: str) -> str:
@@ -440,6 +586,7 @@ def validate_claims(
     section_group_ids: set[str],
     citable_finding_ids: set[str],
     citable_chunk_ids: set[str],
+    spans: Sequence[tuple[int, int] | None],
     claim_ids: Sequence[str] | None = None,
     claim_indices: Sequence[int] | None = None,
     available_claim_types: set[str] | None = None,
@@ -454,6 +601,9 @@ def validate_claims(
         section_group_ids: Group ids assigned to this section.
         citable_finding_ids: Finding ids seeded or returned by this section.
         citable_chunk_ids: Chunk ids returned by this section.
+        spans: Bound char-offset spans (one per claim, aligned): ``None`` for a
+            claim whose text did not bind into the prose (span-bind failure,
+            routed to the repair lane). ADR 0015 §2.
         claim_ids: Optional explicit ids, used for repair replacements.
         claim_indices: Optional original slot indices, used for repair ordering.
         available_claim_types: Optional claim-type gate. When omitted, it is
@@ -480,6 +630,21 @@ def validate_claims(
             if claim_indices is not None and offset < len(claim_indices)
             else offset
         )
+        span = spans[offset] if offset < len(spans) else None
+        if span is None:
+            # The claim's text did not bind as a span into the prose — a
+            # span-bind failure routes to the repair lane (ADR 0015 §2).
+            rejected.append(
+                _reject(
+                    claim,
+                    claim_id=claim_id,
+                    claim_index=claim_index,
+                    reason="span_not_found",
+                    structural=False,
+                    span_bind_failed=True,
+                )
+            )
+            continue
         if claim.claim_type == "reasoning":
             reasoning_count += 1
         result = _validate_claim(
@@ -494,8 +659,11 @@ def validate_claims(
             available_claim_types=available,
         )
         if isinstance(result, RejectedClaim):
-            rejected.append(result)
+            # A structural rejection carries its bound span so the repair lane
+            # can splice its prose segment in place (ADR 0015 §4).
+            rejected.append(replace(result, span=span))
         else:
+            result.span = span
             drafts.append(result)
     return ClaimValidationBatch(drafts=drafts, rejected=rejected)
 
@@ -1245,6 +1413,7 @@ def _reject(
     reason: str,
     structural: bool = True,
     chunk_quote_failed: bool = False,
+    span_bind_failed: bool = False,
 ) -> RejectedClaim:
     return RejectedClaim(
         claim_id=claim_id,
@@ -1253,6 +1422,7 @@ def _reject(
         reason=reason,
         structural=structural,
         chunk_quote_failed=chunk_quote_failed,
+        span_bind_failed=span_bind_failed,
     )
 
 
@@ -1877,11 +2047,13 @@ def _judge_claims(
     claims: Sequence[ClaimDraft],
     substrate: SubstrateView,
     grounding_judge_backend: GroundingJudgeBackend,
-) -> tuple[int, dict[str, int]]:
+    section_prose: str,
+) -> tuple[int, dict[str, int], list[dict[str, Any]]]:
     judged = [claim for claim in claims if claim.claim_type in JUDGED_TYPES]
     if not judged:
-        return 0, UsageAccumulator().payload()
+        return 0, UsageAccumulator().payload(), []
     envelope_claims: list[dict[str, Any]] = []
+    span_map: list[dict[str, Any]] = []
     chunk_ids: set[str] = set()
     for claim in judged:
         chunk_ids.update(claim.judge_chunk_ids)
@@ -1894,6 +2066,10 @@ def _judge_claims(
         if claim.claim_type == "finding":
             record["cited_finding_ids"] = claim.payload.get("cited_finding_ids", [])
         envelope_claims.append(record)
+        if claim.span is not None:
+            span_map.append(
+                {"claim_id": claim.claim_id, "start": claim.span[0], "end": claim.span[1]}
+            )
     chunks = [
         {
             "chunk_record_id": chunk_id,
@@ -1904,7 +2080,12 @@ def _judge_claims(
         for chunk_id in sorted(chunk_ids)
         if chunk_id in substrate.chunk_by_id
     ]
-    envelope = build_envelope(claims=envelope_claims, chunks=chunks)
+    envelope = build_envelope(
+        claims=envelope_claims,
+        chunks=chunks,
+        section_prose=section_prose,
+        span_map=span_map,
+    )
     response, usage = grounding_judge_backend.judge_block(envelope)
     usage_totals = UsageAccumulator()
     usage_totals.add(usage)
@@ -1923,16 +2104,33 @@ def _judge_claims(
         claim.weakly_grounded = claim.weakly_grounded or verdict.weakly_grounded
         claim.rationale = verdict.rationale
         claim.judge_io_ref = judge_io_ref
-    return 1, usage_totals.payload()
+    unspanned = [
+        {
+            "excerpt": assertion.excerpt,
+            "rationale": assertion.rationale,
+            "judge_io_ref": judge_io_ref,
+        }
+        for assertion in response.unspanned_assertions
+    ]
+    return 1, usage_totals.payload(), unspanned
+
+
+def _span_segment(prose: str, span: tuple[int, int] | None) -> str | None:
+    if span is None:
+        return None
+    return prose[span[0] : span[1]]
 
 
 def _failing_records(
     rejected: Sequence[RejectedClaim],
     drafts: Sequence[ClaimDraft],
+    *,
+    prose: str,
 ) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     for rejection in rejected:
         claim_data = rejection.claim.model_dump(mode="json")
+        span = rejection.span
         records.append(
             {
                 "claim_id": rejection.claim_id,
@@ -1940,6 +2138,10 @@ def _failing_records(
                 "claim": claim_data,
                 "reason": rejection.reason,
                 "rationale": rejection.reason,
+                # Bound span + current prose segment (null when the claim never
+                # bound — a span-bind failure), for the prose-splice repair.
+                "span": list(span) if span is not None else None,
+                "segment": _span_segment(prose, span),
             }
         )
     for draft in drafts:
@@ -1959,85 +2161,308 @@ def _failing_records(
                     },
                     "reason": "unsupported_mis_cited",
                     "rationale": draft.rationale or "unsupported_mis_cited",
+                    "span": list(draft.span) if draft.span is not None else None,
+                    "segment": _span_segment(prose, draft.span),
                 }
             )
     return sorted(records, key=lambda item: (int(item["claim_index"]), str(item["claim_id"])))
 
 
-def _replacement_validation(
-    replacements: SectionClaimsWire,
-    *,
-    failing: Sequence[dict[str, Any]],
-    substrate: SubstrateView,
-    section_index: int,
-    section_group_ids: set[str],
-    citable_finding_ids: set[str],
-    citable_chunk_ids: set[str],
-    available_claim_types: set[str],
-    reasoning_count_start: int,
-) -> ClaimValidationBatch:
-    # ponytail: replacements bind to failing slots positionally — the repair
-    # prompt instructs same order; an id-carrying repair schema is a recorded
-    # deferred seam. Count mismatches are flagged by the caller.
-    claim_ids = [str(item["claim_id"]) for item in failing]
-    claim_indices = [int(item["claim_index"]) for item in failing]
-    return validate_claims(
-        replacements.claims[: len(failing)],
-        substrate=substrate,
-        section_index=section_index,
-        section_group_ids=section_group_ids,
-        citable_finding_ids=citable_finding_ids,
-        citable_chunk_ids=citable_chunk_ids,
-        claim_ids=claim_ids,
-        claim_indices=claim_indices,
-        available_claim_types=available_claim_types,
-        reasoning_count_start=reasoning_count_start,
-    )
-
-
-def _finalize_claims(
-    *,
-    initial: ClaimValidationBatch,
-    replacements: ClaimValidationBatch | None,
-    failing: Sequence[dict[str, Any]],
-    accounting: SectionAccounting,
-) -> list[ClaimDraft]:
-    by_index = {draft.claim_index: draft for draft in initial.drafts}
-    initial_rejections = {rejection.claim_index: rejection for rejection in initial.rejected}
-    failing_indices = [int(item["claim_index"]) for item in failing]
-    if replacements is not None:
-        replacement_drafts = {draft.claim_index: draft for draft in replacements.drafts}
-        replacement_rejections = {
-            rejection.claim_index: rejection for rejection in replacements.rejected
-        }
-        for index in failing_indices:
-            if index in replacement_drafts:
-                by_index[index] = replacement_drafts[index]
-                continue
-            if index in by_index:
-                # An originally valid but unsupported claim still has honest
-                # persistence as an unsupported claim if repair fails structurally.
-                continue
-            rejection = replacement_rejections.get(index) or initial_rejections.get(index)
-            if rejection is not None:
-                _count_exclusion(rejection, accounting=accounting)
-    else:
-        for rejection in initial.rejected:
-            _count_exclusion(rejection, accounting=accounting)
-    return [by_index[index] for index in sorted(by_index)]
-
-
 def _count_exclusion(rejection: RejectedClaim, *, accounting: SectionAccounting) -> None:
-    if rejection.chunk_quote_failed:
+    if rejection.span_bind_failed:
+        accounting.span_bind_failures += 1
+    elif rejection.chunk_quote_failed:
         accounting.chunk_claims_rejected += 1
     else:
         accounting.claims_rejected_structural += 1
 
 
+def _count_repair_exclusion(
+    index: int,
+    rejection_by_index: Mapping[int, RejectedClaim],
+    accounting: SectionAccounting,
+) -> None:
+    """Count a failing claim excluded after its repair produced no valid claim.
+
+    A structural rejection reuses its own exclusion bucket (chunk-quote vs
+    generic); an unsupported draft with no rejection record counts generic.
+    """
+    rejection = rejection_by_index.get(index)
+    if rejection is not None:
+        _count_exclusion(rejection, accounting=accounting)
+    else:
+        accounting.claims_rejected_structural += 1
+
+
+def _bind_into(
+    prose: str, text: str, blocked: Sequence[tuple[int, int]]
+) -> tuple[int, int] | None:
+    """Bind ``text`` to the first occurrence in ``prose`` not overlapping
+    any span in ``blocked``; ``None`` on failure. Empty text never binds."""
+    if not text:
+        return None
+    search = 0
+    while True:
+        index = prose.find(text, search)
+        if index == -1:
+            return None
+        span = (index, index + len(text))
+        if not _spans_overlap(span, blocked):
+            return span
+        search = index + 1
+
+
+def _finalize_no_repair(
+    *,
+    initial: ClaimValidationBatch,
+    accounting: SectionAccounting,
+) -> list[ClaimDraft]:
+    """Finalise when no prose splice is applied (no failing, or repair
+    exhausted): unsupported drafts persist verbatim, rejections are counted."""
+    for rejection in initial.rejected:
+        _count_exclusion(rejection, accounting=accounting)
+    by_index = {draft.claim_index: draft for draft in initial.drafts}
+    return [by_index[index] for index in sorted(by_index)]
+
+
+def _bind_unspanned(
+    records: Sequence[dict[str, Any]],
+    prose: str,
+    *,
+    accounting: SectionAccounting,
+) -> list[dict[str, Any]]:
+    """Bind judge-returned unspanned excerpts into the final prose (flag-not-drop).
+
+    Bound excerpts become addressable-unit + annotation mint records; unbound
+    excerpts are counted (``unspanned_unbound``) and logged. Prose is never
+    modified by this lane (ADR 0015 §5).
+    """
+    spans = bind_spans(prose, [str(record["excerpt"]) for record in records])
+    minted: list[dict[str, Any]] = []
+    for record, span in zip(records, spans, strict=False):
+        if span is None:
+            accounting.unspanned_unbound += 1
+            log.info(
+                "synthesise.unspanned_unbound",
+                excerpt=str(record["excerpt"])[:120],
+            )
+            continue
+        accounting.unspanned_assertions += 1
+        minted.append(
+            {
+                "excerpt": record["excerpt"],
+                "rationale": record["rationale"],
+                "judge_io_ref": record["judge_io_ref"],
+                "span": span,
+            }
+        )
+    return minted
+
+
+def _apply_and_rebuild(
+    *,
+    prose: str,
+    initial: ClaimValidationBatch,
+    failing: Sequence[dict[str, Any]],
+    repairs: Sequence[RepairItemWire],
+    substrate: SubstrateView,
+    section_group_ids: set[str],
+    citable_finding_ids: set[str],
+    citable_chunk_ids: set[str],
+    available_claim_types: set[str],
+    grounding_judge_backend: GroundingJudgeBackend,
+    accounting: SectionAccounting,
+) -> tuple[list[ClaimDraft], str, int, dict[str, int], list[dict[str, Any]]]:
+    """Apply the prose-splice repair: rebuild prose in one pass, re-validate and
+    re-judge the repaired claims, and rebind span-bind failures (ADR 0015 §4).
+
+    Returns the final claims, the rebuilt prose, the rejudge call count, the
+    rejudge usage payload, and the rejudge unspanned records.
+    """
+    # Positional repair mapping (repairs[:len(failing)] aligned to failing order).
+    repair_by_index: dict[int, RepairItemWire] = {}
+    failing_by_index: dict[int, dict[str, Any]] = {}
+    for offset, record in enumerate(failing):
+        idx = int(record["claim_index"])
+        failing_by_index[idx] = record
+        if offset < len(repairs):
+            repair_by_index[idx] = repairs[offset]
+    failing_indices = set(failing_by_index)
+
+    draft_by_index = {draft.claim_index: draft for draft in initial.drafts}
+    rejection_by_index = {
+        rejection.claim_index: rejection for rejection in initial.rejected
+    }
+
+    # Positioned claims = every claim currently carrying a bound span.
+    positioned: list[tuple[int, tuple[int, int]]] = []
+    for draft in initial.drafts:
+        if draft.span is not None:
+            positioned.append((draft.claim_index, draft.span))
+    for rejection in initial.rejected:
+        if rejection.span is not None:
+            positioned.append((rejection.claim_index, rejection.span))
+
+    items: list[SpliceItem] = []
+    replace_claim_by_index: dict[int, ClaimWire] = {}
+    kept_draft_indices: set[int] = set()
+    for idx, span in positioned:
+        repair = repair_by_index.get(idx)
+        if idx in failing_indices and repair is not None:
+            if repair.claim is None:
+                # Segment rewritten to carry no claim, or deleted (empty
+                # segment): the original claim is excluded (exhausted repair).
+                items.append(
+                    SpliceItem(
+                        key=idx,
+                        span=span,
+                        replacement=repair.replacement_segment,
+                        claim_text=None,
+                    )
+                )
+                _count_repair_exclusion(idx, rejection_by_index, accounting)
+            else:
+                items.append(
+                    SpliceItem(
+                        key=idx,
+                        span=span,
+                        replacement=repair.replacement_segment,
+                        claim_text=repair.claim.text,
+                    )
+                )
+                replace_claim_by_index[idx] = repair.claim
+        elif idx in failing_indices:
+            # Failing but no repair item (count mismatch): keep an unsupported
+            # draft verbatim; drop a structural rejection (residual prose stays,
+            # exclusion counted).
+            if idx in draft_by_index:
+                items.append(
+                    SpliceItem(key=idx, span=span, replacement=None, claim_text=None)
+                )
+                kept_draft_indices.add(idx)
+            elif idx in rejection_by_index:
+                _count_exclusion(rejection_by_index[idx], accounting=accounting)
+        else:
+            # Surviving (passing) draft — kept verbatim, span shifts.
+            items.append(
+                SpliceItem(key=idx, span=span, replacement=None, claim_text=None)
+            )
+            kept_draft_indices.add(idx)
+
+    new_prose, span_map = splice_and_rebind(prose, items)
+
+    # Kept drafts shift to their rebuilt spans; the round-trip is a code
+    # invariant, not a model failure.
+    for idx in kept_draft_indices:
+        draft = draft_by_index[idx]
+        new_span = span_map[idx]
+        if new_span is None or new_prose[new_span[0] : new_span[1]] != draft.text:
+            raise SynthesiseFailure("span_rebind_invariant")
+        draft.span = new_span
+
+    # Reasoning cap binds across passes.
+    reasoning_count = sum(
+        1
+        for idx in kept_draft_indices
+        if draft_by_index[idx].claim_type == "reasoning"
+    )
+
+    replacement_drafts: list[ClaimDraft] = []
+    for idx in sorted(replace_claim_by_index):
+        claim = replace_claim_by_index[idx]
+        record = failing_by_index[idx]
+        claim_id = str(record["claim_id"])
+        new_span = span_map[idx]
+        if new_span is None:
+            # The rewritten claim text is not a substring of its replacement
+            # segment — the repair fails validation; the claim is excluded.
+            _count_repair_exclusion(idx, rejection_by_index, accounting)
+            continue
+        if claim.claim_type == "reasoning":
+            reasoning_count += 1
+        result = _validate_claim(
+            claim,
+            claim_id=claim_id,
+            claim_index=idx,
+            substrate=substrate,
+            section_group_ids=section_group_ids,
+            citable_finding_ids=citable_finding_ids,
+            citable_chunk_ids=citable_chunk_ids,
+            reasoning_count=reasoning_count,
+            available_claim_types=available_claim_types,
+        )
+        if isinstance(result, RejectedClaim):
+            _count_exclusion(result, accounting=accounting)
+            continue
+        if new_prose[new_span[0] : new_span[1]] != result.text:
+            raise SynthesiseFailure("span_rebind_invariant")
+        result.span = new_span
+        replacement_drafts.append(result)
+
+    # Span-bind-failed repairs: no splice — rebind the rewritten claim text into
+    # the current prose; still unbound → excluded (span_bind_failures).
+    rebound_drafts: list[ClaimDraft] = []
+    blocked_spans: list[tuple[int, int]] = []
+    for idx in kept_draft_indices:
+        kept_span = draft_by_index[idx].span
+        if kept_span is not None:
+            blocked_spans.append(kept_span)
+    for draft in replacement_drafts:
+        if draft.span is not None:
+            blocked_spans.append(draft.span)
+    for idx in sorted(failing_indices):
+        record = failing_by_index[idx]
+        if record.get("span") is not None:
+            continue  # a spanned failure, handled by the splice above
+        repair = repair_by_index.get(idx)
+        if repair is None or repair.claim is None:
+            accounting.span_bind_failures += 1
+            continue
+        rebind = _bind_into(new_prose, repair.claim.text, blocked_spans)
+        if rebind is None:
+            accounting.span_bind_failures += 1
+            continue
+        if repair.claim.claim_type == "reasoning":
+            reasoning_count += 1
+        result = _validate_claim(
+            repair.claim,
+            claim_id=str(record["claim_id"]),
+            claim_index=idx,
+            substrate=substrate,
+            section_group_ids=section_group_ids,
+            citable_finding_ids=citable_finding_ids,
+            citable_chunk_ids=citable_chunk_ids,
+            reasoning_count=reasoning_count,
+            available_claim_types=available_claim_types,
+        )
+        if isinstance(result, RejectedClaim):
+            _count_exclusion(result, accounting=accounting)
+            continue
+        result.span = rebind
+        blocked_spans.append(rebind)
+        rebound_drafts.append(result)
+
+    rejudged = replacement_drafts + rebound_drafts
+    rejudge_calls, rejudge_usage, rejudge_unspanned = _judge_claims(
+        claims=rejudged,
+        substrate=substrate,
+        grounding_judge_backend=grounding_judge_backend,
+        section_prose=new_prose,
+    )
+
+    final_by_index: dict[int, ClaimDraft] = {
+        idx: draft_by_index[idx] for idx in kept_draft_indices
+    }
+    for draft in rejudged:
+        final_by_index[draft.claim_index] = draft
+    final = [final_by_index[idx] for idx in sorted(final_by_index)]
+    return final, new_prose, rejudge_calls, rejudge_usage, rejudge_unspanned
+
+
 def _section_claims(
     *,
     section_index: int,
-    raw_claims: SectionClaimsWire,
+    raw_claims: SectionProseWire,
     seed: dict[str, Any],
     transcript: list[ToolExchange],
     substrate: SubstrateView,
@@ -2048,9 +2473,11 @@ def _section_claims(
     grounding_judge_backend: GroundingJudgeBackend,
     available_claim_types: set[str],
     accounting: SectionAccounting,
-) -> tuple[list[ClaimDraft], dict[str, int], dict[str, int]]:
+) -> tuple[list[ClaimDraft], str, list[dict[str, Any]], dict[str, int], dict[str, int]]:
     call_counts = {"judge": 0, "repair": 0, "rejudge": 0}
     usage_totals = UsageAccumulator()
+    prose = raw_claims.prose
+    spans = bind_spans(prose, [claim.text for claim in raw_claims.claims])
     initial = validate_claims(
         raw_claims.claims,
         substrate=substrate,
@@ -2058,74 +2485,74 @@ def _section_claims(
         section_group_ids=section_group_ids,
         citable_finding_ids=citable_finding_ids,
         citable_chunk_ids=citable_chunk_ids,
+        spans=spans,
         available_claim_types=available_claim_types,
     )
-    judge_calls, judge_usage = _judge_claims(
+    judge_calls, judge_usage, unspanned = _judge_claims(
         claims=initial.drafts,
         substrate=substrate,
         grounding_judge_backend=grounding_judge_backend,
+        section_prose=prose,
     )
     call_counts["judge"] += judge_calls
     usage_totals.add_payload(judge_usage)
-    failing = _failing_records(initial.rejected, initial.drafts)
-    replacements: ClaimValidationBatch | None = None
-    if failing:
+    failing = _failing_records(initial.rejected, initial.drafts, prose=prose)
+
+    final: list[ClaimDraft]
+    final_prose = prose
+    if not failing:
+        final = _finalize_no_repair(initial=initial, accounting=accounting)
+    else:
         accounting.repair_taken = True
         call_counts["repair"] += 1
+        repair_wire: SectionRepairWire | None
         try:
-            repair_claims, repair_usage = synthesis_backend.repair_section(
+            repair_wire, repair_usage = synthesis_backend.repair_section(
                 seed, transcript, failing=failing
             )
             usage_totals.add(repair_usage)
         except MalformedEmissionError:
             # The one repair call produced structurally unparseable output —
             # the repair is loop-free and unrepeatable, so the failing claims
-            # land per the exhaustion rules (soft-flagged / the counted
-            # exclusions), never a whole-component failure. Flagged so a
-            # systematically malforming backend is distinguishable from
-            # honest sparsity in the roll-up.
+            # land per the exhaustion rules (prose untouched; the counted
+            # exclusions), never a whole-component failure.
             accounting.repair_unparseable = True
-            repair_claims = None
-        if repair_claims is not None:
-            if len(repair_claims.claims) != len(failing):
+            repair_wire = None
+        if repair_wire is None:
+            final = _finalize_no_repair(initial=initial, accounting=accounting)
+        else:
+            if len(repair_wire.repairs) != len(failing):
                 accounting.repair_count_mismatch = True
-            failing_index_set = {int(item["claim_index"]) for item in failing}
-            surviving_reasoning = sum(
-                1
-                for draft in initial.drafts
-                if draft.claim_type == "reasoning"
-                and draft.claim_index not in failing_index_set
-            )
-            replacements = _replacement_validation(
-                repair_claims,
+            (
+                final,
+                final_prose,
+                rejudge_calls,
+                rejudge_usage,
+                rejudge_unspanned,
+            ) = _apply_and_rebuild(
+                prose=prose,
+                initial=initial,
                 failing=failing,
+                repairs=repair_wire.repairs,
                 substrate=substrate,
-                section_index=section_index,
                 section_group_ids=section_group_ids,
                 citable_finding_ids=citable_finding_ids,
                 citable_chunk_ids=citable_chunk_ids,
                 available_claim_types=available_claim_types,
-                reasoning_count_start=surviving_reasoning,
-            )
-            rejudge_calls, rejudge_usage = _judge_claims(
-                claims=replacements.drafts,
-                substrate=substrate,
                 grounding_judge_backend=grounding_judge_backend,
+                accounting=accounting,
             )
             call_counts["rejudge"] += rejudge_calls
             usage_totals.add_payload(rejudge_usage)
-    final = _finalize_claims(
-        initial=initial,
-        replacements=replacements,
-        failing=failing,
-        accounting=accounting,
-    )
+            unspanned = unspanned + rejudge_unspanned
+
     for claim in final:
         if "gap_degraded" in claim.flags:
             accounting.gap_claims_degraded += 1
         if claim.verdict == "unsupported_mis_cited" and "unsupported_mis_cited" not in claim.flags:
             claim.flags.append("unsupported_mis_cited")
-    return final, call_counts, usage_totals.payload()
+    minted_unspanned = _bind_unspanned(unspanned, final_prose, accounting=accounting)
+    return final, final_prose, minted_unspanned, call_counts, usage_totals.payload()
 
 
 def _claim_counts(claims: Sequence[ClaimDraft]) -> dict[str, int]:
@@ -2184,12 +2611,15 @@ def _write_section(
     conn: Connection,
     *,
     artefact_id: uuid.UUID,
+    prose: str,
     claims: Sequence[ClaimDraft],
+    unspanned: Sequence[dict[str, Any]],
     substrate: SubstrateView,
     created_at: datetime,
 ) -> str:
-    texts = [claim.text for claim in claims]
-    content = "\n\n".join(texts)
+    # The block content IS the authored prose (ADR 0015 §3); each claim's
+    # addressable unit locates its bound span, and unit.content == prose[span].
+    content = prose
     block_id = uuid.uuid4()
     conn.execute(
         block.insert().values(
@@ -2200,16 +2630,16 @@ def _write_section(
             created_at=created_at,
         )
     )
-    offset = 0
     unit_rows: list[dict[str, Any]] = []
     annotation_rows: list[dict[str, Any]] = []
     citation_rows: list[dict[str, Any]] = []
-    for index, claim in enumerate(claims):
-        if index > 0:
-            offset += 2
-        start = offset
-        end = start + len(claim.text)
-        offset = end
+    for claim in claims:
+        if claim.span is None:
+            # Every persisted claim is span-anchored by construction.
+            raise SynthesiseFailure("claim_span_missing")
+        start, end = claim.span
+        if content[start:end] != claim.text:
+            raise SynthesiseFailure("span_rebind_invariant")
         unit_id = uuid.uuid4()
         annotation_id = uuid.uuid4()
         unit_rows.append(
@@ -2242,6 +2672,37 @@ def _write_section(
                 "created_at": created_at,
             }
             for citation in claim.citation_rows
+        )
+    for assertion in unspanned:
+        start, end = assertion["span"]
+        unit_id = uuid.uuid4()
+        annotation_id = uuid.uuid4()
+        unit_rows.append(
+            {
+                "unit_id": unit_id,
+                "block_id": block_id,
+                "unit_type": "text_span",
+                "locator": {"start": start, "end": end},
+                "content": assertion["excerpt"],
+                "created_at": created_at,
+            }
+        )
+        annotation_rows.append(
+            {
+                "annotation_id": annotation_id,
+                "block_id": block_id,
+                "unit_id": unit_id,
+                "annotation_type": "unspanned_assertion",
+                "payload": {
+                    "excerpt": assertion["excerpt"],
+                    "rationale": assertion["rationale"],
+                    "judge_model": JUDGE_MODEL,
+                    "judge_prompt_version": JUDGE_PROMPT_VERSION,
+                    "envelope_version": ENVELOPE_VERSION,
+                    "judge_io_ref": assertion["judge_io_ref"],
+                },
+                "created_at": created_at,
+            }
         )
     if unit_rows:
         conn.execute(addressable_unit.insert(), unit_rows)
@@ -2393,6 +2854,9 @@ def _blocks_rollup(
         "chunk_claims_rejected": accounting.chunk_claims_rejected,
         "claims_rejected_structural": accounting.claims_rejected_structural,
         "gap_claims_degraded": accounting.gap_claims_degraded,
+        "span_bind_failures": accounting.span_bind_failures,
+        "unspanned_assertions": accounting.unspanned_assertions,
+        "unspanned_unbound": accounting.unspanned_unbound,
         "repair_taken": accounting.repair_taken,
         "repair_count_mismatch": accounting.repair_count_mismatch,
         "repair_unparseable": accounting.repair_unparseable,
@@ -2410,6 +2874,9 @@ def _rollup_counts(
     chunk_claims_rejected: int,
     claims_rejected_structural: int,
     gap_claims_degraded: int,
+    span_bind_failures: int,
+    unspanned_assertions: int,
+    unspanned_unbound: int,
     tool_calls_total: int,
 ) -> dict[str, Any]:
     verdict_counts: Counter[str] = Counter()
@@ -2439,6 +2906,9 @@ def _rollup_counts(
         "chunk_claims_rejected": chunk_claims_rejected,
         "claims_rejected_structural": claims_rejected_structural,
         "gap_claims_degraded": gap_claims_degraded,
+        "span_bind_failures": span_bind_failures,
+        "unspanned_assertions": unspanned_assertions,
+        "unspanned_unbound": unspanned_unbound,
         "tool_calls_total": tool_calls_total,
         "findings_cited_distinct": len(finding_ids),
     }
@@ -2458,6 +2928,8 @@ def _rollup_flags(
     chunk_claims_rejected: int,
     claims_rejected_structural: int,
     gap_claims_degraded: int,
+    span_bind_failures: int,
+    unspanned_assertions: int,
     turn_cap_hit: bool,
     repair_path_taken: bool,
     repair_count_mismatch: bool,
@@ -2476,6 +2948,10 @@ def _rollup_flags(
         flags["claims_rejected_structural"] = True
     if gap_claims_degraded:
         flags["gap_claims_degraded"] = True
+    if span_bind_failures:
+        flags["span_bind_failed"] = True
+    if unspanned_assertions:
+        flags["unspanned_assertions_present"] = True
     if turn_cap_hit:
         flags["turn_cap_hit"] = True
     if repair_path_taken:
@@ -2720,6 +3196,9 @@ def synthesise_scope(
     total_chunk_rejections = 0
     total_structural_rejections = 0
     total_gap_degraded = 0
+    total_span_bind_failures = 0
+    total_unspanned_assertions = 0
+    total_unspanned_unbound = 0
     total_tool_calls = 0
     turn_cap_hit_any = False
     repair_path_taken = False
@@ -2783,9 +3262,15 @@ def synthesise_scope(
             # validation (backend per-claim salvage) — counted, never silent.
             claims_rejected_structural=int(loop_result.get("malformed_claims", 0)),
         )
-        raw_claims = loop_result["claims"] or SectionClaimsWire(claims=[])
+        raw_claims = loop_result["claims"] or SectionProseWire(prose="", claims=[])
         try:
-            claims, section_call_counts, section_usage = _section_claims(
+            (
+                claims,
+                final_prose,
+                minted_unspanned,
+                section_call_counts,
+                section_usage,
+            ) = _section_claims(
                 section_index=section_index,
                 raw_claims=raw_claims,
                 seed=seed,
@@ -2813,7 +3298,9 @@ def synthesise_scope(
         block_id = _write_section(
             conn,
             artefact_id=artefact_id,
+            prose=final_prose,
             claims=claims,
+            unspanned=minted_unspanned,
             substrate=substrate,
             created_at=created_at,
         )
@@ -2821,6 +3308,9 @@ def synthesise_scope(
         total_chunk_rejections += accounting.chunk_claims_rejected
         total_structural_rejections += accounting.claims_rejected_structural
         total_gap_degraded += accounting.gap_claims_degraded
+        total_span_bind_failures += accounting.span_bind_failures
+        total_unspanned_assertions += accounting.unspanned_assertions
+        total_unspanned_unbound += accounting.unspanned_unbound
         total_tool_calls += accounting.tool_call_count
         turn_cap_hit_any = turn_cap_hit_any or accounting.turn_cap_hit
         repair_path_taken = repair_path_taken or accounting.repair_taken
@@ -2918,6 +3408,9 @@ def synthesise_scope(
         chunk_claims_rejected=total_chunk_rejections,
         claims_rejected_structural=total_structural_rejections,
         gap_claims_degraded=total_gap_degraded,
+        span_bind_failures=total_span_bind_failures,
+        unspanned_assertions=total_unspanned_assertions,
+        unspanned_unbound=total_unspanned_unbound,
         tool_calls_total=total_tool_calls,
     )
     flags = _rollup_flags(
@@ -2927,6 +3420,8 @@ def synthesise_scope(
         chunk_claims_rejected=total_chunk_rejections,
         claims_rejected_structural=total_structural_rejections,
         gap_claims_degraded=total_gap_degraded,
+        span_bind_failures=total_span_bind_failures,
+        unspanned_assertions=total_unspanned_assertions,
         turn_cap_hit=turn_cap_hit_any,
         repair_path_taken=repair_path_taken,
         repair_count_mismatch=repair_count_mismatch_any,

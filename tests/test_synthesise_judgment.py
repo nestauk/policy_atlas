@@ -38,8 +38,8 @@ from policy_atlas.synthesis_backend import (
     ChunkCitationWire,
     ClaimWire,
     GapPayloadWire,
-    SectionClaimsWire,
     SectionProposalWire,
+    SectionRepairWire,
     SectionTurn,
     SectionWire,
     StubSynthesisBackend,
@@ -71,6 +71,7 @@ from tests.helpers import (
     seed_screening_result,
     seed_select_doc,
 )
+from tests.synthesis_wire import prose_section, repair_wire
 
 
 def _count(conn: Connection, table: Any, project_id: uuid.UUID) -> int:
@@ -175,7 +176,7 @@ class _CapCountingBackend:
         if force_emit:
             return {
                 "tool_calls": [],
-                "claims": SectionClaimsWire(
+                "claims": prose_section(
                     claims=[
                         ClaimWire(
                             claim_type="gap",
@@ -237,7 +238,7 @@ def _tool_turn(tool: str) -> SectionTurn:
 def _emit_turn() -> SectionTurn:
     return {
         "tool_calls": [],
-        "claims": SectionClaimsWire(
+        "claims": prose_section(
             claims=[
                 ClaimWire(
                     claim_type="gap",
@@ -304,7 +305,7 @@ class _SiblingRepairBackend:
         chunk_id = chunks[0]["chunk_record_id"] if chunks else "missing"
         return {
             "tool_calls": [],
-            "claims": SectionClaimsWire(
+            "claims": prose_section(
                 claims=[
                     ClaimWire(
                         claim_type="chunk",
@@ -326,14 +327,14 @@ class _SiblingRepairBackend:
 
     def repair_section(
         self, seed: dict[str, Any], transcript: list[Any], *, failing: list[dict[str, Any]]
-    ) -> UsageResult[SectionClaimsWire]:
+    ) -> UsageResult[SectionRepairWire]:
         # Return the failing claim unchanged — the fabricated quote stays fabricated.
         claims: list[ClaimWire] = []
         for record in failing:
             raw = record.get("claim", record)
             claim_data = {k: v for k, v in raw.items() if k in ClaimWire.model_fields}
             claims.append(ClaimWire.model_validate(claim_data))
-        return SectionClaimsWire(claims=claims), None
+        return repair_wire(claims=claims), None
 
 
 def test_sibling_repair_guard(conn: Connection) -> None:
@@ -592,7 +593,7 @@ class _CrossSectionBackend:
             self.section0_chunk_id = chunk_id
             return {
                 "tool_calls": [],
-                "claims": SectionClaimsWire(
+                "claims": prose_section(
                     claims=[
                         ClaimWire(
                             claim_type="chunk",
@@ -608,7 +609,7 @@ class _CrossSectionBackend:
         assert self.section0_chunk_id is not None
         return {
             "tool_calls": [],
-            "claims": SectionClaimsWire(
+            "claims": prose_section(
                 claims=[
                     ClaimWire(
                         claim_type="chunk",
@@ -625,13 +626,13 @@ class _CrossSectionBackend:
 
     def repair_section(
         self, seed: dict[str, Any], transcript: list[Any], *, failing: list[dict[str, Any]]
-    ) -> UsageResult[SectionClaimsWire]:
+    ) -> UsageResult[SectionRepairWire]:
         claims: list[ClaimWire] = []
         for record in failing:
             raw = record.get("claim", record)
             claim_data = {k: v for k, v in raw.items() if k in ClaimWire.model_fields}
             claims.append(ClaimWire.model_validate(claim_data))
-        return SectionClaimsWire(claims=claims), None
+        return repair_wire(claims=claims), None
 
 
 def test_ledger_cross_section_citation_rejected(conn: Connection) -> None:
@@ -792,6 +793,7 @@ def test_reasoning_over_cap() -> None:
         section_group_ids=set(),
         citable_finding_ids=set(),
         citable_chunk_ids=set(),
+        spans=[(index, index + 1) for index in range(len(claims))],
         available_claim_types={"gap", "reasoning"},
     )
 

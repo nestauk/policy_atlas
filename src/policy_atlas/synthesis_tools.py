@@ -51,7 +51,7 @@ from policy_atlas.tags import has_control_character
 from policy_atlas.usage import UsageAccumulator
 
 if TYPE_CHECKING:
-    from policy_atlas.synthesis_backend import SectionClaimsWire
+    from policy_atlas.synthesis_backend import SectionProseWire
 
 # --- Plan-pinned constants (plan.md rev 2 — binding; the caps-bind test
 # asserts these module constants are the values enforced on the live path,
@@ -308,7 +308,7 @@ class ToolValidationError(Exception):
 class MalformedEmissionError(Exception):
     """A claims emission whose arguments failed structural validation.
 
-    Raised by live backends when the provider's ``emit_claims`` arguments do
+    Raised by live backends when the provider's ``emit_section`` arguments do
     not parse into the wire models (strict constrained decoding is unavailable
     for the pattern claim's counts map). The loop runner treats it as a
     turn-consuming error exchange — the model reads the bounded validation
@@ -320,7 +320,7 @@ class MalformedEmissionError(Exception):
 class SectionLoopResult(TypedDict):
     """Outcome of one bounded section tool-calling loop."""
 
-    claims: SectionClaimsWire | None
+    claims: SectionProseWire | None
     transcript: list[ToolExchange]
     turns_used: int
     tool_call_counts: dict[str, int]
@@ -1739,9 +1739,9 @@ def run_section_loop(
                     "malformed claims emission on the forced final turn"
                 ) from exc
             transcript.append({
-                "tool": "emit_claims",
+                "tool": "emit_section",
                 "arguments": {},
-                "result": {"error": f"emit_claims arguments invalid: {exc}"},
+                "result": {"error": f"emit_section arguments invalid: {exc}"},
             })
             rejected_tool_calls += 1
             continue

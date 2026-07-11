@@ -33,8 +33,8 @@ from policy_atlas.schema import chunk as chunk_table
 from policy_atlas.synthesis_backend import (
     ChunkCitationWire,
     ClaimWire,
-    SectionClaimsWire,
     SectionProposalWire,
+    SectionRepairWire,
     SectionTurn,
     SectionWire,
     StubSynthesisBackend,
@@ -51,6 +51,7 @@ from tests.helpers import (
     seed_scope,
     seed_select_doc,
 )
+from tests.synthesis_wire import prose_section, repair_wire
 
 
 def _count(conn: Connection, table: Any, project_id: uuid.UUID) -> int:
@@ -221,7 +222,7 @@ class _SearchAndCiteBackend:
         chunk_id = chunks[0]["chunk_record_id"] if chunks else "missing"
         return {
             "tool_calls": [],
-            "claims": SectionClaimsWire(
+            "claims": prose_section(
                 claims=[
                     ClaimWire(
                         claim_type="chunk",
@@ -236,9 +237,9 @@ class _SearchAndCiteBackend:
 
     def repair_section(
         self, seed: dict[str, Any], transcript: list[Any], *, failing: list[dict[str, Any]]
-    ) -> UsageResult[SectionClaimsWire]:
+    ) -> UsageResult[SectionRepairWire]:
         del seed, transcript, failing
-        return SectionClaimsWire(claims=[]), None
+        return repair_wire(claims=[]), None
 
 
 class _CapturingJudgeBackend:

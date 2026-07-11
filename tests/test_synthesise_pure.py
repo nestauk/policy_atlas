@@ -25,11 +25,14 @@ from policy_atlas.synthesise import (
     CorpusProfile,
     CoverageRecord,
     FindingInfo,
+    SpliceItem,
     SubstrateView,
     _anchor_counts,
+    bind_spans,
     build_ledger,
     derive_artefact_title,
     generation_budget_max,
+    splice_and_rebind,
     validate_claims,
 )
 
@@ -153,6 +156,7 @@ def _rejected_reason(claim: ClaimWire, **kwargs: Any) -> str:
         section_group_ids={"group-1"},
         citable_finding_ids=citable_finding_ids,
         citable_chunk_ids=citable_chunk_ids,
+        spans=kwargs.pop("spans", [(0, 1)]),
         **kwargs,
     )
     assert len(batch.rejected) == 1
@@ -339,6 +343,7 @@ def test_pattern_theme_gap_and_reasoning_validation_edges() -> None:
         section_group_ids={"group-1"},
         citable_finding_ids={"finding-1"},
         citable_chunk_ids={"11111111-1111-1111-1111-111111111111"},
+        spans=[(index, index + 1) for index in range(len(reasoning))],
     )
     assert [rejection.reason for rejection in batch.rejected] == ["reasoning_over_cap"]
 
@@ -362,6 +367,7 @@ def test_gap_degradation_and_caveat_payloads() -> None:
         section_group_ids={"group-1"},
         citable_finding_ids={"finding-1"},
         citable_chunk_ids={"11111111-1111-1111-1111-111111111111"},
+        spans=[(0, 1)],
     )
     assert degraded.drafts[0].flags == ["gap_degraded"]
     assert degraded.drafts[0].payload["gap"]["grade"] == "inferred"
@@ -384,6 +390,7 @@ def test_gap_degradation_and_caveat_payloads() -> None:
         section_group_ids={"group-1"},
         citable_finding_ids={"finding-1"},
         citable_chunk_ids={"11111111-1111-1111-1111-111111111111"},
+        spans=[(0, 1)],
     )
     caveat = caveated.drafts[0].payload["gap"]["caveat"]
     assert caveat == {
@@ -406,6 +413,7 @@ def test_reasoning_cap_binds_across_repair() -> None:
         section_group_ids={"group-1"},
         citable_finding_ids={"finding-1"},
         citable_chunk_ids={"11111111-1111-1111-1111-111111111111"},
+        spans=[(0, 1)],
         reasoning_count_start=REASONING_CLAIMS_MAX,
     )
     assert not at_cap.drafts
@@ -418,6 +426,7 @@ def test_reasoning_cap_binds_across_repair() -> None:
         section_group_ids={"group-1"},
         citable_finding_ids={"finding-1"},
         citable_chunk_ids={"11111111-1111-1111-1111-111111111111"},
+        spans=[(0, 1)],
         reasoning_count_start=0,
     )
     assert not fresh.rejected
@@ -448,6 +457,7 @@ def test_finding_claim_with_empty_grounding_is_weakly_grounded() -> None:
         section_group_ids={"group-1"},
         citable_finding_ids={"finding-1"},
         citable_chunk_ids={"11111111-1111-1111-1111-111111111111"},
+        spans=[(0, 1)],
     )
     assert not batch.rejected
     draft = batch.drafts[0]
@@ -492,3 +502,74 @@ def test_anchor_counts_tallies_verified_and_failed_anchors() -> None:
         payload={"citations": [{"chunk_id": "chunk-1"}]},
     )
     assert _anchor_counts([claim_with_anchors, claim_with_citation]) == (2, 1)
+
+
+# --- ADR 0015 §2/§4: span binder + one-pass splice/rebind (pure) ---
+
+
+def test_bind_spans_duplicate_texts_bind_ordered_cursor() -> None:
+    prose = "the rate fell the rate fell"
+    spans = bind_spans(prose, ["the rate fell", "the rate fell"])
+    assert spans == [(0, 13), (14, 27)]
+    for text, span in zip(["the rate fell", "the rate fell"], spans, strict=True):
+        assert span is not None
+        assert prose[span[0] : span[1]] == text
+
+
+def test_bind_spans_out_of_order_binds_via_fallback_without_overlap() -> None:
+    prose = "alpha beta"
+    # "beta" binds forward (cursor past it), "alpha" only via the non-overlapping
+    # fallback scanning from the start.
+    spans = bind_spans(prose, ["beta", "alpha"])
+    assert spans == [(6, 10), (0, 5)]
+
+
+def test_bind_spans_overlap_empty_and_missing_are_none_fail_closed() -> None:
+    # Overlap forbidden: the second "aa" can only land overlapping the first.
+    assert bind_spans("aaa", ["aa", "aa"]) == [(0, 2), None]
+    # Empty text never binds.
+    assert bind_spans("anything", [""]) == [None]
+    # Missing text never binds.
+    assert bind_spans("present", ["absent"]) == [None]
+
+
+def test_bind_spans_post_condition_roundtrips() -> None:
+    prose = "one two three two one"
+    texts = ["one", "two", "three", "one"]
+    spans = bind_spans(prose, texts)
+    for text, span in zip(texts, spans, strict=True):
+        assert span is not None
+        assert prose[span[0] : span[1]] == text
+
+
+def test_splice_and_rebind_mixed_keep_replace_delete_roundtrips() -> None:
+    prose = "AAA BBB CCC DDD"
+    items = [
+        SpliceItem(key=0, span=(0, 3), replacement=None, claim_text=None),
+        SpliceItem(key=1, span=(4, 7), replacement="XXYY", claim_text="XX"),
+        SpliceItem(key=2, span=(8, 11), replacement="", claim_text=None),
+        SpliceItem(key=3, span=(12, 15), replacement=None, claim_text=None),
+    ]
+    new_prose, span_map = splice_and_rebind(prose, items)
+    # Kept A and D round-trip; repaired B records the located claim text; the
+    # deleted C carries no map entry.
+    expected = {0: "AAA", 1: "XX", 3: "DDD"}
+    for key, text in expected.items():
+        span = span_map[key]
+        assert span is not None
+        assert new_prose[span[0] : span[1]] == text
+    assert 2 not in span_map
+    # The deleted segment's text is gone; the connective prose survives.
+    assert "CCC" not in new_prose
+    assert "XXYY" in new_prose
+
+
+def test_splice_and_rebind_repaired_text_not_substring_is_validation_failure() -> None:
+    prose = "AAA BBB"
+    items = [
+        SpliceItem(key=0, span=(0, 3), replacement=None, claim_text=None),
+        # The claim text is not a substring of the replacement segment.
+        SpliceItem(key=1, span=(4, 7), replacement="ZZZZ", claim_text="QQ"),
+    ]
+    _new_prose, span_map = splice_and_rebind(prose, items)
+    assert span_map[1] is None

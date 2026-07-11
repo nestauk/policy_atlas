@@ -13,7 +13,7 @@ from policy_atlas.embeddings import EMBEDDING_DIMENSIONS, EMBEDDING_PROFILE, UNI
 from policy_atlas.grounding import content_hash
 from policy_atlas.schema import chunk as chunk_table
 from policy_atlas.schema import chunk_embedding, project_source_snapshot
-from policy_atlas.synthesis_backend import SectionClaimsWire
+from policy_atlas.synthesis_backend import SectionProseWire
 from policy_atlas.synthesis_tools import (
     BOOST_CLAMP_MAX,
     BOOST_CLAMP_MIN,
@@ -100,13 +100,13 @@ class ScriptedBackend:
         })
         index = len(self.calls) - 1
         if index >= len(self.turns):
-            return {"tool_calls": [], "claims": SectionClaimsWire(claims=[])}, None
+            return {"tool_calls": [], "claims": SectionProseWire(prose="", claims=[])}, None
         return self.turns[index], None
 
 
-def _claims(text: str = "x") -> SectionClaimsWire:
-    return SectionClaimsWire.model_validate(
-        {"claims": [{"claim_type": "reasoning", "text": text}]}
+def _claims(text: str = "x") -> SectionProseWire:
+    return SectionProseWire.model_validate(
+        {"prose": text, "claims": [{"claim_type": "reasoning", "text": text}]}
     )
 
 
@@ -679,7 +679,7 @@ def test_loop_runner_malformed_emission_consumes_turn_and_recovers() -> None:
     """A MalformedEmissionError is a turn-consuming error exchange (the model
     reads the bounded error as data and re-emits); on the forced final turn it
     is a structural failure, never an extension."""
-    from policy_atlas.synthesis_backend import SectionClaimsWire
+    from policy_atlas.synthesis_backend import SectionProseWire
     from policy_atlas.synthesis_tools import (
         MalformedEmissionError,
         run_section_loop,
@@ -698,9 +698,9 @@ def test_loop_runner_malformed_emission_consumes_turn_and_recovers() -> None:
             del seed
             if not transcript:
                 raise MalformedEmissionError("gap.sparsity: Input should be an object")
-            assert transcript[0]["tool"] == "emit_claims"
+            assert transcript[0]["tool"] == "emit_section"
             assert "invalid" in transcript[0]["result"]["error"]
-            return {"tool_calls": [], "claims": SectionClaimsWire(claims=[])}, None
+            return {"tool_calls": [], "claims": SectionProseWire(prose="", claims=[])}, None
 
     result = run_section_loop(_Backend(), seed={}, tools={})
     assert result["claims"] is not None
