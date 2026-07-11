@@ -722,6 +722,10 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   and/or embedding-assisted value clustering over the landed chunk vectors. Eval-gated —
   a head sample cannot discover tail-only groups, which is why the sample-discover/assign
   shape was rejected at contract rev 1.3 and stays rejected until evals exist.
+  **Owner note (2026-07-11, during 018 C):** characterise's discovery-model +
+  assignment-model split works well in practice — when the eval slice reopens this seam,
+  weigh that two-stage shape as a candidate for facets too, against the recorded
+  tail-discovery risk and the partition-exactness invariant a split must preserve.
 - **Agent-authored grouping directive** — the same seam as select's agent-authored
   directives (above): the capability agent authors `context["grouping"]` just-in-time at
   invocation; the `group` facade signature is already the tool call, so arrival is a

@@ -253,6 +253,72 @@
 - Cost-per-run (extract, gpt-5.4-mini): `91d2d684` ≈ 239k tokens (v2) /
   252k (v3); `e8ac8418` ≈ 521k (v2). Mini-tier — negligible next to
   synthesise.
+- **C2 extraction round 3 (final; user-confirmed)** (commit `55a03ab`, lead):
+  `extract_iof_v4` — future-dated targets are aspirations even when
+  quantified; testimony concerns/expectations are aspirations; deixis rules
+  hold inside plans/testimony. Replay `91d2d684` (run `3063498e`, 126
+  findings, 8/10 extracted): oral-evidence junk back to 0 ✓, BUS retained
+  (9) ✓, consumer-loans doc extracted for the FIRST time in any arm (11,
+  incl. the Home Energy Scotland grant-and-loan → heat pumps evidence the B
+  smoke flagged as an inferred gap) ✓, direction-in-outcome fixed ✓. Residual
+  junk concentrated in the one mega-plan doc (Scotland CCP 64 findings,
+  ~10 still aspiration/self-referential shapes). Rounds exhausted →
+  **residual junk after 3 bounded rounds = the contract's named trigger for
+  the contingent C5 junk judge** (pre-approved: post-extract filter,
+  flag-not-drop). Lead recommendation: pin v4 + build C5.
+- **C2 voice round 2 (user verdict: pin v3 + round 2)** (commit `84ae79a`,
+  lead): `synthesise_section_v4` — once-per-report figures + corpus-shape
+  numbers get one home, classification/appraisal vocabulary translated,
+  no restated-sentence claim carriers. Replay `91d2d684` (run `626b5f4e`,
+  artefact `c6d562ab`, blocks in `c-loop/`): spreads now appear ~once each
+  (vs ~5 sections at the B smoke), raw labels gone, hard duplicate opener
+  gone (two soft echo sentences remain); tier_1 claims 20→33,
+  span_bind_failures 0, unspanned flags 49→43. Lead verdict: pin v4.
+  **A prior synthesise attempt failed at launch** — run concurrently with the
+  extract replay on the SAME project; both append to the project event log
+  (per-project sequence). Loop-protocol note sharpened: same-project replays
+  serialize; cross-project stays parallel.
+- **C2 planner round 1 (user verdict: author domain-tempo inference)**
+  (commit `7585e5f`, lead): date-window inference at the question's tempo —
+  never "recent"→a decade; ~last decade default only when no horizon implied;
+  no hard-coded year mappings; window stated as changeable assumption, never
+  as user scoping. After-probes (uncounted): "recent" heat-policy → 2023
+  (was 2015) with tempo-reasoned assumption; "since 2000" respected
+  unchanged; generative-AI probe → 2023 "reflecting the rapid post-ChatGPT
+  adoption cycle". On the user's stated bar exactly. Lead verdict: pin.
+- **classify@xhigh hypothesis FAILED validation** (commit landed, lead):
+  first live exercise of the A1 setting — at xhigh, gpt-5.4-mini exhausted
+  the full 16K completion cap on reasoning alone (LengthFinishReasonError,
+  2.2K-token doc) before answering. At high: 26/26 pinned-project docs
+  classified, 4/26 plausible boundary flips vs recorded gpt-5.5 labels
+  (offline A/B driver `classify_ab.py` — direct backend calls, NO DB writes,
+  substrate uncontaminated). `CLASSIFY_REASONING_EFFORT` → "high".
+  Corroboration A/B on `e8ac8418` at high run alongside. Matches the
+  prompting-research non-monotonicity note.
+- **Unspanned-flag calibration (named C2 item) — resolved by inspection, no
+  prompt change**: the B smoke's 49 flags hand-sampled — the judge is
+  correct; the writer under-anchors (spread counts in prose without pattern
+  claims, "Inferred gap:" sentences not anchored as gap claims, attributed
+  re-statements unclaimed). No judge change; voice v4 reduced the class
+  (43); C4 renders unspanned flags as quiet markers, not errors; deeper
+  claim-coverage behaviour is eval-slice territory.
+- **Cost riders (approved list) — dispositions**:
+  1. cached_tokens telemetry ✓ landed (C1). **Synthesise cache hit rate:
+     63.8%** (2.438M prompt / 1.556M cached, run `626b5f4e`); extract
+     18–25%.
+  2. `prompt_cache_key` — **condition not met** (rider was "if hit rate is
+     low"; 64% auto-caching); not adopted, recorded.
+  3. multi-read-tool turns — in flight (writer round 3): loop + backend
+     plumbing (parallel read calls, emit alone) + prompt batching rule
+     (≤6 reads/turn), `synthesise_section_v5`; replay-evidenced next.
+  4. chunk-dedupe — proxy measured: 43 read calls over 9 sections this
+     replay; with 64% auto-cache, duplicated chunk content is largely
+     cache-priced. Full per-chunk measurement deferred (re-open if D1 cost
+     disagrees).
+- **Env-context preamble (named C2 hypothesis) — surface dispositions**:
+  writer ✓ (B-B2, validated), extractor ✓ (v2–v4), judge NOT adopted —
+  prompt fresh from B-B4 with evidence green; screen/classify excluded at
+  plan time (dilution).
 
 ## C-phase riders — synthesis cost reduction (user-approved 2026-07-11, post-B3)
 
@@ -294,8 +360,14 @@ trade, not adopted here.)
 | 2 | C2 extraction r1 | extract `e8ac8418` (run `c2f30d5c`, extract_iof_v2) | counted |
 | 3 | C2 extraction r2 | extract `91d2d684` (run `0510453b`, extract_iof_v3) | counted |
 | – | C2 planner | 2 single-turn probes (before-arm) | excluded (planner-only probes: pennies, unrestricted — plan live-check script) |
+| 4 | C2 extraction r3 | extract `91d2d684` (run `3063498e`, extract_iof_v4) | counted |
+| 5 | C2 voice r2 | synthesise `91d2d684` — failed at launch (same-project event-log contention with replay 4; no artefact) | counted (honest accounting) |
+| 6 | C2 voice r2 | synthesise `91d2d684` (run `626b5f4e`, artefact `c6d562ab`, section_v4) | counted |
+| 7 | C2 classify | classify A/B `91d2d684` @ high, 26 docs (offline, no DB writes; the @xhigh attempt fast-failed on doc 1, LengthFinishReasonError) | counted |
+| 8 | C2 classify | classify A/B `e8ac8418` @ high (corroboration) | counted |
+| – | C2 planner | 3 single-turn after-probes (incl. AI-tempo) | excluded (planner-only) |
 
-Running total: **3 / 30**.
+Running total: **8 / 30**.
 
 ## Loop protocol notes (flow-back candidates for the eval-slice convention)
 
