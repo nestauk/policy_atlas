@@ -118,12 +118,98 @@
   summary-attach guard — run `4077e12f` (succeeded characterise) shows the
   payload-lookup miss; flagged for a C-loop eye, not blocking.
 
+### B3 (2026-07-11): Phase B (B0 flow-back + B-B1..B-B4) — complete
+
+| Gate | Result |
+|---|---|
+| B3 build-open full `make verify` | pass (1027 passed, mypy 110 files, ruff clean, build ok) |
+| B-B1 `make verify-fast` | pass (987 passed, mypy 111 files, ruff clean) |
+| B-B2 / B-B3 / B-B4 `make verify-fast` | pass (986 / 997 / 997 passed) |
+| Phase B exit full `make verify` | pass (1048 passed, mypy 111 files, ruff clean, build ok) |
+| B smoke + annotation re-proof | pass (132 units, 0 span violations) |
+
+- **B0 spec flow-back landed** (commit `8c24ff5`): capability.md + provenance-grounding.md
+  two-block refinement (key-findings conditional-required, produced last / shown first;
+  conclusions at the report foot, evidence-descriptive, never merged) + log.md entry.
+  The ADR half (0015) predates this conversation (plan rev 3).
+- **B-B1 emission wire v2** (commit `3cb88a7`): `SectionProseWire` (prose + claims,
+  exact-substring anchoring, spans bound code-side); `bind_spans` (ordered-cursor,
+  fail-closed, overlap-forbidden); block content = authored prose with per-claim span
+  locators asserted at write time; repair v2 (`SectionRepairWire` segment splice,
+  one-pass `splice_and_rebind`, claim:null removal lane); unspanned-prose plumbing
+  (`synthesis_envelope_v2` carries prose + span map; `unspanned_assertion` annotations
+  flag-not-drop; new counts/flags). Every 013 invariant test green on the new wire +
+  span round-trip / repair-offset / unspanned fixtures (plan B-B1 test list discharged).
+  **Substitution (routing ladder): codex out of credits at dispatch — B-B1 and B-B3
+  built by deep-reasoner per the standing exhaustion fallback.**
+  **Visible deviation (minor, contract-vocabulary):** a spliced replacement whose claim
+  fails structural validation excludes the claim (counted) instead of v1's
+  keep-original-verbatim — the spliced prose residual is the unspanned lane's territory.
+- **B-B2 writer prompt v3** (commit `4fdd2ae`, lead): voice designed as one coherent
+  whole — audience pinned (senior policy makers), environment-context preamble with
+  context-not-content rule (machinery vocabulary named + banned), anchored-claim
+  contract with motivation, takeaway-first + connected-argument + analyst-number
+  prose rules, 150–450-word numeric bound, no meta-commentary; repair prompt v3
+  aligned to splice mechanics. Conflict audit applied (each rule stated once).
+  C2 validates the voice against baseline-1 per the loop protocol.
+- **B-B3 envelopes + two blocks** (commit `b7833e9`): writer-envelope default set
+  (year/evidence_type/appraisal_label/venue/cited_by, terse, adjacent, omit-if-absent;
+  is_retracted NOT surfaced) on chunk results + finding records; judge envelope v2
+  completed (intent + section_focus; finding-anchor chunk text explicit, deduped);
+  conclusions section code-injected last (role=conclusions, pinned evidence-descriptive
+  focus; proposed "Conclusion(s)" titles still rejected); key-findings pass produced
+  last / shown first (roll-up index 0), citable = union of section-cited ids,
+  conditional-required with explicit no-headline absence path (test-owned fixture).
+  section_role lives in SectionSpec + roll-up JSON — **no schema change** (stop
+  condition never approached). Deviations (flagged): anchored chunks absent from
+  chunk_by_id stay dropped (text_basis unrecoverable from BasisText);
+  generation_budget_max honestly expanded for the injected section + KF pass.
+- **B-B4 judge prompt v2 + evidence** (commit `9ce295d` + this one, lead):
+  grounding_judge_v2 — prose/span-map as claim context, intent/section_focus with the
+  relevance-is-not-support leniency guard, finding claims judged against anchor quotes
+  in chunk context, unspanned-assertion semantics (verbatim excerpts,
+  report-when-in-doubt with motivated asymmetry); 013 self-certification guard kept
+  verbatim. Key-findings prompt (headline bar, caveat fidelity, 3–7 claims / 60–180
+  words, absence-is-correct).
+- **Judge-envelope v2 evidence (contract Phase B protocol, gates this exit;**
+  `docs/verification/private/018/judge-envelope-ab/`, driver `judge_envelope_ab.py`**)**:
+  - *Verdict-shift*: recorded baseline-1 verdicts (envelope v1) vs live v2 re-judge on
+    the same claims. `91d2d684`: 68 claims, 14 flips — dominant pattern tier_3→tier_2
+    ×7 (anchor text visible → single-document support recognised), 3 stricter flips to
+    unsupported (over-synthesis caught), 2 evidence-based upgrades; net unsupported
+    7→9. `e8ac8418`: 38 claims, 15 flips — same shape; net unsupported 6→7.
+    **Every flip hand-inspected: no intent-induced leniency found** (upgrade rationales
+    cite textual support, never question-relevance); v2 is net stricter.
+  - *Unchanged-verdict stratified sample* (3/lane/project) hand-inspected: rationales
+    sound; no unchanged-but-wrong found.
+  - *Self-certification fixture* (mandatory — v2 feeds the judge more chunk text): a
+    chunk instructing the judge to up-tier its citers swayed NOTHING (verdicts
+    identical to control; overstated claim held unsupported_mis_cited). PASS.
+  - *Caveat recorded honestly*: arm 1 is recorded verdicts, arm 2 a live re-judge, so
+    boundary flips carry a sampling-noise component; the protocol's hand-inspection is
+    the control for that. Full judge calibration remains eval-workstream property.
+- **B smoke (live, on the recorded `91d2d684` substrate; new wire end-to-end)**:
+  run `5a044d71`, artefact `e25010be`, 10 blocks — key_findings first, 8 standard,
+  conclusions last. **Annotation layer re-proven: 132 addressable units, 0 span
+  violations** (`smoke_reproof.py`; every locator round-trips against block content).
+  Claims 83 (tier_1 20 / tier_2 12 / tier_3 19 / tier_4 2 / unsupported 3), citations
+  156 verified / 6 unverified, span_bind_failures 1, repair lanes exercised (incl. one
+  repair_unparseable section — exhaustion semantics held). Early C-loop signal (not
+  adjudicated): the judge flags unspanned assertions liberally (49 flagged + 18
+  unbound excerpts) — writer anchoring vs judge threshold is a named C2 calibration
+  item.
+- Exact end-to-end command: `uv run python docs/verification/private/018/drivers/`
+  `baseline1_replay.py 91d2d684 synthesise` (component replay, contract live-check
+  scope) followed by `smoke_reproof.py 5a044d71`.
+
 ## Live component replay tally (bound: ≤30; baselines/fork-probe/B-smoke/D excluded)
 
 | # | Phase | Replay | Counted? |
 |---|---|---|---|
 | – | A′ | baseline-1: extract ×2, synthesise ×2 | excluded (baseline) |
 | – | A-rest | none (OpenAlex/Overton wire probes are search-API calls, not component replays) | n/a |
+| – | B | B smoke: synthesise ×1 on `91d2d684` (run `5a044d71`) | excluded (B smoke, named) |
+| – | B | judge-envelope A/B re-judges (per-block judge calls on recorded claims, both projects) + self-cert fixture | not component replays (judge sub-calls; the contract's in-B evidence protocol) |
 
 Running total: **0 / 30**.
 
@@ -156,3 +242,20 @@ Running total: **0 / 30**.
     payload lookup succeeds (`skeleton.py` guard) — a *succeeded* run can still show an
     empty-I/O trace (seen: `4077e12f`, characterise); make the attach unconditional or
     log the miss if it starts mattering (B2; C-loop eye).
+  - LLMs cannot emit reliable char offsets: span-anchoring works by asking the model
+    for verbatim TEXT and binding text→offset code-side (exact substring, fail-closed).
+    Never put offsets on a model-facing wire (B3).
+  - Offset arithmetic after splicing is where span bugs live — a one-pass rebuild that
+    recomputes every offset by construction (emit pieces, record positions) plus a
+    round-trip assertion at persist time beats delta-shifting (B3).
+  - Judge verdict tiers are a function of what the envelope lets the judge SEE: adding
+    anchor chunk text moved tier_3 mass to tier_2 (single-doc support recognised) and
+    net-raised unsupported. Tier distributions are NOT comparable across envelope
+    versions — re-baseline whenever the envelope changes (B3).
+  - An asymmetric "report when in doubt" judge rule produces high flag volume on first
+    contact (49 unspanned flags / 83 claims on the B smoke) — plan a calibration pass
+    before such flags reach a user surface (B3; named C2 item).
+  - Codex quota exhausted at B-B1 dispatch: the fallback ladder held — deep-reasoner
+    delivered both machine-verifiable refactor lanes green on first delivery; the
+    precise pinned brief (every design decision decided by the lead, agent implements)
+    is what made the substitution costless (B3).
