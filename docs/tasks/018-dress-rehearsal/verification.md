@@ -296,6 +296,16 @@
   Corroboration A/B on `e8ac8418` at high: 92/92 docs, no cap exhaustion,
   14 flips (~85% agreement — same rate as the mission project). Matches the
   prompting-research non-monotonicity note.
+  **xhigh-uncapped experiment (user-requested)**: with a 64K cap xhigh
+  completes — 221,913 reasoning tokens / 26 docs (mean 8.5K, max 18.6K; the
+  16K production cap was too tight for the tail), cost well under $1. But
+  quality is WORSE where it differs from high: 4 disagreement docs, all
+  low-confidence churn (0.60–0.69) — including demoting the clearly-typed
+  BUS-in-four-charts doc to Unknown/Insufficient at 0.63, which recorded and
+  high both label correctly. xhigh's agreements with high's flips add
+  nothing high didn't catch. ~10–30× output volume, ~1–2 min/doc vs seconds.
+  **Verdict: keep high** — on quality, not cost. Evidence:
+  `c-loop/classify-xhigh-uncapped.txt`.
 - **Unspanned-flag calibration (named C2 item) — resolved by inspection, no
   prompt change**: the B smoke's 49 flags hand-sampled — the judge is
   correct; the writer under-anchors (spread counts in prose without pattern
@@ -455,10 +465,10 @@ trade, not adopted here.)
 | 9 | C3 spot-check | extract `e8ac8418` (run `c333f2c3`, extract_iof_v4) — anti-overfit arm | counted |
 | – | C3 pins | 7 planner taxonomy probes | excluded (planner-only) |
 | 10 | C2 writer r3 | synthesise `91d2d684` (run `347e3a2f`, artefact `64143a9d`, section_v5 multi-read) | counted |
-| – | C2 classify | xhigh-uncapped experiment (user-requested; offline A/B, no DB writes) | counted when it completes (11) |
-| 11 | C5 adoption | extract `91d2d684` with junk judge live (extract_iof_v5) | counted when it completes (12) |
+| 11 | C5 adoption | extract `91d2d684` with junk judge live (run `df216bce`, extract_iof_v5) | counted |
+| 12 | C2 classify | xhigh-uncapped experiment, 26 docs (user-requested; offline A/B, no DB writes) | counted |
 
-Running total: **10 / 30** (+2 in flight → 12).
+Running total: **12 / 30**.
 
 ## Loop protocol notes (flow-back candidates for the eval-slice convention)
 
