@@ -331,6 +331,17 @@
   writer ✓ (B-B2, validated), extractor ✓ (v2–v4), judge NOT adopted —
   prompt fresh from B-B4 with evidence green; screen/classify excluded at
   plan time (dilution).
+- **C5 junk judge — built (trigger fired) and adoption-replayed** (commit
+  `4dd3353` + lead fix; replay run `df216bce`, extract_iof_v5 + judge live on
+  `91d2d684`): 36 findings flagged {aspiration 21, vague_outcome 13,
+  self_referential 2}, `junk_judge_failed` 0. Flag set covers the lead's
+  hand-identified junk list nearly exactly (woodland future-targets, VETS
+  ambitions, the "→ households" vague-outcome family, both self-referential
+  records); the two debatable flags spot-checked via recorded reasons — both
+  correct (quotes were purpose statements / a 2026–27 expectation). One doc
+  went all-junk → honest no_findings (per-doc junk_flagged count preserves
+  the distinction). Judge cost ≈ 25k mini output tokens per extract run.
+  Lead verdict: PASS — pin pending user confirmation.
 - **C3 taxonomy pins — planner replay across the 7 v2 categories** (real
   questions from the recorded V2 list, one per category; probes uncounted;
   drafts in `c-loop/c3-pin-cat*.json`). **Per-category composition-adequacy
