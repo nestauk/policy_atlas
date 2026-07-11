@@ -175,7 +175,7 @@ def test_section_repair_is_loop_free_and_reword_down() -> None:
     )
     repair = messages[-1]["content"]
     assert "you cannot make tool calls" in repair
-    assert "Reword each claim DOWN" in repair
+    assert "Reword each claim DOWN" in " ".join(repair.split())
     assert "overstates magnitude" in repair
     # Prose-splice repair (ADR 0015 §4): rewrite the failing claims' segments,
     # in the same order, via emit_repairs.
