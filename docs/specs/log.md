@@ -1,5 +1,18 @@
 # Spec update log
 
+## 2026-07-11
+* **Update**: [EB capability § Output structure](capabilities/evidence-base/capability.md) and
+  [provenance-grounding § Summaries](system/provenance-grounding.md) — the "what did it
+  conclude" front door split into **two distinct grounded blocks, never merged** (owner
+  refinement 2026-07-10; task 018, ADR 0015): the **key-findings block** (headline evidence
+  claims at their appropriate grade, produced last / shown first, conditional-required —
+  present iff headline claims are made) and a **conclusions block** at the report foot (what
+  this evidence amounts to against the user's question, evidence-descriptive — no
+  recommendations / decision-answer content; cited to sources, never to sibling blocks).
+  provenance-grounding's compound "key-findings/conclusion block" phrase resolved into the
+  two-block structure accordingly. Approved with the 018 contract (rev 4) per the
+  spec-refinement flow.
+
 ## 2026-07-10
 * **Update**: [execution-orchestration § Steering modes & the routing rule](system/execution-orchestration.md)
   — **Unattended mode** added (task 017, contract rev 2 decision 6b, user call; approved in
