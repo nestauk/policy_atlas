@@ -1,4 +1,7 @@
-"""The ``extract_iof_v4`` prompt — the repo's third product prompt (task 011).
+"""The ``extract_iof_v5`` prompt — the repo's third product prompt (task 011).
+
+v5 = v4 with a mission-neutral prevalence example (018 C3 no-mission-vocabulary
+check); rules byte-identical to the replay-evidenced v4 set.
 
 Lead-authored and versioned; recorded in extraction provenance and the event
 payload. Field documentation is generated from the wire models (one source of
@@ -27,7 +30,7 @@ from policy_atlas.extraction_records import (
     render_field_docs,
 )
 
-PROMPT_VERSION = "extract_iof_v4"
+PROMPT_VERSION = "extract_iof_v5"
 
 # The contracted model floor (the 009 nano lesson is binding); a step-up is a
 # recorded option, not a silent switch.
@@ -208,7 +211,7 @@ What you must NOT extract — hard rules:
   (estimate_level "claim"); a hope, plan or recommendation is not, however
   concrete its wording.
 - Pure prevalence statements with no intervention (for example "one in five
-  children are obese") are not findings — skip them. When a statement does tie
+  adults smoke") are not findings — skip them. When a statement does tie
   an intervention to an outcome but you are unsure whether it is an effect
   estimate or mere prevalence, extract it with is_prevalence_only set true.
 - Quotes must be exact verbatim text copied from a segment — never paraphrased,
@@ -323,7 +326,7 @@ def _preflight_validate_example() -> None:
             match = matcher.find(anchor.quote)
             if match.status == "failed":
                 raise RuntimeError(
-                    "extract_iof_v4 few-shot example is invalid: finding "
+                    "extract_iof_v5 few-shot example is invalid: finding "
                     f"{finding_index} carries a quote that is not verbatim in "
                     f"its example text: {anchor.quote!r}"
                 )

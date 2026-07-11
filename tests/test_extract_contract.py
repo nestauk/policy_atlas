@@ -1245,5 +1245,7 @@ def test_summary_payload_shape(conn: Connection) -> None:
     assert set(summary["provenance"].keys()) == {
         "profile", "schema", "prompt", "model", "mode", "field_rules", "verifier",
         "window", "max_output_tokens", "retry_cap", "fingerprint", "pass_count",
-        "call_budget", "retry_count",
+        "call_budget", "retry_count", "junk_judge",
     }
+    # 018 C5: no junk_judge_backend passed here, so judging is off — null component.
+    assert summary["provenance"]["junk_judge"] is None

@@ -2,7 +2,7 @@
 
 Per selected document: load the selection row, resolve the extraction basis
 (full-text chunks or the envelope abstract), check the durable memo, window and
-fan out the ``extract_iof_v4`` calls, validate / verify / dedup the emitted
+fan out the ``extract_iof_v5`` calls, validate / verify / dedup the emitted
 records, then write the durable ``source_extraction_record`` +
 ``intervention_outcome_finding`` rows and, last of all, the run-scoped
 ``extraction_result`` roll-up.
@@ -43,6 +43,12 @@ from policy_atlas.extraction_records import (
     IOFRecord,
     IOFRecordWire,
 )
+from policy_atlas.junk_judge import (
+    JUNK_JUDGE_PROMPT_VERSION,
+    JunkJudgeBackend,
+    JunkVerdictWire,
+    validate_verdict_coverage,
+)
 from policy_atlas.quote_verify import (
     FIELD_RULES_VERSION,
     QUOTE_VERIFIER_VERSION,
@@ -64,7 +70,7 @@ from policy_atlas.schema import (
     source_extraction_record,
     source_snapshot,
 )
-from policy_atlas.usage import UsageAccumulator
+from policy_atlas.usage import TokenUsage, UsageAccumulator
 from policy_atlas.windowing import greedy_windows as _shared_greedy_windows
 
 log = structlog.get_logger()
@@ -78,6 +84,10 @@ OVERSIZE_POLICY = "char_split_v1"
 EXTRACT_RETRY_CAP = 1
 MAX_CONCURRENT_EXTRACT = 4
 EXTRACTION_PROFILE = PROFILE_ID
+
+# 018 C5 junk judge: component.completed payload record cap (flag-not-drop —
+# every flagged finding is counted; only the displayed record list is capped).
+JUNK_FLAGGED_RECORDS_CAP = 50
 
 
 class ExtractError(Exception):
@@ -112,7 +122,9 @@ class ExtractContext:
     selection_run_id: uuid.UUID
 
 
-def extraction_fingerprint(mode: str) -> tuple[str, dict[str, Any]]:
+def extraction_fingerprint(
+    mode: str, *, junk_judge_active: bool = False
+) -> tuple[str, dict[str, Any]]:
     """Build the extraction fingerprint and its canonical component map.
 
     The digest is the **full** sha256 hex (no truncation — the column is TEXT)
@@ -125,6 +137,8 @@ def extraction_fingerprint(mode: str) -> tuple[str, dict[str, Any]]:
     Args:
         mode: The backend mode (``"live"`` or ``"stub"``), from
             ``backend.mode`` — a stub result can never masquerade as a live one.
+        junk_judge_active: Whether a junk judge backend was supplied. Judged
+            and unjudged runs never reuse each other's records (018 C5).
 
     Returns:
         A ``(fingerprint_hex, components)`` pair. ``components`` is recorded
@@ -147,6 +161,7 @@ def extraction_fingerprint(mode: str) -> tuple[str, dict[str, Any]]:
         },
         "max_output_tokens": EXTRACT_MAX_OUTPUT_TOKENS,
         "retry_cap": EXTRACT_RETRY_CAP,
+        "junk_judge": JUNK_JUDGE_PROMPT_VERSION if junk_judge_active else None,
     }
     canonical = json.dumps(components, sort_keys=True, separators=(",", ":"))
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -203,6 +218,11 @@ class _Doc:
     invalid_dropped: int = 0
     dedup_collapsed: int = 0
     quote_unverified: int = 0
+
+    # Junk judge (018 C5) — flag-not-drop accounting for this document.
+    junk_flagged_count: int = 0
+    junk_flagged_records: list[dict[str, Any]] = field(default_factory=list)
+    junk_judge_failed: bool = False
 
     @property
     def title(self) -> str:
@@ -698,6 +718,89 @@ def _process_doc(doc: _Doc, window_findings: dict[int, list[IOFRecordWire]]) -> 
     doc.quote_unverified = quote_unverified
 
 
+# --- Junk judge (018 C5) -----------------------------------------------------
+
+
+def _judge_payload_entry(index: int, record: IOFRecord) -> dict[str, Any]:
+    """Build one dedup survivor's id-keyed judge input entry."""
+    return {
+        "index": index,
+        "intervention": record.intervention,
+        "outcome": record.outcome,
+        "effect_direction": record.effect_direction,
+        "estimate_level": record.estimate_level,
+        "stratum_qualifiers": [
+            {"type": stratum.type, "value": stratum.value}
+            for stratum in record.stratum_qualifiers
+        ],
+        "quotes": [anchor.quote for anchor in record.anchors],
+    }
+
+
+def _apply_junk_judge(doc: _Doc, junk_judge_backend: JunkJudgeBackend) -> TokenUsage | None:
+    """Judge one document's dedup survivors, excluding clear junk (flag-not-drop).
+
+    Runs AFTER ``dedup_records`` and BEFORE the IOF insert (``doc.survivors``
+    etc. are mutated in place, so ``_write_docs`` never sees excluded
+    findings). A judge call/parse/coverage failure is fail-open: the document
+    persists unfiltered and ``doc.junk_judge_failed`` is set for accounting —
+    the filter is an enhancement, never an extraction blocker.
+
+    Args:
+        doc: An ``extracted`` document with dedup survivors already resolved.
+        junk_judge_backend: The judge seam.
+
+    Returns:
+        The judge call's token usage, or ``None`` on failure or no usage.
+    """
+    findings = [_judge_payload_entry(index, record) for index, record in enumerate(doc.survivors)]
+    try:
+        response, usage = junk_judge_backend.judge({"findings": findings})
+        validate_verdict_coverage(findings, response.verdicts)
+    except Exception as exc:  # noqa: BLE001 — reduced to a type name for the record
+        doc.junk_judge_failed = True
+        log.warning(
+            "extract.junk_judge_failed", pss_id=str(doc.pss_id), error=type(exc).__name__
+        )
+        return None
+
+    junk_by_index: dict[int, JunkVerdictWire] = {
+        verdict.finding_index: verdict
+        for verdict in response.verdicts
+        if verdict.verdict == "junk"
+    }
+    if not junk_by_index:
+        return usage
+
+    kept_survivors: list[IOFRecord] = []
+    kept_groundings: list[list[dict[str, Any]]] = []
+    kept_coverage: list[dict[str, str]] = []
+    for index, (record, grounding, coverage) in enumerate(
+        zip(doc.survivors, doc.groundings, doc.coverage_by_survivor, strict=True)
+    ):
+        verdict = junk_by_index.get(index)
+        if verdict is None:
+            kept_survivors.append(record)
+            kept_groundings.append(grounding)
+            kept_coverage.append(coverage)
+            continue
+        doc.junk_flagged_records.append(
+            {
+                "intervention": record.intervention,
+                "outcome": record.outcome,
+                "junk_class": verdict.junk_class,
+                "reason": verdict.reason,
+            }
+        )
+
+    doc.junk_flagged_count = len(doc.junk_flagged_records)
+    doc.survivors = kept_survivors
+    doc.groundings = kept_groundings
+    doc.coverage_by_survivor = kept_coverage
+    doc.finding_count = len(kept_survivors)
+    return usage
+
+
 # --- Writes -----------------------------------------------------------------
 
 
@@ -764,8 +867,8 @@ def _write_docs(
 # --- Summary / invariants ---------------------------------------------------
 
 
-def _doc_summary(doc: _Doc) -> dict[str, Any]:
-    return {
+def _doc_summary(doc: _Doc, *, junk_judge_active: bool) -> dict[str, Any]:
+    summary: dict[str, Any] = {
         "pss_id": str(doc.pss_id),
         "status": doc.status,
         "basis": doc.basis,
@@ -774,6 +877,9 @@ def _doc_summary(doc: _Doc) -> dict[str, Any]:
         "error": doc.error,
         "extraction_record_id": str(doc.extraction_record_id),
     }
+    if junk_judge_active:
+        summary["junk_flagged"] = doc.junk_flagged_count
+    return summary
 
 
 def _assert_invariants(docs: list[_Doc], *, selected_count: int) -> None:
@@ -807,6 +913,7 @@ def _build_summary(
     budget_used: int,
     retry_count: int,
     usage_totals: dict[str, int],
+    junk_judge_active: bool,
 ) -> dict[str, Any]:
     selected = len(docs)
     counts = {
@@ -817,6 +924,8 @@ def _build_summary(
         "fresh": sum(1 for doc in docs if not doc.reused),
         "reused": sum(1 for doc in docs if doc.reused),
     }
+    if junk_judge_active:
+        counts["junk_judge_failed"] = sum(1 for doc in docs if doc.junk_judge_failed)
     findings = {
         "total": sum(doc.finding_count for doc in docs if doc.status == "extracted"),
         "quote_unverified": sum(doc.quote_unverified for doc in docs if not doc.reused),
@@ -842,11 +951,30 @@ def _build_summary(
                 field_coverage.setdefault(name, {})
                 field_coverage[name][marker] = field_coverage[name].get(marker, 0) + 1
 
+    junk_flagged: dict[str, Any] | None = None
+    if junk_judge_active:
+        junk_flagged_by_class: dict[str, int] = {}
+        junk_flagged_records: list[dict[str, Any]] = []
+        for doc in docs:
+            for record in doc.junk_flagged_records:
+                junk_class = cast("str", record["junk_class"])
+                junk_flagged_by_class[junk_class] = junk_flagged_by_class.get(junk_class, 0) + 1
+                junk_flagged_records.append(record)
+        junk_flagged = {
+            "total": len(junk_flagged_records),
+            "by_class": junk_flagged_by_class,
+            "records": junk_flagged_records[:JUNK_FLAGGED_RECORDS_CAP],
+        }
+        if len(junk_flagged_records) > JUNK_FLAGGED_RECORDS_CAP:
+            junk_flagged["records_truncated"] = True
+
     flags: list[str] = []
     if counts["failed"] > 0:
         flags.append("extraction_failures")
     if selected == 0:
         flags.append("empty_selection")
+    if junk_flagged is not None and junk_flagged["total"] > 0:
+        flags.append("junk_flagged_present")
     # thin_extraction is deliberately NOT computed in v1 (contract "where computed").
 
     provenance = {
@@ -860,8 +988,8 @@ def _build_summary(
         },
         "retry_count": retry_count,
     }
-    return {
-        "docs": [_doc_summary(doc) for doc in docs],
+    summary: dict[str, Any] = {
+        "docs": [_doc_summary(doc, junk_judge_active=junk_judge_active) for doc in docs],
         "counts": counts,
         "findings": findings,
         "basis": basis,
@@ -871,6 +999,9 @@ def _build_summary(
         "provenance": provenance,
         "usage_totals": usage_totals,
     }
+    if junk_flagged is not None:
+        summary["junk_flagged"] = junk_flagged
+    return summary
 
 
 # --- Public entry point -----------------------------------------------------
@@ -883,6 +1014,7 @@ def extract_scope(
     run_id: uuid.UUID,
     context: ExtractContext,
     extraction_backend: ExtractionBackend,
+    junk_judge_backend: JunkJudgeBackend | None = None,
 ) -> dict[str, Any]:
     """Extract intervention-outcome findings for one evidence scope's selection.
 
@@ -897,6 +1029,9 @@ def extract_scope(
         run_id: Run writing the extraction result.
         context: Scope-level extract input (carries the explicit selection run).
         extraction_backend: The extraction seam (stub by default; live on key).
+        junk_judge_backend: The 018 C5 post-extract junk filter (per-doc, after
+            dedup, before the IOF insert). ``None`` (the default) turns judging
+            off entirely — byte-identical behaviour to the pre-018-C5 pipeline.
 
     Returns:
         The extraction summary payload for ``component.completed``.
@@ -905,7 +1040,10 @@ def extract_scope(
         ExtractError: If the selection row is missing, a selected pss lacks its
             snapshot row, or a coverage invariant fails.
     """
-    fingerprint, components = extraction_fingerprint(extraction_backend.mode)
+    junk_judge_active = junk_judge_backend is not None
+    fingerprint, components = extraction_fingerprint(
+        extraction_backend.mode, junk_judge_active=junk_judge_active
+    )
     selected = _load_selection(
         conn,
         project_id=project_id,
@@ -927,6 +1065,7 @@ def extract_scope(
             budget_used=0,
             retry_count=0,
             usage_totals=UsageAccumulator().payload(),
+            junk_judge_active=junk_judge_active,
         )
         _write_rollup(
             conn,
@@ -953,6 +1092,8 @@ def extract_scope(
     per_doc, doc_errors, baseline, budget, retry_count, usage_totals = _run_windows(
         docs, extraction_backend=extraction_backend
     )
+    usage_accumulator = UsageAccumulator()
+    usage_accumulator.add_payload(usage_totals)
     for doc_index, doc in enumerate(docs):
         if not doc.extractable:
             continue
@@ -964,6 +1105,9 @@ def extract_scope(
             log.info("extract.doc_failed", pss_id=str(doc.pss_id), error=doc.error)
             continue
         _process_doc(doc, per_doc.get(doc_index, {}))
+        if junk_judge_backend is not None and doc.status == "extracted" and doc.survivors:
+            usage_accumulator.add(_apply_junk_judge(doc, junk_judge_backend))
+    usage_totals = usage_accumulator.payload()
 
     # Asserted BEFORE any row is written: the harness catches without rollback,
     # so a violation raising here must precede the writes it would indict.
@@ -988,6 +1132,7 @@ def extract_scope(
         budget_used=budget.used,
         retry_count=retry_count,
         usage_totals=usage_totals,
+        junk_judge_active=junk_judge_active,
     )
     # The roll-up is the LAST fallible statement (the 010 pattern): the harness
     # catches without rollback, so nothing may fail after this insert.

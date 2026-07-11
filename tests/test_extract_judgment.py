@@ -468,7 +468,7 @@ def test_fingerprint_provenance_lists_every_component(conn: Connection) -> None:
 
     assert prov["profile"] == "eb_iof_base_v1"
     assert prov["schema"] == "iof_v1"
-    assert prov["prompt"] == "extract_iof_v4"
+    assert prov["prompt"] == "extract_iof_v5"
     assert prov["field_rules"] == "iof_rules_v1"
     assert prov["verifier"] == "qv_v1"
     assert prov["model"] and prov["mode"] == "stub"
@@ -477,6 +477,9 @@ def test_fingerprint_provenance_lists_every_component(conn: Connection) -> None:
     )
     assert "max_output_tokens" in prov
     assert "retry_cap" in prov
+    # 018 C5: judging is off by default (no junk_judge_backend passed), so the
+    # fingerprint component is null — byte-identical to the pre-018-C5 pipeline.
+    assert prov["junk_judge"] is None
 
 
 def test_fingerprint_changes_on_any_single_component(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -540,7 +543,7 @@ def test_repeated_quote_grounds_to_successive_occurrences(conn: Connection) -> N
 def test_preflight_rejects_non_verbatim_example(monkeypatch: pytest.MonkeyPatch) -> None:
     """A doctored few-shot example whose quote is not verbatim fails loudly at pre-flight."""
     # The real module imported fine (its own pre-flight ran at import).
-    assert extract_prompt.PROMPT_VERSION == "extract_iof_v4"
+    assert extract_prompt.PROMPT_VERSION == "extract_iof_v5"
 
     doctored = extract_prompt.EXAMPLE_RESPONSE.model_copy(deep=True)
     doctored.findings[0].anchors[0].quote = "this quote is absent from the example segment text"

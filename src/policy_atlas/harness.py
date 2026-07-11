@@ -42,6 +42,7 @@ from policy_atlas.ingest_full_text import (
     IngestFullTextContext,
     ingest_full_text_sources,
 )
+from policy_atlas.junk_judge import JunkJudgeBackend
 from policy_atlas.plan import Config
 from policy_atlas.ranking import RankingBackend
 from policy_atlas.schema import artefact, evidence_scope, runs
@@ -74,6 +75,7 @@ class HarnessState(TypedDict):
     theme_grouping_backend: ThemeGroupingBackend
     ranking_backend: RankingBackend | None
     extraction_backend: ExtractionBackend
+    junk_judge_backend: JunkJudgeBackend | None
     facet_grouping_backend: FacetGroupingBackend
     synthesis_backend: SynthesisBackend
     grounding_judge_backend: GroundingJudgeBackend
@@ -264,7 +266,9 @@ def _run_extract(state: HarnessState) -> HarnessState:
         ExtractContext, selection_run_id=config.selection_run_id
     )
     sources_fn = functools.partial(
-        extract_scope, extraction_backend=state["extraction_backend"]
+        extract_scope,
+        extraction_backend=state["extraction_backend"],
+        junk_judge_backend=state["junk_judge_backend"],
     )
     return _run_scope_component(state, context_cls, sources_fn)
 
@@ -570,6 +574,7 @@ def run_harness(
     theme_grouping_backend: ThemeGroupingBackend | None = None,
     ranking_backend: RankingBackend | None = None,
     extraction_backend: ExtractionBackend | None = None,
+    junk_judge_backend: JunkJudgeBackend | None = None,
     facet_grouping_backend: FacetGroupingBackend | None = None,
     synthesis_backend: SynthesisBackend | None = None,
     grounding_judge_backend: GroundingJudgeBackend | None = None,
@@ -611,6 +616,11 @@ def run_harness(
         extraction_backend: Extraction backend for the extract component;
             defaults to ``StubExtractionBackend()`` — no default egress, the
             theme grouping backend pattern (approved gated change 2, task 011).
+        junk_judge_backend: Post-extract junk filter for the extract component
+            (018 C5). Unlike the other backends this stays ``None`` by default
+            with NO stub substitution — ``None`` means judging is off, so a
+            caller that does not pass one gets byte-identical extract output
+            to the pre-018-C5 pipeline.
         facet_grouping_backend: Facet grouping backend for the group component;
             defaults to ``StubFacetGroupingBackend()`` — no default egress,
             approved gated change 2, task 012.
@@ -680,6 +690,9 @@ def run_harness(
         "extraction_backend": (
             extraction_backend if extraction_backend is not None else StubExtractionBackend()
         ),
+        # No stub substitution (unlike every other backend key): None must
+        # mean judging OFF, so extract_scope's own None default stays reachable.
+        "junk_judge_backend": junk_judge_backend,
         "facet_grouping_backend": (
             facet_grouping_backend
             if facet_grouping_backend is not None
