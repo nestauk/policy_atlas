@@ -1,4 +1,4 @@
-"""The ``extract_iof_v1`` prompt — the repo's third product prompt (task 011).
+"""The ``extract_iof_v2`` prompt — the repo's third product prompt (task 011).
 
 Lead-authored and versioned; recorded in extraction provenance and the event
 payload. Field documentation is generated from the wire models (one source of
@@ -27,7 +27,7 @@ from policy_atlas.extraction_records import (
     render_field_docs,
 )
 
-PROMPT_VERSION = "extract_iof_v1"
+PROMPT_VERSION = "extract_iof_v2"
 
 # The contracted model floor (the 009 nano lesson is binding); a step-up is a
 # recorded option, not a silent switch.
@@ -136,6 +136,15 @@ _EXAMPLE_RESPONSE_JSON = EXAMPLE_RESPONSE.model_dump_json()
 EXTRACT_SYSTEM_PROMPT = f"""\
 You are extracting intervention-outcome findings from one source document.
 
+Context: Policy Atlas is an evidence tool for government policy makers.
+Upstream steps searched and screened a corpus; you are reading one selected
+document. Each finding you extract is stored and later shown to a reader on
+its own — in reports and evidence tables, away from this document's text —
+which is why the naming rules below demand fields a reader can understand
+without the document in front of them. Pipeline terms (corpus, screening,
+extraction, segment) are context for you, never content: they must not appear
+in extracted fields.
+
 Task: read the document segments and report, as structured records, every
 intervention-outcome finding the document itself states. A finding is one claim
 that a named intervention had (or did not have) an effect on a named outcome,
@@ -151,6 +160,23 @@ Grain — one record per (intervention, outcome, effect, stratum):
 - A reported null result is a finding (effect_direction "no_effect"), never an
   omission.
 
+Naming — every field must stand alone for a reader who has not seen this
+document:
+- Name the actual intervention, never a document-internal label: "the
+  programme", "the strategy" or "this approach" name nothing outside the
+  document — say what the thing is, using the document's own words ("weekly
+  home visits by trained nurses", not "the programme"). The same goes for
+  outcomes: "the problems this report identifies" is unreadable on its own.
+- Expand every acronym the document defines, keeping the short form in
+  brackets where it aids recognition: "conditional cash transfers (CCTs)",
+  never bare "CCTs".
+- The outcome is a concrete, observable measure. "Quality", "success" or
+  "effectiveness" alone are too vague to extract, and the outcome never
+  carries the direction — write outcome "reoffending rates" with
+  effect_direction "decrease", never outcome "lower reoffending rates".
+- A finding whose intervention and outcome cannot be named self-containedly
+  from the document's own words is not extractable — skip it.
+
 What you must NOT extract — hard rules:
 - No question-relative judgements: never emit normalised magnitudes, causal
   weightings, or any judgement of whether an effect is beneficial or harmful.
@@ -162,6 +188,13 @@ What you must NOT extract — hard rules:
 - Never force effect fields: if the document reports no effect estimate, leave
   the statistics null. Do not invent, compute, or approximate numbers.
 - Control or comparison arms are not interventions.
+- Statements of intent, ambition or principle are not findings: a plan
+  "committing to" or "encouraging" something, a communiqué "reaffirming" a
+  goal, or a study calling for "carefully designed support mechanisms" reports
+  an aspiration, not an effect. A finding requires the document to report that
+  something happened (or did not happen) to an outcome. A stated effect
+  without numbers is still a finding (estimate_level "claim"); a hope, plan or
+  recommendation is not, however concrete its wording.
 - Pure prevalence statements with no intervention (for example "one in five
   children are obese") are not findings — skip them. When a statement does tie
   an intervention to an outcome but you are unsure whether it is an effect
@@ -278,7 +311,7 @@ def _preflight_validate_example() -> None:
             match = matcher.find(anchor.quote)
             if match.status == "failed":
                 raise RuntimeError(
-                    "extract_iof_v1 few-shot example is invalid: finding "
+                    "extract_iof_v2 few-shot example is invalid: finding "
                     f"{finding_index} carries a quote that is not verbatim in "
                     f"its example text: {anchor.quote!r}"
                 )

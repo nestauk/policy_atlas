@@ -2,7 +2,7 @@
 
 Per selected document: load the selection row, resolve the extraction basis
 (full-text chunks or the envelope abstract), check the durable memo, window and
-fan out the ``extract_iof_v1`` calls, validate / verify / dedup the emitted
+fan out the ``extract_iof_v2`` calls, validate / verify / dedup the emitted
 records, then write the durable ``source_extraction_record`` +
 ``intervention_outcome_finding`` rows and, last of all, the run-scoped
 ``extraction_result`` roll-up.
