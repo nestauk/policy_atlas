@@ -730,6 +730,21 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   directives (above): the capability agent authors `context["grouping"]` just-in-time at
   invocation; the `group` facade signature is already the tool call, so arrival is a
   parameter-authoring change, zero re-plumbing.
+- **EB report-shape boundary vs future capabilities (owner steer, 2026-07-11, 018 C)** —
+  V2's templated report grammar (core answer ending in an imperative directive,
+  fixed background section, interventions table, "exactly 3-4 actionable policy
+  recommendations") is the recorded anti-pattern: too intervention-focused and too
+  rigid for v3.0's intent diversity. v3.0 EB stays intent-led discovery with an
+  evidence-descriptive role menu (synthesise_sections_v2: policy/delivery context
+  under specific titles, cross-cutting patterns, enablers-and-barriers-as-described).
+  Several V2 template sections belong to FUTURE capabilities, not EB:
+  recommendations → options assessment; stakeholder perspectives → stakeholder
+  capability; impact framing → impact assessment; cost comparisons → value-for-money.
+  When those capability contracts are drafted, they should reclaim their section
+  types from the V2 template rather than EB growing them. The `section_role` seam
+  (SectionSpec, 018 B) is the extension point — roles extend without schema change.
+  Eval slice: judge composition quality across the 7 intent shapes with this
+  boundary in mind.
 - **Cross-schema reference-mediated linkage** — activates with
   `implementation_context_finding` (EB internals entry): the shared source-named
   vocabulary means a facet group's member values can link findings across schemas by

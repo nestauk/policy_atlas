@@ -341,6 +341,30 @@
   writer ✓ (B-B2, validated), extractor ✓ (v2–v4), judge NOT adopted —
   prompt fresh from B-B4 with evidence green; screen/classify excluded at
   plan time (dilution).
+- **Pin verdicts (user, 2026-07-11 afternoon)**: writer `synthesise_section_v5`
+  PINNED (multi-read; $ curve adjudicated at D1) · extraction `extract_iof_v5`
+  + junk judge PINNED (production wiring added: RunnerBackends.junk_judge +
+  live-bundle construction — commit `65cb827`) · classify `high` stands
+  (xhigh evidence complete) · **C4 re-sequenced by the owner**: no merge into
+  `demo-live-run` until this branch lands in dev through review — demo
+  surface + rehearsal follow the merge, not Phase C.
+- **C2 sections round (owner-scoped addition)**: the proposal surface was
+  overlooked at planning; owner brought it into the loop (this slice exists
+  to check every prompt) with the design steer: intent-led discovery stays —
+  V2's templated grammar (imperative core answer, fixed background,
+  interventions table, exactly-3-4 recommendations) is the recorded
+  anti-pattern, and several template sections belong to future capabilities
+  (deferred.md § EB report-shape boundary). Landed `synthesise_sections_v2`:
+  an evidence-descriptive role menu (context under specific titles /
+  cross-cutting patterns / enablers-and-barriers-as-described), each only
+  when the substrate supports it. Proposal-only before/after probes on both
+  pinned projects (pennies, excluded from the replay tally; archived in
+  `c-loop/sections-v{1,2}-*.txt`): on the finance intent the menu surfaced
+  a genuine enablers-and-barriers section + a specific-titled architecture-
+  context section; on the mission intent it absorbed into existing sections
+  rather than force-spawning — no generics, no verdicts, lead sections now
+  cross-cutting-pattern-shaped on both. Lead verdict: improvement; user
+  eyeball pending.
 - **C5 junk judge — built (trigger fired) and adoption-replayed** (commit
   `4dd3353` + lead fix; replay run `df216bce`, extract_iof_v5 + judge live on
   `91d2d684`): 36 findings flagged {aspiration 21, vague_outcome 13,
