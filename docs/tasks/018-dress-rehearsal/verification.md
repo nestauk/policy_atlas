@@ -348,6 +348,8 @@
   (xhigh evidence complete) · **C4 re-sequenced by the owner**: no merge into
   `demo-live-run` until this branch lands in dev through review — demo
   surface + rehearsal follow the merge, not Phase C.
+- **Sections pin (user verdict, 2026-07-11): `synthesise_sections_v2`
+  PINNED.**
 - **C2 sections round (owner-scoped addition)**: the proposal surface was
   overlooked at planning; owner brought it into the loop (this slice exists
   to check every prompt) with the design steer: intent-led discovery stays —
@@ -511,6 +513,23 @@ Running total: **13 / 30**.
   together); serialize only when two runs contend for the same substrate or when
   isolating one variable's trace matters. Baseline-1 ran sequentially (driver shakedown
   + rate-limit caution) — that caution is not the convention.
+- **Sharpened in B4: "same substrate" includes the project event log** — two
+  component replays on the same project contend on the per-project event
+  sequence (one synthesise launch died against a concurrent extract on the
+  same project). Convention: same-project replays serialize; cross-project
+  stays parallel. Similarly, two concurrent SUITE runs against the one shared
+  test DB flake on migration round-trip tests — one suite runner at a time.
+- **Cheap probe classes sit outside the replay budget**: planner single-turn
+  probes and proposal-only probes (one bounded call, pennies) are the
+  high-iteration loop unit; counted component replays are spent only where
+  full-output quality is the question. This is what let 4 prompt surfaces +
+  2 A/B studies + a contingent judge land inside 13/30.
+- **Pin-or-revert mechanics that worked**: every prompt change bumps its
+  version string (fingerprints hash versions, not text — an unbumped edit
+  silently reuses stale records); rounds are bounded per surface with the
+  contingent-judge escape hatch (C5) taking over where rule-iteration stops
+  converging; the user's taste verdicts batch at pause points rather than
+  per-change.
 
 ## Review handoff (accrues; finalised at Phase E)
 
@@ -550,3 +569,32 @@ Running total: **13 / 30**.
     delivered both machine-verifiable refactor lanes green on first delivery; the
     precise pinned brief (every design decision decided by the lead, agent implements)
     is what made the substitution costless (B3).
+  - Reasoning effort is non-monotonic on mini judgment surfaces — confirmed
+    in-house: 5.4-mini@xhigh exhausted a 16K completion cap purely on
+    reasoning (silent-looking cap failure), and uncapped produced WORSE
+    labels than @high (low-confidence churn, one clear demotion miss).
+    Validate effort level and completion cap together, per surface, with a
+    live A/B before pinning (B4).
+  - Prompt rule pairs behave like an under-damped control system: the
+    aspiration rule over-suppressed (a scheme-results doc 5→0 findings), its
+    programme-results correction over-opened (a mega-plan doc 1→41). Bounded
+    rounds converge only roughly on rule text; a cheap flag-not-drop judge
+    (the C5 pattern) beats a fourth rule iteration once the residual is
+    doc-class-shaped (B4).
+  - Input-volume optimizations must be judged on the cache-discounted cost
+    curve, not raw tokens: multi-read batching cut prompt volume 31% but the
+    eliminated repeated prefixes were exactly the provider-cached tokens
+    (hit rate 64%→23%) — the $ sign of the change depends on the cache
+    discount rate (B4; adjudicate at D1 billing).
+  - High judge-flag volume ≠ judge over-flagging: hand-inspection showed the
+    B-smoke's 49 unspanned flags were mostly correct (writer under-anchoring
+    — counts in prose without pattern claims, "Inferred gap:" prose without
+    gap claims). Inspect flags before recalibrating the judge; render such
+    flags quietly on user surfaces (B4).
+  - Direct-backend A/B drivers (no `_run_component`, no DB writes) are the
+    clean way to test model/effort hypotheses on classify-like surfaces —
+    the pinned substrate stays uncontaminated because downstream components
+    read latest-classification, which a real replay would overwrite (B4).
+  - The future-target extraction rule drops modelled BAU-scenario projections
+    (results, not targets) as collateral — recorded watch item for the eval
+    slice (B4).
