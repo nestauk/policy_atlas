@@ -8,6 +8,7 @@ from types import TracebackType
 from typing import Any, Literal, cast
 
 import pytest
+from structlog.testing import capture_logs
 
 from policy_atlas import tracing
 from policy_atlas.grounding_judge import StubGroundingJudgeBackend, build_envelope
@@ -16,6 +17,7 @@ from policy_atlas.synthesis_backend import (
     EMISSION_CLAIMS_MAX,
     ClaimWire,
     GapPayloadWire,
+    OpenAISynthesisBackend,
     RepairItemWire,
     SectionProposalWire,
     SectionRepairWire,
@@ -115,6 +117,99 @@ def test_stub_section_turn_default_tool_ordering_is_gated() -> None:
         "tool_calls": [{"tool": "lookup", "arguments": {"kind": "characterisation_summary"}}],
         "claims": None,
     }
+
+
+# --- Live section-turn parsing: multi-read-tool-call turns (018 C2 round 3) ---
+
+
+class _FakeFunctionCall:
+    def __init__(self, name: str, arguments: str) -> None:
+        self.name = name
+        self.arguments = arguments
+
+
+class _FakeToolCall:
+    def __init__(self, name: str, arguments: str) -> None:
+        self.function = _FakeFunctionCall(name, arguments)
+
+
+class _FakeMessage:
+    def __init__(self, tool_calls: list[_FakeToolCall]) -> None:
+        self.tool_calls = tool_calls
+
+
+class _FakeChoice:
+    def __init__(self, tool_calls: list[_FakeToolCall]) -> None:
+        self.message = _FakeMessage(tool_calls)
+
+
+class _FakeResponse:
+    def __init__(self, tool_calls: list[_FakeToolCall]) -> None:
+        self.choices = [_FakeChoice(tool_calls)]
+        self.usage = None
+
+
+class _FakeCompletions:
+    def __init__(self, tool_calls: list[_FakeToolCall]) -> None:
+        self._tool_calls = tool_calls
+        self.calls: list[dict[str, Any]] = []
+
+    def create(self, **kwargs: Any) -> _FakeResponse:
+        self.calls.append(kwargs)
+        return _FakeResponse(self._tool_calls)
+
+
+class _FakeChat:
+    def __init__(self, tool_calls: list[_FakeToolCall]) -> None:
+        self.completions = _FakeCompletions(tool_calls)
+
+
+class _FakeOpenAIClient:
+    def __init__(self, tool_calls: list[_FakeToolCall]) -> None:
+        self.chat = _FakeChat(tool_calls)
+
+
+def _backend_with_fake_client(tool_calls: list[_FakeToolCall]) -> OpenAISynthesisBackend:
+    backend: OpenAISynthesisBackend = object.__new__(OpenAISynthesisBackend)
+    fake_client = _FakeOpenAIClient(tool_calls)
+    cast("Any", backend)._client = fake_client
+    return backend
+
+
+def test_live_section_turn_parses_two_read_tool_calls_in_order() -> None:
+    backend = _backend_with_fake_client([
+        _FakeToolCall("search_chunks", json.dumps({"query": "housing"})),
+        _FakeToolCall("query_findings", json.dumps({})),
+    ])
+
+    turn, usage = cast("Any", backend)._create_section_turn_once([], force_emit=False)
+
+    assert usage is None
+    assert turn["claims"] is None
+    assert turn["tool_calls"] == [
+        {"tool": "search_chunks", "arguments": {"query": "housing"}},
+        {"tool": "query_findings", "arguments": {}},
+    ]
+    [kwargs] = cast("Any", backend)._client.chat.completions.calls
+    assert kwargs["parallel_tool_calls"] is True
+    assert kwargs["tool_choice"] == "required"
+
+
+def test_live_section_turn_drops_emit_section_alongside_reads() -> None:
+    backend = _backend_with_fake_client([
+        _FakeToolCall("emit_section", json.dumps({"prose": "x", "claims": []})),
+        _FakeToolCall("search_chunks", json.dumps({"query": "housing"})),
+    ])
+
+    with capture_logs() as logs:
+        turn, usage = cast("Any", backend)._create_section_turn_once([], force_emit=False)
+
+    assert usage is None
+    assert turn["claims"] is None
+    assert turn["tool_calls"] == [
+        {"tool": "search_chunks", "arguments": {"query": "housing"}},
+    ]
+    assert any(entry["event"] == "synthesis.emit_with_reads_deferred" for entry in logs)
 
 
 def test_scripted_turns_drive_real_loop_and_cap_forcing_falls_through() -> None:

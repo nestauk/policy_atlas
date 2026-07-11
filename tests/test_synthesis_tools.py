@@ -574,15 +574,8 @@ def test_loop_runner_unknown_tool_rejected_and_not_executed() -> None:
     assert result["transcript"][0]["result"] == {"error": "unknown tool 'missing'"}
 
 
-def test_loop_runner_rejects_two_tool_calls_and_validation_errors() -> None:
+def test_loop_runner_rejects_validation_errors() -> None:
     backend = ScriptedBackend([
-        {
-            "tool_calls": [
-                {"tool": "ok", "arguments": {}},
-                {"tool": "ok", "arguments": {}},
-            ],
-            "claims": None,
-        },
         {"tool_calls": [{"tool": "bad", "arguments": {"x": 1}}], "claims": None},
         {"tool_calls": [], "claims": _claims()},
     ])
@@ -591,10 +584,66 @@ def test_loop_runner_rejects_two_tool_calls_and_validation_errors() -> None:
         raise ToolValidationError("bad args")
 
     result = run_section_loop(backend, seed={}, tools={"bad": bad})
-    assert result["rejected_tool_calls"] == 2
+    assert result["rejected_tool_calls"] == 1
     assert result["tool_call_counts"] == {}
-    assert result["transcript"][0]["result"] == {"error": "one tool call per turn"}
-    assert result["transcript"][1]["result"] == {"error": "bad args"}
+    assert result["transcript"][0]["result"] == {"error": "bad args"}
+
+
+def test_loop_runner_executes_multiple_read_calls_in_one_turn() -> None:
+    """A single turn may batch several independent read-tool calls (018 C2
+    round 3 cost rider): all execute, in order, within the same turn."""
+    backend = ScriptedBackend([
+        {
+            "tool_calls": [
+                {"tool": "ok", "arguments": {"i": 0}},
+                {"tool": "ok", "arguments": {"i": 1}},
+                {"tool": "ok", "arguments": {"i": 2}},
+            ],
+            "claims": None,
+        },
+        {"tool_calls": [], "claims": _claims()},
+    ])
+    result = run_section_loop(
+        backend, seed={}, tools={"ok": lambda args: {"ok": args["i"]}}
+    )
+    assert result["turns_used"] == 2
+    assert len(result["transcript"]) == 3
+    assert [entry["result"] for entry in result["transcript"]] == [
+        {"ok": 0},
+        {"ok": 1},
+        {"ok": 2},
+    ]
+    assert result["tool_call_counts"] == {"ok": 3}
+    assert result["rejected_tool_calls"] == 0
+
+
+def test_loop_runner_one_valid_read_and_one_unknown_tool_in_same_turn() -> None:
+    """A batched turn mixing a valid read with an unknown tool executes the
+    valid call and rejects only the unknown one — the loop continues."""
+    called: list[int] = []
+
+    def known(args: dict[str, Any]) -> dict[str, Any]:
+        called.append(args["i"])
+        return {"ok": args["i"]}
+
+    backend = ScriptedBackend([
+        {
+            "tool_calls": [
+                {"tool": "known", "arguments": {"i": 0}},
+                {"tool": "missing", "arguments": {}},
+            ],
+            "claims": None,
+        },
+        {"tool_calls": [], "claims": _claims()},
+    ])
+    result = run_section_loop(backend, seed={}, tools={"known": known})
+    assert called == [0]
+    assert result["rejected_tool_calls"] == 1
+    assert result["tool_call_counts"] == {"known": 1}
+    assert len(result["transcript"]) == 2
+    assert result["transcript"][0]["result"] == {"ok": 0}
+    assert result["transcript"][1]["result"] == {"error": "unknown tool 'missing'"}
+    assert result["turns_used"] == 2
 
 
 def test_loop_runner_rejects_tool_calls_on_forced_emit_turn() -> None:

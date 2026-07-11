@@ -1873,48 +1873,38 @@ def run_section_loop(
             raise RuntimeError("backend returned tool call on forced emit turn")
         if not tool_calls:
             raise RuntimeError("backend returned no claims or tool calls")
-        if len(tool_calls) != 1:
-            first = tool_calls[0] if tool_calls else {"tool": "invalid"}
-            name = first.get("tool", "invalid")
-            transcript.append({
-                "tool": name if isinstance(name, str) else "invalid",
-                "arguments": {},
-                "result": {"error": "one tool call per turn"},
-            })
-            rejected_tool_calls += 1
-            continue
 
-        call = tool_calls[0]
-        tool_name = call.get("tool")
-        arguments = call.get("arguments", {})
-        if not isinstance(tool_name, str):
-            tool_name = "invalid"
-        if not isinstance(arguments, dict):
-            arguments = {}
-        if tool_name not in tools:
+        for call in tool_calls:
+            tool_name = call.get("tool")
+            arguments = call.get("arguments", {})
+            if not isinstance(tool_name, str):
+                tool_name = "invalid"
+            if not isinstance(arguments, dict):
+                arguments = {}
+            if tool_name not in tools:
+                transcript.append({
+                    "tool": tool_name,
+                    "arguments": cast("dict[str, Any]", arguments),
+                    "result": {"error": f"unknown tool {tool_name!r}"},
+                })
+                rejected_tool_calls += 1
+                continue
+            try:
+                tool_result = tools[tool_name](cast("dict[str, Any]", arguments))
+            except ToolValidationError as exc:
+                transcript.append({
+                    "tool": tool_name,
+                    "arguments": cast("dict[str, Any]", arguments),
+                    "result": {"error": str(exc)},
+                })
+                rejected_tool_calls += 1
+                continue
             transcript.append({
                 "tool": tool_name,
                 "arguments": cast("dict[str, Any]", arguments),
-                "result": {"error": f"unknown tool {tool_name!r}"},
+                "result": tool_result,
             })
-            rejected_tool_calls += 1
-            continue
-        try:
-            tool_result = tools[tool_name](cast("dict[str, Any]", arguments))
-        except ToolValidationError as exc:
-            transcript.append({
-                "tool": tool_name,
-                "arguments": cast("dict[str, Any]", arguments),
-                "result": {"error": str(exc)},
-            })
-            rejected_tool_calls += 1
-            continue
-        transcript.append({
-            "tool": tool_name,
-            "arguments": cast("dict[str, Any]", arguments),
-            "result": tool_result,
-        })
-        tool_call_counts[tool_name] = tool_call_counts.get(tool_name, 0) + 1
+            tool_call_counts[tool_name] = tool_call_counts.get(tool_name, 0) + 1
 
     raise RuntimeError("section loop exhausted without emission")
 
