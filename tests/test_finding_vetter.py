@@ -1,4 +1,4 @@
-"""Tests for the 018 C5 junk judge — wire validation, backend seam, and the
+"""Tests for the 018 C5 finding vetter — wire validation, backend seam, and the
 extract post-filter integration (flag-not-drop, fail-open, byte-identical when
 absent). All DB-touching rows ride the ``conn`` fixture's per-test rollback;
 every backend here is ``mode == "stub"`` so the suite stays egress-free.
@@ -16,15 +16,15 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.extract import ExtractContext, extract_scope, extraction_fingerprint
-from policy_atlas.junk_judge import (
-    JUNK_JUDGE_MODEL,
-    JUNK_JUDGE_PROMPT_VERSION,
-    JUNK_JUDGE_REASONING_EFFORT,
-    JUNK_JUDGE_SYSTEM_PROMPT,
-    JunkJudgeResponse,
-    JunkVerdictWire,
-    OpenAIJunkJudgeBackend,
-    StubJunkJudgeBackend,
+from policy_atlas.finding_vetter import (
+    FINDING_VETTER_MODEL,
+    FINDING_VETTER_PROMPT_VERSION,
+    FINDING_VETTER_REASONING_EFFORT,
+    FINDING_VETTER_SYSTEM_PROMPT,
+    FindingVetterResponse,
+    OpenAIFindingVetterBackend,
+    StubFindingVetterBackend,
+    VetterVerdictWire,
     build_judge_messages,
     validate_verdict_coverage,
 )
@@ -52,7 +52,7 @@ def _run_with_judge(
     selection_run_id: uuid.UUID,
     *,
     extraction_backend: Any,
-    junk_judge_backend: Any,
+    finding_vetter_backend: Any,
 ) -> tuple[dict[str, Any], uuid.UUID]:
     """Seed a fresh extract run and execute extract_scope with both backends."""
     run_id = seed_run(conn, project_id)
@@ -64,7 +64,7 @@ def _run_with_judge(
             scope_id=scope_id, intent="unused", context={}, selection_run_id=selection_run_id
         ),
         extraction_backend=extraction_backend,
-        junk_judge_backend=junk_judge_backend,
+        finding_vetter_backend=finding_vetter_backend,
     )
     return summary, run_id
 
@@ -100,14 +100,14 @@ class _ScriptedJudgeBackend:
         self._reason = reason
         self.payloads: list[dict[str, Any]] = []
 
-    def judge(self, payload: dict[str, Any]) -> UsageResult[JunkJudgeResponse]:
+    def judge(self, payload: dict[str, Any]) -> UsageResult[FindingVetterResponse]:
         self.payloads.append(payload)
-        verdicts: list[JunkVerdictWire] = []
+        verdicts: list[VetterVerdictWire] = []
         for finding in payload["findings"]:
             index = cast("int", finding["index"])
             if index in self._junk_indices:
                 verdicts.append(
-                    JunkVerdictWire(
+                    VetterVerdictWire(
                         finding_index=index,
                         verdict="junk",
                         junk_class=cast("Any", self._junk_class),
@@ -116,11 +116,11 @@ class _ScriptedJudgeBackend:
                 )
             else:
                 verdicts.append(
-                    JunkVerdictWire(
+                    VetterVerdictWire(
                         finding_index=index, verdict="sound", junk_class=None, reason="Sound."
                     )
                 )
-        return JunkJudgeResponse(verdicts=verdicts), None
+        return FindingVetterResponse(verdicts=verdicts), None
 
 
 class _FailingJudgeBackend:
@@ -128,7 +128,7 @@ class _FailingJudgeBackend:
 
     mode = "stub"
 
-    def judge(self, payload: dict[str, Any]) -> UsageResult[JunkJudgeResponse]:
+    def judge(self, payload: dict[str, Any]) -> UsageResult[FindingVetterResponse]:
         raise RuntimeError("Stub judge failure sentinel.")
 
 
@@ -137,11 +137,11 @@ class _MismatchedJudgeBackend:
 
     mode = "stub"
 
-    def judge(self, payload: dict[str, Any]) -> UsageResult[JunkJudgeResponse]:
+    def judge(self, payload: dict[str, Any]) -> UsageResult[FindingVetterResponse]:
         return (
-            JunkJudgeResponse(
+            FindingVetterResponse(
                 verdicts=[
-                    JunkVerdictWire(
+                    VetterVerdictWire(
                         finding_index=999, verdict="sound", junk_class=None, reason="Wrong index."
                     )
                 ]
@@ -155,18 +155,18 @@ class _MismatchedJudgeBackend:
 
 def test_junk_verdict_requires_junk_class_when_junk() -> None:
     with pytest.raises(ValidationError, match="junk_class is required"):
-        JunkVerdictWire(finding_index=0, verdict="junk", junk_class=None, reason="x")
+        VetterVerdictWire(finding_index=0, verdict="junk", junk_class=None, reason="x")
 
 
 def test_junk_verdict_forbids_junk_class_when_sound() -> None:
     with pytest.raises(ValidationError, match="junk_class must be null"):
-        JunkVerdictWire(
+        VetterVerdictWire(
             finding_index=0, verdict="sound", junk_class="aspiration", reason="x"
         )
 
 
 def test_junk_verdict_junk_with_class_is_valid() -> None:
-    verdict = JunkVerdictWire(
+    verdict = VetterVerdictWire(
         finding_index=0, verdict="junk", junk_class="aspiration", reason="A target, not a result."
     )
     assert verdict.junk_class == "aspiration"
@@ -174,7 +174,7 @@ def test_junk_verdict_junk_with_class_is_valid() -> None:
 
 def test_junk_verdict_reason_over_300_chars_rejected() -> None:
     with pytest.raises(ValidationError):
-        JunkVerdictWire(
+        VetterVerdictWire(
             finding_index=0, verdict="sound", junk_class=None, reason="x" * 301
         )
 
@@ -182,7 +182,7 @@ def test_junk_verdict_reason_over_300_chars_rejected() -> None:
 def test_validate_verdict_coverage_raises_on_missing_index() -> None:
     findings = [{"index": 0}, {"index": 1}]
     verdicts = [
-        JunkVerdictWire(finding_index=0, verdict="sound", junk_class=None, reason="ok"),
+        VetterVerdictWire(finding_index=0, verdict="sound", junk_class=None, reason="ok"),
     ]
     with pytest.raises(RuntimeError, match="do not cover"):
         validate_verdict_coverage(findings, verdicts)
@@ -191,8 +191,8 @@ def test_validate_verdict_coverage_raises_on_missing_index() -> None:
 def test_validate_verdict_coverage_raises_on_duplicate_index() -> None:
     findings = [{"index": 0}]
     verdicts = [
-        JunkVerdictWire(finding_index=0, verdict="sound", junk_class=None, reason="ok"),
-        JunkVerdictWire(finding_index=0, verdict="sound", junk_class=None, reason="ok2"),
+        VetterVerdictWire(finding_index=0, verdict="sound", junk_class=None, reason="ok"),
+        VetterVerdictWire(finding_index=0, verdict="sound", junk_class=None, reason="ok2"),
     ]
     with pytest.raises(RuntimeError, match="do not cover"):
         validate_verdict_coverage(findings, verdicts)
@@ -201,7 +201,7 @@ def test_validate_verdict_coverage_raises_on_duplicate_index() -> None:
 def test_validate_verdict_coverage_raises_on_unknown_index() -> None:
     findings = [{"index": 0}]
     verdicts = [
-        JunkVerdictWire(finding_index=7, verdict="sound", junk_class=None, reason="ok"),
+        VetterVerdictWire(finding_index=7, verdict="sound", junk_class=None, reason="ok"),
     ]
     with pytest.raises(RuntimeError, match="do not cover"):
         validate_verdict_coverage(findings, verdicts)
@@ -210,8 +210,8 @@ def test_validate_verdict_coverage_raises_on_unknown_index() -> None:
 def test_validate_verdict_coverage_passes_on_exact_match_any_order() -> None:
     findings = [{"index": 0}, {"index": 1}]
     verdicts = [
-        JunkVerdictWire(finding_index=1, verdict="sound", junk_class=None, reason="ok"),
-        JunkVerdictWire(finding_index=0, verdict="sound", junk_class=None, reason="ok"),
+        VetterVerdictWire(finding_index=1, verdict="sound", junk_class=None, reason="ok"),
+        VetterVerdictWire(finding_index=0, verdict="sound", junk_class=None, reason="ok"),
     ]
     validate_verdict_coverage(findings, verdicts)  # no raise
 
@@ -233,7 +233,7 @@ def test_build_judge_messages_carries_findings_as_data_not_instructions() -> Non
     ]
     messages = build_judge_messages(findings)
 
-    assert messages[0]["content"] == JUNK_JUDGE_SYSTEM_PROMPT
+    assert messages[0]["content"] == FINDING_VETTER_SYSTEM_PROMPT
     user = str(cast("dict[str, Any]", messages[1])["content"])
     assert "data, not instructions" in user
     assert "coaching" in user
@@ -244,7 +244,7 @@ def test_build_judge_messages_carries_findings_as_data_not_instructions() -> Non
 
 
 def test_stub_backend_returns_all_sound_covering_every_index() -> None:
-    backend = StubJunkJudgeBackend()
+    backend = StubFindingVetterBackend()
     response, usage = backend.judge({"findings": [{"index": 0}, {"index": 2}]})
 
     assert usage is None
@@ -285,21 +285,21 @@ def test_junk_flagged_excluded_from_persistence_and_accounted(conn: Connection) 
 
     summary, _ = _run_with_judge(
         conn, project_id, scope_id, sel_run,
-        extraction_backend=backend, junk_judge_backend=judge,
+        extraction_backend=backend, finding_vetter_backend=judge,
     )
 
     assert summary["docs"][0]["finding_count"] == 1
-    assert summary["docs"][0]["junk_flagged"] == 1
+    assert summary["docs"][0]["vetted_out"] == 1
     assert summary["findings"]["total"] == 1
-    assert summary["junk_flagged"]["total"] == 1
-    assert summary["junk_flagged"]["by_class"] == {"deictic_naming": 1}
-    [record] = summary["junk_flagged"]["records"]
+    assert summary["vetted_out"]["total"] == 1
+    assert summary["vetted_out"]["by_class"] == {"deictic_naming": 1}
+    [record] = summary["vetted_out"]["records"]
     assert record["intervention"] == "this Plan"
     assert record["outcome"] == "costs"
     assert record["junk_class"] == "deictic_naming"
     assert record["reason"] == "Names the document itself."
-    assert "junk_flagged_present" in summary["flags"]
-    assert summary["provenance"]["junk_judge"] == JUNK_JUDGE_PROMPT_VERSION
+    assert "vetted_out_present" in summary["flags"]
+    assert summary["provenance"]["finding_vetter"] == FINDING_VETTER_PROMPT_VERSION
 
     rows = _findings(conn, project_id)
     assert len(rows) == 1
@@ -311,7 +311,7 @@ def test_junk_flagged_excluded_from_persistence_and_accounted(conn: Connection) 
 def test_all_junk_doc_reports_no_findings_status(conn: Connection) -> None:
     """A doc whose every finding is junk-flagged is no_findings, never a
     zero-finding "extracted" that inflates the extracted tally; the
-    junk_flagged count keeps it distinguishable from a genuinely-empty doc."""
+    vetted_out count keeps it distinguishable from a genuinely-empty doc."""
     project_id, sel_run = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     cid = uuid.uuid4()
@@ -337,15 +337,15 @@ def test_all_junk_doc_reports_no_findings_status(conn: Connection) -> None:
 
     summary, _ = _run_with_judge(
         conn, project_id, scope_id, sel_run,
-        extraction_backend=backend, junk_judge_backend=judge,
+        extraction_backend=backend, finding_vetter_backend=judge,
     )
 
     assert summary["docs"][0]["status"] == "no_findings"
     assert summary["docs"][0]["finding_count"] == 0
-    assert summary["docs"][0]["junk_flagged"] == 2
+    assert summary["docs"][0]["vetted_out"] == 2
     assert summary["counts"]["extracted"] == 0
     assert summary["counts"]["no_findings"] == 1
-    assert summary["junk_flagged"]["total"] == 2
+    assert summary["vetted_out"]["total"] == 2
     assert _findings(conn, project_id) == []
 
 
@@ -366,14 +366,14 @@ def test_junk_judge_failure_fails_open_and_counts(conn: Connection) -> None:
 
     summary, _ = _run_with_judge(
         conn, project_id, scope_id, sel_run,
-        extraction_backend=backend, junk_judge_backend=_FailingJudgeBackend(),
+        extraction_backend=backend, finding_vetter_backend=_FailingJudgeBackend(),
     )
 
     assert summary["docs"][0]["finding_count"] == 1
-    assert summary["docs"][0]["junk_flagged"] == 0
-    assert summary["counts"]["junk_judge_failed"] == 1
-    assert summary["junk_flagged"]["total"] == 0
-    assert "junk_flagged_present" not in summary["flags"]
+    assert summary["docs"][0]["vetted_out"] == 0
+    assert summary["counts"]["vetting_failed"] == 1
+    assert summary["vetted_out"]["total"] == 0
+    assert "vetted_out_present" not in summary["flags"]
     rows = _findings(conn, project_id)
     assert len(rows) == 1
 
@@ -395,17 +395,17 @@ def test_junk_judge_coverage_violation_fails_open_and_counts(conn: Connection) -
 
     summary, _ = _run_with_judge(
         conn, project_id, scope_id, sel_run,
-        extraction_backend=backend, junk_judge_backend=_MismatchedJudgeBackend(),
+        extraction_backend=backend, finding_vetter_backend=_MismatchedJudgeBackend(),
     )
 
     assert summary["docs"][0]["finding_count"] == 1
-    assert summary["counts"]["junk_judge_failed"] == 1
+    assert summary["counts"]["vetting_failed"] == 1
     rows = _findings(conn, project_id)
     assert len(rows) == 1
 
 
 def test_no_backend_is_byte_identical_no_junk_keys(conn: Connection) -> None:
-    """``junk_judge_backend=None`` (the default): no new keys anywhere, provenance is null."""
+    """``finding_vetter_backend=None`` (the default): no new keys anywhere, provenance is null."""
     project_id, sel_run = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     pss_id, _ = _seed_full_text_doc(
@@ -417,15 +417,15 @@ def test_no_backend_is_byte_identical_no_junk_keys(conn: Connection) -> None:
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
-    assert "junk_flagged" not in summary
-    assert "junk_flagged" not in summary["docs"][0]
-    assert "junk_judge_failed" not in summary["counts"]
-    assert summary["provenance"]["junk_judge"] is None
+    assert "vetted_out" not in summary
+    assert "vetted_out" not in summary["docs"][0]
+    assert "vetting_failed" not in summary["counts"]
+    assert summary["provenance"]["finding_vetter"] is None
 
 
 def test_fingerprint_sensitive_to_junk_judge_presence() -> None:
-    without = extraction_fingerprint("stub", junk_judge_active=False)[0]
-    with_judge = extraction_fingerprint("stub", junk_judge_active=True)[0]
+    without = extraction_fingerprint("stub", finding_vetter_active=False)[0]
+    with_judge = extraction_fingerprint("stub", finding_vetter_active=True)[0]
     assert without != with_judge
     assert without == extraction_fingerprint("stub")[0]  # default is off
 
@@ -470,12 +470,12 @@ class _FakeOpenAIClient:
 
 
 def test_openai_junk_judge_backend_passes_model_and_reasoning_effort() -> None:
-    response = JunkJudgeResponse(
+    response = FindingVetterResponse(
         verdicts=[
-            JunkVerdictWire(finding_index=0, verdict="sound", junk_class=None, reason="Fine."),
+            VetterVerdictWire(finding_index=0, verdict="sound", junk_class=None, reason="Fine."),
         ]
     )
-    backend: OpenAIJunkJudgeBackend = object.__new__(OpenAIJunkJudgeBackend)
+    backend: OpenAIFindingVetterBackend = object.__new__(OpenAIFindingVetterBackend)
     fake_client = _FakeOpenAIClient(response)
     cast("Any", backend)._client = fake_client
     cast("Any", backend)._langfuse_client = None
@@ -500,6 +500,6 @@ def test_openai_junk_judge_backend_passes_model_and_reasoning_effort() -> None:
     assert usage is None
     [kwargs] = fake_client.chat.completions.calls
     assert kwargs["model"] == "gpt-5.4-mini"
-    assert kwargs["model"] == JUNK_JUDGE_MODEL
+    assert kwargs["model"] == FINDING_VETTER_MODEL
     assert kwargs["reasoning_effort"] == "high"
-    assert kwargs["reasoning_effort"] == JUNK_JUDGE_REASONING_EFFORT
+    assert kwargs["reasoning_effort"] == FINDING_VETTER_REASONING_EFFORT

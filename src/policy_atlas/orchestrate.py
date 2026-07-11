@@ -35,11 +35,11 @@ from policy_atlas.embeddings import EmbeddingBackend, OpenAIEmbeddingBackend
 from policy_atlas.extraction_backend import OpenAIExtractionBackend
 from policy_atlas.facet_grouping import OpenAIFacetGroupingBackend
 from policy_atlas.fetch_live import LiveDocumentFetcher
+from policy_atlas.finding_vetter import OpenAIFindingVetterBackend
 from policy_atlas.fixtures import get_source
 from policy_atlas.grounding_judge import OpenAIGroundingJudgeBackend
 from policy_atlas.grouping import OpenAIThemeGroupingBackend, ThemeGroupingBackend
 from policy_atlas.ingest import ingest_upload
-from policy_atlas.junk_judge import OpenAIJunkJudgeBackend
 from policy_atlas.logging import configure_logging
 from policy_atlas.orchestration_plan import OrchestrationPlan
 from policy_atlas.planner import OpenAIPlannerBackend, PlannerBackend, StubPlannerBackend
@@ -460,7 +460,7 @@ def _live_planner_and_backends(
         classification=OpenAIClassificationBackend(langfuse_client=langfuse_client),
         ranking=OpenAIRankingBackend(langfuse_client=langfuse_client),
         extraction=OpenAIExtractionBackend(langfuse_client=langfuse_client),
-        junk_judge=OpenAIJunkJudgeBackend(langfuse_client=langfuse_client),
+        finding_vetter=OpenAIFindingVetterBackend(langfuse_client=langfuse_client),
         facet_grouping=OpenAIFacetGroupingBackend(langfuse_client=langfuse_client),
         synthesis=OpenAISynthesisBackend(langfuse_client=langfuse_client),
         grounding_judge=OpenAIGroundingJudgeBackend(langfuse_client=langfuse_client),

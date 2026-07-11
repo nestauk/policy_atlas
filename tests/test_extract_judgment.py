@@ -477,9 +477,9 @@ def test_fingerprint_provenance_lists_every_component(conn: Connection) -> None:
     )
     assert "max_output_tokens" in prov
     assert "retry_cap" in prov
-    # 018 C5: judging is off by default (no junk_judge_backend passed), so the
+    # 018 C5: judging is off by default (no finding_vetter_backend passed), so the
     # fingerprint component is null — byte-identical to the pre-018-C5 pipeline.
-    assert prov["junk_judge"] is None
+    assert prov["finding_vetter"] is None
 
 
 def test_fingerprint_changes_on_any_single_component(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -42,6 +42,7 @@ from policy_atlas.facet_grouping import (
     StubFacetGroupingBackend,
 )
 from policy_atlas.fetch_live import LiveDocumentFetcher
+from policy_atlas.finding_vetter import FindingVetterBackend
 from policy_atlas.fixtures import get_source
 from policy_atlas.grounding_judge import (
     GroundingJudgeBackend,
@@ -57,7 +58,6 @@ from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.ingest import ingest_upload
 from policy_atlas.ingest_full_text import DocumentFetcher, FixtureFetcher
-from policy_atlas.junk_judge import JunkJudgeBackend
 from policy_atlas.logging import configure_logging
 from policy_atlas.plan import Plan, compile
 from policy_atlas.ranking import OpenAIRankingBackend, RankingBackend
@@ -142,7 +142,7 @@ def _run_component(
     ranking_backend: RankingBackend | None = None,
     selection_run_id: uuid.UUID | None = None,
     extraction_backend: ExtractionBackend | None = None,
-    junk_judge_backend: JunkJudgeBackend | None = None,
+    finding_vetter_backend: FindingVetterBackend | None = None,
     extraction_run_id: uuid.UUID | None = None,
     facet_grouping_backend: FacetGroupingBackend | None = None,
     grouping_run_id: uuid.UUID | None = None,
@@ -174,7 +174,7 @@ def _run_component(
             other components.
         extraction_backend: Extraction backend for ``extract``; unused by
             other components.
-        junk_judge_backend: Post-extract junk filter for ``extract``; unused
+        finding_vetter_backend: Post-extract finding vetter for ``extract``; unused
             by other components. ``None`` (the default) turns judging off.
         extraction_run_id: Explicit extraction run for ``group``; unused by
             other components.
@@ -257,7 +257,7 @@ def _run_component(
             classification_backend=classification_backend,
             ranking_backend=ranking_backend,
             extraction_backend=extraction_backend,
-            junk_judge_backend=junk_judge_backend,
+            finding_vetter_backend=finding_vetter_backend,
             facet_grouping_backend=facet_grouping_backend,
             synthesis_backend=synthesis_backend,
             grounding_judge_backend=grounding_judge_backend,

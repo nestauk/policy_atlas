@@ -588,8 +588,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Extract / findings layer (task 011 seams)
 
-- **Junk-judge per-doc calls run sequentially (018 review stack, efficiency lane)** —
-  `_apply_junk_judge` loops one live mini call per extracted doc right after
+- **Finding-vetter per-doc calls run sequentially (018 review stack, efficiency lane;
+  component renamed from "junk judge" at 018 step 9, owner call)** —
+  `_apply_finding_vetter` loops one live mini call per extracted doc right after
   `_run_windows`' 4-wide `ThreadPoolExecutor` fan-out of the same kind of call.
   Bounded today (~10–25 docs, mini-tier, seconds each); parallelize with the existing
   executor pattern (plus a thread-safe usage accumulation story) if D-phase timing

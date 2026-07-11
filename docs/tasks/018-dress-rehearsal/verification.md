@@ -696,6 +696,20 @@ per-candidate adjudications (author/fold/decline with reasons) · failure-log en
 (unspanned-lane full decoupling · junk-judge parallelization · per-lane test-DB
 partition). Every B4 knowledge candidate dispositioned — none dropped silently.
 
+**Post-review rename (owner call, 2026-07-11, during step-9 review):** the C5 "junk
+judge" is renamed **finding vetter** — `finding_vetter.py`, `FindingVetterBackend`,
+`RunnerBackends.finding_vetter`, telemetry keys `vetting_failed` /
+`vetted_out{,_count,_present}` / provenance `finding_vetter`, prompt-version label
+`extract_finding_vetter_v1`. **Model-facing surfaces deliberately untouched** (no
+replay owed): prompt text, wire field names (`verdict`, `junk_class`, `reason`) and
+verdict tokens (`"junk"`/`"sound"`) are byte-identical. Two recorded consequences:
+(1) the extraction fingerprint changes (version-label + fingerprint-key rename) —
+memoized extraction records mint new records on next run, never stale reuse;
+(2) the structured-output schema *name* changes with the response-class rename
+(`FindingVetterResponse`) — adjudicated non-behavioral (envelope metadata, not
+instruction content). Earlier phase-log entries keep the old name as history; dev-DB
+event rows written before the rename carry the old payload keys.
+
 ## Review handoff (accrues; finalised at Phase E)
 
 - **Knowledge candidates:**

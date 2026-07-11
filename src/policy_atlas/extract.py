@@ -43,10 +43,10 @@ from policy_atlas.extraction_records import (
     IOFRecord,
     IOFRecordWire,
 )
-from policy_atlas.junk_judge import (
-    JUNK_JUDGE_PROMPT_VERSION,
-    JunkJudgeBackend,
-    JunkVerdictWire,
+from policy_atlas.finding_vetter import (
+    FINDING_VETTER_PROMPT_VERSION,
+    FindingVetterBackend,
+    VetterVerdictWire,
     validate_verdict_coverage,
 )
 from policy_atlas.quote_verify import (
@@ -85,9 +85,9 @@ EXTRACT_RETRY_CAP = 1
 MAX_CONCURRENT_EXTRACT = 4
 EXTRACTION_PROFILE = PROFILE_ID
 
-# 018 C5 junk judge: component.completed payload record cap (flag-not-drop —
+# 018 C5 finding vetter: component.completed payload record cap (flag-not-drop —
 # every flagged finding is counted; only the displayed record list is capped).
-JUNK_FLAGGED_RECORDS_CAP = 50
+VETTED_OUT_RECORDS_CAP = 50
 
 
 class ExtractError(Exception):
@@ -123,7 +123,7 @@ class ExtractContext:
 
 
 def extraction_fingerprint(
-    mode: str, *, junk_judge_active: bool = False
+    mode: str, *, finding_vetter_active: bool = False
 ) -> tuple[str, dict[str, Any]]:
     """Build the extraction fingerprint and its canonical component map.
 
@@ -137,8 +137,8 @@ def extraction_fingerprint(
     Args:
         mode: The backend mode (``"live"`` or ``"stub"``), from
             ``backend.mode`` — a stub result can never masquerade as a live one.
-        junk_judge_active: Whether a junk judge backend was supplied. Judged
-            and unjudged runs never reuse each other's records (018 C5).
+        finding_vetter_active: Whether a finding-vetter backend was supplied. Vetted
+            and unvetted runs never reuse each other's records (018 C5).
 
     Returns:
         A ``(fingerprint_hex, components)`` pair. ``components`` is recorded
@@ -161,7 +161,7 @@ def extraction_fingerprint(
         },
         "max_output_tokens": EXTRACT_MAX_OUTPUT_TOKENS,
         "retry_cap": EXTRACT_RETRY_CAP,
-        "junk_judge": JUNK_JUDGE_PROMPT_VERSION if junk_judge_active else None,
+        "finding_vetter": FINDING_VETTER_PROMPT_VERSION if finding_vetter_active else None,
     }
     canonical = json.dumps(components, sort_keys=True, separators=(",", ":"))
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -219,10 +219,10 @@ class _Doc:
     dedup_collapsed: int = 0
     quote_unverified: int = 0
 
-    # Junk judge (018 C5) — flag-not-drop accounting for this document.
-    junk_flagged_count: int = 0
-    junk_flagged_records: list[dict[str, Any]] = field(default_factory=list)
-    junk_judge_failed: bool = False
+    # Finding vetter (018 C5) — flag-not-drop accounting for this document.
+    vetted_out_count: int = 0
+    vetted_out_records: list[dict[str, Any]] = field(default_factory=list)
+    vetting_failed: bool = False
 
     @property
     def title(self) -> str:
@@ -718,7 +718,7 @@ def _process_doc(doc: _Doc, window_findings: dict[int, list[IOFRecordWire]]) -> 
     doc.quote_unverified = quote_unverified
 
 
-# --- Junk judge (018 C5) -----------------------------------------------------
+# --- Finding vetter (018 C5) --------------------------------------------------
 
 
 def _judge_payload_entry(index: int, record: IOFRecord) -> dict[str, Any]:
@@ -737,39 +737,41 @@ def _judge_payload_entry(index: int, record: IOFRecord) -> dict[str, Any]:
     }
 
 
-def _apply_junk_judge(doc: _Doc, junk_judge_backend: JunkJudgeBackend) -> TokenUsage | None:
-    """Judge one document's dedup survivors, excluding clear junk (flag-not-drop).
+def _apply_finding_vetter(
+    doc: _Doc, finding_vetter_backend: FindingVetterBackend
+) -> TokenUsage | None:
+    """Vet one document's dedup survivors, excluding clear junk (flag-not-drop).
 
     Runs AFTER ``dedup_records`` and BEFORE the IOF insert (``doc.survivors``
     etc. are mutated in place, so ``_write_docs`` never sees excluded
     findings). A judge call/parse/coverage failure is fail-open: the document
-    persists unfiltered and ``doc.junk_judge_failed`` is set for accounting —
+    persists unfiltered and ``doc.vetting_failed`` is set for accounting —
     the filter is an enhancement, never an extraction blocker.
 
     Args:
         doc: An ``extracted`` document with dedup survivors already resolved.
-        junk_judge_backend: The judge seam.
+        finding_vetter_backend: The judge seam.
 
     Returns:
         The judge call's token usage, or ``None`` on failure or no usage.
     """
     findings = [_judge_payload_entry(index, record) for index, record in enumerate(doc.survivors)]
     try:
-        response, usage = junk_judge_backend.judge({"findings": findings})
+        response, usage = finding_vetter_backend.judge({"findings": findings})
         validate_verdict_coverage(findings, response.verdicts)
     except Exception as exc:  # noqa: BLE001 — reduced to a type name for the record
-        doc.junk_judge_failed = True
+        doc.vetting_failed = True
         log.warning(
-            "extract.junk_judge_failed", pss_id=str(doc.pss_id), error=type(exc).__name__
+            "extract.vetting_failed", pss_id=str(doc.pss_id), error=type(exc).__name__
         )
         return None
 
-    junk_by_index: dict[int, JunkVerdictWire] = {
+    vetted_out_by_index: dict[int, VetterVerdictWire] = {
         verdict.finding_index: verdict
         for verdict in response.verdicts
         if verdict.verdict == "junk"
     }
-    if not junk_by_index:
+    if not vetted_out_by_index:
         return usage
 
     kept_survivors: list[IOFRecord] = []
@@ -778,13 +780,13 @@ def _apply_junk_judge(doc: _Doc, junk_judge_backend: JunkJudgeBackend) -> TokenU
     for index, (record, grounding, coverage) in enumerate(
         zip(doc.survivors, doc.groundings, doc.coverage_by_survivor, strict=True)
     ):
-        verdict = junk_by_index.get(index)
+        verdict = vetted_out_by_index.get(index)
         if verdict is None:
             kept_survivors.append(record)
             kept_groundings.append(grounding)
             kept_coverage.append(coverage)
             continue
-        doc.junk_flagged_records.append(
+        doc.vetted_out_records.append(
             {
                 "intervention": record.intervention,
                 "outcome": record.outcome,
@@ -793,14 +795,14 @@ def _apply_junk_judge(doc: _Doc, junk_judge_backend: JunkJudgeBackend) -> TokenU
             }
         )
 
-    doc.junk_flagged_count = len(doc.junk_flagged_records)
+    doc.vetted_out_count = len(doc.vetted_out_records)
     doc.survivors = kept_survivors
     doc.groundings = kept_groundings
     doc.coverage_by_survivor = kept_coverage
     doc.finding_count = len(kept_survivors)
     if not kept_survivors:
-        # Every finding was junk-flagged: the doc contributes no usable
-        # evidence, so its status says so honestly — `junk_flagged_count`
+        # Every finding was vetted out: the doc contributes no usable
+        # evidence, so its status says so honestly — `vetted_out_count`
         # preserves the distinction from a genuinely-empty extraction.
         doc.status = "no_findings"
     return usage
@@ -872,7 +874,7 @@ def _write_docs(
 # --- Summary / invariants ---------------------------------------------------
 
 
-def _doc_summary(doc: _Doc, *, junk_judge_active: bool) -> dict[str, Any]:
+def _doc_summary(doc: _Doc, *, finding_vetter_active: bool) -> dict[str, Any]:
     summary: dict[str, Any] = {
         "pss_id": str(doc.pss_id),
         "status": doc.status,
@@ -882,8 +884,8 @@ def _doc_summary(doc: _Doc, *, junk_judge_active: bool) -> dict[str, Any]:
         "error": doc.error,
         "extraction_record_id": str(doc.extraction_record_id),
     }
-    if junk_judge_active:
-        summary["junk_flagged"] = doc.junk_flagged_count
+    if finding_vetter_active:
+        summary["vetted_out"] = doc.vetted_out_count
     return summary
 
 
@@ -918,7 +920,7 @@ def _build_summary(
     budget_used: int,
     retry_count: int,
     usage_totals: dict[str, int],
-    junk_judge_active: bool,
+    finding_vetter_active: bool,
 ) -> dict[str, Any]:
     selected = len(docs)
     counts = {
@@ -929,8 +931,8 @@ def _build_summary(
         "fresh": sum(1 for doc in docs if not doc.reused),
         "reused": sum(1 for doc in docs if doc.reused),
     }
-    if junk_judge_active:
-        counts["junk_judge_failed"] = sum(1 for doc in docs if doc.junk_judge_failed)
+    if finding_vetter_active:
+        counts["vetting_failed"] = sum(1 for doc in docs if doc.vetting_failed)
     findings = {
         "total": sum(doc.finding_count for doc in docs if doc.status == "extracted"),
         "quote_unverified": sum(doc.quote_unverified for doc in docs if not doc.reused),
@@ -956,30 +958,30 @@ def _build_summary(
                 field_coverage.setdefault(name, {})
                 field_coverage[name][marker] = field_coverage[name].get(marker, 0) + 1
 
-    junk_flagged: dict[str, Any] | None = None
-    if junk_judge_active:
-        junk_flagged_by_class: dict[str, int] = {}
-        junk_flagged_records: list[dict[str, Any]] = []
+    vetted_out: dict[str, Any] | None = None
+    if finding_vetter_active:
+        vetted_out_by_class: dict[str, int] = {}
+        vetted_out_records: list[dict[str, Any]] = []
         for doc in docs:
-            for record in doc.junk_flagged_records:
+            for record in doc.vetted_out_records:
                 junk_class = cast("str", record["junk_class"])
-                junk_flagged_by_class[junk_class] = junk_flagged_by_class.get(junk_class, 0) + 1
-                junk_flagged_records.append(record)
-        junk_flagged = {
-            "total": len(junk_flagged_records),
-            "by_class": junk_flagged_by_class,
-            "records": junk_flagged_records[:JUNK_FLAGGED_RECORDS_CAP],
+                vetted_out_by_class[junk_class] = vetted_out_by_class.get(junk_class, 0) + 1
+                vetted_out_records.append(record)
+        vetted_out = {
+            "total": len(vetted_out_records),
+            "by_class": vetted_out_by_class,
+            "records": vetted_out_records[:VETTED_OUT_RECORDS_CAP],
         }
-        if len(junk_flagged_records) > JUNK_FLAGGED_RECORDS_CAP:
-            junk_flagged["records_truncated"] = True
+        if len(vetted_out_records) > VETTED_OUT_RECORDS_CAP:
+            vetted_out["records_truncated"] = True
 
     flags: list[str] = []
     if counts["failed"] > 0:
         flags.append("extraction_failures")
     if selected == 0:
         flags.append("empty_selection")
-    if junk_flagged is not None and junk_flagged["total"] > 0:
-        flags.append("junk_flagged_present")
+    if vetted_out is not None and vetted_out["total"] > 0:
+        flags.append("vetted_out_present")
     # thin_extraction is deliberately NOT computed in v1 (contract "where computed").
 
     provenance = {
@@ -994,7 +996,7 @@ def _build_summary(
         "retry_count": retry_count,
     }
     summary: dict[str, Any] = {
-        "docs": [_doc_summary(doc, junk_judge_active=junk_judge_active) for doc in docs],
+        "docs": [_doc_summary(doc, finding_vetter_active=finding_vetter_active) for doc in docs],
         "counts": counts,
         "findings": findings,
         "basis": basis,
@@ -1004,8 +1006,8 @@ def _build_summary(
         "provenance": provenance,
         "usage_totals": usage_totals,
     }
-    if junk_flagged is not None:
-        summary["junk_flagged"] = junk_flagged
+    if vetted_out is not None:
+        summary["vetted_out"] = vetted_out
     return summary
 
 
@@ -1019,7 +1021,7 @@ def extract_scope(
     run_id: uuid.UUID,
     context: ExtractContext,
     extraction_backend: ExtractionBackend,
-    junk_judge_backend: JunkJudgeBackend | None = None,
+    finding_vetter_backend: FindingVetterBackend | None = None,
 ) -> dict[str, Any]:
     """Extract intervention-outcome findings for one evidence scope's selection.
 
@@ -1034,7 +1036,7 @@ def extract_scope(
         run_id: Run writing the extraction result.
         context: Scope-level extract input (carries the explicit selection run).
         extraction_backend: The extraction seam (stub by default; live on key).
-        junk_judge_backend: The 018 C5 post-extract junk filter (per-doc, after
+        finding_vetter_backend: The 018 C5 post-extract finding vetter (per-doc, after
             dedup, before the IOF insert). ``None`` (the default) turns judging
             off entirely — byte-identical behaviour to the pre-018-C5 pipeline.
 
@@ -1045,9 +1047,9 @@ def extract_scope(
         ExtractError: If the selection row is missing, a selected pss lacks its
             snapshot row, or a coverage invariant fails.
     """
-    junk_judge_active = junk_judge_backend is not None
+    finding_vetter_active = finding_vetter_backend is not None
     fingerprint, components = extraction_fingerprint(
-        extraction_backend.mode, junk_judge_active=junk_judge_active
+        extraction_backend.mode, finding_vetter_active=finding_vetter_active
     )
     selected = _load_selection(
         conn,
@@ -1070,7 +1072,7 @@ def extract_scope(
             budget_used=0,
             retry_count=0,
             usage_totals=UsageAccumulator().payload(),
-            junk_judge_active=junk_judge_active,
+            finding_vetter_active=finding_vetter_active,
         )
         _write_rollup(
             conn,
@@ -1110,8 +1112,8 @@ def extract_scope(
             log.info("extract.doc_failed", pss_id=str(doc.pss_id), error=doc.error)
             continue
         _process_doc(doc, per_doc.get(doc_index, {}))
-        if junk_judge_backend is not None and doc.status == "extracted" and doc.survivors:
-            usage_accumulator.add(_apply_junk_judge(doc, junk_judge_backend))
+        if finding_vetter_backend is not None and doc.status == "extracted" and doc.survivors:
+            usage_accumulator.add(_apply_finding_vetter(doc, finding_vetter_backend))
     usage_totals = usage_accumulator.payload()
 
     # Asserted BEFORE any row is written: the harness catches without rollback,
@@ -1137,7 +1139,7 @@ def extract_scope(
         budget_used=budget.used,
         retry_count=retry_count,
         usage_totals=usage_totals,
-        junk_judge_active=junk_judge_active,
+        finding_vetter_active=finding_vetter_active,
     )
     # The roll-up is the LAST fallible statement (the 010 pattern): the harness
     # catches without rollback, so nothing may fail after this insert.
