@@ -468,7 +468,7 @@ def test_fingerprint_provenance_lists_every_component(conn: Connection) -> None:
 
     assert prov["profile"] == "eb_iof_base_v1"
     assert prov["schema"] == "iof_v1"
-    assert prov["prompt"] == "extract_iof_v3"
+    assert prov["prompt"] == "extract_iof_v4"
     assert prov["field_rules"] == "iof_rules_v1"
     assert prov["verifier"] == "qv_v1"
     assert prov["model"] and prov["mode"] == "stub"
@@ -540,7 +540,7 @@ def test_repeated_quote_grounds_to_successive_occurrences(conn: Connection) -> N
 def test_preflight_rejects_non_verbatim_example(monkeypatch: pytest.MonkeyPatch) -> None:
     """A doctored few-shot example whose quote is not verbatim fails loudly at pre-flight."""
     # The real module imported fine (its own pre-flight ran at import).
-    assert extract_prompt.PROMPT_VERSION == "extract_iof_v3"
+    assert extract_prompt.PROMPT_VERSION == "extract_iof_v4"
 
     doctored = extract_prompt.EXAMPLE_RESPONSE.model_copy(deep=True)
     doctored.findings[0].anchors[0].quote = "this quote is absent from the example segment text"

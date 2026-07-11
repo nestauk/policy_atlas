@@ -1,4 +1,4 @@
-"""Extraction backend seam for the extract_iof_v3 IOF extraction call."""
+"""Extraction backend seam for the extract_iof_v4 IOF extraction call."""
 
 from __future__ import annotations
 
