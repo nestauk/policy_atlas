@@ -293,7 +293,8 @@
   classified, 4/26 plausible boundary flips vs recorded gpt-5.5 labels
   (offline A/B driver `classify_ab.py` — direct backend calls, NO DB writes,
   substrate uncontaminated). `CLASSIFY_REASONING_EFFORT` → "high".
-  Corroboration A/B on `e8ac8418` at high run alongside. Matches the
+  Corroboration A/B on `e8ac8418` at high: 92/92 docs, no cap exhaustion,
+  14 flips (~85% agreement — same rate as the mission project). Matches the
   prompting-research non-monotonicity note.
 - **Unspanned-flag calibration (named C2 item) — resolved by inspection, no
   prompt change**: the B smoke's 49 flags hand-sampled — the judge is
@@ -319,6 +320,69 @@
   writer ✓ (B-B2, validated), extractor ✓ (v2–v4), judge NOT adopted —
   prompt fresh from B-B4 with evidence green; screen/classify excluded at
   plan time (dilution).
+- **C3 taxonomy pins — planner replay across the 7 v2 categories** (real
+  questions from the recorded V2 list, one per category; probes uncounted;
+  drafts in `c-loop/c3-pin-cat*.json`). **Per-category composition-adequacy
+  verdicts (lead): 7/7 adequate.**
+  1. *Intervention* (ACEs early-intervention): standard×standard + full deep
+     chain ✓ — the chain's home shape.
+  2. *Topic search* ("refugee integration"): no axes proposed on turn 1 —
+     asked its ONE shape-changing question (landscape vs effectiveness)
+     first; within the ask-only-shape-changing rule for a 2-word intent.
+     Adequate; recorded as an observation, not a failure.
+  3. *Impact* (free school meals → childhood obesity): deep chain ✓,
+     international default + under-18 assumption stated.
+  4. *Statistics* (primary-care demand/costs, deprived vs non-deprived):
+     composed WITHOUT the deep chain, explicitly reasoning
+     "descriptive/comparative, not intervention" — the owner bar exactly
+     (neither refuses nor pretends; honest evidence-descriptive
+     composition).
+  5. *Literature* (planning system / unhealthy food outlets): read as a
+     policy-effect ask → deep chain ✓, 2010+ window domain-reasoned.
+  6. *Benchmarking* (nuclear decommissioning across countries): the
+     textbook off-diagonal — landscape × deep search, characterise only,
+     geo filters declined with reasons; screen_stage2 correctly absent with
+     landscape.
+  7. *Opinions* (left/right narrative effectiveness): no refusal, no deep
+     chain (narratives aren't IOF material), honest interpretive
+     assumptions ("better" defined, scope pinned to national politics).
+  Cross-cutting: the planner date-tempo rule behaved on all 7 (defaults
+  stated as changeable assumptions); deep-chain selection tracked intent
+  shape perfectly (in: 1/3/5, out: 4/6/7).
+- **C3 no-mission-vocabulary checks (deterministic, adopted prompts)**:
+  extract_iof_v4 / synthesise_section_v4 / key_findings_v1 / sections_v1 /
+  planner — all CLEAN except one pre-existing v1 example in the extract
+  prompt ("one in five children are obese", the prevalence example, predates
+  018): obesity is a mission domain, so the example is swapped to a neutral
+  domain as part of the C5 landing (riding the C5 adoption replay rather
+  than spending a 4th extraction round).
+- **C3 desk reviews (each adopted rule × the 7 question shapes)**:
+  *extract_iof_v4*: hortatory/aspiration + programme-results — benchmarking
+  questions read country programmes with delivered results (kept by the
+  programme-results clause); opinions questions rarely route through
+  extract at all (planner composes without the chain — pin 7 evidence).
+  Future-target rule: watch item — modelled projections are results, not
+  targets (v4 kept grant/price projections; dropped the BAU-scenario
+  finding, defensible but recorded for the eval slice). Testimony rule:
+  witness concerns are not IOF effects on ANY question shape. Naming rules:
+  shape-neutral (acronym expansion helps literature shapes most).
+  *synthesise_section_v4*: once-per-report figures / label translation /
+  no-restatement are shape-neutral prose rules; landscape-shaped reports
+  keep their counts (stated once).
+  *planner date-tempo*: stats questions want current values (recent-tempo
+  fits); explicit horizons respected (probe q2); slow domains stretch
+  naturally (pin 6). No misfire found on any shape.
+- **C3 extraction spot-check on the non-mission project** (replay 9, run
+  `c333f2c3`, 215 findings): v4 behaviour on the finance intent is rich and
+  question-appropriate — communiqué stays 0 ✓, meaty ERDF programme-delivery
+  doc grew honestly (71→123 administrative results), macrofiscal doc
+  tightened (35→18). **Anti-overfit pin PASSES** (failure modes are
+  domain-neutral, no mission vocabulary encoded). One instructive flip: the
+  Institutional Accountability Framework doc came back 7→6 at v4 (v2 had
+  correctly zeroed it) — the programme-results clause re-admits
+  framework-mechanism descriptions ("framework → public transparency
+  [increase]"). Domain-neutral junk class; strengthens the C5 trigger
+  evidence (judge build in flight).
 
 ## C-phase riders — synthesis cost reduction (user-approved 2026-07-11, post-B3)
 
@@ -366,8 +430,10 @@ trade, not adopted here.)
 | 7 | C2 classify | classify A/B `91d2d684` @ high, 26 docs (offline, no DB writes; the @xhigh attempt fast-failed on doc 1, LengthFinishReasonError) | counted |
 | 8 | C2 classify | classify A/B `e8ac8418` @ high (corroboration) | counted |
 | – | C2 planner | 3 single-turn after-probes (incl. AI-tempo) | excluded (planner-only) |
+| 9 | C3 spot-check | extract `e8ac8418` (run `c333f2c3`, extract_iof_v4) — anti-overfit arm | counted |
+| – | C3 pins | 7 planner taxonomy probes | excluded (planner-only) |
 
-Running total: **8 / 30**.
+Running total: **9 / 30**.
 
 ## Loop protocol notes (flow-back candidates for the eval-slice convention)
 
