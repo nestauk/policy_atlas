@@ -41,7 +41,7 @@ from policy_atlas.synthesis_tools import (
 def test_prompt_versions_are_distinct_constants() -> None:
     assert SECTIONS_PROMPT_VERSION == "synthesise_sections_v1"
     assert SECTION_PROMPT_VERSION == "synthesise_section_v3"
-    assert JUDGE_PROMPT_VERSION == "grounding_judge_v1"
+    assert JUDGE_PROMPT_VERSION == "grounding_judge_v2"
     assert ENVELOPE_VERSION == "synthesis_envelope_v2"
 
 
@@ -184,7 +184,7 @@ def test_section_repair_is_loop_free_and_reword_down() -> None:
     assert "emit_repairs" in repair
 
 
-# --- grounding_judge_v1 ---
+# --- grounding_judge_v2 ---
 
 
 def test_judge_prompt_negative_rules() -> None:

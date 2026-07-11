@@ -1,4 +1,4 @@
-"""The ``grounding_judge_v1`` prompt surface and judge seam (task 013).
+"""The ``grounding_judge_v2`` prompt surface and judge seam (task 013).
 
 The repo's seventh product prompt — lead-authored, versioned, recorded on every
 judged claim's annotation payload. Verification is **non-agentic** (contract
@@ -7,10 +7,12 @@ its own backend seam and prompt, no tools, no loop — so the section loop never
 grades its own homework (maker ≠ checker at the surface level; the seam permits
 a heterogeneous judge model at the Bedrock swap).
 
-The judge reads ``synthesis_envelope_v1`` — the cited chunks' full frozen
-text — and judges **cited claims** (finding/chunk, the full lane) and
-**reasoning claims** (strict routing only). Pattern, theme and gap claims are
-deterministically validated, never judged.
+The judge reads ``synthesis_envelope_v2`` — the cited chunks' full frozen
+text, the section prose + span map, and the intent/section focus — and judges
+**cited claims** (finding/chunk, the full lane) and **reasoning claims**
+(strict routing only), plus the unspanned-prose traceability lane (ADR 0015
+§5). Pattern, theme and gap claims are deterministically validated, never
+judged.
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ from policy_atlas.embeddings import (
 )
 from policy_atlas.usage import UsageResult, token_usage_from_provider
 
-JUDGE_PROMPT_VERSION = "grounding_judge_v1"
+JUDGE_PROMPT_VERSION = "grounding_judge_v2"
 ENVELOPE_VERSION = "synthesis_envelope_v2"
 
 # The contracted model floor; judge calibration is eval-workstream territory —
@@ -111,6 +113,12 @@ Instructions:
   unsupported_mis_cited, however plausible it sounds.
 - Topical relevance is not support: a cited passage about the claim's topic
   that does not support the claim as worded does not ground it.
+- Finding claims (claim_type "finding") carry system-verified anchors — the
+  extracted quotes their findings rest on — and the chunks list includes each
+  anchor's full frozen chunk text. Judge the claim against those quotes IN
+  their chunk context, the same way chunk claims are judged against their
+  chunks: an anchor quote-mined against its surrounding context does not
+  support the claim.
 - Reasoning claims (claim_type "reasoning") are strict-routed: they carry no
   citations by design and are legitimately "tier_4" ONLY while they stay
   visibly-labelled background reasoning. A reasoning claim that asserts
@@ -124,11 +132,26 @@ Instructions:
   not support the claim (the per-citation how). Never omit it.
 - Return a verdict for every claim you were given, keyed by its claim_id,
   and for no other claim_id.
-- The data also carries "section_prose" (the section's full authored text) and
-  a "span_map" (each claim_id's char-offset span into that prose), and you may
-  return an "unspanned_assertions" list of prose excerpts that carry an
-  evidential assertion outside any claim span; these are additive flags and do
-  not change any verdict.
+- The data also carries "section_prose" (the section's full authored text)
+  and a "span_map" (each claim_id's char-offset span into that prose). Use
+  the prose to read each claim in the context it functions in — context can
+  change what a claim asserts — while still judging support against the
+  cited sources alone.
+- "intent" (the user's question) and "section_focus" (what this section
+  covers) tell you what the claims are FOR. They are context for reading the
+  claims, never a reason to grade support leniently: a claim highly relevant
+  to the question but unsupported by its citations is still
+  unsupported_mis_cited. Relevance is not support.
+- Prose outside every claim span is connective tissue and must carry no
+  evidential assertion. Report in "unspanned_assertions" any passage of it
+  that states what the evidence, a study, a document or the literature
+  shows, finds, reports or amounts to — copy the passage verbatim as
+  "excerpt" and give a short "rationale". Structural or transitional prose
+  (signposting, restating the section's question, relating already-claimed
+  statements without adding new assertion) is not reportable. When in doubt
+  whether a passage asserts evidence, report it: a false alarm costs a
+  review glance; a missed assertion reaches the reader unverified. These are
+  additive flags and change no verdict.
 """
 
 JUDGE_USER_TEMPLATE = """\
