@@ -30,6 +30,7 @@ from policy_atlas.grouping import ThemeGroupingBackend
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.ingest_full_text import DocumentFetcher
+from policy_atlas.junk_judge import JunkJudgeBackend
 from policy_atlas.orchestration_plan import (
     _REGISTRY_COMPONENT_BY_STEP,
     SPINE,
@@ -101,6 +102,7 @@ class RunnerBackends:
         classification: Optional classification backend.
         ranking: Optional selection reranking backend.
         extraction: Optional extraction backend.
+        junk_judge: Optional extraction junk-judge backend (``None`` = off).
         facet_grouping: Optional facet-grouping backend.
         synthesis: Optional synthesis backend.
         grounding_judge: Optional grounding-judge backend.
@@ -116,6 +118,7 @@ class RunnerBackends:
     classification: ClassificationBackend | None = None
     ranking: RankingBackend | None = None
     extraction: ExtractionBackend | None = None
+    junk_judge: JunkJudgeBackend | None = None
     facet_grouping: FacetGroupingBackend | None = None
     synthesis: SynthesisBackend | None = None
     grounding_judge: GroundingJudgeBackend | None = None
@@ -1083,6 +1086,7 @@ def _run_step_attempt(
                     classification_backend=backends.classification,
                     ranking_backend=backends.ranking,
                     extraction_backend=backends.extraction,
+                    junk_judge_backend=backends.junk_judge,
                     facet_grouping_backend=backends.facet_grouping,
                     synthesis_backend=backends.synthesis,
                     grounding_judge_backend=backends.grounding_judge,
