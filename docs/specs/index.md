@@ -36,6 +36,8 @@ implementation lands — see the flow-back in [README](README).
   - [system/provenance-grounding.md](system/provenance-grounding.md)
   - [system/execution-orchestration.md](system/execution-orchestration.md)
   - [system/plan-as-object.md](system/plan-as-object.md)
+  - [system/prompting.md](system/prompting.md) — doctrine for every prompt surface
+    (promoted from the 018 research + loop method; not distilled from the frozen sources).
 - Capability specs (instances of the framework):
   - [capabilities/evidence-base/](capabilities/evidence-base/) — the first and only v3.0 capability.
 
@@ -49,6 +51,7 @@ implementation lands — see the flow-back in [README](README).
 | Orchestrator/sub-agents, the tool registry + universal core, steering modes, the routing rule, durability | [system/execution-orchestration.md](system/execution-orchestration.md) → arch §4, §6 |
 | The plan object, plan→config compile, two-level/progressive planning, source/evidence policy, depth/thoroughness | [system/plan-as-object.md](system/plan-as-object.md) → arch §5 |
 | Anything in the Evidence Base run (acquire → … → synthesise) | [capabilities/evidence-base/](capabilities/evidence-base/) → build spec |
+| Writing or changing ANY LLM prompt/envelope surface; the refine-replay loop; model swaps | [system/prompting.md](system/prompting.md) — no frozen-source arch section (018 origin) |
 | Export/share, version-pinned deep-links, the superseded-version banner | **No contract drafted yet** — read arch §10 directly (a down-weighted v3.0 seam). |
 | Collaboration/comments/event log, persistence substrate, observability/eval, security/egress | **No contract drafted yet** — read arch §7, §9, §8, §11 directly; draft the contract when the first task lands. |
 

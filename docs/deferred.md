@@ -588,6 +588,13 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Extract / findings layer (task 011 seams)
 
+- **Junk-judge per-doc calls run sequentially (018 review stack, efficiency lane)** —
+  `_apply_junk_judge` loops one live mini call per extracted doc right after
+  `_run_windows`' 4-wide `ThreadPoolExecutor` fan-out of the same kind of call.
+  Bounded today (~10–25 docs, mini-tier, seconds each); parallelize with the existing
+  executor pattern (plus a thread-safe usage accumulation story) if D-phase timing
+  shows extract wall-clock matters.
+
 - **The extraction service + evidence dataset snapshots** — profile resolution against
   existing records, per-source task objects, capability commits declaring extraction
   profiles, and pinned point-in-time dataset consumption. 011 shipped the minimal honest
@@ -776,6 +783,15 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Synthesise (task 013 seams)
 
+- **Unspanned-lane full decoupling (018 review stack, security lane MEDIUM)** — the
+  unspanned-assertion judge scan rides the grounding-judge call, so a block whose final
+  prose no judge call scanned (no judged-type claims; or a splice rebuilt the prose and
+  the rejudge had nothing to judge) mints unscanned. 018 closed the *honesty* half:
+  `unspanned_lane_skipped` on the accounting + rollup distinguishes "not looked at" from
+  "clean". The *coverage* half — a judge call fired solely for the unspanned lane on
+  those paths — is eval-slice work (it adds a per-affected-section LLM call and needs
+  the flag-volume calibration that workstream owns). Until then, consumers of
+  `unspanned_assertions == 0` must check the skip flag.
 - **Plan-compile section machinery** — the fail-closed `context["synthesis"]` directive
   (sections + retrieval_boosts, normative grammar per contract rev 8 M5) is the compile
   target the future plan-shaped-sections machinery and the source/evidence policy compile
@@ -1032,6 +1048,13 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   search.
 
 ## Execution / collaboration / ops
+
+- **Per-lane test-DB partition (018 B2/C)** — concurrent `make verify` runs against the
+  one shared test DB flake (migration round-trip + steering tests, psycopg INERROR);
+  seen from worker lanes (B2/B4) and from a review-lane agent (step 7). Convention today:
+  one suite runner at a time, stated in reviewer/worker briefs. If parallel suite runs
+  become routine, give lanes separate DATABASE_URLs (disposable per-lane DBs) instead of
+  policing serialization.
 
 - **Harness failure-event write on an aborted transaction — DISCHARGED for the
   product path (task 017)** (013 review stack, 2026-07-08) — every `run_harness`

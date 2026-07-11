@@ -533,6 +533,169 @@ Running total: **13 / 30**.
   converging; the user's taste verdicts batch at pause points rather than
   per-change.
 
+## Review findings (step 7, 2026-07-11 — fresh conversation C)
+
+**Stack run:** contract-verifier (fresh-context Opus agent; first attempt died on a
+session limit, relaunched clean) · `/code-review` medium (8 finder angles, per-angle
+pathspecs, lead-verified votes) · ONE security lane (security-auditor) · Codex
+adversarial (job `task-mrgdh8po-jyi14j`, family-flipped onto the Claude-written
+surfaces; A2 telemetry anchored by the Claude lanes) · live-trace content lane (lead,
+DB + private records). **Budget honest accounting:** reasoning-class ≈ 242K (verifier
+120K + security 122K; ≤250K held). Fast-worker finder fan-out ≈ 606K vs the ≤500K
+proxy — **21% over, flagged not silent**: the diff is ~8.7K insertions (≈2× a routine
+slice); per-angle pathspecs are what kept it that low. `/code-review high` was not
+used.
+
+**Self-verify gate:** first full `make verify` of the stack FAILED (10 tests, psycopg
+INERROR on the shared test DB) — root-caused in-stack: a review agent ran its own
+`make verify` concurrently with the lead's (the recorded B2/B4 flake class, now seen
+from the reviewer side). Serial re-run after fixes: see gate table below. Convention
+sharpened: reviewer briefs must say "do not run the suite".
+
+**Adjudicated findings (adopt → fixed on this branch):**
+
+1. **Planner prompt described pre-regrade depths** (Codex HIGH + trace lane + contract
+   verifier — the stack's headline). `planner_prompt.py` still said standard = "~10
+   documents extracted in depth"; post-A3 the validator rejects select/extract/group
+   at standard. **C3 pins 1/3/5 recorded compile-INVALID drafts** — the per-category
+   "adequate" verdicts were judged on draft shape, never compiled (single-turn probes).
+   Live standard runs on intervention-shaped questions (the rehearsal shape!) would
+   have failed plan validation. Fixed (lead): depth menu now names what standard buys
+   (full-text synthesis, no findings extraction) and the deep-chain bullet carries the
+   deep-only availability rule; `PLANNER_PROMPT_VERSION` → `planner_v2` (also noted:
+   the C2 date-tempo round shipped without a version bump — traces from that round
+   carry `planner_v1` labels on v2-era text; recorded, unfixable retroactively).
+   After-probes (pennies, uncounted; `c-loop/c3-pin-cat{1,3,5}-*-v2.json`): cat 1 →
+   **deep + full chain** (compile-valid, the home shape), cat 3/5 → standard WITHOUT
+   the chain, exclusions reasoned ("extraction only runs at deep"). Note for the
+   taste judge: cat 3 previously wanted chain-at-standard; the fixed prompt chose
+   standard-without-chain over deep-with-chain — defensible, user eyeball at D2.
+2. **No code-side read-batch cap** (finder A + Codex HIGH, convergent). The "≤6
+   reads/turn" rule was prompt-only; one degenerate turn could execute 30 reads.
+   Fixed: `READ_CALLS_PER_TURN_CAP = 6` enforced in `run_section_loop` — overflow
+   calls get an error tool-result and count as rejected (test-pinned).
+3. **`rejected_tool_calls` dropped from accounting** (Codex MEDIUM). Fixed: plumbed
+   into `SectionAccounting` + block rollups.
+4. **Key-findings empty-gate bypass** (Codex HIGH; narrow reachability). An empty
+   `available_claim_types` set was falsy → validator silently reopened the FULL
+   substrate gate inside the KF pass. Fixed: explicit `is not None`; test pins that
+   an empty gate rejects.
+5. **All-junk doc stayed `status="extracted"`** (Codex MEDIUM + contract-verifier
+   F2 — a documented-but-not-built catch against this file's own B4 wording).
+   Fixed: judge-emptied docs flip to `no_findings` (`junk_flagged_count` keeps them
+   distinguishable from genuinely-empty); extracted counts no longer overstate
+   usable evidence. Test added. The B4 "honest no_findings" sentence is now true.
+6. **KF pass lacked the block-aware failure wrap** (Codex MEDIUM). Fixed: wrapped
+   like the section path (`SynthesiseFailure` with `blocks_written`).
+7. **Unspanned lane only runs when a section has judged-type claims** (security
+   MEDIUM — unique to that lane). Sections carrying only pattern/theme/gap claims
+   (or whose splice lost every judged claim) minted prose no judge ever scanned,
+   reporting the same 0 as a clean scan. Minimal honest fix adopted:
+   `unspanned_lane_skipped` accounting flag + rollup key, test-pinned (no-judged vs
+   judged control). Full decoupled scan → deferred.md (eval slice owns it; the flag
+   keeps zero-counts honest meanwhile).
+8. **Failed attempts logged usage as zeros** (finder A). `component.timing` on a
+   failed attempt now carries `usage_totals: null` (absent ≠ free); the
+   fault-injected runner test updated to pin None — a strengthening, recorded.
+9. **Unspanned excerpts could bind inside claim spans / drift occurrences post-splice**
+   (security LOW). Fixed the overlap half: `_bind_unspanned` now blocks claim spans
+   (reusing `_bind_into`, which also discharges the reuse finding's duplicate-scan
+   half for this lane); claim-overlapping excerpts count `unspanned_unbound`.
+   Occurrence-drift residual accepted: bound content is identical by construction,
+   only the pointed-at instance can differ — recorded, not fixed.
+10. **Planner assistant-role provenance seam** (security LOW + finder B, convergent).
+    No current-path exposure (roles only ever assigned by `orchestrate`); the
+    invariant is now documented on `build_planner_messages` (planner-role text MUST
+    be prior model output; never accept role labels from a client). Structural
+    enforcement deferred to the web-app slice.
+11. Small adopts: bool-as-int guard in `usage.py` `_int_or_none` (a True field is
+    invalid, not 1) · `window_usage_totals` rename in `extract.py` (name was rebound
+    mid-function).
+
+**Declined / deferred (recorded reasons):**
+
+- *Junk-judge per-doc calls run sequentially* (efficiency finder): real, bounded
+  (~10–25 mini calls); parallelizing touches the accumulator's thread story mid-review
+  for wall-clock nobody has measured as a problem → deferred.md; D1 timing decides.
+- *`_record_component_timing` called from three branches* (simplification finder):
+  the branches carry deliberately different status/error semantics; a shared tail
+  would blur the exception backstop. Declined.
+- *`_usage_totals` duplicate coercion vs `UsageAccumulator`*: different trust
+  boundaries — the runner reads DB-sourced payloads tolerantly; the accumulator
+  trusts in-process payloads and may raise. Declined.
+- *Envelope five-field triplication* (reuse finder): the three record builders source
+  the same field set from different envelope surfaces; a kwargs helper saves ~20
+  lines but hides per-surface sourcing. Declined; revisit if the A/B set grows.
+- *`FACET_VALUE_CAP` 150→400 guard widening* (finder B): contract-approved,
+  demo-validated at 280 live values; eval slice owns calibration. Not a finding.
+- *`bind_spans`' internal fallback duplicates `_bind_into`*: claim binding is
+  fail-closed-on-overlap by design and heavily test-pinned; excerpt binding now
+  reuses `_bind_into`. Full merge declined.
+
+**Security lane headline verdicts** (all six surfaces explicitly "checked, sound"):
+junk judge (data-framed findings, schema-forbidden extras, exact-multiset coverage
+check, fail-open-with-accounting verified before any mutation) · planner message
+array (all three protections survived; system prompt static) · span binding
+(fail-closed at the `_write_section` terminus, offsets recomputed by construction) ·
+migration (static DDL, transaction-atomic, symmetric down) · judge envelope v2 (013
+self-cert guard verbatim; leniency channel explicitly closed) · sweep (no secrets, no
+new egress; junk-flagged event records are capped + truncation-marked). INFO items
+recorded as-is.
+
+**Live-trace lane (013 lesson applied):**
+
+- `turn_cap_hit` (B1 early signal) — closed: absent on the pinned mission replay
+  `347e3a2f` (multi-read relieved cap pressure) but **still fires on the thin-corpus
+  spot-check `8c2b5f2e`** (DB flags read directly); honest bounded-loop force-emit
+  semantics, not a defect. Eval-slice watch item.
+- `347e3a2f` also carries `span_bind_failed: true` (fail-closed lane, counted) — the
+  write-up never claimed 0 for that run; consistent.
+- Junk-judge run `df216bce`: `junk_flagged_present` flag confirmed in the event log.
+- Self-cert fixture JSON re-read: poisoned arm verdict-identical, `swayed_claim_ids`
+  empty, `pass: true` — matches B4.
+- The recorded v5 "warts" are real but the write-up UNDERSTATED one: "As reasoning,"
+  is a systematic per-section tic in `64143a9d` (most sections), not a one-off; the
+  claim-type prefix habit is voice-surface work for C4 rendering / the eval slice.
+  User pinned v5 with the warts named — verdict stands, pervasiveness now recorded.
+- Empty-I/O `run:` trace explanation (B2, `4077e12f`) corroborated against
+  `skeleton.py`'s score-summary guard. Stands as a C-loop eye note.
+
+**Deviations confirm/contest (014 rule — every flagged deviation re-examined):**
+B1 baseline swap (user-directed, project verified unusable) — ADOPTED · B-B1
+spliced-claim exclusion vs keep-verbatim (residue lands in the unspanned lane, whose
+skip-honesty gap this stack closed) — ADOPTED · B-B3 anchored-chunks-absent drop
+(narrow, flagged, text_basis unrecoverable) — ADOPTED · B-B3 budget expansion
+(honest, test-pinned formula) — ADOPTED · A3 stale band comment (owner re-sequenced
+D1 post-merge) — ADOPTED, PR notes it.
+
+**`/simplify` skipped with justification (per the standing rule):** the `/code-review`
+pass ran dedicated reuse / simplification / efficiency / altitude finder angles and
+their adjudications (2 adopted, 4 declined with reasons above) — a separate same-family
+cleanup pass over the same diff would duplicate it.
+
+**Lane value note:** convergent across families — read-cap, planner-depth staleness,
+planner-seam provenance. Unique-to-lane — security: unspanned-lane conditionality;
+Codex: KF empty gate + all-junk status + KF wrap; finder A: failed-attempt zeros;
+trace lane: turn_cap_hit persistence + the unbumped planner version. Every lane paid
+rent.
+
+| Gate | Result |
+|---|---|
+| Post-fix full `make verify` (serial, sole runner) | **pass — 1081 tests** (1075 + 6 review-fix tests), mypy 114 files, ruff clean (one import-order auto-fix), okf-validate 56 concepts, build ok |
+
+**Planner after-probes** (3, planner-only class — pennies, uncounted; tally stays
+13/30): `c-loop/c3-pin-cat{1,3,5}-*-v2.json`, all compile-valid.
+
+**Step-8 records authored against the review-finalised code** (ride this PR):
+`docs/specs/system/prompting.md` (the owner-seeded doctrine promotion; specs index +
+log entry) · knowledge concepts `span-anchoring-text-not-offsets` ·
+`judge-envelope-defines-verdicts` · `overton-filter-values-display-names` + a fold
+into `reasoning-model-output-cap` (effort × cap) · knowledge index/log entries, incl.
+per-candidate adjudications (author/fold/decline with reasons) · failure-log entries
+(prompt-capability-text staleness; reviewer-lane concurrent suite run) · deferred.md
+(unspanned-lane full decoupling · junk-judge parallelization · per-lane test-DB
+partition). Every B4 knowledge candidate dispositioned — none dropped silently.
+
 ## Review handoff (accrues; finalised at Phase E)
 
 - **Knowledge candidates:**

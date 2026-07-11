@@ -1,5 +1,16 @@
 # Spec update log
 
+## 2026-07-11 (b)
+* **Creation**: [system/prompting.md](system/prompting.md) — the prompting doctrine promoted
+  out of the 018 task folder (owner decision, 2026-07-11; task-cycle step 8): the 12
+  family-general rules + mini-tier adjustments from the 018 research sweep, the
+  refine-replay loop method as validated by the 018 C-loop (two-stage baselines, cheap-probe
+  classes, ≤3-rounds bound with the flag-not-drop-judge escape hatch, anti-overfit pins,
+  compile-your-probes), agent-loop conventions (force-emit exhaustion, code-enforced read
+  batching, adjacent envelopes, judge-envelope re-baselining, environment-context preamble),
+  and the provider quarantine for the Bedrock swap. A hand-maintained prompt-surface registry
+  was considered and declined (drifts; provenance already records surface versions).
+
 ## 2026-07-11
 * **Update**: [EB capability § Output structure](capabilities/evidence-base/capability.md) and
   [provenance-grounding § Summaries](system/provenance-grounding.md) — the "what did it
