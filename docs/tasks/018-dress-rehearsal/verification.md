@@ -309,9 +309,20 @@
      18–25%.
   2. `prompt_cache_key` — **condition not met** (rider was "if hit rate is
      low"; 64% auto-caching); not adopted, recorded.
-  3. multi-read-tool turns — in flight (writer round 3): loop + backend
-     plumbing (parallel read calls, emit alone) + prompt batching rule
-     (≤6 reads/turn), `synthesise_section_v5`; replay-evidenced next.
+  3. multi-read-tool turns — LANDED (writer round 3, final; commit
+     `5e77e10`): parallel read calls + per-call loop accounting + batching
+     rule (≤6 reads/turn, emit alone; all-emit parallel turns honour the
+     emission — lead fix on the delivered lane), `synthesise_section_v5`.
+     Replay (run `347e3a2f`, artefact `64143a9d`): **input −31%**
+     (2.438M→1.689M prompt) while gathering MORE evidence (71 read calls vs
+     43; verified citations 161→198) — but the **cache hit rate collapsed
+     64%→23%** (the eliminated repeated prefixes were the cached tokens), so
+     the realized $ verdict depends on the provider cache discount (≈−10%
+     at a 50% discount, ≈+30% at 90%) — **adjudicate against D1 billing**.
+     Voice mostly held; three new polish-grade warts recorded for the
+     pin-or-revert verdict (a rule-compliance meta-leak sentence, an
+     "As reasoning," claim-type prefix, a repeated no-mixed/no-effect
+     phrasing tic in the opening section). Writer rounds exhausted (3/3).
   4. chunk-dedupe — proxy measured: 43 read calls over 9 sections this
      replay; with 64% auto-cache, duplicated chunk content is largely
      cache-priced. Full per-chunk measurement deferred (re-open if D1 cost
@@ -432,8 +443,11 @@ trade, not adopted here.)
 | – | C2 planner | 3 single-turn after-probes (incl. AI-tempo) | excluded (planner-only) |
 | 9 | C3 spot-check | extract `e8ac8418` (run `c333f2c3`, extract_iof_v4) — anti-overfit arm | counted |
 | – | C3 pins | 7 planner taxonomy probes | excluded (planner-only) |
+| 10 | C2 writer r3 | synthesise `91d2d684` (run `347e3a2f`, artefact `64143a9d`, section_v5 multi-read) | counted |
+| – | C2 classify | xhigh-uncapped experiment (user-requested; offline A/B, no DB writes) | counted when it completes (11) |
+| 11 | C5 adoption | extract `91d2d684` with junk judge live (extract_iof_v5) | counted when it completes (12) |
 
-Running total: **9 / 30**.
+Running total: **10 / 30** (+2 in flight → 12).
 
 ## Loop protocol notes (flow-back candidates for the eval-slice convention)
 
