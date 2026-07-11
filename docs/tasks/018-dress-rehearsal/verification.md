@@ -202,7 +202,7 @@
   `baseline1_replay.py 91d2d684 synthesise` (component replay, contract live-check
   scope) followed by `smoke_reproof.py 5a044d71`.
 
-### B4 (2026-07-11): Phase C — in progress
+### B4 (2026-07-11): Phase C — COMPLETE (C4 re-sequenced post-review by owner)
 
 | Gate | Result |
 |---|---|
@@ -210,6 +210,8 @@
 | C1 landing `make verify-fast` | pass (1004 passed, mypy 112 files, ruff clean) |
 | C2 extraction r1 landing `make verify-fast` | pass (1004 passed, mypy, ruff) |
 | C2 extraction r2 landing `make verify-fast` | pass (1004 passed, mypy, ruff) |
+| C2 r3 ×3 / C5 / sections / wiring landings `make verify-fast` | pass (1004 / 1008 / 1024 / 1024 / 1024) |
+| **Phase C exit full `make verify`** | **pass (1075 passed, mypy 114 files, ruff clean, build ok)** |
 
 - **C1 landed** (commit `687a721`): `TokenUsage.cached` captured from
   `prompt_tokens_details.cached_tokens` through accumulator payloads,
@@ -598,3 +600,14 @@ Running total: **13 / 30**.
   - The future-target extraction rule drops modelled BAU-scenario projections
     (results, not targets) as collateral — recorded watch item for the eval
     slice (B4).
+  - **Step-8 authoring candidate (owner question, 2026-07-11): promote the
+    prompting doctrine out of this task folder** — prompting-research-notes.md
+    (12 family-general rules, mini-tier notes, provider quarantine) + the
+    now-validated loop method + agent-loop conventions (turn caps, read
+    batching, force-emit, envelope/judge patterns) → one durable doc in
+    docs/specs/system/ or docs/knowledge/. A hand-maintained prompt-surface
+    registry was considered and declined (drifts; provenance already records
+    it; registry tooling is the parked A2(e) eval-slice item). A dedicated
+    agents spec is premature until the capability cluster multiplies agents.
+  - Eval-workstream re-grounding index consolidated in
+    `docs/tasks/018-dress-rehearsal/eval-handoff.md` (pointers only).
