@@ -44,6 +44,7 @@ from policy_atlas.extraction_records import (
     IOFRecordWire,
 )
 from policy_atlas.finding_vetter import (
+    FINDING_VETTER_MAX_OUTPUT_TOKENS,
     FINDING_VETTER_PROMPT_VERSION,
     FindingVetterBackend,
     VetterVerdictWire,
@@ -161,7 +162,14 @@ def extraction_fingerprint(
         },
         "max_output_tokens": EXTRACT_MAX_OUTPUT_TOKENS,
         "retry_cap": EXTRACT_RETRY_CAP,
-        "finding_vetter": FINDING_VETTER_PROMPT_VERSION if finding_vetter_active else None,
+        "finding_vetter": (
+            {
+                "prompt": FINDING_VETTER_PROMPT_VERSION,
+                "max_output_tokens": FINDING_VETTER_MAX_OUTPUT_TOKENS,
+            }
+            if finding_vetter_active
+            else None
+        ),
     }
     canonical = json.dumps(components, sort_keys=True, separators=(",", ":"))
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -740,7 +748,7 @@ def _judge_payload_entry(index: int, record: IOFRecord) -> dict[str, Any]:
 def _apply_finding_vetter(
     doc: _Doc, finding_vetter_backend: FindingVetterBackend
 ) -> TokenUsage | None:
-    """Vet one document's dedup survivors, excluding clear junk (flag-not-drop).
+    """Vet one document's dedup survivors, excluding clear non-findings (flag-not-drop).
 
     Runs AFTER ``dedup_records`` and BEFORE the IOF insert (``doc.survivors``
     etc. are mutated in place, so ``_write_docs`` never sees excluded
@@ -769,7 +777,7 @@ def _apply_finding_vetter(
     vetted_out_by_index: dict[int, VetterVerdictWire] = {
         verdict.finding_index: verdict
         for verdict in response.verdicts
-        if verdict.verdict == "junk"
+        if verdict.verdict == "flagged"
     }
     if not vetted_out_by_index:
         return usage
@@ -790,7 +798,7 @@ def _apply_finding_vetter(
             {
                 "intervention": record.intervention,
                 "outcome": record.outcome,
-                "junk_class": verdict.junk_class,
+                "flag_class": verdict.flag_class,
                 "reason": verdict.reason,
             }
         )
@@ -964,8 +972,8 @@ def _build_summary(
         vetted_out_records: list[dict[str, Any]] = []
         for doc in docs:
             for record in doc.vetted_out_records:
-                junk_class = cast("str", record["junk_class"])
-                vetted_out_by_class[junk_class] = vetted_out_by_class.get(junk_class, 0) + 1
+                flag_class = cast("str", record["flag_class"])
+                vetted_out_by_class[flag_class] = vetted_out_by_class.get(flag_class, 0) + 1
                 vetted_out_records.append(record)
         vetted_out = {
             "total": len(vetted_out_records),

@@ -39,8 +39,17 @@ contingent-judge escape hatch, batched user taste verdicts at pause points.
 
 (all in `docs/deferred.md` unless noted)
 
-- **Junk-judge calibration** — extract_junk_judge_v1 shipped conservative
-  (flag only clear cases); precision/recall on reference sets is eval work.
+- **Finding-vetter calibration** (renamed from "junk judge" at step 9, owner
+  call) — extract_finding_vetter_v2 shipped conservative (flag only clear
+  cases); precision/recall on reference sets is eval work.
+- **Two prompt surfaces the 018 loop never touched** (owner question, step 9):
+  the select LLM reranker (`select_rerank_v1`, unchanged since 010 — only its
+  model constant moved) and the facet-grouping discovery/assignment prompts.
+  Both are C2-style experiment candidates (before/after replay on the pinned
+  substrates, ≤3 bounded rounds each), best run post-merge or inside the eval
+  slice where their quality bars — downstream selection yield and partition
+  coherence — have real measures (the 010 "rerank-quality evals" seam and the
+  012 grouping-quality seam are the recorded homes).
 - **EB report-shape boundary vs future capabilities** — § EB report-shape
   boundary; judge composition across the 7 shapes with this boundary.
 - **Two-stage facet grouping** (owner note riding § Large-corpus grouping).
@@ -58,11 +67,9 @@ contingent-judge escape hatch, batched user taste verdicts at pause points.
   archived (`c-loop/classify-xhigh-uncapped.txt`); effort×cap validated
   together per surface is the transferable rule.
 
-## Prompting doctrine (promote out of this task folder at step 8)
+## Prompting doctrine (promoted at step 8 — DONE)
 
-`prompting-research-notes.md` — the 12 family-general rules, mini-tier
-adjustments, provider quarantine, and the loop method (conflict audit,
-fresh-minimal on family swap, numeric bounds, motivation-bearing rules) —
-now validated by this slice's rounds. Step-8 knowledge candidate: author the
-durable doctrine doc (incl. agent-loop conventions) in docs/specs/system/ or
-docs/knowledge/.
+The durable doctrine now lives at `docs/specs/system/prompting.md` (12
+family-general rules, mini-tier adjustments, loop method, agent-loop
+conventions, provider quarantine). `prompting-research-notes.md` stays as the
+research record.

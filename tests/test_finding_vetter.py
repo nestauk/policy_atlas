@@ -17,6 +17,7 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.extract import ExtractContext, extract_scope, extraction_fingerprint
 from policy_atlas.finding_vetter import (
+    FINDING_VETTER_MAX_OUTPUT_TOKENS,
     FINDING_VETTER_MODEL,
     FINDING_VETTER_PROMPT_VERSION,
     FINDING_VETTER_REASONING_EFFORT,
@@ -84,19 +85,19 @@ class _FixedBackend:
 
 
 class _ScriptedJudgeBackend:
-    """A judge backend flagging a fixed set of finding indices as junk."""
+    """A judge backend flagging a fixed set of finding indices as flagged."""
 
     mode = "stub"
 
     def __init__(
         self,
-        junk_indices: set[int],
+        flag_indices: set[int],
         *,
-        junk_class: str = "vague_outcome",
+        flag_class: str = "vague_outcome",
         reason: str = "Not a concrete measure.",
     ) -> None:
-        self._junk_indices = junk_indices
-        self._junk_class = junk_class
+        self._flag_indices = flag_indices
+        self._flag_class = flag_class
         self._reason = reason
         self.payloads: list[dict[str, Any]] = []
 
@@ -105,19 +106,19 @@ class _ScriptedJudgeBackend:
         verdicts: list[VetterVerdictWire] = []
         for finding in payload["findings"]:
             index = cast("int", finding["index"])
-            if index in self._junk_indices:
+            if index in self._flag_indices:
                 verdicts.append(
                     VetterVerdictWire(
                         finding_index=index,
-                        verdict="junk",
-                        junk_class=cast("Any", self._junk_class),
+                        verdict="flagged",
+                        flag_class=cast("Any", self._flag_class),
                         reason=self._reason,
                     )
                 )
             else:
                 verdicts.append(
                     VetterVerdictWire(
-                        finding_index=index, verdict="sound", junk_class=None, reason="Sound."
+                        finding_index=index, verdict="sound", flag_class=None, reason="Sound."
                     )
                 )
         return FindingVetterResponse(verdicts=verdicts), None
@@ -142,7 +143,7 @@ class _MismatchedJudgeBackend:
             FindingVetterResponse(
                 verdicts=[
                     VetterVerdictWire(
-                        finding_index=999, verdict="sound", junk_class=None, reason="Wrong index."
+                        finding_index=999, verdict="sound", flag_class=None, reason="Wrong index."
                     )
                 ]
             ),
@@ -153,36 +154,39 @@ class _MismatchedJudgeBackend:
 # --- 1. Wire validation -------------------------------------------------------
 
 
-def test_junk_verdict_requires_junk_class_when_junk() -> None:
-    with pytest.raises(ValidationError, match="junk_class is required"):
-        VetterVerdictWire(finding_index=0, verdict="junk", junk_class=None, reason="x")
+def test_vetter_verdict_requires_flag_class_when_flagged() -> None:
+    with pytest.raises(ValidationError, match="flag_class is required"):
+        VetterVerdictWire(finding_index=0, verdict="flagged", flag_class=None, reason="x")
 
 
-def test_junk_verdict_forbids_junk_class_when_sound() -> None:
-    with pytest.raises(ValidationError, match="junk_class must be null"):
+def test_vetter_verdict_forbids_flag_class_when_sound() -> None:
+    with pytest.raises(ValidationError, match="flag_class must be null"):
         VetterVerdictWire(
-            finding_index=0, verdict="sound", junk_class="aspiration", reason="x"
+            finding_index=0, verdict="sound", flag_class="aspiration", reason="x"
         )
 
 
-def test_junk_verdict_junk_with_class_is_valid() -> None:
+def test_vetter_verdict_flagged_with_class_is_valid() -> None:
     verdict = VetterVerdictWire(
-        finding_index=0, verdict="junk", junk_class="aspiration", reason="A target, not a result."
+        finding_index=0,
+        verdict="flagged",
+        flag_class="aspiration",
+        reason="A target, not a result.",
     )
-    assert verdict.junk_class == "aspiration"
+    assert verdict.flag_class == "aspiration"
 
 
-def test_junk_verdict_reason_over_300_chars_rejected() -> None:
+def test_vetter_verdict_reason_over_300_chars_rejected() -> None:
     with pytest.raises(ValidationError):
         VetterVerdictWire(
-            finding_index=0, verdict="sound", junk_class=None, reason="x" * 301
+            finding_index=0, verdict="sound", flag_class=None, reason="x" * 301
         )
 
 
 def test_validate_verdict_coverage_raises_on_missing_index() -> None:
     findings = [{"index": 0}, {"index": 1}]
     verdicts = [
-        VetterVerdictWire(finding_index=0, verdict="sound", junk_class=None, reason="ok"),
+        VetterVerdictWire(finding_index=0, verdict="sound", flag_class=None, reason="ok"),
     ]
     with pytest.raises(RuntimeError, match="do not cover"):
         validate_verdict_coverage(findings, verdicts)
@@ -191,8 +195,8 @@ def test_validate_verdict_coverage_raises_on_missing_index() -> None:
 def test_validate_verdict_coverage_raises_on_duplicate_index() -> None:
     findings = [{"index": 0}]
     verdicts = [
-        VetterVerdictWire(finding_index=0, verdict="sound", junk_class=None, reason="ok"),
-        VetterVerdictWire(finding_index=0, verdict="sound", junk_class=None, reason="ok2"),
+        VetterVerdictWire(finding_index=0, verdict="sound", flag_class=None, reason="ok"),
+        VetterVerdictWire(finding_index=0, verdict="sound", flag_class=None, reason="ok2"),
     ]
     with pytest.raises(RuntimeError, match="do not cover"):
         validate_verdict_coverage(findings, verdicts)
@@ -201,7 +205,7 @@ def test_validate_verdict_coverage_raises_on_duplicate_index() -> None:
 def test_validate_verdict_coverage_raises_on_unknown_index() -> None:
     findings = [{"index": 0}]
     verdicts = [
-        VetterVerdictWire(finding_index=7, verdict="sound", junk_class=None, reason="ok"),
+        VetterVerdictWire(finding_index=7, verdict="sound", flag_class=None, reason="ok"),
     ]
     with pytest.raises(RuntimeError, match="do not cover"):
         validate_verdict_coverage(findings, verdicts)
@@ -210,8 +214,8 @@ def test_validate_verdict_coverage_raises_on_unknown_index() -> None:
 def test_validate_verdict_coverage_passes_on_exact_match_any_order() -> None:
     findings = [{"index": 0}, {"index": 1}]
     verdicts = [
-        VetterVerdictWire(finding_index=1, verdict="sound", junk_class=None, reason="ok"),
-        VetterVerdictWire(finding_index=0, verdict="sound", junk_class=None, reason="ok"),
+        VetterVerdictWire(finding_index=1, verdict="sound", flag_class=None, reason="ok"),
+        VetterVerdictWire(finding_index=0, verdict="sound", flag_class=None, reason="ok"),
     ]
     validate_verdict_coverage(findings, verdicts)  # no raise
 
@@ -256,8 +260,8 @@ def test_stub_backend_returns_all_sound_covering_every_index() -> None:
 # --- 4. Extract integration --------------------------------------------------
 
 
-def test_junk_flagged_excluded_from_persistence_and_accounted(conn: Connection) -> None:
-    """A junk-flagged finding is excluded from the DB rows and honestly counted."""
+def test_vetted_out_excluded_from_persistence_and_accounted(conn: Connection) -> None:
+    """A vetted-out finding is excluded from the DB rows and honestly counted."""
     project_id, sel_run = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     cid = uuid.uuid4()
@@ -280,7 +284,7 @@ def test_junk_flagged_excluded_from_persistence_and_accounted(conn: Connection) 
         ),
     ])
     judge = _ScriptedJudgeBackend(
-        {1}, junk_class="deictic_naming", reason="Names the document itself."
+        {1}, flag_class="deictic_naming", reason="Names the document itself."
     )
 
     summary, _ = _run_with_judge(
@@ -296,10 +300,13 @@ def test_junk_flagged_excluded_from_persistence_and_accounted(conn: Connection) 
     [record] = summary["vetted_out"]["records"]
     assert record["intervention"] == "this Plan"
     assert record["outcome"] == "costs"
-    assert record["junk_class"] == "deictic_naming"
+    assert record["flag_class"] == "deictic_naming"
     assert record["reason"] == "Names the document itself."
     assert "vetted_out_present" in summary["flags"]
-    assert summary["provenance"]["finding_vetter"] == FINDING_VETTER_PROMPT_VERSION
+    assert summary["provenance"]["finding_vetter"] == {
+        "prompt": FINDING_VETTER_PROMPT_VERSION,
+        "max_output_tokens": FINDING_VETTER_MAX_OUTPUT_TOKENS,
+    }
 
     rows = _findings(conn, project_id)
     assert len(rows) == 1
@@ -308,15 +315,15 @@ def test_junk_flagged_excluded_from_persistence_and_accounted(conn: Connection) 
     assert judge.payloads[0]["findings"][0]["index"] == 0
 
 
-def test_all_junk_doc_reports_no_findings_status(conn: Connection) -> None:
-    """A doc whose every finding is junk-flagged is no_findings, never a
+def test_all_vetted_out_doc_reports_no_findings_status(conn: Connection) -> None:
+    """A doc whose every finding is flagged-flagged is no_findings, never a
     zero-finding "extracted" that inflates the extracted tally; the
     vetted_out count keeps it distinguishable from a genuinely-empty doc."""
     project_id, sel_run = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     cid = uuid.uuid4()
     pss_id, _ = _seed_full_text_doc(
-        conn, project_id, sel_run, scope_id, title="All-junk doc",
+        conn, project_id, sel_run, scope_id, title="All-flagged doc",
         chunk_content="This Plan will reduce costs. This Strategy will boost uptake.",
         chunk_id=cid,
     )
@@ -333,7 +340,7 @@ def test_all_junk_doc_reports_no_findings_status(conn: Connection) -> None:
             quote="This Strategy will boost uptake", segment_id=str(cid),
         ),
     ])
-    judge = _ScriptedJudgeBackend({0, 1}, junk_class="deictic_naming", reason="Deictic.")
+    judge = _ScriptedJudgeBackend({0, 1}, flag_class="deictic_naming", reason="Deictic.")
 
     summary, _ = _run_with_judge(
         conn, project_id, scope_id, sel_run,
@@ -349,7 +356,7 @@ def test_all_junk_doc_reports_no_findings_status(conn: Connection) -> None:
     assert _findings(conn, project_id) == []
 
 
-def test_junk_judge_failure_fails_open_and_counts(conn: Connection) -> None:
+def test_vetter_failure_fails_open_and_counts(conn: Connection) -> None:
     """A judge call failure never blocks extraction: the doc persists unfiltered."""
     project_id, sel_run = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
@@ -378,7 +385,7 @@ def test_junk_judge_failure_fails_open_and_counts(conn: Connection) -> None:
     assert len(rows) == 1
 
 
-def test_junk_judge_coverage_violation_fails_open_and_counts(conn: Connection) -> None:
+def test_vetter_coverage_violation_fails_open_and_counts(conn: Connection) -> None:
     """A coverage-violating response is a judge failure too — fail-open, not a crash."""
     project_id, sel_run = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
@@ -404,7 +411,7 @@ def test_junk_judge_coverage_violation_fails_open_and_counts(conn: Connection) -
     assert len(rows) == 1
 
 
-def test_no_backend_is_byte_identical_no_junk_keys(conn: Connection) -> None:
+def test_no_backend_is_byte_identical_no_vetter_keys(conn: Connection) -> None:
     """``finding_vetter_backend=None`` (the default): no new keys anywhere, provenance is null."""
     project_id, sel_run = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
@@ -472,7 +479,7 @@ class _FakeOpenAIClient:
 def test_openai_junk_judge_backend_passes_model_and_reasoning_effort() -> None:
     response = FindingVetterResponse(
         verdicts=[
-            VetterVerdictWire(finding_index=0, verdict="sound", junk_class=None, reason="Fine."),
+            VetterVerdictWire(finding_index=0, verdict="sound", flag_class=None, reason="Fine."),
         ]
     )
     backend: OpenAIFindingVetterBackend = object.__new__(OpenAIFindingVetterBackend)

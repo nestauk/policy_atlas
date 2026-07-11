@@ -230,6 +230,22 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 
 ## Live search / depth-graded loop (task 015 seams)
 
+- **Country filter allowlists + deterministic country-group expansion (owner,
+  2026-07-11, 018 review conversation)** — current validation is shape-only:
+  OpenAlex `author_affiliation_countries` accepts any 2-letter alpha pair (`XX`
+  passes; the provider then silently returns nothing) and Overton
+  `publisher_country` accepts near-arbitrary text with the display-name hazard
+  recorded (silent zero on ISO codes / "United Kingdom"). Upgrade both to
+  fail-closed allowlists: a static ISO-3166 set for OpenAlex; a probed
+  display-name list for Overton. Then the real user vocabulary — groupings
+  ("OECD countries", "G7"/"G20", "EU"/"Europe", "developing") — via
+  deterministic membership tables compiled in the grammar: the planner emits a
+  group token, compile expands it from a static provenance-stamped table, NEVER
+  the LLM listing members inline. "Developing" needs a pinned definition (e.g.
+  World Bank income groups) or an honest planner decline. Touches grammar +
+  both wire mappings + the planner capability line (prompt-bearing half is
+  lead-only, replay-evidenced).
+
 Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 - **Retrieval-boost grammar v2** — rev 3.9's named companion slice: tag-based retrieval
@@ -548,6 +564,15 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   stratum with zero selections), `must_include_conflict`, `thin_base` (honestly
   stub-constant until the LLM screen tool lands), `thin_full_text` (extraction-shaping).
   The pause slice reads these flags; no new signal computation needed.
+- **Corpus-conditioned selection budget (owner, 2026-07-11, 018 review conversation)** —
+  `ANALYSIS_DEPTH_TABLE`'s `selection_budget: 25` at deep is a plan-pinned cost CEILING
+  (allocation fills up to it, capped by eligible capacity), not a quality judgment.
+  The evolution: condition the executed budget on the corpus (screened/full-text counts,
+  strata shape, question breadth) rather than a constant — it lands naturally in the
+  agent-authored `SelectionDirective` seam below (the just-in-time post-characterise
+  author sees exactly those signals), with the depth-table constant demoted to the hard
+  ceiling. Needs eval evidence for the conditioning function; the steer-point flags
+  (`thin_base`, `large_stratum_excluded`, …) are the ready-made inputs.
 - **Agent-authored directives** — the capability agent authors the `SelectionDirective`
   **just-in-time at invocation, post-characterise** (plan-as-object § forecast-vs-commit:
   the up-front plan is a non-compiling forecast, never the executed directive). v3.0
@@ -793,6 +818,35 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   those paths — is eval-slice work (it adds a per-affected-section LLM call and needs
   the flag-volume calibration that workstream owns). Until then, consumers of
   `unspanned_assertions == 0` must check the skip flag.
+- **Pre-synthesise steer point → `context["synthesis"]` directive (owner-confirmed seam,
+  2026-07-11, 018 review conversation)** — a check-in after grouping/characterise and
+  before synthesise (or at section-proposal time): show the proposed sections and
+  discovered themes/facet groups; the user prunes/boosts ("only these themes", "prefer
+  strongest evidence types"); the response compiles into the EXISTING fail-closed
+  `context["synthesis"]` directive (sections + `group_ids` + `retrieval_boosts`) — the
+  compile target below that nothing authors yet. Parameter authoring on built machinery,
+  zero re-plumbing; pairs with the `deepening_selection` steer point the same way select
+  pairs with extract.
+- **Selection prior at standard depth + `SELECTION_PRIOR_BOOST` calibration (owner
+  questions, 2026-07-11)** — (1) select currently runs deep-only (018 regrade), so
+  standard-depth synthesis retrieval gets no selection prior; if the prior earns its
+  keep, select-at-standard (without extract) is a legitimate re-composition — weigh
+  against select's cost and the honest question of what selection means without the
+  findings layer. (2) The prior itself is a flat 2.0× multiplicative boost on the fused
+  retrieval score — could over-suppress an unselected-but-highly-relevant chunk for a
+  specific section. Mitigations already in place: it is a soft prior never a filter,
+  unselected docs stay in both retrieval legs, and citations record
+  `origin: selected|unselected_screened` so the effect is measurable. Eval-slice
+  measurement: citation quality/rate by origin as a function of the boost value.
+- **Writer read-tool scoping arguments (owner direction, 2026-07-11)** — `search_chunks`
+  takes only a query today; `query_findings` already scopes (`group_id`, `finding_ids`,
+  `effect_direction`) and `lookup` by `doc_id`/`tag`. Give `search_chunks` optional
+  fail-closed scope filters (tags, doc ids, facet-group members, evidence types —
+  validated against the closed vocabularies like the directive boosts) so the writer can
+  gather strategically per section instead of relying on global boosts — "act like a
+  researcher". Interacts with the Cohere/Bedrock cross-encoder rerank recorded at the
+  `retrieve` seam; prompt guidance for WHEN to scope is the prompt-bearing half
+  (lead-only, replay-evidenced).
 - **Plan-compile section machinery** — the fail-closed `context["synthesis"]` directive
   (sections + retrieval_boosts, normative grammar per contract rev 8 M5) is the compile
   target the future plan-shaped-sections machinery and the source/evidence policy compile

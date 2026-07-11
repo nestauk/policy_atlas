@@ -506,7 +506,12 @@ trade, not adopted here.)
 | 13 | C3 spot-check | synthesise `e8ac8418` (run `8c2b5f2e`, artefact `25dbb39a`, pinned section_v5) | counted |
 | – | C2 sections | 4 proposal-only probes (v1/v2 × both projects) | excluded (single bounded calls, planner-probe class) |
 
-Running total: **13 / 30**.
+Running total: **13 / 30** at Phase C exit.
+
+| 14 | step 9 vetter v2 | extract `91d2d684` (run `8650f28e`, extract_iof_v5 + finding_vetter v2) | counted |
+| – | step 9 | direct-backend re-vet of the failed 73-finding doc (no DB writes) | excluded (probe class) |
+
+Running total: **14 / 30**.
 
 ## Loop protocol notes (flow-back candidates for the eval-slice convention)
 
@@ -695,6 +700,38 @@ per-candidate adjudications (author/fold/decline with reasons) · failure-log en
 (prompt-capability-text staleness; reviewer-lane concurrent suite run) · deferred.md
 (unspanned-lane full decoupling · junk-judge parallelization · per-lane test-DB
 partition). Every B4 knowledge candidate dispositioned — none dropped silently.
+
+**Vetter prompt v2 — de-junked wording, replay-evidenced (owner direction at step 9;
+the prompt-change discipline applies):** `extract_finding_vetter_v2` removes "junk"
+from the model-facing surface — verdict tokens `"junk"|"sound"` → `"flagged"|"sound"`,
+wire field `junk_class` → `flag_class` (class VALUES unchanged), prompt wording
+("flag the clear non-findings"). Evidence (verification surface → verdict-shift
+inspection):
+- *Replay 14* (extract `91d2d684`, run `8650f28e`, extract_iof_v5 + vetter v2):
+  122 findings, 11 vetted out {aspiration 8, self_referential 2, vague_outcome 1}
+  across the 7 successfully-vetted docs — every flag hand-read, all correct, same
+  families as v1 (potential-benefit aspirations, future projections,
+  self-referential scheme features). `vetting_failed: 1`: the 73-finding mega-doc's
+  call failed and persisted unvetted (fail-open + counting behaved exactly as
+  designed).
+- *Root cause of the failure, probed directly* (substrate-safe direct-backend call,
+  no DB writes, uncounted probe class): the same 73-finding payload re-vetted
+  successfully — **42/73 flagged {aspiration 27, vague_outcome 9,
+  self_referential 6}** at 12,567 completion tokens (77% of the 16,384 cap); the
+  in-run attempt exceeded the cap on reasoning volume — the recorded effort×cap
+  tail hazard (reasoning-model-output-cap concept), now on a 70+-finding batch.
+- *Verdict-shift verdict*: combined, v2 flags ≥53 vs v1's 36 on the same project —
+  net stricter, no leniency from the wording change; the v1 flag families (bare-
+  population vague outcomes, purpose-statement aspirations, both self-referential
+  shapes) all reproduce. The earlier-looking "vague_outcome collapse" was the
+  failed mega-doc call, not wording. Caveat as ever: extraction re-ran fresh
+  (sampling noise component); the hand-inspection is the control.
+- *Fix riding this*: `FINDING_VETTER_MAX_OUTPUT_TOKENS` 16,384 → 32,768 (matches
+  extract's own cap; mini-tier cost trivial) and the vetter fingerprint component
+  becomes `{prompt, max_output_tokens}` — the cap now alters stored findings via
+  the fail-open path, so it enters the fingerprint like every other such knob.
+- Tally: **14 / 30**. Vetter rounds used: 2 of 3 (v1 build + adoption replay;
+  v2 wording + this replay).
 
 **Post-review rename (owner call, 2026-07-11, during step-9 review):** the C5 "junk
 judge" is renamed **finding vetter** — `finding_vetter.py`, `FindingVetterBackend`,
