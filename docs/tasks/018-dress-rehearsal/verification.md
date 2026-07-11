@@ -202,6 +202,58 @@
   `baseline1_replay.py 91d2d684 synthesise` (component replay, contract live-check
   scope) followed by `smoke_reproof.py 5a044d71`.
 
+### B4 (2026-07-11): Phase C — in progress
+
+| Gate | Result |
+|---|---|
+| B4 build-open full `make verify` | pass on serial re-run (exit 0; first attempt flaked: `test_stop_condition_widen_migration_roundtrip`, passes in isolation — concurrent worker-lane `verify-fast` against the shared test DB, the recorded B2 flake class) |
+| C1 landing `make verify-fast` | pass (1004 passed, mypy 112 files, ruff clean) |
+| C2 extraction r1 landing `make verify-fast` | pass (1004 passed, mypy, ruff) |
+| C2 extraction r2 landing `make verify-fast` | pass (1004 passed, mypy, ruff) |
+
+- **C1 landed** (commit `687a721`): `TokenUsage.cached` captured from
+  `prompt_tokens_details.cached_tokens` through accumulator payloads,
+  `usage_metadata`, and runner `usage_totals` (cost rider 1; new
+  `tests/test_usage.py`). Replay drivers generalised in the gitignored private
+  dir: `replay.py` (extract/synthesise on the pinned substrates + planner
+  single-turn probe; prints per-run usage incl. cached), `export_artefact.py`,
+  `export_findings.py`. Replays now carry `run:{component}:{run_id}` roots for
+  free (they call `_run_component`, which post-A2 opens `component_span`).
+  Codex quota probe: **credits restored** — C4 returns to the codex lane.
+- **C2 extraction round 1** (commit `fd76d9d`, lead): `extract_iof_v2` —
+  environment-context preamble (context-not-content paired), hortatory
+  exclusion, self-contained-naming section (RETRO's four fix classes
+  re-authored, mission-neutral examples; deterministic no-mission-vocab check
+  run at authoring — added text clean, one heat-pump-adjacent example
+  replaced pre-replay). Replays: extract on `91d2d684` (run `3143c2b2`,
+  43 findings vs baseline 54) and `e8ac8418` (run `c2f30d5c`, 190 vs 157) —
+  junk suppression confirmed (hortatory cluster 4→1; Institutional
+  Accountability Framework doc 7→0; deictic outcomes gone; acronyms expanded)
+  BUT the administrative scheme-results doc (BUS-in-four-charts) flipped
+  extracted(5)→no_findings — over-suppression regression.
+- **C2 extraction round 2** (commit landed post-r1, lead): `extract_iof_v3` —
+  one programme-results clause (reported delivery/monitoring data passes the
+  something-happened bar). Replay: extract on `91d2d684` (run `0510453b`,
+  104 findings, 9/10 docs extracted): BUS doc recovered 0→10, but plan-type
+  docs over-opened (Scotland CCP 1→41 incl. future-target aspirations and
+  deictic entries; oral-evidence doc 0→7 vague witness-concern findings).
+  Three arms with distinct failure profiles → **paused for the taste-judge
+  verdict before the final bounded round** (contract: ≤3 rounds/surface).
+- **C2 planner before-probes** (uncounted, pennies): current prompt already
+  infers date windows — "recent" → `published_after=2015-01-01` stated as an
+  assumption; "since 2000" → `2000-01-01` + `publisher_country="UK"` (display
+  name, correct vocabulary) with honest assumptions. Lead recommendation:
+  no date-inference prompt change (round 0 = validated as-is); evidence in
+  `c-loop/planner-before-q{1,2}.json`.
+- **Cache hit rate (rider 1 first data, extract surface)**: 17.6% / 24.6% /
+  20.6% of prompt tokens cached across the three extract replays (per-doc
+  one-shot calls — only the shared system-prompt prefix caches). The
+  decision-relevant number is the synthesise replay's (2.80M input at the B
+  smoke); measured at the next voice-round replay.
+- Cost-per-run (extract, gpt-5.4-mini): `91d2d684` ≈ 239k tokens (v2) /
+  252k (v3); `e8ac8418` ≈ 521k (v2). Mini-tier — negligible next to
+  synthesise.
+
 ## C-phase riders — synthesis cost reduction (user-approved 2026-07-11, post-B3)
 
 Evidence: the B smoke recorded **2.85M tokens (2.80M input / 47k output)** across 61
@@ -238,8 +290,12 @@ trade, not adopted here.)
 | – | A-rest | none (OpenAlex/Overton wire probes are search-API calls, not component replays) | n/a |
 | – | B | B smoke: synthesise ×1 on `91d2d684` (run `5a044d71`) | excluded (B smoke, named) |
 | – | B | judge-envelope A/B re-judges (per-block judge calls on recorded claims, both projects) + self-cert fixture | not component replays (judge sub-calls; the contract's in-B evidence protocol) |
+| 1 | C2 extraction r1 | extract `91d2d684` (run `3143c2b2`, extract_iof_v2) | counted |
+| 2 | C2 extraction r1 | extract `e8ac8418` (run `c2f30d5c`, extract_iof_v2) | counted |
+| 3 | C2 extraction r2 | extract `91d2d684` (run `0510453b`, extract_iof_v3) | counted |
+| – | C2 planner | 2 single-turn probes (before-arm) | excluded (planner-only probes: pennies, unrestricted — plan live-check script) |
 
-Running total: **0 / 30**.
+Running total: **3 / 30**.
 
 ## Loop protocol notes (flow-back candidates for the eval-slice convention)
 
