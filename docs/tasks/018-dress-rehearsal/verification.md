@@ -202,6 +202,34 @@
   `baseline1_replay.py 91d2d684 synthesise` (component replay, contract live-check
   scope) followed by `smoke_reproof.py 5a044d71`.
 
+## C-phase riders — synthesis cost reduction (user-approved 2026-07-11, post-B3)
+
+Evidence: the B smoke recorded **2.85M tokens (2.80M input / 47k output)** across 61
+gpt-5.5 writer calls (51 section turns + 8 repairs + proposal + KF) ≈ **$13/run**
+(owner-observed billing; fork-probe arms $17/$10). The cost is writer *input volume* —
+the stateless loop re-sends the full transcript (incl. chunk texts) every turn; the
+mini judge is negligible. Approved riders, in order:
+
+1. **C1 (telemetry, zero quality risk):** capture `prompt_tokens_details.cached_tokens`
+   into `TokenUsage` + the usage aggregates — measure the OpenAI cache hit rate on the
+   next replays. (`token_usage_from_provider` currently drops the detail.)
+2. **C2 (if hit rate is low):** cache-routing hint at the `openai_kwargs` seam
+   (OpenAI `prompt_cache_key` per run+section). Provider note: Bedrock caching is
+   explicit `cachePoint` markers, not automatic — the SEAM carries over at migration
+   (deterministic append-only prefixes already suit both); only the kwarg is
+   OpenAI-specific.
+3. **C2 (replay-evidenced):** multi-read-tool calls per turn — raise the one-call-per-
+   turn loop rule for READ tools substantially (user direction: push well above 2–3;
+   emit stays alone), gathering the same evidence in fewer frontier calls and shorter
+   re-sent transcripts. Before/after replay per the loop protocol.
+4. **C2 (measure first):** chunk-duplication rate across a section's tool results;
+   dedupe repeats ("already returned as <id>") only if material. Quality-safe by
+   construction (content already in context once).
+
+Each C2 replay records cost-per-run alongside quality so both curves are visible.
+(Depth-graded SECTION_CAP was raised as a further linear lever — a product coverage
+trade, not adopted here.)
+
 ## Live component replay tally (bound: ≤30; baselines/fork-probe/B-smoke/D excluded)
 
 | # | Phase | Replay | Counted? |
