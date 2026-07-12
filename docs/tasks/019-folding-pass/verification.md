@@ -8,9 +8,10 @@ review stack (step 7, fresh conversation).
 
 | Command | Result | Notes |
 |---|---:|---|
-| `make test` | pass | final step-6 exit run — see § Final verify below |
-| `make typecheck` | pass | mypy, 120 source files |
-| `make lint` | pass | ruff |
+| `make verify` (step-6 exit, 2026-07-12) | pass | okf-validate · test · typecheck · lint · build, exit 0 |
+| `make test` | pass | **1145 passed** (full suite incl. ingest integration, under suite-wide socket deny) |
+| `make typecheck` | pass | mypy, 120 source files, no issues |
+| `make lint` | pass | ruff, all checks passed |
 | `make build` | pass | sdist + wheel |
 
 Gate history: Phase 0 baseline full `make verify` green (1081 tests). Per-phase gates green at every
