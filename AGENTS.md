@@ -22,33 +22,33 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `020-extract-v2` (contract + plan APPROVED
-2026-07-12, all four gate decisions decided, ADR 0016 Accepted —
-build per `docs/tasks/020-extract-v2/plan.md` in a fresh
-conversation, task-cycle-build).
+Implementation — task `021-icf` (design phase: contract being
+drafted per task-cycle-design; Tier 3 — schema hard gate +
+prompt-bearing extraction surface).
 
-Tasks `001-walking-skeleton` through `019-folding-pass` are complete
+Tasks `001-walking-skeleton` through `020-extract-v2` are complete
 (merged) — the EB chain runs end-to-end live behind the thin v1
 orchestrator with the prose-first synthesis output shape v2
 (ADR 0015), select at standard depth, fail-closed country
-filters/groups, and the pinned prompt surfaces (`planner_v3`,
-`extract_iof_v5` + finding vetter, `synthesise_section_v5`,
-`synthesise_sections_v2`). 018 trailing lanes: **C4 demo surface**
-(codex lane, throwaway `demo-live-run` branch — never merges) and
-**D2 rehearsal** (owner-scheduled); D1 rode 019 and is done.
+filters/groups, IOF schema v2 (`iof_v2`: effect_basis +
+study_geography, envelope fencing — ADR 0016), and the pinned
+prompt surfaces (`planner_v3`, `extract_iof_v6` + finding vetter,
+`synthesise_section_v5`, `synthesise_sections_v2`). 018 trailing
+lanes: **C4 demo surface** (codex lane, throwaway `demo-live-run`
+branch — never merges) and **D2 rehearsal** (owner-scheduled).
 
-`020-extract-v2` is **pre-eval Slice B** of the owner-adjudicated
+`021-icf` is the promoted pre-eval ICF slice of the owner-adjudicated
 sequencing (2026-07-12; criterion: schema/vocabulary/composition
 changes land BEFORE evals, prompt/constant tuning after, with eval
-cover): the one IOF extraction-schema bump before ground truth —
-`effect_basis` (observed|modelled) on wire + row, prompt-envelope
-fencing (011 security seam), `study_geography` source-named field,
-`extract_iof_v6` (lead-only, replay-evidenced), field-rules v2,
-fingerprint bumps, writer-envelope + annotation carriage. No
-backfill: existing findings stay valid (data-model rule). Then slice
-021 — `implementation_context_finding` promoted pre-eval (owner,
-2026-07-12; EB synthesis first reader, separate profile/fingerprint
-domain) — then Slice C (synthesis multi-facet + cost/surface), then
-the eval slice with cost as a first-class axis. Bedrock migration, retrieval-boost
-grammar v2 and all other seams remain deferred (`docs/deferred.md`).
+cover): `implementation_context_finding` — the second reusable
+finding schema (mechanisms, barriers, implementation conditions).
+EB synthesis is its first reader; posture pinned at the 020 gate:
+separate extraction call/profile, own fingerprint domain, never
+invalidates IOF memos; same source-named reference vocabulary so
+cross-schema linkage stays reference-mediated via `group`. Then
+Slice C (synthesis multi-facet + cost/surface), then the eval slice
+with cost as a first-class axis (ICF ground truth authored alongside
+IOF's, with/without-ICF composition as an explicit axis). Bedrock
+migration, retrieval-boost grammar v2 and all other seams remain
+deferred (`docs/deferred.md`).
 
