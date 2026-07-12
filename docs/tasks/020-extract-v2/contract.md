@@ -132,9 +132,13 @@ flow-back (the task-011 pattern).
    annotation payload today carries claim text + anchors + cited finding ids, NOT
    record metadata — the new fields are *reachable* at the annotation layer via the
    cited finding row (read surfaces resolve `finding_id`). Whether the citation payload
-   additionally embeds the two fields is a ❓ plan decision — the contract promises
-   reachability, not payload embedding. Read side tolerates old rows per item 3's
-   distinguisher.
+   additionally embeds the two fields is a ❓ plan decision, with a recorded leaning
+   (🟡 owner-checked, 2026-07-12): don't embed in 020 — resolve-via-row is the shipped
+   read-surface pattern (demo readmodels), 018's metadata work landed on the *writer*
+   envelope + judge envelope v2 (quote/chunk-text/context, no record metadata), and no
+   recorded C-slice work touches annotation payloads; the consumer slice that builds the
+   surface decides, and nothing in 020 blocks embedding later. Read side tolerates old
+   rows per item 3's distinguisher.
    Also in scope (adversarial finding 7): the stub/fixture surface — the stub extraction
    backend's sentinel payloads and shared test record factories gain the new wire fields
    (default null), named here so they're scope, not mid-build creep.
@@ -149,7 +153,12 @@ flow-back (the task-011 pattern).
    fields with a task-020 flow-back note + `log.md` line; deferred.md entries discharged
    (effect_basis, fencing, `_load_findings` batch) or narrowed (study-geography: field
    landed, diversity consumers remain; evidence-type: column landed, memo-match rule
-   remains; mixed/unclear: carry-through pinned).
+   remains; mixed/unclear: carry-through pinned). The sweep also ADDS one seam entry
+   (docs only, no build): **`effect_basis` as a judge-envelope candidate** — the
+   grounding judge seeing the structured basis signal (prose asserting an effect while
+   citing a modelled projection is a faithfulness question); any judge-envelope change
+   is bound by 018's verification-grade A/B protocol, so it lands at the C/eval gate,
+   never silently.
 9. **Evidence-type provenance rider (011 review, Codex — folded in at contract review)**:
    record the `primary_evidence_type` actually sent to the prompt on
    `source_extraction_record` (nullable Text; rides the same migration). Honest
