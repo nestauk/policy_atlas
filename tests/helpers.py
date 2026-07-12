@@ -7,7 +7,18 @@ from typing import Any
 from sqlalchemy import delete, select, update
 from sqlalchemy.engine import Connection
 
+from policy_atlas.search_prompts import (
+    QueriesPayload,
+    ReformulatePayload,
+    SearchQueriesWire,
+    SearchSuggestWire,
+    SuggestPayload,
+)
+from policy_atlas.usage import UsageResult
+
 EVIDENCE_TYPE = "RCTs and Quasi-Experimental Studies"
+
+_UNSET: Any = object()
 
 
 def now() -> datetime:
@@ -458,3 +469,134 @@ def run_select(
         .where(selection_result.c.run_id == run_id)
     ).one()
     return summary, row, run_id
+
+
+# --- Search backend/record test doubles ---
+
+
+def _inverted_index(text: str) -> dict[str, list[int]]:
+    """Build an OpenAlex-style abstract_inverted_index from plain text."""
+    index: dict[str, list[int]] = {}
+    for position, token in enumerate(text.split()):
+        index.setdefault(token, []).append(position)
+    return index
+
+
+def oa_record(
+    suffix: str | None = None,
+    *,
+    rid: str | None = None,
+    title: str | None = _UNSET,
+    abstract: str | None = "relevant evidence abstract",
+    index: dict[str, list[int]] | None = _UNSET,
+    doi: str | None = None,
+    year: int | None = 2020,
+    is_oa: bool = False,
+    referenced_works: list[str] | None = None,
+    source_name: str = "Willow Journal",
+) -> dict[str, Any]:
+    """Build a sanitized-shape OpenAlex Work record for acquire/search-loop tests.
+
+    Identity: pass ``rid`` for a full record id (acquire-style dedup tests),
+    or a bare ``suffix`` for an ``https://openalex.org/W{suffix}`` id
+    (search-loop scripted-backend tests); ``rid`` wins if both are given.
+    ``title`` defaults to a per-suffix ``"OpenAlex record {suffix}"`` when a
+    suffix is given (so scripted multi-record tests get distinct
+    dedup-relevant titles), else a fixed placeholder. Pass ``title=None``
+    explicitly (not omitted) to exercise the no-title/unusable path.
+
+    Abstract: ``abstract`` (whitespace-tokenized into word positions) builds
+    ``abstract_inverted_index`` by default. Pass ``index`` directly — even
+    ``None``, to exercise the missing-abstract path — to bypass that.
+    """
+    if rid is None:
+        rid = (
+            f"https://openalex.org/W{suffix}"
+            if suffix is not None
+            else "https://example.org/W1"
+        )
+    if title is _UNSET:
+        title = f"OpenAlex record {suffix}" if suffix is not None else "Quartz meadow lantern"
+    if index is _UNSET:
+        index = _inverted_index(abstract) if abstract is not None else None
+    record: dict[str, Any] = {
+        "id": rid,
+        "display_name": title,
+        "abstract_inverted_index": index,
+        "publication_year": year,
+        "publication_date": f"{year}-01-01" if year else None,
+        "doi": doi,
+        "language": "en",
+        "type": "article",
+        "primary_location": {"source": {"display_name": source_name}},
+        "open_access": {"is_oa": is_oa},
+        "authorships": [],
+    }
+    if referenced_works is not None:
+        record["referenced_works"] = referenced_works
+    return record
+
+
+class ScriptedGenerationBackend:
+    """SearchGenerationBackend double with payload capture.
+
+    ``reformulations``/``suggestions`` left at their ``None`` default means
+    the corresponding verb is never expected to be called for this test's
+    depth — an unexpected call raises ``AssertionError``. Pass an explicit
+    list (even ``[]``) to allow calls; once exhausted, further calls return
+    an empty wire result. ``queries`` always falls back to an empty result
+    when omitted or exhausted — several deep-loop tests rely on that.
+    """
+
+    mode = "scripted"
+
+    def __init__(
+        self,
+        *,
+        queries: list[SearchQueriesWire | BaseException] | None = None,
+        reformulations: list[SearchQueriesWire | BaseException] | None = None,
+        suggestions: list[SearchSuggestWire | BaseException] | None = None,
+    ) -> None:
+        self._queries = list(queries or [])
+        self._reformulations_allowed = reformulations is not None
+        self._reformulations = list(reformulations or [])
+        self._suggestions_allowed = suggestions is not None
+        self._suggestions = list(suggestions or [])
+        self.query_payloads: list[QueriesPayload] = []
+        self.reformulate_payloads: list[ReformulatePayload] = []
+        self.suggest_payloads: list[SuggestPayload] = []
+
+    @staticmethod
+    def _pop_wire[T](queue: list[T | BaseException], fallback: T) -> T:
+        item = queue.pop(0) if queue else fallback
+        if isinstance(item, BaseException):
+            raise item
+        return item
+
+    def generate_queries(self, payload: QueriesPayload) -> UsageResult[SearchQueriesWire]:
+        self.query_payloads.append(payload)
+        return (
+            self._pop_wire(
+                self._queries,
+                SearchQueriesWire(queries=[], overton_paraphrases=[]),
+            ),
+            None,
+        )
+
+    def reformulate(self, payload: ReformulatePayload) -> UsageResult[SearchQueriesWire]:
+        if not self._reformulations_allowed:
+            raise AssertionError("reformulate was not expected to be called")
+        self.reformulate_payloads.append(payload)
+        return (
+            self._pop_wire(
+                self._reformulations,
+                SearchQueriesWire(queries=[], overton_paraphrases=[]),
+            ),
+            None,
+        )
+
+    def suggest(self, payload: SuggestPayload) -> UsageResult[SearchSuggestWire]:
+        if not self._suggestions_allowed:
+            raise AssertionError("suggest was not expected to be called")
+        self.suggest_payloads.append(payload)
+        return self._pop_wire(self._suggestions, SearchSuggestWire(papers=[])), None

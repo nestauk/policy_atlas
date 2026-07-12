@@ -285,52 +285,185 @@ class StopDecision:
     overlay_applied: bool
 
 
-def _str_values(key: str, value: Any) -> list[str]:
-    if not isinstance(value, list) or not value:
-        raise ValueError(f"{key} must be a non-empty list")
-    return [str(item) for item in value]
+# Unified filter-directive validator/raiser family.
+#
+# Two call paths share these helpers, distinguished by keyword args:
+#   - Wire mapping (openalex_wire_params/overton_wire_params) operates on
+#     already-validated directive dicts, so it coerces loosely and raises
+#     plain ValueError (the defaults below).
+#   - Raw-directive validation (validate_scope_filters, via the
+#     _validate_*_block functions) operates on untrusted JSON, so it passes
+#     error=SearchDirectiveError and strict=True (type-check, no coercion,
+#     reject surrounding whitespace) plus accept_list_of_one=False for
+#     single-value fields (a list is always invalid there).
+#
+# To add a new key validator: pick the matching shape helper below, decide
+# strict/coerce semantics for the raw-JSON side, and wire it into both an
+# openalex/overton wire_params branch and a _validate_*_block branch.
 
 
-def _int_values(key: str, value: Any, min_value: int, max_value: int) -> list[int]:
+def _str_values(
+    key: str,
+    value: Any,
+    *,
+    error: type[Exception] = ValueError,
+    strict: bool = False,
+) -> list[str]:
     if not isinstance(value, list) or not value:
-        raise ValueError(f"{key} must be a non-empty list")
-    ints = [int(item) for item in value]
+        raise error(f"{key} must be a non-empty list")
+    if not strict:
+        return [str(item) for item in value]
+    out: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip() or item != item.strip():
+            raise error(f"{key} must contain non-empty strings")
+        out.append(item)
+    return out
+
+
+def _int_values(
+    key: str,
+    value: Any,
+    min_value: int,
+    max_value: int,
+    *,
+    error: type[Exception] = ValueError,
+    strict: bool = False,
+) -> list[int]:
+    if not isinstance(value, list) or not value:
+        raise error(f"{key} must be a non-empty list")
+    ints: list[int] = []
+    for item in value:
+        if strict:
+            if isinstance(item, bool) or not isinstance(item, int):
+                raise error(f"{key} must contain integers")
+            ints.append(item)
+        else:
+            ints.append(int(item))
     if any(item < min_value or item > max_value for item in ints):
-        raise ValueError(f"{key} contains an out-of-range value")
+        raise error(f"{key} contains an out-of-range value")
     return ints
 
 
-def _single_str_value(key: str, value: Any) -> str:
+def _single_str_value(
+    key: str,
+    value: Any,
+    *,
+    error: type[Exception] = ValueError,
+    accept_list_of_one: bool = True,
+    strict: bool = False,
+) -> str:
     if isinstance(value, list):
+        if not accept_list_of_one:
+            raise error(f"{key} must be a non-empty string")
         if len(value) != 1:
-            raise ValueError(f"{key} must be single-valued")
+            raise error(f"{key} must be single-valued")
         value = value[0]
-    return str(value)
+    if not strict:
+        return str(value)
+    if not isinstance(value, str) or not value.strip() or value != value.strip():
+        raise error(f"{key} must be a non-empty string")
+    return value
 
 
-def _single_int_value(key: str, value: Any, min_value: int, max_value: int) -> int:
+def _single_int_value(
+    key: str,
+    value: Any,
+    min_value: int,
+    max_value: int,
+    *,
+    error: type[Exception] = ValueError,
+) -> int:
     if not isinstance(value, list) or len(value) != 1:
-        raise ValueError(f"{key} must be a single-item list")
+        raise error(f"{key} must be a single-item list")
     item = int(value[0])
     if item < min_value or item > max_value:
-        raise ValueError(f"{key} contains an out-of-range value")
+        raise error(f"{key} contains an out-of-range value")
     return item
 
 
-def _enum_values(key: str, value: Any, allowed: tuple[str, ...]) -> list[str]:
-    values = _str_values(key, value)
+def _enum_values(
+    key: str,
+    value: Any,
+    allowed: tuple[str, ...],
+    *,
+    error: type[Exception] = ValueError,
+    strict: bool = False,
+) -> list[str]:
+    values = _str_values(key, value, error=error, strict=strict)
     allowed_set = set(allowed)
     unknown = [item for item in values if item not in allowed_set]
     if unknown:
-        raise ValueError(f"{key} contains unknown value(s): {unknown}")
+        raise error(f"{key} contains unknown value(s): {unknown}")
     return values
 
 
-def _single_enum_value(key: str, value: Any, allowed: tuple[str, ...]) -> str:
-    item = _single_str_value(key, value)
+def _single_enum_value(
+    key: str,
+    value: Any,
+    allowed: tuple[str, ...],
+    *,
+    error: type[Exception] = ValueError,
+    accept_list_of_one: bool = True,
+    strict: bool = False,
+) -> str:
+    item = _single_str_value(
+        key, value, error=error, accept_list_of_one=accept_list_of_one, strict=strict
+    )
     if item not in set(allowed):
-        raise ValueError(f"{key} contains unknown value: {item}")
+        raise error(f"{key} contains unknown value: {item}")
     return item
+
+
+def _alpha_code_values(
+    key: str,
+    value: Any,
+    *,
+    length: int,
+    case: Literal["lower", "upper"],
+    error: type[Exception] = SearchDirectiveError,
+) -> list[str]:
+    values = _str_values(key, value, error=error, strict=True)
+    for item in values:
+        if len(item) != length or not item.isalpha():
+            raise error(f"{key} must contain {length}-letter codes")
+        if case == "lower" and item != item.lower():
+            raise error(f"{key} must contain lowercase codes")
+        if case == "upper" and item != item.upper():
+            raise error(f"{key} must contain uppercase codes")
+    return values
+
+
+def _single_alpha_code_value(
+    key: str,
+    value: Any,
+    *,
+    length: int,
+    case: Literal["lower", "upper"],
+    error: type[Exception] = SearchDirectiveError,
+) -> str:
+    text = _single_str_value(key, value, error=error, accept_list_of_one=False, strict=True)
+    if len(text) != length or not text.isalpha():
+        raise error(f"{key} must be a {length}-letter code")
+    if case == "lower" and text != text.lower():
+        raise error(f"{key} must be lowercase")
+    if case == "upper" and text != text.upper():
+        raise error(f"{key} must be uppercase")
+    return text
+
+
+def _iso_date_value(
+    key: str, value: Any, *, error: type[Exception] = SearchDirectiveError
+) -> str:
+    if not isinstance(value, str):
+        raise error(f"{key} must be an ISO date string")
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError as exc:
+        raise error(f"{key} must be a valid ISO date") from exc
+    if parsed.isoformat() != value:
+        raise error(f"{key} must be a YYYY-MM-DD ISO date")
+    return value
 
 
 def openalex_wire_params(filters: dict[str, Any] | None) -> dict[str, str]:
@@ -463,98 +596,6 @@ def _object_block(raw: Any, *, label: str) -> dict[str, Any]:
     return cast(dict[str, Any], raw)
 
 
-def _validate_iso_date(key: str, value: Any) -> str:
-    if not isinstance(value, str):
-        raise SearchDirectiveError(f"{key} must be an ISO date string")
-    try:
-        parsed = date.fromisoformat(value)
-    except ValueError as exc:
-        raise SearchDirectiveError(f"{key} must be a valid ISO date") from exc
-    if parsed.isoformat() != value:
-        raise SearchDirectiveError(f"{key} must be a YYYY-MM-DD ISO date")
-    return value
-
-
-def _validate_sdgs(value: Any) -> list[int]:
-    if not isinstance(value, list) or not value:
-        raise SearchDirectiveError("sdgs must be a non-empty list")
-    out: list[int] = []
-    for item in value:
-        if isinstance(item, bool) or not isinstance(item, int):
-            raise SearchDirectiveError("sdgs must contain integers")
-        if item < 1 or item > 17:
-            raise SearchDirectiveError("sdgs must contain values from 1 to 17")
-        out.append(item)
-    return out
-
-
-def _validate_str_list(key: str, value: Any) -> list[str]:
-    if not isinstance(value, list) or not value:
-        raise SearchDirectiveError(f"{key} must be a non-empty list")
-    out: list[str] = []
-    for item in value:
-        if not isinstance(item, str) or not item.strip() or item != item.strip():
-            raise SearchDirectiveError(f"{key} must contain non-empty strings")
-        out.append(item)
-    return out
-
-
-def _validate_enum_list(key: str, value: Any, allowed: tuple[str, ...]) -> list[str]:
-    values = _validate_str_list(key, value)
-    unknown = [item for item in values if item not in set(allowed)]
-    if unknown:
-        raise SearchDirectiveError(f"{key} contains unknown value(s): {unknown}")
-    return values
-
-
-def _validate_single_str(key: str, value: Any) -> str:
-    if not isinstance(value, str) or not value.strip() or value != value.strip():
-        raise SearchDirectiveError(f"{key} must be a non-empty string")
-    return value
-
-
-def _validate_single_enum(key: str, value: Any, allowed: tuple[str, ...]) -> str:
-    text = _validate_single_str(key, value)
-    if text not in set(allowed):
-        raise SearchDirectiveError(f"{key} contains unknown value: {text}")
-    return text
-
-
-def _validate_alpha_code_list(
-    key: str,
-    value: Any,
-    *,
-    length: int,
-    case: Literal["lower", "upper"],
-) -> list[str]:
-    values = _validate_str_list(key, value)
-    for item in values:
-        if len(item) != length or not item.isalpha():
-            raise SearchDirectiveError(f"{key} must contain {length}-letter codes")
-        if case == "lower" and item != item.lower():
-            raise SearchDirectiveError(f"{key} must contain lowercase codes")
-        if case == "upper" and item != item.upper():
-            raise SearchDirectiveError(f"{key} must contain uppercase codes")
-    return values
-
-
-def _validate_single_alpha_code(
-    key: str,
-    value: Any,
-    *,
-    length: int,
-    case: Literal["lower", "upper"],
-) -> str:
-    text = _validate_single_str(key, value)
-    if len(text) != length or not text.isalpha():
-        raise SearchDirectiveError(f"{key} must be a {length}-letter code")
-    if case == "lower" and text != text.lower():
-        raise SearchDirectiveError(f"{key} must be lowercase")
-    if case == "upper" and text != text.upper():
-        raise SearchDirectiveError(f"{key} must be uppercase")
-    return text
-
-
 def _validate_shared_block(block: dict[str, Any]) -> dict[str, Any]:
     unknown = set(block) - _SHARED_FILTER_KEYS
     if unknown:
@@ -562,9 +603,9 @@ def _validate_shared_block(block: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for key, value in block.items():
         if key in {"published_after", "published_before"}:
-            out[key] = _validate_iso_date(key, value)
+            out[key] = _iso_date_value(key, value)
         elif key == "sdgs":
-            out[key] = _validate_sdgs(value)
+            out[key] = _int_values(key, value, 1, 17, error=SearchDirectiveError, strict=True)
     return out
 
 
@@ -575,17 +616,21 @@ def _validate_openalex_block(block: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for key, value in block.items():
         if key == "types":
-            out[key] = _validate_enum_list(key, value, OPENALEX_TYPES)
+            out[key] = _enum_values(
+                key, value, OPENALEX_TYPES, error=SearchDirectiveError, strict=True
+            )
         elif key == "languages":
-            out[key] = _validate_alpha_code_list(key, value, length=2, case="lower")
+            out[key] = _alpha_code_values(key, value, length=2, case="lower")
         elif key in {"exclude_retracted", "exclude_paratext"}:
             if not isinstance(value, bool):
                 raise SearchDirectiveError(f"{key} must be a boolean")
             out[key] = value
         elif key == "oa_status":
-            out[key] = _validate_enum_list(key, value, OA_STATUS_VALUES)
+            out[key] = _enum_values(
+                key, value, OA_STATUS_VALUES, error=SearchDirectiveError, strict=True
+            )
         elif key == "author_affiliation_countries":
-            out[key] = _validate_alpha_code_list(key, value, length=2, case="upper")
+            out[key] = _alpha_code_values(key, value, length=2, case="upper")
     return out
 
 
@@ -596,13 +641,29 @@ def _validate_overton_block(block: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for key, value in block.items():
         if key == "publisher_type":
-            out[key] = _validate_single_enum(key, value, OVERTON_PUBLISHER_TYPES)
+            out[key] = _single_enum_value(
+                key,
+                value,
+                OVERTON_PUBLISHER_TYPES,
+                error=SearchDirectiveError,
+                accept_list_of_one=False,
+                strict=True,
+            )
         elif key == "publisher_country":
-            out[key] = _validate_single_str(key, value)
+            out[key] = _single_str_value(
+                key, value, error=SearchDirectiveError, accept_list_of_one=False, strict=True
+            )
         elif key == "publisher_region":
-            out[key] = _validate_single_enum(key, value, OVERTON_REGION_GROUPS)
+            out[key] = _single_enum_value(
+                key,
+                value,
+                OVERTON_REGION_GROUPS,
+                error=SearchDirectiveError,
+                accept_list_of_one=False,
+                strict=True,
+            )
         elif key == "language":
-            out[key] = _validate_single_alpha_code(key, value, length=3, case="lower")
+            out[key] = _single_alpha_code_value(key, value, length=3, case="lower")
     return out
 
 

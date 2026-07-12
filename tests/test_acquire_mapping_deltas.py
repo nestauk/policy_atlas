@@ -24,8 +24,8 @@ from policy_atlas.schema import (
     source_snapshot,
     source_tag,
 )
-from tests.helpers import seed_project_and_run, seed_scope
-from tests.test_acquire import FakeBackend, assert_invariant, oa_record, ov_record
+from tests.helpers import oa_record, seed_project_and_run, seed_scope
+from tests.test_acquire import FakeBackend, assert_invariant, ov_record
 
 # --- _map_openalex_work: decision-20 retain-key deltas ---
 

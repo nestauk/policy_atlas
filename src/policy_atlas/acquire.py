@@ -172,6 +172,25 @@ class ExecutedSearchCall(Protocol):
         ...
 
 
+@dataclass(frozen=True)
+class _LegacySearchCall:
+    """Synthetic ``ExecutedSearchCall`` for the legacy one-call-per-backend path.
+
+    ``acquire_sources`` builds one of these per backend when ``executed_calls``
+    is omitted, wrapping the single ``backend.search(context.intent)`` result
+    so the rest of the function only has to know one (executed-calls) shape.
+    """
+
+    backend_name: str
+    verb: str
+    query: str
+    query_origin: str
+    wire_params: dict[str, str]
+    records: list[dict[str, Any]]
+    status: str
+    error: str | None
+
+
 def _limit_fixture_records(
     records: list[dict[str, Any]], max_results: int | None
 ) -> list[dict[str, Any]]:
@@ -825,96 +844,77 @@ def acquire_sources(
                 seen_dois.add(doi)
 
     if executed_calls is None:
+        # Legacy path: make the one search call per backend ourselves, then
+        # wrap each outcome as the equivalent executed-call shape so the loop
+        # below is the only place that turns calls into rows/events/counts.
+        legacy_calls: list[ExecutedSearchCall] = []
         for backend in backends:
-            counts = by_backend[backend.name]
             try:
                 results = backend.search(context.intent)
-                ok_calls_by_backend[backend.name] += 1
                 status, error = "ok", None
             except Exception as exc:
                 # Per-backend error isolation: this part of the search space
                 # wasn't searched, but the other backends and the run continue.
                 results = []
                 status, error = "error", str(exc)
-                errors_by_backend[backend.name].append(error)
-                log.warning(
-                    "acquire.backend_failed",
-                    backend=backend.name,
-                    project_id=str(project_id),
-                    run_id=str(run_id),
-                    error=error,
-                )
-
-            events.append(
-                conn,
-                project_id=project_id,
-                run_id=run_id,
-                event_type="search.executed",
-                payload={
-                    "backend": backend.name,
-                    "trust_class": backend.trust_class,
-                    "mode": backend.mode,
-                    "query": context.intent,
-                    "depth": depth,
-                    "filters": {},
-                    "status": status,
-                    "result_count": len(results),
-                    "error": error,
-                    "evidence_scope_id": str(context.scope_id),
-                },
-            )
-            if status == "ok":
-                process_records(
+            legacy_calls.append(
+                _LegacySearchCall(
                     backend_name=backend.name,
                     verb="search",
+                    query=context.intent,
+                    query_origin="verbatim",
+                    wire_params={},
                     records=results,
-                    counts=counts,
-                )
-    else:
-        for call in executed_calls:
-            backend = backend_by_name[call.backend_name]
-            counts = by_backend[backend.name]
-            if call.status not in {"ok", "error"}:
-                raise ValueError(f"executed call has invalid status: {call.status!r}")
-            result_count = len(call.records) if call.status == "ok" else 0
-            error = call.error if call.status == "error" else None
-            events.append(
-                conn,
-                project_id=project_id,
-                run_id=run_id,
-                event_type="search.executed",
-                payload={
-                    "backend": backend.name,
-                    "trust_class": backend.trust_class,
-                    "mode": backend.mode,
-                    "query": call.query,
-                    "query_origin": call.query_origin,
-                    "verb": call.verb,
-                    "depth": depth,
-                    "filters": call.wire_params,
-                    "status": call.status,
-                    "result_count": result_count,
-                    "error": error,
-                    "evidence_scope_id": str(context.scope_id),
-                },
-            )
-            if call.status == "ok":
-                ok_calls_by_backend[backend.name] += 1
-                process_records(
-                    backend_name=backend.name,
-                    verb=call.verb,
-                    records=call.records,
-                    counts=counts,
-                )
-            else:
-                errors_by_backend[backend.name].append(error or "unknown search error")
-                log.warning(
-                    "acquire.backend_failed",
-                    backend=backend.name,
-                    project_id=str(project_id),
-                    run_id=str(run_id),
+                    status=status,
                     error=error,
                 )
+            )
+        executed_calls = legacy_calls
+
+    for call in executed_calls:
+        backend = backend_by_name[call.backend_name]
+        counts = by_backend[backend.name]
+        if call.status not in {"ok", "error"}:
+            raise ValueError(f"executed call has invalid status: {call.status!r}")
+        result_count = len(call.records) if call.status == "ok" else 0
+        error = call.error if call.status == "error" else None
+        events.append(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            event_type="search.executed",
+            payload={
+                "backend": backend.name,
+                "trust_class": backend.trust_class,
+                "mode": backend.mode,
+                "query": call.query,
+                "query_origin": call.query_origin,
+                "verb": call.verb,
+                "depth": depth,
+                "filters": call.wire_params,
+                "status": call.status,
+                "result_count": result_count,
+                "error": error,
+                "evidence_scope_id": str(context.scope_id),
+            },
+        )
+        if call.status == "ok":
+            ok_calls_by_backend[backend.name] += 1
+            process_records(
+                backend_name=backend.name,
+                verb=call.verb,
+                records=call.records,
+                counts=counts,
+            )
+        else:
+            errors_by_backend[backend.name].append(error or "unknown search error")
+            log.warning(
+                "acquire.backend_failed",
+                backend=backend.name,
+                project_id=str(project_id),
+                run_id=str(run_id),
+                error=error,
+            )
 
     any_error = False
     for backend in backends:

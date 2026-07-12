@@ -40,7 +40,14 @@ from policy_atlas.schema import (
     source_snapshot,
 )
 from policy_atlas.screen import ScreenContext, screen_sources
-from tests.helpers import delete_project_data, now, seed_project_and_run, seed_run, seed_scope
+from tests.helpers import (
+    delete_project_data,
+    now,
+    oa_record,
+    seed_project_and_run,
+    seed_run,
+    seed_scope,
+)
 
 # --- Test doubles / builders ---
 
@@ -92,28 +99,6 @@ class FakeBackend:
         self, dois: list[str], *, max_results: int | None = None
     ) -> list[dict[str, Any]]:
         raise NotImplementedError("FakeBackend caps.has_doi_lookup=False")
-
-
-def oa_record(
-    rid: str = "https://example.org/W1",
-    title: str | None = "Quartz meadow lantern",
-    index: dict[str, list[int]] | None = None,
-    doi: str | None = None,
-    year: int | None = 2020,
-) -> dict[str, Any]:
-    return {
-        "id": rid,
-        "display_name": title,
-        "abstract_inverted_index": index,
-        "publication_year": year,
-        "publication_date": f"{year}-01-01" if year else None,
-        "doi": doi,
-        "language": "en",
-        "type": "article",
-        "primary_location": {"source": {"display_name": "Willow Journal"}},
-        "open_access": {"is_oa": False},
-        "authorships": [],
-    }
 
 
 def ov_record(

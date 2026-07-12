@@ -15,9 +15,8 @@ from policy_atlas.acquire import AcquireContext
 from policy_atlas.schema import search_coverage_record
 from policy_atlas.search_live import OpenAlexLiveBackend, OvertonLiveBackend
 from policy_atlas.search_loop import overton_wire_params, run_search, to_wire_params
-from policy_atlas.search_prompts import QueriesPayload, SearchQueriesWire
-from policy_atlas.usage import UsageResult
-from tests.helpers import seed_project_and_run, seed_scope
+from policy_atlas.search_prompts import SearchQueriesWire
+from tests.helpers import ScriptedGenerationBackend, seed_project_and_run, seed_scope
 
 
 @dataclass(frozen=True)
@@ -39,31 +38,6 @@ class CapturingFetch:
         if "overton" in url:
             return {"results": [], "next_page_url": False}
         return {"results": []}
-
-
-class ScriptedGenerationBackend:
-    """Minimal rapid-query backend for wire tests."""
-
-    mode = "scripted"
-
-    def __init__(self) -> None:
-        self.payloads: list[QueriesPayload] = []
-
-    def generate_queries(self, payload: QueriesPayload) -> UsageResult[SearchQueriesWire]:
-        self.payloads.append(payload)
-        return (
-            SearchQueriesWire(
-                queries=["housing retrofit", "fuel poverty"],
-                overton_paraphrases=["Policy evidence about housing retrofit."],
-            ),
-            None,
-        )
-
-    def reformulate(self, payload: Any) -> UsageResult[SearchQueriesWire]:
-        raise AssertionError("wire test runs rapid search only")
-
-    def suggest(self, payload: Any) -> Any:
-        raise AssertionError("wire test runs rapid search only")
 
 
 def _context(scope_id: uuid.UUID) -> AcquireContext:
@@ -105,7 +79,14 @@ def test_live_backends_receive_backend_native_wire_params_via_run_search(
         run_id=run_id,
         context=_context(scope_id),
         backends=[openalex, overton],
-        generation_backend=ScriptedGenerationBackend(),
+        generation_backend=ScriptedGenerationBackend(
+            queries=[
+                SearchQueriesWire(
+                    queries=["housing retrofit", "fuel poverty"],
+                    overton_paraphrases=["Policy evidence about housing retrofit."],
+                )
+            ]
+        ),
     )
 
     assert openalex_fetch.calls
