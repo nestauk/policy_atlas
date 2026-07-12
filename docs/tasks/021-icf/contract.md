@@ -221,6 +221,23 @@ discharge/narrowing.
      visible coverage fact, not a silently absent tool (and the with/without-ICF eval
      arms differ by less surface). Tool present, as today, only when an extraction is
      referenced at all.
+   - **Reader shape preserved (owner, 2026-07-12):** the as-built pattern holds for
+     both kinds — one scoped setup query per kind into process memory
+     (`make_findings_reader`), ALL filtering server-side in the reader closure,
+     results-only into model context, truncation-capped and flagged. ❓ plan decision:
+     the cap arithmetic once two kinds share a return — leaning **per-kind caps** (a
+     barrier-rich document must not crowd effects out of the return, or vice versa).
+   - **No free-text dimension filter in 021 (owner, 2026-07-12):** filters stay
+     id/group/closed-attribute-keyed. A naive keyword match over source-named
+     `intervention` values would silently miss differently-worded companion documents
+     — the exact V2 lesson the data-model's committed hybrid dimension indexing
+     exists for. Cross-wording resolution stays with `group` (the designed
+     identity-resolver; cross-schema at Slice C) and, when scale outgrows
+     envelope-plus-bare-call reads, with hybrid dimension search — **a Slice C
+     contract-agenda item, not 021 work** (it owns the writer's retrieval surface and
+     must land pre-eval if built). ICF's source-named reference values are shaped to
+     ride the same committed dimension index when it lands (shared vocabulary =
+     shared index target — free by construction).
    Carriage: ICF records enter the writer envelope alongside IOF findings (same terse,
    always-present-nullable idiom); finding claims may cite ICF finding ids resolved to
    extract-verified anchors (the model never authors these quotes — same rule, same
@@ -270,6 +287,11 @@ discharge/narrowing.
     the time, median 15.5 months later — the capability's acquire step should hunt
     companion process evaluations; ICF's nullable-outcome + reference-mediated design
     already absorbs findings arriving in different documents than their effects).
+    The sweep also places **hybrid dimension search over finding reference values**
+    (the data-model's committed intervention/outcome dimension indexing, with ICF's
+    source-named values as co-riders on the same index target) on the **Slice C
+    contract agenda** — build-or-defer decided there, where the writer's retrieval
+    surface is being reworked and pre-eval sequencing still holds.
 
 **Out:** **cross-schema facet grouping** — `group` stays IOF-only this slice; the design
 property (shared source-named vocabulary) now exists in both tables, but the multi-table
