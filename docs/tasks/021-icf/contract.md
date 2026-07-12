@@ -12,8 +12,13 @@ must be cut on the intended composition (the select-at-standard precedent). Land
 ground truth: the eval slice authors ICF ground truth alongside IOF's, with a
 with/without-ICF composition comparison as an explicit axis.
 
-> **Status:** drafted. Contract approved (before planning): _pending · owner_ ·
-> Contract-stage adversarial review: _pending (after owner approval)_ ·
+> **Status:** approved. Contract approved (before planning): **2026-07-12 · owner**
+> (all eight gate decisions settled — § Decisions; shaped through owner review:
+> unified query tool, research-grounded field set, IOF setting rider, shared
+> vocabulary defined once, kind-spanning membership bridge; design research recorded
+> in [design-research.md](design-research.md)) ·
+> Contract-stage adversarial review: _in progress (post-approval, per the design
+> skill)_ ·
 > Plan approved (before implementation): _pending_ · ADR: _expected (second finding
 > schema + composition shape)_.
 
@@ -267,8 +272,10 @@ entry becomes built; components §7/§8 narrowed) + deferred.md discharge/narrow
    annotation resolve-via-row pattern); **pattern claims** over ICF records (counts by
    `context_type` / intervention) validate deterministically against the referenced
    extraction — the claim-type ladder in components §9 gains its implementation-shaped
-   rung. **Theme claims over ICF stay unavailable** — facet grouping is out of scope
-   (below); until then implementation *themes* remain landscape-grade. The tool-shape
+   rung. **Theme claims over kind-spanning groups become available at their existing
+   grade** (softest, interpretive, base-labelled — the membership validator is
+   kind-agnostic; item 12's bridge is what makes the membership real); ICF-specific
+   *facets* (grouping BY barrier/mechanism) stay at Slice C. The tool-shape
    change touches the writer's prompt surface (tool description + any guidance line):
    prompt-bearing, lead-only, version-bumped — ❓ plan decision on whether a synthesise
    prompt guidance line is strictly needed beyond the tool description itself.
@@ -340,12 +347,25 @@ entry becomes built; components §7/§8 narrowed) + deferred.md discharge/narrow
     distinguish via `field_coverage` key-absence (the 020 old-row pattern; no
     backfill, existing rows stay valid). **Nothing else rides this bump** — any
     temptation to add further IOF fields is a stop condition.
+12. **Kind-spanning group membership — the minimal bridge (gate decision 8, owner
+    2026-07-12):** `group` keeps its current shape entirely — single facet per run,
+    current grain, current clustering, no new facets — but its loader reads **both
+    finding tables via the shared reference columns** (the shared-vocabulary
+    definition's first payoff) and `FindingFacetView` tolerates kind-specific fields
+    (`effect_direction` nullable, a kind tag carried). A facet group's members then
+    span kinds — the cross-schema linkage design property made real — which is what
+    makes item 8's envelope carriage TRUE on grouped runs: section `member_findings`
+    are group members, and without this bridge ICF findings would never reach the
+    envelope on exactly the deep grouped runs that matter (the hole this item
+    closes). Slice C's multi-facet redesign inherits kind-spanning membership as a
+    requirement, and reworks fan-out/grain around it — the membership principle
+    (members join by shared reference, regardless of kind) survives that rework.
 
-**Out:** **cross-schema facet grouping** — `group` stays IOF-only this slice; the design
-property (shared source-named vocabulary) now exists in both tables, but the multi-table
-facet read lands with Slice C's facet rework (`FindingFacetView.effect_direction` has no
-ICF analogue — the C multi-facet redesign is the right place to solve that shape, not a
-bolt-on here) · implementation-shaped **theme** claims (follow facet grouping) ·
+**Out:** **facet-machinery rework beyond item 12's membership bridge** — multi-facet
+fan-out, facet-at-group-row grain, per-facet residuals/CAP, and ICF-specific facets
+(grouping BY barrier/mechanism/condition) all land with Slice C's adjudicated facet
+redesign; 021 changes group's *membership reach* (both kinds via shared references),
+never its facet shape ·
 hybrid-indexing any ICF dimension (the dimension-promotion gate is observed behaviour,
 not schema enthusiasm) · ICF ground truth + extraction-quality evals (eval slice — this
 slice is honestly eval-blind) · downstream capability consumers (Options/Impact/
@@ -449,7 +469,10 @@ schemas) · budget spent.
   shape + flag-not-drop pinned · unified `query_findings`: kind-segregated typed return
   (never one homogeneous list) · kind-specific filters fail closed on a mismatched kind
   · honest per-kind availability ("not extracted in this run" when the ICF profile
-  didn't fire; tool absent only when no extraction is referenced at all) · envelope
+  didn't fire; tool absent only when no extraction is referenced at all) · **membership
+  bridge**: group loader spans both kinds via shared references; facet view tolerates
+  null `effect_direction` + carries the kind tag; a grouped run's section
+  `member_findings` include ICF members (envelope carriage on grouped runs) · envelope
   carriage + annotation
   resolve-via-row for ICF finding ids · pattern-claim validator counts ICF records
   correctly · stub backend round-trip.
@@ -484,24 +507,28 @@ facet grouping or eval territory.
 
 ## Decisions for the owner at this gate
 
-1. **`context_type` vocabulary** — the seven proposed values (mechanism · barrier ·
+**All eight settled — owner, 2026-07-12** (1–5 approved as proposed at the final
+review; 6–8 settled during contract review, recorded below).
+
+1. **`context_type` vocabulary — SETTLED: in as proposed** — the seven values (mechanism · barrier ·
    enabler · implementation_condition · delivery_process · adaptation · fidelity;
    the last two added at the research review — FRAME and Carroll/TIDieR make them
    first-class, and folding them into delivery_process would lose the queryability
    the future consumers want). This is the schema's load-bearing closed vocabulary;
    ground truth and evals will be authored against it.
-2. **CFIR profile fields + level** — `resource_requirements` + `workforce_requirements`
-   in v1 (recommended: in — framework-backed: EtD resources, Green Book benchmarks;
-   transferability/VfM are their eventual readers), plus the `level` enum
-   (system·organisation·provider·recipient — CFIR coding practice; recommended: in);
-   or fold the texts into `claim` for a lighter v1. `complexity` dropped either way.
-3. **`claim_basis`** — three-way studied · author_assertion · cited_theory (· null),
-   per V2's forecast EvidenceBasis and realist practice (recommended: in — the
+2. **CFIR profile fields + level — SETTLED: in** — `resource_requirements` +
+   `workforce_requirements` in v1 (framework-backed: EtD resources, Green Book
+   benchmarks; transferability/VfM are their eventual readers), plus the `level` enum
+   (system·organisation·provider·recipient — CFIR coding practice). `complexity`
+   dropped.
+3. **`claim_basis` — SETTLED: in** — three-way studied · author_assertion ·
+   cited_theory (· null), per V2's forecast EvidenceBasis and realist practice (the
    effect_basis precedent; implementation material is where author commentary
    dominates, and the eval slice will want the axis).
-4. **Composition shape** — second profile inside the extract component, plan-visible
-   `profiles` directive, default both-at-deep (recommended as written).
-5. **ICF vetter** — in scope with the proposed flag classes (recommended: in).
+4. **Composition shape — SETTLED: as written** — second profile inside the extract
+   component, plan-visible `profiles` directive, default both-at-deep, IOF-only
+   expressible.
+5. **ICF vetter — SETTLED: in** with the proposed flag classes.
 6. **Read surface — SETTLED (owner, 2026-07-12): one unified `query_findings`** serving
    both schemas in a single call (kind-segregated typed return, kind filters fail-closed,
    honest per-kind availability). Rationale: the dominant query is "effects AND context
@@ -515,3 +542,7 @@ facet grouping or eval territory.
    and `claim_level` (study·pooled) onto ICF, and the shared reference vocabulary
    defined once with a cross-schema drift guard (storage stays parallel tables; the
    UNION read view rides Slice C with its first reader).
+8. **Kind-spanning group membership — SETTLED (owner, 2026-07-12): in** (item 12; the
+   minimal bridge — group's membership reach spans both kinds via shared references,
+   its facet shape untouched; closes the envelope-carriage hole on grouped runs;
+   Slice C inherits kind-spanning membership as a requirement of its facet redesign).

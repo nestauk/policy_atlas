@@ -3,8 +3,8 @@
 Core completion criteria. The task is **done only if every box holds** — otherwise it is
 in progress, not done.
 
-1. [ ] Implementation satisfies [contract.md](contract.md), including the six gate
-       decisions as adjudicated by the owner.
+1. [ ] Implementation satisfies [contract.md](contract.md), including the eight gate
+       decisions as adjudicated by the owner (contract § Decisions).
 2. [ ] `make verify` passes; declared manual/eval checks pass (replay probe set + the
        scoped live extract-both-profiles → synthesise check).
 3. [ ] No approval-gated change snuck in unapproved — schema, auth/tenancy, egress, deps,
