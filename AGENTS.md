@@ -22,39 +22,35 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `018-dress-rehearsal`.
+Implementation — task `019-folding-pass` (contract + plan APPROVED
+2026-07-12, all five gate decisions decided — build per
+`docs/tasks/019-folding-pass/plan.md`).
 
-Tasks `001-walking-skeleton` through `017-orchestrator` are complete
-(merged) — the EB chain runs end-to-end live behind the thin v1
-orchestrator: intent → planner conversation → depth-graded plan →
-spine-by-construction composition → serial EB capability-runner with
-steering. The active slice is the **fifth of the live-demo path**
-(014 → 015 → 016 → 017 → **018 dress-rehearsal** → eval slice) and
-the repo's **first eval-type slice**: prompt-bearing iteration judged
-qualitatively on outputs, not a single code build — the contract's
-§ How this slice runs records where task-cycle conventions are
-deliberately adapted. 018 lands: (A) code riders — model refresh to
-gpt-5.4-mini (+ a provider-neutral reasoning-effort knob;
-classify @ xhigh), telemetry sweep (Langfuse sessions, usage-return,
-durable per-component wall-clock + counts), standard-depth regrade
-(select/extract/group become deep-only; bands re-measured),
-planner-history fix (native message arrays, provider-neutral —
-Bedrock is infra-ready and queued post-eval), OpenAlex country
-filter, and the direction-vocabulary rename
-positive/negative → increase/decrease (the one approved schema
-migration); (B) the **synthesis output-shape v2** (ADR due,
-supersedes 013's claims-are-the-prose emission): authored prose
-answering the intent with typed claims anchored as char-offset span
-annotations *into* the prose, every grounding invariant preserved,
-plus the grounded **conclusion-block front door** and widened
-judge/writer envelopes; (C) a **refine-replay loop** (baseline
-capture → per-surface replay on recorded projects → before/after
-evidence; anti-overfit pins via the v2 question taxonomy) ending in
-a live **dress rehearsal** on a Nesta-mission question rendered on
-the updated `demo-live-run` surface (throwaway — the frontend
-scaffold gate stays untouched). Build per
-`docs/tasks/018-dress-rehearsal/contract.md`; stay within its scope
-and stop conditions. Bedrock migration, the screen-stage rename,
-RAG-quick-run findings, direct plan editing and all other seams
-remain deferred (`docs/deferred.md`).
+Tasks `001-walking-skeleton` through `018-dress-rehearsal` are
+complete (merged) — the EB chain runs end-to-end live behind the thin
+v1 orchestrator with the prose-first synthesis output shape v2
+(ADR 0015), refreshed models, and the refine-replay loop's pinned
+prompt surfaces (`planner_v2`, `extract_iof_v5` + finding vetter,
+`synthesise_section_v5`, `synthesise_sections_v2`). Two 018 remainder
+steps run in parallel on their own lanes, outside 019's scope:
+**C4 demo surface** (codex lane, throwaway `demo-live-run` branch —
+never merges) and **D1/D2** (measured-band re-seed + live rehearsal,
+owner-scheduled).
+
+`019-folding-pass` is **pre-eval Slice A** of the owner-adjudicated
+sequencing (2026-07-12; criterion: schema/vocabulary/composition
+changes land BEFORE evals, prompt/constant tuning after, with eval
+cover): search-response caching (cache-before-throttle), embed-pass
+429/batch robustness, fail-closed country-filter allowlists +
+deterministic country-group expansion (planner capability-line half
+is lead-only, replay-evidenced), Langfuse thread-context propagation,
+coverage-record stop/attribution grain (gated one-line CHECK
+migration), `_discover_themes` rejection-detail persistence,
+`bind_contextvars`/`exc_info` + `pytest-socket` riders, and the gated
+`is_retracted`-at-screening eligibility decision. Slices B (extract
+schema bump) and C (synthesis multi-facet + cost/surface) follow,
+then the eval slice with cost as a first-class axis. Build per
+`docs/tasks/019-folding-pass/contract.md`; stay within its scope and
+stop conditions. Bedrock migration, retrieval-boost grammar v2 and
+all other seams remain deferred (`docs/deferred.md`).
 
