@@ -26,9 +26,11 @@ Slice-specific:
         ICF extracts fresh alongside an IOF memo hit on the same document; every
         output-affecting ICF constant (profile, schema, prompt, model, rules, verifier,
         window knobs, vetter sub-block) is in the fingerprint.
-11. [ ] **Related-but-distinct held everywhere**: no mixed-schema record, tool return,
-        or claim; `query_findings` untouched; `query_context_findings` present only
-        with an ICF-bearing extraction referenced.
+11. [ ] **Related-but-distinct held everywhere**: unified `query_findings` returns
+        kind-segregated typed sections (never one homogeneous list); no record,
+        envelope entry or claim blends schemas; kind-specific filters fail closed;
+        honest per-kind availability ("not extracted in this run", never a silent
+        absence).
 12. [ ] **Trust machinery parity**: ≥1 verified verbatim anchor per record (`qv_v1`);
         full `field_coverage` mapping (a null is never ambiguous); grain gate enforced;
         flag-not-drop through the vetter; honest absence on the effects-only probe.

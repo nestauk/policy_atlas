@@ -162,22 +162,37 @@ discharge/narrowing.
    eval slice measure whether one is needed (the prompt's exclusion guidance still
    binds). Recommendation: in — the recommendation/finding line is ICF's single
    biggest quality risk and it is exactly what vetters are for.
-8. **Synthesis read surface — the first-reader payoff (🛑 gate decision 6):** a
-   **separate writer tool `query_context_findings`** (present only when an extraction
-   with the ICF profile is referenced), NOT an extension of `query_findings` — the
-   record shapes share no effect fields, and related-but-distinct at the tool boundary
-   is what keeps a barrier from blending into an effect claim. Carriage: ICF records
-   enter the writer envelope alongside IOF findings (same terse, always-present-nullable
-   idiom); finding claims may cite ICF finding ids resolved to extract-verified anchors
-   (the model never authors these quotes — same rule, same annotation resolve-via-row
-   pattern); **pattern claims** over ICF records (counts by `context_type` /
-   intervention) validate deterministically against the referenced extraction — the
-   claim-type ladder in components §9 gains its implementation-shaped rung.
-   **Theme claims over ICF stay unavailable** — facet grouping is out of scope (below);
-   until then implementation *themes* remain landscape-grade. Prompt-side guidance for
-   when the writer reaches for context findings is part of the synthesise prompt only
-   if a line is strictly needed (any change bumps its version; lead-only) — ❓ plan
-   decision, default: no synthesise prompt change this slice.
+8. **Synthesis read surface — the first-reader payoff (gate decision 6 SETTLED —
+   owner, 2026-07-12): ONE unified writer tool.** `query_findings` extends to serve
+   both schemas in a single call — the dominant writer query is "effects AND
+   implementation context of intervention X", and one call instead of two saves a
+   whole writer turn each time (writer turns = ~74% of the $15-run anatomy; each turn
+   resends ~93k input tokens — the single-call shape is a direct cost lever, the
+   Slice C direction). Design requirements, non-negotiable:
+   - **Kind-segregated typed return**: `iof_findings` and `icf_findings` as separate
+     typed sections — never interleaved into one homogeneous list, no record ever
+     blends kinds (related-but-distinct moves from the tool boundary to the return
+     shape, where the record-level fences — typed records, deterministic validators,
+     id-resolved anchors — were always the real guarantee).
+   - **Kind filter + fail-closed params**: a `kinds` parameter (default: all kinds
+     present); kind-specific filters (`effect_direction` IOF-only, `context_type`
+     ICF-only) rejected loudly on a mismatched kind/filter combo.
+   - **Honest per-kind availability**: in a run whose extraction lacks the ICF
+     profile, the tool answers "context findings: not extracted in this run" — a
+     visible coverage fact, not a silently absent tool (and the with/without-ICF eval
+     arms differ by less surface). Tool present, as today, only when an extraction is
+     referenced at all.
+   Carriage: ICF records enter the writer envelope alongside IOF findings (same terse,
+   always-present-nullable idiom); finding claims may cite ICF finding ids resolved to
+   extract-verified anchors (the model never authors these quotes — same rule, same
+   annotation resolve-via-row pattern); **pattern claims** over ICF records (counts by
+   `context_type` / intervention) validate deterministically against the referenced
+   extraction — the claim-type ladder in components §9 gains its implementation-shaped
+   rung. **Theme claims over ICF stay unavailable** — facet grouping is out of scope
+   (below); until then implementation *themes* remain landscape-grade. The tool-shape
+   change touches the writer's prompt surface (tool description + any guidance line):
+   prompt-bearing, lead-only, version-bumped — ❓ plan decision on whether a synthesise
+   prompt guidance line is strictly needed beyond the tool description itself.
 9. **Stub/fixture surface:** stub extraction backend sentinel payloads for the ICF
    profile, shared test record factories, replay fixtures (openly-licensed real
    documents per the sanitized-fixtures policy).
@@ -187,10 +202,10 @@ discharge/narrowing.
     narrowed "ICF facets await facet machinery" pointer, §9's claim-type ladder gains
     the ICF pattern/finding rungs; deferred.md ICF entry discharged, replaced by the
     narrowed seams (ICF facet grouping · dimension-promotion for ICF fields ·
-    downstream capability consumers · **per-schema writer tools past ~3 evidence
-    kinds** — separate tools are right at two or three; if the schema count ever grows
-    past that, a schema-typed query interface becomes worth revisiting — a recorded
-    seam, not a 021 problem).
+    downstream capability consumers). The formerly-mooted per-schema-writer-tools seam
+    is **pre-discharged by gate decision 6**: the unified kind-typed `query_findings`
+    IS the schema-typed query interface — a future third schema adds a kind section +
+    filters (content work), not a new tool.
 
 **Out:** **cross-schema facet grouping** — `group` stays IOF-only this slice; the design
 property (shared source-named vocabulary) now exists in both tables, but the multi-table
@@ -264,8 +279,9 @@ validating). No composed full-chain e2e.
 Halt and escalate when: the schema gate is hit without recorded approval · the field-set
 ❓s resolve toward anything beyond the proposed record shape (scope growth into facet
 grouping, canonicalisation or eval territory) · the profile parameterisation cannot be
-done without touching IOF's fingerprint string · any pressure to extend `query_findings`
-into a mixed-schema record · budget spent.
+done without touching IOF's fingerprint string · any pressure to blend kinds inside the
+unified tool's return (one homogeneous findings list, or any single record mixing
+schemas) · budget spent.
 
 ## Acceptance checks
 
@@ -278,8 +294,11 @@ into a mixed-schema record · budget spent.
   directive compiles fail-closed (unknown profile errors; IOF-only expressible; default
   both at deep) · `render_field_docs` for ICF wire models · structural fencing check
   (no inline envelope interpolation) · few-shot pre-flight binding · vetter payload
-  shape + flag-not-drop pinned · `query_context_findings` present only with an
-  ICF-bearing extraction referenced; absent otherwise · envelope carriage + annotation
+  shape + flag-not-drop pinned · unified `query_findings`: kind-segregated typed return
+  (never one homogeneous list) · kind-specific filters fail closed on a mismatched kind
+  · honest per-kind availability ("not extracted in this run" when the ICF profile
+  didn't fire; tool absent only when no extraction is referenced at all) · envelope
+  carriage + annotation
   resolve-via-row for ICF finding ids · pattern-claim validator counts ICF records
   correctly · stub backend round-trip.
 - Replay evidence (AI-behaviour, honestly eval-blind): the probe set above summarised in
@@ -296,16 +315,17 @@ deferred.md + spec flow-back diff summary, known gaps.
 
 ## Risk tier & review focus
 
-**Tier 3** — schema hard gate + two new prompt-bearing surfaces + a new writer-facing
-tool. Contract- and plan-stage adversarial reviews per the design skill; review stack
-per [review-stack economy]: medium `/code-review`, one security lane (fencing
-completeness on the new prompt; migration correctness; the new tool's read scope stays
-project-guarded), contract verifier fresh-context, per-angle diff scoping.
+**Tier 3** — schema hard gate + two new prompt-bearing surfaces + a writer-facing tool
+extension. Contract- and plan-stage adversarial reviews per the design skill; review
+stack per [review-stack economy]: medium `/code-review`, one security lane (fencing
+completeness on the new prompt; migration correctness; the extended tool's read scope
+stays project-guarded), contract verifier fresh-context, per-angle diff scoping.
 
 Focus: IOF non-invalidation (the one catastrophic failure) · the recommendation/finding
 exclusion line · fingerprint completeness for the new domain (every output-affecting
-constant versioned) · related-but-distinct held at every surface (no mixed-schema
-records, tools or claims) · no scope creep into facet grouping or eval territory.
+constant versioned) · related-but-distinct held at every surface (kind-segregated tool
+returns; no record, envelope entry or claim blending schemas) · no scope creep into
+facet grouping or eval territory.
 
 ## Decisions for the owner at this gate
 
@@ -322,5 +342,10 @@ records, tools or claims) · no scope creep into facet grouping or eval territor
 4. **Composition shape** — second profile inside the extract component, plan-visible
    `profiles` directive, default both-at-deep (recommended as written).
 5. **ICF vetter** — in scope with the proposed flag classes (recommended: in).
-6. **Read surface** — separate `query_context_findings` tool, `query_findings`
-   untouched (recommended as written).
+6. **Read surface — SETTLED (owner, 2026-07-12): one unified `query_findings`** serving
+   both schemas in a single call (kind-segregated typed return, kind filters fail-closed,
+   honest per-kind availability). Rationale: the dominant query is "effects AND context
+   of intervention X"; one call saves a ~93k-input writer turn each time (the Slice C
+   cost direction); the record-level fences, not the tool boundary, are what hold
+   related-but-distinct. Supersedes the drafted two-tool proposal; pre-discharges the
+   N-schema writer-tool seam.
