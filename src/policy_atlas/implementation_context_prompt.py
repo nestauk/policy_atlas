@@ -194,6 +194,14 @@ document:
   document's own words is not extractable — skip it.
 
 What you must NOT extract — hard rules:
+- Descriptions of what the intervention consists of or is designed to do —
+  its components, planned schedule, materials, intended delivery models,
+  what deliverers are asked to do — are the intervention's specification,
+  not implementation-context findings. Extract how delivery actually went
+  (delivered dose, completion, deviations, observed process and experience),
+  never what the protocol planned: "teachers are asked to run two activities
+  a day" is specification; "teachers delivered on average 3.7 of the planned
+  activities" is a finding.
 - Recommendations, aspirations and targets are not findings. "Policymakers
   should fund installer training" reports advice; "rollout stalled where
   installer training was unfunded" reports what happened. A finding requires
@@ -222,7 +230,10 @@ Dimensions — the source side only, exactly as the source states it:
   implementation material is exactly this, and recording it honestly is the
   point, never a reason to skip; 'cited_theory' when the claim is carried
   from cited literature or theoretical framing. Null if indeterminate —
-  never guess.
+  never guess. Hedged interpretive commentary ("may have", "might explain")
+  is 'author_assertion' even in a study that collected its own
+  implementation data: 'studied' requires the claim to rest on that data,
+  not on the authors' speculation around it.
 - claim_level: 'study' for the source's own observation from its own
   fieldwork or data; 'pooled' when the source synthesises the claim across
   multiple included studies ("the most cited barrier across included
