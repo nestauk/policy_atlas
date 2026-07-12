@@ -134,7 +134,11 @@ flow-back (the task-011 pattern).
 **Out:** extraction-quality evals and ground truth themselves (next after Slice C) ·
 Slice C surfaces (multi-facet grouping, cost/surface work) · multi-pass recall,
 retrieval-augmented extraction, per-intervention decomposition (eval-gated, unchanged) ·
-`implementation_context_finding` · geography canonicalisation/ISO mapping and any
+`implementation_context_finding` — **promoted to its own pre-eval slice 021 (owner,
+2026-07-12)**: EB synthesis is its first reader (the deterministic validator for
+implementation-shaped pattern claims); posture pinned — a separate extraction
+call/profile with its own fingerprint domain, so nothing in 020 couples to it and its
+later arrival never invalidates 020's memo · geography canonicalisation/ISO mapping and any
 selection-diversity or characterise consumer of it · annotation *widget* rendering
 (web-app slice; this slice makes the payload carry the fields) · vetter behaviour changes
 beyond the optional guidance line · the per-run window/call ceiling (owner call,

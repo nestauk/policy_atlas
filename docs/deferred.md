@@ -137,11 +137,21 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   level; thin landing-page text reported `ok`) are structurally closed (reason-coded
   `full_text_status`/`full_text_error`, thin-text guard). Snapshot identity resolved as a
   **new immutable `full_text` snapshot linked at the project-source link** (ADR 0003).
-- **`implementation_context_finding`** — the second reusable finding schema (mechanisms, barriers,
-  implementation conditions); cross-schema linkage is reference-mediated via `group`. Extract-side
-  note (task 011): V2's CFIR implementation-profile field definitions (cost/staffing/complexity +
-  the inner-setting rule) are recorded design input for this schema; no field of it entered
-  `intervention_outcome_finding`.
+- **`implementation_context_finding` — PROMOTED to pre-eval slice 021 (owner, 2026-07-12,
+  020 contract review)** — the second reusable finding schema (mechanisms, barriers,
+  implementation conditions); cross-schema linkage is reference-mediated via `group`.
+  Re-adjudicated from "other capabilities' reader" to a pre-eval slice: **EB synthesis is
+  its first reader** — ICF records are the deterministic validator that makes
+  implementation-shaped theme/pattern claims possible (content-scan pattern claims are
+  prohibited in v1 precisely for lack of one), full-read coverage + honest absence beat
+  top-k RAG for diffuse implementation material, and the eval slice's synthesis baselines
+  should be cut on the intended composition (the select-at-standard precedent). Posture
+  pinned at the 020 gate: separate extraction call/profile, own fingerprint domain —
+  never invalidates IOF memos. Eval slice authors ICF ground truth alongside IOF's, with
+  a with/without-ICF composition comparison as an explicit axis. Extract-side note
+  (task 011): V2's CFIR implementation-profile field definitions (cost/staffing/complexity
+  + the inner-setting rule) are recorded design input for this schema; no field of it
+  entered `intervention_outcome_finding`.
 - **Saturation-based search stopping** — `saturated` is still not a
   `search_coverage_record` stop value (kept out by migration 15's widening, task 015):
   within-run discovery-RATE collapse now stops honestly as `short_circuit`, but

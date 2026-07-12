@@ -43,8 +43,10 @@ cover): the one IOF extraction-schema bump before ground truth —
 fencing (011 security seam), `study_geography` source-named field,
 `extract_iof_v6` (lead-only, replay-evidenced), field-rules v2,
 fingerprint bumps, writer-envelope + annotation carriage. No
-backfill: existing findings stay valid (data-model rule). Slice C
-(synthesis multi-facet + cost/surface) follows, then the eval slice
-with cost as a first-class axis. Bedrock migration, retrieval-boost
+backfill: existing findings stay valid (data-model rule). Then slice
+021 — `implementation_context_finding` promoted pre-eval (owner,
+2026-07-12; EB synthesis first reader, separate profile/fingerprint
+domain) — then Slice C (synthesis multi-facet + cost/surface), then
+the eval slice with cost as a first-class axis. Bedrock migration, retrieval-boost
 grammar v2 and all other seams remain deferred (`docs/deferred.md`).
 
