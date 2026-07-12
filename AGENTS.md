@@ -22,8 +22,10 @@
 - Touch only what the task requires.
 
 # Current phase
-Design — task `020-extract-v2` (contract DRAFTED, awaiting owner
-approval — see `docs/tasks/020-extract-v2/contract.md`).
+Implementation — task `020-extract-v2` (contract + plan APPROVED
+2026-07-12, all four gate decisions decided, ADR 0016 Accepted —
+build per `docs/tasks/020-extract-v2/plan.md` in a fresh
+conversation, task-cycle-build).
 
 Tasks `001-walking-skeleton` through `019-folding-pass` are complete
 (merged) — the EB chain runs end-to-end live behind the thin v1

@@ -12,8 +12,9 @@ change re-extracts the corpus fresh (one bump = one memo invalidation, not three
 > Contract-stage adversarial review: codex session 019f565f (2026-07-12), 8 findings all
 > adjudicated in — semantics sharpenings, no material scope change (claim-key and
 > annotation-carriage decisions flagged below for the plan 🛑) ·
-> Plan approved (before implementation): _date · owner_ · ADR: expected (effect-basis
-> dimension decision — see step 4).
+> Plan approved (before implementation): 2026-07-12 · owner (all four gate decisions
+> decided as recommended — plan.md § Gate decisions) ·
+> ADR: [0016](../../adr/0016-iof-schema-v2-effect-basis.md) (Accepted 2026-07-12).
 
 ## Goal
 

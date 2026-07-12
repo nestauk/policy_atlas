@@ -1,8 +1,12 @@
 # Plan: 020-extract-v2
 
-> **Status:** DRAFTED — plan-stage adversarial review adjudicated (codex, 2026-07-12,
-> 9 findings all folded; the vetter recommendation flipped to a guidance line), awaiting
-> owner approval with four gate decisions to adjudicate (§ Gate decisions).
+> **Status:** APPROVED — 2026-07-12 · owner, all four gate decisions decided as
+> recommended (§ Gate decisions): 0 schema gate approved as scoped · 1 no PROFILE_ID
+> bump (family-id semantics documented + provenance test) · 2 vetter payload unchanged
+> + guidance line → extract_finding_vetter_v3, replay-evidenced · 3 evidence-type
+> CHECK approved (null legal on pre-prompt failure rows).
+> Plan-stage adversarial review adjudicated (codex, 2026-07-12, 9 findings all folded;
+> the vetter recommendation flipped to a guidance line). ADR: 0016.
 > Contract: [contract.md](contract.md) (approved 2026-07-12, adversarial-reviewed,
 > owner checks folded). Rubric: [rubric.md](rubric.md).
 > Executor marks default to subagents (orchestrator-delegation convention); lead marks
