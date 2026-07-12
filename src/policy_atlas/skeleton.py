@@ -42,6 +42,7 @@ from policy_atlas.facet_grouping import (
     StubFacetGroupingBackend,
 )
 from policy_atlas.fetch_live import LiveDocumentFetcher
+from policy_atlas.finding_vetter import FindingVetterBackend
 from policy_atlas.fixtures import get_source
 from policy_atlas.grounding_judge import (
     GroundingJudgeBackend,
@@ -141,6 +142,7 @@ def _run_component(
     ranking_backend: RankingBackend | None = None,
     selection_run_id: uuid.UUID | None = None,
     extraction_backend: ExtractionBackend | None = None,
+    finding_vetter_backend: FindingVetterBackend | None = None,
     extraction_run_id: uuid.UUID | None = None,
     facet_grouping_backend: FacetGroupingBackend | None = None,
     grouping_run_id: uuid.UUID | None = None,
@@ -172,6 +174,8 @@ def _run_component(
             other components.
         extraction_backend: Extraction backend for ``extract``; unused by
             other components.
+        finding_vetter_backend: Post-extract finding vetter for ``extract``; unused
+            by other components. ``None`` (the default) turns judging off.
         extraction_run_id: Explicit extraction run for ``group``; unused by
             other components.
         facet_grouping_backend: Facet grouping backend for ``group``; unused
@@ -253,6 +257,7 @@ def _run_component(
             classification_backend=classification_backend,
             ranking_backend=ranking_backend,
             extraction_backend=extraction_backend,
+            finding_vetter_backend=finding_vetter_backend,
             facet_grouping_backend=facet_grouping_backend,
             synthesis_backend=synthesis_backend,
             grounding_judge_backend=grounding_judge_backend,

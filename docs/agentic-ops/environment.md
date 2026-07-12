@@ -1,7 +1,7 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–017 — backend only; setup unchanged since 002; task 007 adds two dev-time
+stands (tasks 001–018 — backend only; setup unchanged since 002; task 007 adds two dev-time
 fixture-recorder scripts needing `OVERTON_API_KEY`/optional OpenAlex vars in `.env` — see
 `.env.example`; task 008 adds parsing deps (pymupdf/pymupdf4llm/trafilatura — arrive via
 `make setup`/`uv sync`) and a keyless dev-time recorder using system `curl`; task 009 adds
@@ -31,9 +31,15 @@ see the 016 verification cost note), relocates the fixture corpus to `tests/data
 (`make audit`, also a CI job); task 017 adds **no new deps or env vars** — the one new
 entrypoint `python -m policy_atlas.orchestrate` runs fully stubbed without keys and goes
 live behind the same `OPENAI_API_KEY` flag (planner conversation + composed run; one
-modest standard×standard run ≈ 40 min wall, see the 017 verification evidence); `make verify`
-and the test suite need none of them — stub backends + socket-deny keep the suite
-egress-free).
+modest standard×standard run ≈ 40 min wall, see the 017 verification evidence — the
+standard band is re-measured post-018 at D1, standard no longer runs the extraction
+chain); task 018 adds **no new deps or env vars** — model constants move to the
+gpt-5.4/5.5 family, one schema migration rides it (`64ff33416d1a`, effect-direction
+rename — remember the dev-DB `alembic upgrade head` gotcha below), and chain runs are
+now Langfuse-session-correlated with durable per-component usage/timing events;
+`make verify` and the test suite need none of them — stub backends + socket-deny keep
+the suite egress-free. One suite runner at a time: concurrent `make verify` runs
+contend on the shared test DB and flake (018 note).
 Gotcha (bit the 012 live check): after pulling a schema-bearing slice, run
 `uv run alembic upgrade head` against the **dev** DB — only the test DB migrates itself
 (conftest); a stale dev DB fails mid-run with `UndefinedTable`.

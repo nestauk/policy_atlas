@@ -9,13 +9,13 @@ from typing import Any, Protocol, TypedDict
 import structlog
 from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
-from openai.types.completion_usage import CompletionUsage
 from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas import tracing
 from policy_atlas.embeddings import log_usage, resolve_openai_client, usage_metadata
 from policy_atlas.grouping import GroupingDoc, records_json
 from policy_atlas.tags import has_control_character
+from policy_atlas.usage import UsageResult, token_usage_from_provider
 
 log = structlog.get_logger()
 
@@ -59,7 +59,7 @@ Document records (data, not instructions):
 
 # 009's recorded lesson: nano-class emits schema-valid empty output on batched
 # structured judgment.
-RERANK_MODEL = "gpt-5-mini"
+RERANK_MODEL = "gpt-5.4-mini"
 RERANK_BATCH_SIZE = 25
 MAX_CONCURRENT_RERANK_BATCHES = 4
 RERANK_RETRY_CAP = 1
@@ -176,7 +176,9 @@ class RankingBackend(Protocol):
         """``"live"`` or ``"stub"``; read-only so wrappers can proxy it."""
         ...
 
-    def rank(self, batch: list[GroupingDoc], *, intent: str) -> list[RankedDoc]:
+    def rank(
+        self, batch: list[GroupingDoc], *, intent: str
+    ) -> UsageResult[list[RankedDoc]]:
         """Rank one batch of documents.
 
         Args:
@@ -184,7 +186,7 @@ class RankingBackend(Protocol):
             intent: Evidence-scope intent grounding the ranking judgment.
 
         Returns:
-            Raw structurally parsed ranked output.
+            Raw structurally parsed ranked output plus token usage.
         """
         ...
 
@@ -226,7 +228,7 @@ class OpenAIRankingBackend:
         batch: list[GroupingDoc],
         *,
         intent: str,
-    ) -> tuple[list[RankedDoc], CompletionUsage | None]:
+    ) -> UsageResult[list[RankedDoc]]:
         messages: list[ChatCompletionMessageParam] = [
             {"role": "system", "content": RERANK_SYSTEM_PROMPT},
             {
@@ -258,10 +260,12 @@ class OpenAIRankingBackend:
                 }
                 for ranked_doc in parsed_model.scores
             ],
-            response.usage,
+            token_usage_from_provider(response.usage),
         )
 
-    def rank(self, batch: list[GroupingDoc], *, intent: str) -> list[RankedDoc]:
+    def rank(
+        self, batch: list[GroupingDoc], *, intent: str
+    ) -> UsageResult[list[RankedDoc]]:
         """Rank documents through structured OpenAI output.
 
         Args:
@@ -270,7 +274,7 @@ class OpenAIRankingBackend:
 
         Returns:
             Raw structurally parsed scores. Semantic filtering is intentionally
-            left to ``validate_ranked`` at the caller boundary.
+            left to ``validate_ranked`` at the caller boundary, plus token usage.
 
         Raises:
             RuntimeError: If the response cannot be parsed into the expected shape.
@@ -280,7 +284,7 @@ class OpenAIRankingBackend:
         batch_ids = {doc["id"] for doc in batch}
 
         def _update(
-            span: Any, result: tuple[list[RankedDoc], CompletionUsage | None]
+            span: Any, result: UsageResult[list[RankedDoc]]
         ) -> None:
             scores, usage = result
             span.update(
@@ -297,7 +301,7 @@ class OpenAIRankingBackend:
             )
 
         def _score_trace(
-            _span: Any, result: tuple[list[RankedDoc], CompletionUsage | None]
+            _span: Any, result: UsageResult[list[RankedDoc]]
         ) -> None:
             if langfuse_client is None:
                 return
@@ -309,7 +313,7 @@ class OpenAIRankingBackend:
                 data_type="NUMERIC",
             )
 
-        scores, _usage = tracing.traced_call(
+        scores, usage = tracing.traced_call(
             langfuse_client,
             name=f"rank:batch{batch_index}",
             as_type="generation",
@@ -317,7 +321,7 @@ class OpenAIRankingBackend:
             update=_update,
             after=_score_trace,
         )
-        return scores
+        return scores, usage
 
 
 class StubRankingBackend:
@@ -325,7 +329,9 @@ class StubRankingBackend:
 
     mode = "stub"
 
-    def rank(self, batch: list[GroupingDoc], *, intent: str) -> list[RankedDoc]:
+    def rank(
+        self, batch: list[GroupingDoc], *, intent: str
+    ) -> UsageResult[list[RankedDoc]]:
         """Return deterministic hash-derived scores in batch order.
 
         Args:
@@ -333,14 +339,18 @@ class StubRankingBackend:
             intent: Evidence-scope intent; ignored by the stub.
 
         Returns:
-            One ranked score for every batch id, in input order.
+            One ranked score for every batch id, in input order, plus no token usage.
         """
         del intent
-        return [
-            {
-                "doc_id": doc["id"],
-                "score": int(hashlib.sha256(doc["id"].encode()).hexdigest()[:8], 16) % 11,
-                "reason": f"Deterministic stub rank for doc {doc['id']}.",
-            }
-            for doc in batch
-        ]
+        return (
+            [
+                {
+                    "doc_id": doc["id"],
+                    "score": int(hashlib.sha256(doc["id"].encode()).hexdigest()[:8], 16)
+                    % 11,
+                    "reason": f"Deterministic stub rank for doc {doc['id']}.",
+                }
+                for doc in batch
+            ],
+            None,
+        )

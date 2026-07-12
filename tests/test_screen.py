@@ -41,6 +41,7 @@ from policy_atlas.screen_prompt import (
     ScreenRepWire,
 )
 from policy_atlas.screening_backend import StubScreeningBackend
+from policy_atlas.usage import UsageResult
 from policy_atlas.windowing import greedy_windows
 from tests.helpers import (
     now,
@@ -83,7 +84,7 @@ def test_ssr_columns(conn: Connection) -> None:
 # --- Stub logic (pure Python, no DB) ---
 
 def test_stub_relevant_with_abstract() -> None:
-    result = StubScreeningBackend().screen_envelope(
+    result, usage = StubScreeningBackend().screen_envelope(
         ScreenEnvelopePayload(
             pss_id="pss-1",
             title="Test",
@@ -93,12 +94,13 @@ def test_stub_relevant_with_abstract() -> None:
             metadata={"abstract": "Some abstract text."},
         )
     )
+    assert usage is None
     assert result.decision == "relevant"
     assert result.confidence == 0.9
 
 
 def test_stub_relevant_without_abstract() -> None:
-    result = StubScreeningBackend().screen_envelope(
+    result, usage = StubScreeningBackend().screen_envelope(
         ScreenEnvelopePayload(
             pss_id="pss-1",
             title="Test",
@@ -108,12 +110,13 @@ def test_stub_relevant_without_abstract() -> None:
             metadata={},
         )
     )
+    assert usage is None
     assert result.decision == "relevant"
     assert result.confidence == 0.7
 
 
 def test_stub_not_relevant() -> None:
-    result = StubScreeningBackend().screen_envelope(
+    result, usage = StubScreeningBackend().screen_envelope(
         ScreenEnvelopePayload(
             pss_id="pss-1",
             title="Test",
@@ -123,12 +126,13 @@ def test_stub_not_relevant() -> None:
             metadata={"_stub_not_relevant": True, "abstract": "Some text."},
         )
     )
+    assert usage is None
     assert result.decision == "not_relevant"
     assert result.confidence == 0.95
 
 
 def test_stub_unsure() -> None:
-    result = StubScreeningBackend().screen_envelope(
+    result, usage = StubScreeningBackend().screen_envelope(
         ScreenEnvelopePayload(
             pss_id="pss-1",
             title="Test",
@@ -138,6 +142,7 @@ def test_stub_unsure() -> None:
             metadata={"_stub_unsure": True, "abstract": "Some text."},
         )
     )
+    assert usage is None
     assert result.decision == "unsure"
     assert result.confidence == 0.6
 
@@ -443,12 +448,14 @@ def test_screen_sources_doc_exception_isolated(conn: Connection) -> None:
             payload: ScreenEnvelopePayload,
             *,
             rep_index: int = 0,
-        ) -> ScreenRepWire:
+        ) -> UsageResult[ScreenRepWire]:
             if payload.metadata.get("_boom"):
                 raise RuntimeError("simulated per-doc failure")
             return self._stub.screen_envelope(payload, rep_index=rep_index)
 
-        def screen_fulltext(self, payload: ScreenFullTextPayload) -> ScreenRepWire:
+        def screen_fulltext(
+            self, payload: ScreenFullTextPayload
+        ) -> UsageResult[ScreenRepWire]:
             return self._stub.screen_fulltext(payload)
 
     pid, rid = seed_project_and_run(conn)
@@ -603,6 +610,7 @@ def test_harness_screen_component(conn: Connection) -> None:
         "component", "screened", "relevant", "not_relevant",
         "failed", "title_abstract", "title_only", "unsure_reps",
         "non_unanimous", "rep_failures", "tie_broken", "retries",
+        "usage_totals",
     }
     assert set(payload.keys()) == expected_keys
 
@@ -818,11 +826,13 @@ class _RecordingScreeningBackend:
         payload: ScreenEnvelopePayload,
         *,
         rep_index: int = 0,
-    ) -> ScreenRepWire:
+    ) -> UsageResult[ScreenRepWire]:
         self.envelope_intents.append(payload.intent)
         return self._stub.screen_envelope(payload, rep_index=rep_index)
 
-    def screen_fulltext(self, payload: ScreenFullTextPayload) -> ScreenRepWire:
+    def screen_fulltext(
+        self, payload: ScreenFullTextPayload
+    ) -> UsageResult[ScreenRepWire]:
         self.fulltext_intents.append(payload.intent)
         return self._stub.screen_fulltext(payload)
 

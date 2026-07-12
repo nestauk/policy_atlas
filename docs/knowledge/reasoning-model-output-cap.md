@@ -34,6 +34,13 @@ run as "mostly worked".
   reasoning overhead, not just expected output size.
 - The pin is plan-gate detail — flip it on live evidence without ceremony, but flag the
   deviation (the 011 flip is deviation 2 in verification.md).
+- **Effort level multiplies the hazard, and more effort is NOT better on judgment
+  surfaces** (018 C2): 5.4-mini@xhigh exhausted a 16K cap purely on reasoning
+  (silent-looking per-doc failure on a 2.2K-token document), and uncapped-xhigh
+  produced *worse* classify labels than @high — low-confidence churn, one clear
+  demotion miss, at ~10–30× output volume. Validate effort level and completion cap
+  **together, per surface, with a live A/B** before pinning (a direct-backend A/B
+  driver with no DB writes keeps the pinned substrate uncontaminated).
 
 # Citations
 
@@ -41,3 +48,6 @@ run as "mostly worked".
   run 1; § Diff summary deviation 2)
 - `EXTRACT_MAX_OUTPUT_TOKENS` in `src/policy_atlas/extract_prompt.py`;
   fingerprint component `max_output_tokens` in `src/policy_atlas/extract.py`
+- [018 verification.md § B4](../tasks/018-dress-rehearsal/verification.md)
+  (classify@xhigh FAILED validation; xhigh-uncapped experiment — keep high, on quality);
+  `CLASSIFY_REASONING_EFFORT` in `src/policy_atlas/classify_prompt.py`

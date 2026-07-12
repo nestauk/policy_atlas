@@ -39,6 +39,7 @@ from policy_atlas.schema import (
     source_classification_result,
     source_tag,
 )
+from policy_atlas.usage import UsageResult
 from tests.helpers import (
     now,
     seed_project_and_run,
@@ -74,7 +75,7 @@ class ScriptedClassificationBackend:
         self._scripts = {key: list(entries) for key, entries in scripts.items()}
         self.payloads: list[ClassifyEnvelopePayload] = []
 
-    def classify(self, payload: ClassifyEnvelopePayload) -> ClassifyWire:
+    def classify(self, payload: ClassifyEnvelopePayload) -> UsageResult[ClassifyWire]:
         """Return the next scripted classification entry for ``payload``."""
         key = _script_key(payload.metadata)
         with self._lock:
@@ -87,7 +88,7 @@ class ScriptedClassificationBackend:
             entry = entries.pop(0)
         if isinstance(entry, BaseException):
             raise entry
-        return entry
+        return entry, None
 
 
 def _script_key(metadata: dict[str, Any]) -> str:

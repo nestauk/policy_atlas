@@ -31,6 +31,7 @@ from policy_atlas.embeddings import EmbeddingBackend, StubEmbeddingBackend
 from policy_atlas.extract import ExtractContext, extract_scope
 from policy_atlas.extraction_backend import ExtractionBackend, StubExtractionBackend
 from policy_atlas.facet_grouping import FacetGroupingBackend, StubFacetGroupingBackend
+from policy_atlas.finding_vetter import FindingVetterBackend
 from policy_atlas.grounding import GroundingError, produce_grounded_block
 from policy_atlas.grounding_judge import GroundingJudgeBackend, StubGroundingJudgeBackend
 from policy_atlas.group import GroupContext, group_findings
@@ -74,6 +75,7 @@ class HarnessState(TypedDict):
     theme_grouping_backend: ThemeGroupingBackend
     ranking_backend: RankingBackend | None
     extraction_backend: ExtractionBackend
+    finding_vetter_backend: FindingVetterBackend | None
     facet_grouping_backend: FacetGroupingBackend
     synthesis_backend: SynthesisBackend
     grounding_judge_backend: GroundingJudgeBackend
@@ -264,7 +266,9 @@ def _run_extract(state: HarnessState) -> HarnessState:
         ExtractContext, selection_run_id=config.selection_run_id
     )
     sources_fn = functools.partial(
-        extract_scope, extraction_backend=state["extraction_backend"]
+        extract_scope,
+        extraction_backend=state["extraction_backend"],
+        finding_vetter_backend=state["finding_vetter_backend"],
     )
     return _run_scope_component(state, context_cls, sources_fn)
 
@@ -570,6 +574,7 @@ def run_harness(
     theme_grouping_backend: ThemeGroupingBackend | None = None,
     ranking_backend: RankingBackend | None = None,
     extraction_backend: ExtractionBackend | None = None,
+    finding_vetter_backend: FindingVetterBackend | None = None,
     facet_grouping_backend: FacetGroupingBackend | None = None,
     synthesis_backend: SynthesisBackend | None = None,
     grounding_judge_backend: GroundingJudgeBackend | None = None,
@@ -611,6 +616,11 @@ def run_harness(
         extraction_backend: Extraction backend for the extract component;
             defaults to ``StubExtractionBackend()`` — no default egress, the
             theme grouping backend pattern (approved gated change 2, task 011).
+        finding_vetter_backend: Post-extract finding vetter for the extract component
+            (018 C5). Unlike the other backends this stays ``None`` by default
+            with NO stub substitution — ``None`` means judging is off, so a
+            caller that does not pass one gets byte-identical extract output
+            to the pre-018-C5 pipeline.
         facet_grouping_backend: Facet grouping backend for the group component;
             defaults to ``StubFacetGroupingBackend()`` — no default egress,
             approved gated change 2, task 012.
@@ -680,6 +690,9 @@ def run_harness(
         "extraction_backend": (
             extraction_backend if extraction_backend is not None else StubExtractionBackend()
         ),
+        # No stub substitution (unlike every other backend key): None must
+        # mean judging OFF, so extract_scope's own None default stays reachable.
+        "finding_vetter_backend": finding_vetter_backend,
         "facet_grouping_backend": (
             facet_grouping_backend
             if facet_grouping_backend is not None

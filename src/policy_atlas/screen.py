@@ -33,6 +33,7 @@ from policy_atlas.screen_prompt import (
     ScreenRepWire,
 )
 from policy_atlas.screening_backend import ScreeningBackend, StubScreeningBackend
+from policy_atlas.usage import UsageAccumulator
 from policy_atlas.windowing import greedy_windows
 
 log = structlog.get_logger()
@@ -382,7 +383,7 @@ def _run_stage1_reps(
     docs: list[_Stage1Doc],
     *,
     screening_backend: ScreeningBackend,
-) -> tuple[dict[int, list[_RepOutcome]], int]:
+) -> tuple[dict[int, list[_RepOutcome]], int, dict[str, int]]:
     tasks: list[tuple[int, int]] = [
         (doc_index, rep_index)
         for doc_index in range(len(docs))
@@ -394,9 +395,10 @@ def _run_stage1_reps(
 
     results: dict[tuple[int, int], ScreenRepWire] = {}
     errors: dict[tuple[int, int], Exception] = {}
+    usage_totals = UsageAccumulator()
 
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_STAGE1) as executor:
-        submitted: list[tuple[tuple[int, int], Future[ScreenRepWire]]] = []
+        submitted: list[tuple[tuple[int, int], Future[Any]]] = []
         for key in tasks:
             if not budget.reserve():
                 errors[key] = RuntimeError("call budget exhausted")
@@ -415,7 +417,9 @@ def _run_stage1_reps(
         wait([future for _, future in submitted])
         for key, future in submitted:
             try:
-                results[key] = future.result()
+                rep, usage = future.result()
+                results[key] = rep
+                usage_totals.add(usage)
             except Exception as exc:  # noqa: BLE001 - reduced to type name in events
                 errors[key] = exc
 
@@ -426,9 +430,11 @@ def _run_stage1_reps(
         retry_count += 1
         doc_index, rep_index = key
         try:
-            results[key] = screening_backend.screen_envelope(
+            rep, usage = screening_backend.screen_envelope(
                 docs[doc_index].payload, rep_index=rep_index
             )
+            results[key] = rep
+            usage_totals.add(usage)
         except Exception as exc:  # noqa: BLE001
             errors[key] = exc
         else:
@@ -448,7 +454,7 @@ def _run_stage1_reps(
                 by_doc[doc_index].append(
                     _RepOutcome(error_type=type(errors[key]).__name__)
                 )
-    return by_doc, retry_count
+    return by_doc, retry_count, usage_totals.payload()
 
 
 def _run_stage1(
@@ -466,7 +472,9 @@ def _run_stage1(
         scope_id=context.scope_id,
         intent=effective_intent,
     )
-    outcomes_by_doc, retries = _run_stage1_reps(docs, screening_backend=screening_backend)
+    outcomes_by_doc, retries, usage_totals = _run_stage1_reps(
+        docs, screening_backend=screening_backend
+    )
     counts: dict[str, int] = {
         "screened": len(docs),
         "relevant": 0,
@@ -563,7 +571,7 @@ def _run_stage1(
         if basis is not None:
             counts[basis] += 1
 
-    return counts
+    return {**counts, "usage_totals": usage_totals}
 
 
 def _stage2_text_snapshot_id(
@@ -738,7 +746,7 @@ def _run_stage2_reps(
     payloads: dict[int, ScreenFullTextPayload],
     *,
     screening_backend: ScreeningBackend,
-) -> tuple[dict[int, _RepOutcome], int]:
+) -> tuple[dict[int, _RepOutcome], int, dict[str, int]]:
     tasks = list(payloads)
     baseline = len(tasks) * STAGE2_REPS
     budget = _CallBudget(maximum=baseline * (1 + SCREEN_RETRY_CAP))
@@ -746,9 +754,10 @@ def _run_stage2_reps(
 
     results: dict[int, ScreenRepWire] = {}
     errors: dict[int, Exception] = {}
+    usage_totals = UsageAccumulator()
 
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_STAGE2) as executor:
-        submitted: list[tuple[int, Future[ScreenRepWire]]] = []
+        submitted: list[tuple[int, Future[Any]]] = []
         for doc_index in tasks:
             if not budget.reserve():
                 errors[doc_index] = RuntimeError("call budget exhausted")
@@ -762,7 +771,9 @@ def _run_stage2_reps(
         wait([future for _, future in submitted])
         for doc_index, future in submitted:
             try:
-                results[doc_index] = future.result()
+                rep, usage = future.result()
+                results[doc_index] = rep
+                usage_totals.add(usage)
             except Exception as exc:  # noqa: BLE001 - event gets type name only
                 errors[doc_index] = exc
 
@@ -772,7 +783,9 @@ def _run_stage2_reps(
             continue
         retry_count += 1
         try:
-            results[doc_index] = screening_backend.screen_fulltext(payloads[doc_index])
+            rep, usage = screening_backend.screen_fulltext(payloads[doc_index])
+            results[doc_index] = rep
+            usage_totals.add(usage)
         except Exception as exc:  # noqa: BLE001
             errors[doc_index] = exc
         else:
@@ -788,7 +801,7 @@ def _run_stage2_reps(
             outcomes[doc_index] = _RepOutcome(
                 error_type=type(errors[doc_index]).__name__
             )
-    return outcomes, retry_count
+    return outcomes, retry_count, usage_totals.payload()
 
 
 def _assert_stage1_relevant(
@@ -830,7 +843,7 @@ def _run_stage2(
         else:
             payloads[doc_index] = payload
 
-    outcomes_by_doc, retries = _run_stage2_reps(
+    outcomes_by_doc, retries, usage_totals = _run_stage2_reps(
         payloads, screening_backend=screening_backend
     )
     counts: dict[str, int] = {
@@ -903,7 +916,7 @@ def _run_stage2(
             flags=flags,
         )
 
-    return counts
+    return {**counts, "usage_totals": usage_totals}
 
 
 def screen_sources(

@@ -98,7 +98,8 @@ def _cleanup_project(engine: Engine, project_id: uuid.UUID | None) -> None:
 
 
 def test_pause_points_compile_pinned_for_all_modes() -> None:
-    plan = _base_plan(search_effort="standard", analysis_depth="standard")
+    # deep depth: "select" must be present for the after-select pause points.
+    plan = _base_plan(search_effort="standard", analysis_depth="deep")
     chain = compose(plan)
 
     assert pause_points("frequent", chain) == {
@@ -120,9 +121,11 @@ def test_frequent_run_pauses_after_every_component_and_continue_matches_nullio(
     try:
         pause_project_id, pause_scope_id = _seed_project(engine)
         null_project_id, null_scope_id = _seed_project(engine)
+        # deep depth: the default component set (select/extract/group) is
+        # deep-only after the 018 regrade.
         plan = _base_plan(
             search_effort="standard",
-            analysis_depth="standard",
+            analysis_depth="deep",
             steering_mode="frequent",
         )
         io = ScriptedIO()
@@ -606,7 +609,10 @@ def test_steer_point_triggers_map_each_flag_shape(engine: Engine) -> None:
 
 
 def test_build_steer_point_options_speak_intents_with_pinned_grammar() -> None:
-    plan = _base_plan(search_effort="standard", analysis_depth="standard")
+    # deep depth: the default component set (select/extract/group) is
+    # deep-only after the 018 regrade; adjust_budget's pinned delta below is
+    # deep's selection_budget (25).
+    plan = _base_plan(search_effort="standard", analysis_depth="deep")
     options = build_steer_point_options(plan=plan, point="deepening_selection")
     by_id = {option["id"]: option for option in options}
 
@@ -626,7 +632,7 @@ def test_build_steer_point_options_speak_intents_with_pinned_grammar() -> None:
     assert by_id["most_relevant"]["delta"] == {
         "selection": {"weight_emphasis": {"screen_confidence": 2.5}}
     }
-    assert by_id["adjust_budget"]["delta"] == {"selection": {"budget": 10}}
+    assert by_id["adjust_budget"]["delta"] == {"selection": {"budget": 25}}
     assert by_id["as_proposed"]["delta"] == {}
     # Every option speaks a user intent and carries an honest description.
     assert all(option["intent"] and option["description"] for option in options)
@@ -697,7 +703,7 @@ def test_moderate_steer_point_reselect_reruns_select_and_threads_new_run_id(
     project_id: uuid.UUID | None = None
     try:
         project_id, scope_id = _seed_project(engine)
-        plan = _base_plan()  # moderate mode, full standard chain
+        plan = _base_plan()  # moderate mode, full (deep) chain
         plan_id = _insert_plan_row(
             engine, project_id=project_id, scope_id=scope_id, plan=plan
         )

@@ -59,6 +59,7 @@ from policy_atlas.search_prompts import (
     SuggestPayload,
     build_reformulate_messages,
 )
+from policy_atlas.usage import UsageResult
 from tests.helpers import now, seed_project_and_run, seed_run, seed_scope, seed_source
 
 ScriptResult = list[dict[str, Any]] | BaseException
@@ -202,23 +203,29 @@ class ScriptedGenerationBackend:
             raise item
         return item
 
-    def generate_queries(self, payload: QueriesPayload) -> SearchQueriesWire:
+    def generate_queries(self, payload: QueriesPayload) -> UsageResult[SearchQueriesWire]:
         self.query_payloads.append(payload)
-        return self._pop_wire(
-            self._queries,
-            SearchQueriesWire(queries=[], overton_paraphrases=[]),
+        return (
+            self._pop_wire(
+                self._queries,
+                SearchQueriesWire(queries=[], overton_paraphrases=[]),
+            ),
+            None,
         )
 
-    def reformulate(self, payload: ReformulatePayload) -> SearchQueriesWire:
+    def reformulate(self, payload: ReformulatePayload) -> UsageResult[SearchQueriesWire]:
         self.reformulate_payloads.append(payload)
-        return self._pop_wire(
-            self._reformulations,
-            SearchQueriesWire(queries=[], overton_paraphrases=[]),
+        return (
+            self._pop_wire(
+                self._reformulations,
+                SearchQueriesWire(queries=[], overton_paraphrases=[]),
+            ),
+            None,
         )
 
-    def suggest(self, payload: SuggestPayload) -> SearchSuggestWire:
+    def suggest(self, payload: SuggestPayload) -> UsageResult[SearchSuggestWire]:
         self.suggest_payloads.append(payload)
-        return self._pop_wire(self._suggestions, SearchSuggestWire(papers=[]))
+        return self._pop_wire(self._suggestions, SearchSuggestWire(papers=[])), None
 
 
 class TitleScriptedScreeningBackend:
@@ -231,25 +238,33 @@ class TitleScriptedScreeningBackend:
         payload: ScreenEnvelopePayload,
         *,
         rep_index: int = 0,
-    ) -> ScreenRepWire:
+    ) -> UsageResult[ScreenRepWire]:
         """Return a deterministic rep from the title prefix."""
         del rep_index
         decision: Literal["relevant", "not_relevant"] = (
             "relevant" if payload.title.startswith("Relevant") else "not_relevant"
         )
-        return ScreenRepWire(
-            decision=decision,
-            confidence=0.9,
-            reason=f"Title scripted as {decision}.",
+        return (
+            ScreenRepWire(
+                decision=decision,
+                confidence=0.9,
+                reason=f"Title scripted as {decision}.",
+            ),
+            None,
         )
 
-    def screen_fulltext(self, payload: ScreenFullTextPayload) -> ScreenRepWire:
+    def screen_fulltext(
+        self, payload: ScreenFullTextPayload
+    ) -> UsageResult[ScreenRepWire]:
         """Return a deterministic full-text confirmation."""
         del payload
-        return ScreenRepWire(
-            decision="relevant",
-            confidence=0.9,
-            reason="Scripted full-text confirmation.",
+        return (
+            ScreenRepWire(
+                decision="relevant",
+                confidence=0.9,
+                reason="Scripted full-text confirmation.",
+            ),
+            None,
         )
 
 

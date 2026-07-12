@@ -110,7 +110,7 @@ def _finding_values(
         "outcome": "Test scores",
         "population": None,
         "comparator": None,
-        "effect_direction": "positive",
+        "effect_direction": "increase",
         "estimate_level": "study",
         "study_design": None,
         "stratum_qualifiers": [],
@@ -1235,7 +1235,7 @@ def test_summary_payload_shape(conn: Connection) -> None:
 
     assert set(summary.keys()) == {
         "docs", "counts", "findings", "basis", "field_coverage",
-        "selection_run_id", "flags", "provenance",
+        "selection_run_id", "flags", "provenance", "usage_totals",
     }
     for doc in summary["docs"]:
         assert set(doc.keys()) == {
@@ -1245,5 +1245,7 @@ def test_summary_payload_shape(conn: Connection) -> None:
     assert set(summary["provenance"].keys()) == {
         "profile", "schema", "prompt", "model", "mode", "field_rules", "verifier",
         "window", "max_output_tokens", "retry_cap", "fingerprint", "pass_count",
-        "call_budget", "retry_count",
+        "call_budget", "retry_count", "finding_vetter",
     }
+    # 018 C5: no finding_vetter_backend passed here, so judging is off — null component.
+    assert summary["provenance"]["finding_vetter"] is None

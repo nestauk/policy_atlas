@@ -26,6 +26,7 @@ from policy_atlas.schema import (
     source_classification_result,
     source_snapshot,
 )
+from policy_atlas.usage import UsageResult
 
 from .helpers import EVIDENCE_TYPE, now, seed_project_and_run, seed_run, seed_scope
 
@@ -55,7 +56,7 @@ def _record(
     outcome: str,
     quote: str,
     segment_id: str | None,
-    effect_direction: str = "positive",
+    effect_direction: str = "increase",
     statistics: dict[str, Any] | None = None,
     **over: Any,
 ) -> dict[str, Any]:
@@ -258,7 +259,7 @@ def test_memo_reuse(conn: Connection) -> None:
         stub_iof=[_record(
             intervention="home visiting", outcome="hospital admissions",
             quote="Home visiting reduced hospital admissions", segment_id=str(cid),
-            effect_direction="negative",
+            effect_direction="decrease",
         )],
     )
     _seed_selection(conn, project_id, sel_run, scope_id,
@@ -461,14 +462,16 @@ def test_nul_bearing_model_output_is_scrubbed(conn: Connection) -> None:
     class _NulBackend:
         mode = "stub"
 
-        def extract(self, payload: ExtractionWindowPayload) -> ExtractionResponse:
+        def extract(
+            self, payload: ExtractionWindowPayload
+        ) -> UsageResult[ExtractionResponse]:
             record = _record(
                 intervention="free school\x00 meals", outcome="absence rates",
                 quote="Free school meals reduced absence rates",
                 segment_id=payload.segments[0]["segment_id"],
                 population="pupils\x00",
             )
-            return ExtractionResponse(findings=[IOFRecordWire.model_validate(record)])
+            return ExtractionResponse(findings=[IOFRecordWire.model_validate(record)]), None
 
     project_id, sel_run = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)

@@ -196,9 +196,14 @@ Block- and artefact-level summaries are a **navigation device**, not a new evide
   block-composition change (never auto-run), **emphasis located structurally** (anchored on the
   declared conclusion-bearing component; falls back to structural-shape condensation for a
   horizon scan).
-- **The "what did it conclude" front door is a grounded key-findings/conclusion block**, inside
-  the grounding economy (cited — **to sources, never to sibling blocks** — contestable, versioned,
-  steerable) — **produced last, shown first** — present only where the skeleton declares a
-  conclusion-bearing component. The summary only *points at* it.
+- **The "what did it conclude" front door is two distinct grounded blocks, never merged**
+  (owner refinement 2026-07-10; task 018, ADR 0015): the **key-findings block** — headline
+  evidence claims at their appropriate grade, **produced last, shown first**,
+  conditional-required (present iff headline claims are made) — and the **conclusions block**
+  at the report foot — what this evidence amounts to against the user's question,
+  evidence-descriptive (no recommendations). Both sit inside the grounding economy (cited —
+  **to sources, never to sibling blocks** — contestable, versioned, steerable) and are present
+  only where the skeleton declares a conclusion-bearing component. The summary only *points
+  at* them.
 - ⏸ **Summaries may route, never substitute** — nothing load-bearing (grounding, synthesis,
   citation, extraction, agent context) is generated *from* a summary.

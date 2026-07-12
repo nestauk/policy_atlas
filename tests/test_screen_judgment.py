@@ -39,6 +39,7 @@ from policy_atlas.screen_prompt import (
     build_screen_messages,
 )
 from policy_atlas.screening_backend import OpenAIScreeningBackend
+from policy_atlas.usage import UsageResult
 from tests.helpers import (
     seed_ingested_full_text,
     seed_project_and_run,
@@ -107,7 +108,7 @@ class ScriptedScreeningBackend:
         payload: ScreenEnvelopePayload,
         *,
         rep_index: int = 0,
-    ) -> ScreenRepWire:
+    ) -> UsageResult[ScreenRepWire]:
         """Return the next scripted stage-1 entry for ``payload``."""
         key = _script_key(payload.metadata)
         with self._lock:
@@ -117,9 +118,11 @@ class ScriptedScreeningBackend:
             entry = _pop_script_entry(queues[rep_index], key=key)
         if isinstance(entry, BaseException):
             raise entry
-        return entry
+        return entry, None
 
-    def screen_fulltext(self, payload: ScreenFullTextPayload) -> ScreenRepWire:
+    def screen_fulltext(
+        self, payload: ScreenFullTextPayload
+    ) -> UsageResult[ScreenRepWire]:
         """Return the next scripted stage-2 entry for ``payload``."""
         key = _script_key(payload.metadata)
         with self._lock:
@@ -129,7 +132,7 @@ class ScriptedScreeningBackend:
             entry = _pop_script_entry(entries, key=key)
         if isinstance(entry, BaseException):
             raise entry
-        return entry
+        return entry, None
 
 
 def _script_key(metadata: dict[str, Any]) -> str:

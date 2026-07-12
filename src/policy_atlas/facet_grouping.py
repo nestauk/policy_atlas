@@ -21,22 +21,24 @@ from typing import Any, Protocol, TypedDict
 
 from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
-from openai.types.completion_usage import CompletionUsage
 from pydantic import BaseModel, ConfigDict
 
 from policy_atlas import tracing
 from policy_atlas.embeddings import log_usage, resolve_openai_client, usage_metadata
+from policy_atlas.usage import UsageResult, token_usage_from_provider
 
 PROMPT_VERSION = "group_facet_v1"
 
 # The contracted model floor (the 009 nano lesson is binding); partition quality
 # on real reference sets is eval territory, not asserted by the build.
-FACET_GROUPING_MODEL = "gpt-5-mini"
+FACET_GROUPING_MODEL = "gpt-5.4-mini"
 
 # Scale guard — fail closed (contract rev 1.3): above the cap the component
 # fails structurally before any call; the large-corpus algorithm is a recorded
-# eval-gated seam, never a degraded sample/assign pass grown here.
-FACET_VALUE_CAP = 150
+# eval-gated seam, never a degraded sample/assign pass grown here. Raised in
+# 018's standard-depth regrade: demo-validated at 280 live distinct values;
+# the eval slice owns final calibration.
+FACET_VALUE_CAP = 400
 
 # One targeted repair pass, hard; still-missing values land in the counted
 # ungrouped residual, never re-asked. Budget is always 1 + REPAIR_CAP.
@@ -339,7 +341,7 @@ class FacetGroupingBackend(Protocol):
 
     def partition(
         self, values: list[FacetValueRecord], *, facet: str
-    ) -> PartitionResult:
+    ) -> UsageResult[PartitionResult]:
         """Partition all distinct facet values into named groups.
 
         Args:
@@ -347,7 +349,7 @@ class FacetGroupingBackend(Protocol):
             facet: The facet being grouped.
 
         Returns:
-            Raw structurally parsed partition output.
+            Raw structurally parsed partition output plus token usage.
         """
         ...
 
@@ -357,7 +359,7 @@ class FacetGroupingBackend(Protocol):
         *,
         facet: str,
         accepted_groups: list[ProposedGroup],
-    ) -> PartitionResult:
+    ) -> UsageResult[PartitionResult]:
         """Re-ask only the values the first response failed to place.
 
         Reuses ``group_facet_v1`` verbatim — the one prompt-bearing surface.
@@ -368,7 +370,8 @@ class FacetGroupingBackend(Protocol):
             accepted_groups: Groups already accepted from the first response.
 
         Returns:
-            Raw structurally parsed partition output over the missing values.
+            Raw structurally parsed partition output plus token usage over the
+            missing values.
         """
         ...
 
@@ -422,7 +425,7 @@ class OpenAIFacetGroupingBackend:
         usage_event: str,
         empty_error: str,
         unparsed_error: str,
-    ) -> tuple[PartitionResult, CompletionUsage | None]:
+    ) -> UsageResult[PartitionResult]:
         response = self._client.chat.completions.parse(
             model=FACET_GROUPING_MODEL,
             messages=messages,
@@ -434,7 +437,7 @@ class OpenAIFacetGroupingBackend:
         parsed = response.choices[0].message.parsed
         if parsed is None:
             raise RuntimeError(unparsed_error)
-        return _partition_result(parsed), response.usage
+        return _partition_result(parsed), token_usage_from_provider(response.usage)
 
     def _call(
         self,
@@ -446,8 +449,8 @@ class OpenAIFacetGroupingBackend:
         span_name: str,
         empty_error: str,
         unparsed_error: str,
-    ) -> PartitionResult:
-        def _parse() -> tuple[PartitionResult, CompletionUsage | None]:
+    ) -> UsageResult[PartitionResult]:
+        def _parse() -> UsageResult[PartitionResult]:
             return self._parse_once(
                 messages,
                 usage_event=usage_event,
@@ -455,9 +458,7 @@ class OpenAIFacetGroupingBackend:
                 unparsed_error=unparsed_error,
             )
 
-        def _update(
-            span: Any, parsed: tuple[PartitionResult, CompletionUsage | None]
-        ) -> None:
+        def _update(span: Any, parsed: UsageResult[PartitionResult]) -> None:
             result, usage = parsed
             span.update(
                 input={"messages": messages},
@@ -471,18 +472,18 @@ class OpenAIFacetGroupingBackend:
                 },
             )
 
-        result, _usage = tracing.traced_call(
+        result, usage = tracing.traced_call(
             self._langfuse_client,
             name=span_name,
             as_type="generation",
             call=_parse,
             update=_update,
         )
-        return result
+        return result, usage
 
     def partition(
         self, values: list[FacetValueRecord], *, facet: str
-    ) -> PartitionResult:
+    ) -> UsageResult[PartitionResult]:
         """Partition distinct facet values through structured OpenAI output.
 
         Args:
@@ -490,7 +491,7 @@ class OpenAIFacetGroupingBackend:
             facet: The facet being grouped.
 
         Returns:
-            Raw structurally parsed partition output.
+            Raw structurally parsed partition output plus token usage.
 
         Raises:
             RuntimeError: If the response cannot be parsed into the expected shape.
@@ -512,7 +513,7 @@ class OpenAIFacetGroupingBackend:
         *,
         facet: str,
         accepted_groups: list[ProposedGroup],
-    ) -> PartitionResult:
+    ) -> UsageResult[PartitionResult]:
         """Repair missing facet values through structured OpenAI output.
 
         Args:
@@ -521,7 +522,8 @@ class OpenAIFacetGroupingBackend:
             accepted_groups: Groups already accepted from the first response.
 
         Returns:
-            Raw structurally parsed partition output over the missing values.
+            Raw structurally parsed partition output plus token usage over the
+            missing values.
 
         Raises:
             RuntimeError: If the response cannot be parsed into the expected shape.
@@ -580,7 +582,7 @@ class StubFacetGroupingBackend:
 
     def partition(
         self, values: list[FacetValueRecord], *, facet: str
-    ) -> PartitionResult:
+    ) -> UsageResult[PartitionResult]:
         """Partition values by their first casefolded whitespace token.
 
         Args:
@@ -588,13 +590,13 @@ class StubFacetGroupingBackend:
             facet: The facet being grouped; ignored by the stub.
 
         Returns:
-            Deterministic partition output.
+            Deterministic partition output plus no token usage.
 
         Raises:
             RuntimeError: If the failure sentinel is enabled.
         """
         del facet
-        return self._partition_values(values)
+        return self._partition_values(values), None
 
     def repair(
         self,
@@ -602,7 +604,7 @@ class StubFacetGroupingBackend:
         *,
         facet: str,
         accepted_groups: list[ProposedGroup],
-    ) -> PartitionResult:
+    ) -> UsageResult[PartitionResult]:
         """Partition missing values by the same deterministic stub rule.
 
         Args:
@@ -611,13 +613,13 @@ class StubFacetGroupingBackend:
             accepted_groups: Groups already accepted; ignored by the stub.
 
         Returns:
-            Deterministic partition output over the missing values.
+            Deterministic partition output plus no token usage over the missing values.
 
         Raises:
             RuntimeError: If the failure sentinel is enabled.
         """
         del facet, accepted_groups
-        return self._partition_values(missing_values)
+        return self._partition_values(missing_values), None
 
 
 def _preflight_validate_example() -> None:

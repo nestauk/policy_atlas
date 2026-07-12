@@ -81,10 +81,14 @@ ANALYSIS_DEPTH_TABLE: dict[AnalysisDepth, AnalysisDepthDirective] = {
         "selection_budget": None,
     },
     "standard": {
+        # 018 regrade: select/extract/group are deep-only now (ADR 0013 spine
+        # untouched). Standard keeps ingest + stage-2 screening +
+        # characterisation, so synthesise grounds in full-text chunks plus
+        # characterisation without the findings layer.
         "screen_stage2": True,
         "characterise": True,
-        "deep_chain": True,
-        "selection_budget": 10,
+        "deep_chain": False,
+        "selection_budget": None,
     },
     "deep": {
         "screen_stage2": True,
@@ -116,6 +120,11 @@ TIME_BANDS: dict[tuple[SearchEffort, AnalysisDepth], str] = {
     ("standard", "landscape"): "~15-20 min",
     ("deep", "landscape"): "~20-25 min",
     ("rapid", "standard"): "~30-45 min",
+    # This anchor was measured pre-regrade, with the deep chain (select/
+    # extract/group) still running at standard depth — it is stale now that
+    # standard drops the deep chain and gets re-seeded from a fresh measured
+    # run in 018 Phase D (displayed-band-is-measured discipline: not invented
+    # here).
     ("standard", "standard"): "~30-45 min",
     ("deep", "standard"): "~35-50 min",
     ("rapid", "deep"): "~75-90 min",
@@ -196,6 +205,8 @@ class ScopeConstraints(BaseModel):
         published_after: Optional lower publication-date bound as ``YYYY-MM-DD``.
         published_before: Optional upper publication-date bound as ``YYYY-MM-DD``.
         publisher_country: Optional Overton publisher-country filter.
+        author_affiliation_countries: Optional OpenAlex author-affiliation
+            country filter, as 2-letter alpha codes normalised to upper-case.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -203,6 +214,7 @@ class ScopeConstraints(BaseModel):
     published_after: str | None = None
     published_before: str | None = None
     publisher_country: str | None = None
+    author_affiliation_countries: list[str] | None = None
 
     @field_validator("published_after", "published_before")
     @classmethod
@@ -250,6 +262,40 @@ class ScopeConstraints(BaseModel):
             )
         return value
 
+    @field_validator("author_affiliation_countries")
+    @classmethod
+    def validate_author_affiliation_countries(
+        cls, value: list[str] | None
+    ) -> list[str] | None:
+        """Validate the optional OpenAlex author-affiliation country filter.
+
+        Args:
+            value: Candidate list of 2-letter country codes, or ``None``.
+
+        Returns:
+            The validated list, normalised to upper-case, or ``None``.
+
+        Raises:
+            ValueError: If the list is empty, contains a non-2-letter or
+                non-alphabetic entry, or contains duplicate entries.
+        """
+        if value is None:
+            return None
+        if not value:
+            raise ValueError(
+                "author_affiliation_countries must not be empty; omit the field instead"
+            )
+        normalised: list[str] = []
+        for entry in value:
+            if len(entry) != 2 or not entry.isalpha():
+                raise ValueError(
+                    "author_affiliation_countries must contain 2-letter alphabetic codes"
+                )
+            normalised.append(entry.upper())
+        if len(set(normalised)) != len(normalised):
+            raise ValueError("author_affiliation_countries must not contain duplicates")
+        return normalised
+
     @model_validator(mode="after")
     def validate_date_window(self) -> Self:
         """Validate chronological ordering for the optional recency window.
@@ -268,14 +314,15 @@ class ScopeConstraints(BaseModel):
             raise ValueError("published_after must not be later than published_before")
         return self
 
-    def to_filters(self) -> dict[str, dict[str, str]]:
+    def to_filters(self) -> dict[str, dict[str, Any]]:
         """Compile constraints into search-loop two-level filters.
 
         Returns:
-            A ``filters`` object with recency under ``shared`` and publisher
-            geography under ``overton``. Empty constraints compile to ``{}``.
+            A ``filters`` object with recency under ``shared``, publisher
+            geography under ``overton``, and author-affiliation geography
+            under ``openalex``. Empty constraints compile to ``{}``.
         """
-        filters: dict[str, dict[str, str]] = {}
+        filters: dict[str, dict[str, Any]] = {}
         shared: dict[str, str] = {}
         if self.published_after is not None:
             shared["published_after"] = self.published_after
@@ -285,6 +332,10 @@ class ScopeConstraints(BaseModel):
             filters["shared"] = shared
         if self.publisher_country is not None:
             filters["overton"] = {"publisher_country": self.publisher_country}
+        if self.author_affiliation_countries is not None:
+            filters["openalex"] = {
+                "author_affiliation_countries": self.author_affiliation_countries
+            }
         return filters
 
 
@@ -502,6 +553,15 @@ class OrchestrationPlan(BaseModel):
             raise ValueError(
                 "publisher_country filters the grey-literature backend, which "
                 "backend_scope 'academic_only' excludes"
+            )
+
+        if (
+            self.scope_constraints.author_affiliation_countries is not None
+            and self.backend_scope == "grey_lit_only"
+        ):
+            raise ValueError(
+                "author_affiliation_countries filters the academic backend, "
+                "which backend_scope 'grey_lit_only' excludes"
             )
 
         # Compile-target parity for the screen prompt: the composed intent

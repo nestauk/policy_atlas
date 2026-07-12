@@ -1,5 +1,13 @@
 # Knowledge update log
 
+## 2026-07-11 (task 018 step 8)
+* **Creation**: Added [span-anchoring-text-not-offsets](span-anchoring-text-not-offsets.md) — model-facing wires carry verbatim text, never offsets; splice repair rebuilds offsets one-pass by construction; persist-time round-trip assertion (018 B3, B smoke re-proof).
+* **Creation**: Added [judge-envelope-defines-verdicts](judge-envelope-defines-verdicts.md) — tier distributions incomparable across envelope versions; verification-grade A/B protocol; inspect flags before recalibrating an asymmetric judge rule (018 B3/B4).
+* **Creation**: Added [overton-filter-values-display-names](overton-filter-values-display-names.md) — provider-side silent zero on wrong filter-value vocabulary; live-probe values, not just keys (018 B2).
+* **Update**: [reasoning-model-output-cap](reasoning-model-output-cap.md) — effort × cap validated together per surface with a live A/B; xhigh non-monotonicity confirmed in-house (classify keep-high verdict, on quality); direct-backend A/B drivers keep pinned substrates uncontaminated (018 B4).
+* **Promoted to spec**: the prompting doctrine (research rules + loop method + agent-loop conventions) → [docs/specs/system/prompting.md](../specs/system/prompting.md) — owner-seeded step-8 item; carries the loop-method lessons (under-damped rule pairs → flag-not-drop judge escape hatch; cache-discounted cost curves; compile-your-probes; prompt capability lines are registry readers).
+* **Declined**: contract-pin replayability check, concurrent-suite test-DB contention, codex-sandbox DB limits, reviewer-agents-must-not-run-the-suite → process lessons, recorded in `docs/agentic-ops/failure-log.md`, not product knowledge. `run:` trace attach guard (C-loop eye note, not yet load-bearing); future-target rule dropping BAU projections (eval-slice watch item, recorded in 018 verification.md); codex-exhaustion fallback (already durable in agentic-ops routing docs).
+
 ## 2026-07-10 (task 017 step 8)
 * **Creation**: Added [alembic-roundtrip-explicit-revisions](alembic-roundtrip-explicit-revisions.md) — explicit downgrade targets; uncommitted seeds across DDL on a second connection hang silently behind FK-dependent DROPs (017 build, 14-minute hang).
 * **Creation**: Added [process-start-deadlines-need-spawn-headroom](process-start-deadlines-need-spawn-headroom.md) — a Process.start() deadline clock asserts spawn+import<deadline and inverts under host load (017 build).

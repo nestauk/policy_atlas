@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from policy_atlas.orchestration_plan import (
+    ANALYSIS_DEPTH_TABLE,
     SPINE,
     TIME_BANDS,
     AnalysisDepth,
@@ -56,6 +57,15 @@ def _plan(**overrides: Any) -> OrchestrationPlan:
 def _valid_component_sets(depth: AnalysisDepth) -> list[list[str]]:
     if depth == "landscape":
         return [[], ["characterise"]]
+    if depth == "standard":
+        # 018 regrade: select/extract/group are deep-only now, so standard's
+        # valid sets are screen_stage2 + characterise only (no deep chain).
+        return [
+            [],
+            ["screen_stage2"],
+            ["characterise"],
+            ["screen_stage2", "characterise"],
+        ]
     return [
         [],
         ["screen_stage2"],
@@ -128,6 +138,15 @@ def test_spine_is_present_in_order_for_valid_plan_matrix() -> None:
             "backend_scope": "academic_only",
             "scope_constraints": {"publisher_country": "United Kingdom"},
         },
+        {"scope_constraints": {"author_affiliation_countries": []}},
+        {"scope_constraints": {"author_affiliation_countries": ["gbr"]}},
+        {"scope_constraints": {"author_affiliation_countries": ["g"]}},
+        {"scope_constraints": {"author_affiliation_countries": ["g1"]}},
+        {"scope_constraints": {"author_affiliation_countries": ["gb", "GB"]}},
+        {
+            "backend_scope": "grey_lit_only",
+            "scope_constraints": {"author_affiliation_countries": ["GB"]},
+        },
     ],
 )
 def test_fail_closed_validation(overrides: dict[str, Any]) -> None:
@@ -151,10 +170,71 @@ def test_intent_fit_can_strike_deep_chain_at_standard_depth() -> None:
     ]
 
 
+def test_standard_depth_composes_without_deep_chain_components() -> None:
+    """018 regrade: select/extract/group are deep-only; standard keeps ingest
+    plus stage-2 screening and characterisation, so synthesise grounds in
+    full-text chunks and characterisation without the findings layer.
+    """
+    plan = _plan(
+        search_effort="standard",
+        analysis_depth="standard",
+        components=["screen_stage2", "characterise"],
+    )
+
+    chain = compose(plan)
+
+    assert chain.components == [
+        "acquire",
+        "screen",
+        "classify",
+        "appraise",
+        "ingest_full_text",
+        "screen_stage2",
+        "characterise",
+        "synthesise",
+    ]
+    assert "select" not in chain.components
+    assert "extract" not in chain.components
+    assert "group" not in chain.components
+
+    # select/extract/group are not merely absent when unselected — they are
+    # disabled outright at standard depth (deep-only after the 018 regrade).
+    with pytest.raises(ValidationError):
+        _plan(
+            search_effort="standard",
+            analysis_depth="standard",
+            components=["screen_stage2", "characterise", "select"],
+        )
+
+
+def test_landscape_and_deep_depth_rows_are_unchanged_by_the_standard_regrade() -> None:
+    """Pin landscape/deep ANALYSIS_DEPTH_TABLE + TIME_BANDS rows byte-identical
+    to their pre-018-regrade values; only the "standard" row was rewritten.
+    """
+    assert ANALYSIS_DEPTH_TABLE["landscape"] == {
+        "screen_stage2": False,
+        "characterise": True,
+        "deep_chain": False,
+        "selection_budget": None,
+    }
+    assert ANALYSIS_DEPTH_TABLE["deep"] == {
+        "screen_stage2": True,
+        "characterise": True,
+        "deep_chain": True,
+        "selection_budget": 25,
+    }
+    assert TIME_BANDS[("rapid", "landscape")] == "~10-15 min"
+    assert TIME_BANDS[("standard", "landscape")] == "~15-20 min"
+    assert TIME_BANDS[("deep", "landscape")] == "~20-25 min"
+    assert TIME_BANDS[("rapid", "deep")] == "~75-90 min"
+    assert TIME_BANDS[("standard", "deep")] == "~80-95 min"
+    assert TIME_BANDS[("deep", "deep")] == "~90-100 min"
+
+
 def test_round_trip_payload_composes_to_identical_chain() -> None:
     plan = _plan(
         search_effort="deep",
-        analysis_depth="standard",
+        analysis_depth="deep",
         components=["screen_stage2", "characterise", "select", "extract", "group"],
         grouping_facet="outcome",
         scope_constraints={
@@ -193,6 +273,55 @@ def test_scope_constraints_compile_into_two_level_search_filters() -> None:
             },
         }
     }
+
+
+def test_author_affiliation_countries_normalised_to_upper_case() -> None:
+    plan = _plan(scope_constraints={"author_affiliation_countries": ["gb", "us"]})
+
+    assert plan.scope_constraints.author_affiliation_countries == ["GB", "US"]
+
+
+def test_scope_constraints_compile_openalex_block_alongside_shared_and_overton() -> None:
+    plan = _plan(
+        search_effort="standard",
+        scope_constraints={
+            "published_after": "2021-01-01",
+            "published_before": "2024-12-31",
+            "publisher_country": "United Kingdom",
+            "author_affiliation_countries": ["gb", "us"],
+        },
+    )
+
+    acquire = compose(plan).steps[0]
+
+    assert acquire.directive_delta == {
+        "search": {
+            "depth": "standard",
+            "filters": {
+                "shared": {
+                    "published_after": "2021-01-01",
+                    "published_before": "2024-12-31",
+                },
+                "overton": {"publisher_country": "United Kingdom"},
+                "openalex": {"author_affiliation_countries": ["GB", "US"]},
+            },
+        }
+    }
+
+
+def test_author_affiliation_countries_flow_to_openalex_wire_filter_string() -> None:
+    """End-to-end wire pin: plan constraints -> validate_scope_filters ->
+    openalex_wire_params, lower-case input normalised upper on the plan.
+    """
+    from policy_atlas.search_loop import openalex_wire_params, validate_scope_filters
+
+    plan = _plan(scope_constraints={"author_affiliation_countries": ["gb", "us"]})
+
+    filters = plan.scope_constraints.to_filters()
+    validated = validate_scope_filters(filters, backend_names=["openalex"])
+    wire = openalex_wire_params(validated.get("openalex"))
+
+    assert wire == {"filter": "authorships.countries:GB|US"}
 
 
 def test_empty_scope_constraints_omit_filters_key() -> None:

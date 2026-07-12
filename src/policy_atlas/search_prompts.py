@@ -35,9 +35,9 @@ SEARCH_SUGGEST_PROMPT_VERSION = "search_suggest_v1"
 
 # All three are volume surfaces; mini is the 009-lesson floor (plan-pinned;
 # a queries-model swap-up is an eval-seam question).
-SEARCH_QUERIES_MODEL = "gpt-5-mini"
-SEARCH_REFORMULATE_MODEL = "gpt-5-mini"
-SEARCH_SUGGEST_MODEL = "gpt-5-mini"
+SEARCH_QUERIES_MODEL = "gpt-5.4-mini"
+SEARCH_REFORMULATE_MODEL = "gpt-5.4-mini"
+SEARCH_SUGGEST_MODEL = "gpt-5.4-mini"
 
 # Reasoning model: the cap covers reasoning + output tokens (extract's 011
 # lesson). All three outputs are small lists; 8K leaves ample headroom.

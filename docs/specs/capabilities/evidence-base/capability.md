@@ -111,8 +111,16 @@ landscape. Per-component detail in [components.md](components.md).
   content form carrying its headline at the appropriate grade — source-cited for a synthesis
   headline, metadata-grounded for a landscape headline), **never** the citation-free summary;
   **conditional-required** (present iff a headline claim is made).
+- The artefact closes with a **conclusions block** (owner refinement 2026-07-10; task 018,
+  ADR 0015): what this evidence amounts to against the user's question — an ordinary grounded
+  block at the **report foot**, cited to sources (never to sibling blocks) and
+  **evidence-descriptive** per the scope rule (no recommendations / decision-answer content).
+  Distinct from the key-findings block and **never merged** with it: key-findings carries the
+  headline evidence claims (produced last, shown first); conclusions carries what the evidence
+  amounts to (produced and shown last).
 - **Soft default order:** artefact summary (navigation) → [grounded key-findings block, *if*
-  headline claims] → landscape → grounded synthesis (depth-ordered, general→specific).
+  headline claims] → landscape → grounded synthesis (depth-ordered, general→specific) →
+  conclusions block.
   **Production ≠ presentation:** the key-findings block is produced **last** (it condenses what
   synthesis discovers) and the artefact summary is a late display rendering; both shown near the
   top, produced after their content. A convention, not a rigid template.

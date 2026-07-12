@@ -32,9 +32,11 @@ def test_stub_ranking_is_deterministic_and_exhaustive() -> None:
     batch = _batch(30)
     backend = StubRankingBackend()
 
-    first = backend.rank(batch, intent="Assess policy evidence.")
-    second = backend.rank(batch, intent="Assess policy evidence.")
+    first, first_usage = backend.rank(batch, intent="Assess policy evidence.")
+    second, second_usage = backend.rank(batch, intent="Assess policy evidence.")
 
+    assert first_usage is None
+    assert second_usage is None
     assert first == second
     assert [ranked["doc_id"] for ranked in first] == [doc["id"] for doc in batch]
     assert len({ranked["doc_id"] for ranked in first}) == len(batch)

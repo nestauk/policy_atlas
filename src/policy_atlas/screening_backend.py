@@ -6,7 +6,6 @@ from typing import Any, Protocol
 
 from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
-from openai.types.completion_usage import CompletionUsage
 
 from policy_atlas import tracing
 from policy_atlas.embeddings import log_usage, resolve_openai_client, usage_metadata
@@ -22,6 +21,7 @@ from policy_atlas.screen_prompt import (
     build_screen_fulltext_messages,
     build_screen_messages,
 )
+from policy_atlas.usage import UsageResult, token_usage_from_provider
 
 
 class ScreeningBackend(Protocol):
@@ -42,7 +42,7 @@ class ScreeningBackend(Protocol):
         payload: ScreenEnvelopePayload,
         *,
         rep_index: int = 0,
-    ) -> ScreenRepWire:
+    ) -> UsageResult[ScreenRepWire]:
         """Screen one document metadata envelope.
 
         Args:
@@ -50,21 +50,23 @@ class ScreeningBackend(Protocol):
             rep_index: Zero-based consensus rep index, recorded in traces only.
 
         Returns:
-            One parsed screening rep.
+            One parsed screening rep plus token usage.
 
         Raises:
             RuntimeError: If the backend cannot produce a valid rep.
         """
         ...
 
-    def screen_fulltext(self, payload: ScreenFullTextPayload) -> ScreenRepWire:
+    def screen_fulltext(
+        self, payload: ScreenFullTextPayload
+    ) -> UsageResult[ScreenRepWire]:
         """Screen one full-text window for stage-2 confirmation.
 
         Args:
             payload: The document title, scope intent, and full-text segments.
 
         Returns:
-            One parsed screening rep.
+            One parsed screening rep plus token usage.
 
         Raises:
             RuntimeError: If the backend cannot produce a valid rep.
@@ -109,7 +111,7 @@ class OpenAIScreeningBackend:
         *,
         messages: list[ChatCompletionMessageParam],
         usage_event: str,
-    ) -> tuple[ScreenRepWire, CompletionUsage | None]:
+    ) -> UsageResult[ScreenRepWire]:
         response = self._client.chat.completions.parse(
             model=SCREEN_MODEL,
             messages=messages,
@@ -123,14 +125,14 @@ class OpenAIScreeningBackend:
         if parsed is None:
             raise RuntimeError("OpenAI screening response was not parsed.")
         parsed_model: ScreenRepWire = parsed
-        return _scrub_rep(parsed_model), response.usage
+        return _scrub_rep(parsed_model), token_usage_from_provider(response.usage)
 
     def screen_envelope(
         self,
         payload: ScreenEnvelopePayload,
         *,
         rep_index: int = 0,
-    ) -> ScreenRepWire:
+    ) -> UsageResult[ScreenRepWire]:
         """Screen one document envelope through structured OpenAI output.
 
         Args:
@@ -138,7 +140,7 @@ class OpenAIScreeningBackend:
             rep_index: Zero-based consensus rep index, recorded in traces only.
 
         Returns:
-            One parsed screening rep.
+            One parsed screening rep plus token usage.
 
         Raises:
             RuntimeError: If the response cannot be parsed or has invalid confidence.
@@ -148,7 +150,7 @@ class OpenAIScreeningBackend:
 
         def _update(
             span: Any,
-            result: tuple[ScreenRepWire, CompletionUsage | None],
+            result: UsageResult[ScreenRepWire],
         ) -> None:
             rep, usage = result
             span.update(
@@ -165,7 +167,7 @@ class OpenAIScreeningBackend:
 
         def _score_trace(
             _span: Any,
-            result: tuple[ScreenRepWire, CompletionUsage | None],
+            result: UsageResult[ScreenRepWire],
         ) -> None:
             if langfuse_client is None:
                 return
@@ -182,7 +184,7 @@ class OpenAIScreeningBackend:
                 data_type="NUMERIC",
             )
 
-        rep, _usage = tracing.traced_call(
+        rep, usage = tracing.traced_call(
             langfuse_client,
             name=f"screen:{payload.pss_id[:8]}:r{rep_index}",
             as_type="generation",
@@ -198,16 +200,18 @@ class OpenAIScreeningBackend:
                 "OpenAI screening response confidence out of range "
                 f"for pss_id={payload.pss_id!r}, rep_index={rep_index}: {rep.confidence}."
             )
-        return rep
+        return rep, usage
 
-    def screen_fulltext(self, payload: ScreenFullTextPayload) -> ScreenRepWire:
+    def screen_fulltext(
+        self, payload: ScreenFullTextPayload
+    ) -> UsageResult[ScreenRepWire]:
         """Screen one full-text window through structured OpenAI output.
 
         Args:
             payload: The document title, scope intent, and full-text segments.
 
         Returns:
-            One parsed screening rep.
+            One parsed screening rep plus token usage.
 
         Raises:
             RuntimeError: If the response cannot be parsed or has invalid confidence.
@@ -217,7 +221,7 @@ class OpenAIScreeningBackend:
 
         def _update(
             span: Any,
-            result: tuple[ScreenRepWire, CompletionUsage | None],
+            result: UsageResult[ScreenRepWire],
         ) -> None:
             rep, usage = result
             span.update(
@@ -234,7 +238,7 @@ class OpenAIScreeningBackend:
 
         def _score_trace(
             _span: Any,
-            result: tuple[ScreenRepWire, CompletionUsage | None],
+            result: UsageResult[ScreenRepWire],
         ) -> None:
             if langfuse_client is None:
                 return
@@ -251,7 +255,7 @@ class OpenAIScreeningBackend:
                 data_type="NUMERIC",
             )
 
-        rep, _usage = tracing.traced_call(
+        rep, usage = tracing.traced_call(
             langfuse_client,
             name=f"screen_fulltext:{payload.pss_id[:8]}",
             as_type="generation",
@@ -268,7 +272,7 @@ class OpenAIScreeningBackend:
                 f"for pss_id={payload.pss_id!r}, window_index={payload.window_index}: "
                 f"{rep.confidence}."
             )
-        return rep
+        return rep, usage
 
 
 class StubScreeningBackend:
@@ -281,7 +285,7 @@ class StubScreeningBackend:
         payload: ScreenEnvelopePayload,
         *,
         rep_index: int = 0,
-    ) -> ScreenRepWire:
+    ) -> UsageResult[ScreenRepWire]:
         """Return sentinel-driven metadata screening output.
 
         Args:
@@ -290,7 +294,7 @@ class StubScreeningBackend:
             rep_index: Accepted for protocol compatibility; ignored by the stub.
 
         Returns:
-            Deterministic screening output driven by ``payload.metadata``.
+            Deterministic screening output plus no token usage.
 
         Raises:
             RuntimeError: If ``_stub_failed`` is truthy.
@@ -300,16 +304,22 @@ class StubScreeningBackend:
         if metadata.get("_stub_failed"):
             raise RuntimeError("Stub screening failure sentinel.")
         if metadata.get("_stub_not_relevant"):
-            return ScreenRepWire(
-                decision="not_relevant",
-                confidence=0.95,
-                reason="Deterministic stub exclusion.",
+            return (
+                ScreenRepWire(
+                    decision="not_relevant",
+                    confidence=0.95,
+                    reason="Deterministic stub exclusion.",
+                ),
+                None,
             )
         if metadata.get("_stub_unsure"):
-            return ScreenRepWire(
-                decision="unsure",
-                confidence=0.6,
-                reason="Deterministic stub unsure.",
+            return (
+                ScreenRepWire(
+                    decision="unsure",
+                    confidence=0.6,
+                    reason="Deterministic stub unsure.",
+                ),
+                None,
             )
 
         confidence = (
@@ -317,13 +327,18 @@ class StubScreeningBackend:
             if isinstance(payload.abstract, str) and bool(payload.abstract.strip())
             else 0.7
         )
-        return ScreenRepWire(
-            decision="relevant",
-            confidence=confidence,
-            reason="Deterministic stub inclusion.",
+        return (
+            ScreenRepWire(
+                decision="relevant",
+                confidence=confidence,
+                reason="Deterministic stub inclusion.",
+            ),
+            None,
         )
 
-    def screen_fulltext(self, payload: ScreenFullTextPayload) -> ScreenRepWire:
+    def screen_fulltext(
+        self, payload: ScreenFullTextPayload
+    ) -> UsageResult[ScreenRepWire]:
         """Return sentinel-driven full-text screening output.
 
         Args:
@@ -331,7 +346,7 @@ class StubScreeningBackend:
                 sentinels; it never enters live prompts.
 
         Returns:
-            Deterministic stage-2 screening output driven by ``payload.metadata``.
+            Deterministic stage-2 screening output plus no token usage.
 
         Raises:
             RuntimeError: If ``_stub_stage2_failed`` is truthy.
@@ -340,19 +355,28 @@ class StubScreeningBackend:
         if metadata.get("_stub_stage2_failed"):
             raise RuntimeError("Stub screening stage-2 failure sentinel.")
         if metadata.get("_stub_stage2_demote"):
-            return ScreenRepWire(
-                decision="not_relevant",
-                confidence=0.95,
-                reason="Deterministic stub stage-2 demotion.",
+            return (
+                ScreenRepWire(
+                    decision="not_relevant",
+                    confidence=0.95,
+                    reason="Deterministic stub stage-2 demotion.",
+                ),
+                None,
             )
         if metadata.get("_stub_stage2_unsure"):
-            return ScreenRepWire(
-                decision="unsure",
-                confidence=0.6,
-                reason="Deterministic stub stage-2 unsure.",
+            return (
+                ScreenRepWire(
+                    decision="unsure",
+                    confidence=0.6,
+                    reason="Deterministic stub stage-2 unsure.",
+                ),
+                None,
             )
-        return ScreenRepWire(
-            decision="relevant",
-            confidence=0.9,
-            reason="Deterministic stub stage-2 confirmation.",
+        return (
+            ScreenRepWire(
+                decision="relevant",
+                confidence=0.9,
+                reason="Deterministic stub stage-2 confirmation.",
+            ),
+            None,
         )
