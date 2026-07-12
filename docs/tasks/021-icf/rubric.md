@@ -35,12 +35,15 @@ Slice-specific:
         honest per-kind availability ("not extracted in this run", never a silent
         absence).
 12. [ ] **Trust machinery parity**: ≥1 verified verbatim anchor per record (`qv_v1`);
-        full `field_coverage` mapping (a null is never ambiguous); grain gate enforced;
-        flag-not-drop through the vetter; honest absence on the effects-only probe.
+        `field_coverage` markers for non-valid outcomes only (a null is never
+        ambiguous); grain gate enforced; vetter storage semantics = the IOF pattern
+        (vetted-out excluded from insert, recorded in the doc summary); honest
+        absence on the effects-only probe and per-profile in the roll-up.
 13. [ ] **Fencing from day one**: no inline envelope interpolation in `extract_icf_v1`
         (structural test) and the hostile-envelope probe leaves fields unaffected.
-14. [ ] **Prompt-bearing surfaces lead-authored and replay-evidenced** (`extract_icf_v1`,
-        vetter prompt, any synthesise line) — evidence in verification.md.
+14. [ ] **Prompt-bearing surfaces lead-authored and replay-evidenced**
+        (`extract_icf_v1`, vetter prompt, `extract_iof_v7`, the planner-prompt
+        two-profile update, any synthesise line) — evidence in verification.md.
 15. [ ] **First-reader payoff demonstrated**: the scoped live check shows an
         implementation-shaped pattern claim validating deterministically against ICF
         records in a minted artefact (or an honest account of why the probe corpus

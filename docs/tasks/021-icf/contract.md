@@ -17,8 +17,14 @@ with/without-ICF composition comparison as an explicit axis.
 > unified query tool, research-grounded field set, IOF setting rider, shared
 > vocabulary defined once, kind-spanning membership bridge; design research recorded
 > in [design-research.md](design-research.md)) ·
-> Contract-stage adversarial review: _in progress (post-approval, per the design
-> skill)_ ·
+> Contract-stage adversarial review: **adjudicated 2026-07-12** (codex session
+> 019f57b9, 8 findings: 1 blocker · 7 major — ALL adopted: roll-up per-profile shape
+> pinned · claim_level joins the ICF claim key · field_coverage corrected to
+> non-valid-only markers · vetter storage semantics pinned to the IOF pattern ·
+> group payload contract pinned (direction_spread IOF-only, kind tags) ·
+> `icf_context_type_count` validator named · item 13 added (planner/plan-compile —
+> the missing orchestrator half of decision 4) · IOF top-level-vs-stratum setting
+> semantics pinned; none contradicted an owner-settled decision) ·
 > Plan approved (before implementation): _pending_ · ADR: _expected (second finding
 > schema + composition shape)_.
 
@@ -201,9 +207,16 @@ entry becomes built; components §7/§8 narrowed) + deferred.md discharge/narrow
    component, two profiles; no new component, no second selection. Plan-visible toggle:
    the extract directive gains a `profiles` field (default at deep depth: both; IOF-only
    remains expressible — the eval slice's with/without-ICF axis needs exactly this
-   switch). Fail-closed: an unknown profile name is a compile error. ❓ whether the
-   shared `extraction_result` run roll-up row carries per-profile counts or stays
-   aggregate — plan decision.
+   switch). Fail-closed: an unknown profile name is a compile error.
+   **Roll-up shape pinned (adversarial finding 1, blocker — adopted):** the
+   `extraction_result` table stays one row per `(evidence_scope_id, run_id)` (no DDL
+   change), but its JSON payloads become **per-profile keyed**: provenance maps
+   profile id → {fingerprint + version components}; counts and finding totals are
+   per-profile; per-doc statuses in the docs array are per-profile. The distinction
+   the shape must carry: **"profile not selected"** (absent from provenance — the
+   plan didn't fire it) vs **"profile fired, zero findings"** (present, count 0,
+   doc statuses `no_findings`) — this is also what feeds the unified tool's honest
+   per-kind availability (item 8) and the rubric's per-profile memo claims.
 5. **Prompt `extract_icf_v1`** — **prompt-bearing: lead-only, replay-evidenced**:
    envelope fenced as an id-keyed JSON data object from day one (the 020 pattern — no
    inline title/abstract, structural test); field reference generated from the wire
@@ -214,21 +227,33 @@ entry becomes built; components §7/§8 narrowed) + deferred.md discharge/narrow
    lesson: no "infer from context if not explicit", no High/Moderate/Low judgment
    ordinals, no transferability verdicts — reported-or-null, always anchored).
 6. **Field rules `icf_rules_v1`** (`quote_verify.py`): null-like coercion of the
-   free-text fields, full `field_coverage` mapping per nullable field (valid ·
-   `not_extracted` · `unclear` — a null is never ambiguous within v1), grain gate,
-   `claim_key` + dedup (key proposal: `context_type` + normalised `intervention` +
-   normalised `claim`; first-wins on descriptive metadata — plan reviews the exact
-   key). No invalid-enum recovery rows: `context_type`/`claim_basis` are strict wire
+   free-text fields; **`field_coverage` carries markers for non-valid outcomes only**
+   (`not_extracted` · `unclear` · `not_applicable` where applicable) — a present
+   valid field is ABSENT from the map, the as-built qv semantics (adversarial
+   finding 3 — adopted; the data-model's coverage states have no "valid" value).
+   Zero-record documents are represented by the per-profile doc status in item 4's
+   roll-up, never by dummy field coverage. Grain gate; `claim_key` + dedup — **key
+   proposal: `context_type` + `claim_level` + normalised `intervention` + normalised
+   `claim`** (adversarial finding 2 — adopted: `claim_level` joins the key, matching
+   item 1 and the `estimate_level` precedent; study-vs-pooled twins never collapse);
+   first-wins on descriptive metadata — plan reviews the exact key. No invalid-enum
+   recovery rows: `context_type`/`claim_basis`/`claim_level` are strict wire
    Literals under schema-constrained output (the 020 precedent).
 7. **ICF vetter (❓ gate decision 5):** a parallel vetter with ICF flag classes —
    proposal: `recommendation` (should/ought content), `aspiration` (targets), 
    `vague_context` (no named intervention or actionable content), `deictic_naming`
    (carried from IOF — "the programme"). Same protocol/stub/live seam, own prompt
-   version (`extract_icf_vetter_v1`, lead-only), own fingerprint sub-block,
-   flag-not-drop, fail-open. Alternative if declined: ship without a vetter and let the
-   eval slice measure whether one is needed (the prompt's exclusion guidance still
-   binds). Recommendation: in — the recommendation/finding line is ICF's single
-   biggest quality risk and it is exactly what vetters are for.
+   version (`extract_icf_vetter_v1`, lead-only), own fingerprint sub-block, fail-open.
+   **Storage semantics pinned (adversarial finding 4 — adopted): the IOF pattern** —
+   flagged findings are excluded from the row insert and recorded in the extraction
+   doc summary (all-flagged docs → `no_findings`); the finding tables carry no vetter
+   flag column. "Flag-not-drop" here means the flagged material is RECORDED in
+   extraction provenance (auditable, never silently vanished), not that flagged rows
+   persist in the findings table — the earlier row-visibility wording was wrong
+   against the as-built vetter. Alternative if declined: ship without a vetter and
+   let the eval slice measure whether one is needed (the prompt's exclusion guidance
+   still binds). Recommendation: in — the recommendation/finding line is ICF's
+   single biggest quality risk and it is exactly what vetters are for.
 8. **Synthesis read surface — the first-reader payoff (gate decision 6 SETTLED —
    owner, 2026-07-12): ONE unified writer tool.** `query_findings` extends to serve
    both schemas in a single call — the dominant writer query is "effects AND
@@ -272,7 +297,12 @@ entry becomes built; components §7/§8 narrowed) + deferred.md discharge/narrow
    annotation resolve-via-row pattern); **pattern claims** over ICF records (counts by
    `context_type` / intervention) validate deterministically against the referenced
    extraction — the claim-type ladder in components §9 gains its implementation-shaped
-   rung. **Theme claims over kind-spanning groups become available at their existing
+   rung. **Validator scope named (adversarial finding 6 — adopted):** the synthesis
+   pattern-claim machinery gains an explicit new payload + validator (an
+   `icf_context_type_count` shape over the referenced extraction's ICF records, with
+   a group-scoped variant), alongside the existing `characterisation_coverage` /
+   `group_direction_spread` / `extraction_direction_spread` set — the existing
+   direction-spread payloads stay IOF-only, unchanged. **Theme claims over kind-spanning groups become available at their existing
    grade** (softest, interpretive, base-labelled — the membership validator is
    kind-agnostic; item 12's bridge is what makes the membership real); ICF-specific
    *facets* (grouping BY barrier/mechanism) stay at Slice C. The tool-shape
@@ -345,8 +375,27 @@ entry becomes built; components §7/§8 narrowed) + deferred.md discharge/narrow
     fingerprint bump (deliberate memo invalidation, mini-priced re-extraction) ·
     carriage through the surfaces item 8 already touches. v2-null vs v3-null
     distinguish via `field_coverage` key-absence (the 020 old-row pattern; no
-    backfill, existing rows stay valid). **Nothing else rides this bump** — any
+    backfill, existing rows stay valid). **Top-level `setting` vs stratum `setting`
+    pinned (adversarial finding 8 — adopted, the 020 geography precedent applied):**
+    IOF already carries `setting` as a stratum qualifier scoping specific claims (a
+    setting-scoped subgroup estimate); the new top-level column records the delivery
+    setting of the evidence underlying the finding — they coexist, exactly as
+    `study_geography` coexists with geographic strata, and the `extract_iof_v7`
+    guidance carries the same two-distinction pattern 020 wrote for geography.
+    Top-level `setting` does NOT join the IOF `claim_key` (descriptive study
+    metadata, first-wins — the population/study_design/study_geography precedent;
+    stratum setting continues to participate via canonical strata as today).
+    Coexistence + key behaviour test-pinned. **Nothing else rides this bump** — any
     temptation to add further IOF fields is a stop condition.
+13. **Planner + plan compile (adversarial finding 7 — adopted; the missing
+    orchestrator half of gate decision 4):** the `profiles` directive needs its
+    upstream surfaces — the `Plan`/`Config` model gains the extract-profiles field,
+    plan compile + directive validation enforce it fail-closed (unknown profile =
+    compile error; defaults per depth from the analysis-depth table), and the
+    **planner prompt** (which currently describes extract as IOF-only) is updated to
+    describe the two-profile extract semantics — prompt-bearing, **lead-only,
+    version-bumped, replay-evidenced** (the 019 planner-prompt precedent binds:
+    plan-visible, user-confirmable composition; no silent compilation).
 12. **Kind-spanning group membership — the minimal bridge (gate decision 8, owner
     2026-07-12):** `group` keeps its current shape entirely — single facet per run,
     current grain, current clustering, no new facets — but its loader reads **both
@@ -357,8 +406,13 @@ entry becomes built; components §7/§8 narrowed) + deferred.md discharge/narrow
     makes item 8's envelope carriage TRUE on grouped runs: section `member_findings`
     are group members, and without this bridge ICF findings would never reach the
     envelope on exactly the deep grouped runs that matter (the hole this item
-    closes). Slice C's multi-facet redesign inherits kind-spanning membership as a
-    requirement, and reworks fan-out/grain around it — the membership principle
+    closes). **Group payload contract pinned (adversarial finding 5 — adopted):**
+    members carry a `kind` tag; `direction_spread` is computed over IOF members ONLY
+    (ICF members have no direction — never zero-filled into the spread); the payload
+    gains per-kind member counts; the group/synthesise validators that read
+    `group_direction_spread` are updated to the IOF-members-only base and
+    test-pinned. Slice C's multi-facet redesign inherits kind-spanning membership as
+    a requirement, and reworks fan-out/grain around it — the membership principle
     (members join by shared reference, regardless of kind) survives that rework.
 
 **Out:** **facet-machinery rework beyond item 12's membership bridge** — multi-facet
@@ -403,8 +457,9 @@ All code, migrations and spec changes public-safe. Replay evidence as summaries 
 
 Extraction + vetter on `gpt-5.4-mini` via the OpenAI route (the IOF floor; same
 step-up-is-recorded rule). Prompt-bearing changes: `extract_icf_v1` +
-`extract_icf_vetter_v1` + `extract_iof_v7` (the rider's setting line only), all
-lead-authored. Replay set: at least one process-evaluation / qualitative-arm document
+`extract_icf_vetter_v1` + `extract_iof_v7` (the rider's setting line only) + the
+planner-prompt two-profile update (item 13), all lead-authored.
+Replay set: at least one process-evaluation / qualitative-arm document
 rich in implementation material (ideally carrying reported adaptations and a
 fidelity/dose observation, exercising the two new vocabulary values) · one effects-only
 RCT (expect few/zero ICF records —
@@ -433,7 +488,9 @@ validating). No composed full-chain e2e.
 - **Don't flatten status.** settled · 🟡 leaning · ❓ open · ⏸ deferred stay as-is.
 - **Model only what behaves** — every ICF field ships with its render surface (writer
   envelope + annotation resolve-via-row); a field with no reader doesn't ship.
-- **Flag, don't drop** — vetter flags never delete; below-bar material stays visible.
+- **Flag, don't drop** — vetted-out material is recorded in extraction provenance
+  (the IOF storage semantics, item 7), never silently vanished; below-bar material
+  at synthesis stays visible.
 - **Honest absence** — zero ICF records from an effects-only source is coverage, not
   failure; `field_coverage` records absence per field.
 - Leave deferred seams as seams in [docs/deferred.md](../../deferred.md).
@@ -454,9 +511,17 @@ schemas) · budget spent.
 - `make verify` green.
 - Deterministic tests: migration up/down (incl. the IOF `setting` column) ·
   `context_type` + `claim_level` (+ `claim_basis`, `level`) CHECK ↔
-  Literal asserts · `icf_rules_v1` coercion + full coverage mapping + grain gate ·
+  Literal asserts · `icf_rules_v1` coercion + non-valid-only coverage markers + grain
+  gate ·
   claim-key dedup (context_type/intervention/claim twins collapse; distinct types and
-  study-vs-pooled `claim_level` twins don't)
+  study-vs-pooled `claim_level` twins don't) · roll-up per-profile shape
+  (profile-not-selected vs fired-with-zero distinguishable; per-profile provenance +
+  counts) · IOF top-level `setting` vs stratum setting coexist; top-level setting
+  does not join the IOF claim key · planner/plan-compile profiles field fail-closed
+  (unknown profile compile error; depth defaults from the table) · group payload:
+  members kind-tagged, `direction_spread` IOF-members-only, per-kind counts;
+  validators updated · `icf_context_type_count` pattern payload validates (incl.
+  group-scoped variant)
   · **IOF fingerprint changes only via the rider** (old memos reuse under the old
   fingerprint; `iof_v3` extracts fresh alongside; v2-null vs v3-null distinguished by
   `field_coverage` key-absence; `iof_rules_v3` coverage for `setting`) ·
@@ -466,7 +531,8 @@ schemas) · budget spent.
   directive compiles fail-closed (unknown profile errors; IOF-only expressible; default
   both at deep) · `render_field_docs` for ICF wire models · structural fencing check
   (no inline envelope interpolation) · few-shot pre-flight binding · vetter payload
-  shape + flag-not-drop pinned · unified `query_findings`: kind-segregated typed return
+  storage semantics pinned (vetted-out excluded from insert, recorded in the doc
+  summary — the IOF pattern) · unified `query_findings`: kind-segregated typed return
   (never one homogeneous list) · kind-specific filters fail closed on a mismatched kind
   · honest per-kind availability ("not extracted in this run" when the ICF profile
   didn't fire; tool absent only when no extraction is referenced at all) · **membership
