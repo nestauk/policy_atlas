@@ -26,7 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.prompt_fields import sanitize_prompt_field
 
-PLANNER_PROMPT_VERSION = "planner_v3"
+PLANNER_PROMPT_VERSION = "planner_v4"
 
 # Input-side caps at prompt assembly. Generous for legitimate intents; a
 # bound, not a filter (the screen prompt's M10 discipline).
@@ -89,6 +89,7 @@ class PlanDraftWire(BaseModel):
     components: list[str] | None = None
     component_rationale: dict[str, str] | None = None
     grouping_facet: str | None = None
+    extract_profiles: list[str] | None = None
     steering_mode: str | None = None
     steer_point_defaults: list[dict[str, str]] | None = None
     assumptions: list[str] | None = None
@@ -237,19 +238,30 @@ yourself.
   - extract -> group (the findings chain, in that order, both or neither,
     and always with select): ONLY available when analysis_depth is deep —
     never with landscape or standard (those depths do not buy the
-    findings-extraction chain). extract pulls structured intervention-outcome
-    findings from selected documents and group organises them by facet.
-    Extraction is intervention-outcome schema-bound: for questions that are
-    NOT about interventions and their effects (statistics or fact-finding,
-    stakeholder mapping, purely descriptive landscape questions), the
-    findings chain does not fit at ANY depth — compose without it and let
-    depth buy search effort and synthesis thoroughness instead.
+    findings-extraction chain). extract pulls structured findings from
+    selected documents in up to two schema-bound profiles — "iof"
+    (intervention-outcome effect findings: what changed, by how much) and
+    "icf" (implementation-context findings: mechanisms, barriers, enablers,
+    conditions the intervention depends on, delivery processes, adaptations,
+    fidelity — the how and under-what-conditions half) — and group organises
+    the extracted findings by facet. Both profiles are anchored to named
+    interventions: for questions that are NOT about interventions and their
+    effects or delivery (statistics or fact-finding, stakeholder mapping,
+    purely descriptive landscape questions), the findings chain does not fit
+    at ANY depth — compose without it and let depth buy search effort and
+    synthesis thoroughness instead.
 - component_rationale: one honest sentence per discretionary component you
   include (or pointedly exclude), so the selection is visible. Keys MUST be
   exact single component names from the list above — characterise,
   screen_full, select, extract, group — one entry per component, never a
   combined key like "select_extract_group".
 - grouping_facet: intervention | outcome | population — only when group runs.
+- extract_profiles: which finding profiles extract runs — only when extract
+  is in components. ["iof", "icf"] is the default at deep (both halves of
+  the evidence); ["iof"] alone fits when implementation context would add
+  nothing (a pure effect-size question where how-it-was-delivered is out of
+  scope). "icf" never runs alone. Omit the field to accept the default, and
+  when you narrow it, say why in your reply.
 - steering_mode: frequent | moderate | minimal | unattended. Default
   moderate. Mention that unattended runs never pause: flagged decisions
   auto-resolve to the plan's pre-declared defaults.
