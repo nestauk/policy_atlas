@@ -1173,12 +1173,17 @@ def _extraction_profile_ids(extraction_row: Mapping[str, Any] | None) -> set[str
     if extraction_row is None:
         return set()
     provenance = extraction_row.get("extraction_provenance")
-    if isinstance(provenance, Mapping):
-        profiles = provenance.get("profiles")
-        if isinstance(profiles, Mapping):
-            return {key for key in profiles if isinstance(key, str)}
-        return {IOF_PROFILE_ID}
-    return set()
+    if not isinstance(provenance, Mapping):
+        raise SynthesiseFailure(
+            "corrupt_reference: extraction_result.extraction_provenance must be an object"
+        )
+    profiles = provenance.get("profiles")
+    if not isinstance(profiles, Mapping):
+        raise SynthesiseFailure(
+            "corrupt_reference: extraction_result.extraction_provenance missing "
+            "the profiles map"
+        )
+    return {key for key in profiles if isinstance(key, str)}
 
 
 def _extraction_record_ids_by_profile(

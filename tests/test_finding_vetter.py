@@ -582,6 +582,7 @@ def test_parallel_vetter_failure_isolates_to_one_doc(conn: Connection) -> None:
     )
 
     assert profile_counts(summary)["vetting_failed"] == 1
+    assert "vetting_failed" in summary["flags"]
     by_pss = {doc["pss_id"]: doc for doc in profile_docs(summary)}
     assert by_pss[str(good_pss)]["finding_count"] == 1
     assert by_pss[str(failing_pss)]["finding_count"] == 1

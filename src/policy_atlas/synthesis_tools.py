@@ -490,14 +490,11 @@ def _validate_findings_tool_arguments(arguments: dict[str, Any]) -> None:
     raw_context_type = arguments.get("context_type")
     if raw_context_type is not None and raw_context_type not in CONTEXT_TYPES:
         _tool_fail("context_type is invalid")
-    if raw_direction is not None and requested_kinds is not None and "iof" not in requested_kinds:
-        _tool_fail("effect_direction requires iof findings")
-    if (
-        raw_context_type is not None
-        and requested_kinds is not None
-        and "icf" not in requested_kinds
-    ):
-        _tool_fail("context_type requires icf findings")
+    effective_kinds = requested_kinds if requested_kinds is not None else set(FINDING_KINDS)
+    if raw_direction is not None and effective_kinds != {"iof"}:
+        _tool_fail("effect_direction requires iof findings only — pass kinds ['iof']")
+    if raw_context_type is not None and effective_kinds != {"icf"}:
+        _tool_fail("context_type requires icf findings only — pass kinds ['icf']")
 
 
 def _validate_lookup_tool_arguments(arguments: dict[str, Any]) -> None:
@@ -1325,11 +1322,17 @@ def _load_extraction_docs(
         return [], set()
     mapped_docs = [cast("dict[str, Any]", doc) for doc in docs if isinstance(doc, dict)]
     provenance = row.extraction_provenance
-    if isinstance(provenance, Mapping):
-        profiles = provenance.get("profiles")
-        if isinstance(profiles, Mapping):
-            return mapped_docs, {key for key in profiles if isinstance(key, str)}
-    return mapped_docs, set()
+    if not isinstance(provenance, Mapping):
+        raise ToolValidationError(
+            "corrupt_reference: extraction_result.extraction_provenance must be an object"
+        )
+    profiles = provenance.get("profiles")
+    if not isinstance(profiles, Mapping):
+        raise ToolValidationError(
+            "corrupt_reference: extraction_result.extraction_provenance missing "
+            "the profiles map"
+        )
+    return mapped_docs, {key for key in profiles if isinstance(key, str)}
 
 
 def _record_ids_from_profile_map(raw_ids: Sequence[Any]) -> list[uuid.UUID]:

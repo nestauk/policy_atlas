@@ -308,10 +308,11 @@ QUERY_FINDINGS_TOOL_SCHEMA: dict[str, Any] = {
             "conditions, delivery processes, adaptations, fidelity). Records are "
             "id-keyed with extract-verified anchors; the two kinds are never blended "
             "into one list. When a kind was not extracted in this run, its section "
-            "reports that as a coverage fact. Filters combine with AND; kind-specific "
-            "filters apply only when their kind is requested (a mismatched kind/filter "
-            "combination is an error); omit all filters to list findings (capped per "
-            "kind)."
+            "reports that as a coverage fact. Filters combine with AND; a "
+            "kind-specific filter (effect_direction, context_type) requires kinds to "
+            "name exactly its own kind — any other kinds value, including the "
+            "omitted-kinds default, is an error; omit all filters to list findings "
+            "(capped per kind)."
         ),
         "parameters": {
             "type": "object",

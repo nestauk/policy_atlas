@@ -6,6 +6,8 @@ from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 from policy_atlas.grounding_judge import (
     StubGroundingJudgeBackend,
     build_envelope,
@@ -1073,3 +1075,19 @@ def test_unspanned_lane_not_skipped_when_judge_scanned() -> None:
     accounting = _accounting()
     _run_section_claims(wire, accounting, available_claim_types={"gap", "reasoning"})
     assert accounting.unspanned_lane_skipped is False
+
+
+def test_extraction_profile_ids_fails_closed_on_flat_provenance() -> None:
+    """Post-021 amendment: a pre-021 flat roll-up (provenance without a
+    profiles map) is a corrupt reference for synthesise, mirroring group's
+    loud error — never a silent IOF-only fallback."""
+    from policy_atlas.synthesise import SynthesiseFailure, _extraction_profile_ids
+
+    assert _extraction_profile_ids(None) == set()
+    assert _extraction_profile_ids(
+        {"extraction_provenance": {"profiles": {"eb_iof_base_v1": {}}}}
+    ) == {"eb_iof_base_v1"}
+    with pytest.raises(SynthesiseFailure, match="corrupt_reference"):
+        _extraction_profile_ids({"extraction_provenance": {"fingerprint": "fp"}})
+    with pytest.raises(SynthesiseFailure, match="corrupt_reference"):
+        _extraction_profile_ids({"extraction_provenance": "flat"})

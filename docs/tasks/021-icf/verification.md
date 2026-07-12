@@ -248,6 +248,108 @@ Flagged deviations / adjudication notes:
   discharged by this slice's membership bridge (flagged by the flow-back
   draft as a lead call, folded into the deferred.md sweep).
 
+## Review findings (step 7, 2026-07-13)
+
+Stack: contract verifier (pinned Opus, fresh) · security auditor · Codex
+adversarial (family flip: Codex anchored the lead-authored prompt surfaces;
+Claude lanes anchored the Codex-written product code) · `/code-review medium`
+(8 scoped finder angles + 1-vote verify) · lead live-trace lane (dev-DB
+claims re-queried; Langfuse-only claims checked via persisted provenance).
+`make verify` green before and after fixes (1272 → 1273 tests).
+
+**Live-trace lane (lead):** every dev-DB claim above re-verified by direct
+query — ICF 203 with the exact context_type breakdown, claim_basis 203/203,
+setting 119, pooled 4; the 48 IOF `setting` values all carry the single
+live-run timestamp (0 backfilled among 3,318 pre-existing NULL rows); the
+grouping failure's cause is **persisted**, not trace-only
+(`rejection_reasons: ["partition: duplicate id v126", "repair: duplicate id
+v139"]`) with the per-kind residual `{icf: 203, iof: 130}` live — the 013
+trace-only-diagnosis corollary holds; the build's root-cause stands and the
+Slice-C facet-redesign input is confirmed, not a 021 defect.
+
+**Adopted (fixed in-stack, commit follows):**
+1. **Amendment sweep missed `synthesise.py`'s flat-row fallback** (finder
+   removed-behavior lane + security INFO, convergent; verifier CONFIRMED):
+   `_extraction_profile_ids` still silently returned `{IOF_PROFILE_ID}` on a
+   pre-021 flat row while group raised loud — a flat row reached synthesise
+   as an internally inconsistent run (substrate loaded IOF findings,
+   `query_findings` reported the kind unavailable). Fixed: synthesise raises
+   `corrupt_reference` (mirroring group), `_load_extraction_docs` likewise
+   fail-closed; five test fixtures reseeded to the per-profile shape; pure
+   test pins the raise.
+2. **`query_findings` kind-specific filters failed open on the
+   omitted-`kinds` default** (Codex adversarial #5, unique catch; verifier
+   CONFIRMED): `{"context_type": "barrier"}` with `kinds` omitted returned
+   ALL IOF findings unfiltered alongside ICF barriers — rubric item 11
+   violation. Fixed: a kind-specific filter now requires kinds to name
+   exactly its own kind (omission or both-kinds is a loud tool error); tool
+   description updated to match; tests pin omitted/both-kinds rejection.
+3. **Grouping `extraction_base` under-reported the kind-spanning base**
+   (Codex adversarial #6; verifier CONFIRMED, no functional readers —
+   provenance fidelity only): the persisted base claimed profile
+   `eb_iof_base_v1` / findings_total 130 while `finding_set.size` was 333.
+   Fixed: `extraction_base.profiles` now carries every extracted profile's
+   fingerprint + counts (profile-set mismatch between counts and provenance
+   is a corrupt reference); shape test updated + kind-spanning pin added.
+4. **Vetter fail-open was invisible at run level** (security LOW): a judge
+   failure persisted findings unfiltered with only a per-profile count.
+   Fixed: `vetting_failed` promoted to a run-level flag (mirrors
+   `extraction_failures`); test asserts the flag.
+
+**Declined (recorded reasons):**
+- Sequential IOF→ICF DB loads in `_load_findings` and per-call list rescans
+  in the findings reader (efficiency lane; verifier: negligible vs
+  LLM-dominated wall-clock).
+- Migration CHECK strings duplicated vs schema.py constants (contract
+  verifier NOTE; standard immutable-migration practice, drift guarded by
+  test_icf_migration).
+- Codex #1 (specification-shaped delivery_process leakage): convergent with
+  the build's own eval-blind pin — already bounded by flag-not-drop, the
+  known-gap line above, and the deferred `intervention_specification`
+  candidate; no new action this slice.
+- Codex #3 (claim_basis drift risk): the round-2 hedged-commentary clause is
+  the shipped mitigation; residual measurement belongs to the eval slice's
+  ground truth by the contract's honesty pin.
+
+**Deferred (→ deferred.md, step 8):**
+- Two-profile extraction runs strictly sequentially (~2× extract wall-clock
+  on both-profile runs); parallelising needs a second DB connection or
+  restructured memo/write phases — real but non-trivial (efficiency lane,
+  verifier-confirmed mechanism).
+- ICF-side plumbing clones IOF (backends, vetter scaffolding, dedup loops,
+  per-kind literals in group/facet_values/synthesis_tools) — 19 convergent
+  cleanup/altitude candidates across three lanes; consolidation deliberately
+  rides the third-schema slice (deferred.md already pins "a third schema
+  adds a kind section + filters"; the candidates sharpen that entry's cost).
+- Control-character scrubbing asymmetry: model output is NUL-scrubbed only,
+  while directives get `has_control_character` (security LOW,
+  defense-in-depth).
+- `claim_basis` null cannot distinguish "indeterminate after reading" from
+  "not attempted" (`not_extracted` covers both — Codex #4); a coverage-
+  vocabulary refinement for the eval slice / schema-candidate ladder.
+- Planner two-profile narrowing is discretionary, not prompt-decidable in
+  edge intents (Codex #2); an over-narrow planner silently drops ICF — eval
+  slice's intent set should probe it.
+
+**Flagged deviations — all five explicitly re-examined:** 1 (wire-model
+default removal), 2 (shared-keys projection fix — now generalised to all
+profiles by adopted fix 3), 3 (31-vs-30 replay overage, honest disclosure,
+no coverage loss), 4 (ICF-only unsupported, explicit compile error + seam)
+— **confirmed as-is**; 5 (owner amendment) — **contested in part**: the
+sweep was incomplete (adopted fix 1); otherwise confirmed against the code.
+
+**Clean lanes:** conventions, line-by-line, cross-file tracer — no findings.
+Security: 0 critical/high/medium; prompt fencing, SQL construction,
+fail-closed validators, secrets, resource caps all explicitly clean.
+Contract verifier: no MAJOR; all 16 rubric items hold (item 8 completed by
+this stack; items 14/15 hold with disclosed documentary/live-evidence
+bounds; M1/M2 = the disclosed replay overage and grouped-run-carriage
+limitation, both already recorded above).
+
+**Fake-done check on the in-stack fixes:** no tests weakened — fixture
+reseeds made seeds *stricter* (real per-profile shapes); all new guards are
+raises, not fallbacks; `make verify` green (1273 tests, +1 net).
+
 ## Public safety
 
 Probe summaries above are public-safe (titles + counts + short claim

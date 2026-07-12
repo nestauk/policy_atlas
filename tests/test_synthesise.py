@@ -189,7 +189,10 @@ def test_transitive_resolution_from_grouping_reference(conn: Connection) -> None
             evidence_scope_id=scope_id,
             run_id=extraction_run_id,
             selection_run_id=selection_run_id,
-            extraction_provenance={"fingerprint": "t"},
+            extraction_provenance={
+                "fingerprint": "t",
+                "profiles": {IOF_PROFILE_ID: {"fingerprint": "t"}},
+            },
             docs=[],
             counts={"findings": {"total": 0}},
             flags={},
@@ -899,7 +902,10 @@ def test_groups_unsectioned_counted(conn: Connection) -> None:
             evidence_scope_id=scope_id,
             run_id=extraction_run_id,
             selection_run_id=selection_run_id,
-            extraction_provenance={"fingerprint": "t"},
+            extraction_provenance={
+                "fingerprint": "t",
+                "profiles": {IOF_PROFILE_ID: {"fingerprint": "t"}},
+            },
             docs=[],
             counts={"findings": {"total": 0}},
             flags={},
@@ -1553,6 +1559,7 @@ def test_load_findings_carries_effect_basis_and_study_geography(conn: Connection
         conn,
         project_id=project_id,
         extraction_row={
+            "extraction_provenance": {"profiles": {IOF_PROFILE_ID: {}}},
             "docs": [
                 {"profiles": {IOF_PROFILE_ID: {"extraction_record_id": str(record_id)}}}
             ]
@@ -1590,6 +1597,7 @@ def test_load_findings_tolerates_v1_null_rows(conn: Connection) -> None:
         conn,
         project_id=project_id,
         extraction_row={
+            "extraction_provenance": {"profiles": {IOF_PROFILE_ID: {}}},
             "docs": [
                 {"profiles": {IOF_PROFILE_ID: {"extraction_record_id": str(record_id)}}}
             ]
@@ -1671,10 +1679,11 @@ def test_load_findings_batches_chunk_basis_query(conn: Connection) -> None:
     expected_basis[str(snap_id)] = build_basis([(None, "The chunkless abstract.")])
 
     extraction_row = {
+        "extraction_provenance": {"profiles": {IOF_PROFILE_ID: {}}},
         "docs": [
             {"profiles": {IOF_PROFILE_ID: {"extraction_record_id": str(rid)}}}
             for rid in record_ids
-        ]
+        ],
     }
 
     query_count = 0

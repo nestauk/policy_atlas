@@ -419,16 +419,12 @@ def test_happy_path_writes_rollup_summary_and_provenance(conn: Connection) -> No
     assert provenance["repair_count"] == 0
     assert provenance["distinct_value_count"] == 6
     base = cast("dict[str, Any]", provenance["extraction_base"])
-    assert base.keys() == {
-        "extraction_fingerprint",
-        "profile",
-        "counts",
-        "finding_set",
-        "facet_coverage",
-    }
-    assert base["extraction_fingerprint"] == f"rollup-fp-{seeded.run_id}"
-    assert base["profile"] == "test-profile"
-    assert base["counts"] == {
+    assert base.keys() == {"profiles", "finding_set", "facet_coverage"}
+    assert base["profiles"].keys() == {IOF_PROFILE_ID}
+    iof_base = cast("dict[str, Any]", base["profiles"][IOF_PROFILE_ID])
+    assert iof_base.keys() == {"extraction_fingerprint", "counts"}
+    assert iof_base["extraction_fingerprint"] == f"rollup-fp-{seeded.run_id}"
+    assert iof_base["counts"] == {
         "selected": 1,
         "extracted": 1,
         "no_findings": 0,
@@ -857,6 +853,14 @@ def test_group_membership_spans_iof_and_icf_with_iof_only_spread(
     assert group["direction_spread"]["increase"] == 1
     assert sum(group["direction_spread"].values()) == 1
     assert sum(cast("dict[str, int]", payload["overall_direction_spread"]).values()) == 1
+    provenance = cast(
+        "dict[str, Any]", _group_row(conn, project_id, group_run_id)["grouping_provenance"]
+    )
+    base = cast("dict[str, Any]", provenance["extraction_base"])
+    assert base["profiles"].keys() == {IOF_PROFILE_ID, ICF_PROFILE_ID}
+    assert base["profiles"][IOF_PROFILE_ID]["extraction_fingerprint"] == "rollup-iof"
+    assert base["profiles"][ICF_PROFILE_ID]["extraction_fingerprint"] == "rollup-icf"
+    assert base["profiles"][ICF_PROFILE_ID]["counts"]["findings_total"] == 1
 
 
 def test_mixed_unclear_findings_never_dropped_by_group(conn: Connection) -> None:

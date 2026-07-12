@@ -1333,6 +1333,8 @@ def _build_summary(
         counts_profiles[run.profile_id] = counts
         if counts["failed"] > 0 and "extraction_failures" not in flags:
             flags.append("extraction_failures")
+        if counts.get("vetting_failed", 0) > 0 and "vetting_failed" not in flags:
+            flags.append("vetting_failed")
 
         vetted_out = _profile_vetted_out(
             run.docs, finding_vetter_active=run.finding_vetter_active

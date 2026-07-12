@@ -1685,6 +1685,14 @@ def test_make_findings_reader_kind_filter_mismatch_fails_closed(conn: Connection
         reader({"kinds": ["icf"], "effect_direction": "increase"})
     with pytest.raises(ToolValidationError, match="context_type requires icf"):
         reader({"kinds": ["iof"], "context_type": "barrier"})
+    # Omitted kinds defaults to both — a kind-specific filter must still fail
+    # closed, never return the other kind unfiltered alongside.
+    with pytest.raises(ToolValidationError, match="effect_direction requires iof"):
+        reader({"effect_direction": "increase"})
+    with pytest.raises(ToolValidationError, match="context_type requires icf"):
+        reader({"context_type": "barrier"})
+    with pytest.raises(ToolValidationError, match="context_type requires icf"):
+        reader({"kinds": ["iof", "icf"], "context_type": "barrier"})
 
 
 def test_make_findings_reader_iof_only_run_reports_icf_not_extracted(

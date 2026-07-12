@@ -113,11 +113,13 @@ def group_findings(
             is exceeded, the backend fails, or grouping invariants fail.
     """
     facet, facet_source = parse_grouping_directive(context.context)
-    docs, extraction_counts, extraction_provenance, raw_counts = _load_extraction_rollup(
-        conn,
-        project_id=project_id,
-        scope_id=context.scope_id,
-        extraction_run_id=context.extraction_run_id,
+    docs, extraction_profile_counts, extraction_profile_provenance, raw_counts = (
+        _load_extraction_rollup(
+            conn,
+            project_id=project_id,
+            scope_id=context.scope_id,
+            extraction_run_id=context.extraction_run_id,
+        )
     )
     extraction_record_ids_by_kind = _extraction_record_ids_by_kind(docs)
     findings = _load_findings(
@@ -207,8 +209,8 @@ def group_findings(
         rejection_reasons=rejection_reasons,
         distinct_value_count=len(values),
         extraction_run_id=context.extraction_run_id,
-        extraction_counts=extraction_counts,
-        extraction_provenance=extraction_provenance,
+        extraction_profile_counts=extraction_profile_counts,
+        extraction_profile_provenance=extraction_profile_provenance,
         finding_ids=finding_ids,
         values_with_findings=len(values),
         no_value_count=len(no_value_finding_ids),
@@ -249,7 +251,12 @@ def _load_extraction_rollup(
     project_id: uuid.UUID,
     scope_id: uuid.UUID,
     extraction_run_id: uuid.UUID,
-) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any], dict[str, Any]]:
+) -> tuple[
+    list[dict[str, Any]],
+    dict[str, dict[str, Any]],
+    dict[str, dict[str, Any]],
+    dict[str, Any],
+]:
     row = conn.execute(
         sa_select(
             extraction_result.c.docs,
@@ -293,14 +300,30 @@ def _load_extraction_rollup(
             "corrupt reference: extraction_result.extraction_provenance missing "
             "the IOF profile block"
         )
-    iof_counts = dict(counts_profiles[IOF_PROFILE_ID])
-    for shared_key in ("selected", "basis"):
-        if shared_key in counts_map:
-            iof_counts[shared_key] = counts_map[shared_key]
+    if set(counts_profiles) != set(provenance_profiles):
+        raise GroupError(
+            "corrupt reference: extraction_result counts and extraction_provenance "
+            "name different profile sets"
+        )
+    profile_counts: dict[str, dict[str, Any]] = {}
+    profile_provenance: dict[str, dict[str, Any]] = {}
+    for profile_id, block in counts_profiles.items():
+        prov_block = provenance_profiles[profile_id]
+        if not isinstance(block, dict) or not isinstance(prov_block, dict):
+            raise GroupError(
+                f"corrupt reference: extraction_result profile block for {profile_id} "
+                "must be an object"
+            )
+        merged = dict(block)
+        for shared_key in ("selected", "basis"):
+            if shared_key in counts_map:
+                merged[shared_key] = counts_map[shared_key]
+        profile_counts[profile_id] = merged
+        profile_provenance[profile_id] = dict(prov_block)
     return (
         mapped_docs,
-        iof_counts,
-        dict(provenance_profiles[IOF_PROFILE_ID]),
+        profile_counts,
+        profile_provenance,
         counts_map,
     )
 
@@ -555,8 +578,8 @@ def _build_provenance(
     rejection_reasons: Sequence[str],
     distinct_value_count: int,
     extraction_run_id: uuid.UUID,
-    extraction_counts: dict[str, Any],
-    extraction_provenance: dict[str, Any],
+    extraction_profile_counts: dict[str, dict[str, Any]],
+    extraction_profile_provenance: dict[str, dict[str, Any]],
     finding_ids: Sequence[str],
     values_with_findings: int,
     no_value_count: int,
@@ -576,11 +599,19 @@ def _build_provenance(
         "distinct_value_count": distinct_value_count,
         "extraction_run_id": str(extraction_run_id),
         "extraction_base": {
-            "extraction_fingerprint": _required_str(
-                extraction_provenance, "fingerprint", "extraction provenance"
-            ),
-            "profile": _required_str(extraction_provenance, "profile", "extraction provenance"),
-            "counts": _extraction_base_counts(extraction_counts),
+            "profiles": {
+                profile_id: {
+                    "extraction_fingerprint": _required_str(
+                        extraction_profile_provenance[profile_id],
+                        "fingerprint",
+                        f"extraction provenance [{profile_id}]",
+                    ),
+                    "counts": _extraction_base_counts(
+                        extraction_profile_counts[profile_id]
+                    ),
+                }
+                for profile_id in sorted(extraction_profile_provenance)
+            },
             "finding_set": {
                 "size": len(finding_ids),
                 "sha256": _finding_set_sha256(finding_ids),
