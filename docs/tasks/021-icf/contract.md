@@ -205,7 +205,23 @@ discharge/narrowing.
     downstream capability consumers). The formerly-mooted per-schema-writer-tools seam
     is **pre-discharged by gate decision 6**: the unified kind-typed `query_findings`
     IS the schema-typed query interface — a future third schema adds a kind section +
-    filters (content work), not a new tool.
+    filters (content work), not a new tool. The sweep also ADDS the
+    **schema-candidate ladder** entry (owner adjudication, 2026-07-12, this contract's
+    review): generic findings container and runtime intent-shaped custom extraction
+    REMAIN declined (the 011 rulings hold — typed records are what deterministic
+    validation, ground truth, memo reuse and cross-question interpretability rest on;
+    the long tail is served by verified chunk-grounded synthesis, ADR 0010); named
+    candidates `reported_statistic` and `case_example` (V2 question-taxonomy categories
+    4 + 6), **first reader = the Baseline analysis / problem-identification capability**
+    (quantitative + qualitative — its qualitative half may name a further kind, e.g. a
+    `reported_problem`; the candidate list is open, not exhaustive); trigger = Baseline's
+    contract committing the extraction profile, with per-category eval evidence (the
+    eval intent set keeps categories 4/6 in and scores chunk-grounded synthesis on them)
+    as the demonstration; sequencing note — **additive schemas never invalidate eval
+    baselines** (no existing record shape or ground truth changes; a new kind is a new
+    eval arm, the with/without-ICF axis pattern repeated), so these land with Baseline
+    post-eval, no pre-eval promotion pressure. Schema design stays with the committing
+    capability's contract (the IOF precedent).
 
 **Out:** **cross-schema facet grouping** — `group` stays IOF-only this slice; the design
 property (shared source-named vocabulary) now exists in both tables, but the multi-table
