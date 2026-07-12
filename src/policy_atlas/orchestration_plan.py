@@ -12,6 +12,14 @@ from typing import Any, Literal, Self, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from policy_atlas.country_filters import (
+    TIER1_GROUPS,
+    SearchDirectiveError,
+    expand_tier1,
+    overton_display_names,
+    validate_iso_alpha2,
+    validate_overton_display_name,
+)
 from policy_atlas.plan import COMPONENT_REGISTRY
 from policy_atlas.schema import DIRECTIVE_STRING_MAX
 from policy_atlas.screen import CRITERIA_LIST_MAX, _compose_screen_intent
@@ -30,6 +38,7 @@ DiscretionaryComponent = Literal[
 GroupingFacet = Literal["intervention", "outcome", "population"]
 SteeringMode = Literal["frequent", "moderate", "minimal", "unattended"]
 SteerAction = Literal["proceed_flag", "stop"]
+CountryGroupAuthorship = Literal["pinned-table", "planner-proposed", "user-amended"]
 
 PUBLISHER_COUNTRY_MAX = 100
 
@@ -198,6 +207,88 @@ def _derive_expected_artefact_shape(
     return "grounded answer over the screened corpus"
 
 
+class CountryGroup(BaseModel):
+    """Named country group compiled into backend-specific search filters.
+
+    Args:
+        label: Pinned Tier-1 label, or a user/planner label for an explicit
+            Tier-2 country list.
+        countries: Explicit ISO-3166 alpha-2 country list for Tier-2 groups.
+            Must be ``None`` for pinned Tier-1 labels.
+        authorship: Deterministic provenance of the group membership.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    label: str
+    countries: list[str] | None = None
+    authorship: CountryGroupAuthorship
+
+    @field_validator("label")
+    @classmethod
+    def validate_label(cls, value: str) -> str:
+        """Validate the group label.
+
+        Args:
+            value: Candidate group label.
+
+        Returns:
+            The validated label.
+
+        Raises:
+            ValueError: If the label is empty or padded with whitespace.
+        """
+        return _require_clean_string(value, field_name="country_group.label")
+
+    @field_validator("countries")
+    @classmethod
+    def validate_countries(cls, value: list[str] | None) -> list[str] | None:
+        """Validate explicit Tier-2 country membership.
+
+        Args:
+            value: Candidate country list, or ``None``.
+
+        Returns:
+            The validated list, normalised to upper-case, or ``None``.
+
+        Raises:
+            ValueError: If the list is empty, duplicated, too long, or contains
+                a non-ISO-3166 alpha-2 code.
+        """
+        if value is None:
+            return None
+        if len(value) > 200:
+            raise ValueError("country_group.countries must contain at most 200 codes")
+        try:
+            return validate_iso_alpha2(value)
+        except SearchDirectiveError as exc:
+            raise ValueError(f"country_group.countries {exc}") from exc
+
+    @model_validator(mode="after")
+    def validate_group_shape(self) -> Self:
+        """Validate pinned-vs-explicit group shape and authorship.
+
+        Returns:
+            The validated group.
+
+        Raises:
+            ValueError: If a pinned group carries inline countries, a custom
+                group omits countries, or authorship does not match the group
+                source.
+        """
+        if self.label in TIER1_GROUPS:
+            if self.countries is not None:
+                raise ValueError("pinned country_group labels must not carry countries")
+            if self.authorship != "pinned-table":
+                raise ValueError("pinned country_group labels require authorship 'pinned-table'")
+            return self
+        if self.countries is None:
+            raise ValueError("custom country_group labels require countries")
+        if self.authorship == "pinned-table":
+            raise ValueError("custom country_group labels cannot use authorship 'pinned-table'")
+        return self
+
+
 class ScopeConstraints(BaseModel):
     """Search-scope constraints compiled into the search filter grammar.
 
@@ -207,6 +298,7 @@ class ScopeConstraints(BaseModel):
         publisher_country: Optional Overton publisher-country filter.
         author_affiliation_countries: Optional OpenAlex author-affiliation
             country filter, as 2-letter alpha codes normalised to upper-case.
+        country_group: Optional named group applied to both search backends.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -215,6 +307,7 @@ class ScopeConstraints(BaseModel):
     published_before: str | None = None
     publisher_country: str | None = None
     author_affiliation_countries: list[str] | None = None
+    country_group: CountryGroup | None = None
 
     @field_validator("published_after", "published_before")
     @classmethod
@@ -260,7 +353,10 @@ class ScopeConstraints(BaseModel):
             raise ValueError(
                 "publisher_country must contain only letters, spaces, hyphens or apostrophes"
             )
-        return value
+        try:
+            return validate_overton_display_name(value, field_name="publisher_country")
+        except SearchDirectiveError as exc:
+            raise ValueError(str(exc)) from exc
 
     @field_validator("author_affiliation_countries")
     @classmethod
@@ -285,26 +381,22 @@ class ScopeConstraints(BaseModel):
             raise ValueError(
                 "author_affiliation_countries must not be empty; omit the field instead"
             )
-        normalised: list[str] = []
-        for entry in value:
-            if len(entry) != 2 or not entry.isalpha():
-                raise ValueError(
-                    "author_affiliation_countries must contain 2-letter alphabetic codes"
-                )
-            normalised.append(entry.upper())
-        if len(set(normalised)) != len(normalised):
-            raise ValueError("author_affiliation_countries must not contain duplicates")
-        return normalised
+        try:
+            return validate_iso_alpha2(value)
+        except SearchDirectiveError as exc:
+            raise ValueError(f"author_affiliation_countries {exc}") from exc
 
     @model_validator(mode="after")
-    def validate_date_window(self) -> Self:
-        """Validate chronological ordering for the optional recency window.
+    def validate_scope_shape(self) -> Self:
+        """Validate cross-field scope rules.
 
         Returns:
             The validated model.
 
         Raises:
             ValueError: If ``published_after`` is later than ``published_before``.
+            ValueError: If ``country_group`` is combined with single-country
+                geography filters.
         """
         if (
             self.published_after is not None
@@ -312,6 +404,14 @@ class ScopeConstraints(BaseModel):
             and date.fromisoformat(self.published_after) > date.fromisoformat(self.published_before)
         ):
             raise ValueError("published_after must not be later than published_before")
+        if self.country_group is not None and (
+            self.publisher_country is not None
+            or self.author_affiliation_countries is not None
+        ):
+            raise ValueError(
+                "country_group is mutually exclusive with publisher_country "
+                "and author_affiliation_countries"
+            )
         return self
 
     def to_filters(self) -> dict[str, dict[str, Any]]:
@@ -330,6 +430,19 @@ class ScopeConstraints(BaseModel):
             shared["published_before"] = self.published_before
         if shared:
             filters["shared"] = shared
+        if self.country_group is not None:
+            group = self.country_group
+            if group.label in TIER1_GROUPS:
+                countries = list(expand_tier1(group.label))
+                filters["openalex"] = {"author_affiliation_countries": countries}
+                filters["overton"] = {"publisher_region": group.label}
+                return filters
+            countries = group.countries or []
+            filters["openalex"] = {"author_affiliation_countries": countries}
+            filters["overton"] = {
+                "source_country_post_filter": sorted(overton_display_names(countries)),
+            }
+            return filters
         if self.publisher_country is not None:
             filters["overton"] = {"publisher_country": self.publisher_country}
         if self.author_affiliation_countries is not None:

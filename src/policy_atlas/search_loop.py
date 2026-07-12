@@ -20,6 +20,14 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas import acquire, screen
+from policy_atlas.country_filters import (
+    OVERTON_DISPLAY_ALLOWLIST,
+    validate_iso_alpha2,
+    validate_overton_display_name,
+)
+from policy_atlas.country_filters import (
+    SearchDirectiveError as _SearchDirectiveError,
+)
 from policy_atlas.embeddings import EmbeddingBackend
 from policy_atlas.schema import (
     event_log,
@@ -40,6 +48,7 @@ from policy_atlas.search_prompts import (
 from policy_atlas.usage import UsageAccumulator
 
 SearchDepth = Literal["rapid", "standard", "deep"]
+SearchDirectiveError = _SearchDirectiveError
 QueryOrigin = Literal[
     "generated",
     "variant_sr",
@@ -221,13 +230,10 @@ _OVERTON_FILTER_KEYS = {
     "publisher_type",
     "publisher_country",
     "publisher_region",
+    "source_country_post_filter",
     "language",
 }
 _BACKEND_NAMES = {"openalex", "overton"}
-
-
-class SearchDirectiveError(ValueError):
-    """Raised when a search directive or filter block fails closed."""
 
 
 @dataclass(frozen=True)
@@ -243,6 +249,8 @@ class ExecutedCall:
         records: Raw provider records returned by the call.
         status: ``"ok"`` or ``"error"``.
         error: Redacted error string for failed calls.
+        post_filter_excluded: Records excluded by a compiled post-filter, or
+            ``None`` when no post-filter was active for the call.
     """
 
     backend_name: str
@@ -253,6 +261,7 @@ class ExecutedCall:
     records: list[dict[str, Any]]
     status: CallStatus
     error: str | None
+    post_filter_excluded: int | None = None
 
 
 @dataclass(frozen=True)
@@ -261,6 +270,7 @@ class _PlannedCall:
     query: str
     query_origin: QueryOrigin
     group_key: str | None = None
+    filter_variant_index: int = 0
 
 
 @dataclass(frozen=True)
@@ -548,6 +558,8 @@ def overton_wire_params(filters: dict[str, Any] | None) -> dict[str, str]:
             params["source_region"] = _single_enum_value(key, value, OVERTON_REGION_GROUPS)
         elif key == "language":
             params["language"] = _single_str_value(key, value)
+        elif key == "source_country_post_filter":
+            continue
         else:
             raise ValueError(f"unknown Overton filter key: {key}")
     return params
@@ -630,7 +642,25 @@ def _validate_openalex_block(block: dict[str, Any]) -> dict[str, Any]:
                 key, value, OA_STATUS_VALUES, error=SearchDirectiveError, strict=True
             )
         elif key == "author_affiliation_countries":
-            out[key] = _alpha_code_values(key, value, length=2, case="upper")
+            countries = _alpha_code_values(key, value, length=2, case="upper")
+            if len(countries) > 200:
+                raise SearchDirectiveError(
+                    "author_affiliation_countries must contain at most 200 codes"
+                )
+            out[key] = validate_iso_alpha2(countries)
+    return out
+
+
+def _overton_post_filter_values(key: str, value: Any) -> list[str]:
+    if not isinstance(value, list):
+        raise SearchDirectiveError(f"{key} must be a list")
+    out: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or item != item.strip():
+            raise SearchDirectiveError(f"{key} must contain display-country strings")
+        if item not in OVERTON_DISPLAY_ALLOWLIST:
+            raise SearchDirectiveError(f"{key} contains an unsupported Overton country")
+        out.append(item)
     return out
 
 
@@ -650,9 +680,10 @@ def _validate_overton_block(block: dict[str, Any]) -> dict[str, Any]:
                 strict=True,
             )
         elif key == "publisher_country":
-            out[key] = _single_str_value(
+            country = _single_str_value(
                 key, value, error=SearchDirectiveError, accept_list_of_one=False, strict=True
             )
+            out[key] = validate_overton_display_name(country, field_name=key)
         elif key == "publisher_region":
             out[key] = _single_enum_value(
                 key,
@@ -664,6 +695,8 @@ def _validate_overton_block(block: dict[str, Any]) -> dict[str, Any]:
             )
         elif key == "language":
             out[key] = _single_alpha_code_value(key, value, length=3, case="lower")
+        elif key == "source_country_post_filter":
+            out[key] = _overton_post_filter_values(key, value)
     return out
 
 
@@ -745,6 +778,46 @@ def to_wire_params(backend_name: str, validated: dict[str, Any]) -> dict[str, st
     except ValueError as exc:
         raise SearchDirectiveError(str(exc)) from exc
     raise SearchDirectiveError(f"unsupported search backend for filters: {backend_name}")
+
+
+def _filter_variants(backend_name: str, validated: dict[str, Any]) -> list[dict[str, Any]]:
+    if backend_name != "openalex":
+        return [validated]
+    countries = validated.get("author_affiliation_countries")
+    if not isinstance(countries, list) or len(countries) <= 100:
+        return [validated]
+    if len(countries) > 200:
+        raise SearchDirectiveError(
+            "author_affiliation_countries must contain at most 200 codes"
+        )
+    return [
+        {**validated, "author_affiliation_countries": countries[start : start + 100]}
+        for start in range(0, len(countries), 100)
+    ]
+
+
+def _scope_wire_params_payload(
+    wire_params_by_backend: dict[str, list[dict[str, str]]],
+) -> dict[str, Any]:
+    return {
+        name: variants[0] if len(variants) == 1 else {"variants": variants}
+        for name, variants in wire_params_by_backend.items()
+    }
+
+
+def _with_filter_variants(plan: _PlannedCall, variant_count: int) -> list[_PlannedCall]:
+    if variant_count <= 1:
+        return [plan]
+    return [
+        _PlannedCall(
+            backend_name=plan.backend_name,
+            query=plan.query,
+            query_origin=plan.query_origin,
+            group_key=plan.group_key,
+            filter_variant_index=index,
+        )
+        for index in range(variant_count)
+    ]
 
 
 def _count_existing_rounds(
@@ -1168,10 +1241,16 @@ def run_search(
     constants = DEPTH_CONSTANTS[depth]
     backend_names = [backend.name for backend in backends]
     validated_filters = validate_scope_filters(raw_filters, backend_names=backend_names)
-    wire_params_by_backend = {
-        name: to_wire_params(name, validated_filters[name]) for name in backend_names
+    filter_variants_by_backend = {
+        name: _filter_variants(name, validated_filters[name]) for name in backend_names
     }
-    scope_wire_params = wire_params_by_backend if raw_filters is not None else None
+    wire_params_by_backend = {
+        name: [to_wire_params(name, variant) for variant in filter_variants_by_backend[name]]
+        for name in backend_names
+    }
+    scope_wire_params = (
+        _scope_wire_params_payload(wire_params_by_backend) if raw_filters is not None else None
+    )
 
     round_index = _count_existing_rounds(
         conn,
@@ -1220,6 +1299,7 @@ def run_search(
         query_origin: QueryOrigin,
         wire_params: dict[str, str],
         fetch: Callable[[int], list[dict[str, Any]]],
+        post_filter_excluded: Callable[[], int | None] | None = None,
         max_records: int | None = None,
         arm: ArmName | None = None,
     ) -> ExecutedCall | None:
@@ -1243,6 +1323,7 @@ def run_search(
         try:
             records = fetch(remaining)
             records = records[:remaining]
+            excluded = post_filter_excluded() if post_filter_excluded is not None else None
             raw_results_by_backend[backend.name] += len(records)
             call = ExecutedCall(
                 backend_name=backend.name,
@@ -1253,6 +1334,7 @@ def run_search(
                 records=records,
                 status="ok",
                 error=None,
+                post_filter_excluded=excluded,
             )
         except Exception as exc:
             call = ExecutedCall(
@@ -1277,7 +1359,32 @@ def run_search(
         arm: ArmName | None = None,
         max_records: int | None = None,
     ) -> ExecutedCall | None:
-        wire_params = wire_params_by_backend[backend.name]
+        wire_params = wire_params_by_backend[backend.name][plan.filter_variant_index]
+        validated = filter_variants_by_backend[backend.name][plan.filter_variant_index]
+        post_filter = validated.get("source_country_post_filter")
+        if (
+            backend.name == "overton"
+            and isinstance(post_filter, list)
+            and hasattr(backend, "search_with_post_filter")
+        ):
+            return execute_call(
+                backend,
+                verb="search",
+                query=plan.query,
+                query_origin=plan.query_origin,
+                wire_params=wire_params,
+                max_records=max_records,
+                arm=arm,
+                post_filter_excluded=lambda: cast(
+                    int | None, getattr(backend, "last_post_filter_excluded", None)
+                ),
+                fetch=lambda remaining: cast(Any, backend).search_with_post_filter(
+                    plan.query,
+                    wire_params=wire_params,
+                    source_country_post_filter=post_filter,
+                    max_results=remaining,
+                ),
+            )
         return execute_call(
             backend,
             verb="search",
@@ -1295,7 +1402,13 @@ def run_search(
 
     if all(backend.mode == "fixture" for backend in backends):
         for backend in backends:
-            execute_plan(backend, _PlannedCall(backend.name, context.intent, "verbatim"))
+            for plan in _with_filter_variants(
+                _PlannedCall(backend.name, context.intent, "verbatim"),
+                len(filter_variants_by_backend[backend.name]),
+            ):
+                execute_plan(backend, plan)
+                if stop_all:
+                    break
             if stop_all:
                 break
     elif depth in ("deep", "standard") and round_index >= 2:
@@ -1327,27 +1440,43 @@ def run_search(
                 constants["result_cap_per_backend"] - raw_results_by_backend[backend.name],
             )
             if backend.name == "openalex":
-                planned = min(len(queries), REFORMULATE_CALL_CAP) + DIVERSITY_CALL_MIN
+                variant_count = len(filter_variants_by_backend[backend.name])
+                planned = (
+                    min(len(queries), REFORMULATE_CALL_CAP) * variant_count
+                    + DIVERSITY_CALL_MIN * variant_count
+                )
                 quota = _distribute_quota(episode_remaining, planned)
                 for query in queries[:REFORMULATE_CALL_CAP]:
-                    execute_plan(
-                        backend,
+                    for plan in _with_filter_variants(
                         _PlannedCall(backend.name, query, "generated"),
-                        arm="reformulate",
-                        max_records=quota,
-                    )
+                        variant_count,
+                    ):
+                        execute_plan(
+                            backend,
+                            plan,
+                            arm="reformulate",
+                            max_records=quota,
+                        )
+                        if stop_all:
+                            break
                     if stop_all:
                         break
             elif backend.name == "overton":
                 planned = min(len(overton_paraphrases), 2)
                 quota = _distribute_quota(episode_remaining, planned)
                 for paraphrase in overton_paraphrases[:2]:
-                    execute_plan(
-                        backend,
+                    for plan in _with_filter_variants(
                         _PlannedCall(backend.name, paraphrase, "paraphrase"),
-                        arm="reformulate",
-                        max_records=quota,
-                    )
+                        len(filter_variants_by_backend[backend.name]),
+                    ):
+                        execute_plan(
+                            backend,
+                            plan,
+                            arm="reformulate",
+                            max_records=quota,
+                        )
+                        if stop_all:
+                            break
                     if stop_all:
                         break
             if stop_all:
@@ -1569,16 +1698,22 @@ def run_search(
                 reserve = max(
                     1, int(constants["result_cap_per_backend"] * DIVERSITY_FRACTION)
                 )
-                execute_plan(
-                    diversity_backend,
+                for plan in _with_filter_variants(
                     _PlannedCall(
                         diversity_backend.name,
                         diversity_query,
                         diversity_origin,
                     ),
-                    arm="diversity",
-                    max_records=reserve,
-                )
+                    len(filter_variants_by_backend[diversity_backend.name]),
+                ):
+                    execute_plan(
+                        diversity_backend,
+                        plan,
+                        arm="diversity",
+                        max_records=reserve,
+                    )
+                    if stop_all:
+                        break
     else:
         wire, usage = generation_backend.generate_queries(QueriesPayload(intent=context.intent))
         usage_totals.add(usage)
@@ -1592,6 +1727,14 @@ def run_search(
                 queries=queries,
                 overton_paraphrases=overton_paraphrases,
             )
+            plans = [
+                variant
+                for plan in plans
+                for variant in _with_filter_variants(
+                    plan,
+                    len(filter_variants_by_backend[backend.name]),
+                )
+            ]
             quota = _distribute_quota(constants["result_cap_per_backend"], len(plans))
             backend_calls: list[ExecutedCall] = []
             generated_groups: dict[str, list[ExecutedCall]] = {}
@@ -1633,9 +1776,14 @@ def run_search(
             if backend.name == "openalex" and not generated_calls:
                 all_generated_zero = True
             if all_generated_zero and not has_verbatim:
-                fallback = _PlannedCall(backend.name, context.intent, "fallback_verbatim")
-                if execute_plan(backend, fallback) is not None:
-                    fallback_to_verbatim[backend.name] = True
+                for fallback in _with_filter_variants(
+                    _PlannedCall(backend.name, context.intent, "fallback_verbatim"),
+                    len(filter_variants_by_backend[backend.name]),
+                ):
+                    if execute_plan(backend, fallback) is not None:
+                        fallback_to_verbatim[backend.name] = True
+                    if stop_all:
+                        break
             if stop_all:
                 break
 

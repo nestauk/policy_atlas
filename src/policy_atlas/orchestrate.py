@@ -30,6 +30,7 @@ from sqlalchemy.engine import Engine
 from policy_atlas import search_generation, search_live, tracing
 from policy_atlas.acquire import SearchBackend
 from policy_atlas.classification_backend import OpenAIClassificationBackend
+from policy_atlas.country_filters import TIER1_GROUPS, expand_tier1
 from policy_atlas.db import get_engine
 from policy_atlas.embeddings import EmbeddingBackend, OpenAIEmbeddingBackend
 from policy_atlas.extraction_backend import OpenAIExtractionBackend
@@ -41,7 +42,7 @@ from policy_atlas.grounding_judge import OpenAIGroundingJudgeBackend
 from policy_atlas.grouping import OpenAIThemeGroupingBackend, ThemeGroupingBackend
 from policy_atlas.ingest import ingest_upload
 from policy_atlas.logging import configure_logging
-from policy_atlas.orchestration_plan import OrchestrationPlan
+from policy_atlas.orchestration_plan import CountryGroupAuthorship, OrchestrationPlan
 from policy_atlas.planner import OpenAIPlannerBackend, PlannerBackend, StubPlannerBackend
 from policy_atlas.planner_prompt import PLANNER_HISTORY_TURNS_MAX, PlanDraftWire
 from policy_atlas.ranking import OpenAIRankingBackend
@@ -325,7 +326,72 @@ def _split_ids(raw: str) -> list[str]:
     return [token.strip() for token in raw.split(",") if token.strip()]
 
 
-def _build_plan(draft: PlanDraftWire) -> OrchestrationPlan:
+def _country_group_identity(raw_group: object) -> tuple[str, tuple[str, ...] | None] | None:
+    if raw_group is None:
+        return None
+    if isinstance(raw_group, dict):
+        label = raw_group.get("label")
+        countries = raw_group.get("countries")
+    else:
+        label = getattr(raw_group, "label", None)
+        countries = getattr(raw_group, "countries", None)
+    if not isinstance(label, str):
+        return None
+    if countries is None:
+        return label, None
+    if not isinstance(countries, list):
+        return None
+    return label, tuple(str(country).upper() for country in countries)
+
+
+def _assign_country_group_authorship(
+    draft: PlanDraftWire,
+    previous_draft: dict[str, object] | None,
+    *,
+    follows_user_turn: bool,
+    first_countries_by_label: dict[str, tuple[str, ...] | None],
+    authorship_by_label: dict[str, CountryGroupAuthorship],
+) -> CountryGroupAuthorship | None:
+    current = _country_group_identity(draft.country_group)
+    if current is None:
+        return None
+    label, countries = current
+    if label in TIER1_GROUPS:
+        authorship_by_label[label] = "pinned-table"
+        return "pinned-table"
+
+    first = first_countries_by_label.setdefault(label, countries)
+    authorship = authorship_by_label.get(label, "planner-proposed")
+    previous = (
+        _country_group_identity(previous_draft.get("country_group"))
+        if previous_draft is not None
+        else None
+    )
+    if first != countries:
+        authorship = "user-amended"
+    if (
+        follows_user_turn
+        and previous is not None
+        and previous[0] == label
+        and previous[1] != countries
+    ):
+        authorship = "user-amended"
+    authorship_by_label[label] = authorship
+    return authorship
+
+
+def _default_country_group_authorship(raw_group: object) -> CountryGroupAuthorship:
+    identity = _country_group_identity(raw_group)
+    if identity is not None and identity[0] in TIER1_GROUPS:
+        return "pinned-table"
+    return "planner-proposed"
+
+
+def _build_plan(
+    draft: PlanDraftWire,
+    *,
+    country_group_authorship: CountryGroupAuthorship | None = None,
+) -> OrchestrationPlan:
     """Build the executable plan from a ready draft, fail-closed.
 
     Drops null draft fields, folds the flat scope-constraint fields into the
@@ -342,16 +408,23 @@ def _build_plan(draft: PlanDraftWire) -> OrchestrationPlan:
         ValidationError: If the draft is not a valid orchestration plan.
     """
     data = draft.model_dump(exclude_none=True)
-    constraints = {
-        key: data.pop(key)
-        for key in (
-            "published_after",
-            "published_before",
-            "publisher_country",
-            "author_affiliation_countries",
-        )
-        if key in data
-    }
+    constraints: dict[str, object] = {}
+    for key in (
+        "published_after",
+        "published_before",
+        "publisher_country",
+        "author_affiliation_countries",
+    ):
+        if key in data:
+            constraints[key] = data.pop(key)
+    if "country_group" in data:
+        raw_group = data.pop("country_group")
+        if isinstance(raw_group, dict):
+            constraints["country_group"] = {
+                **raw_group,
+                "authorship": country_group_authorship
+                or _default_country_group_authorship(raw_group),
+            }
     if constraints:
         data["scope_constraints"] = constraints
     return OrchestrationPlan.model_validate(data)
@@ -372,6 +445,37 @@ def _render_draft(draft: PlanDraftWire) -> str:
     return "\n".join(parts)
 
 
+def _render_scope_constraints(plan: OrchestrationPlan) -> list[str]:
+    constraints = plan.scope_constraints
+    if not constraints.to_filters():
+        return []
+    lines = ["  scope_constraints:"]
+    if constraints.published_after is not None:
+        lines.append(f"    published_after: {constraints.published_after}")
+    if constraints.published_before is not None:
+        lines.append(f"    published_before: {constraints.published_before}")
+    if constraints.publisher_country is not None:
+        lines.append(f"    publisher_country: {constraints.publisher_country}")
+    if constraints.author_affiliation_countries is not None:
+        lines.append(
+            "    author_affiliation_countries: "
+            f"{constraints.author_affiliation_countries}"
+        )
+    if constraints.country_group is not None:
+        group = constraints.country_group
+        if group.label in TIER1_GROUPS:
+            count = len(expand_tier1(group.label))
+        else:
+            count = len(group.countries or [])
+        authorship = (
+            "pinned table" if group.authorship == "pinned-table" else group.authorship
+        )
+        lines.append(
+            f"    Country group: {group.label} ({count} countries, {authorship})"
+        )
+    return lines
+
+
 def _render_full_plan(plan: OrchestrationPlan) -> str:
     lines = [
         "Proposed orchestration plan:",
@@ -390,8 +494,7 @@ def _render_full_plan(plan: OrchestrationPlan) -> str:
         lines.append(f"  scoping_notes: {plan.scoping_notes}")
     if plan.screening_criteria:
         lines.append(f"  screening_criteria: {plan.screening_criteria}")
-    if plan.scope_constraints.to_filters():
-        lines.append(f"  scope_constraints: {plan.scope_constraints.model_dump(exclude_none=True)}")
+    lines.extend(_render_scope_constraints(plan))
     if plan.component_rationale:
         lines.append("  component_rationale:")
         for component, rationale in plan.component_rationale.items():
@@ -576,8 +679,18 @@ def _plan_conversation(
         ``"no_plan"`` if the planner never converged within the turn cap.
     """
     previous_draft: dict[str, object] | None = None
+    first_country_groups: dict[str, tuple[str, ...] | None] = {}
+    country_group_authorship: dict[str, CountryGroupAuthorship] = {}
     for _ in range(MAX_PLANNER_TURNS):
+        follows_user_turn = bool(turns and turns[-1]["role"] == "user")
         turn = planner.plan_turn(turns, previous_draft, session_id=session_id)
+        assigned_country_group_authorship = _assign_country_group_authorship(
+            turn.plan_draft,
+            previous_draft,
+            follows_user_turn=follows_user_turn,
+            first_countries_by_label=first_country_groups,
+            authorship_by_label=country_group_authorship,
+        )
         console.print(turn.reply)
         console.print(_render_draft(turn.plan_draft))
         previous_draft = turn.plan_draft.model_dump()
@@ -589,7 +702,10 @@ def _plan_conversation(
             continue
 
         try:
-            plan = _build_plan(turn.plan_draft)
+            plan = _build_plan(
+                turn.plan_draft,
+                country_group_authorship=assigned_country_group_authorship,
+            )
         except ValidationError as exc:
             console.print(f"The proposed plan failed validation and was not run:\n{exc}")
             response = console.prompt(

@@ -403,6 +403,7 @@ class OvertonLiveBackend(_TransportMixin):
     def __init__(self, api_key: str, *, fetch: _Fetch | None = None):
         self._api_key = api_key
         self._last_request_at: float | None = None
+        self.last_post_filter_excluded: int | None = None
         self._init_transport(fetch)
 
     def search(
@@ -422,7 +423,52 @@ class OvertonLiveBackend(_TransportMixin):
         Returns:
             Raw Overton policy-document dictionaries.
         """
+        return self._search(
+            query,
+            wire_params=wire_params,
+            max_results=max_results,
+            source_country_post_filter=None,
+        )
+
+    def search_with_post_filter(
+        self,
+        query: str,
+        *,
+        wire_params: dict[str, str] | None = None,
+        source_country_post_filter: list[str],
+        max_results: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return Overton records filtered by source-country metadata.
+
+        Args:
+            query: Natural-language semantic search text.
+            wire_params: Provider wire params from ``overton_wire_params``;
+                never includes the post-filter key.
+            source_country_post_filter: Overton display-country names accepted
+                by the 2026-07-12 probe.
+            max_results: Optional accepted-result cap across pages.
+
+        Returns:
+            Matching Overton policy-document dictionaries. Excluded records are
+            counted in ``last_post_filter_excluded``.
+        """
+        return self._search(
+            query,
+            wire_params=wire_params,
+            max_results=max_results,
+            source_country_post_filter=set(source_country_post_filter),
+        )
+
+    def _search(
+        self,
+        query: str,
+        *,
+        wire_params: dict[str, str] | None,
+        max_results: int | None,
+        source_country_post_filter: set[str] | None,
+    ) -> list[dict[str, Any]]:
         limit = _result_limit(max_results, _DEFAULT_MAX_RESULTS)
+        self.last_post_filter_excluded = 0 if source_country_post_filter is not None else None
         if limit == 0:
             return []
 
@@ -453,8 +499,19 @@ class OvertonLiveBackend(_TransportMixin):
                 )
             response = _json_object(data, _host_from_url(OVERTON_HOST))
             page_results = _results_array(response, _host_from_url(OVERTON_HOST))
-            remaining = limit - len(records)
-            records.extend(page_results[:remaining])
+            if source_country_post_filter is None:
+                remaining = limit - len(records)
+                records.extend(page_results[:remaining])
+            else:
+                for record in page_results:
+                    if len(records) >= limit:
+                        break
+                    if _overton_source_country(record) in source_country_post_filter:
+                        records.append(record)
+                    else:
+                        self.last_post_filter_excluded = (
+                            self.last_post_filter_excluded or 0
+                        ) + 1
             if len(records) >= limit:
                 break
             # An empty page that still advertises next_page_url must not be
@@ -551,6 +608,14 @@ def _overton_wire_params(wire_params: dict[str, str] | None) -> dict[str, str]:
         blocked = sorted(unknown | protected)
         raise ValueError(f"unknown Overton wire param(s): {blocked}")
     return dict(wire_params)
+
+
+def _overton_source_country(record: dict[str, Any]) -> str | None:
+    source = record.get("source")
+    if not isinstance(source, dict):
+        return None
+    country = source.get("country")
+    return country if isinstance(country, str) else None
 
 
 def _result_limit(max_results: int | None, default: int) -> int:

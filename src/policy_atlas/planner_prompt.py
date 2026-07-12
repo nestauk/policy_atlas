@@ -26,7 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.prompt_fields import sanitize_prompt_field
 
-PLANNER_PROMPT_VERSION = "planner_v2"
+PLANNER_PROMPT_VERSION = "planner_v3"
 
 # Input-side caps at prompt assembly. Generous for legitimate intents; a
 # bound, not a filter (the screen prompt's M10 discipline).
@@ -36,6 +36,33 @@ PLANNER_HISTORY_TURNS_MAX = 20
 
 # Reasoning model: cap covers reasoning + output tokens.
 PLANNER_MAX_OUTPUT_TOKENS = 16_384
+
+
+class CountryGroupDraft(BaseModel):
+    """A named country grouping in the plan draft.
+
+    The model authors ``label`` (and, for non-pinned groupings, the explicit
+    ``countries`` list); authorship provenance is assigned code-side at plan
+    compile, never here.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = Field(
+        description=(
+            "The grouping's display label: a pinned-table group name emitted "
+            "EXACTLY as listed in the system prompt, or the user's own phrase "
+            "for a proposed explicit list."
+        )
+    )
+    countries: list[str] | None = Field(
+        default=None,
+        description=(
+            "2-letter ISO country codes. MUST be null for pinned-table group "
+            "labels (membership expands at compile); REQUIRED for any other "
+            "grouping (the list is the truth the run filters by)."
+        ),
+    )
 
 
 class PlanDraftWire(BaseModel):
@@ -56,6 +83,7 @@ class PlanDraftWire(BaseModel):
     published_before: str | None = None
     publisher_country: str | None = None
     author_affiliation_countries: list[str] | None = None
+    country_group: CountryGroupDraft | None = None
     search_effort: str | None = None
     analysis_depth: str | None = None
     components: list[str] | None = None
@@ -146,15 +174,53 @@ yourself.
   geography lives in the text) — say this honestly whenever you set one,
   and name the backend it applies to: publisher_country is grey-literature
   only, author_affiliation_countries academic only.
+- country_group: a named country grouping, applied to BOTH backends at once
+  (academic side by author affiliation, grey-literature side by publishing
+  source geography — state that honestly, as with the single-country
+  filters). Never combine it with publisher_country or
+  author_affiliation_countries — pick the one surface that matches the ask.
+  First decide what the grouping scopes:
+  - STUDY/PROGRAMME SETTING (most "evidence from/across X" phrasings):
+    express it as a screening criterion naming the group, not a backend
+    filter — filters cannot see study geography, and an author-affiliation
+    filter would drop foreign-authored studies ABOUT those countries. Say
+    so. When a source-origin reading is also plausible (policy documents
+    are usually about their own country), offer country_group in your
+    reply as an option the user can add, rather than silently choosing.
+  - SOURCE ORIGIN (publications, governments, or authors FROM those
+    countries — "what are G7 governments publishing", "Nordic ministry
+    documents", or the user confirms the origin reading): set
+    country_group.
+  Three cases for the label:
+  - Pinned groups — emit the label EXACTLY as written, countries null
+    (membership expands at compile from provenance-stamped tables, never
+    from you): "OECD members", "G7", "G20", "EU27", "EEA", "Europe",
+    "North America", "Oceania". Choose the label honestly: "Europe" is the
+    continent (includes the UK, Norway, Switzerland); "EU27" is the
+    political union (the UK is not in it); "G20" expands to its 19
+    sovereign members.
+  - Any other grouping the user names ("Nordic countries", "Commonwealth",
+    "MENA", "developing countries", ...): propose an EXPLICIT list — label
+    = the user's phrase, countries = 2-letter ISO codes. In your reply,
+    name the definitional choice you made (e.g. which definition of
+    "developing" the list encodes) and ask the user to confirm or amend
+    the list before approving the plan. The persisted list is the truth —
+    the run filters by exactly those countries, and the label must never
+    claim a definition its list no longer matches.
+  - Decline honestly what neither case serves: exclusion groupings
+    ("everywhere except the UK") and groupings the user won't pin to a
+    concrete list are not yet supported — say so plainly, never
+    approximate silently.
 - search_effort: rapid (one quick search pass; a thin result stays thin and
   is flagged) | standard (a bounded iterative search loop, ~2.5-3.5 min) |
   deep (the full iterative loop with citation snowballing, ~6 min of
   searching).
 - analysis_depth: landscape (map the evidence base: coverage, themes, gaps —
-  no per-document extraction) | standard (screen, appraise and synthesise
-  over the corpus's full text — no per-document findings extraction; the
-  extraction chain is what deep buys) | deep (adds the findings chain: a
-  selection of ~25 documents extracted in depth).
+  no per-document extraction) | standard (screen, appraise, purposively
+  select the strongest-fit documents to guide synthesis emphasis, and
+  synthesise over the corpus's full text — no per-document findings
+  extraction; the extraction chain is what deep buys) | deep (adds the
+  findings chain: ~25 selected documents extracted in depth).
 - components: which discretionary steps run. The mandatory spine always
   runs: search -> screen -> classify -> appraise -> fetch full text ->
   synthesise. Discretionary, chosen by you for intent-fit:
@@ -163,16 +229,21 @@ yourself.
   - screen_stage2: a precision re-screen of full text. ONLY available when
     analysis_depth is standard or deep — never with landscape (the landscape
     rung does not buy the full-text confirmation pass).
-  - select -> extract -> group (the deep chain, in that order, all or
-    none from select onward): ONLY available when analysis_depth is deep —
+  - select: a purposive ranking that picks the strongest-fit documents.
+    Available at standard and deep — never with landscape. At standard it
+    guides synthesis emphasis (selected documents get retrieval priority
+    and citations record their selection origin); at deep it additionally
+    feeds the extraction chain.
+  - extract -> group (the findings chain, in that order, both or neither,
+    and always with select): ONLY available when analysis_depth is deep —
     never with landscape or standard (those depths do not buy the
     findings-extraction chain). extract pulls structured intervention-outcome
     findings from selected documents and group organises them by facet.
     Extraction is intervention-outcome schema-bound: for questions that are
     NOT about interventions and their effects (statistics or fact-finding,
-    stakeholder mapping, purely descriptive landscape questions), the deep
-    chain does not fit at ANY depth — compose without it and let depth buy
-    search effort and synthesis thoroughness instead.
+    stakeholder mapping, purely descriptive landscape questions), the
+    findings chain does not fit at ANY depth — compose without it and let
+    depth buy search effort and synthesis thoroughness instead.
 - component_rationale: one honest sentence per discretionary component you
   include (or pointedly exclude), so the selection is visible. Keys MUST be
   exact single component names from the list above — characterise,

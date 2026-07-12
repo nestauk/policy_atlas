@@ -61,6 +61,18 @@ def _context(scope_id: uuid.UUID) -> AcquireContext:
     )
 
 
+def _overton_record(rid: str, country: str) -> dict[str, Any]:
+    return {
+        "policy_document_id": rid,
+        "title": f"Policy document {rid}",
+        "snippet": "Policy evidence summary.",
+        "document_url": f"https://example.org/{rid}",
+        "source": {"country": country, "type": "government", "title": "Test source"},
+        "published_on": "2024-01-01",
+        "languages": ["eng"],
+    }
+
+
 def test_live_backends_receive_backend_native_wire_params_via_run_search(
     conn: Connection,
     monkeypatch: pytest.MonkeyPatch,
@@ -148,3 +160,59 @@ def test_live_backends_receive_backend_native_wire_params_via_run_search(
         .where(search_coverage_record.c.acquired_by_run_id == run_id)
     ).one()
     assert row.scope_filters == expected_filters
+
+
+def test_overton_post_filter_exclusion_count_reaches_event_and_coverage(
+    conn: Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("policy_atlas.search_live._sleep", lambda _seconds: None)
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    calls = 0
+
+    def fetch(url: str, params: dict[str, str]) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return {
+                "results": [_overton_record("uk-1", "UK"), _overton_record("igo-1", "IGO")],
+                "next_page_url": "https://app.overton.io/documents.php?page=2",
+            }
+        return {"results": [_overton_record("uk-2", "UK")]}
+
+    overton = OvertonLiveBackend("overton-test-key", fetch=fetch)
+    run_search(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        context=AcquireContext(
+            scope_id=scope_id,
+            intent="Find evidence on housing retrofit policy.",
+            context={
+                "search": {
+                    "depth": "rapid",
+                    "filters": {
+                        "overton": {"source_country_post_filter": ["UK"]},
+                    },
+                }
+            },
+        ),
+        backends=[overton],
+        generation_backend=ScriptedGenerationBackend(
+            queries=[SearchQueriesWire(queries=[], overton_paraphrases=[])]
+        ),
+    )
+
+    payloads = [
+        event["payload"]
+        for event in events.read(conn, project_id)
+        if event["event_type"] == "search.executed"
+    ]
+    assert payloads[0]["filters"] == {}
+    assert payloads[0]["post_filter_excluded"] == 1
+    row = conn.execute(
+        select(search_coverage_record)
+        .where(search_coverage_record.c.acquired_by_run_id == run_id)
+    ).one()
+    assert row.scope_filters["post_filter_exclusions"][0]["post_filter_excluded"] == 1

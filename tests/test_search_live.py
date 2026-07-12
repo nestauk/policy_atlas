@@ -41,6 +41,13 @@ def _oa_stub_record(rid: str = "https://example.org/W1") -> dict[str, Any]:
     return {"id": rid, "display_name": "Stub title"}
 
 
+def _overton_stub_record(rid: str, country: str | None) -> dict[str, Any]:
+    record: dict[str, Any] = {"policy_document_id": rid, "title": f"Title {rid}"}
+    if country is not None:
+        record["source"] = {"country": country}
+    return record
+
+
 def _status_error(status_code: int, host: str = "api.openalex.org") -> httpx.HTTPStatusError:
     url = f"https://{host}/works?api_key=SECRET123"
     request = httpx.Request("GET", url)
@@ -150,6 +157,47 @@ def test_overton_limiter_gates_next_page_url_follow(monkeypatch: pytest.MonkeyPa
     assert len(calls) == 2
     assert len(sleeps) == 1
     assert 0 < sleeps[0] <= OVERTON_MIN_INTERVAL_S
+
+
+def test_overton_source_country_post_filter_paginates_until_quota(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _sleep_recorder(monkeypatch)
+    calls: list[tuple[str, dict[str, str]]] = []
+
+    def fetch(url: str, params: dict[str, str]) -> Any:
+        calls.append((url, dict(params)))
+        if len(calls) == 1:
+            return {
+                "results": [
+                    _overton_stub_record("p1", "UK"),
+                    _overton_stub_record("p2", "IGO"),
+                    _overton_stub_record("p3", None),
+                ],
+                "next_page_url": "https://app.overton.io/documents.php?page=2",
+            }
+        return {
+            "results": [
+                _overton_stub_record("p4", "France"),
+                _overton_stub_record("p5", "USA"),
+                _overton_stub_record("p6", "UK"),
+            ]
+        }
+
+    backend = OvertonLiveBackend("KEY", fetch=fetch)
+    records = backend.search_with_post_filter(
+        "housing policy",
+        wire_params={"published_after": "2020-01-01"},
+        source_country_post_filter=["UK", "France"],
+        max_results=3,
+    )
+
+    assert [record["policy_document_id"] for record in records] == ["p1", "p4", "p6"]
+    assert backend.last_post_filter_excluded == 3
+    assert len(calls) == 2
+    assert calls[0][1]["published_after"] == "2020-01-01"
+    assert "source_country" not in calls[0][1]
+    assert "source_country_post_filter" not in calls[0][1]
 
 
 # --- Timeout ---

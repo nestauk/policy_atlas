@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from policy_atlas.country_filters import ISO_3166_ALPHA2
 from policy_atlas.orchestration_plan import (
     ANALYSIS_DEPTH_TABLE,
     SPINE,
@@ -133,16 +134,43 @@ def test_spine_is_present_in_order_for_valid_plan_matrix() -> None:
         # prompt's intent cap, or criteria would silently truncate mid-run.
         {"question": "q" * 1_990, "screening_criteria": ["Exclude opinion pieces."]},
         {"scope_constraints": {"publisher_country": "x" * 101}},
+        {"scope_constraints": {"publisher_country": "United Kingdom"}},
+        {"scope_constraints": {"publisher_country": "GB"}},
         {"scope_constraints": {"publisher_country": "United Kingdom\x1b[2J"}},
         {
             "backend_scope": "academic_only",
-            "scope_constraints": {"publisher_country": "United Kingdom"},
+            "scope_constraints": {"publisher_country": "UK"},
         },
         {"scope_constraints": {"author_affiliation_countries": []}},
         {"scope_constraints": {"author_affiliation_countries": ["gbr"]}},
         {"scope_constraints": {"author_affiliation_countries": ["g"]}},
         {"scope_constraints": {"author_affiliation_countries": ["g1"]}},
+        {"scope_constraints": {"author_affiliation_countries": ["XX"]}},
         {"scope_constraints": {"author_affiliation_countries": ["gb", "GB"]}},
+        {
+            "scope_constraints": {
+                "country_group": {
+                    "label": "Nordic countries",
+                    "countries": ["NO", "SE", "ZZ"],
+                    "authorship": "planner-proposed",
+                }
+            }
+        },
+        {
+            "scope_constraints": {
+                "publisher_country": "UK",
+                "country_group": {"label": "G7", "authorship": "pinned-table"},
+            }
+        },
+        {
+            "scope_constraints": {
+                "country_group": {
+                    "label": "Large custom group",
+                    "countries": list(ISO_3166_ALPHA2)[:201],
+                    "authorship": "planner-proposed",
+                }
+            }
+        },
         {
             "backend_scope": "grey_lit_only",
             "scope_constraints": {"author_affiliation_countries": ["GB"]},
@@ -240,7 +268,7 @@ def test_round_trip_payload_composes_to_identical_chain() -> None:
         scope_constraints={
             "published_after": "2020-01-01",
             "published_before": "2025-12-31",
-            "publisher_country": "United Kingdom",
+            "publisher_country": "UK",
         },
     )
 
@@ -255,7 +283,7 @@ def test_scope_constraints_compile_into_two_level_search_filters() -> None:
         scope_constraints={
             "published_after": "2021-01-01",
             "published_before": "2024-12-31",
-            "publisher_country": "United Kingdom",
+            "publisher_country": "UK",
         },
     )
 
@@ -269,7 +297,7 @@ def test_scope_constraints_compile_into_two_level_search_filters() -> None:
                     "published_after": "2021-01-01",
                     "published_before": "2024-12-31",
                 },
-                "overton": {"publisher_country": "United Kingdom"},
+                "overton": {"publisher_country": "UK"},
             },
         }
     }
@@ -281,13 +309,53 @@ def test_author_affiliation_countries_normalised_to_upper_case() -> None:
     assert plan.scope_constraints.author_affiliation_countries == ["GB", "US"]
 
 
+def test_tier1_country_group_compiles_to_openalex_and_native_overton_region() -> None:
+    plan = _plan(
+        scope_constraints={
+            "country_group": {"label": "OECD members", "authorship": "pinned-table"}
+        }
+    )
+
+    filters = plan.scope_constraints.to_filters()
+
+    assert len(filters["openalex"]["author_affiliation_countries"]) == 38
+    assert filters["overton"] == {"publisher_region": "OECD members"}
+
+
+def test_tier2_country_group_compiles_to_openalex_and_overton_post_filter() -> None:
+    plan = _plan(
+        scope_constraints={
+            "country_group": {
+                "label": "Nordic countries",
+                "countries": ["no", "se", "dk", "fi", "is"],
+                "authorship": "planner-proposed",
+            }
+        }
+    )
+
+    filters = plan.scope_constraints.to_filters()
+
+    assert filters["openalex"] == {
+        "author_affiliation_countries": ["NO", "SE", "DK", "FI", "IS"]
+    }
+    assert filters["overton"] == {
+        "source_country_post_filter": [
+            "Denmark",
+            "Finland",
+            "Iceland",
+            "Norway",
+            "Sweden",
+        ]
+    }
+
+
 def test_scope_constraints_compile_openalex_block_alongside_shared_and_overton() -> None:
     plan = _plan(
         search_effort="standard",
         scope_constraints={
             "published_after": "2021-01-01",
             "published_before": "2024-12-31",
-            "publisher_country": "United Kingdom",
+            "publisher_country": "UK",
             "author_affiliation_countries": ["gb", "us"],
         },
     )
@@ -302,7 +370,7 @@ def test_scope_constraints_compile_openalex_block_alongside_shared_and_overton()
                     "published_after": "2021-01-01",
                     "published_before": "2024-12-31",
                 },
-                "overton": {"publisher_country": "United Kingdom"},
+                "overton": {"publisher_country": "UK"},
                 "openalex": {"author_affiliation_countries": ["GB", "US"]},
             },
         }

@@ -205,6 +205,7 @@ class _ExecutedCallStub:
     records: list[dict[str, Any]]
     status: str
     error: str | None
+    post_filter_excluded: int | None = None
 
 
 def test_counting_invariant_across_executed_calls_and_backends(conn: Connection) -> None:

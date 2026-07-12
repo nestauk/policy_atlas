@@ -171,6 +171,11 @@ class ExecutedSearchCall(Protocol):
         """Redacted error text for failed calls."""
         ...
 
+    @property
+    def post_filter_excluded(self) -> int | None:
+        """Records excluded by a compiled post-filter, when one was active."""
+        ...
+
 
 @dataclass(frozen=True)
 class _LegacySearchCall:
@@ -189,6 +194,7 @@ class _LegacySearchCall:
     records: list[dict[str, Any]]
     status: str
     error: str | None
+    post_filter_excluded: int | None = None
 
 
 def _limit_fixture_records(
@@ -624,7 +630,7 @@ def acquire_sources(
     embedder: EmbeddingBackend | None = None,
     executed_calls: Sequence[ExecutedSearchCall] | None = None,
     depth: str = "rapid",
-    scope_wire_params: dict[str, dict[str, str]] | None = None,
+    scope_wire_params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Acquire metadata-only sources for an evidence scope over the given backends.
 
@@ -646,8 +652,8 @@ def acquire_sources(
             strategy layer. When supplied, no backend ``search`` method is
             called here.
         depth: Search-depth directive recorded in events and coverage.
-        scope_wire_params: Per-backend executed wire params recorded on the
-            coverage record.
+        scope_wire_params: Per-backend executed wire params or variant payloads
+            recorded on the coverage record.
 
     Returns:
         Counts dict: ``acquired``, ``already_acquired``, ``skipped_unusable``,
@@ -878,25 +884,29 @@ def acquire_sources(
             raise ValueError(f"executed call has invalid status: {call.status!r}")
         result_count = len(call.records) if call.status == "ok" else 0
         error = call.error if call.status == "error" else None
+        post_filter_excluded = call.post_filter_excluded
+        event_payload: dict[str, Any] = {
+            "backend": backend.name,
+            "trust_class": backend.trust_class,
+            "mode": backend.mode,
+            "query": call.query,
+            "query_origin": call.query_origin,
+            "verb": call.verb,
+            "depth": depth,
+            "filters": call.wire_params,
+            "status": call.status,
+            "result_count": result_count,
+            "error": error,
+            "evidence_scope_id": str(context.scope_id),
+        }
+        if post_filter_excluded is not None:
+            event_payload["post_filter_excluded"] = post_filter_excluded
         events.append(
             conn,
             project_id=project_id,
             run_id=run_id,
             event_type="search.executed",
-            payload={
-                "backend": backend.name,
-                "trust_class": backend.trust_class,
-                "mode": backend.mode,
-                "query": call.query,
-                "query_origin": call.query_origin,
-                "verb": call.verb,
-                "depth": depth,
-                "filters": call.wire_params,
-                "status": call.status,
-                "result_count": result_count,
-                "error": error,
-                "evidence_scope_id": str(context.scope_id),
-            },
+            payload=event_payload,
         )
         if call.status == "ok":
             ok_calls_by_backend[backend.name] += 1
@@ -960,6 +970,21 @@ def acquire_sources(
     usable = totals["acquired"] + totals["already_acquired"]
     adequacy_verdict = "inadequate" if (any_error or usable == 0) else "adequate"
 
+    coverage_scope_filters: dict[str, Any] = dict(scope_wire_params or {})
+    post_filter_exclusions = [
+        {
+            "backend": call.backend_name,
+            "verb": call.verb,
+            "query": call.query,
+            "query_origin": call.query_origin,
+            "post_filter_excluded": call.post_filter_excluded,
+        }
+        for call in executed_calls
+        if call.post_filter_excluded is not None
+    ]
+    if post_filter_exclusions:
+        coverage_scope_filters["post_filter_exclusions"] = post_filter_exclusions
+
     coverage_record_id = uuid.uuid4()
     conn.execute(
         search_coverage_record.insert().values(
@@ -976,7 +1001,7 @@ def acquire_sources(
                 }
                 for b in backends
             ],
-            scope_filters=scope_wire_params or {},
+            scope_filters=coverage_scope_filters,
             stop_condition=stop_condition,
             adequacy_verdict=adequacy_verdict,
             verdict_origin="model",
