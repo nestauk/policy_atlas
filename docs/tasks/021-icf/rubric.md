@@ -19,13 +19,16 @@ in progress, not done.
 
 Slice-specific:
 
-9.  [ ] **IOF non-invalidation evidenced**: IOF fingerprint components byte-identical
-        before/after; an existing IOF memo hits post-slice; no IOF table/column/prompt/
-        rules change in the diff.
+9.  [ ] **IOF invalidation bounded to the approved rider**: the only IOF changes in
+        the diff are item 11's — `setting` column, `iof_v3`, `iof_rules_v3`,
+        `extract_iof_v7` setting line, fingerprint bump; old memos reuse under the old
+        fingerprint; v2-null vs v3-null distinguished via `field_coverage`
+        key-absence; no backfill, no rewritten rows.
 10. [ ] **Own fingerprint domain**: ICF fingerprint composes only from ICF constants;
         ICF extracts fresh alongside an IOF memo hit on the same document; every
         output-affecting ICF constant (profile, schema, prompt, model, rules, verifier,
-        window knobs, vetter sub-block) is in the fingerprint.
+        window knobs, vetter sub-block) is in the fingerprint; the shared-vocabulary
+        drift guard passes (one definition, both models import it).
 11. [ ] **Related-but-distinct held everywhere**: unified `query_findings` returns
         kind-segregated typed sections (never one homogeneous list); no record,
         envelope entry or claim blends schemas; kind-specific filters fail closed;

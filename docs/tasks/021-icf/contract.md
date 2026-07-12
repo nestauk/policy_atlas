@@ -37,10 +37,12 @@ claim).
 One PR to `dev` landing the ICF domain end-to-end: wire + stored models (`icf_v1`), the
 `implementation_context_finding` table + migration, `extract_icf_v1` prompt + ICF field
 rules + ICF vetter, a second extraction profile through the extract component behind a
-plan-visible composition toggle, and the synthesis read surface (writer tool + envelope
-carriage + deterministic validators) that makes EB synthesis the first reader. Spec
-flow-back (data-model ⏸ entry becomes built; components §7/§8 narrowed) + deferred.md
-discharge/narrowing.
+plan-visible composition toggle, and the synthesis read surface (unified kind-typed
+writer tool + envelope carriage + deterministic validators) that makes EB synthesis the
+first reader. Plus the bounded **IOF `setting` rider** (`iof_v3`, item 11 — one column,
+one prompt line, deliberate pre-ground-truth fingerprint bump) and the shared reference
+vocabulary defined once with a cross-schema drift guard. Spec flow-back (data-model ⏸
+entry becomes built; components §7/§8 narrowed) + deferred.md discharge/narrowing.
 
 ## Read first
 
@@ -116,6 +118,25 @@ discharge/narrowing.
    - `study_geography` (nullable, source-named, finding grain — the 020 field's exact
      semantics; implementation context is where transferability lives, and consistency
      with IOF keeps the eval ground-truth instructions uniform).
+   - `study_design` (nullable, source-named — IOF-parity, owner 2026-07-12: the
+     review-grain logic is identical — a review's implementation findings come from
+     different included studies; `claim_basis` doesn't cover it, design is what kind
+     of study produced the claim, basis is its epistemic grounding).
+   - **`claim_level`** (`study` | `pooled` | null — owner 2026-07-12): the IOF
+     `estimate_level` logic applied to context claims — a review's pooled barrier
+     ("most cited across 12 studies") and a primary study's own barrier observation
+     are different evidence shapes that must not double-count, and ICF's first-reader
+     payoff is deterministic pattern-claim COUNTS, so count honesty is load-bearing.
+     Joins the claim key (the estimate_level precedent). CHECK-backed.
+   - **Shared reference vocabulary defined ONCE (owner, 2026-07-12):** the shared
+     source-named columns (`intervention` / `outcome` / `population` / `setting` /
+     `study_geography` / `study_design`) get a single code definition (shared column
+     set / model mixin both record modules import) plus a cross-schema drift-guard
+     test — nothing may let IOF's and ICF's semantics or coercion for the same-named
+     reference drift apart (grouping and the future dimension index depend on it).
+     Storage stays parallel tables (payloads are disjoint; a merged table is the
+     generic-container failure mode); the cross-kind UNION read view goes to Slice C
+     with its first reader (cross-schema grouping).
    - **CFIR profile fields (❓ gate decision 2):** `resource_requirements` and
      `workforce_requirements` — nullable source-named Text, only what the source
      reports (cost/funding; staffing/skills/training). Framework-backed at the
@@ -152,10 +173,11 @@ discharge/narrowing.
      rankings) are analysis enrichment, never base fields.
 2. **DB schema + migration (schema gate):** one new table
    `implementation_context_finding` hanging off `source_extraction_record` via the same
-   composite FK as IOF; CHECKs on `context_type` (+ `claim_basis` and `level` if
-   adopted); one up/down migration. **`source_extraction_record` and `extraction_result` are reused
-   unchanged** — ICF rows key on their own fingerprint; no IOF table or column changes
-   of any kind (test-pinned).
+   composite FK as IOF; CHECKs on `context_type` and `claim_level` (+ `claim_basis` and
+   `level` if adopted); one up/down migration, which also carries item 11's single IOF
+   column. **`source_extraction_record` and `extraction_result` are reused unchanged**
+   — ICF rows key on their own fingerprint. IOF table changes: **only** item 11's
+   approved `setting` column, nothing else (test-pinned).
 3. **Extraction profile + fingerprint domain:** `implementation_context_records.py`
    (wire/stored models, `PROFILE_ID = "eb_icf_base_v1"`, `SCHEMA_VERSION = "icf_v1"`,
    own `render_field_docs`; payload types reused). **Pipeline shape pinned (owner,
@@ -165,9 +187,10 @@ discharge/narrowing.
    a future third schema is content work, not plumbing. Bounded to what the two real
    instances force: no profile registry, no plugin machinery, no speculative
    abstraction (the plan 🛑 reviews the parameterisation seam). ICF fingerprints
-   compose from ICF constants only; **IOF's fingerprint components are byte-identical
-   before/after this slice** (test pin: existing IOF memos hit; a fixture project's
-   IOF fingerprint string is unchanged).
+   compose from ICF constants only. **IOF's fingerprint changes exactly once, via item
+   11's approved rider** (deliberate, pre-ground-truth); beyond the rider's named
+   version bumps, IOF constants are untouched — test pin per the 020 pattern: old
+   memos reuse under the old fingerprint, `iof_v3` extracts fresh alongside.
 4. **Composition shape (🛑 gate decision 4):** ICF extraction runs **inside the existing
    extract component as a second per-source pass over the same selection** — one
    component, two profiles; no new component, no second selection. Plan-visible toggle:
@@ -291,7 +314,32 @@ discharge/narrowing.
     (the data-model's committed intervention/outcome dimension indexing, with ICF's
     source-named values as co-riders on the same index target) on the **Slice C
     contract agenda** — build-or-defer decided there, where the writer's retrieval
-    surface is being reworked and pre-eval sequencing still holds.
+    surface is being reworked and pre-eval sequencing still holds — alongside the
+    **cross-kind UNION reference view** (item 1's shared-vocabulary read surface;
+    first reader = C's cross-schema grouping). The flow-back also records the
+    **presentation-grain design note** (owner, 2026-07-12): finding kinds are
+    production/validation categories, never reader-facing navigation — reader
+    surfaces pivot on the shared references and on `group`'s facet clusters (one
+    card/section per intervention or theme, effects and implementation context as
+    facets of one entity; the V2 InterventionCard precedent) — recorded so the
+    web-app slice inherits it.
+11. **IOF `setting` rider — `iof_v3` (owner-approved 2026-07-12; supersedes this
+    contract's earlier "IOF untouched" pin):** the shared reference vocabulary was
+    always intervention/outcome/population/setting, but IOF never got the setting
+    column (setting exists only as a stratum qualifier scoping specific claims) —
+    and setting is what GRADE indirectness/Wang/TRANSFER compare for EFFECT evidence
+    too. Ground truth is not yet authored, so this is the one cheap moment (the 020
+    rationale, applied once more). Scope, deliberately minimal: one nullable
+    source-named `setting` column on `intervention_outcome_finding` (same semantics
+    + inner-setting rule as ICF's, via the shared vocabulary definition) · wire +
+    stored model field · `SCHEMA_VERSION` → `iof_v3` · `iof_rules_v3` (coverage
+    mapping for the new nullable field) · `extract_iof_v7` (lead-only: the setting
+    guidance line + few-shot touch — nothing else changes in the prompt) ·
+    fingerprint bump (deliberate memo invalidation, mini-priced re-extraction) ·
+    carriage through the surfaces item 8 already touches. v2-null vs v3-null
+    distinguish via `field_coverage` key-absence (the 020 old-row pattern; no
+    backfill, existing rows stay valid). **Nothing else rides this bump** — any
+    temptation to add further IOF fields is a stop condition.
 
 **Out:** **cross-schema facet grouping** — `group` stays IOF-only this slice; the design
 property (shared source-named vocabulary) now exists in both tables, but the multi-table
@@ -301,21 +349,26 @@ bolt-on here) · implementation-shaped **theme** claims (follow facet grouping) 
 hybrid-indexing any ICF dimension (the dimension-promotion gate is observed behaviour,
 not schema enthusiasm) · ICF ground truth + extraction-quality evals (eval slice — this
 slice is honestly eval-blind) · downstream capability consumers (Options/Impact/
-Transferability/VfM read it later; EB synthesis is the reader now) · any IOF schema,
-prompt, rules or fingerprint change (zero — test-pinned) · geography/setting
+Transferability/VfM read it later; EB synthesis is the reader now) · any IOF change
+beyond item 11's approved `setting` rider (one column, one prompt line, the named
+version bumps — nothing else rides; test-pinned) · geography/setting
 canonicalisation · Slice C cost/surface work · Bedrock · everything else in
 `docs/deferred.md`.
 
 ## Constraints & approval gates
 
-- **Schema (needs human approval):** item 2 — one new table + CHECKs + one migration.
-  No changes to existing tables.
-- **No invalidation:** IOF memos, fingerprints, records and prompts are untouched.
-  Any temptation to "quickly parameterise" an IOF surface in a way that changes its
-  fingerprint string is a stop condition.
+- **Schema (needs human approval):** item 2 — one new table + CHECKs, plus item 11's
+  single approved IOF column, in one migration. No other changes to existing tables.
+- **Bounded invalidation:** the IOF fingerprint bump happens exactly once, via item
+  11's rider, before ground truth — deliberate and owner-approved. Existing IOF rows
+  are never rewritten (no backfill; v2 rows read as "not recorded under v2" via
+  `field_coverage` key-absence). Any OTHER change to IOF constants — including
+  "quickly parameterising" an IOF surface in a way that alters its fingerprint beyond
+  the rider's named bumps — is a stop condition.
 - **Prompt-bearing surfaces are lead-only:** `extract_icf_v1`, the ICF vetter prompt,
-  any synthesise guidance line. Mechanical carriage (models, migration, SELECTs, tests,
-  stub payloads) delegates — routing marked at plan time.
+  `extract_iof_v7` (the rider's setting line), any synthesise guidance line.
+  Mechanical carriage (models, migration, SELECTs, tests, stub payloads) delegates —
+  routing marked at plan time.
 - **Egress:** none new — same OpenAI route; ICF adds one mini-priced extraction call
   (+ vetter call) per selected document. Cost context: extract+vet was <3% of the $15
   synthesis-run anatomy; doubling it is noise next to Slice C's writer-side work.
@@ -329,8 +382,9 @@ All code, migrations and spec changes public-safe. Replay evidence as summaries 
 ## Model route
 
 Extraction + vetter on `gpt-5.4-mini` via the OpenAI route (the IOF floor; same
-step-up-is-recorded rule). Prompt-bearing changes: `extract_icf_v1` + `extract_icf_vetter_v1`
-(lead-authored). Replay set: at least one process-evaluation / qualitative-arm document
+step-up-is-recorded rule). Prompt-bearing changes: `extract_icf_v1` +
+`extract_icf_vetter_v1` + `extract_iof_v7` (the rider's setting line only), all
+lead-authored. Replay set: at least one process-evaluation / qualitative-arm document
 rich in implementation material (ideally carrying reported adaptations and a
 fidelity/dose observation, exercising the two new vocabulary values) · one effects-only
 RCT (expect few/zero ICF records —
@@ -341,7 +395,9 @@ fencing probe · **one dual-kind document (owner, 2026-07-12)**: the same passag
 both passes and is judged differently by design — an aspiration sentence ("the pilot
 aims to cut bills") flagged by the IOF vetter while an adjacent implementation
 condition ("rollout stalled where installer training was unfunded") extracts cleanly
-as ICF — pinning that the two exclusion lines are independent, not one shared vet.
+as ICF — pinning that the two exclusion lines are independent, not one shared vet ·
+**one IOF v3 probe** (a study with a clearly reported delivery setting yields the new
+`setting` field; the inner-setting rule holds — mandating institution never recorded).
 **Honesty pin:** eval-blind until ICF ground truth exists — replay evidence shows shape
 and the exclusion lines holding on probes, it does not certify extraction quality; that
 is exactly why this slice precedes ground truth.
@@ -366,18 +422,26 @@ validating). No composed full-chain e2e.
 
 Halt and escalate when: the schema gate is hit without recorded approval · the field-set
 ❓s resolve toward anything beyond the proposed record shape (scope growth into facet
-grouping, canonicalisation or eval territory) · the profile parameterisation cannot be
-done without touching IOF's fingerprint string · any pressure to blend kinds inside the
+grouping, canonicalisation or eval territory) · any IOF change beyond item 11's rider
+(further fields riding the v3 bump, or the profile parameterisation altering IOF's
+fingerprint beyond the rider's named version bumps) · any pressure to backfill or
+rewrite existing IOF rows · any pressure to blend kinds inside the
 unified tool's return (one homogeneous findings list, or any single record mixing
 schemas) · budget spent.
 
 ## Acceptance checks
 
 - `make verify` green.
-- Deterministic tests: migration up/down · `context_type` (+ `claim_basis`) CHECK ↔
+- Deterministic tests: migration up/down (incl. the IOF `setting` column) ·
+  `context_type` + `claim_level` (+ `claim_basis`, `level`) CHECK ↔
   Literal asserts · `icf_rules_v1` coercion + full coverage mapping + grain gate ·
-  claim-key dedup (context_type/intervention/claim twins collapse; distinct types don't)
-  · **IOF fingerprint unchanged** (byte-identical components; existing memo hits) · ICF
+  claim-key dedup (context_type/intervention/claim twins collapse; distinct types and
+  study-vs-pooled `claim_level` twins don't)
+  · **IOF fingerprint changes only via the rider** (old memos reuse under the old
+  fingerprint; `iof_v3` extracts fresh alongside; v2-null vs v3-null distinguished by
+  `field_coverage` key-absence; `iof_rules_v3` coverage for `setting`) ·
+  **cross-schema shared-vocabulary drift guard** (one definition, both models import
+  it, semantics/coercion asserted equal) · ICF
   fingerprint fresh-extracts alongside an IOF memo hit on the same document · profiles
   directive compiles fail-closed (unknown profile errors; IOF-only expressible; default
   both at deep) · `render_field_docs` for ICF wire models · structural fencing check
@@ -398,8 +462,9 @@ schemas) · budget spent.
 ## Verification evidence expected
 
 `verification.md`: command results, migration up/down evidence, replay summaries, the
-schema-gate approval with owner sign-off date, IOF-fingerprint-unchanged evidence,
-deferred.md + spec flow-back diff summary, known gaps.
+schema-gate approval with owner sign-off date, the bounded-invalidation evidence (old
+IOF memos reusable under the old fingerprint; only the rider's bumps in the v3
+fingerprint diff), deferred.md + spec flow-back diff summary, known gaps.
 
 ## Risk tier & review focus
 
@@ -409,10 +474,12 @@ stack per [review-stack economy]: medium `/code-review`, one security lane (fenc
 completeness on the new prompt; migration correctness; the extended tool's read scope
 stays project-guarded), contract verifier fresh-context, per-angle diff scoping.
 
-Focus: IOF non-invalidation (the one catastrophic failure) · the recommendation/finding
+Focus: IOF invalidation bounded to the rider exactly (the one catastrophic failure is
+an unintended second invalidation path) · the recommendation/finding
 exclusion line · fingerprint completeness for the new domain (every output-affecting
 constant versioned) · related-but-distinct held at every surface (kind-segregated tool
-returns; no record, envelope entry or claim blending schemas) · no scope creep into
+returns; no record, envelope entry or claim blending schemas) · shared-vocabulary
+drift-guard real, not cosmetic · no scope creep into
 facet grouping or eval territory.
 
 ## Decisions for the owner at this gate
@@ -442,3 +509,9 @@ facet grouping or eval territory.
    cost direction); the record-level fences, not the tool boundary, are what hold
    related-but-distinct. Supersedes the drafted two-tool proposal; pre-discharges the
    N-schema writer-tool seam.
+7. **IOF `setting` rider — SETTLED (owner, 2026-07-12): in** (item 11; the "IOF
+   untouched" pin released for this one bounded rider — pre-ground-truth is the cheap
+   moment; nothing else rides the bump). With it, folded the same day: `study_design`
+   and `claim_level` (study·pooled) onto ICF, and the shared reference vocabulary
+   defined once with a cross-schema drift guard (storage stays parallel tables; the
+   UNION read view rides Slice C with its first reader).
