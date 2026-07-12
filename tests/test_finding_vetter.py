@@ -407,6 +407,8 @@ def test_vetted_out_excluded_from_persistence_and_accounted(conn: Connection) ->
     assert "vetted_out_present" in summary["flags"]
     assert summary["provenance"]["finding_vetter"] == {
         "prompt": FINDING_VETTER_PROMPT_VERSION,
+        "model": FINDING_VETTER_MODEL,
+        "reasoning_effort": FINDING_VETTER_REASONING_EFFORT,
         "max_output_tokens": FINDING_VETTER_MAX_OUTPUT_TOKENS,
     }
 

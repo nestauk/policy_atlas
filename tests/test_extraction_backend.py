@@ -29,6 +29,7 @@ def _valid_wire_record() -> dict[str, Any]:
         effect_direction="decrease",
         estimate_level="pooled",
         study_design="pooled analysis of randomised trials",
+        study_geography=None,
         stratum_qualifiers=[],
         statistics=IOFStatisticsWire(
             effect_size=0.82,
@@ -43,6 +44,7 @@ def _valid_wire_record() -> dict[str, Any]:
             tau2=None,
         ),
         causality_by_design="attributable",
+        effect_basis=None,
         is_primary=True,
         is_prevalence_only=False,
         anchors=[

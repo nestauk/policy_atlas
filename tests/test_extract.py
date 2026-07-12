@@ -12,11 +12,20 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+import pytest
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.extract import ExtractContext, ExtractError, extract_scope
+from policy_atlas import extract_prompt
+from policy_atlas.extract import (
+    ExtractContext,
+    ExtractError,
+    _judge_payload_entry,
+    extract_scope,
+    extraction_fingerprint,
+)
 from policy_atlas.extraction_backend import StubExtractionBackend
+from policy_atlas.extraction_records import IOFAnchor, IOFRecord, IOFStatistics, IOFStratum
 from policy_atlas.schema import (
     chunk,
     extraction_result,
@@ -24,6 +33,7 @@ from policy_atlas.schema import (
     project_source_snapshot,
     selection_result,
     source_classification_result,
+    source_extraction_record,
     source_snapshot,
 )
 from policy_atlas.usage import UsageResult
@@ -68,9 +78,11 @@ def _record(
         "effect_direction": effect_direction,
         "estimate_level": "study",
         "study_design": None,
+        "study_geography": None,
         "stratum_qualifiers": [],
         "statistics": statistics or _stat(),
         "causality_by_design": None,
+        "effect_basis": None,
         "is_primary": None,
         "is_prevalence_only": None,
         "anchors": [{"segment_id": segment_id, "quote": quote}],
@@ -277,6 +289,65 @@ def test_memo_reuse(conn: Connection) -> None:
     assert second["docs"][0]["extraction_record_id"] == first_record_id
     # No new finding rows were written on the reused run.
     assert _finding_count(conn, project_id) == findings_after_first
+
+
+def test_fingerprint_change_extracts_fresh_alongside(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fingerprint bump never reuses old records and never rewrites them.
+
+    The task-020 acceptance pair in one deterministic test (its two halves
+    were previously pinned only by composition): records extracted under one
+    fingerprint are memo-missed after any component changes — the run
+    extracts FRESH, creating a new record and new finding rows ALONGSIDE —
+    while the old record and its findings survive byte-untouched
+    (upgrades-never-invalidate)."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    content = "Home visiting reduced hospital admissions among infants."
+    cid = uuid.uuid4()
+    pss_id, _ = _seed_full_text_doc(
+        conn, project_id, sel_run, scope_id, title="Home visiting", chunk_content=content,
+        chunk_id=cid,
+        stub_iof=[_record(
+            intervention="home visiting", outcome="hospital admissions",
+            quote="Home visiting reduced hospital admissions", segment_id=str(cid),
+            effect_direction="decrease",
+        )],
+    )
+    _seed_selection(conn, project_id, sel_run, scope_id,
+                    [{"pss_id": str(pss_id), "text_basis": "full_text"}])
+
+    first, _ = _run(conn, project_id, scope_id, sel_run)
+    first_record_id = first["docs"][0]["extraction_record_id"]
+    findings_after_first = _finding_count(conn, project_id)
+    old_findings = conn.execute(
+        select(intervention_outcome_finding)
+        .where(intervention_outcome_finding.c.project_id == project_id)
+    ).mappings().all()
+
+    with monkeypatch.context() as m:
+        m.setattr("policy_atlas.extract.PROMPT_VERSION", "extract_iof_vNEXT")
+        second, _ = _run(conn, project_id, scope_id, sel_run)
+
+    assert second["counts"]["reused"] == 0
+    assert second["counts"]["fresh"] == 1
+    assert second["docs"][0]["extraction_record_id"] != first_record_id
+    # New finding rows landed alongside; the old rows are byte-identical.
+    assert _finding_count(conn, project_id) == 2 * findings_after_first
+    surviving = conn.execute(
+        select(intervention_outcome_finding)
+        .where(intervention_outcome_finding.c.finding_id.in_(
+            [row["finding_id"] for row in old_findings]
+        ))
+    ).mappings().all()
+    assert sorted(surviving, key=lambda r: str(r["finding_id"])) == sorted(
+        old_findings, key=lambda r: str(r["finding_id"])
+    )
+    # And the untouched original fingerprint still reuses its own record.
+    third, _ = _run(conn, project_id, scope_id, sel_run)
+    assert third["counts"]["reused"] == 1
+    assert third["docs"][0]["extraction_record_id"] == first_record_id
 
 
 def test_abstract_basis(conn: Connection) -> None:
@@ -499,3 +570,120 @@ def test_nul_bearing_model_output_is_scrubbed(conn: Connection) -> None:
     assert row.intervention == "free school meals"
     assert row.population == "pupils"
     assert "\x00" not in str(row.grounding)
+
+
+# --- Evidence-type call provenance (task 020) -------------------------------
+
+
+def test_evidence_type_provenance_recorded_on_attempted_call(conn: Connection) -> None:
+    """A doc extracted via an attempted call records its classification value
+    on source_extraction_record.primary_evidence_type; a doc with no live
+    classification records the sentinel 'Unclassified' — the value actually
+    sent to the prompt, which may legitimately diverge from the live
+    classification read elsewhere."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    cid = uuid.uuid4()
+    classified_pss, _ = _seed_full_text_doc(
+        conn, project_id, sel_run, scope_id, title="Classified doc",
+        chunk_content="Coaching increased graduation rates in the trial.",
+        chunk_id=cid, evidence_type="RCTs and Quasi-Experimental Studies",
+        stub_iof=[_record(
+            intervention="coaching", outcome="graduation rates",
+            quote="Coaching increased graduation rates", segment_id=str(cid),
+        )],
+    )
+    unclassified_pss, _ = _seed_full_text_doc(
+        conn, project_id, sel_run, scope_id, title="Unclassified doc",
+        chunk_content="Home visiting reduced admissions in the trial.",
+        evidence_type=None,
+    )
+    _seed_selection(conn, project_id, sel_run, scope_id, [
+        {"pss_id": str(classified_pss), "text_basis": "full_text"},
+        {"pss_id": str(unclassified_pss), "text_basis": "full_text"},
+    ])
+
+    summary, _ = _run(conn, project_id, scope_id, sel_run)
+    assert summary["counts"]["failed"] == 0
+
+    rows = {
+        row.project_source_snapshot_id: row.primary_evidence_type
+        for row in conn.execute(
+            select(source_extraction_record).where(
+                source_extraction_record.c.project_id == project_id
+            )
+        )
+    }
+    assert rows[classified_pss] == "RCTs and Quasi-Experimental Studies"
+    assert rows[unclassified_pss] == extract_prompt.UNCLASSIFIED_EVIDENCE_TYPE
+
+
+def test_evidence_type_provenance_null_on_pre_prompt_failure(conn: Connection) -> None:
+    """A pre-prompt basis failure (empty_basis) never attempts a backend call,
+    so its extraction record's primary_evidence_type stays NULL — never the
+    'Unclassified' sentinel, which would falsely claim a call was made."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    pss_id = _seed_abstract_doc(conn, project_id, title="Empty abstract doc", abstract="")
+    _seed_selection(conn, project_id, sel_run, scope_id,
+                    [{"pss_id": str(pss_id), "text_basis": "abstract_only"}])
+
+    summary, _ = _run(conn, project_id, scope_id, sel_run)
+    doc = summary["docs"][0]
+    assert doc["status"] == "extraction_failed"
+    assert doc["error"] == "empty_basis"
+
+    stored = conn.execute(
+        select(source_extraction_record.c.primary_evidence_type).where(
+            source_extraction_record.c.project_id == project_id
+        )
+    ).scalar_one()
+    assert stored is None
+
+
+def test_extraction_fingerprint_components_v2() -> None:
+    """The fingerprint's component map pins the v2 schema/field-rules names
+    and the live prompt version — pure, no DB."""
+    _fingerprint, components = extraction_fingerprint("stub")
+    assert components["profile"] == "eb_iof_base_v1"
+    assert components["schema"] == "iof_v2"
+    assert components["field_rules"] == "iof_rules_v2"
+    assert components["prompt"] == extract_prompt.PROMPT_VERSION
+
+
+def test_judge_payload_entry_key_set_excludes_effect_basis_and_study_geography() -> None:
+    """Vetter payload shape-snapshot (owner gate decision 2, task 020): the
+    payload deliberately does NOT carry ``effect_basis``/``study_geography``
+    even though the record itself does — self-label bias risk (the vetter's
+    verdict must not be swayed by a field it never itself judged). Pure,
+    no DB; pins the exact key set so a future ``IOFRecord`` field addition
+    can't silently leak into the judge payload."""
+    record = IOFRecord(
+        intervention="Coaching",
+        outcome="Test scores",
+        population=None,
+        comparator=None,
+        effect_direction="increase",
+        estimate_level="study",
+        study_design="RCT",
+        study_geography="England",
+        stratum_qualifiers=[IOFStratum(type="subgroup", value="Girls")],
+        statistics=IOFStatistics(),
+        causality_by_design=None,
+        effect_basis="observed",
+        is_primary=None,
+        is_prevalence_only=None,
+        anchors=[IOFAnchor(segment_id="seg-1", quote="scores rose")],
+    )
+
+    entry = _judge_payload_entry(0, record)
+
+    assert set(entry.keys()) == {
+        "index",
+        "intervention",
+        "outcome",
+        "effect_direction",
+        "estimate_level",
+        "stratum_qualifiers",
+        "quotes",
+    }

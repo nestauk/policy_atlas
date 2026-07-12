@@ -4,6 +4,52 @@ Recurring issues encountered during the task cycle. Each entry: what happened, r
 
 ---
 
+## 2026-07-12 — Phase commit swept in 6,230 node_modules files: no JS ignores existed and nobody looked at the stat line
+
+**What happened:** Task 020's phase C commit staged `demo/frontend/node_modules`
+(6,230 files, ~1.5M lines), `.vite/` dep bundles and `tsconfig.tsbuildinfo` alongside
+the slice code. It rode two commits unnoticed and was caught only by the step-7
+review conversation reading `git diff dev...HEAD --stat` before dispatching lanes.
+
+**Root cause:** two-part. The repo's `.gitignore` predates the demo frontend and had
+no `node_modules/`/`.vite/`/`*.tsbuildinfo` entries — someone ran `npm install`
+locally (018/019 demo work) and the tree became stageable. Then a broad `git add`
+staged it, and the commit's stat line (6k+ files) was never read.
+
+**Fix (installed):** review commit untracked the artifacts and added the Node ignores
+to `.gitignore`. Branch-history rewrite recommended at the PR gate (branch unpushed —
+the blobs need never reach origin).
+
+**Rule:** read the `--stat` tail of every phase commit — a file count wildly above
+the plan's touched-file list is a stop-and-look, not a scroll-past. When a new
+toolchain (npm, cargo, etc.) first appears in the repo, its ignore entries land in
+the same slice.
+
+## 2026-07-12 — Codex died mid-turn ("model at capacity") but left a complete product-code diff: salvage beats rerun
+
+**What happened:** Task 020 phase A's codex job delivered the full product-code diff,
+then failed before authoring tests. The build salvaged it: lead reviewed the delivered
+diff, test authoring re-routed to fast-worker (the codex-exhaustion ladder).
+
+**Root cause / what made salvage safe:** the failure mode leaves working-tree output,
+not corrupt state. The one wart found was a *duplicate constant* — codex re-added
+`UNCLASSIFIED_EVIDENCE_TYPE` when it already existed later in the file — i.e. the
+signature wart class of a model losing track of a file it partially read.
+
+**Rule:** on a codex mid-turn death, diff-review-then-reroute the remainder instead
+of rerunning the whole brief; grep the salvage for duplicate definitions/constants
+first (`grep -c` per new constant name), and byte-verify any spec-copied strings.
+
+## 2026-07-12 — mypy incremental cache produced a false attr-defined after multi-agent edits
+
+**What happened:** During 020's phase B+C gate, mypy flagged an `attr-defined` error
+on a submodule import that a just-green full run had accepted; `rm -rf .mypy_cache`
+cleared it and the clean-cache run was green.
+
+**Rule:** when a type error contradicts a just-green full run — especially after
+several agents edited overlapping modules in one session — clear `.mypy_cache`
+before believing it (and before "fixing" code that isn't broken).
+
 ## 2026-07-12 — Killed live-run attempt survived its console: an orphaned driver ran a full deep chain to artefact, then got cited as the real run's evidence
 
 **What happened:** During 019's D1 rider, attempt 2's driver lacked a `__main__` spawn

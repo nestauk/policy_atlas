@@ -1,16 +1,22 @@
 """Schema validation — tables, columns, constraints."""
 
 import os
+import re
 import uuid
+from typing import get_args
 
 import pytest
 from alembic import command
 from alembic.config import Config as AlembicConfig
-from sqlalchemy import inspect, select
+from sqlalchemy import inspect, select, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
 
+from policy_atlas import extract_prompt
+from policy_atlas.extraction_records import EffectBasis
 from policy_atlas.schema import (
+    EFFECT_BASES,
+    EVIDENCE_TYPES,
     METHODOLOGICAL_STRUCTURAL,
     annotation,
     artefact,
@@ -301,3 +307,46 @@ def test_migration_roundtrip_screen_stage_and_classify_tags(engine: Engine) -> N
             assert tag_row.tag_type == METHODOLOGICAL_STRUCTURAL
         finally:
             trans.rollback()
+
+
+# --- CHECK-vocabulary agreement (task 020) ---------------------------------
+
+
+def _check_constraint_allowed_values(conn: Connection, constraint_name: str) -> set[str]:
+    """Read a live CHECK's ``= ANY (ARRAY[...])`` string vocabulary from Postgres.
+
+    Args:
+        conn: Open database connection.
+        constraint_name: The CHECK constraint's name.
+
+    Returns:
+        The set of string literals the constraint's ``ARRAY[...]`` admits.
+    """
+    definition = conn.execute(
+        text("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = :name"),
+        {"name": constraint_name},
+    ).scalar_one()
+    return set(re.findall(r"'([^']*)'::text", definition))
+
+
+def test_ck_ser_evidence_type_matches_schema_and_prompt_vocabulary(conn: Connection) -> None:
+    """ck_ser_evidence_type's live allowed set is exactly EVIDENCE_TYPES plus the
+    prompt's UNCLASSIFIED_EVIDENCE_TYPE sentinel — the two modules deliberately
+    never import each other (schema.py keeps the literal in sync by comment),
+    so this test is the drift guard."""
+    allowed = _check_constraint_allowed_values(conn, "ck_ser_evidence_type")
+    assert allowed == {*EVIDENCE_TYPES, extract_prompt.UNCLASSIFIED_EVIDENCE_TYPE}
+
+
+def test_ck_iof_effect_basis_matches_effect_bases(conn: Connection) -> None:
+    """ck_iof_effect_basis's live allowed set is exactly schema.EFFECT_BASES."""
+    allowed = _check_constraint_allowed_values(conn, "ck_iof_effect_basis")
+    assert allowed == set(EFFECT_BASES)
+
+
+def test_effect_basis_literal_matches_effect_bases() -> None:
+    """The wire/stored EffectBasis Literal agrees with schema.EFFECT_BASES —
+    also asserted at extraction_records import time; restated here as an
+    explicit, independently discoverable test (not just a collection-time
+    side effect)."""
+    assert get_args(EffectBasis) == EFFECT_BASES

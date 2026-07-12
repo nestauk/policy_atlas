@@ -649,9 +649,11 @@ def test_finding_record_default_metadata_present_and_absent() -> None:
         effect_direction="increase",
         estimate_level=None,
         study_design=None,
+        study_geography="England",
         stratum_qualifiers=[],
         statistics={},
         causality_by_design=None,
+        effect_basis="observed",
         is_primary=None,
         field_coverage={},
         primary_evidence_type="systematic_review",
@@ -670,6 +672,10 @@ def test_finding_record_default_metadata_present_and_absent() -> None:
     assert record["venue"] == "Review Press"
     assert record["cited_by"] == 7
     assert "is_retracted" not in record
+    # Task 020 C1: effect_basis/study_geography are always-present-nullable,
+    # exactly like study_design — never omit-if-absent.
+    assert record["study_geography"] == "England"
+    assert record["effect_basis"] == "observed"
 
     absent = SimpleNamespace(
         finding_id="finding-2",
@@ -681,9 +687,11 @@ def test_finding_record_default_metadata_present_and_absent() -> None:
         effect_direction="increase",
         estimate_level=None,
         study_design=None,
+        study_geography=None,
         stratum_qualifiers=[],
         statistics={},
         causality_by_design=None,
+        effect_basis=None,
         is_primary=None,
         field_coverage={},
         primary_evidence_type=None,
@@ -694,6 +702,9 @@ def test_finding_record_default_metadata_present_and_absent() -> None:
     for key in ("year", "evidence_type", "appraisal_label", "venue", "cited_by"):
         assert key not in bare
     assert "is_retracted" not in bare
+    # Always-present-nullable: present even for a bare row, just None.
+    assert bare["study_geography"] is None
+    assert bare["effect_basis"] is None
 
 
 # --- ADR 0015 §2 / B-B3: judge envelope v2 (intent + section_focus + finding

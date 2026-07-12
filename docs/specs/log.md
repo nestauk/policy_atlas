@@ -1,5 +1,15 @@
 # Spec update log
 
+## 2026-07-12
+* **Update**: [system/data-model.md § The findings layer](system/data-model.md) — the
+  `intervention_outcome_finding` base-field list gains `effect_basis` (`observed` |
+  `modelled`, null if indeterminate — evidence basis is its own dimension from causal
+  identification, deliberately not folded into `causality_by_design`) and
+  `study_geography` (source-named, finding-grain — the same population/comparator
+  treatment; null when unreported, never inferred). Existing v1 rows are not backfilled;
+  they read as "not recorded under v1" via `field_coverage` key-absence, per the
+  upgrades-never-invalidate rule. Task 020, ADR 0016.
+
 ## 2026-07-11 (b)
 * **Creation**: [system/prompting.md](system/prompting.md) — the prompting doctrine promoted
   out of the 018 task folder (owner decision, 2026-07-11; task-cycle step 8): the 12

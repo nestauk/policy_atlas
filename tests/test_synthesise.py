@@ -7,10 +7,11 @@ verification run. The local Codex sandbox does not run them.
 from __future__ import annotations
 
 import uuid
+from collections import Counter
 from typing import Any
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.embeddings import StubEmbeddingBackend
@@ -20,6 +21,7 @@ from policy_atlas.grounding_judge import (
     StubGroundingJudgeBackend,
     UnspannedAssertionWire,
 )
+from policy_atlas.quote_verify import build_basis
 from policy_atlas.schema import (
     addressable_unit,
     annotation,
@@ -28,9 +30,13 @@ from policy_atlas.schema import (
     citation,
     extraction_result,
     grouping_result,
+    intervention_outcome_finding,
+    project_source_snapshot,
     search_coverage_record,
+    source_extraction_record,
     synthesis_result,
 )
+from policy_atlas.schema import chunk as chunk_table
 from policy_atlas.synthesis_backend import (
     ChunkCitationWire,
     ClaimWire,
@@ -45,7 +51,12 @@ from policy_atlas.synthesis_backend import (
     SynthesisBackend,
 )
 from policy_atlas.synthesis_tools import ToolExchange
-from policy_atlas.synthesise import SynthesiseContext, SynthesiseFailure, synthesise_scope
+from policy_atlas.synthesise import (
+    SynthesiseContext,
+    SynthesiseFailure,
+    _load_findings,
+    synthesise_scope,
+)
 from policy_atlas.usage import UsageResult
 from tests.helpers import (
     delete_project_data,
@@ -1449,3 +1460,569 @@ def test_key_findings_claim_citing_uncited_id_is_rejected_and_counted(
     assert row.flags.get("claims_rejected_structural") is True
     # Exactly the one section chunk claim survives (not the uncited key-findings one).
     assert row.counts["claims_total"].get("chunk", 0) == 1
+
+
+# --- Task 020 Phase C: writer-envelope carriage of effect_basis/study_geography ---
+
+
+def _seed_iof_row(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    run_id: uuid.UUID,
+    snap_id: uuid.UUID,
+    pss_id: uuid.UUID,
+    record_id: uuid.UUID,
+    finding_id: uuid.UUID,
+    extraction_fingerprint: str,
+    **overrides: Any,
+) -> None:
+    """Insert one source_extraction_record + intervention_outcome_finding pair.
+
+    Minimal, non-memo-shaped fixture for direct ``_load_findings`` unit tests
+    (no selection/characterisation/grouping scaffolding required).
+    """
+    conn.execute(
+        source_extraction_record.insert().values(
+            extraction_record_id=record_id,
+            project_id=project_id,
+            source_snapshot_id=snap_id,
+            project_source_snapshot_id=pss_id,
+            extraction_fingerprint=extraction_fingerprint,
+            status="extracted",
+            basis="full_text",
+            error=None,
+            finding_count=1,
+            run_id=run_id,
+            created_at=now(),
+        )
+    )
+    values: dict[str, Any] = {
+        "finding_id": finding_id,
+        "project_id": project_id,
+        "extraction_record_id": record_id,
+        "intervention": "Alpha",
+        "outcome": "Outcome",
+        "population": None,
+        "comparator": None,
+        "effect_direction": "increase",
+        "estimate_level": "study",
+        "study_design": None,
+        "study_geography": None,
+        "stratum_qualifiers": [],
+        "statistics": {},
+        "causality_by_design": None,
+        "effect_basis": None,
+        "is_primary": None,
+        "is_prevalence_only": None,
+        "field_coverage": {},
+        "grounding": [],
+        "created_at": now(),
+    }
+    values.update(overrides)
+    conn.execute(intervention_outcome_finding.insert().values(**values))
+
+
+def test_load_findings_carries_effect_basis_and_study_geography(conn: Connection) -> None:
+    """Task 020 C2: synthesise's own read path (``_load_findings``) carries the
+    two new finding-grain fields through to the substrate record — the same
+    carriage pinned for ``query_findings`` in test_synthesis_tools.py."""
+    project_id, run_id = seed_project_and_run(conn)
+    snap_id, pss_id = seed_source(conn, project_id, meta={"title": "Geo doc"})
+    record_id = uuid.uuid4()
+    finding_id = uuid.uuid4()
+    _seed_iof_row(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        snap_id=snap_id,
+        pss_id=pss_id,
+        record_id=record_id,
+        finding_id=finding_id,
+        extraction_fingerprint="fp-load-findings-carries",
+        intervention="Coaching",
+        outcome="Test scores",
+        effect_basis="observed",
+        study_geography="England",
+    )
+
+    findings, _bases = _load_findings(
+        conn,
+        project_id=project_id,
+        extraction_row={"docs": [{"extraction_record_id": str(record_id)}]},
+    )
+
+    record = findings[str(finding_id)].record
+    assert record["effect_basis"] == "observed"
+    assert record["study_geography"] == "England"
+
+
+def test_load_findings_tolerates_v1_null_rows(conn: Connection) -> None:
+    """Old-row tolerance (task 020 C2): a v1 row's NULL effect_basis/
+    study_geography and a field_coverage dict lacking the new keys pass
+    through as ``None`` — never a ``KeyError``."""
+    project_id, run_id = seed_project_and_run(conn)
+    snap_id, pss_id = seed_source(conn, project_id, meta={"title": "V1 doc"})
+    record_id = uuid.uuid4()
+    finding_id = uuid.uuid4()
+    _seed_iof_row(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        snap_id=snap_id,
+        pss_id=pss_id,
+        record_id=record_id,
+        finding_id=finding_id,
+        extraction_fingerprint="fp-load-findings-v1",
+        intervention="Coaching",
+        outcome="Test scores",
+        field_coverage={"study_design": "not_extracted"},
+    )
+
+    findings, _bases = _load_findings(
+        conn,
+        project_id=project_id,
+        extraction_row={"docs": [{"extraction_record_id": str(record_id)}]},
+    )
+
+    record = findings[str(finding_id)].record
+    assert record["effect_basis"] is None
+    assert record["study_geography"] is None
+    assert "effect_basis" not in record["field_coverage"]
+    assert "study_geography" not in record["field_coverage"]
+
+
+def test_load_findings_batches_chunk_basis_query(conn: Connection) -> None:
+    """013 review N+1 finding, task 020 C3 rider: ``_load_findings`` issues
+    exactly ONE chunk query over the whole distinct-snapshot set — never one
+    per snapshot — and every snapshot's ``BasisText`` output is unchanged: two
+    chunked docs build from their chunks, and a third chunkless doc falls back
+    to its already-selected envelope abstract at zero extra queries."""
+    project_id, run_id = seed_project_and_run(conn)
+
+    record_ids: list[uuid.UUID] = []
+    expected_basis: dict[str, Any] = {}
+
+    for index, chunks in enumerate([
+        ["alpha chunk one.", "alpha chunk two."],
+        ["beta chunk one."],
+    ]):
+        snap_id, pss_id = seed_source(conn, project_id, meta={"title": f"Doc {index}"})
+        record_id = uuid.uuid4()
+        finding_id = uuid.uuid4()
+        record_ids.append(record_id)
+        _seed_iof_row(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            snap_id=snap_id,
+            pss_id=pss_id,
+            record_id=record_id,
+            finding_id=finding_id,
+            extraction_fingerprint=f"fp-batch-{index}",
+        )
+        chunk_pairs: list[tuple[str, str]] = []
+        for seq, content in enumerate(chunks):
+            chunk_id = uuid.uuid4()
+            chunk_pairs.append((str(chunk_id), content))
+            conn.execute(
+                chunk_table.insert().values(
+                    chunk_id=chunk_id,
+                    source_snapshot_id=snap_id,
+                    sequence=seq,
+                    content=content,
+                    content_hash=content_hash(content),
+                    locator={},
+                    segmentation_policy="manual_v1",
+                    created_at=now(),
+                )
+            )
+        expected_basis[str(snap_id)] = build_basis(chunk_pairs)
+
+    # The chunkless doc: no chunk rows — falls back to the envelope metadata's
+    # abstract, already selected by the findings query (zero extra queries).
+    snap_id, pss_id = seed_source(
+        conn, project_id, meta={"title": "Doc 2", "abstract": "The chunkless abstract."}
+    )
+    record_id = uuid.uuid4()
+    finding_id = uuid.uuid4()
+    record_ids.append(record_id)
+    _seed_iof_row(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        snap_id=snap_id,
+        pss_id=pss_id,
+        record_id=record_id,
+        finding_id=finding_id,
+        extraction_fingerprint="fp-batch-2",
+    )
+    expected_basis[str(snap_id)] = build_basis([(None, "The chunkless abstract.")])
+
+    extraction_row = {"docs": [{"extraction_record_id": str(rid)} for rid in record_ids]}
+
+    query_count = 0
+
+    def _count_query(
+        db_conn: Connection,
+        cursor: Any,
+        statement: str,
+        parameters: Any,
+        context: Any,
+        executemany: bool,
+    ) -> None:
+        del db_conn, cursor, statement, parameters, context, executemany
+        nonlocal query_count
+        query_count += 1
+
+    event.listen(conn, "before_cursor_execute", _count_query)
+    try:
+        findings, basis_by_snapshot = _load_findings(
+            conn, project_id=project_id, extraction_row=extraction_row
+        )
+    finally:
+        event.remove(conn, "before_cursor_execute", _count_query)
+
+    # One statement for the findings-rows select, one batched chunk query over
+    # the three distinct snapshots — never one chunk query per snapshot.
+    assert query_count == 2
+    assert len(findings) == 3
+    assert set(basis_by_snapshot) == set(expected_basis)
+    for snapshot_key, expected in expected_basis.items():
+        actual = basis_by_snapshot[snapshot_key]
+        assert actual.raw_text == expected.raw_text
+        assert actual.segments == expected.segments
+
+
+def _seed_group_with_findings(
+    conn: Connection, findings: list[dict[str, Any]]
+) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, list[uuid.UUID]]:
+    """Seed one screened+selected+characterised doc, N intervention_outcome_finding
+    rows sharing one extraction record, and one grouping group holding every
+    finding as a member — ready for a full ``synthesise_scope`` run.
+
+    Args:
+        conn: Open database connection.
+        findings: Per-finding column overrides (merged onto shared defaults).
+
+    Returns:
+        ``(project_id, run_id, scope_id, extraction_run_id, grouping_run_id,
+        finding_ids)``; ``finding_ids[i]`` corresponds to ``findings[i]``.
+    """
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="Finding doc")
+    characterisation_run_id = seed_run(conn, project_id)
+    seed_characterisation(
+        conn, project_id, scope_id, characterisation_run_id, themes={"theme-a": [pss_id]}
+    )
+    _, _, selection_run_id = run_select(conn, project_id, scope_id, characterisation_run_id)
+
+    snap_id = conn.execute(
+        select(project_source_snapshot.c.source_snapshot_id).where(
+            project_source_snapshot.c.project_source_snapshot_id == pss_id
+        )
+    ).scalar_one()
+
+    extraction_run_id = seed_run(conn, project_id)
+    record_id = uuid.uuid4()
+    conn.execute(
+        source_extraction_record.insert().values(
+            extraction_record_id=record_id,
+            project_id=project_id,
+            source_snapshot_id=snap_id,
+            project_source_snapshot_id=pss_id,
+            extraction_fingerprint="fp-group-seed",
+            status="extracted",
+            basis="full_text",
+            error=None,
+            finding_count=len(findings),
+            run_id=extraction_run_id,
+            created_at=now(),
+        )
+    )
+
+    finding_ids: list[uuid.UUID] = []
+    direction_spread: Counter[str] = Counter()
+    for overrides in findings:
+        finding_id = uuid.uuid4()
+        finding_ids.append(finding_id)
+        values: dict[str, Any] = {
+            "finding_id": finding_id,
+            "project_id": project_id,
+            "extraction_record_id": record_id,
+            "intervention": "Alpha service",
+            "outcome": "Outcome",
+            "population": None,
+            "comparator": None,
+            "effect_direction": "increase",
+            "estimate_level": "study",
+            "study_design": None,
+            "study_geography": None,
+            "stratum_qualifiers": [],
+            "statistics": {},
+            "causality_by_design": None,
+            "effect_basis": None,
+            "is_primary": None,
+            "is_prevalence_only": None,
+            "field_coverage": {},
+            "grounding": [],
+            "created_at": now(),
+        }
+        values.update(overrides)
+        conn.execute(intervention_outcome_finding.insert().values(**values))
+        direction_spread[values["effect_direction"]] += 1
+
+    conn.execute(
+        extraction_result.insert().values(
+            extraction_result_id=uuid.uuid4(),
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            run_id=extraction_run_id,
+            selection_run_id=selection_run_id,
+            extraction_provenance={"fingerprint": "t"},
+            docs=[{"extraction_record_id": str(record_id)}],
+            counts={"findings": {"total": len(findings)}},
+            flags={},
+            created_at=now(),
+        )
+    )
+
+    grouping_run_id = seed_run(conn, project_id)
+    conn.execute(
+        grouping_result.insert().values(
+            grouping_result_id=uuid.uuid4(),
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            run_id=grouping_run_id,
+            extraction_run_id=extraction_run_id,
+            facet="intervention",
+            grouping_provenance={},
+            groups={
+                "groups": [
+                    {
+                        "group_id": "g1",
+                        "label": "alpha",
+                        "description": "D",
+                        "member_values": [],
+                        "member_finding_ids": [str(fid) for fid in finding_ids],
+                        "size": len(finding_ids),
+                        "direction_spread": dict(direction_spread),
+                    }
+                ],
+                "ungrouped": {},
+                "no_value": {},
+            },
+            counts={},
+            flags={},
+            created_at=now(),
+        )
+    )
+    return project_id, run_id, scope_id, extraction_run_id, grouping_run_id, finding_ids
+
+
+class _FindingClaimBackend:
+    """Section 0 emits one finding claim citing a known finding id on its
+    first turn, with no tool calls; every other section/pass emits nothing."""
+
+    mode = "stub"
+
+    def __init__(self, *, proposal: SectionProposalWire, finding_id: str) -> None:
+        self._proposal = proposal
+        self._finding_id = finding_id
+
+    def propose_sections(
+        self, *, intent: str, substrate: dict[str, Any], rejection: list[str] | None = None
+    ) -> UsageResult[SectionProposalWire]:
+        del intent, substrate, rejection
+        return self._proposal, None
+
+    def section_turn(
+        self, seed: dict[str, Any], transcript: list[ToolExchange], *, force_emit: bool
+    ) -> UsageResult[SectionTurn]:
+        del force_emit
+        if seed.get("section_index", 0) != 0 or transcript:
+            return {"tool_calls": [], "claims": SectionProseWire(prose="", claims=[])}, None
+        return {
+            "tool_calls": [],
+            "claims": prose_section(
+                claims=[
+                    ClaimWire(
+                        claim_type="finding",
+                        text="Coaching raised test scores in the cited finding (stub).",
+                        cited_finding_ids=[self._finding_id],
+                    )
+                ]
+            ),
+        }, None
+
+    def repair_section(
+        self, seed: dict[str, Any], transcript: list[ToolExchange], *, failing: list[dict[str, Any]]
+    ) -> UsageResult[SectionRepairWire]:
+        raise AssertionError("repair_section should not be called for an accepted claim")
+
+    def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
+        return empty_key_findings(seed)
+
+
+def test_annotation_payload_excludes_finding_metadata_row_join_resolves(
+    conn: Connection,
+) -> None:
+    """Adversarial finding 6 (owner 2026-07-12): a finding claim's annotation
+    payload never embeds effect_basis/study_geography — the payload
+    deliberately does not carry finding-record metadata; a reader resolves
+    those fields for ``cited_finding_ids`` via the intervention_outcome_finding
+    row join instead."""
+    (
+        project_id,
+        run_id,
+        scope_id,
+        extraction_run_id,
+        grouping_run_id,
+        finding_ids,
+    ) = _seed_group_with_findings(
+        conn,
+        [
+            {
+                "intervention": "Coaching",
+                "outcome": "Test scores",
+                "effect_direction": "increase",
+                "effect_basis": "observed",
+                "study_geography": "England",
+            }
+        ],
+    )
+    finding_id = finding_ids[0]
+
+    backend = _FindingClaimBackend(
+        proposal=SectionProposalWire(
+            sections=[
+                SectionWire(title="Coaching", focus="What coaching does", group_ids=["g1"])
+            ]
+        ),
+        finding_id=str(finding_id),
+    )
+
+    _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        extraction_run_id=extraction_run_id,
+        grouping_run_id=grouping_run_id,
+        backend=backend,
+    )
+
+    payloads = _project_annotations(conn, project_id)
+    finding_payloads = [
+        payload
+        for payload in payloads
+        if str(finding_id) in payload.get("cited_finding_ids", [])
+    ]
+    assert finding_payloads
+    for payload in finding_payloads:
+        assert "effect_basis" not in payload
+        assert "study_geography" not in payload
+
+    # The row join is the source of truth these fields resolve from.
+    row = conn.execute(
+        select(
+            intervention_outcome_finding.c.effect_basis,
+            intervention_outcome_finding.c.study_geography,
+        ).where(intervention_outcome_finding.c.finding_id == finding_id)
+    ).one()
+    assert row.effect_basis == "observed"
+    assert row.study_geography == "England"
+
+
+class _SeedCapturingBackend:
+    """Wraps a delegate backend, recording every section-loop seed by section index."""
+
+    mode = "stub"
+
+    def __init__(self, inner: SynthesisBackend) -> None:
+        self._inner = inner
+        self.seeds_by_section: dict[int, list[dict[str, Any]]] = {}
+
+    def propose_sections(
+        self, *, intent: str, substrate: dict[str, Any], rejection: list[str] | None = None
+    ) -> UsageResult[SectionProposalWire]:
+        return self._inner.propose_sections(
+            intent=intent, substrate=substrate, rejection=rejection
+        )
+
+    def section_turn(
+        self, seed: dict[str, Any], transcript: list[ToolExchange], *, force_emit: bool
+    ) -> UsageResult[SectionTurn]:
+        section_index = seed.get("section_index", 0)
+        self.seeds_by_section.setdefault(
+            section_index if isinstance(section_index, int) else 0, []
+        ).append(seed)
+        return self._inner.section_turn(seed, transcript, force_emit=force_emit)
+
+    def repair_section(
+        self, seed: dict[str, Any], transcript: list[ToolExchange], *, failing: list[dict[str, Any]]
+    ) -> UsageResult[SectionRepairWire]:
+        return self._inner.repair_section(seed, transcript, failing=failing)
+
+    def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
+        return self._inner.write_key_findings(seed)
+
+
+def test_mixed_and_unclear_findings_survive_synthesise_section_seed(
+    conn: Connection,
+) -> None:
+    """V2 silent-zeroing autopsy (task 020 C7): mixed/unclear findings are
+    group members like any other and must reach the section-loop seed's
+    ``member_findings`` list and ``computed_spread`` — never dropped at
+    synthesise's aggregation step."""
+    (
+        project_id,
+        run_id,
+        scope_id,
+        extraction_run_id,
+        grouping_run_id,
+        finding_ids,
+    ) = _seed_group_with_findings(
+        conn,
+        [
+            {
+                "intervention": "Alpha service",
+                "outcome": "Outcome A",
+                "effect_direction": "mixed",
+            },
+            {
+                "intervention": "Alpha service",
+                "outcome": "Outcome B",
+                "effect_direction": "unclear",
+            },
+        ],
+    )
+    mixed_id, unclear_id = finding_ids
+
+    capture = _SeedCapturingBackend(
+        StubSynthesisBackend(
+            script=[[{"tool_calls": [], "claims": SectionProseWire(prose="", claims=[])}]],
+            proposal=SectionProposalWire(
+                sections=[SectionWire(title="Alpha", focus="Alpha coverage", group_ids=["g1"])]
+            ),
+        )
+    )
+
+    _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        extraction_run_id=extraction_run_id,
+        grouping_run_id=grouping_run_id,
+        backend=capture,
+    )
+
+    seed = capture.seeds_by_section[0][0]
+    member_directions = {
+        finding["finding_id"]: finding["effect_direction"] for finding in seed["member_findings"]
+    }
+    assert member_directions[str(mixed_id)] == "mixed"
+    assert member_directions[str(unclear_id)] == "unclear"
+    assert seed["computed_spread"] == {"mixed": 1, "unclear": 1}
