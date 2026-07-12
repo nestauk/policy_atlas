@@ -50,6 +50,7 @@ interface State {
   plan: Plan | null
   thread: ThreadMsg[]
   thinking: boolean
+  plannerProgress: string | null
   stages: Record<string, StageInfo>
   stageOrder: string[]
   activity: ActivityLine[]
@@ -66,7 +67,7 @@ interface State {
 }
 
 const initial: State = {
-  phase: 'planning', plan: null, thread: [], thinking: false,
+  phase: 'planning', plan: null, thread: [], thinking: false, plannerProgress: null,
   stages: {}, stageOrder: [], activity: [], search: {}, paused: false,
   funnel: null, landscape: null, groups: null, coverage: null, failure: null,
   completionStatus: null, collation: null, suggestions: [],
@@ -102,14 +103,23 @@ function reduce(state: State, action: Action): State {
     case 'reset':
       // SSE reconnect: the backlog replays everything — drop stream-derived
       // state, keep fetched read-models (they refetch on the next completion)
-      return { ...state, thread: [], stages: {}, stageOrder: [], activity: [], search: {}, paused: false }
+      return {
+        ...state,
+        thread: [],
+        stages: {},
+        stageOrder: [],
+        activity: [],
+        search: {},
+        paused: false,
+        plannerProgress: null,
+      }
     case 'user.sent':
       return {
-        ...state, thinking: true, suggestions: [],
+        ...state, thinking: true, plannerProgress: null, suggestions: [],
         thread: [...state.thread, { id: nid(), role: 'user', text: action.text }],
       }
     case 'thinking':
-      return { ...state, thinking: action.on }
+      return { ...state, thinking: action.on, plannerProgress: action.on ? state.plannerProgress : null }
     case 'checkin.answered':
       return {
         ...state,
@@ -130,14 +140,14 @@ function reduce(state: State, action: Action): State {
 function onEvent(state: State, ev: DemoEvent): State {
   switch (ev.type) {
     case 'plan.updated':
-      return { ...state, plan: ev.data.plan, thinking: false }
+      return { ...state, plan: ev.data.plan, thinking: false, plannerProgress: null }
     case 'user.message':
       if (isDuplicateMsg(state.thread, 'user', ev.data.text)) return state
       return { ...state, thread: [...state.thread, { id: nid(), role: 'user', text: ev.data.text }] }
     case 'narration':
       if (isDuplicateMsg(state.thread, 'assistant', ev.data.text)) return state
       return {
-        ...state, thinking: false,
+        ...state, thinking: false, plannerProgress: null,
         thread: [...state.thread, { id: nid(), role: 'assistant', text: ev.data.text }],
         suggestions: ev.data.suggestions ?? state.suggestions,
       }
@@ -209,6 +219,9 @@ function onEvent(state: State, ev: DemoEvent): State {
     case 'stage.progress': {
       const d = ev.data
       const line = progressLine(d)
+      if (d.stage == null && state.phase === 'planning') {
+        return line ? { ...state, thinking: true, plannerProgress: line } : state
+      }
       // collapse consecutive identical lines AT INGEST with a true count —
       // collapsing later, after the buffer cap, would under-count long stages
       let activity = state.activity

@@ -652,6 +652,7 @@ def artefact(conn: Connection, project_id: uuid.UUID) -> dict[str, Any] | None:
         if isinstance(block, dict) and isinstance(block.get("block_id"), str)
     ]
     block_ids = [uuid.UUID(section["block_id"]) for section in section_specs]
+    block_order = {block_id: index for index, block_id in enumerate(block_ids)}
 
     prose_by_block: dict[uuid.UUID, str] = {}
     if block_ids:
@@ -702,7 +703,9 @@ def artefact(conn: Connection, project_id: uuid.UUID) -> dict[str, Any] | None:
                     "end": end if isinstance(end, int) else None,
                 }
             )
-    citation_annotations.sort(key=lambda entry: (str(entry["block_id"]), entry["start"]))
+    citation_annotations.sort(
+        key=lambda entry: (block_order.get(entry["block_id"], 10_000), entry["start"])
+    )
 
     annotation_ids = [entry["annotation_id"] for entry in citation_annotations]
     citation_rows_by_annotation: dict[uuid.UUID, list[dict[str, Any]]] = {}
@@ -813,9 +816,9 @@ def artefact(conn: Connection, project_id: uuid.UUID) -> dict[str, Any] | None:
         ):
             quality_by_pss[row.project_source_snapshot_id] = row.quality_score
 
-    # Build claims per block (one citation-type annotation = one claim span,
-    # in claim-emission order) and the reference table (numbered by first
-    # appearance of each distinct cited snapshot).
+    # Build claims per block (one annotation = one claim span, in claim-emission
+    # order) and the reference table (numbered by first appearance of each
+    # distinct cited snapshot).
     claims_by_block: dict[uuid.UUID, list[dict[str, Any]]] = {
         block_id: [] for block_id in block_ids
     }
@@ -854,11 +857,22 @@ def artefact(conn: Connection, project_id: uuid.UUID) -> dict[str, Any] | None:
                     "chunk_id": str(citation["chunk_id"]),
                 }
             )
+        claim_type = str(entry["annotation_type"])
+        if claim_type not in {
+            "citation",
+            "gap",
+            "reasoning",
+            "pattern",
+            "theme",
+            "unspanned_assertion",
+        }:
+            claim_type = "reasoning"
         claims_by_block[entry["block_id"]].append(
             {
                 "claim_id": str(entry["unit_id"]),
-                # citation | gap | reasoning | pattern | theme — drives rendering
-                "claim_type": entry["annotation_type"],
+                # citation | gap | reasoning | pattern | theme | unspanned_assertion
+                # drives rendering.
+                "claim_type": claim_type,
                 "text": entry["claim_text"],
                 # Char offsets into the block prose — the claim IS a span of the
                 # text, so citation chips anchor inline at span end.
@@ -868,21 +882,32 @@ def artefact(conn: Connection, project_id: uuid.UUID) -> dict[str, Any] | None:
         )
 
     sections: list[dict[str, Any]] = []
+    key_findings_blocks: list[dict[str, Any]] = []
+    conclusion_blocks: list[dict[str, Any]] = []
     for section in section_specs:
         block_id = uuid.UUID(section["block_id"])
-        sections.append(
-            {
-                "title": section.get("title", ""),
-                "blocks": [
-                    {
-                        "block_id": section["block_id"],
-                        "prose": prose_by_block.get(block_id, ""),
-                        "claims": claims_by_block.get(block_id, []),
-                        "gaps": [],
-                    }
-                ],
-            }
-        )
+        block = {
+            "block_id": section["block_id"],
+            "prose": prose_by_block.get(block_id, ""),
+            "claims": claims_by_block.get(block_id, []),
+            "gaps": [],
+        }
+        if not block["prose"].strip() and not block["claims"]:
+            continue
+
+        role = _block_role(section)
+        if role == "key_findings":
+            key_findings_blocks.append(block)
+        elif role == "conclusions":
+            conclusion_blocks.append(block)
+        else:
+            sections.append(
+                {
+                    "title": section.get("title", ""),
+                    "role": role,
+                    "blocks": [block],
+                }
+            )
 
     references = [
         {
@@ -930,9 +955,41 @@ def artefact(conn: Connection, project_id: uuid.UUID) -> dict[str, Any] | None:
             "included": included,
             "screened_out": screened_out,
         },
+        "key_findings": {
+            "title": "Key findings",
+            "blocks": key_findings_blocks,
+        } if key_findings_blocks else None,
         "sections": sections,
+        "conclusion": {
+            "title": "Conclusions",
+            "blocks": conclusion_blocks,
+        } if conclusion_blocks else None,
         "references": references,
     }
+
+
+def _block_role(section: dict[str, Any]) -> str:
+    """Return the synthesis v2 role for a block roll-up.
+
+    Args:
+        section: One entry from ``synthesis_result.blocks``.
+
+    Returns:
+        ``key_findings``, ``conclusions`` or ``standard``. Older seeded
+        projects did not carry roles, so title-based inference keeps them
+        renderable.
+    """
+    role = section.get("role")
+    if role in ("key_findings", "conclusions", "standard"):
+        return role
+    title = section.get("title")
+    if isinstance(title, str):
+        normalised = title.strip().lower().replace("-", " ")
+        if normalised == "key findings":
+            return "key_findings"
+        if normalised in ("conclusion", "conclusions"):
+            return "conclusions"
+    return "standard"
 
 
 # --- 6. findings (the task-011 findings layer) ---

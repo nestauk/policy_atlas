@@ -47,7 +47,7 @@ function Thread() {
       ))}
       {state.thinking && (
         <div className="flex items-center gap-2 text-[13px] text-grey">
-          <Spinner /> thinking…
+          <Spinner /> {state.plannerProgress ?? 'thinking…'}
         </div>
       )}
       <div ref={endRef} />

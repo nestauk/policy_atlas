@@ -3,7 +3,7 @@
 // so the demo UI can be rehearsed end-to-end with zero live runs.
 
 import type {
-  Artefact, Block, ChunkContext, Claim, DemoApi, DemoEvent, DecisionEntry,
+  Artefact, ArtefactSection, Block, ChunkContext, Claim, DemoApi, DemoEvent, DecisionEntry,
   EvidenceRow, Finding, Funnel, Groups, Landscape, Plan, PlanStep, Project, SourceDossier,
 } from './types'
 
@@ -157,6 +157,40 @@ const b3 = block(
   ],
 )
 
+const keyFindings = block(
+  'kf1',
+  'The clearest evidence favours measures that change the food environment, especially the Soft Drinks Industry Levy and early promotion restrictions. School programmes improve some behaviours but have not shown reliable BMI effects in the largest UK trials. The main gap is still direct weight-outcome evidence for newer food-environment restrictions and early-years approaches.',
+  [
+    ['The clearest evidence favours measures that change the food environment, especially the Soft Drinks Industry Levy and early promotion restrictions.', {
+      citations: [
+        cite(1, 'Household purchasing of soft drinks after the UK Soft Drinks Industry Levy: controlled interrupted time series', 'The volume of sugar purchased in soft drinks fell by 29.5 g per household per week relative to the counterfactual, while total soft-drink volume was unchanged, consistent with reformulation as the dominant mechanism.'),
+        cite(2, 'Sugar reduction programme: industry progress 2015–2020 (national evaluation)', 'Average sugar content of levy-eligible drinks fell by 43.7% between 2015 and 2020.'),
+      ],
+    }],
+    ['School programmes improve some behaviours but have not shown reliable BMI effects in the largest UK trials.', {
+      citations: [
+        cite(4, 'The WAVES cluster-randomised controlled trial of a multi-component school intervention', 'No statistically significant difference in BMI z-score was observed between intervention and control arms at 24 months (−0.02, 95% CI −0.09 to 0.05).'),
+        cite(6, 'School-based interventions to prevent childhood obesity: umbrella review of systematic reviews 2010–2023', 'Across 24 reviews, effects on dietary and activity behaviours were consistent; effects on adiposity were small, heterogeneous, and attenuated at longer follow-up.', 'tier_2'),
+      ],
+    }],
+    ['The main gap is still direct weight-outcome evidence for newer food-environment restrictions and early-years approaches.', { claim_type: 'gap', citations: [] }],
+  ],
+)
+
+const conclusion = block(
+  'conclusion',
+  'Overall, the evidence points more strongly to population-level food-environment measures than to school-only programmes for reducing childhood obesity in the UK. The best-supported measures reduce sugar purchased or supplied, while evidence on actual weight outcomes is narrower and uneven. For a policy reader, that means the base is useful for choosing where to look harder, but it does not yet support a simple ranking of every intervention type.',
+  [
+    ['the evidence points more strongly to population-level food-environment measures than to school-only programmes for reducing childhood obesity in the UK', {
+      citations: [
+        cite(1, 'Household purchasing of soft drinks after the UK Soft Drinks Industry Levy: controlled interrupted time series', 'The volume of sugar purchased in soft drinks fell by 29.5 g per household per week relative to the counterfactual, while total soft-drink volume was unchanged, consistent with reformulation as the dominant mechanism.'),
+        cite(4, 'The WAVES cluster-randomised controlled trial of a multi-component school intervention', 'No statistically significant difference in BMI z-score was observed between intervention and control arms at 24 months (−0.02, 95% CI −0.09 to 0.05).'),
+      ],
+    }],
+    ['it does not yet support a simple ranking of every intervention type', { claim_type: 'reasoning', citations: [] }],
+  ],
+)
+
 const mockArtefact: Artefact = {
   title: 'Evidence base: reducing childhood obesity in the UK',
   question: QUESTION,
@@ -167,11 +201,13 @@ const mockArtefact: Artefact = {
     included: 67,
     screened_out: 147,
   },
+  key_findings: { title: 'Key findings', role: 'key_findings', blocks: [keyFindings] },
   sections: [
     { title: 'Fiscal and food-environment measures', blocks: [b1] },
     { title: 'School-based programmes', blocks: [b2] },
     { title: 'Family, community and early-years approaches', blocks: [b3] },
   ],
+  conclusion: { title: 'Conclusions', role: 'conclusions', blocks: [conclusion] },
   references: [
     { n: 1, title: 'Household purchasing of soft drinks after the UK Soft Drinks Industry Levy: controlled interrupted time series', year: 2021, venue: 'BMJ Public Health', url: 'https://doi.org/10.0000/example1' },
     { n: 2, title: 'Sugar reduction programme: industry progress 2015–2020 (national evaluation)', year: 2022, venue: 'Office for Health Improvement', url: null },
@@ -183,6 +219,10 @@ const mockArtefact: Artefact = {
     { n: 8, title: 'Whole-systems obesity programmes in English local authorities: three-year outcome evaluation', year: 2024, venue: 'The Lancet Public Health', url: null },
   ],
 }
+
+const artefactSections = (): ArtefactSection[] =>
+  [mockArtefact.key_findings, ...mockArtefact.sections, mockArtefact.conclusion]
+    .filter((section): section is ArtefactSection => section != null)
 
 // ---------- evidence table ----------
 
@@ -261,11 +301,11 @@ const F = (
 })
 
 const mockFindings: Finding[] = [
-  F(1, 'Soft Drinks Industry Levy', 'Sugar purchased from soft drinks', 'negative', 'quasi-experimental (interrupted time series)',
+  F(1, 'Soft Drinks Industry Levy', 'Sugar purchased from soft drinks', 'decrease', 'quasi-experimental (interrupted time series)',
     { effect_size: '−29.5 g/household/week', ci: '−45.1 to −13.9', p_value: '<0.001', n: 22183 },
     'The volume of sugar purchased in soft drinks fell by 29.5 g per household per week relative to the counterfactual.', 1,
     g('Sugar levy / fiscal', 'Purchasing behaviour')),
-  F(2, 'Soft Drinks Industry Levy', 'Obesity prevalence (year-6 girls)', 'negative', 'quasi-experimental (interrupted time series)',
+  F(2, 'Soft Drinks Industry Levy', 'Obesity prevalence (year-6 girls)', 'decrease', 'quasi-experimental (interrupted time series)',
     { effect_size: '−1.6 pp', ci: '−2.8 to −0.4', p_value: '0.009' },
     'We estimate a 1.6 percentage-point reduction in obesity prevalence among year-6 girls in the most deprived quintile.', 3,
     g('Sugar levy / fiscal', 'BMI / weight status')),
@@ -273,39 +313,39 @@ const mockFindings: Finding[] = [
     { effect_size: '−0.02 z', ci: '−0.09 to 0.05', n: 1467 },
     'No statistically significant difference in BMI z-score was observed between intervention and control arms at 24 months.', 4,
     g('School programmes', 'BMI / weight status')),
-  F(4, 'Active-mile initiative', 'Physical activity (MVPA minutes)', 'positive', 'pragmatic evaluation',
+  F(4, 'Active-mile initiative', 'Physical activity (MVPA minutes)', 'increase', 'pragmatic evaluation',
     { effect_size: '+5.1 min/day', p_value: '0.03', n: 3218 },
     'Daily moderate-to-vigorous activity increased by just over five minutes on average.', 5,
     g('School programmes', 'Physical activity')),
   F(5, 'Active-mile initiative', 'Weight status', 'no_effect', 'pragmatic evaluation',
     {}, 'We found no detectable effect on weight status at follow-up.', 5,
     g('School programmes', 'BMI / weight status')),
-  F(6, 'School-based interventions (pooled)', 'Dietary and activity behaviours', 'positive', 'umbrella review of systematic reviews',
+  F(6, 'School-based interventions (pooled)', 'Dietary and activity behaviours', 'increase', 'umbrella review of systematic reviews',
     { k: 24, i2: '61%' },
     'Across 24 reviews, effects on dietary and activity behaviours were consistent.', 6,
     g('School programmes', 'Dietary intake')),
   F(7, 'School-based interventions (pooled)', 'Adiposity at longer follow-up', 'mixed', 'umbrella review of systematic reviews',
     { k: 24 }, 'Effects on adiposity were small, heterogeneous, and attenuated at longer follow-up.', 6,
     g('School programmes', 'BMI / weight status')),
-  F(8, 'Family weight-management referral programme', 'BMI z-score (completers)', 'positive', 'service evaluation',
+  F(8, 'Family weight-management referral programme', 'BMI z-score (completers)', 'decrease', 'service evaluation',
     { effect_size: '−0.13 z', n: 4102 },
     'Among completers, mean BMI z-score fell by 0.13 at six months.', 7,
     g('Family programmes', 'BMI / weight status')),
-  F(9, 'Family weight-management referral programme', 'Programme completion', 'negative', 'service evaluation',
+  F(9, 'Family weight-management referral programme', 'Programme completion', 'decrease', 'service evaluation',
     { effect_size: '46% attrition' }, '46% of referred families did not complete the programme.', 7,
     g('Family programmes', 'Reach & completion')),
-  F(10, 'Whole-systems local authority programme', 'Year-6 obesity prevalence', 'negative', 'matched-comparator evaluation',
+  F(10, 'Whole-systems local authority programme', 'Year-6 obesity prevalence', 'decrease', 'matched-comparator evaluation',
     { effect_size: '−0.9 pp', ci: '−1.7 to −0.1' },
     'Participating authorities recorded a small relative reduction in year-6 obesity prevalence against matched comparators.', 8,
     g('Whole-systems approaches', 'BMI / weight status')),
-  F(11, 'In-store promotion restrictions (HFSS placement)', 'Sugar purchased', 'negative', 'quasi-experimental',
+  F(11, 'In-store promotion restrictions (HFSS placement)', 'Sugar purchased', 'decrease', 'quasi-experimental',
     { effect_size: '−2.1%', p_value: '0.04' },
     'Purchases of targeted products fell modestly in the first year of the placement restrictions.', 2,
     g('Marketing restrictions', 'Purchasing behaviour')),
-  F(12, 'Sugar reduction programme (voluntary reformulation)', 'Average sugar content of drinks', 'negative', 'national evaluation',
+  F(12, 'Sugar reduction programme (voluntary reformulation)', 'Average sugar content of drinks', 'decrease', 'national evaluation',
     { effect_size: '−43.7%' }, 'Average sugar content of levy-eligible drinks fell by 43.7% between 2015 and 2020.', 2,
     g('Sugar levy / fiscal', 'Dietary intake')),
-  F(13, 'Breakfast club provision', 'Dietary quality', 'positive', 'cohort evidence',
+  F(13, 'Breakfast club provision', 'Dietary quality', 'increase', 'cohort evidence',
     {}, 'Attendance was associated with modestly better dietary quality scores.', 6,
     g('School programmes', 'Dietary intake')),
   F(14, 'Infant-feeding support (international trials)', 'Weight gain trajectory', 'unclear', 'pooled analysis of trials',
@@ -416,7 +456,7 @@ function dossier(row: EvidenceRow): SourceDossier {
       { tag: 'school-based', tag_type: 'methodological_structural', asserted_by: 'classify' },
     ],
     cited_claims: row.cited
-      ? mockArtefact.sections
+      ? artefactSections()
           .flatMap((s) => s.blocks.flatMap((b) => b.claims.map((c) => ({ c, s }))))
           .filter(({ c }) => c.citations.some((ci) => ci.source_title === row.title))
           .map(({ c, s }) => ({
@@ -429,7 +469,7 @@ function dossier(row: EvidenceRow): SourceDossier {
 }
 
 function chunkContext(chunkId: string): ChunkContext | null {
-  const quote = mockArtefact.sections
+  const quote = artefactSections()
     .flatMap((s) => s.blocks.flatMap((b) => b.claims.flatMap((c) => c.citations)))
     .find((c) => c.chunk_id === chunkId)
   if (!quote) return null
@@ -659,9 +699,10 @@ export const mockApi: DemoApi = {
     return { project_id: id }
   },
   async chat(id, message) {
-    await delay(700)
     const s = state(id)
     emit(s, { type: 'user.message', data: { text: message } })
+    emit(s, { type: 'stage.progress', data: { stage: null, kind: 'tick', note: 'Planning the analysis' } })
+    await delay(700)
     const turn = chatTurns[Math.min(s.turn, chatTurns.length - 1)]
     s.turn += 1
     s.plan = turn.plan

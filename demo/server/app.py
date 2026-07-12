@@ -220,6 +220,11 @@ def _state(project_id: str) -> ProjectState:
 def chat(project_id: str, body: ChatIn) -> dict[str, Any]:
     state = _state(project_id)
     state.turns.append({"role": "user", "text": body.message})
+    state.bus.emit("user.message", {"text": body.message})
+    state.bus.emit(
+        "stage.progress",
+        {"stage": None, "kind": "tick", "note": "Planning the analysis"},
+    )
     turn = orchestrator.plan_turn(state.turns, state.draft)
     state.draft = turn.plan_draft.model_dump()
 
@@ -245,9 +250,10 @@ def chat(project_id: str, body: ChatIn) -> dict[str, Any]:
     title = plan.get("title")
     if state.auto_named and isinstance(title, str) and title.strip():
         state.name = title.strip()
-    # conversation lands on the bus too, so a reconnecting tab replays the
-    # full transcript (the open tab dedups against its local copy)
-    state.bus.emit("user.message", {"text": body.message})
+    # Conversation lands on the bus too, so a reconnecting tab replays the full
+    # transcript (the open tab dedups against its local copy). The user turn was
+    # emitted before the planner call so the browser has a live progress tick
+    # during multi-turn planning.
     state.bus.emit("narration", {"text": reply,
                                  "suggestions": turn.suggested_answers or []})
     state.bus.emit("plan.updated", {"plan": plan})

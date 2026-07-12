@@ -4,7 +4,15 @@
 
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api, type Artefact, type Block, type ChunkContext, type Citation, type Claim } from '../api'
+import {
+  api,
+  type Artefact,
+  type ArtefactSection,
+  type Block,
+  type ChunkContext,
+  type Citation,
+  type Claim,
+} from '../api'
 import { SourceLink } from '../sourcePanel'
 import { useProject } from '../store'
 import { Dot, PaneH, SlideOver, Tip, TIER_LABEL, TIER_TEXT } from '../ui'
@@ -59,14 +67,21 @@ export default function EvidenceBase() {
           ))}
         </div>
 
+        {artefact.key_findings && (
+          <SectionBlocks section={artefact.key_findings} onOpen={setDetail} className="mt-7" />
+        )}
+
         {artefact.sections.map((section) => (
-          <section key={section.title} className="mt-9">
-            <h2 className="font-display text-[18px] font-bold text-navy">{section.title}</h2>
-            {section.blocks.map((b) => (
-              <BlockProse key={b.block_id} block={b} onOpen={setDetail} />
-            ))}
-          </section>
+          <SectionBlocks key={section.title} section={section} onOpen={setDetail} className="mt-9" />
         ))}
+
+        {artefact.conclusion && (
+          <SectionBlocks
+            section={artefact.conclusion}
+            onOpen={setDetail}
+            className="mt-10 border-t hairline pt-6"
+          />
+        )}
 
         <section className="mt-10 border-t hairline pt-6">
           <h2 className="font-display text-[18px] font-bold text-navy">References</h2>
@@ -101,6 +116,7 @@ const SPAN_STYLE: Record<Claim['claim_type'], string> = {
   reasoning: 'border-b border-dashed border-line-2 hover:bg-ground',
   pattern: 'border-b border-dotted border-violet hover:bg-blue-tint2',
   theme: 'border-b border-dotted border-violet hover:bg-blue-tint2',
+  unspanned_assertion: 'border-b border-dotted border-orange-edge hover:bg-orange-tint',
 }
 
 const TYPE_HINT: Record<Claim['claim_type'], string> = {
@@ -109,10 +125,42 @@ const TYPE_HINT: Record<Claim['claim_type'], string> = {
   reasoning: 'Reasoning from the evidence — not a quoted source.',
   pattern: 'A computed pattern across the evidence.',
   theme: "The clustering's reading of the corpus.",
+  unspanned_assertion: 'A source-check flag from the grounding review.',
+}
+
+const TYPE_LABEL: Record<Claim['claim_type'], string> = {
+  citation: '',
+  gap: 'gap',
+  reasoning: 'reasoning',
+  pattern: 'pattern',
+  theme: 'theme',
+  unspanned_assertion: 'source check',
+}
+
+function SectionBlocks({
+  section,
+  onOpen,
+  className = '',
+}: {
+  section: ArtefactSection
+  onOpen: (c: Claim) => void
+  className?: string
+}) {
+  const blocks = section.blocks.filter((b) => b.prose.trim() || b.claims.length > 0)
+  if (blocks.length === 0) return null
+  return (
+    <section className={className}>
+      <h2 className="font-display text-[18px] font-bold text-navy">{section.title}</h2>
+      {blocks.map((b) => (
+        <BlockProse key={b.block_id} block={b} onOpen={onOpen} />
+      ))}
+    </section>
+  )
 }
 
 function BlockProse({ block, onOpen }: { block: Block; onOpen: (c: Claim) => void }) {
   const prose = block.prose
+  if (!prose.trim() && block.claims.length === 0) return null
   const claims = [...block.claims]
     .filter((c) => c.span && c.span.end != null && c.span.start >= 0)
     .sort((a, b) => a.span!.start - b.span!.start)
@@ -169,7 +217,7 @@ function ClaimSpan({ claim, text, onOpen }: { claim: Claim; text: string; onOpen
         )}
         {claim.claim_type !== 'citation' && (
           <span className={`chip mx-1 !px-1.5 !py-0 !text-[10px] align-[2px] ${claim.claim_type === 'gap' ? 'chip--yellow' : 'chip--soft'}`}>
-            {claim.claim_type}
+            {TYPE_LABEL[claim.claim_type]}
           </span>
         )}
       </span>
@@ -195,6 +243,11 @@ function ClaimPanel({ claim, onClose, projectId }: { claim: Claim | null; onClos
           )}
           {claim.claim_type === 'reasoning' && (
             <p className="text-[12.5px] text-grey">{TYPE_HINT.reasoning}</p>
+          )}
+          {claim.claim_type === 'unspanned_assertion' && (
+            <p className="border-l-[3px] border-orange bg-orange-tint p-3 text-[13px] text-navy">
+              {TYPE_HINT.unspanned_assertion}
+            </p>
           )}
           {claim.citations.map((c, i) => (
             <CitationContext key={i} citation={c} projectId={projectId} />

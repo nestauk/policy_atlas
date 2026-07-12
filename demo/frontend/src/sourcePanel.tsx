@@ -235,8 +235,8 @@ function Dossier({ projectId, row, findings }: { projectId: string; row: Evidenc
 
 export function DirectionChip({ direction, className = '' }: { direction: Finding['direction']; className?: string }) {
   const map: Record<Finding['direction'], [string, string]> = {
-    positive: ['chip--green', 'Positive'],
-    negative: ['chip--orange', 'Negative'],
+    increase: ['chip--green', 'Increase'],
+    decrease: ['chip--orange', 'Decrease'],
     no_effect: ['chip--soft', 'No effect'],
     mixed: ['chip--yellow', 'Mixed'],
     unclear: ['chip--soft italic', 'Unclear'],

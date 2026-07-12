@@ -106,7 +106,8 @@ export interface EvidenceRow {
   screen_stage: number | null
 }
 
-export type ClaimType = 'citation' | 'gap' | 'reasoning' | 'pattern' | 'theme'
+export type ClaimType =
+  | 'citation' | 'gap' | 'reasoning' | 'pattern' | 'theme' | 'unspanned_assertion'
 
 export interface Citation {
   n: number
@@ -132,6 +133,12 @@ export interface Block {
   claims: Claim[]
 }
 
+export interface ArtefactSection {
+  title: string
+  role?: 'standard' | 'key_findings' | 'conclusions'
+  blocks: Block[]
+}
+
 export interface Artefact {
   title: string
   question: string
@@ -142,7 +149,9 @@ export interface Artefact {
     included: number
     screened_out: number
   }
-  sections: { title: string; blocks: Block[] }[]
+  key_findings: ArtefactSection | null
+  sections: ArtefactSection[]
+  conclusion: ArtefactSection | null
   references: { n: number; title: string; year: number | null; venue: string; url: string | null }[]
 }
 
@@ -151,7 +160,7 @@ export interface Finding {
   source_id: string
   intervention: string
   outcome: string
-  direction: 'positive' | 'negative' | 'no_effect' | 'mixed' | 'unclear'
+  direction: 'increase' | 'decrease' | 'no_effect' | 'mixed' | 'unclear'
   population: string | null
   comparator: string | null
   study_design: string | null

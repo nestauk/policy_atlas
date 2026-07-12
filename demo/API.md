@@ -54,7 +54,7 @@ which re-runs the shortlist with the new directive — / Abort).
 - `GET /api/projects/{id}/groups` → `{facets: [{facet, groups: [{label, description, size}], ungrouped: int}]}`
 - `GET /api/projects/{id}/evidence` → `[{title, year, venue, origin: "OpenAlex"|"Overton"|"Uploaded", status, status_reason?, evidence_type?, appraisal_tier?, cited: bool, url?}]`
   - `status` ∈ found | screened_out | relevant | not_selected | selected | read_in_full | findings_extracted | cited | unavailable (abstract-only)
-- `GET /api/projects/{id}/artefact` → `{title, question, coverage_snapshot: {source_count, study_types: {..}, year_range, included, screened_out}, sections: [{title, blocks: [{block_id, prose, claims: [{claim_id, text, citations: [{n, source_title, quote, grounding_tier, appraisal_label}]}], gaps: [..]}]}], references: [{n, title, year, venue, url?}]}`
+- `GET /api/projects/{id}/artefact` → `{title, question, coverage_snapshot: {source_count, study_types: {..}, year_range, included, screened_out}, key_findings?: {title, blocks: [...]}, sections: [{title, role, blocks: [{block_id, prose, claims: [{claim_id, claim_type, text, span, citations: [{n, source_title, quote, grounding_tier, appraisal_label}]}], gaps: [..]}]}], conclusion?: {title, blocks: [...]}, references: [{n, title, year, venue, url?}]}`
   - Detail panels are provenance (quotes, tiers, appraisal, set-aside/gaps) — never generic expansion.
 
 ## SSE: `GET /api/projects/{id}/events`
@@ -136,14 +136,15 @@ select (`stage.started` for select may repeat). UI labels come from `stage_label
 
 ## Added read models (feature-showcase pass)
 
-- `GET /api/projects/{id}/findings` → `[{intervention, outcome, direction: positive|negative|no_effect|mixed|unclear, population?, study_design?, statistic?, quote?, quote_verified, source_title}]`
+- `GET /api/projects/{id}/findings` → `[{intervention, outcome, direction: increase|decrease|no_effect|mixed|unclear, population?, study_design?, statistic?, quote?, quote_verified, source_title}]`
 - `GET /api/projects/{id}/decisions` → `[{at, kind, text}]` — projection over the canonical event log + this session's check-ins, ascending.
 - `GET /api/projects/{id}/coverage` → `{backends: [..], stop_condition, stop_text, adequacy, verdict_origin} | null`
 - Artefact claims now carry `span: {start, end}` — char offsets into the block `prose` (the claim IS a span of the text); citation chips anchor inline at span end.
 
 ## Annotation-layer + dossier pass (round 3)
 
-- Artefact claims now carry `claim_type`: `citation | gap | reasoning | pattern | theme`.
+- Artefact claims now carry `claim_type`: `citation | gap | reasoning | pattern | theme`
+  (plus `unspanned_assertion` when the grounding judge flags a source-check issue).
   EVERY annotation is a prose span (span offsets as before); gaps/reasoning render IN the
   prose, typed — never as separate callouts. `citations` is populated for citation-type only.
 - `GET /api/projects/{id}/findings` rows now carry: `finding_id`, `comparator`,

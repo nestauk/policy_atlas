@@ -31,23 +31,6 @@ from policy_atlas.steering import Abort, Adjust, Continue, SteeringResponse
 
 log = structlog.get_logger()
 
-# ponytail: demo-branch model upgrade — the artefact is the demo's closing shot, so
-# the model writing the blocks runs judgment-class instead of mini (user call:
-# judge + extraction stay mini). Module-constant patch, so src/ stays untouched;
-# the real change belongs to the eval slice's model-routing calibration.
-import policy_atlas.facet_grouping as _facet_mod  # noqa: E402
-import policy_atlas.group as _group_mod  # noqa: E402
-import policy_atlas.synthesis_backend as _synth_mod  # noqa: E402
-
-_synth_mod.SYNTHESIS_MODEL = "gpt-5.5"
-# Observed live (finance-ministries run): 25 docs → 427 findings → 280 distinct
-# facet values, over the fail-closed 150 cap pinned on fixture corpora. Raised
-# for the demo only; the real ceiling belongs to the large-corpus grouping seam
-# (docs/deferred.md) and its eval calibration. group.py binds the constant by
-# value at import, so patch BOTH modules.
-_facet_mod.FACET_VALUE_CAP = 400
-_group_mod.FACET_VALUE_CAP = 400
-
 # --- structlog → bus bridge (installed once at app startup) ---
 
 _BUS: EventBus | None = None
