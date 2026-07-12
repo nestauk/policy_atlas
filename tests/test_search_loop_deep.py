@@ -666,6 +666,10 @@ def test_rapid_result_cap_http_budget_and_wall_clock_stop(
     assert all(call.max_results == 3 for call in capped_backend.calls)
     assert capped["results_returned"] == 45
     assert capped["search"]["queries_executed"]["openalex"] == 15
+    # Honest stop attribution (task 019 item 5): capping on the run/http
+    # budget is not a wall-clock breach and not an error — a clean completion.
+    assert capped["search"]["wall_clock_breached"] is False
+    assert capped["stop_condition"] == "completed"
 
     second_run = seed_run(conn, project_id)
     generation_2 = ScriptedGenerationBackend(
@@ -689,6 +693,17 @@ def test_rapid_result_cap_http_budget_and_wall_clock_stop(
     assert len(clock_backend.calls) == 3
     assert stopped["search"]["queries_executed"]["openalex"] == 3
     assert stopped["search"]["wall_clock_breached"] is True
+
+    # Honest stop attribution (task 019 item 5): the rapid/standard fan-out's
+    # own wall-clock breach reaches the coverage record run_search creates,
+    # with no update-after pass — acquire_sources sees wall_clock_breached
+    # before it ever writes the row.
+    assert stopped["stop_condition"] == "wall_clock_exceeded"
+    row = conn.execute(
+        select(search_coverage_record)
+        .where(search_coverage_record.c.acquired_by_run_id == second_run)
+    ).one()
+    assert row.stop_condition == "wall_clock_exceeded"
 
 
 def test_deep_round_exemplar_payload_is_top_k_anchored_and_bounded(

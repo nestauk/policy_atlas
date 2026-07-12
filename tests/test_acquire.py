@@ -745,7 +745,7 @@ def test_coverage_adequate_both_ok(conn: Connection) -> None:
     counts = acquire(conn, pid, rid, scope_id)
     row = read_coverage(conn, rid)
     assert counts["adequacy_verdict"] == row.adequacy_verdict == "adequate"
-    assert counts["stop_condition"] == row.stop_condition == "breadth_truncated"
+    assert counts["stop_condition"] == row.stop_condition == "completed"
     assert row.verdict_origin == "model"
     assert row.scope_filters == {}
     assert row.backends == [
@@ -800,7 +800,7 @@ def test_coverage_adequate_with_empty_but_successful_backend(conn: Connection) -
         conn, pid, rid, scope_id, backends=[empty, OvertonFixtureBackend()]
     )
     assert counts["adequacy_verdict"] == "adequate"
-    assert counts["stop_condition"] == "breadth_truncated"
+    assert counts["stop_condition"] == "completed"
 
 
 def test_coverage_inadequate_on_zero_usable(conn: Connection) -> None:
@@ -812,8 +812,43 @@ def test_coverage_inadequate_on_zero_usable(conn: Connection) -> None:
     assert counts["skipped_unusable"] == 2
     assert counts["acquired"] == 0
     assert counts["adequacy_verdict"] == "inadequate"
-    assert counts["stop_condition"] == "breadth_truncated"  # no error occurred
+    assert counts["stop_condition"] == "completed"  # no error occurred
     assert_invariant(counts)
+
+
+def test_coverage_wall_clock_exceeded_when_breached_and_no_error(conn: Connection) -> None:
+    """Honest stop attribution (task 019 item 5): a wall-clock breach with no
+    backend error reports 'wall_clock_exceeded', not 'completed' or 'error'."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    counts = acquire_sources(
+        conn,
+        project_id=pid,
+        run_id=rid,
+        context=make_context(scope_id),
+        backends=[OpenAlexFixtureBackend(), OvertonFixtureBackend()],
+        wall_clock_breached=True,
+    )
+    assert counts["adequacy_verdict"] == "adequate"
+    assert counts["stop_condition"] == "wall_clock_exceeded"
+    row = read_coverage(conn, rid)
+    assert row.stop_condition == "wall_clock_exceeded"
+
+
+def test_coverage_error_wins_over_wall_clock_breached(conn: Connection) -> None:
+    """A backend error always reports 'error', even if the wall clock also breached."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    boom = FakeBackend(exc=RuntimeError("backend exploded"))
+    counts = acquire_sources(
+        conn,
+        project_id=pid,
+        run_id=rid,
+        context=make_context(scope_id),
+        backends=[boom],
+        wall_clock_breached=True,
+    )
+    assert counts["stop_condition"] == "error"
 
 
 # --- Harness integration ---

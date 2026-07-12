@@ -155,7 +155,8 @@ def test_coverage_distributions_match_hand_computed(conn: Connection) -> None:
     assert set(coverage.keys()) == {"base", "base_counts", "distributions", "rates"}
     assert coverage["base"] == "screened"
     assert coverage["base_counts"] == {
-        "screened_in": 3, "not_relevant": 1, "screen_failed": 1, "unscreened": 0,
+        "screened_in": 3, "not_relevant": 1, "excluded_retracted": 0,
+        "screen_failed": 1, "unscreened": 0,
     }
 
     distributions = coverage["distributions"]
@@ -224,6 +225,13 @@ def test_base_counts_effective_grain_four_shapes(conn: Connection) -> None:
     _, all_failed = seed_source(conn, pid)
     seed_screening_result(conn, pid, rid, scope_id, all_failed, status="failed", screen_stage=1)
 
+    # excluded_retracted: a distinct terminal effective status (task 019) —
+    # never folded into not_relevant, own bucket in the unscreened subtraction.
+    _, retracted = seed_source(conn, pid)
+    seed_screening_result(
+        conn, pid, rid, scope_id, retracted, status="excluded_retracted", screen_stage=1
+    )
+
     # genuinely unscreened: no screening rows at all.
     seed_source(conn, pid)
 
@@ -231,6 +239,7 @@ def test_base_counts_effective_grain_four_shapes(conn: Connection) -> None:
     assert counts == {
         "screened_in": 3,
         "not_relevant": 1,
+        "excluded_retracted": 1,
         "screen_failed": 1,
         "unscreened": 1,
     }
@@ -620,13 +629,15 @@ def test_coverage_two_scopes_one_project_isolated(conn: Connection) -> None:
     # Scope A: 2 screened-in, 1 not_relevant, and scope B's doc — unscreened
     # FOR SCOPE A (project-pool base), never counted as screened.
     assert coverage_a["base_counts"] == {
-        "screened_in": 2, "not_relevant": 1, "screen_failed": 0, "unscreened": 1,
+        "screened_in": 2, "not_relevant": 1, "excluded_retracted": 0,
+        "screen_failed": 0, "unscreened": 1,
     }
     assert coverage_a["distributions"]["language"] == {"en": 2}
 
     # Scope B: 1 screened-in; scope A's 3 docs are unscreened for scope B.
     assert coverage_b["base_counts"] == {
-        "screened_in": 1, "not_relevant": 0, "screen_failed": 0, "unscreened": 3,
+        "screened_in": 1, "not_relevant": 0, "excluded_retracted": 0,
+        "screen_failed": 0, "unscreened": 3,
     }
     assert coverage_b["distributions"]["language"] == {"fr": 1}
 

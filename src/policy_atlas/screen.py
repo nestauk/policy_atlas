@@ -38,7 +38,7 @@ from policy_atlas.windowing import greedy_windows
 
 log = structlog.get_logger()
 
-ScreenStatus = Literal["relevant", "not_relevant", "failed"]
+ScreenStatus = Literal["relevant", "not_relevant", "failed", "excluded_retracted"]
 ScreenBasis = Literal["title_abstract", "title_only", "full_text"]
 
 SCREEN_RETRY_CAP = 1
@@ -120,6 +120,13 @@ def effective_screen_rows() -> Subquery:
     Consumers should join this selectable instead and then filter its effective
     ``status``/``screen_stage`` columns.
 
+    ``excluded_retracted`` is a terminal effective status like any other
+    non-failed status (task 019): it is always a stage-1 row (retraction
+    exclusion happens before any stage-2 candidate exists), so it ranks as
+    the effective row and is never superseded. Consumers that filter on
+    ``status == 'relevant'`` already exclude it by construction; consumers
+    that want a full status breakdown must read it as its own bucket.
+
     Returns:
         A SQLAlchemy subquery exposing all ``source_screening_result`` columns
         for the effective row.
@@ -169,6 +176,21 @@ def _optional_text_value(metadata: dict[str, Any], key: str) -> str | None:
 def _screen_basis(metadata: dict[str, Any]) -> Literal["title_abstract", "title_only"]:
     abstract = _text_value(metadata, "abstract")
     return "title_abstract" if abstract.strip() else "title_only"
+
+
+def _is_retracted(metadata: dict[str, Any]) -> bool:
+    """True when the acquired envelope's provider metadata marks the doc retracted.
+
+    ``is_retracted`` (OpenAlex field) lives under ``metadata["provider_fields"]``
+    — acquire.py's ``_OPENALEX_RETAIN_KEYS`` retains it there, unread until task
+    019. Overton records carry no such key, so this is fail-open (absent or
+    non-dict ``provider_fields`` -> not retracted): retraction exclusion is a
+    positive provider signal, never inferred from its absence.
+    """
+    provider_fields = metadata.get("provider_fields")
+    if not isinstance(provider_fields, dict):
+        return False
+    return bool(provider_fields.get("is_retracted"))
 
 
 def _parse_screen_directive(context: dict[str, Any]) -> tuple[Literal[1, 2], list[str]]:
@@ -458,6 +480,72 @@ def _run_stage1_reps(
     return by_doc, retry_count, usage_totals.payload()
 
 
+def _exclude_retracted_docs(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    run_id: uuid.UUID,
+    context: ScreenContext,
+    all_docs: list[_Stage1Doc],
+) -> tuple[list[_Stage1Doc], list[_Stage1Doc]]:
+    """Split retracted docs out of a loaded stage-1 batch, excluding them.
+
+    Writes an ``excluded_retracted`` row (and matching event) for every
+    retracted doc, BEFORE any doc reaches the screening backend — the backend
+    is never called for a retracted doc. Owner decision: retraction is a
+    policy exclusion, never a relevance verdict, so it is never conflated
+    with ``not_relevant``.
+
+    Returns:
+        The remaining (non-retracted) docs to actually screen, and the
+        excluded retracted docs.
+    """
+    screenable: list[_Stage1Doc] = []
+    retracted: list[_Stage1Doc] = []
+    for doc in all_docs:
+        if not _is_retracted(doc.metadata):
+            screenable.append(doc)
+            continue
+        _insert_screen_row(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            scope_id=context.scope_id,
+            pss_id=doc.pss_id,
+            status="excluded_retracted",
+            basis=doc.basis,
+            # Not a relevance confidence — a provider-asserted exclusion
+            # signal, recorded at full certainty. ck_ssr_non_null_when_decided
+            # requires a non-null confidence for every non-failed status.
+            confidence=1.0,
+            stage=1,
+        )
+        _append_screened_event(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            scope_id=context.scope_id,
+            source_snapshot_id=doc.source_snapshot_id,
+            pss_id=doc.pss_id,
+            status="excluded_retracted",
+            basis=doc.basis,
+            confidence=1.0,
+            stage=1,
+            reps=[],
+            agreement={"agreeing": 0, "survivors": 0},
+            flags=["is_retracted"],
+        )
+        log.info(
+            "screen.excluded_retracted",
+            project_id=str(project_id),
+            run_id=str(run_id),
+            evidence_scope_id=str(context.scope_id),
+            project_source_snapshot_id=str(doc.pss_id),
+        )
+        retracted.append(doc)
+    return screenable, retracted
+
+
 def _run_stage1(
     conn: Connection,
     *,
@@ -467,22 +555,30 @@ def _run_stage1(
     effective_intent: str,
     screening_backend: ScreeningBackend,
 ) -> dict[str, Any]:
-    docs = _load_stage1_docs(
+    all_docs = _load_stage1_docs(
         conn,
         project_id=project_id,
         scope_id=context.scope_id,
         intent=effective_intent,
     )
+    docs, retracted_docs = _exclude_retracted_docs(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        context=context,
+        all_docs=all_docs,
+    )
     outcomes_by_doc, retries, usage_totals = _run_stage1_reps(
         docs, screening_backend=screening_backend
     )
     counts: dict[str, int] = {
-        "screened": len(docs),
+        "screened": len(all_docs),
         "relevant": 0,
         "not_relevant": 0,
         "failed": 0,
-        "title_abstract": 0,
-        "title_only": 0,
+        "excluded_retracted": len(retracted_docs),
+        "title_abstract": sum(1 for doc in retracted_docs if doc.basis == "title_abstract"),
+        "title_only": sum(1 for doc in retracted_docs if doc.basis == "title_only"),
         "unsure_reps": 0,
         "non_unanimous": 0,
         "rep_failures": 0,

@@ -631,6 +631,7 @@ def acquire_sources(
     executed_calls: Sequence[ExecutedSearchCall] | None = None,
     depth: str = "rapid",
     scope_wire_params: dict[str, Any] | None = None,
+    wall_clock_breached: bool = False,
 ) -> dict[str, Any]:
     """Acquire metadata-only sources for an evidence scope over the given backends.
 
@@ -654,6 +655,11 @@ def acquire_sources(
         depth: Search-depth directive recorded in events and coverage.
         scope_wire_params: Per-backend executed wire params or variant payloads
             recorded on the coverage record.
+        wall_clock_breached: Whether the calling search strategy's own
+            wall-clock budget was exceeded (task 019: the rapid/standard
+            fan-out's honest stop-grain signal, mirroring the deep loop's
+            ``budget_exhausted``). Ignored when ``any_error`` is true — an
+            error stop is always reported as ``'error'``.
 
     Returns:
         Counts dict: ``acquired``, ``already_acquired``, ``skipped_unusable``,
@@ -966,7 +972,19 @@ def acquire_sources(
     # part of the search space wasn't searched); zero usable records across the
     # run -> inadequate (nothing screenable came back). An empty-but-successful
     # backend beside a productive one is honest coverage, not inadequacy.
-    stop_condition = "error" if any_error else "breadth_truncated"
+    #
+    # Honest stop attribution (task 019 item 5): a clean run that never hit an
+    # error or its own wall-clock budget is 'completed', not a truncation — the
+    # old default falsely claimed breadth_truncated on every run. A run that
+    # stopped because the calling search strategy's wall clock fired is
+    # 'wall_clock_exceeded', the rapid/standard fan-out's mirror of the deep
+    # loop's budget_exhausted.
+    if any_error:
+        stop_condition = "error"
+    elif wall_clock_breached:
+        stop_condition = "wall_clock_exceeded"
+    else:
+        stop_condition = "completed"
     usable = totals["acquired"] + totals["already_acquired"]
     adequacy_verdict = "inadequate" if (any_error or usable == 0) else "adequate"
 

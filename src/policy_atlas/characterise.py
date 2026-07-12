@@ -216,11 +216,17 @@ def _base_counts(conn: Connection, *, project_id: uuid.UUID, scope_id: uuid.UUID
     )
     screened_in = status_counts.get("relevant", 0)
     not_relevant = status_counts.get("not_relevant", 0)
+    # excluded_retracted (task 019): a distinct, visible effective status —
+    # never folded into not_relevant (don't-flatten-status, owner decision).
+    excluded_retracted = status_counts.get("excluded_retracted", 0)
     return {
         "screened_in": screened_in,
         "not_relevant": not_relevant,
+        "excluded_retracted": excluded_retracted,
         "screen_failed": screen_failed,
-        "unscreened": project_sources - screened_in - not_relevant - screen_failed,
+        "unscreened": (
+            project_sources - screened_in - not_relevant - excluded_retracted - screen_failed
+        ),
     }
 
 

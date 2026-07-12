@@ -1788,6 +1788,11 @@ def run_search(
                 break
 
     elapsed = clock() - start
+    # wall_clock_breached is already known here — the loop above set it before
+    # this call, in the same synchronous invocation — so acquire's coverage
+    # row gets the honest stop condition on creation; no update-after pass is
+    # needed (unlike the deep loop's cross-round finalise_deep_stop, whose
+    # final stop condition isn't known until later rounds complete).
     counts = acquire.acquire_sources(
         conn,
         project_id=project_id,
@@ -1798,6 +1803,7 @@ def run_search(
         executed_calls=executed_calls,
         depth=depth,
         scope_wire_params=scope_wire_params,
+        wall_clock_breached=wall_clock_breached,
     )
     counts["search"] = {
         "depth": depth,
