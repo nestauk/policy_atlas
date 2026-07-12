@@ -148,12 +148,14 @@ TIME_BANDS: dict[tuple[SearchEffort, AnalysisDepth], str] = {
     ("standard", "landscape"): "~15-20 min",
     ("deep", "landscape"): "~20-25 min",
     ("rapid", "standard"): "~30-45 min",
-    # This anchor was measured pre-regrade, with the deep chain (select/
-    # extract/group) still running at standard depth — it is stale now that
-    # standard drops the deep chain and gets re-seeded from a fresh measured
-    # run in 018 Phase D (displayed-band-is-measured discipline: not invented
-    # here).
-    ("standard", "standard"): "~30-45 min",
+    # Re-seeded from the 019 Phase E measured run (2026-07-12, heat-pump
+    # question, standard x standard WITH select-at-standard, 58 docs acquired,
+    # 20 full-text screened): 805 s ≈ 13.4 min end to end incl. the planner
+    # turn — acquire 12s + screen_abstract 14s + classify 58s + appraise 0.1s
+    # + ingest 76s + screen_full 6s + characterise 8s + select 5s +
+    # synthesise 602s. Displayed-band-is-measured; synthesise dominates, so
+    # the band widens with corpus size, not composition.
+    ("standard", "standard"): "~10-20 min",
     ("deep", "standard"): "~35-50 min",
     ("rapid", "deep"): "~75-90 min",
     ("standard", "deep"): "~80-95 min",
