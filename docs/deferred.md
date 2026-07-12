@@ -658,6 +658,16 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   judge-envelope change is bound by 018's verification-grade A/B protocol (replay the
   same claim set through both envelopes, hand-inspect every flipped verdict); it lands
   at the C/eval gate, never silently.
+- **Length bound on free-text finding fields (task 020 security lane, LOW).** No cap
+  exists between model output and storage on the finding free-text class
+  (`study_geography`, and pre-existing `intervention`/`outcome`/`study_design`/
+  `comparator`/`population`) — all prompt-feeding columns re-serialized into every
+  downstream synthesis seed and `query_findings` result, so a hostile document can
+  induce prompt bloat / cost amplification (not breakout — carriage is JSON-fenced
+  throughout). One bound applied in `validate_record` (coerce-with-coverage-marker,
+  `DIRECTIVE_STRING_MAX = 200` precedent in `schema.py`) covers the whole class.
+  Practical exposure is limited today (schema-constrained structured output + the
+  document's own influence bound size); a `iof_rules` version bump when picked up.
 - **Finding-vetter per-doc calls run sequentially — DISCHARGED (task 019).**
   Parallelized on the extract executor width with context propagation; workers
   judge, the parent applies in input order; usage is accumulated in the

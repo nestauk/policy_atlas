@@ -1,9 +1,9 @@
 ---
 type: Convention
 title: The event log's run-id FK decides what can carry audit state — no run, no event
-description: Anything that happens without a run — a skipped component, a pre-run plan event, a steering interaction — needs a table-first or outcome-object carrier instead; the same constraint resurfaced three times in one slice.
+description: Anything that happens without a run — a skipped component, a pre-run plan event, a steering interaction — needs a table-first or outcome-object carrier instead; the same constraint resurfaced three times in one slice. Corollary — some tables reach their run only transitively (annotation via block → artefact), shaping how run-scoped queries must be written.
 tags: [event-log, persistence, audit, orchestrator, architecture]
-timestamp: 2026-07-10
+timestamp: 2026-07-12
 ---
 
 # Rule
@@ -33,3 +33,10 @@ has no run, pick table-first or outcome-object up front.
 Outcome-object carriers are not durable — a skip reason lives only in the
 process that ran the plan. If durable skip provenance is ever needed, that is
 a schema decision (recorded on the deferred provenance seam), not an event.
+
+The transitive-reach corollary (020 live check): `annotation` has no
+`run_id` column — it reaches its run only via `block` → `artefact`. A
+run-scoped annotation query therefore joins that path and, when picking a
+specific mint, wants newest-first plus a payload-shape filter
+(`a.payload ? 'cited_finding_ids'` for finding-claim citations) rather than
+assuming run scoping exists on the table.

@@ -1,5 +1,13 @@
 # Knowledge update log
 
+## 2026-07-12 (task 020 step 8)
+* **Creation**: Added [fingerprint-covers-subcomponent-knobs](fingerprint-covers-subcomponent-knobs.md) — the vetter's model/effort are fingerprint components; the 018-latent gap the 020 review stack's Codex adversarial lane caught and fixed, per-knob test-pinned.
+* **Creation**: Added [wire-field-additions-break-all-construction-sites](wire-field-additions-break-all-construction-sites.md) — all-fields-required wire models + import-time few-shot pre-flight; nulls-first staging across schema/prompt phases (020 A/B).
+* **Creation**: Added [replay-diff-prophylactic-vs-corrective](replay-diff-prophylactic-vs-corrective.md) — 0-flip pre/post replay reads as "pins behaviour", not "fixed a failure"; record which honestly (020 vetter v3).
+* **Creation**: Added [run-component-driver-for-scoped-live-checks](run-component-driver-for-scoped-live-checks.md) — skeleton._run_component as the sanctioned dev-DB live-check driver; substrate discipline (reuse screened selection, never re-search) (020 live check).
+* **Update**: [run-id-fk-shapes-audit-carriers](run-id-fk-shapes-audit-carriers.md) — annotation's transitive run reach (block → artefact) + the newest-first + `payload ? 'cited_finding_ids'` query shape (020 live check).
+* **Declined**: codex mid-turn-death partial-diff salvage + duplicate-constant wart grep, mypy stale-cache false attr-defined, and the accidental node_modules commit (no node ignores existed) → process lessons, recorded as 2026-07-12 entries in `docs/agentic-ops/failure-log.md`; finding-grain geography's empirical validation (11 distinct geographies in one realist review) and submission-site provenance semantics → carried by ADR 0016 + verification.md, not re-recorded; "Visit a Heat Pump" geography over-fill → eval-slice ground-truth input, recorded in verification.md § Review findings.
+
 ## 2026-07-12 (task 019 step 8)
 * **Creation**: Added [executor-fanout-context-and-usage](executor-fanout-context-and-usage.md) — copy_context at submit carries Langfuse span context + structlog contextvars in one mechanism; workers return usage, the submitting thread accumulates (019 items 4/7a/11, D1-trace-verified).
 * **Creation**: Added [prompt-honesty-rules-route-around-new-capability](prompt-honesty-rules-route-around-new-capability.md) — an earlier honesty rule silently defeats a new capability line until the prompt states which reading selects which surface; only replay catches it (019 planner replay; first entry in a new Prompting index section).
