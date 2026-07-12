@@ -1,8 +1,10 @@
 """Harness — run-record lifecycle and event-log completeness."""
 
 import uuid
+from typing import Any
 
 import pytest
+import structlog
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection, Engine
 
@@ -76,6 +78,73 @@ def test_run_lifecycle_failed_on_grounding_error(conn: Connection) -> None:
 
     log = events.read(conn, pid)
     assert log[-1]["event_type"] == "run.failed"
+
+
+def test_run_harness_binds_project_run_component_contextvars(conn: Connection) -> None:
+    """run_harness binds project_id/run_id/component once via
+    structlog.contextvars.bound_contextvars around the component body, so
+    log calls made deep inside a component execution (here, the provider
+    invoked by the echo component's grounding leg) inherit them without any
+    kwarg being hand-threaded down to that call site.
+    """
+    pid, rid = seed_project_and_run(conn)
+    snapshot_id = _seed_snapshot(conn, pid)
+    config = compile(Plan(component="echo", source_snapshot_id=snapshot_id))
+
+    events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
+    events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
+
+    seen_contextvars: dict[str, Any] = {}
+
+    class _ContextSpyingProvider:
+        def complete(self, prompt: str) -> str:  # noqa: ARG002
+            seen_contextvars.update(structlog.contextvars.get_contextvars())
+            return "fabricated text not in source"
+
+    # Outside the harness call, no ambient project_id/run_id/component context.
+    assert structlog.contextvars.get_contextvars() == {}
+
+    run_harness(
+        conn, config=config, project_id=pid, run_id=rid, provider=_ContextSpyingProvider()
+    )
+
+    assert seen_contextvars == {
+        "project_id": str(pid),
+        "run_id": str(rid),
+        "component": "echo",
+    }
+    # bound_contextvars unwinds after the call — no leakage across executions.
+    assert structlog.contextvars.get_contextvars() == {}
+
+
+def test_configure_logging_json_chain_renders_exc_info(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """configure_logging's JSON processor chain must render exc_info (dict_tracebacks
+    before JSONRenderer), so log.error(..., exc_info=True) inside an except block
+    surfaces the traceback instead of silently dropping it.
+    """
+    import json
+
+    from policy_atlas.logging import configure_logging
+
+    monkeypatch.setenv("LOG_FORMAT", "json")
+    try:
+        configure_logging()
+        log = structlog.get_logger()
+        try:
+            raise ValueError("boom")
+        except ValueError:
+            log.error("something.failed", exc_info=True)
+
+        out = capsys.readouterr().out.strip().splitlines()
+        assert len(out) == 1
+        record = json.loads(out[0])
+        assert record["event"] == "something.failed"
+        assert record["exception"][0]["exc_type"] == "ValueError"
+        assert record["exception"][0]["exc_value"] == "boom"
+    finally:
+        structlog.reset_defaults()
 
 
 def test_run_project_mismatch_raises_before_write(conn: Connection) -> None:

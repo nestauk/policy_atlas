@@ -571,6 +571,93 @@ def test_edge_scope_n_less_than_batch_is_one_batch(conn: Connection) -> None:
     assert summary["unclustered"]["count"] == 0
 
 
+def test_coverage_two_scopes_one_project_isolated(conn: Connection) -> None:
+    """Two evidence scopes in ONE project: screened counts, distributions and
+    themes are scope-local (no cross-scope bleed), while the coverage BASE is
+    the whole project pool by design — a doc screened only in the other scope
+    is honestly ``unscreened`` for this one (pool-wide per-question screening;
+    009/012 deferred combination, previously untested).
+    """
+    pid, rid = seed_project_and_run(conn)
+    scope_a = seed_scope(conn, pid)
+    scope_b = seed_scope(conn, pid)
+
+    _, pss_a1 = seed_source(conn, pid, meta={
+        "language": "en", "abstract": "On housing. [stub-theme: Housing]",
+    })
+    _, pss_a2 = seed_source(conn, pid, meta={
+        "language": "en", "abstract": "More housing. [stub-theme: Housing]",
+    })
+    _, pss_a_not_relevant = seed_source(conn, pid, meta={"abstract": "Off-topic for A."})
+
+    _, pss_b1 = seed_source(conn, pid, meta={
+        "language": "fr", "abstract": "Sur la sante. [stub-theme: Health]",
+    })
+
+    for pss in (pss_a1, pss_a2):
+        seed_screening_result(conn, pid, rid, scope_a, pss, status="relevant")
+    seed_screening_result(conn, pid, rid, scope_a, pss_a_not_relevant, status="not_relevant")
+    seed_screening_result(conn, pid, rid, scope_b, pss_b1, status="relevant")
+
+    summary_a = characterise_scope(
+        conn,
+        project_id=pid,
+        run_id=rid,
+        context=CharacteriseContext(scope_id=scope_a, intent="Housing", context={}),
+        theme_grouping_backend=StubThemeGroupingBackend(),
+    )
+    rid_b = seed_run(conn, pid)
+    summary_b = characterise_scope(
+        conn,
+        project_id=pid,
+        run_id=rid_b,
+        context=CharacteriseContext(scope_id=scope_b, intent="Health", context={}),
+        theme_grouping_backend=StubThemeGroupingBackend(),
+    )
+
+    coverage_a = summary_a["coverage"]
+    coverage_b = summary_b["coverage"]
+
+    # Scope A: 2 screened-in, 1 not_relevant, and scope B's doc — unscreened
+    # FOR SCOPE A (project-pool base), never counted as screened.
+    assert coverage_a["base_counts"] == {
+        "screened_in": 2, "not_relevant": 1, "screen_failed": 0, "unscreened": 1,
+    }
+    assert coverage_a["distributions"]["language"] == {"en": 2}
+
+    # Scope B: 1 screened-in; scope A's 3 docs are unscreened for scope B.
+    assert coverage_b["base_counts"] == {
+        "screened_in": 1, "not_relevant": 0, "screen_failed": 0, "unscreened": 3,
+    }
+    assert coverage_b["distributions"]["language"] == {"fr": 1}
+
+    # Themes are grouped within each scope's own docs only.
+    assert {theme["name"] for theme in summary_a["themes"]} == {"Housing"}
+    assert {theme["name"] for theme in summary_b["themes"]} == {"Health"}
+
+    row_a = conn.execute(
+        select(characterisation_result.c.themes)
+        .where(characterisation_result.c.evidence_scope_id == scope_a)
+    ).scalar_one()
+    member_ids_a = {
+        member_id
+        for theme in row_a["themes"]
+        for member_id in theme["member_ids"]
+    }
+    assert member_ids_a == {str(pss_a1), str(pss_a2)}
+
+    row_b = conn.execute(
+        select(characterisation_result.c.themes)
+        .where(characterisation_result.c.evidence_scope_id == scope_b)
+    ).scalar_one()
+    member_ids_b = {
+        member_id
+        for theme in row_b["themes"]
+        for member_id in theme["member_ids"]
+    }
+    assert member_ids_b == {str(pss_b1)}
+
+
 # --- Failure semantics ---
 
 
@@ -580,7 +667,7 @@ def test_discovery_failure_raises_with_coverage_and_persists_nothing(conn: Conne
     _seed_doc(conn, pid, rid, scope_id, title="Report", abstract="Body. [stub-theme: X]")
 
     ctx = CharacteriseContext(scope_id=scope_id, intent="Test", context={})
-    with pytest.raises(CharacteriseFailure) as exc_info:
+    with capture_logs() as logs, pytest.raises(CharacteriseFailure) as exc_info:
         characterise_scope(
             conn, project_id=pid, run_id=rid, context=ctx,
             theme_grouping_backend=_RaisingDiscoverBackend(),
@@ -589,6 +676,14 @@ def test_discovery_failure_raises_with_coverage_and_persists_nothing(conn: Conne
     assert set(exc_info.value.coverage.keys()) == {
         "base", "base_counts", "distributions", "rates",
     }
+    # The rejection reason (not just the exception type name) must be diagnosable
+    # from the raised failure and from the discovery_invalid log events, not only
+    # from Langfuse traces.
+    assert "discovery boom" in exc_info.value.error
+    assert any(
+        entry["event"] == "characterise.discovery_invalid" and entry["error"] == "discovery boom"
+        for entry in logs
+    )
 
     char_count = conn.execute(
         select(sa.func.count())
@@ -901,6 +996,28 @@ class _RepairExhaustedBackend:
         return {doc["id"]: "Housing" for doc in batch[:-1]}, None
 
 
+class _RaisingAssignBackend:
+    """A grouping backend whose assign stage always raises; exercises the
+    assignment-batch-failure and repair-failure rejection-detail paths."""
+
+    mode = "stub"
+
+    def discover(
+        self,
+        docs: list[GroupingDoc],
+        *,
+        intent: str,
+        min_themes: int,
+        max_themes: int,
+    ) -> UsageResult[list[Theme]]:
+        return _valid_themes(), None
+
+    def assign(
+        self, batch: list[GroupingDoc], *, themes: list[Theme]
+    ) -> UsageResult[dict[str, str]]:
+        raise RuntimeError("assign boom")
+
+
 class _FlakyDiscoveryBackend:
     mode = "stub"
 
@@ -1137,6 +1254,32 @@ def test_judgment_repair_exhausted_fails_honestly_without_persistence(
     assert all("general theme" not in row.tag.casefold() for row in tag_rows)
 
 
+def test_assignment_repair_failure_carries_rejection_detail(conn: Connection) -> None:
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _seed_three_docs(conn, pid, rid, scope_id)
+
+    with capture_logs() as logs, pytest.raises(CharacteriseFailure) as exc_info:
+        characterise_scope(
+            conn,
+            project_id=pid,
+            run_id=rid,
+            context=CharacteriseContext(scope_id=scope_id, intent="Test", context={}),
+            theme_grouping_backend=_RaisingAssignBackend(),
+        )
+
+    assert "assign boom" in exc_info.value.error
+    assert any(
+        entry["event"] == "characterise.assignment_batch_failed" and entry["error"] == "assign boom"
+        for entry in logs
+    )
+    assert any(
+        entry["event"] == "characterise.assignment_repair"
+        and entry["first_error_detail"] == "assign boom"
+        for entry in logs
+    )
+
+
 def test_judgment_invalid_discovery_retried_once(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
@@ -1172,7 +1315,7 @@ def test_judgment_invalid_discovery_retried_once(conn: Connection) -> None:
     scope_id2 = seed_scope(conn, pid2)
     _seed_three_docs(conn, pid2, rid2, scope_id2)
     always_invalid = _FlakyDiscoveryBackend(always_invalid=True)
-    with pytest.raises(CharacteriseFailure):
+    with pytest.raises(CharacteriseFailure) as exhausted_info:
         characterise_scope(
             conn,
             project_id=pid2,
@@ -1181,6 +1324,9 @@ def test_judgment_invalid_discovery_retried_once(conn: Connection) -> None:
             theme_grouping_backend=always_invalid,
         )
     assert always_invalid.discover_calls == 2
+    # Exhausting retries must not lose the rejection reason: it was diagnosable
+    # only from Langfuse traces before, now it rides in the raised failure.
+    assert expected_rejection in exhausted_info.value.error
 
 
 def test_judgment_duplicate_same_theme_deduped_at_openai_grouping_seam(
