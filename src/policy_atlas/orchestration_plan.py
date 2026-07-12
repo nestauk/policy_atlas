@@ -775,6 +775,13 @@ def _directive_delta(component: str, plan: OrchestrationPlan) -> dict[str, Any]:
     if component == "acquire":
         search: dict[str, Any] = dict(SEARCH_EFFORT_DIRECTIVES[plan.search_effort])
         filters = plan.scope_constraints.to_filters()
+        # country_group compiles blocks for both backends; drop the block for
+        # a backend the plan's scope excludes, or acquire-time directive
+        # validation rejects the whole (approved) plan as out of scope.
+        if plan.backend_scope == "academic_only":
+            filters.pop("overton", None)
+        elif plan.backend_scope == "grey_lit_only":
+            filters.pop("openalex", None)
         if filters:
             search["filters"] = filters
         return {"search": search}

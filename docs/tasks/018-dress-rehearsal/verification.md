@@ -24,14 +24,21 @@
 - **Item-4 trace evidence (019 acceptance riding this run):** every per-doc generation nests under
   its component root — `run:screen_abstract:b180de7f` trace `b2e159e284de6ea4057f4a191910ec1b`:
   176 observations, 174 generations, 0 parentless generations, exactly 1 root; same shape on
-  screen_full (`2fd83def…`), select (`7ee9ec19…`), synthesise (`5c6a340e…`, 49 generations, 0
-  orphans). Before-state: the 018-recorded detached-root wart on executor fan-outs.
-- **Incidents (recorded honestly, pennies each):** attempt 1 failed at acquire on the un-migrated
-  dev DB (old `ck_scov_stop_condition` rejected the new `completed` value — the 017 failure
-  backstop caught it; `alembic upgrade head` on dev is now a pre-live-run checklist item);
-  attempt 2 failed at ingest's parse pool because the run driver lacked a `__main__` guard (the
-  014 spawn lesson, hit live) AND the planner proposed standard×deep on the same intent (the
-  driver now verifies standard×standard before approving, one edit turn allowed).
+  screen_full (`2fd83def…`), select (`7ee9ec19…`), synthesise (trace `2936eab6e8ca…`, 60
+  generations, 602.2 s, 1 root, 0 orphans — 019 step-7 correction: the id originally cited here,
+  `5c6a340e…`, is attempt 2's synthesise trace, project `319323bb`). Before-state: the
+  018-recorded detached-root wart on executor fan-outs.
+- **Incidents (amended at 019 step 7 — trace-lane audit):** attempt 1 failed at acquire on the
+  un-migrated dev DB (old `ck_scov_stop_condition` rejected the new `completed` value — the 017
+  failure backstop caught it; `alembic upgrade head` on dev is now a pre-live-run checklist
+  item); attempt 2's run driver lacked a `__main__` guard (the 014 spawn lesson, hit live) AND
+  the planner proposed standard×deep on the same intent (the driver now verifies
+  standard×standard before approving, one edit turn allowed). **Correction:** attempt 2 did not
+  die cheaply — its project (`319323bb`, the approved standard×deep plan) ran the full deep chain
+  to a minted artefact concurrently with the D1 run (event log 05:07→05:38; extract+group;
+  synthesise trace `5c6a340e…`, 1.53 M prompt tokens). One unplanned standard×deep e2e run was
+  spent beyond the live pin; the pin governed intended runs, and this stands recorded as visible,
+  attributed incident spend. Band + `$` numbers are unaffected (both trace to `b63ac9b0`).
 
 ### B1 (2026-07-10): Phase 0 + A-model + A′ baseline-1 — complete
 

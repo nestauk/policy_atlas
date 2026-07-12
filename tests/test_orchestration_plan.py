@@ -406,6 +406,35 @@ def test_tier2_country_group_compiles_to_openalex_and_overton_post_filter() -> N
     }
 
 
+def test_country_group_compile_drops_overton_block_for_academic_only_scope() -> None:
+    """country_group compiles blocks for both backends; the acquire directive
+    must drop the block for a backend the plan's scope excludes, or acquire-time
+    directive validation rejects the approved plan as out of scope."""
+    plan = _plan(
+        backend_scope="academic_only",
+        scope_constraints={"country_group": {"label": "G7", "authorship": "pinned-table"}},
+    )
+
+    acquire_step = next(step for step in compose(plan).steps if step.component == "acquire")
+    filters = acquire_step.directive_delta["search"]["filters"]
+
+    assert len(filters["openalex"]["author_affiliation_countries"]) == 7
+    assert "overton" not in filters
+
+
+def test_country_group_compile_drops_openalex_block_for_grey_lit_only_scope() -> None:
+    plan = _plan(
+        backend_scope="grey_lit_only",
+        scope_constraints={"country_group": {"label": "G7", "authorship": "pinned-table"}},
+    )
+
+    acquire_step = next(step for step in compose(plan).steps if step.component == "acquire")
+    filters = acquire_step.directive_delta["search"]["filters"]
+
+    assert filters["overton"] == {"publisher_region": "G7"}
+    assert "openalex" not in filters
+
+
 def test_scope_constraints_compile_openalex_block_alongside_shared_and_overton() -> None:
     plan = _plan(
         search_effort="standard",

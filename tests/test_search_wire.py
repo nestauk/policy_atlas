@@ -11,10 +11,15 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
 from policy_atlas import events
-from policy_atlas.acquire import AcquireContext
+from policy_atlas.acquire import AcquireContext, OvertonFixtureBackend
 from policy_atlas.schema import search_coverage_record
 from policy_atlas.search_live import OpenAlexLiveBackend, OvertonLiveBackend
-from policy_atlas.search_loop import overton_wire_params, run_search, to_wire_params
+from policy_atlas.search_loop import (
+    SearchDirectiveError,
+    overton_wire_params,
+    run_search,
+    to_wire_params,
+)
 from policy_atlas.search_prompts import SearchQueriesWire
 from tests.helpers import ScriptedGenerationBackend, seed_project_and_run, seed_scope
 
@@ -160,6 +165,40 @@ def test_live_backends_receive_backend_native_wire_params_via_run_search(
         .where(search_coverage_record.c.acquired_by_run_id == run_id)
     ).one()
     assert row.scope_filters == expected_filters
+
+
+def test_overton_post_filter_without_capable_backend_fails_closed(
+    conn: Connection,
+) -> None:
+    """A backend that cannot enforce a required source_country_post_filter must
+    refuse loudly — silently searching unfiltered would admit out-of-group
+    records with no provenance trace (the recorded silent-zero hazard shape)."""
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    backend = OvertonFixtureBackend()  # has no search_with_post_filter
+
+    with pytest.raises(SearchDirectiveError, match="search_with_post_filter"):
+        run_search(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            context=AcquireContext(
+                scope_id=scope_id,
+                intent="Find evidence on housing retrofit policy.",
+                context={
+                    "search": {
+                        "depth": "rapid",
+                        "filters": {
+                            "overton": {"source_country_post_filter": ["UK"]},
+                        },
+                    }
+                },
+            ),
+            backends=[backend],
+            generation_backend=ScriptedGenerationBackend(
+                queries=[SearchQueriesWire(queries=[], overton_paraphrases=[])]
+            ),
+        )
 
 
 def test_overton_post_filter_exclusion_count_reaches_event_and_coverage(

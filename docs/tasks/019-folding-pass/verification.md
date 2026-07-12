@@ -124,30 +124,100 @@ eval baselines are cut. Six phase commits on `task/019-folding-pass`:
 
 ## Review findings
 
-Added after the review stack (step 7) — what each review caught and how it was resolved:
+Step 7 ran 2026-07-12 in a fresh conversation (lead = adjudicator, not the build chat). Lanes:
+contract verifier (fresh pinned-Opus agent) · `/code-review medium` (8 scoped finder angles +
+1-vote verify — the Claude half of the heterogeneous pair, anchoring the codex-written B/C
+surfaces) · one security lane (`/security-review`) · Codex adversarial (read-only, scoped to the
+Claude-written A/D/E surfaces + lead prompts — the family flip per surface) · lead live-trace
+content review (Langfuse API + dev-DB event log) · okf-validate via `make verify`. Diff hygiene
+honoured: `country_filters.py` data literals, `uv.lock` excluded; per-angle pathspecs.
 
-- **Contract verifier:**
-- **`/code-review`:**
-- **`/security-review`:**
-- **Adversarial review** (Tier 2+):
-- **`/simplify`:**
-- **`/okf validate`** (if specs/knowledge changed):
+- **Contract verifier:** all rubric items HOLD (8 pending-by-design; 12 later corrected by the
+  trace lane, below); gate decisions cover exactly what shipped; no test weakening; suite
+  independently re-run (1145). Found: duplicated empty § Review findings section (**adopted** —
+  deleted here); 3 adjudication NOTEs — Overton Tier-2 post-filter membership is a strict subset
+  of the ISO list (63 unmapped names, empirically zero-document; **accepted** as the honest
+  asymmetry the contract sanctions, first live exercise = evals), `publisher_country` fail-closes
+  on the same 63 (**accepted** — closing the silent-zero hazard is the point), classify funnel
+  fold (**accepted** — screening's own funnel carries the distinct bucket; classify's skip bucket
+  was already blended).
+- **`/code-review medium`:** 22 candidates from 8 angles → 6 verified. CONFIRMED and **adopted
+  with fix**: Overton post-filter dispatch fell back to plain unfiltered `search()` when a backend
+  lacks `search_with_post_filter` — silent membership violation with no provenance trace (the
+  exact hazard class item 3 closes); now raises `SearchDirectiveError`
+  (`search_loop.py` execute_plan; pinned by
+  `test_overton_post_filter_without_capable_backend_fails_closed`). CONFIRMED-then-**overturned on
+  lead re-read**: the screen basis-count "semantic shift" — the blended counts are deliberate and
+  test-pinned (`test_screen.py:653`; excluded rows carry their own basis stamp;
+  relevant+not_relevant+failed+excluded_retracted == screened). Declined: per-row retracted
+  inserts (codebase idiom, handful-scale), cache deepcopy (load-bearing mutation isolation),
+  unreachable-raise (mypy/idiom), variant-index bounds (synchronized by construction), and the
+  altitude notes (per-backend compile seams are the contract's own design; tracing call-site
+  wrapping is the established pattern).
+- **`/security-review`:** no high-confidence findings. Fail-closed allowlists confirmed;
+  migration SQL interpolates module-internal literals only; cache keys exclude credentials and
+  error payloads are never cached; `is_retracted` can only exclude (no new capability for a
+  payload-controlling attacker); `str(exc)` persistence capped and post-redaction.
+- **Adversarial review (Codex, read-only):** MAJOR **adopted with fix**: `country_group` compiled
+  filter blocks for both backends unconditionally, so an approved `academic_only` plan with a
+  group died at acquire-time directive validation ("Overton filters supplied outside backend
+  scope") — `_directive_delta` now drops the out-of-scope backend block (pinned by two compose
+  tests). MAJOR **declined with evidence**: retraction exclusion not idempotent for a pre-019
+  same-scope `relevant` row on a retracted doc — mechanism real, population provably empty (dev-DB
+  query: 0 rows; snapshots are immutable, so post-019 the edge cannot arise — a re-acquired doc is
+  a new snapshot with no ruling). MINOR **declined**: `_LegacySearchCall`-era external harnesses
+  passing old-shape `ExecutedSearchCall` objects would `AttributeError` on `post_filter_excluded`
+  — the Protocol is the contract and mypy flags non-conforming callers; dev-time replay tooling
+  updates when touched. NOTE: converged with the `/code-review` post-filter finding
+  (cross-family convergence — high confidence, and the family flip earning its keep both ways:
+  the Claude lane confirmed it on codex-written dispatch code, Codex flagged it independently).
+- **Live-trace content review (lead):** item-4 nesting claim verified from actual traces — all
+  five D1 component traces show exactly 1 root, 0 parentless generations, 0 error/warning
+  observations. **Two evidence corrections adopted** (013-class finding — the roll-up cited a
+  trace that isn't the run's): (1) the synthesise trace cited for D1 (`5c6a340e…`, 49 gens) belongs
+  to project `319323bb`, not D1's `b63ac9b0`; the real D1 synthesise trace is `2936eab6e8ca…`
+  (60 generations, 602.2 s — matching the recorded per-component timing; also 1 root / 0
+  orphans, so the claim survives on the correct trace). (2) The incident record understated
+  attempt 2: project `319323bb` (the driver-approved standard×deep plan) did NOT just fail — its
+  process ran the full deep chain to a minted artefact (extract+group, 1.53 M synthesise prompt
+  tokens, event log 05:07→05:38) concurrently with the D1 run. "No additional e2e runs were
+  spent" is corrected to "no additional e2e runs were *intended*; the attempt-2 incident consumed
+  one unplanned standard×deep run" — see the amended § D1 rider and 018 § Phase log D1. The `$`
+  verdict and `TIME_BANDS` re-seed are unaffected: their numbers trace to the correct run
+  (`b63ac9b0`; trace-level input 971 k vs the run accumulator's 994.5 k — same run, accounting
+  layer differs; the deep run's 1.53 M is clearly not the source).
+- **`/simplify`:** skipped with justification — `/code-review` ran the reuse / simplification /
+  efficiency / altitude finder angles with verification and adjudicated fixes above; a separate
+  same-family cleanup pass would duplicate it (review-stack economy).
+- **`make okf-validate`:** green (inside `make verify`).
 
-## Review findings
-
-Added after the review stack (step 7) — what each review caught and how it was resolved:
-
-- **Contract verifier:**
-- **`/code-review`:**
-- **`/security-review`:**
-- **Adversarial review** (Tier 2+):
-- **`/simplify`:**
-- **`/okf validate`** (if specs/knowledge changed):
+Post-fix `make verify`: green (1148 passed — the 3 new pinning tests — mypy, ruff, build, okf).
 
 ## Rubric status
 
-Filled at step 7 (review stack), per rubric.md. Note for the reviewer: rubric items 1–7 and 9–12
-have their evidence in this file; item 8 (review stack) is the step-7 conversation's own output.
+Adjudicated at step 7 (this conversation is the rubric-8 evidence):
+
+1. ✅ Contract satisfied (contract-verifier lane, all 13 scope items traced to shipped code).
+2. ✅ `make verify` green at step-6 exit (1145) and post-fix (1148).
+3. ✅ No unapproved gated change (verifier cross-check: both migrations, dep, eligibility,
+   Tier-2 mechanism all match recorded approvals; nothing exceeded).
+4. ✅ No generated files/secrets hand-edited.
+5. ✅ No tests deleted/skipped/weakened without justification (removed assertions all superseded
+   by behaviour changes; fixes in this phase ADDED three tests, weakened none — fake-done check
+   applied to the step-7 fixes themselves).
+6. ✅ Evidence recorded (this file; two trace citations corrected by the stack — see above).
+7. ✅ Gaps/seams listed (deferred.md sweep verified in-diff by the contract verifier).
+8. ✅ Review stack ran per tier (this section; heterogeneous pair + security + contract verifier
+   + live-trace lane; findings adjudicated with recorded reasons).
+9. ✅ Gate decisions carry recorded owner approval, none inherited (verifier cross-check).
+10. ✅ Planner capability line lead-authored, replay-evidenced incl. honest decline (15 probes).
+11. ✅ Allowlists/group tables static, provenance-stamped, fail-closed — now including the
+    post-filter dispatch path (step-7 fix).
+12. ✅ with correction: TIME_BANDS re-seed traces to the one measured composed standard run and
+    the `$`/band verdicts are recorded in 018's verification.md; the "no additional e2e runs"
+    clause is amended — the attempt-2 incident consumed one unplanned standard×deep run
+    (recorded honestly in both files; the pin governed intended runs and the incident is now
+    visible, attributed spend).
 
 ## Intent & assumptions
 
@@ -253,13 +323,20 @@ stop-grain vocabulary live; the persisted step names show the rename live.
   (§ Phase log D1 + § Review handoff). No revert; no prompt change.
 - **Item-4 trace evidence:** zero parentless generations across all component traces —
   `run:screen_abstract:b180de7f` (trace `b2e159e284de6ea4057f4a191910ec1b`): 174 generations, 1
-  root; synthesise (`5c6a340e…`): 49 generations, 0 orphans. Before-state: 018's recorded
-  detached-root executor wart.
-- **Incidents:** two failed attempts before the run (pennies; recorded in 018 § Phase log D1):
-  un-migrated dev DB tripping the new CHECK (backstop worked — `alembic upgrade head` on dev now a
-  pre-live-run step), and a driver missing the `__main__` spawn guard (the 014 lesson) plus a
-  planner turn proposing standard×deep on the same intent (driver now verifies the composition
-  before approving). No additional e2e runs were spent.
+  root; synthesise trace `2936eab6e8ca…`: 60 generations, 602.2 s, 1 root, 0 orphans
+  (step-7 correction: the build's citation `5c6a340e…` is the *attempt-2* project's synthesise
+  trace — see Incidents; the nesting claim holds on the correct trace, re-verified via the
+  Langfuse API). Before-state: 018's recorded detached-root executor wart.
+- **Incidents (amended at step 7 — trace-lane audit):** two failed attempts preceded the run
+  (recorded in 018 § Phase log D1): un-migrated dev DB tripping the new CHECK (backstop worked —
+  `alembic upgrade head` on dev now a pre-live-run step), and a driver missing the `__main__`
+  spawn guard (the 014 lesson) plus a planner turn proposing standard×deep on the same intent
+  (driver now verifies the composition before approving). **Step-7 correction:** attempt 2 was
+  not merely a cheap failure — its project (`319323bb`, the driver-approved standard×deep plan)
+  ran the full deep chain to a minted artefact concurrently with the D1 run (event log
+  05:07→05:38; extract+group; synthesise 1.53 M prompt tokens). One unplanned standard×deep e2e
+  run was therefore spent beyond the pin; no *intended* extra runs. The band and `$` numbers are
+  unaffected — both trace to `b63ac9b0` (per-component timings match trace `2936eab6e8ca…`).
 
 ## Plan-time probe evidence (2026-07-12, lead; owner authorized the Overton key)
 

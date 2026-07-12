@@ -1362,11 +1362,14 @@ def run_search(
         wire_params = wire_params_by_backend[backend.name][plan.filter_variant_index]
         validated = filter_variants_by_backend[backend.name][plan.filter_variant_index]
         post_filter = validated.get("source_country_post_filter")
-        if (
-            backend.name == "overton"
-            and isinstance(post_filter, list)
-            and hasattr(backend, "search_with_post_filter")
-        ):
+        if backend.name == "overton" and isinstance(post_filter, list):
+            if not hasattr(backend, "search_with_post_filter"):
+                # Fail closed: silently searching unfiltered would admit
+                # out-of-group records with no provenance trace.
+                raise SearchDirectiveError(
+                    "source_country_post_filter requires an Overton backend "
+                    "with search_with_post_filter; refusing to search unfiltered"
+                )
             return execute_call(
                 backend,
                 verb="search",
