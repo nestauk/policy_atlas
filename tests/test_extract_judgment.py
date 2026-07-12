@@ -210,11 +210,13 @@ def test_injection_prompt_level_lands_only_in_segments() -> None:
     assert INJECTION not in user.replace(seg_json, "")
 
 
-def test_render_field_docs_carries_v2_fields() -> None:
-    """Acceptance check (task 020): the generated field reference documents
-    both v2 fields — it renders from the wire model's Field descriptions, so a
+def test_render_field_docs_carries_current_schema_fields() -> None:
+    """Acceptance check: the generated field reference documents current fields.
+
+    It renders from the wire model's Field descriptions, so a
     dropped description would silently weaken the prompt's field guidance."""
     docs = render_field_docs()
+    assert "setting" in docs
     assert "effect_basis" in docs
     assert "study_geography" in docs
 
@@ -535,9 +537,9 @@ def test_fingerprint_provenance_lists_every_component(conn: Connection) -> None:
     prov = summary["provenance"]
 
     assert prov["profile"] == "eb_iof_base_v1"
-    assert prov["schema"] == "iof_v2"
+    assert prov["schema"] == "iof_v3"
     assert prov["prompt"] == "extract_iof_v6"
-    assert prov["field_rules"] == "iof_rules_v2"
+    assert prov["field_rules"] == "iof_rules_v3"
     assert prov["verifier"] == "qv_v1"
     assert prov["model"] and prov["mode"] == "stub"
     assert {"char_budget", "overlap", "oversize_policy", "oversize_overlap"} <= set(

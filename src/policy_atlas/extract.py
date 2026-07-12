@@ -947,6 +947,7 @@ def _write_docs(
                     intervention=record.intervention,
                     outcome=record.outcome,
                     population=record.population,
+                    setting=record.setting,
                     comparator=record.comparator,
                     effect_direction=record.effect_direction,
                     estimate_level=record.estimate_level,

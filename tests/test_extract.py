@@ -74,6 +74,7 @@ def _record(
         "intervention": intervention,
         "outcome": outcome,
         "population": None,
+        "setting": None,
         "comparator": None,
         "effect_direction": effect_direction,
         "estimate_level": "study",
@@ -641,13 +642,13 @@ def test_evidence_type_provenance_null_on_pre_prompt_failure(conn: Connection) -
     assert stored is None
 
 
-def test_extraction_fingerprint_components_v2() -> None:
-    """The fingerprint's component map pins the v2 schema/field-rules names
+def test_extraction_fingerprint_components_v3() -> None:
+    """The fingerprint's component map pins the v3 schema/field-rules names
     and the live prompt version — pure, no DB."""
     _fingerprint, components = extraction_fingerprint("stub")
     assert components["profile"] == "eb_iof_base_v1"
-    assert components["schema"] == "iof_v2"
-    assert components["field_rules"] == "iof_rules_v2"
+    assert components["schema"] == "iof_v3"
+    assert components["field_rules"] == "iof_rules_v3"
     assert components["prompt"] == extract_prompt.PROMPT_VERSION
 
 
@@ -662,6 +663,7 @@ def test_judge_payload_entry_key_set_excludes_effect_basis_and_study_geography()
         intervention="Coaching",
         outcome="Test scores",
         population=None,
+        setting=None,
         comparator=None,
         effect_direction="increase",
         estimate_level="study",

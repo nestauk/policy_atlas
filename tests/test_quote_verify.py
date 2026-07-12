@@ -1,4 +1,4 @@
-"""Pure unit tests for qv_v1 verification, iof_rules_v2 rules, and dedup.
+"""Pure unit tests for qv_v1 verification, iof_rules_v3 rules, and dedup.
 
 No DB fixtures — every case exercises the pure functions directly.
 """
@@ -32,6 +32,7 @@ def _wire(
     intervention: str | None = "home visiting",
     outcome: str | None = "hospital admissions",
     population: str | None = None,
+    setting: str | None = None,
     comparator: str | None = "usual care",
     effect_direction: str = "decrease",
     estimate_level: str | None = "pooled",
@@ -65,6 +66,7 @@ def _wire(
         intervention=intervention,
         outcome=outcome,
         population=population,
+        setting=setting,
         comparator=comparator,
         effect_direction=effect_direction,  # type: ignore[arg-type]
         estimate_level=estimate_level,  # type: ignore[arg-type]
@@ -85,7 +87,7 @@ def _wire(
 
 def test_version_constants() -> None:
     assert QUOTE_VERIFIER_VERSION == "qv_v1"
-    assert FIELD_RULES_VERSION == "iof_rules_v2"
+    assert FIELD_RULES_VERSION == "iof_rules_v3"
     assert "" in NULL_LIKE_STRINGS
 
 
@@ -439,7 +441,32 @@ def test_claim_key_stable_across_casefold_and_whitespace() -> None:
     assert claim_key(r1) == claim_key(r2)
 
 
-# --- iof_rules_v2: study_geography / effect_basis coverage -----------------
+# --- iof_rules_v3: setting / study_geography / effect_basis coverage -------
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_stored", "expect_coverage_key", "expect_coerced"),
+    [
+        ("primary care", "primary care", False, False),
+        ("N/A", None, True, True),
+        (None, None, True, False),
+    ],
+)
+def test_setting_coverage_v3(
+    value: str | None,
+    expected_stored: str | None,
+    expect_coverage_key: bool,
+    expect_coerced: bool,
+) -> None:
+    result = validate_record(_wire(setting=value))
+    assert result.record is not None
+    assert result.record.setting == expected_stored
+    if expect_coverage_key:
+        assert result.field_coverage["setting"] == "not_extracted"
+    else:
+        assert "setting" not in result.field_coverage
+    assert ("setting" in result.coerced_null_fields) is expect_coerced
+    assert "setting" not in result.unclear_fields
 
 
 @pytest.mark.parametrize(
@@ -511,7 +538,7 @@ def test_v1_null_vs_v2_null_coverage_distinguisher() -> None:
     assert "effect_basis" not in v1_shaped_coverage
 
 
-# --- iof_rules_v2: dedup twins (effect_basis in the claim key, geography out) ---
+# --- iof_rules_v3: dedup twins (effect_basis in the claim key, geography/setting out) ---
 
 
 def test_dedup_distinct_effect_basis_splits() -> None:
@@ -534,3 +561,32 @@ def test_dedup_same_claim_different_study_geography_collapses_first_wins() -> No
     assert collapsed == 1
     assert len(deduped) == 1
     assert deduped[0].study_geography == "United Kingdom"
+
+
+def test_dedup_same_claim_different_setting_collapses_first_wins() -> None:
+    """Top-level setting stays out of the claim key: it is descriptive metadata."""
+    r1 = _record(setting="primary care", statistics=_stats(effect_size=0.8))
+    r2 = _record(setting="secondary schools", statistics=_stats(effect_size=0.8))
+    assert claim_key(r1) == claim_key(r2)
+
+    deduped, collapsed = dedup_records([r1, r2])
+    assert collapsed == 1
+    assert len(deduped) == 1
+    assert deduped[0].setting == "primary care"
+
+
+def test_top_level_setting_coexists_with_setting_stratum() -> None:
+    result = validate_record(
+        _wire(
+            setting="primary care",
+            stratum_qualifiers=[
+                IOFStratumWire(type="setting", value="rural clinics")
+            ],
+        )
+    )
+
+    assert result.record is not None
+    assert result.record.setting == "primary care"
+    assert [(s.type, s.value) for s in result.record.stratum_qualifiers] == [
+        ("setting", "rural clinics")
+    ]

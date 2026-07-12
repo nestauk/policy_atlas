@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.engine import Connection
@@ -16,6 +16,9 @@ from policy_atlas.search_prompts import (
 )
 from policy_atlas.usage import UsageResult
 
+if TYPE_CHECKING:
+    from policy_atlas.implementation_context_records import ICFRecordWire
+
 EVIDENCE_TYPE = "RCTs and Quasi-Experimental Studies"
 
 _UNSET: Any = object()
@@ -23,6 +26,36 @@ _UNSET: Any = object()
 
 def now() -> datetime:
     return datetime.now(UTC)
+
+
+def make_icf_wire_record(**overrides: Any) -> "ICFRecordWire":
+    """Build an ICF wire record with sane defaults; override per test."""
+    from policy_atlas.extraction_records import IOFAnchorWire
+    from policy_atlas.implementation_context_records import ICFRecordWire
+
+    values: dict[str, Any] = {
+        "context_type": "barrier",
+        "claim": "Training gaps slowed delivery of the programme.",
+        "intervention": "home visiting",
+        "outcome": None,
+        "population": "families with young children",
+        "setting": "primary care",
+        "study_geography": "England",
+        "study_design": "process evaluation",
+        "claim_level": "study",
+        "claim_basis": "studied",
+        "level": "provider",
+        "resource_requirements": None,
+        "workforce_requirements": "additional staff training",
+        "anchors": [
+            IOFAnchorWire(
+                segment_id="s1",
+                quote="Training gaps slowed delivery of the programme.",
+            )
+        ],
+    }
+    values.update(overrides)
+    return ICFRecordWire.model_validate(values)
 
 
 def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
@@ -46,6 +79,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         evidence_scope,
         extraction_result,
         grouping_result,
+        implementation_context_finding,
         intervention_outcome_finding,
         project,
         project_source_snapshot,
@@ -109,6 +143,9 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
     ))
     # Task 011 rows first: findings FK onto extraction records, which FK onto
     # pss/runs; extraction_result FKs onto scope/runs.
+    conn.execute(delete(implementation_context_finding).where(
+        implementation_context_finding.c.project_id == project_id
+    ))
     conn.execute(delete(intervention_outcome_finding).where(
         intervention_outcome_finding.c.project_id == project_id
     ))

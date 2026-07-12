@@ -17,12 +17,13 @@ from policy_atlas.extract_prompt import (
     build_extract_messages,
 )
 from policy_atlas.extraction_records import ExtractionResponse, ExtractionWindowPayload
+from policy_atlas.implementation_context_records import ICFExtractionResponse
 from policy_atlas.usage import UsageResult, token_usage_from_provider
 
 log = structlog.get_logger()
 
 
-def _with_iof_v2_defaults(raw_findings: Any) -> Any:
+def _with_iof_defaults(raw_findings: Any) -> Any:
     """Default legacy stub sentinel records to the current wire shape."""
     if not isinstance(raw_findings, list):
         return raw_findings
@@ -30,6 +31,7 @@ def _with_iof_v2_defaults(raw_findings: Any) -> Any:
     for record in raw_findings:
         if isinstance(record, dict):
             updated = dict(record)
+            updated.setdefault("setting", None)
             updated.setdefault("study_geography", None)
             updated.setdefault("effect_basis", None)
             defaulted.append(updated)
@@ -178,7 +180,7 @@ class StubExtractionBackend:
             return (
                 ExtractionResponse.model_validate(
                     {
-                        "findings": _with_iof_v2_defaults(
+                        "findings": _with_iof_defaults(
                             windows.get(str(payload.window_index), [])
                         )
                     }
@@ -191,9 +193,7 @@ class StubExtractionBackend:
                 return (
                     ExtractionResponse.model_validate(
                         {
-                            "findings": _with_iof_v2_defaults(
-                                payload.metadata["_stub_iof"]
-                            )
+                            "findings": _with_iof_defaults(payload.metadata["_stub_iof"])
                         }
                     ),
                     None,
@@ -201,3 +201,47 @@ class StubExtractionBackend:
             return ExtractionResponse(findings=[]), None
 
         return ExtractionResponse(findings=[]), None
+
+
+class StubICFExtractionBackend:
+    """Deterministic zero-egress ICF extraction backend for tests and local runs."""
+
+    mode = "stub"
+
+    def extract(self, payload: ExtractionWindowPayload) -> UsageResult[ICFExtractionResponse]:
+        """Return sentinel-driven ICF findings from the payload metadata.
+
+        Args:
+            payload: The window's basis segments plus envelope context. The
+                ``metadata`` dict carries ``_stub_icf*`` sentinels for the
+                stub only; it never enters a live prompt.
+
+        Returns:
+            Deterministic ICF extraction output plus no token usage.
+
+        Raises:
+            RuntimeError: If ``_stub_icf_extract_failed`` is truthy.
+        """
+        if payload.metadata.get("_stub_icf_extract_failed"):
+            raise RuntimeError("Stub ICF extraction failure sentinel.")
+
+        if "_stub_icf_windows" in payload.metadata:
+            windows = payload.metadata["_stub_icf_windows"]
+            return (
+                ICFExtractionResponse.model_validate(
+                    {"findings": windows.get(str(payload.window_index), [])}
+                ),
+                None,
+            )
+
+        if "_stub_icf" in payload.metadata:
+            if payload.window_index == 0:
+                return (
+                    ICFExtractionResponse.model_validate(
+                        {"findings": payload.metadata["_stub_icf"]}
+                    ),
+                    None,
+                )
+            return ICFExtractionResponse(findings=[]), None
+
+        return ICFExtractionResponse(findings=[]), None
