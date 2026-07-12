@@ -36,9 +36,12 @@ against the final pre-eval record shape:
 One PR to `dev` landing the schema v2 bump end-to-end: wire + stored models, DB columns +
 CHECKs with an alembic migration, `extract_iof_v6` prompt (fencing + new-field guidance,
 lead-authored, replay-evidenced), field-rules v2, fingerprint bumps, and the new fields
-carried through the writer envelope (`query_findings`) and the annotation payload. The
-three source deferrals discharged or narrowed in `docs/deferred.md`; the data-model spec's
-findings-layer base-field list updated by flow-back (the task-011 pattern).
+carried through the writer envelope (`query_findings`) and the annotation payload. Three
+riders folded in at contract review (owner, 2026-07-12): the evidence-type provenance
+column on `source_extraction_record`, mixed/unclear carry-through tests, and the
+`_load_findings` batch load. The source deferrals discharged or narrowed in
+`docs/deferred.md`; the data-model spec's findings-layer base-field list updated by
+flow-back (the task-011 pattern).
 
 ## Read first
 
@@ -98,9 +101,24 @@ findings-layer base-field list updated by flow-back (the task-011 pattern).
    prompt gains an effect-basis line (lead-only if touched; `extract_finding_vetter_v2`
    bumps only if its text changes) — plan decision.
 8. **Spec flow-back + deferrals**: data-model findings-layer base fields gain the two
-   fields with a task-020 flow-back note + `log.md` line; the three deferred.md entries
-   discharged (effect_basis, fencing) or narrowed (study-geography: field landed,
-   diversity consumers remain).
+   fields with a task-020 flow-back note + `log.md` line; deferred.md entries discharged
+   (effect_basis, fencing, `_load_findings` batch) or narrowed (study-geography: field
+   landed, diversity consumers remain; evidence-type: column landed, memo-match rule
+   remains; mixed/unclear: carry-through pinned).
+9. **Evidence-type provenance rider (011 review, Codex — folded in at contract review)**:
+   record the `primary_evidence_type` actually sent to the prompt on
+   `source_extraction_record` (nullable Text; rides the same migration). Honest
+   provenance for ground-truth annotation. The memo-match rule stays deferred — its
+   trigger (extract-before-classify plans) still doesn't exist. ❓ whether the column
+   gets a CHECK against the classify vocabulary + `Unclassified` — plan decision.
+10. **Mixed/unclear carry-through tests (V2 requirement carried forward)**: tests pinning
+    that `mixed`/`unclear` effect-direction findings survive `group` and `synthesise`
+    (never dropped at aggregation — the V2 silent-zeroing autopsy). Expected
+    already-correct behaviour; the tests must exist before eval baselines regardless.
+    Behaviour fixes only if a test exposes a drop — anything larger is a stop condition.
+11. **`_load_findings` batch-load rider (013 review, confirmed N+1)**: replace the
+    per-snapshot basis query loop with one batched `IN (...)` query — mechanical,
+    behaviour-preserving, in the function item 6 already touches.
 
 **Out:** extraction-quality evals and ground truth themselves (next after Slice C) ·
 Slice C surfaces (multi-facet grouping, cost/surface work) · multi-pass recall,
@@ -108,12 +126,16 @@ retrieval-augmented extraction, per-intervention decomposition (eval-gated, unch
 `implementation_context_finding` · geography canonicalisation/ISO mapping and any
 selection-diversity or characterise consumer of it · annotation *widget* rendering
 (web-app slice; this slice makes the payload carry the fields) · vetter behaviour changes
-beyond the optional guidance line · Bedrock · everything else in `docs/deferred.md`.
+beyond the optional guidance line · the per-run window/call ceiling (owner call,
+2026-07-12: select's budget + fetch size caps bound the exposure and extraction is
+mini-priced — stays deferred on its "arbitrary corpora" trigger) · the memo-match rule
+for evidence type (trigger unfired) · Bedrock · everything else in `docs/deferred.md`.
 
 ## Constraints & approval gates
 
-- **Schema (needs human approval):** item 2 — two columns + one CHECK on
-  `intervention_outcome_finding`, with down-migration. No other table changes.
+- **Schema (needs human approval):** items 2 + 9 — two columns + one CHECK on
+  `intervention_outcome_finding`, one provenance column on `source_extraction_record`,
+  one migration with down-migration. No other table changes.
 - **No backfill / no invalidation:** existing findings rows and extraction records are
   untouched; the old fingerprint's memo entries stay valid for the old shape. Any
   temptation to rewrite v1 rows is a stop condition.
@@ -170,7 +192,11 @@ than the message template · any pressure to backfill or rewrite v1 rows · budg
   reused under old fingerprint, v2 extracts fresh alongside) · `render_field_docs`
   carries the new fields · user template contains no inline title/abstract interpolation
   (structural fencing check) · few-shot pre-flight still binding · `query_findings` /
-  `_load_findings` / annotation payload carry the fields; old-row null tolerance.
+  `_load_findings` / annotation payload carry the fields; old-row null tolerance ·
+  evidence type recorded on the extraction record matches what the prompt was sent
+  (incl. the `Unclassified` default) · mixed/unclear findings survive group + synthesise
+  end-to-end · `_load_findings` batch load is behaviour-preserving (same output, one
+  basis query).
 - Replay evidence (AI-behaviour, honestly eval-blind): the probe set above, summarised in
   verification.md — including the modelled-projection doc yielding `effect_basis`
   "modelled" and the fencing probe leaving fields unaffected.
