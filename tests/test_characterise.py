@@ -1,7 +1,6 @@
 """Tests for the characterise component — coverage, grouping, tags, harness, cleanup."""
 
 import json
-import socket
 import uuid
 from typing import Any
 
@@ -1153,10 +1152,6 @@ class _ParsedResponse:
         self.choices = [_ParsedChoice(_ParsedAssignments(assignments))]
 
 
-def _deny_socket_task10(*args: Any, **kwargs: Any) -> Any:
-    raise AssertionError("socket creation attempted during characterise judgment test")
-
-
 def test_judgment_invented_assignment_ids_are_dropped_without_repair(
     conn: Connection,
 ) -> None:
@@ -1511,18 +1506,14 @@ def test_judgment_socket_deny_characterise_harness_round_trip(
     rid = seed_run(conn, pid)
     config = compile(Plan(component="characterise", evidence_scope_id=scope_id))
 
-    monkeypatch.setattr(socket, "socket", _deny_socket_task10)
-    try:
-        run_harness(
-            conn,
-            config=config,
-            project_id=pid,
-            run_id=rid,
-            provider=StubEchoProvider(),
-            theme_grouping_backend=StubThemeGroupingBackend(),
-        )
-    finally:
-        monkeypatch.undo()
+    run_harness(
+        conn,
+        config=config,
+        project_id=pid,
+        run_id=rid,
+        provider=StubEchoProvider(),
+        theme_grouping_backend=StubThemeGroupingBackend(),
+    )
 
     completed = [
         event for event in events.read(conn, pid)
@@ -1535,24 +1526,20 @@ def test_judgment_socket_deny_characterise_harness_round_trip(
 def test_judgment_tracing_noop_without_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
     monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
-    monkeypatch.setattr(socket, "socket", _deny_socket_task10)
-    try:
-        client = tracing.get_langfuse()
-        assert client is None
-        with tracing.component_span(
-            client,
-            run_id=uuid.uuid4(),
-            project_id=uuid.uuid4(),
-            component="x",
-        ):
-            pass
-        tracing.score_summary(
-            client,
-            {"unclustered": {"share": 0.0}, "flags": []},
-        )
-        tracing.flush(client)
-    finally:
-        monkeypatch.undo()
+    client = tracing.get_langfuse()
+    assert client is None
+    with tracing.component_span(
+        client,
+        run_id=uuid.uuid4(),
+        project_id=uuid.uuid4(),
+        component="x",
+    ):
+        pass
+    tracing.score_summary(
+        client,
+        {"unclustered": {"share": 0.0}, "flags": []},
+    )
+    tracing.flush(client)
 
 
 def test_judgment_openai_key_hygiene(

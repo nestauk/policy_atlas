@@ -13,7 +13,6 @@ the suite stays egress-free.
 from __future__ import annotations
 
 import json
-import socket
 import uuid
 from typing import Any, cast
 
@@ -554,15 +553,10 @@ def test_preflight_rejects_non_verbatim_example(monkeypatch: pytest.MonkeyPatch)
 
 
 # --- 8. Socket-deny round trip ---------------------------------------------
+# (in-process socket denial is now suite-wide via pytest-socket; see pyproject.toml)
 
 
-def _deny_socket(*args: Any, **kwargs: Any) -> Any:
-    raise AssertionError("socket creation attempted during extract judgment test")
-
-
-def test_socket_deny_extract_round_trip(
-    conn: Connection, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_socket_deny_extract_round_trip(conn: Connection) -> None:
     """A full stub extract round trip over a mixed-basis selection creates no socket."""
     project_id, sel_run = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
@@ -584,11 +578,7 @@ def test_socket_deny_extract_round_trip(
         {"pss_id": str(ab_pss), "text_basis": "abstract_only"},
     ])
 
-    monkeypatch.setattr(socket, "socket", _deny_socket)
-    try:
-        summary, _ = _run(conn, project_id, scope_id, sel_run)
-    finally:
-        monkeypatch.undo()
+    summary, _ = _run(conn, project_id, scope_id, sel_run)
 
     assert summary["counts"]["selected"] == 2
     assert summary["counts"]["extracted"] == 2

@@ -8,7 +8,6 @@ doubles, so this file must remain deterministic and egress-free.
 from __future__ import annotations
 
 import json
-import socket
 import uuid
 from typing import Any, cast
 
@@ -719,15 +718,10 @@ def test_backend_raise_on_repair_propagates_without_grouping_row(conn: Connectio
 
 
 # --- 5. Socket-deny round trip ---------------------------------------------
+# (in-process socket denial is now suite-wide via pytest-socket; see pyproject.toml)
 
 
-def _deny_socket(*args: Any, **kwargs: Any) -> Any:
-    raise AssertionError("socket creation attempted during group judgment test")
-
-
-def test_socket_deny_group_round_trip(
-    conn: Connection, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_socket_deny_group_round_trip(conn: Connection) -> None:
     project_id, _ = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     seeded = seed_extraction(
@@ -758,17 +752,13 @@ def test_socket_deny_group_round_trip(
         ],
     )
 
-    monkeypatch.setattr(socket, "socket", _deny_socket)
-    try:
-        summary, group_run_id = _run_group(
-            conn,
-            project_id,
-            scope_id,
-            seeded.run_id,
-            backend=StubFacetGroupingBackend(),
-        )
-    finally:
-        monkeypatch.undo()
+    summary, group_run_id = _run_group(
+        conn,
+        project_id,
+        scope_id,
+        seeded.run_id,
+        backend=StubFacetGroupingBackend(),
+    )
 
     row = _group_row(conn, project_id, group_run_id)
     assert summary["counts"] == {
