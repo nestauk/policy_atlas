@@ -171,9 +171,11 @@ class FindingRecord(TypedDict):
     effect_direction: str
     estimate_level: str | None
     study_design: str | None
+    study_geography: str | None
     stratum_qualifiers: list[dict[str, str]]
     statistics: dict[str, Any]
     causality_by_design: str | None
+    effect_basis: str | None
     is_primary: bool | None
     field_coverage: dict[str, str]
     # Owner-adopted default metadata set (ADR 0015 §8 / B-B3): omit-if-absent.
@@ -1282,9 +1284,11 @@ def _finding_record(row: Any) -> FindingRecord:
         "effect_direction": cast("str", row.effect_direction),
         "estimate_level": cast("str | None", row.estimate_level),
         "study_design": cast("str | None", row.study_design),
+        "study_geography": cast("str | None", row.study_geography),
         "stratum_qualifiers": cast("list[dict[str, str]]", row.stratum_qualifiers),
         "statistics": cast("dict[str, Any]", row.statistics),
         "causality_by_design": cast("str | None", row.causality_by_design),
+        "effect_basis": cast("str | None", row.effect_basis),
         "is_primary": cast("bool | None", row.is_primary),
         "field_coverage": cast("dict[str, str]", row.field_coverage),
     }
@@ -1361,9 +1365,11 @@ def make_findings_reader(
                 intervention_outcome_finding.c.effect_direction,
                 intervention_outcome_finding.c.estimate_level,
                 intervention_outcome_finding.c.study_design,
+                intervention_outcome_finding.c.study_geography,
                 intervention_outcome_finding.c.stratum_qualifiers,
                 intervention_outcome_finding.c.statistics,
                 intervention_outcome_finding.c.causality_by_design,
+                intervention_outcome_finding.c.effect_basis,
                 intervention_outcome_finding.c.is_primary,
                 intervention_outcome_finding.c.field_coverage,
                 source_extraction_record.c.project_source_snapshot_id,

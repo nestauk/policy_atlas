@@ -1168,3 +1168,230 @@ def test_make_findings_reader_record_carries_default_metadata_set(
     assert record["venue"] == "Study Press"
     assert record["cited_by"] == 9
     assert "is_retracted" not in record
+
+
+def _seed_reader_finding(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    run_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    pss_id: uuid.UUID,
+    snap_id: uuid.UUID,
+    classification_evidence_type: str | None = None,
+    extraction_record_evidence_type: str | None = None,
+    effect_basis: str | None = None,
+    study_geography: str | None = None,
+    field_coverage: dict[str, str] | None = None,
+) -> tuple[uuid.UUID, uuid.UUID]:
+    """Seed one finding ready for ``make_findings_reader``; returns (record_id, finding_id).
+
+    Kept minimal (no appraisal row) — task 020 C tests only exercise
+    effect_basis/study_geography carriage and the evidence-type live-vs-provenance
+    split, not the full ADR 0015 default metadata set (already pinned above).
+    """
+    from policy_atlas.schema import (
+        extraction_result,
+        intervention_outcome_finding,
+        selection_result,
+        source_classification_result,
+        source_extraction_record,
+    )
+
+    if classification_evidence_type is not None:
+        conn.execute(
+            source_classification_result.insert().values(
+                source_classification_result_id=uuid.uuid4(),
+                evidence_scope_id=scope_id,
+                project_source_snapshot_id=pss_id,
+                project_id=project_id,
+                classified_by_run_id=run_id,
+                primary_evidence_type=classification_evidence_type,
+                classified_at=now(),
+            )
+        )
+    extraction_record_id = uuid.uuid4()
+    finding_id = uuid.uuid4()
+    conn.execute(
+        source_extraction_record.insert().values(
+            extraction_record_id=extraction_record_id,
+            project_id=project_id,
+            source_snapshot_id=snap_id,
+            project_source_snapshot_id=pss_id,
+            extraction_fingerprint=f"fp-{extraction_record_id}",
+            status="extracted",
+            basis="full_text",
+            primary_evidence_type=extraction_record_evidence_type,
+            error=None,
+            finding_count=1,
+            run_id=run_id,
+            created_at=now(),
+        )
+    )
+    conn.execute(
+        intervention_outcome_finding.insert().values(
+            finding_id=finding_id,
+            project_id=project_id,
+            extraction_record_id=extraction_record_id,
+            intervention="Coaching",
+            outcome="Scores",
+            population=None,
+            comparator=None,
+            effect_direction="increase",
+            estimate_level="study",
+            study_design=None,
+            study_geography=study_geography,
+            stratum_qualifiers=[],
+            statistics={},
+            causality_by_design=None,
+            effect_basis=effect_basis,
+            is_primary=None,
+            is_prevalence_only=None,
+            field_coverage=field_coverage if field_coverage is not None else {},
+            grounding=[],
+            created_at=now(),
+        )
+    )
+    conn.execute(
+        selection_result.insert().values(
+            selection_result_id=uuid.uuid4(),
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            run_id=run_id,
+            strategy="coverage_stratified_v1",
+            budget=1,
+            selection_provenance={},
+            selected=[],
+            excluded={},
+            flags={},
+            created_at=now(),
+        )
+    )
+    conn.execute(
+        extraction_result.insert().values(
+            extraction_result_id=uuid.uuid4(),
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            run_id=run_id,
+            selection_run_id=run_id,
+            extraction_provenance={"fingerprint": "t"},
+            docs=[{"extraction_record_id": str(extraction_record_id)}],
+            counts={"findings": {"total": 1}},
+            flags={},
+            created_at=now(),
+        )
+    )
+    return extraction_record_id, finding_id
+
+
+def test_make_findings_reader_carries_effect_basis_and_study_geography(
+    conn: Connection,
+) -> None:
+    """Task 020 C1: query_findings' record carries the two new finding-grain
+    fields (always-present-nullable, exactly like ``study_design``)."""
+    from policy_atlas.synthesis_tools import make_findings_reader
+
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    snap_id, pss_id = seed_source(conn, project_id, meta={"title": "Geo doc"})
+    seed_screening_result(conn, project_id, run_id, scope_id, pss_id, status="relevant")
+
+    _record_id, finding_id = _seed_reader_finding(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        pss_id=pss_id,
+        snap_id=snap_id,
+        effect_basis="observed",
+        study_geography="England",
+    )
+
+    reader = make_findings_reader(
+        conn,
+        project_id=project_id,
+        extraction_run_id=run_id,
+        evidence_scope_id=scope_id,
+        grouping_groups=None,
+    )
+    findings = reader({})["findings"]
+    record = next(f for f in findings if f["finding_id"] == str(finding_id))
+    assert record["effect_basis"] == "observed"
+    assert record["study_geography"] == "England"
+
+
+def test_make_findings_reader_effect_basis_study_geography_null_for_v1_rows(
+    conn: Connection,
+) -> None:
+    """Old-row tolerance: a v1 row has NULL effect_basis/study_geography and a
+    field_coverage dict without the new keys — the read path passes both
+    through as ``None``, never a ``KeyError``."""
+    from policy_atlas.synthesis_tools import make_findings_reader
+
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    snap_id, pss_id = seed_source(conn, project_id, meta={"title": "V1 doc"})
+    seed_screening_result(conn, project_id, run_id, scope_id, pss_id, status="relevant")
+
+    _record_id, finding_id = _seed_reader_finding(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        pss_id=pss_id,
+        snap_id=snap_id,
+        effect_basis=None,
+        study_geography=None,
+        field_coverage={"study_design": "not_extracted"},
+    )
+
+    reader = make_findings_reader(
+        conn,
+        project_id=project_id,
+        extraction_run_id=run_id,
+        evidence_scope_id=scope_id,
+        grouping_groups=None,
+    )
+    findings = reader({})["findings"]
+    record = next(f for f in findings if f["finding_id"] == str(finding_id))
+    assert record["effect_basis"] is None
+    assert record["study_geography"] is None
+    assert "effect_basis" not in record["field_coverage"]
+    assert "study_geography" not in record["field_coverage"]
+
+
+def test_make_findings_reader_evidence_type_reads_live_classification_not_provenance(
+    conn: Connection,
+) -> None:
+    """Adversarial finding 5: the writer envelope's ``evidence_type`` always
+    reads the live ``source_classification_result``, never the
+    ``source_extraction_record.primary_evidence_type`` extraction-call
+    provenance column — the two may legitimately diverge (schema comment)."""
+    from policy_atlas.synthesis_tools import make_findings_reader
+
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    snap_id, pss_id = seed_source(conn, project_id, meta={"title": "Divergent doc"})
+    seed_screening_result(conn, project_id, run_id, scope_id, pss_id, status="relevant")
+
+    _record_id, finding_id = _seed_reader_finding(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        pss_id=pss_id,
+        snap_id=snap_id,
+        classification_evidence_type="RCTs and Quasi-Experimental Studies",
+        extraction_record_evidence_type="Observational Research Studies",
+    )
+
+    reader = make_findings_reader(
+        conn,
+        project_id=project_id,
+        extraction_run_id=run_id,
+        evidence_scope_id=scope_id,
+        grouping_groups=None,
+    )
+    findings = reader({})["findings"]
+    record = next(f for f in findings if f["finding_id"] == str(finding_id))
+    assert record["evidence_type"] == "RCTs and Quasi-Experimental Studies"

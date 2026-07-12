@@ -647,6 +647,48 @@ def test_mixed_unclear_directions_are_first_class_in_spreads(conn: Connection) -
     assert cast("dict[str, int]", payload["ungrouped"]["direction_spread"])["unclear"] == 1
 
 
+def test_mixed_unclear_findings_never_dropped_by_group(conn: Connection) -> None:
+    """V2 silent-zeroing autopsy (task 020 C7): findings with effect_direction
+    'mixed'/'unclear' are first-class group members, not just spread-count
+    entries — every finding_id must survive into the persisted membership
+    (a group, or a residual bucket), never silently dropped at aggregation."""
+    project_id, _ = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    seeded = seed_extraction(
+        conn,
+        project_id,
+        scope_id,
+        docs=[
+            (
+                uuid.uuid4(),
+                [
+                    {
+                        "intervention": "Alpha service",
+                        "outcome": "Outcome A",
+                        "effect_direction": "mixed",
+                    },
+                    {
+                        "intervention": "Alpha programme",
+                        "outcome": "Outcome B",
+                        "effect_direction": "unclear",
+                    },
+                    {
+                        "intervention": "Alpha clinic",
+                        "outcome": "Outcome C",
+                        "effect_direction": "increase",
+                    },
+                ],
+            )
+        ],
+    )
+
+    _summary, group_run_id = _run_group(conn, project_id, scope_id, seeded.run_id)
+    row = _group_row(conn, project_id, group_run_id)
+    membership = _payload_finding_ids(cast("dict[str, Any]", row["groups"]))
+
+    assert membership == {str(finding_id) for finding_id in seeded.finding_ids}
+
+
 def test_backend_failure_raises_without_rollup_row(conn: Connection) -> None:
     project_id, _ = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)

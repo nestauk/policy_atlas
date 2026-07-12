@@ -976,21 +976,65 @@ def _load_corpus_profile(
     )
 
 
-def _basis_for_snapshot(conn: Connection, source_snapshot_id: uuid.UUID) -> BasisText:
-    rows = conn.execute(
-        sa_select(chunk_table.c.chunk_id, chunk_table.c.content)
-        .where(chunk_table.c.source_snapshot_id == source_snapshot_id)
-        .order_by(chunk_table.c.sequence, chunk_table.c.chunk_id)
+def _load_bases_for_snapshots(
+    conn: Connection,
+    snapshot_ids: Sequence[uuid.UUID],
+    metadata_by_snapshot: Mapping[str, Any],
+) -> dict[str, BasisText]:
+    """Batch-load basis text for a set of distinct source snapshots.
+
+    Replaces the former one-chunk-query-per-snapshot pattern (013 review N+1
+    finding, task 020 C3 rider): every snapshot's chunks are fetched in ONE
+    query over the whole distinct-snapshot set, then grouped in Python. A
+    chunkless snapshot (abstract-only basis) reads its envelope metadata's
+    ``abstract`` from ``metadata_by_snapshot`` — already selected by the
+    caller's findings query — so the chunkless fallback costs zero extra
+    queries.
+
+    Args:
+        conn: Open database connection.
+        snapshot_ids: Distinct source snapshot ids to build bases for.
+        metadata_by_snapshot: Each snapshot id's envelope ``source_snapshot``
+            metadata dict (string-keyed by ``str(snapshot_id)``), for the
+            chunkless fallback.
+
+    Returns:
+        Mapping from ``str(snapshot_id)`` to its :class:`BasisText`.
+    """
+    if not snapshot_ids:
+        return {}
+    chunk_rows = conn.execute(
+        sa_select(
+            chunk_table.c.source_snapshot_id,
+            chunk_table.c.chunk_id,
+            chunk_table.c.content,
+        )
+        .where(chunk_table.c.source_snapshot_id.in_(snapshot_ids))
+        .order_by(
+            chunk_table.c.source_snapshot_id,
+            chunk_table.c.sequence,
+            chunk_table.c.chunk_id,
+        )
     ).fetchall()
-    if rows:
-        return build_basis([(str(row.chunk_id), cast("str", row.content)) for row in rows])
-    snapshot = conn.execute(
-        sa_select(source_snapshot.c.metadata)
-        .where(source_snapshot.c.source_snapshot_id == source_snapshot_id)
-    ).mappings().one()
-    metadata = snapshot["metadata"] if isinstance(snapshot["metadata"], dict) else {}
-    abstract = metadata.get("abstract")
-    return build_basis([(None, abstract if isinstance(abstract, str) else "")])
+    chunks_by_snapshot: dict[str, list[tuple[str, str]]] = {}
+    for row in chunk_rows:
+        key = str(row.source_snapshot_id)
+        chunks_by_snapshot.setdefault(key, []).append(
+            (str(row.chunk_id), cast("str", row.content))
+        )
+    basis_by_snapshot: dict[str, BasisText] = {}
+    for snapshot_id in snapshot_ids:
+        key = str(snapshot_id)
+        chunks = chunks_by_snapshot.get(key)
+        if chunks:
+            basis_by_snapshot[key] = build_basis(chunks)
+        else:
+            metadata = metadata_by_snapshot.get(key)
+            abstract = metadata.get("abstract") if isinstance(metadata, dict) else None
+            basis_by_snapshot[key] = build_basis(
+                [(None, abstract if isinstance(abstract, str) else "")]
+            )
+    return basis_by_snapshot
 
 
 def _load_screened_chunks(
@@ -1151,9 +1195,11 @@ def _load_findings(
             intervention_outcome_finding.c.effect_direction,
             intervention_outcome_finding.c.estimate_level,
             intervention_outcome_finding.c.study_design,
+            intervention_outcome_finding.c.study_geography,
             intervention_outcome_finding.c.stratum_qualifiers,
             intervention_outcome_finding.c.statistics,
             intervention_outcome_finding.c.causality_by_design,
+            intervention_outcome_finding.c.effect_basis,
             intervention_outcome_finding.c.is_primary,
             intervention_outcome_finding.c.field_coverage,
             intervention_outcome_finding.c.grounding,
@@ -1182,7 +1228,9 @@ def _load_findings(
         )
     ).fetchall()
     findings: dict[str, FindingInfo] = {}
-    basis_by_snapshot: dict[str, BasisText] = {}
+    snapshot_ids: list[uuid.UUID] = []
+    seen_snapshots: set[str] = set()
+    metadata_by_snapshot: dict[str, Any] = {}
     for row in rows:
         pss_id = str(row.project_source_snapshot_id)
         metadata = row.metadata if isinstance(row.metadata, dict) else {}
@@ -1190,8 +1238,10 @@ def _load_findings(
         finding_id = str(row.finding_id)
         source_snapshot_id = cast("uuid.UUID", row.source_snapshot_id)
         basis_key = str(source_snapshot_id)
-        if basis_key not in basis_by_snapshot:
-            basis_by_snapshot[basis_key] = _basis_for_snapshot(conn, source_snapshot_id)
+        if basis_key not in seen_snapshots:
+            seen_snapshots.add(basis_key)
+            snapshot_ids.append(source_snapshot_id)
+            metadata_by_snapshot[basis_key] = metadata
         grounding = row.grounding if isinstance(row.grounding, list) else []
         record = {
             "finding_id": finding_id,
@@ -1204,9 +1254,11 @@ def _load_findings(
             "effect_direction": row.effect_direction,
             "estimate_level": row.estimate_level,
             "study_design": row.study_design,
+            "study_geography": row.study_geography,
             "stratum_qualifiers": row.stratum_qualifiers,
             "statistics": row.statistics,
             "causality_by_design": row.causality_by_design,
+            "effect_basis": row.effect_basis,
             "is_primary": row.is_primary,
             "field_coverage": row.field_coverage,
         }
@@ -1218,6 +1270,7 @@ def _load_findings(
             grounding=cast("list[dict[str, Any]]", grounding),
             effect_direction=cast("str", row.effect_direction),
         )
+    basis_by_snapshot = _load_bases_for_snapshots(conn, snapshot_ids, metadata_by_snapshot)
     return findings, basis_by_snapshot
 
 

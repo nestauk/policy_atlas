@@ -16,8 +16,15 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas import extract_prompt
-from policy_atlas.extract import ExtractContext, ExtractError, extract_scope, extraction_fingerprint
+from policy_atlas.extract import (
+    ExtractContext,
+    ExtractError,
+    _judge_payload_entry,
+    extract_scope,
+    extraction_fingerprint,
+)
 from policy_atlas.extraction_backend import StubExtractionBackend
+from policy_atlas.extraction_records import IOFAnchor, IOFRecord, IOFStatistics, IOFStratum
 from policy_atlas.schema import (
     chunk,
     extraction_result,
@@ -582,3 +589,41 @@ def test_extraction_fingerprint_components_v2() -> None:
     assert components["schema"] == "iof_v2"
     assert components["field_rules"] == "iof_rules_v2"
     assert components["prompt"] == extract_prompt.PROMPT_VERSION
+
+
+def test_judge_payload_entry_key_set_excludes_effect_basis_and_study_geography() -> None:
+    """Vetter payload shape-snapshot (owner gate decision 2, task 020): the
+    payload deliberately does NOT carry ``effect_basis``/``study_geography``
+    even though the record itself does — self-label bias risk (the vetter's
+    verdict must not be swayed by a field it never itself judged). Pure,
+    no DB; pins the exact key set so a future ``IOFRecord`` field addition
+    can't silently leak into the judge payload."""
+    record = IOFRecord(
+        intervention="Coaching",
+        outcome="Test scores",
+        population=None,
+        comparator=None,
+        effect_direction="increase",
+        estimate_level="study",
+        study_design="RCT",
+        study_geography="England",
+        stratum_qualifiers=[IOFStratum(type="subgroup", value="Girls")],
+        statistics=IOFStatistics(),
+        causality_by_design=None,
+        effect_basis="observed",
+        is_primary=None,
+        is_prevalence_only=None,
+        anchors=[IOFAnchor(segment_id="seg-1", quote="scores rose")],
+    )
+
+    entry = _judge_payload_entry(0, record)
+
+    assert set(entry.keys()) == {
+        "index",
+        "intervention",
+        "outcome",
+        "effect_direction",
+        "estimate_level",
+        "stratum_qualifiers",
+        "quotes",
+    }
