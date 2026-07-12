@@ -12,6 +12,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+import pytest
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
@@ -288,6 +289,65 @@ def test_memo_reuse(conn: Connection) -> None:
     assert second["docs"][0]["extraction_record_id"] == first_record_id
     # No new finding rows were written on the reused run.
     assert _finding_count(conn, project_id) == findings_after_first
+
+
+def test_fingerprint_change_extracts_fresh_alongside(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fingerprint bump never reuses old records and never rewrites them.
+
+    The task-020 acceptance pair in one deterministic test (its two halves
+    were previously pinned only by composition): records extracted under one
+    fingerprint are memo-missed after any component changes — the run
+    extracts FRESH, creating a new record and new finding rows ALONGSIDE —
+    while the old record and its findings survive byte-untouched
+    (upgrades-never-invalidate)."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    content = "Home visiting reduced hospital admissions among infants."
+    cid = uuid.uuid4()
+    pss_id, _ = _seed_full_text_doc(
+        conn, project_id, sel_run, scope_id, title="Home visiting", chunk_content=content,
+        chunk_id=cid,
+        stub_iof=[_record(
+            intervention="home visiting", outcome="hospital admissions",
+            quote="Home visiting reduced hospital admissions", segment_id=str(cid),
+            effect_direction="decrease",
+        )],
+    )
+    _seed_selection(conn, project_id, sel_run, scope_id,
+                    [{"pss_id": str(pss_id), "text_basis": "full_text"}])
+
+    first, _ = _run(conn, project_id, scope_id, sel_run)
+    first_record_id = first["docs"][0]["extraction_record_id"]
+    findings_after_first = _finding_count(conn, project_id)
+    old_findings = conn.execute(
+        select(intervention_outcome_finding)
+        .where(intervention_outcome_finding.c.project_id == project_id)
+    ).mappings().all()
+
+    with monkeypatch.context() as m:
+        m.setattr("policy_atlas.extract.PROMPT_VERSION", "extract_iof_vNEXT")
+        second, _ = _run(conn, project_id, scope_id, sel_run)
+
+    assert second["counts"]["reused"] == 0
+    assert second["counts"]["fresh"] == 1
+    assert second["docs"][0]["extraction_record_id"] != first_record_id
+    # New finding rows landed alongside; the old rows are byte-identical.
+    assert _finding_count(conn, project_id) == 2 * findings_after_first
+    surviving = conn.execute(
+        select(intervention_outcome_finding)
+        .where(intervention_outcome_finding.c.finding_id.in_(
+            [row["finding_id"] for row in old_findings]
+        ))
+    ).mappings().all()
+    assert sorted(surviving, key=lambda r: str(r["finding_id"])) == sorted(
+        old_findings, key=lambda r: str(r["finding_id"])
+    )
+    # And the untouched original fingerprint still reuses its own record.
+    third, _ = _run(conn, project_id, scope_id, sel_run)
+    assert third["counts"]["reused"] == 1
+    assert third["docs"][0]["extraction_record_id"] == first_record_id
 
 
 def test_abstract_basis(conn: Connection) -> None:

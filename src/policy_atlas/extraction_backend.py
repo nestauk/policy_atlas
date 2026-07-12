@@ -1,4 +1,5 @@
-"""Extraction backend seam for the extract_iof_v5 IOF extraction call."""
+"""Extraction backend seam for the extract_iof IOF extraction call (see
+``extract_prompt.PROMPT_VERSION`` for the live prompt version)."""
 
 from __future__ import annotations
 

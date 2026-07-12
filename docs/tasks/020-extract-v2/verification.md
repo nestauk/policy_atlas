@@ -13,6 +13,7 @@ the review stack (step 7).
 | `make verify-fast` (Phase B+C gate) | pass | 1125 tests, mypy 121 files, ruff (one stale-mypy-cache false positive cleared with `rm -rf .mypy_cache`; clean-cache run green) |
 | `make verify` (step-6 exit) | pass | 1176 tests, mypy 121 files, ruff, build, okf-validate |
 | `make okf-validate` (docs sweep) | pass | 63 concepts, 0 violations |
+| `make verify` (step-7 exit, post-review-fixes) | pass | 1178 tests (2 review-added), mypy, ruff, build, okf-validate |
 
 ## Checks beyond the build
 
@@ -133,12 +134,137 @@ Accepted) matches the as-built code on all nine decisions — re-checked at step
 
 ## Review findings
 
-(To be added by the review stack — step 7, fresh conversation.)
+Step 7 ran 2026-07-12 in a fresh conversation (this section is its record; lead
+adjudicated, no lane self-reviewed its own code). Lanes: contract-verifier
+(fresh Opus, all 17 rubric items + verification/ADR claims vs as-built) ·
+`/code-review medium` (8 scoped finder angles, Claude) · security-auditor ·
+Codex adversarial (family flip: anchored the Claude-written prompt/carriage/
+tests; Claude lanes anchored the Codex-written Phase A product code) ·
+lead live-trace content review (probe summaries + direct dev-DB checks).
+
+**Adopted (fixed in the review commit):**
+- **Vetter fingerprint gap** (Codex adversarial, MEDIUM — the stack's best
+  finding): the `finding_vetter` fingerprint component carried only
+  prompt+max_output_tokens, omitting `FINDING_VETTER_MODEL` and
+  `FINDING_VETTER_REASONING_EFFORT` — a vetter model/effort change would have
+  reused stale memo records despite changed filtering. Latent since 018 C5,
+  surfaced by this slice's "every output-affecting knob" focus. Fixed in
+  `extraction_fingerprint()` + pinned per-knob in
+  `test_fingerprint_changes_on_any_single_component`.
+- **Fresh-alongside memo test missing** (CONVERGENT: Codex adversarial +
+  contract-verifier independently): rubric 10's "old-reuse + new-fresh-
+  alongside" was pinned only by composition. Added
+  `test_fingerprint_change_extracts_fresh_alongside`: bump → memo miss → new
+  record + findings alongside, old rows byte-identical, original fingerprint
+  still reuses.
+- **Fencing test escaped-leak hole** (Codex adversarial, LOW): the hostile-
+  envelope test checked only the RAW string outside the fence; a regression
+  leaking the JSON-escaped form would have passed. Hardened with an
+  escaped-fragment assertion.
+- **`render_field_docs` acceptance check untested** (contract-verifier NOTE):
+  added the two-line assertion test.
+- **Stale `extract_iof_v5` docstrings** (cross-file finder): extract.py +
+  extraction_backend.py module docstrings; made version-neutral (point at
+  `PROMPT_VERSION`) so they cannot go stale again.
+- **finding_vetter.py missing the "lead-authored and versioned" docstring
+  declaration** (conventions finder) — every sibling prompt module carries it;
+  added.
+- **Accidentally committed demo build artifacts** (lead, pre-lane diff
+  hygiene): phase C's commit included `demo/frontend/node_modules` (6,230
+  files), `.vite/` and `tsconfig.tsbuildinfo` — no node ignores existed.
+  Untracked + `.gitignore` entries in the review commit; history rewrite of
+  the unpushed branch recommended at the PR gate so the blobs never reach
+  origin (owner decision).
+
+**Declined (recorded reasons):**
+- `sent_evidence_type` assigned in both submit and retry paths (3 finder
+  angles converged, cost-only): this IS ADR-0016 decision 7 — provenance set
+  at every backend-call submission site; deduplicating would couple the retry
+  path to the first loop's side effect.
+- No production annotation resolver for the new fields (Codex): contracted —
+  the owner settled don't-embed, resolve-via-row is the pattern, and the
+  rendering surface (web-app/export slice) decides its own read helper; the
+  join-path test pins reachability, the live check exercised it on real rows.
+- v1-null distinguisher test's v1 side is a hand-built literal dict
+  (contract-verifier NOTE): iof_rules_v1 code no longer exists to exercise —
+  the dict documents the v1 coverage shape; the v2 side genuinely asserts
+  key-emission. Recording beats a pretend-exercise of deleted code.
+- Migration-test "repeated inspection" (simplification finder): the four
+  inspections are at four distinct migration states — re-fetching is required,
+  not duplication.
+- Removed-behaviour candidates B1–B3 (null abstract vs "(none)"; metadata
+  staleness; silent missing-snapshot): all REFUTED — null-abstract is the
+  documented envelope design (probe-evidenced); snapshot_ids and
+  metadata_by_snapshot are built in one guarded loop from a single join query,
+  so the miss states are unreachable and the old `.one()` guarded a
+  cross-query invariant that no longer exists.
+
+**Deferred (→ docs/deferred.md, step 8):**
+- Free-text finding fields (`study_geography` and the pre-existing class:
+  intervention/outcome/study_design…) carry no length bound onto a
+  prompt-feeding column (security LOW; `DIRECTIVE_STRING_MAX` precedent) —
+  one bound in `validate_record` covers the class; filed as a seam, not a
+  blocker (schema-constrained output + doc-influence limit practical size).
+
+**Lead live-trace content review** (013 lesson — the roll-up is not the
+evidence):
+- Full-table dev-DB checks (stronger than the build's 3-row sample): 0 v1
+  rows carry new-field values or coverage keys; 86 new rows; live CHECK
+  definitions match the Python vocabularies string-for-string.
+- Probe-summary claims verified against per-finding raw output: the
+  11-distinct-geographies count is exact; hostile-envelope markers all false;
+  the vetter "prophylactic, not corrective" reading is honest (pre-v3 reasons
+  already accept projected results).
+- **Content anomaly the roll-up hides**: 2/86 new rows carry non-geography
+  `study_geography` values — "Visit a Heat Pump" / "Visit a Heat Pump
+  marketing" (a programme name, from a Nesta marketing doc). Carriage is
+  correct; this is a prompt-quality signal, eval-blind by contract — recorded
+  here as ground-truth-authoring input for the eval slice (geography
+  over-filling on non-study documents is a real failure mode to annotate).
+
+**Fake-done check on the review fixes**: no tests relaxed/deleted (only
+additions + two docstring edits + one fingerprint-component addition);
+`make verify` re-run green after fixes.
+
+**Security lane verdict (rubric 12)**: fencing **structurally complete** — no
+document-derived envelope text reaches the prompt outside the id-keyed JSON
+object on any path (template placeholders pinned structurally; retry paths
+rebuild messages only via `build_extract_messages`; str.format does not
+re-scan substituted values; JSON escaping prevents breakout). Explicit note:
+structural ≠ semantic — instruction-like *content* still reaches the model as
+data; the layered mitigations (data-not-instructions rule, structured output,
+quote verification, vetter, grounding judge) are the ceiling, and
+migration/SQL/secrets hygiene all passed.
+
+**Flagged-deviation adjudications (each explicitly re-examined, none
+contested):**
+1. Executor substitution (codex died mid-turn; lead reviewed the delivered
+   diff, fast-worker authored tests): CONFIRMED — the contract-verifier
+   independently probed the fast-worker tests' assertions (dedup twins,
+   v1/v2-null, batch count pin, fencing) and found them genuine, and the
+   Codex lane anchored the Claude-written surfaces.
+2. Stale plan clause (invalid-enum recovery) built per the amendment:
+   CONFIRMED — the amended contract text governs; strict wire Literal built;
+   rubric 14 holds.
+3. Few-shot geography insertion ("in nine high-income countries"):
+   CONFIRMED — precedes both anchor spans, quotes verbatim, pre-flight
+   enforced, probes green.
 
 ## Rubric status
 
-(To be filled with the review stack; all acceptance checks from the contract are
-covered above and green.)
+All 17 items **hold** (contract-verifier lane verdict, confirmed by the lead
+after fixes; the verifier independently re-ran the changed-file test subset —
+193 green — and checked every verification.md/ADR-0016 claim against the
+as-built code: no "documented but not built" mismatch). Items 1–7 and 9–17:
+HOLDS with evidence cited per item in the verifier report (summarised in
+§ Review findings). Item 8 (review stack ran, findings recorded): satisfied by
+this section. Post-fix `make verify` green (1178 tests — 1176 + the two
+review-added test functions).
+
+`/simplify` not separately run — recorded justification per the review-stack
+economy: `/code-review medium` already ran dedicated reuse / simplification /
+efficiency / altitude finder angles on this diff (their findings adjudicated
+above); a second same-family cleanup pass would duplicate it.
 
 ## Intent & assumptions
 

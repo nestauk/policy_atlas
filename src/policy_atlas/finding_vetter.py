@@ -1,5 +1,8 @@
 """Finding-vetter backend seam for the 018 C5 extraction post-filter.
 
+The vetter system prompt below is prompt-bearing: lead-authored and versioned
+(``FINDING_VETTER_PROMPT_VERSION``), like every other prompt module.
+
 A post-extract, pre-write vetting pass that flags non-findings — aspirations,
 document-deictic naming, vague outcomes, self-referential housekeeping — so
 they never enter the evidence base. The filter is flag-not-drop and fail-open

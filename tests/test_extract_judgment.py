@@ -39,6 +39,7 @@ from policy_atlas.extraction_records import (
     ExtractionResponse,
     ExtractionWindowPayload,
     IOFRecordWire,
+    render_field_docs,
 )
 from policy_atlas.schema import (
     extraction_result,
@@ -209,6 +210,15 @@ def test_injection_prompt_level_lands_only_in_segments() -> None:
     assert INJECTION not in user.replace(seg_json, "")
 
 
+def test_render_field_docs_carries_v2_fields() -> None:
+    """Acceptance check (task 020): the generated field reference documents
+    both v2 fields — it renders from the wire model's Field descriptions, so a
+    dropped description would silently weaken the prompt's field guidance."""
+    docs = render_field_docs()
+    assert "effect_basis" in docs
+    assert "study_geography" in docs
+
+
 def test_user_template_has_no_inline_envelope_interpolation() -> None:
     """The v6 structural fencing check (task 020): the user template carries no
     inline title/abstract/evidence-type placeholders — the envelope enters only
@@ -250,6 +260,12 @@ def test_hostile_envelope_is_fenced_json_data() -> None:
     assert fenced in user
     assert hostile not in user
     assert hostile not in user.replace(fenced, "")
+    # 020 review hardening: the JSON-ESCAPED form must not leak outside the
+    # fence either — a regression appending json.dumps(abstract) elsewhere in
+    # the template would pass the raw-string checks above.
+    escaped_fragment = json.dumps(hostile, ensure_ascii=False)[1:-1]
+    assert escaped_fragment in fenced
+    assert escaped_fragment not in user.replace(fenced, "")
     # The fenced object round-trips: title/abstract are data, and the missing
     # classification arrives as the Unclassified default.
     envelope = json.loads(fenced)
@@ -554,6 +570,25 @@ def test_fingerprint_changes_on_any_single_component(monkeypatch: pytest.MonkeyP
             assert extraction_fingerprint("stub")[0] != baseline, name
 
     assert extraction_fingerprint("stub")[0] != extraction_fingerprint("live")[0]
+
+    # 020 review fix: with the vetter active, its own output-affecting knobs
+    # (prompt, model, reasoning effort, output cap) are fingerprint components
+    # too — a vetter model/effort change must never reuse old records.
+    vetted_baseline = extraction_fingerprint("stub", finding_vetter_active=True)[0]
+    assert vetted_baseline != baseline
+    vetter_changes: list[tuple[str, object]] = [
+        ("FINDING_VETTER_PROMPT_VERSION", "changed"),
+        ("FINDING_VETTER_MODEL", "changed"),
+        ("FINDING_VETTER_REASONING_EFFORT", "changed"),
+        ("FINDING_VETTER_MAX_OUTPUT_TOKENS", 1_024),
+    ]
+    for name, value in vetter_changes:
+        with monkeypatch.context() as m:
+            m.setattr(f"policy_atlas.extract.{name}", value)
+            assert (
+                extraction_fingerprint("stub", finding_vetter_active=True)[0]
+                != vetted_baseline
+            ), name
 
 
 # --- 6. Repeated-quote cursor through the component -------------------------

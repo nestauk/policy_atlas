@@ -2,7 +2,8 @@
 
 Per selected document: load the selection row, resolve the extraction basis
 (full-text chunks or the envelope abstract), check the durable memo, window and
-fan out the ``extract_iof_v5`` calls, validate / verify / dedup the emitted
+fan out the ``extract_iof`` prompt calls (versioned by
+``extract_prompt.PROMPT_VERSION``), validate / verify / dedup the emitted
 records, then write the durable ``source_extraction_record`` +
 ``intervention_outcome_finding`` rows and, last of all, the run-scoped
 ``extraction_result`` roll-up.
@@ -47,7 +48,9 @@ from policy_atlas.extraction_records import (
 )
 from policy_atlas.finding_vetter import (
     FINDING_VETTER_MAX_OUTPUT_TOKENS,
+    FINDING_VETTER_MODEL,
     FINDING_VETTER_PROMPT_VERSION,
+    FINDING_VETTER_REASONING_EFFORT,
     FindingVetterBackend,
     VetterVerdictWire,
     validate_verdict_coverage,
@@ -167,6 +170,8 @@ def extraction_fingerprint(
         "finding_vetter": (
             {
                 "prompt": FINDING_VETTER_PROMPT_VERSION,
+                "model": FINDING_VETTER_MODEL,
+                "reasoning_effort": FINDING_VETTER_REASONING_EFFORT,
                 "max_output_tokens": FINDING_VETTER_MAX_OUTPUT_TOKENS,
             }
             if finding_vetter_active
