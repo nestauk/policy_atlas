@@ -14,6 +14,7 @@ import structlog
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
+from policy_atlas import tracing
 from policy_atlas.characterise import ScreenedSource, screened_sources
 from policy_atlas.grouping import UNCLUSTERED, GroupingDoc
 from policy_atlas.ranking import (
@@ -772,7 +773,12 @@ def _rerank_infos(
                 fallback_count += _fallback_batch(batch, rank_infos)
                 continue
             docs = [_doc_for_rerank(signal_docs[pss_id]) for pss_id in batch]
-            submitted.append((batch, executor.submit(ranking_backend.rank, docs, intent=intent)))
+            submitted.append((
+                batch,
+                tracing.submit_with_context(
+                    executor, ranking_backend.rank, docs, intent=intent
+                ),
+            ))
         wait([future for _, future in submitted])
 
     for batch, future in submitted:

@@ -14,7 +14,7 @@ from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 from sqlalchemy.sql.selectable import Subquery
 
-from policy_atlas import events
+from policy_atlas import events, tracing
 from policy_atlas.prompt_fields import clamp_reason
 from policy_atlas.schema import (
     DIRECTIVE_STRING_MAX,
@@ -407,7 +407,8 @@ def _run_stage1_reps(
             submitted.append(
                 (
                     key,
-                    executor.submit(
+                    tracing.submit_with_context(
+                        executor,
                         screening_backend.screen_envelope,
                         docs[doc_index].payload,
                         rep_index=rep_index,
@@ -765,7 +766,9 @@ def _run_stage2_reps(
             submitted.append(
                 (
                     doc_index,
-                    executor.submit(screening_backend.screen_fulltext, payloads[doc_index]),
+                    tracing.submit_with_context(
+                        executor, screening_backend.screen_fulltext, payloads[doc_index]
+                    ),
                 )
             )
         wait([future for _, future in submitted])

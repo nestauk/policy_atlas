@@ -13,7 +13,7 @@ import structlog
 from sqlalchemy import exists, func, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas import grouping
+from policy_atlas import grouping, tracing
 from policy_atlas.embeddings import EMBEDDING_PROFILE, UNIT_POLICY
 from policy_atlas.grouping import (
     UNCLUSTERED,
@@ -603,7 +603,13 @@ def _run_first_assignment_round(
     with ThreadPoolExecutor(max_workers=grouping.MAX_CONCURRENT_BATCHES) as executor:
         for batch_index, batch in enumerate(batches, start=1):
             submitted.append(
-                (batch_index, batch, executor.submit(backend.assign, batch, themes=themes))
+                (
+                    batch_index,
+                    batch,
+                    tracing.submit_with_context(
+                        executor, backend.assign, batch, themes=themes
+                    ),
+                )
             )
         wait([future for _, _, future in submitted])
 

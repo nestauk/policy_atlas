@@ -10,7 +10,7 @@ import structlog
 from sqlalchemy import exists, func, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas import events
+from policy_atlas import events, tracing
 from policy_atlas.classification_backend import ClassificationBackend, StubClassificationBackend
 from policy_atlas.classify_prompt import (
     TAG_MAX_CHARS,
@@ -233,7 +233,12 @@ def _run_classification_calls(
     usage_totals = UsageAccumulator()
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_CLASSIFY) as executor:
         submitted: list[tuple[int, Future[Any]]] = [
-            (doc_index, executor.submit(classification_backend.classify, doc.payload))
+            (
+                doc_index,
+                tracing.submit_with_context(
+                    executor, classification_backend.classify, doc.payload
+                ),
+            )
             for doc_index, doc in enumerate(docs)
         ]
         wait([future for _, future in submitted])

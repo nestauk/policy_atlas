@@ -1,11 +1,19 @@
-"""Live OpenAlex and Overton search backends with redacted HTTP transport."""
+"""Live OpenAlex and Overton search backends with redacted HTTP transport.
+
+Search-response caching is in-process only and TTL bounded. It trusts exactly
+the same origin payload the uncached path would consume, and keys include every
+non-credential request parameter so differing filters do not collide. API keys
+and polite-pool mailto values are excluded from cache structures.
+"""
 
 import os
 import re
 import time
+from collections import OrderedDict
 from collections.abc import Callable, Iterable
+from copy import deepcopy
 from typing import Any, cast
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlparse
 
 import httpx
 import structlog
@@ -80,9 +88,15 @@ OA_SELECT: tuple[str, ...] = (
 )
 
 _sleep = time.sleep
+_monotonic = time.monotonic
 
 _Fetch = Callable[[str, dict[str, str]], Any]
+_SearchCacheKey = tuple[str, str, str, tuple[tuple[str, str], ...]]
 _RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
+_CACHE_CREDENTIAL_PARAMS = frozenset({"api_key", "mailto"})
+_DEFAULT_SEARCH_CACHE_TTL_S = 3600.0
+_SEARCH_CACHE_MAX_ENTRIES = 512
+_SEARCH_CACHE: OrderedDict[_SearchCacheKey, tuple[float, Any]] = OrderedDict()
 _DEFAULT_MAX_RESULTS = 50
 _OPENALEX_MAX_PER_PAGE = 200
 _OVERTON_PAGE_SIZE = 50
@@ -183,13 +197,20 @@ class _TransportMixin:
         overton_retry_wait: bool = False,
     ) -> Any:
         host = _host_from_url(url)
+        cache_ttl_s = _search_cache_ttl_s()
+        cache_key = _search_cache_key(url, params) if cache_ttl_s > 0 else None
+        if cache_key is not None:
+            cached = _search_cache_get(cache_key, ttl_s=cache_ttl_s)
+            if cached is not None:
+                return cached
+
         attempts = 0
         while True:
             if rate_limit is not None:
                 rate_limit()
             self.http_calls += 1
             try:
-                return self._fetch(url, dict(params))
+                data = self._fetch(url, dict(params))
             except Exception as exc:
                 redacted = _redacted_error(exc, host)
                 retryable = _is_retryable_error(exc, redacted)
@@ -210,6 +231,11 @@ class _TransportMixin:
                 if overton_retry_wait and redacted.status_code == 429:
                     _sleep(OVERTON_MIN_INTERVAL_S)
                 attempts += 1
+                continue
+
+            if cache_key is not None and _cacheable_payload(data):
+                _search_cache_set(cache_key, data)
+            return data
 
 
 class OpenAlexLiveBackend(_TransportMixin):
@@ -679,6 +705,61 @@ def _normalize_openalex_work_id(record_id: str) -> str:
 def _host_from_url(url: str) -> str:
     parsed = urlparse(url)
     return parsed.hostname or parsed.netloc or url
+
+
+def _search_cache_ttl_s() -> float:
+    raw = os.environ.get("POLICY_ATLAS_SEARCH_CACHE_TTL_S")
+    if raw is None:
+        return _DEFAULT_SEARCH_CACHE_TTL_S
+    try:
+        return float(raw)
+    except ValueError:
+        log.warning("search.cache_ttl_invalid")
+        return _DEFAULT_SEARCH_CACHE_TTL_S
+
+
+def _search_cache_key(url: str, params: dict[str, str]) -> _SearchCacheKey:
+    parsed = urlparse(url)
+    pairs = [
+        (key, value)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        if key not in _CACHE_CREDENTIAL_PARAMS
+    ]
+    pairs.extend(
+        (key, value) for key, value in params.items() if key not in _CACHE_CREDENTIAL_PARAMS
+    )
+    return (
+        parsed.scheme,
+        parsed.netloc,
+        parsed.path,
+        tuple(sorted((str(key), str(value)) for key, value in pairs)),
+    )
+
+
+def _search_cache_get(key: _SearchCacheKey, *, ttl_s: float) -> Any | None:
+    cached = _SEARCH_CACHE.get(key)
+    if cached is None:
+        return None
+    cached_at, payload = cached
+    if _monotonic() - cached_at >= ttl_s:
+        del _SEARCH_CACHE[key]
+        return None
+    _SEARCH_CACHE.move_to_end(key)
+    return deepcopy(payload)
+
+
+def _search_cache_set(key: _SearchCacheKey, payload: Any) -> None:
+    _SEARCH_CACHE[key] = (_monotonic(), deepcopy(payload))
+    _SEARCH_CACHE.move_to_end(key)
+    while len(_SEARCH_CACHE) > _SEARCH_CACHE_MAX_ENTRIES:
+        _SEARCH_CACHE.popitem(last=False)
+
+
+def _cacheable_payload(data: Any) -> bool:
+    if not isinstance(data, dict):
+        return False
+    results = data.get("results")
+    return isinstance(results, list) and all(isinstance(item, dict) for item in results)
 
 
 def _redacted_error(exc: Exception, host: str) -> SearchTransportError:

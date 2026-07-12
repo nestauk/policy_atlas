@@ -29,6 +29,7 @@ import structlog
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
+from policy_atlas import tracing
 from policy_atlas.extract_prompt import (
     EXTRACT_MAX_OUTPUT_TOKENS,
     EXTRACTION_MODEL,
@@ -609,7 +610,12 @@ def _run_windows(
             if not budget.reserve():  # unreachable by construction; fail closed
                 errors[key] = RuntimeError("call budget exhausted")
                 continue
-            submitted.append((key, executor.submit(extraction_backend.extract, payloads[key])))
+            submitted.append((
+                key,
+                tracing.submit_with_context(
+                    executor, extraction_backend.extract, payloads[key]
+                ),
+            ))
         wait([future for _, future in submitted])
         for key, future in submitted:
             try:
@@ -729,6 +735,12 @@ def _process_doc(doc: _Doc, window_findings: dict[int, list[IOFRecordWire]]) -> 
 # --- Finding vetter (018 C5) --------------------------------------------------
 
 
+@dataclass(frozen=True)
+class _FindingVetterJudgment:
+    verdicts: list[VetterVerdictWire]
+    usage: TokenUsage | None
+
+
 def _judge_payload_entry(index: int, record: IOFRecord) -> dict[str, Any]:
     """Build one dedup survivor's id-keyed judge input entry."""
     return {
@@ -745,42 +757,41 @@ def _judge_payload_entry(index: int, record: IOFRecord) -> dict[str, Any]:
     }
 
 
-def _apply_finding_vetter(
+def _judge_finding_vetter(
     doc: _Doc, finding_vetter_backend: FindingVetterBackend
-) -> TokenUsage | None:
-    """Vet one document's dedup survivors, excluding clear non-findings (flag-not-drop).
+) -> _FindingVetterJudgment:
+    """Call the finding vetter for one document's dedup survivors.
 
     Runs AFTER ``dedup_records`` and BEFORE the IOF insert (``doc.survivors``
-    etc. are mutated in place, so ``_write_docs`` never sees excluded
-    findings). A judge call/parse/coverage failure is fail-open: the document
-    persists unfiltered and ``doc.vetting_failed`` is set for accounting —
-    the filter is an enhancement, never an extraction blocker.
+    etc. are still parent-owned until verdict application). A judge
+    call/parse/coverage failure is handled by the submitting thread so one
+    failed document cannot affect another document's filtering.
 
     Args:
         doc: An ``extracted`` document with dedup survivors already resolved.
         finding_vetter_backend: The judge seam.
 
     Returns:
-        The judge call's token usage, or ``None`` on failure or no usage.
+        Covered verdicts plus the judge call's token usage.
     """
     findings = [_judge_payload_entry(index, record) for index, record in enumerate(doc.survivors)]
-    try:
-        response, usage = finding_vetter_backend.judge({"findings": findings})
-        validate_verdict_coverage(findings, response.verdicts)
-    except Exception as exc:  # noqa: BLE001 — reduced to a type name for the record
-        doc.vetting_failed = True
-        log.warning(
-            "extract.vetting_failed", pss_id=str(doc.pss_id), error=type(exc).__name__
-        )
-        return None
+    response, usage = finding_vetter_backend.judge({"findings": findings})
+    validate_verdict_coverage(findings, response.verdicts)
+    return _FindingVetterJudgment(verdicts=list(response.verdicts), usage=usage)
+
+
+def _apply_finding_vetter_verdicts(
+    doc: _Doc, verdicts: list[VetterVerdictWire]
+) -> None:
+    """Apply covered finding-vetter verdicts to one document in the parent thread."""
 
     vetted_out_by_index: dict[int, VetterVerdictWire] = {
         verdict.finding_index: verdict
-        for verdict in response.verdicts
+        for verdict in verdicts
         if verdict.verdict == "flagged"
     }
     if not vetted_out_by_index:
-        return usage
+        return
 
     kept_survivors: list[IOFRecord] = []
     kept_groundings: list[list[dict[str, Any]]] = []
@@ -813,7 +824,65 @@ def _apply_finding_vetter(
         # evidence, so its status says so honestly — `vetted_out_count`
         # preserves the distinction from a genuinely-empty extraction.
         doc.status = "no_findings"
-    return usage
+
+
+def _run_finding_vetters(
+    docs: list[_Doc], finding_vetter_backend: FindingVetterBackend
+) -> dict[str, int]:
+    """Run finding-vetter calls in parallel and apply verdicts deterministically.
+
+    Args:
+        docs: Documents after extraction post-processing.
+        finding_vetter_backend: The judge seam.
+
+    Returns:
+        Aggregated vetter token usage. Usage accumulation stays on the
+        submitting thread because ``UsageAccumulator`` is mutable and has no
+        internal locking.
+    """
+    candidates = [
+        (doc_index, doc)
+        for doc_index, doc in enumerate(docs)
+        if doc.extractable and doc.status == "extracted" and doc.survivors
+    ]
+    usage_totals = UsageAccumulator()
+    if not candidates:
+        return usage_totals.payload()
+
+    judgments: dict[int, _FindingVetterJudgment] = {}
+    errors: dict[int, Exception] = {}
+    with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_EXTRACT) as executor:
+        submitted: list[tuple[int, Future[Any]]] = [
+            (
+                doc_index,
+                tracing.submit_with_context(
+                    executor, _judge_finding_vetter, doc, finding_vetter_backend
+                ),
+            )
+            for doc_index, doc in candidates
+        ]
+        wait([future for _, future in submitted])
+        for doc_index, future in submitted:
+            try:
+                judgments[doc_index] = future.result()
+            except Exception as exc:  # noqa: BLE001 — reduced to a type name for the record
+                errors[doc_index] = exc
+
+    for doc_index, doc in candidates:
+        error = errors.get(doc_index)
+        if error is not None:
+            doc.vetting_failed = True
+            log.warning(
+                "extract.vetting_failed",
+                pss_id=str(doc.pss_id),
+                error=type(error).__name__,
+            )
+            continue
+        judgment = judgments[doc_index]
+        _apply_finding_vetter_verdicts(doc, judgment.verdicts)
+        usage_totals.add(judgment.usage)
+
+    return usage_totals.payload()
 
 
 # --- Writes -----------------------------------------------------------------
@@ -1120,8 +1189,8 @@ def extract_scope(
             log.info("extract.doc_failed", pss_id=str(doc.pss_id), error=doc.error)
             continue
         _process_doc(doc, per_doc.get(doc_index, {}))
-        if finding_vetter_backend is not None and doc.status == "extracted" and doc.survivors:
-            usage_accumulator.add(_apply_finding_vetter(doc, finding_vetter_backend))
+    if finding_vetter_backend is not None:
+        usage_accumulator.add_payload(_run_finding_vetters(docs, finding_vetter_backend))
     usage_totals = usage_accumulator.payload()
 
     # Asserted BEFORE any row is written: the harness catches without rollback,

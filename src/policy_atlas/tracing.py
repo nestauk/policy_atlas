@@ -8,9 +8,11 @@ no-op, keeping the suite deterministic and egress-free and avoiding SDK auto-ini
 
 from __future__ import annotations
 
+import contextvars
 import os
 import uuid
 from collections.abc import Callable, Iterator
+from concurrent.futures import Executor, Future
 from contextlib import contextmanager
 from threading import Lock
 from typing import Any, Literal
@@ -23,6 +25,27 @@ from policy_atlas.grouping import GroupingDoc, Theme, ThemeGroupingBackend
 from policy_atlas.usage import UsageResult
 
 _ObservationType = Literal["embedding", "generation", "span"]
+
+
+def submit_with_context[T](
+    executor: Executor, fn: Callable[..., T], *args: Any, **kwargs: Any
+) -> Future[T]:
+    """Submit a worker under the caller's current contextvars context.
+
+    Capturing at submit time carries both the active Langfuse/OTel observation
+    context and structlog's bound contextvars into executor workers.
+
+    Args:
+        executor: Executor receiving the work item.
+        fn: Callable to run inside the captured context.
+        *args: Positional arguments for ``fn``.
+        **kwargs: Keyword arguments for ``fn``.
+
+    Returns:
+        Future for the submitted call.
+    """
+    ctx = contextvars.copy_context()
+    return executor.submit(ctx.run, fn, *args, **kwargs)
 
 
 def get_langfuse() -> Langfuse | None:

@@ -61,6 +61,12 @@ def _timeout_error(host: str = "api.openalex.org") -> httpx.TimeoutException:
     return httpx.TimeoutException("timed out", request=request)
 
 
+@pytest.fixture(autouse=True)
+def _clear_search_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    search_live._SEARCH_CACHE.clear()
+    monkeypatch.delenv("POLICY_ATLAS_SEARCH_CACHE_TTL_S", raising=False)
+
+
 # --- sanitize_openalex_query / sanitize_title_query ---
 
 
@@ -120,6 +126,156 @@ def test_sanitize_title_query_strips_additional_punctuation() -> None:
     )
 
 
+# --- Search-response cache ---
+
+
+def test_search_cache_hit_skips_transport_and_overton_limiter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sleeps = _sleep_recorder(monkeypatch)
+    calls: list[tuple[str, dict[str, str]]] = []
+
+    def fetch(url: str, params: dict[str, str]) -> Any:
+        calls.append((url, dict(params)))
+        return {"results": [_overton_stub_record("p1", "UK")]}
+
+    backend = OvertonLiveBackend("KEY", fetch=fetch)
+
+    first = backend.search("housing policy", max_results=1)
+    second = backend.search("housing policy", max_results=1)
+
+    assert first == second
+    assert len(calls) == 1
+    assert backend.http_calls == 1
+    assert sleeps == []
+
+
+def test_search_cache_ttl_expiry_refetches(monkeypatch: pytest.MonkeyPatch) -> None:
+    now = {"value": 0.0}
+    monkeypatch.setattr(search_live, "_monotonic", lambda: now["value"])
+    calls = {"n": 0}
+
+    def fetch(url: str, params: dict[str, str]) -> Any:
+        del url, params
+        calls["n"] += 1
+        return {"results": [_oa_stub_record(f"https://example.org/W{calls['n']}")]}
+
+    backend = OpenAlexLiveBackend("KEY", fetch=fetch)
+
+    assert backend.search("policy", max_results=1)[0]["id"] == "https://example.org/W1"
+    now["value"] = 3599.0
+    assert backend.search("policy", max_results=1)[0]["id"] == "https://example.org/W1"
+    now["value"] = 3601.0
+    assert backend.search("policy", max_results=1)[0]["id"] == "https://example.org/W2"
+    assert calls["n"] == 2
+
+
+def test_search_cache_different_params_miss() -> None:
+    calls: list[dict[str, str]] = []
+
+    def fetch(url: str, params: dict[str, str]) -> Any:
+        del url
+        calls.append(dict(params))
+        return {"results": []}
+
+    backend = OpenAlexLiveBackend("KEY", fetch=fetch)
+    backend.search("policy", wire_params={"filter": "publication_year:2020"}, max_results=1)
+    backend.search("policy", wire_params={"filter": "publication_year:2021"}, max_results=1)
+
+    assert len(calls) == 2
+
+
+def test_search_cache_error_response_not_cached(monkeypatch: pytest.MonkeyPatch) -> None:
+    _sleep_recorder(monkeypatch)
+    calls = {"n": 0}
+
+    def fetch(url: str, params: dict[str, str]) -> Any:
+        del url, params
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise _status_error(429)
+        return {"results": []}
+
+    backend = OpenAlexLiveBackend("KEY", fetch=fetch)
+    with pytest.raises(SearchTransportError):
+        backend.search("policy", max_results=1)
+
+    assert backend.search("policy", max_results=1) == []
+    assert calls["n"] == 3
+
+
+def test_search_cache_malformed_payload_not_cached() -> None:
+    responses: list[Any] = [{"results": "oops"}, {"results": []}]
+
+    def fetch(url: str, params: dict[str, str]) -> Any:
+        del url, params
+        return responses.pop(0)
+
+    backend = OpenAlexLiveBackend("KEY", fetch=fetch)
+    with pytest.raises(SearchTransportError):
+        backend.search("policy", max_results=1)
+
+    assert backend.search("policy", max_results=1) == []
+    assert responses == []
+
+
+def test_search_cache_disable_via_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POLICY_ATLAS_SEARCH_CACHE_TTL_S", "0")
+    calls = {"n": 0}
+
+    def fetch(url: str, params: dict[str, str]) -> Any:
+        del url, params
+        calls["n"] += 1
+        return {"results": []}
+
+    backend = OpenAlexLiveBackend("KEY", fetch=fetch)
+    backend.search("policy", max_results=1)
+    backend.search("policy", max_results=1)
+
+    assert calls["n"] == 2
+
+
+def test_search_cache_covers_validated_next_page_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sleeps = _sleep_recorder(monkeypatch)
+    calls: list[tuple[str, dict[str, str]]] = []
+    next_url = "https://app.overton.io/documents.php?page=2&api_key=SECRET"
+
+    def fetch(url: str, params: dict[str, str]) -> Any:
+        calls.append((url, dict(params)))
+        if url == next_url:
+            return {"results": [_overton_stub_record("p2", "UK")]}
+        return {
+            "results": [_overton_stub_record("p1", "UK")],
+            "next_page_url": next_url,
+        }
+
+    backend = OvertonLiveBackend("KEY", fetch=fetch)
+
+    first = backend.search("housing policy", max_results=2)
+    second = backend.search("housing policy", max_results=2)
+
+    assert [record["policy_document_id"] for record in first] == ["p1", "p2"]
+    assert first == second
+    assert len(calls) == 2
+    assert len(sleeps) == 1
+
+
+def test_search_cache_key_excludes_credentials_and_sorts_params() -> None:
+    key = search_live._search_cache_key(
+        "https://app.overton.io/documents.php?api_key=SECRET&page=2&b=2",
+        {"mailto": "person@example.org", "a": "1"},
+    )
+
+    assert key == (
+        "https",
+        "app.overton.io",
+        "/documents.php",
+        (("a", "1"), ("b", "2"), ("page", "2")),
+    )
+
+
 # --- Overton limiter ---
 
 
@@ -132,7 +288,7 @@ def test_overton_limiter_sleeps_between_consecutive_search_calls(
     backend.search("housing policy", max_results=1)
     assert sleeps == []  # first-ever request never waits
 
-    backend.search("housing policy", max_results=1)
+    backend.search("housing policy updated", max_results=1)
     assert len(sleeps) == 1
     assert 0 < sleeps[0] <= OVERTON_MIN_INTERVAL_S
 
