@@ -9,6 +9,9 @@ change re-extracts the corpus fresh (one bump = one memo invalidation, not three
 > **Status:** approved. Contract approved (before planning): 2026-07-12 · owner
 > (with contract-review amendments: three riders folded in; study_geography settled at
 > finding grain; window ceiling declined; ICF promoted to slice 021) ·
+> Contract-stage adversarial review: codex session 019f565f (2026-07-12), 8 findings all
+> adjudicated in — semantics sharpenings, no material scope change (claim-key and
+> annotation-carriage decisions flagged below for the plan 🛑) ·
 > Plan approved (before implementation): _date · owner_ · ADR: expected (effect-basis
 > dimension decision — see step 4).
 
@@ -83,16 +86,32 @@ flow-back (the task-011 pattern).
    reconciliation; document-level geography is instead a derived aggregation, deferred
    with the diversity consumers. Canonicalisation stays downstream (source-named-reference
    discipline).
+   **Claim-key/dedup (adversarial finding 1, lead-adjudicated — plan 🛑 reviews):**
+   `effect_basis` JOINS `claim_key` — an observed claim and a modelled projection of the
+   same effect are different claims; collapsing them under first-wins would silently
+   drop the basis distinction the field exists to make. `study_geography` does NOT join
+   the key, matching `population`/`study_design` (descriptive study metadata,
+   first-wins); geography-scoped *claims* are already stratum territory. Tests pin both
+   behaviours.
 2. **DB schema + migration** (`schema.py`, `alembic/versions/`): two nullable columns on
    `intervention_outcome_finding`, CHECK on `effect_basis`, up/down migration. **No
    backfill** — existing v1 rows keep null (the spec's upgrades-never-invalidate rule);
    new fingerprints create records alongside, never rewrite. **Schema gate — see
    Constraints.**
 3. **Field rules v2** (`quote_verify.py`): `iof_rules_v2` — coercion + `field_coverage`
-   markers for the two new nullable fields; version constant bump.
+   markers for the two new nullable fields; version constant bump. The rules define the
+   full coverage mapping per field (adversarial finding 6): valid value · null/unreported
+   (`not_extracted`) · unclear/indeterminate · invalid enum value (coerce-and-flag, never
+   reject the record) — so a null is never ambiguous within v2.
+   **Old-row distinguisher (adversarial finding 3):** a v1 row's `field_coverage` lacks
+   the new keys entirely — key-absence (plus the extraction record's schema version) IS
+   the "not recorded under v1" signal, distinct from a v2 null. Readers must not conflate
+   them; tests cover v1-null vs v2-null separately.
 4. **Prompt `extract_iof_v6`** (`extract_prompt.py`) — **prompt-bearing: lead-only,
-   replay-evidenced**: (a) envelope fencing — title/abstract leave the inline template
-   and enter as a JSON data object; (b) `effect_basis` guidance (observed vs
+   replay-evidenced**: (a) envelope fencing — title/abstract AND `primary_evidence_type`
+   leave the inline template and enter as one JSON data object (adversarial finding 8:
+   evidence type is closed-vocabulary today, but uniform fencing is free and removes the
+   structural exception); (b) `effect_basis` guidance (observed vs
    modelled/projected; the existing aspiration exclusions stand — a modelled *result* is
    a finding with `effect_basis` "modelled", a target is still not a finding);
    (c) `study_geography` guidance carrying two distinctions: stratum-vs-geography (a
@@ -106,13 +125,26 @@ flow-back (the task-011 pattern).
    `eb_iof_base_v1` also bumps — plan decision. Test pins: old-fingerprint records reuse;
    new fingerprint extracts fresh alongside.
 6. **Downstream carriage**: `FindingRecord` + the `query_findings` SELECT/mapping
-   (`synthesis_tools.py`) and `_load_findings` (`synthesise.py`) carry the new fields, so
+   (`synthesis_tools.py`) and `_load_findings` (`synthesise.py`) carry the new fields in
    the writer envelope (terse-adjacent, omit-if-absent stays as-is for metadata; the new
-   fields are record fields, always-present-nullable like `study_design`) and the
-   annotation payload render them. Read side tolerates old rows (null) by construction.
-7. **Finding vetter**: new fields flow through its input records; ❓ whether the vetter
-   prompt gains an effect-basis line (lead-only if touched; `extract_finding_vetter_v2`
-   bumps only if its text changes) — plan decision.
+   fields are record fields, always-present-nullable like `study_design`).
+   **Annotation-layer carriage corrected (adversarial finding 2):** the finding-claim
+   annotation payload today carries claim text + anchors + cited finding ids, NOT
+   record metadata — the new fields are *reachable* at the annotation layer via the
+   cited finding row (read surfaces resolve `finding_id`). Whether the citation payload
+   additionally embeds the two fields is a ❓ plan decision — the contract promises
+   reachability, not payload embedding. Read side tolerates old rows per item 3's
+   distinguisher.
+   Also in scope (adversarial finding 7): the stub/fixture surface — the stub extraction
+   backend's sentinel payloads and shared test record factories gain the new wire fields
+   (default null), named here so they're scope, not mid-build creep.
+7. **Finding vetter**: corrected (adversarial finding 5) — `_judge_payload_entry`
+   serializes a fixed field subset today, so the new fields do NOT reach the vetter
+   automatically. ❓ plan decision, decided explicitly and test-pinned either way:
+   whether the vetter payload gains `effect_basis` (note the interaction risk: showing
+   the model its own basis label could bias aspiration flagging) and whether the vetter
+   prompt gains a guidance line (lead-only if touched; `extract_finding_vetter_v2` bumps
+   only if its text changes).
 8. **Spec flow-back + deferrals**: data-model findings-layer base fields gain the two
    fields with a task-020 flow-back note + `log.md` line; deferred.md entries discharged
    (effect_basis, fencing, `_load_findings` batch) or narrowed (study-geography: field
@@ -124,6 +156,10 @@ flow-back (the task-011 pattern).
    provenance for ground-truth annotation. The memo-match rule stays deferred — its
    trigger (extract-before-classify plans) still doesn't exist. ❓ whether the column
    gets a CHECK against the classify vocabulary + `Unclassified` — plan decision.
+   **Consumption semantics pinned (adversarial finding 4):** the column is
+   extraction-call provenance only (audit + ground-truth annotation); writer/annotation
+   surfaces keep reading the live joined classification value — the two may legitimately
+   diverge and no surface silently substitutes one for the other.
 10. **Mixed/unclear carry-through tests (V2 requirement carried forward)**: tests pinning
     that `mixed`/`unclear` effect-direction findings survive `group` and `synthesise`
     (never dropped at aggregation — the V2 silent-zeroing autopsy). Expected
@@ -215,7 +251,9 @@ than the message template · any pressure to backfill or rewrite v1 rows · budg
   evidence type recorded on the extraction record matches what the prompt was sent
   (incl. the `Unclassified` default) · mixed/unclear findings survive group + synthesise
   end-to-end · `_load_findings` batch load is behaviour-preserving (same output, one
-  basis query).
+  basis query) · dedup: observed-vs-modelled twins do NOT collapse, geography-only
+  twins DO (first-wins recorded) · v1-null vs v2-null distinguishable via
+  `field_coverage` key-absence · vetter payload shape pinned per the plan decision.
 - Replay evidence (AI-behaviour, honestly eval-blind): the probe set above, summarised in
   verification.md — including the modelled-projection doc yielding `effect_basis`
   "modelled" and the fencing probe leaving fields unaffected.

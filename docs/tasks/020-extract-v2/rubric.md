@@ -28,11 +28,15 @@ Slice-specific (from the contract):
 12. [ ] Fencing is structurally complete: no envelope text reaches the prompt outside an
         id-keyed JSON data object (structural test + security-lane confirmation).
 13. [ ] `effect_basis` and `study_geography` are carried end-to-end: wire → stored →
-        row → `query_findings` writer envelope → annotation payload, with
-        `field_coverage` markers and old-row null tolerance tested.
-14. [ ] The open ❓s (profile-id bump · vetter guidance line · evidence-type CHECK) are
-        recorded as plan-approval decisions, none silently defaulted; the settled
-        `study_geography` finding-grain decision is honoured, not re-opened.
+        row → `query_findings` writer envelope → reachable at the annotation layer via
+        cited finding ids (payload embedding per the plan decision), with
+        `field_coverage` markers; v1-null vs v2-null distinguished (coverage
+        key-absence) and tested separately.
+14. [ ] The open ❓s (profile-id bump · vetter payload + guidance line · evidence-type
+        CHECK · annotation payload embedding) are recorded as plan-approval decisions,
+        none silently defaulted; the settled decisions (study_geography finding grain ·
+        effect_basis in / study_geography out of `claim_key`) are honoured, not
+        re-opened.
 15. [ ] Spec flow-back landed: data-model findings-layer base fields updated with a
         task-020 note + spec-bundle `log.md` line; the touched deferred.md entries
         discharged or honestly narrowed (incl. the window-ceiling stays-deferred owner
@@ -41,3 +45,8 @@ Slice-specific (from the contract):
         the prompt was sent; mixed/unclear carry-through pinned by tests over group +
         synthesise; `_load_findings` batch load behaviour-preserving with a single
         batched basis query.
+17. [ ] Adversarial-review adjudications hold as built: dedup twin tests (basis twins
+        distinct, geography twins collapse first-wins) · full fencing incl.
+        `primary_evidence_type` in the JSON data object · evidence-type column consumed
+        as extraction provenance only (writer surfaces keep live classification) ·
+        stub/fixture surfaces updated in-scope.
