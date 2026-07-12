@@ -135,14 +135,24 @@ historical state.**
   source reports: effect direction; effect size + type; uncertainty (CI/SE); p-value;
   study-design/sample metadata (design, N, k, I², τ²); source-named **population**;
   source-named nullable **comparator** (an effect direction is *versus something* — reported
-  by the source, so a base field); the **estimate-level discriminator** (`study` | `pooled` |
+  by the source, so a base field); source-named nullable finding-grain **`study_geography`**
+  (the geography of the evidence underlying *this* finding, exactly as the source reports it;
+  null when unreported, never inferred from publisher/venue/affiliation — same source-named,
+  finding-grain treatment as population/comparator, not a document-level field); the
+  **estimate-level discriminator** (`study` | `pooled` |
   `claim` — a review's pooled estimate and a primary study's own estimate are different
   evidence shapes sharing one schema); **stratum qualifiers** (timepoint/subgroup/setting as
   structured qualifiers on the finding — the outcome reference stays the **base measure only**,
   "BMI", never "BMI at 12 months", which keeps outcome references groupable); descriptive
-  **causality-by-design** label; primacy/prevalence flags. *(Comparator, estimate level,
-  stratum qualifiers and τ² made explicit by the task-011 flow-back — all inside the
-  source-groundability line, surfaced by the V2 extraction autopsy.)* **Question-relative
+  **causality-by-design** label; a distinct nullable **`effect_basis`** label (`observed` |
+  `modelled`, null if indeterminate — evidence basis is a different dimension from causal
+  identification, deliberately not folded into causality-by-design); primacy/prevalence flags.
+  *(Comparator, estimate level, stratum qualifiers and τ² made explicit by the task-011
+  flow-back; `study_geography` and `effect_basis` made explicit by the task-020 flow-back
+  (ADR 0016) — all inside the source-groundability line, surfaced by the V2 extraction
+  autopsy / the 018 live-run gap. Neither new field backfills existing v1 rows — per the
+  upgrades-never-invalidate rule above, a v1 row reads as **"not recorded under v1"** via
+  `field_coverage` key-absence, distinct from a genuine v2 null.)* **Question-relative
   judgements** (normalised magnitude, causal *weighting*, is-beneficial) are **analysis
   enrichment** layered by Impact/VfM — **not base fields** (keeps the record reusable, not
   pre-committed to one analysis).

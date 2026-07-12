@@ -305,9 +305,12 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   the coverage record); sliding-window Thompson-sampling arm allocation (eval-gated, must
   beat round-robin); RCS-style abstract compression before screen (only if screen tokens
   bind the wall-clock); best-of-N query selection.
-- **Study-geography extraction field** (rev 3.2, user) — no search API supplies study
-  geography; an extraction-schema gate joining the 010 selection-diversity seam,
-  characterise's post-extraction coverage dimensions and the Transferability capability.
+- **Study-geography extraction field** (rev 3.2, user) — **field + render surfaces
+  landed (task 020, ADR 0016):** `study_geography` is a source-named, finding-grain
+  string (`iof_v2`/`extract_iof_v6`), null when unreported, never inferred from
+  publisher/venue/affiliation. Still open: the 010 selection-diversity consumer,
+  characterise's post-extraction coverage dimensions, the Transferability capability,
+  and canonicalisation/ISO-mapping (raw source-named strings today, no normalisation).
 - **Eval-reuse pointers** (the eval slice's search seed): PaperFindingBench zero-adapter
   first run · the parity-tested `metrics.py` recall@k_est port · SYNERGY true-recall ·
   CODEC policy topics · the Campbell/3ie/EPPI "unzip" golden-dataset build · the
@@ -481,10 +484,10 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   storage migration, and the chunk-volume-bias controls (per-doc caps / MMR /
   doc-grain grouping, 008 entry). Also at this seam: **judge-envelope widening +
   re-gather repair** (the repair alternative that re-gathers targeted evidence needs
-  `retrieve`; v1 repair is reword-down over already-gathered evidence only), and
-  **`_load_findings` batch loading** (013 review stack: one basis query per distinct
-  source snapshot — a confirmed N+1, harmless at v1 corpus scale, batch it when
-  corpus-scale work lands here).
+  `retrieve`; v1 repair is reword-down over already-gathered evidence only).
+  **`_load_findings` batch loading — DISCHARGED (task 020).** The per-snapshot N+1
+  basis-query loop (013 review stack) is now one batched `IN (...)` query; the
+  surrounding corpus-scale retrieval seams above remain open.
 - **Contextual retrieval, late chunking, exact-token budgeting, semantic re-chunking** —
   retrieval-eval seams on the embedding-unit layer (contract decision 2, rev-8 research).
   The unit policy is versioned (`embedding_unit_policy_v1`) so any of these lands as a new
@@ -637,21 +640,24 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Extract / findings layer (task 011 seams)
 
-- **Modelled vs observed effect basis at the finding grain (owner, 2026-07-11, 018
-  review conversation)** — the IOF schema cannot cleanly separate a modelled/projected
-  effect from an observed one: `causality_by_design` folds modelling into
-  `descriptive` (alongside observed descriptive statistics), and `study_design` is
-  free text, null-when-unreported (61/122 not_extracted on the step-9 replay). The
-  vetter correctly keeps modelled RESULTS (targets are flagged as aspirations), and
-  the writer narrates "projected" when the quote makes it obvious — but nothing
-  structured lets a surface render "this is a projection, not something that
-  happened". Candidate: a new `effect_basis` enum (`observed` | `modelled`, null
-  if indeterminate) on the IOF wire + row — a ⚠️ schema-gate item needing its own
-  contract approval, plus extraction-prompt guidance (lead, replay-evidenced), the
-  writer-envelope field (terse-adjacent), and annotation-layer rendering. Extending
-  the `causality_by_design` vocabulary instead was considered and disliked: causal
-  identification and evidence basis are different dimensions (a model calibrated on
-  RCTs is still modelled).
+- **Modelled vs observed effect basis at the finding grain — DISCHARGED (task 020,
+  ADR 0016).** `effect_basis` enum (`observed` | `modelled`, null if indeterminate)
+  landed on the IOF wire + row + `iof_rules_v2` coverage, its own dimension (never
+  folded into `causality_by_design` — causal identification and evidence basis are
+  different axes). Lands in the writer envelope (terse-adjacent) and is reachable at
+  the annotation layer via resolve-via-row (not embedded — owner call, purely additive
+  later). `extract_iof_v6` carries extraction guidance; `extract_finding_vetter_v3`
+  gains one guidance line so modelled/projected results aren't mis-flagged as
+  aspirations (payload itself unchanged — self-label bias risk). No backfill; v1 rows
+  stay null (`field_coverage` key-absence reads as "not recorded under v1", distinct
+  from a genuine v2 null). One candidate deliberately NOT riding, entered as its own
+  seam below.
+- **`effect_basis` as a judge-envelope candidate (task 020 sweep).** The grounding
+  judge seeing the structured basis signal — prose asserting an effect while citing a
+  modelled projection is a faithfulness question the judge cannot see today. Any
+  judge-envelope change is bound by 018's verification-grade A/B protocol (replay the
+  same claim set through both envelopes, hand-inspect every flipped verdict); it lands
+  at the C/eval gate, never silently.
 - **Finding-vetter per-doc calls run sequentially — DISCHARGED (task 019).**
   Parallelized on the extract executor width with context propagation; workers
   judge, the parent applies in input order; usage is accumulated in the
@@ -721,10 +727,12 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Hybrid-indexing of `intervention`/`outcome`** — committed for v3.0; the mechanism is
   the `retrieve` adapter's second index target and lands with `retrieve`. Columns are
   filterable now.
-- **Mixed/unclear findings are first-class — requirement carried forward** — V2 extracted
-  `mixed`/`unclear` effect directions and then aggregation silently zeroed them;
-  flag-not-drop must survive the whole deep chain: `group` and `synthesise` must carry
-  these findings, never discard them at aggregation.
+- **Mixed/unclear findings are first-class — requirement carried forward; test-pinned
+  (task 020).** V2 extracted `mixed`/`unclear` effect directions and then aggregation
+  silently zeroed them; flag-not-drop must survive the whole deep chain: `group` and
+  `synthesise` must carry these findings, never discard them at aggregation. Tests now
+  pin this behaviour end-to-end across the chain — already-correct, no drop existed to
+  fix.
 - **Intra-run shared-basis-snapshot memo** — two selected docs whose basis resolves to the
   *same* content-keyed snapshot (identical full text dedup'd across docs) would both
   fresh-extract and collide on the memo key (IntegrityError → honest loud failure).
@@ -736,26 +744,25 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   second fails loudly on `uq_ser_memo` — wasted spend, never corruption; a single-writer
   operating model makes this a non-path today.
 - **Evidence type is prompt input but not a memo/record key component** (011 review,
-  Codex) — `primary_evidence_type` conditions the extraction prompt, yet the memo keys on
-  (project, basis snapshot, fingerprint) only and the record does not store the evidence
-  type used. Unreachable today: classification is insert-once per (scope, doc) and the
-  skeleton orders classify before extract — the only trigger is a hand-rolled plan that
-  extracts *before* classifying (docs extract as "Unclassified" and memo-reuse after
-  classification lands). If such plans become supported, record the evidence type on
-  `source_extraction_record` and make memo hits require a match.
+  Codex) — **provenance column landed (task 020, ADR 0016 decision 7):**
+  `source_extraction_record.primary_evidence_type` now records what was actually sent
+  to the prompt (CHECK'd against `EVIDENCE_TYPES` + `'Unclassified'`; null on
+  pre-prompt failure rows only — `empty_basis`/`basis_mismatch` never fabricate a
+  value). The memo-match rule stays deferred: the memo still keys on (project, basis
+  snapshot, fingerprint) only, and its trigger — a hand-rolled plan that extracts
+  *before* classifying — still doesn't exist. If such plans become supported, make
+  memo hits require an evidence-type match too.
 - **Per-run window/call ceiling** (011 review, security) — the enforced call budget is
   `windows × (1 + retry_cap)`, which scales with document length; there is no absolute
   per-run cap, so a pathological oversized corpus drives spend linearly ("within
   budget"). Bounded today by `select`'s budget (the designed cost control) and the
   fixture corpus. If arbitrary corpora land, add an absolute window ceiling as a
   fingerprint component with a per-doc `window_cap_exceeded` failure reason.
-- **Prompt envelope fencing** (011 review, security) — segment text enters the prompt as
-  id-keyed JSON data records, but the envelope title/abstract are interpolated inline in
-  the user template, so a hostile abstract can structurally spoof the template around
-  them (impact bounded: wrong findings for its own document, quotes still
-  verified-or-flagged). Fence the envelope as a JSON data object at the next
-  `extract_iof_v1` version bump — prompt changes are eval-blind until the
-  extraction-quality evals exist, so this deliberately does not ride the review phase.
+- **Prompt envelope fencing — DISCHARGED (task 020, ADR 0016 decision 6).** Title,
+  abstract AND `primary_evidence_type` now enter `extract_iof_v6` as one id-keyed JSON
+  data object (the same treatment the segment text already got), closing the
+  structural spoof-around-template seam identified here. Evidence type was
+  closed-vocabulary already but is fenced too, for a uniform envelope shape.
 - **`thin_extraction` roll-up flag** — named in the contract "where computed"; no
   definition was pinned and v1 deliberately does not compute it. Define (e.g. findings per
   extracted full-text doc below a floor) when a consumer needs it.
@@ -883,6 +890,13 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   researcher". Interacts with the Cohere/Bedrock cross-encoder rerank recorded at the
   `retrieve` seam; prompt guidance for WHEN to scope is the prompt-bearing half
   (lead-only, replay-evidenced).
+- **018's A/B-gated writer-envelope metadata queue — dangling, recorded here (owner
+  check, 2026-07-12; task 020 sweep).** Contracted in 018 (contract § Writer envelope
+  widening) but never run and never discharged: author institution(s) (first in the
+  queue) · FWCI · further loop-suggested fields, each adopted only on replay evidence.
+  (018's *default-adopt* set — publication year, evidence type, appraisal label,
+  venue/publisher, cited-by count — already shipped and is not part of this seam.)
+  Silent omission is not deferral; this entry is the explicit seam at the C/eval gate.
 - **Plan-compile section machinery** — the fail-closed `context["synthesis"]` directive
   (sections + retrieval_boosts, normative grammar per contract rev 8 M5) is the compile
   target the future plan-shaped-sections machinery and the source/evidence policy compile
