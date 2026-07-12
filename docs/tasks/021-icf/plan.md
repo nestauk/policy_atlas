@@ -1,12 +1,16 @@
 # Plan: 021-icf
 
-> **Status:** DRAFTED — plan-stage adversarial review **adjudicated 2026-07-12**
-> (codex session 019f57c6, 6 findings: 1 blocker · 4 major · 1 minor — ALL adopted:
-> drift-guard requiredness overrides · Phase E prompt surfaces split to lead
-> (tool-schema + pattern-payload descriptions, `synthesis_backend.py` added) ·
-> `tracing.py` rides the roll-up shape change · claim_basis/claim_level independence
-> clarified in the field text · dependencies corrected A→C, A→D). Awaiting 🛑 owner
-> approval (gate decisions § below).
+> **Status:** APPROVED — 2026-07-12 · owner, all five gate decisions decided as
+> recommended (§ Gate decisions: 0 schema gate approved as scoped · 1 vetter knobs
+> mirror IOF · 2 per-kind caps · 3 no synthesise prompt change · 4 no PROFILE_ID
+> bump) + one owner addition at approval: the **018-style refine-replay loop** for
+> all prompt-bearing surfaces (Phase C).
+> Plan-stage adversarial review adjudicated 2026-07-12 (codex session 019f57c6,
+> 6 findings: 1 blocker · 4 major · 1 minor — ALL adopted: drift-guard requiredness
+> overrides · Phase E prompt surfaces split to lead (tool-schema + pattern-payload
+> descriptions, `synthesis_backend.py` added) · `tracing.py` rides the roll-up shape
+> change · claim_basis/claim_level independence clarified in the field text ·
+> dependencies corrected A→C, A→D). ADR: 0017.
 > Contract: [contract.md](contract.md) (approved 2026-07-12, adversarial review
 > adjudicated 8/8). Rubric: [rubric.md](rubric.md). Design provenance:
 > [design-research.md](design-research.md).
@@ -102,6 +106,18 @@ AGENTS.md)*
   recommendation-shaped doc (vetter line) · review pooling implementation findings
   (claim_level=pooled + finding-grain setting/geography) · hostile-envelope fencing ·
   dual-kind document (independent exclusion lines) · IOF v3 setting probe.
+- **Refine-replay loop (owner, 2026-07-12 — the 018 Phase-C pattern):** each
+  prompt-bearing surface (`extract_icf_v1` · ICF vetter · `extract_iof_v7` line ·
+  the Phase D planner update · Phase E tool/payload descriptions) is developed
+  iteratively — lead-authored change → replay on the pinned probe set → verdicts
+  diffed against the prior round, flips hand-inspected → adopted or reverted.
+  **Bounds: ≤3 rounds per surface, ≤30 live component replays total** (running tally
+  in verification.md). Loop method per the 018 prompting-research discipline: fresh
+  minimal baseline (no ritual/emphatic accumulation), numeric verbosity/format
+  bounds, hard rules carry their motivation, conflict audit before touching an
+  existing surface (iof_v7, planner). Honesty pin unchanged: the loop targets
+  shape-correctness and exclusion-line behaviour on probes — it is still eval-blind
+  on quality.
 - Gate: `make verify-fast` (prompt + tests; no new schema contact).
 
 **Phase D — composition: profiles directive end-to-end** — **codex** mechanics,

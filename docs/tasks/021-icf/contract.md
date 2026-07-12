@@ -25,8 +25,9 @@ with/without-ICF composition comparison as an explicit axis.
 > `icf_context_type_count` validator named · item 13 added (planner/plan-compile —
 > the missing orchestrator half of decision 4) · IOF top-level-vs-stratum setting
 > semantics pinned; none contradicted an owner-settled decision) ·
-> Plan approved (before implementation): _pending_ · ADR: _expected (second finding
-> schema + composition shape)_.
+> Plan approved (before implementation): **2026-07-12 · owner** (all five plan-gate
+> decisions as recommended + the 018-style refine-replay loop added at approval) ·
+> ADR: [0017](../../adr/0017-icf-second-finding-schema.md) (Accepted 2026-07-12).
 
 ## Goal
 

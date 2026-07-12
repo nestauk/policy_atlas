@@ -22,9 +22,11 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `021-icf` (design phase: contract being
-drafted per task-cycle-design; Tier 3 — schema hard gate +
-prompt-bearing extraction surface).
+Implementation — task `021-icf` (contract + plan APPROVED
+2026-07-12, all 8 contract-gate + 5 plan-gate decisions decided,
+both adversarial reviews adjudicated, ADR 0017 Accepted — build
+per `docs/tasks/021-icf/plan.md` in a fresh conversation,
+task-cycle-build; Tier 3).
 
 Tasks `001-walking-skeleton` through `020-extract-v2` are complete
 (merged) — the EB chain runs end-to-end live behind the thin v1
