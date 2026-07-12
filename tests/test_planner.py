@@ -64,7 +64,7 @@ def test_stub_second_turn_returns_complete_ready_draft() -> None:
     assert draft.question == "Do school meals improve attainment?"
     assert draft.search_effort == "standard"
     assert draft.analysis_depth == "deep"
-    assert draft.components == ["characterise", "screen_stage2", "select", "extract", "group"]
+    assert draft.components == ["characterise", "screen_full", "select", "extract", "group"]
     assert draft.component_rationale is not None
     assert set(draft.component_rationale) == set(draft.components)
     assert draft.steering_mode == "moderate"
@@ -115,7 +115,7 @@ def test_stub_ready_draft_round_trips_into_orchestration_plan() -> None:
 
     plan = _plan_from_draft(turn.plan_draft)
 
-    assert plan.components == ["characterise", "screen_stage2", "select", "extract", "group"]
+    assert plan.components == ["characterise", "screen_full", "select", "extract", "group"]
     assert plan.grouping_facet == "outcome"
     assert plan.time_band
     assert plan.expected_artefact_shape
@@ -134,6 +134,32 @@ def test_stub_landscape_draft_round_trips_into_orchestration_plan() -> None:
     assert plan.analysis_depth == "landscape"
     assert plan.components == ["characterise"]
     assert plan.grouping_facet is None
+
+
+def test_planner_draft_with_select_at_standard_round_trips_into_orchestration_plan() -> None:
+    """019 select-at-standard regrade: a planner draft may compose select at
+    standard depth (without the findings chain) and still validate.
+    """
+    draft = PlanDraftWire(
+        title="Evidence review",
+        question="Do school meals improve attainment?",
+        backend_scope="both",
+        search_effort="standard",
+        analysis_depth="standard",
+        components=["characterise", "select"],
+        component_rationale={
+            "characterise": "Maps the corpus landscape before deeper analysis.",
+            "select": "Selects the strongest-fit documents to guide synthesis emphasis.",
+        },
+        steering_mode="moderate",
+    )
+
+    plan = _plan_from_draft(draft)
+
+    assert plan.analysis_depth == "standard"
+    assert plan.components == ["characterise", "select"]
+    assert "extract" not in plan.components
+    assert "group" not in plan.components
 
 
 # --- Suggestion degrade ------------------------------------------------------

@@ -34,7 +34,7 @@ def _payload(**overrides: Any) -> dict[str, Any]:
         "analysis_depth": "landscape",
         "components": ["characterise"],
         "component_rationale": {
-            "screen_stage2": "Useful when full-text confirmation is worth the extra pass",
+            "screen_full": "Useful when full-text confirmation is worth the extra pass",
             "characterise": "Maps themes and coverage for landscape questions",
             "select": "Narrows a characterised corpus when extraction is needed",
             "extract": "Captures intervention-outcome findings for deep questions",
@@ -59,22 +59,26 @@ def _valid_component_sets(depth: AnalysisDepth) -> list[list[str]]:
     if depth == "landscape":
         return [[], ["characterise"]]
     if depth == "standard":
-        # 018 regrade: select/extract/group are deep-only now, so standard's
-        # valid sets are screen_stage2 + characterise only (no deep chain).
+        # 019 select-at-standard regrade: select is now legal at standard
+        # (findings_chain — extract/group — stays deep-only), so standard's
+        # valid sets add characterise+select and screen_full+characterise+
+        # select to the pre-019 screen_full/characterise-only sets.
         return [
             [],
-            ["screen_stage2"],
+            ["screen_full"],
             ["characterise"],
-            ["screen_stage2", "characterise"],
+            ["screen_full", "characterise"],
+            ["characterise", "select"],
+            ["screen_full", "characterise", "select"],
         ]
     return [
         [],
-        ["screen_stage2"],
+        ["screen_full"],
         ["characterise"],
-        ["screen_stage2", "characterise"],
+        ["screen_full", "characterise"],
         ["characterise", "select"],
         ["characterise", "select", "extract"],
-        ["screen_stage2", "characterise", "select", "extract", "group"],
+        ["screen_full", "characterise", "select", "extract", "group"],
     ]
 
 
@@ -119,7 +123,7 @@ def test_spine_is_present_in_order_for_valid_plan_matrix() -> None:
         {"analysis_depth": "standard", "components": ["characterise", "extract"]},
         {"analysis_depth": "standard", "components": ["characterise", "select", "group"]},
         {"analysis_depth": "standard", "components": ["select"]},
-        {"analysis_depth": "landscape", "components": ["screen_stage2"]},
+        {"analysis_depth": "landscape", "components": ["screen_full"]},
         {
             "steer_point_defaults": [
                 {"steer_point": "deepening-selection", "action": "continue"}
@@ -182,14 +186,14 @@ def test_fail_closed_validation(overrides: dict[str, Any]) -> None:
         _plan(**overrides)
 
 
-def test_intent_fit_can_strike_deep_chain_at_standard_depth() -> None:
+def test_intent_fit_can_strike_findings_chain_at_standard_depth() -> None:
     plan = _plan(search_effort="standard", analysis_depth="standard", components=["characterise"])
 
     chain = compose(plan)
 
     assert chain.components == [
         "acquire",
-        "screen",
+        "screen_abstract",
         "classify",
         "appraise",
         "ingest_full_text",
@@ -198,26 +202,26 @@ def test_intent_fit_can_strike_deep_chain_at_standard_depth() -> None:
     ]
 
 
-def test_standard_depth_composes_without_deep_chain_components() -> None:
-    """018 regrade: select/extract/group are deep-only; standard keeps ingest
-    plus stage-2 screening and characterisation, so synthesise grounds in
+def test_standard_depth_composes_without_findings_chain_components() -> None:
+    """018 regrade: extract/group are deep-only; standard keeps ingest plus
+    full-text screening and characterisation, so synthesise grounds in
     full-text chunks and characterisation without the findings layer.
     """
     plan = _plan(
         search_effort="standard",
         analysis_depth="standard",
-        components=["screen_stage2", "characterise"],
+        components=["screen_full", "characterise"],
     )
 
     chain = compose(plan)
 
     assert chain.components == [
         "acquire",
-        "screen",
+        "screen_abstract",
         "classify",
         "appraise",
         "ingest_full_text",
-        "screen_stage2",
+        "screen_full",
         "characterise",
         "synthesise",
     ]
@@ -225,32 +229,85 @@ def test_standard_depth_composes_without_deep_chain_components() -> None:
     assert "extract" not in chain.components
     assert "group" not in chain.components
 
-    # select/extract/group are not merely absent when unselected — they are
-    # disabled outright at standard depth (deep-only after the 018 regrade).
+    # extract/group are not merely absent when unselected — they are disabled
+    # outright at standard depth (deep-only; unchanged by the 019 select
+    # regrade below).
     with pytest.raises(ValidationError):
         _plan(
             search_effort="standard",
             analysis_depth="standard",
-            components=["screen_stage2", "characterise", "select"],
+            components=["screen_full", "characterise", "extract"],
+        )
+
+
+def test_standard_depth_composes_select_after_characterise_before_synthesise() -> None:
+    """019 select-at-standard regrade: select now runs at standard too, ordered
+    after characterise (its reference rule) and before synthesise, still
+    without the findings chain.
+    """
+    plan = _plan(
+        search_effort="standard",
+        analysis_depth="standard",
+        components=["screen_full", "characterise", "select"],
+    )
+
+    chain = compose(plan)
+
+    assert chain.components == [
+        "acquire",
+        "screen_abstract",
+        "classify",
+        "appraise",
+        "ingest_full_text",
+        "screen_full",
+        "characterise",
+        "select",
+        "synthesise",
+    ]
+    assert "extract" not in chain.components
+    assert "group" not in chain.components
+    select_step = next(step for step in chain.steps if step.component == "select")
+    assert select_step.directive_delta == {"selection": {"budget": 15}}
+    assert select_step.reference_rule == "characterisation_run_id <- characterise"
+
+
+def test_extract_without_select_and_group_without_extract_rejected_at_deep() -> None:
+    """The findings-chain both-or-neither rule still requires select first."""
+    with pytest.raises(ValidationError):
+        _plan(
+            search_effort="deep",
+            analysis_depth="deep",
+            components=["characterise", "extract"],
+        )
+    with pytest.raises(ValidationError):
+        _plan(
+            search_effort="deep",
+            analysis_depth="deep",
+            components=["characterise", "select", "group"],
         )
 
 
 def test_landscape_and_deep_depth_rows_are_unchanged_by_the_standard_regrade() -> None:
     """Pin landscape/deep ANALYSIS_DEPTH_TABLE + TIME_BANDS rows byte-identical
-    to their pre-018-regrade values; only the "standard" row was rewritten.
+    to their pre-019-regrade shape; only the "standard" row buys select.
     """
     assert ANALYSIS_DEPTH_TABLE["landscape"] == {
-        "screen_stage2": False,
+        "screen_full": False,
         "characterise": True,
-        "deep_chain": False,
+        "select": False,
+        "findings_chain": False,
         "selection_budget": None,
     }
     assert ANALYSIS_DEPTH_TABLE["deep"] == {
-        "screen_stage2": True,
+        "screen_full": True,
         "characterise": True,
-        "deep_chain": True,
+        "select": True,
+        "findings_chain": True,
         "selection_budget": 25,
     }
+    assert ANALYSIS_DEPTH_TABLE["standard"]["select"] is True
+    assert ANALYSIS_DEPTH_TABLE["standard"]["findings_chain"] is False
+    assert ANALYSIS_DEPTH_TABLE["standard"]["selection_budget"] == 15
     assert TIME_BANDS[("rapid", "landscape")] == "~10-15 min"
     assert TIME_BANDS[("standard", "landscape")] == "~15-20 min"
     assert TIME_BANDS[("deep", "landscape")] == "~20-25 min"
@@ -263,7 +320,7 @@ def test_round_trip_payload_composes_to_identical_chain() -> None:
     plan = _plan(
         search_effort="deep",
         analysis_depth="deep",
-        components=["screen_stage2", "characterise", "select", "extract", "group"],
+        components=["screen_full", "characterise", "select", "extract", "group"],
         grouping_facet="outcome",
         scope_constraints={
             "published_after": "2020-01-01",
@@ -409,7 +466,7 @@ def test_off_diagonal_plans_compose_validly() -> None:
     narrow_and_deep = _plan(
         search_effort="rapid",
         analysis_depth="deep",
-        components=["screen_stage2", "characterise", "select", "extract", "group"],
+        components=["screen_full", "characterise", "select", "extract", "group"],
         grouping_facet="intervention",
     )
     horizon_scan = _plan(
@@ -424,7 +481,7 @@ def test_off_diagonal_plans_compose_validly() -> None:
     assert narrow_chain.steps[0].directive_delta["search"]["depth"] == "rapid"
     assert "group" in narrow_chain.components
     assert horizon_chain.steps[0].directive_delta["search"]["depth"] == "deep"
-    assert "screen_stage2" not in horizon_chain.components
+    assert "screen_full" not in horizon_chain.components
 
 
 def test_expected_artefact_shape_and_time_band_are_deterministic() -> None:
@@ -441,7 +498,7 @@ def test_expected_artefact_shape_and_time_band_are_deterministic() -> None:
     facet = _plan(
         search_effort="deep",
         analysis_depth="deep",
-        components=["screen_stage2", "characterise", "select", "extract", "group"],
+        components=["screen_full", "characterise", "select", "extract", "group"],
         grouping_facet="population",
     )
 

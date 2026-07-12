@@ -30,7 +30,7 @@ SearchEffort = Literal["rapid", "standard", "deep"]
 AnalysisDepth = Literal["landscape", "standard", "deep"]
 DiscretionaryComponent = Literal[
     "characterise",
-    "screen_stage2",
+    "screen_full",
     "select",
     "extract",
     "group",
@@ -49,7 +49,7 @@ STEER_POINTS: tuple[str, ...] = ("deepening_selection",)
 
 SPINE: tuple[str, ...] = (
     "acquire",
-    "screen",
+    "screen_abstract",
     "classify",
     "appraise",
     "ingest_full_text",
@@ -57,11 +57,12 @@ SPINE: tuple[str, ...] = (
 )
 DISCRETIONARY_COMPONENTS: tuple[DiscretionaryComponent, ...] = (
     "characterise",
-    "screen_stage2",
+    "screen_full",
     "select",
     "extract",
     "group",
 )
+ALL_STEPS: tuple[str, ...] = SPINE + DISCRETIONARY_COMPONENTS
 DEEP_CHAIN_COMPONENTS: frozenset[DiscretionaryComponent] = frozenset(
     ("select", "extract", "group")
 )
@@ -76,36 +77,54 @@ SEARCH_EFFORT_DIRECTIVES: dict[SearchEffort, dict[str, SearchEffort]] = {
 class AnalysisDepthDirective(TypedDict):
     """Depth-row flags compiled by orchestration, not by component code."""
 
-    screen_stage2: bool
+    screen_full: bool
     characterise: bool
-    deep_chain: bool
+    select: bool
+    findings_chain: bool
     selection_budget: int | None
 
 
 ANALYSIS_DEPTH_TABLE: dict[AnalysisDepth, AnalysisDepthDirective] = {
     "landscape": {
-        "screen_stage2": False,
+        "screen_full": False,
         "characterise": True,
-        "deep_chain": False,
+        "select": False,
+        "findings_chain": False,
         "selection_budget": None,
     },
     "standard": {
-        # 018 regrade: select/extract/group are deep-only now (ADR 0013 spine
-        # untouched). Standard keeps ingest + stage-2 screening +
-        # characterisation, so synthesise grounds in full-text chunks plus
-        # characterisation without the findings layer.
-        "screen_stage2": True,
+        # 019 select-at-standard regrade: select now runs at standard too, so
+        # synthesise gets the SELECTION_PRIOR_BOOST retrieval prior and
+        # origin: selected|unselected_screened citation accounting over the
+        # full-text corpus, without the findings-extraction layer (extract/
+        # group stay deep-only).
+        "screen_full": True,
         "characterise": True,
-        "deep_chain": False,
-        "selection_budget": None,
+        "select": True,
+        "findings_chain": False,
+        # Plan-pinned standard selection budget; calibration is eval-slice
+        # work (pre-eval-slice-plan.md), not decided here.
+        "selection_budget": 15,
     },
     "deep": {
-        "screen_stage2": True,
+        "screen_full": True,
         "characterise": True,
-        "deep_chain": True,
+        "select": True,
+        "findings_chain": True,
         "selection_budget": 25,
     },
 }
+
+# findings_chain (extract+group) is only ever meaningful once select has run —
+# a depth row that buys the findings chain without buying select is an
+# incoherent table entry, checked once at import time rather than re-derived
+# at every compose() call.
+for _depth, _settings in ANALYSIS_DEPTH_TABLE.items():
+    if _settings["findings_chain"] and not _settings["select"]:
+        raise AssertionError(
+            f"ANALYSIS_DEPTH_TABLE[{_depth!r}]: findings_chain requires select"
+        )
+del _depth, _settings
 
 NAMED_PAIRINGS: dict[str, tuple[SearchEffort, AnalysisDepth]] = {
     "lighter": ("rapid", "landscape"),
@@ -142,19 +161,29 @@ TIME_BANDS: dict[tuple[SearchEffort, AnalysisDepth], str] = {
 }
 
 _DISCRETIONARY_COMPONENT_SET = set(DISCRETIONARY_COMPONENTS)
-_REGISTRY_COMPONENT_BY_STEP: dict[str, str] = {
-    "acquire": "acquire",
-    "screen": "screen",
-    "classify": "classify",
-    "appraise": "appraise",
-    "ingest_full_text": "ingest_full_text",
-    "screen_stage2": "screen",
-    "characterise": "characterise",
-    "select": "select",
-    "extract": "extract",
-    "group": "group",
-    "synthesise": "synthesise",
-}
+# The screening harness component is keyed "screen" in COMPONENT_REGISTRY
+# (plan.py) regardless of which plan-vocabulary step invokes it: both
+# screen_abstract (mandatory spine, stage 1) and screen_full (discretionary,
+# stage 2) dispatch to it. Every other step name is its own registry
+# component, so a function replaces what was previously a mostly-identity
+# dict (task 019 item 10b).
+_SCREENING_STEPS = frozenset(("screen_abstract", "screen_full"))
+
+
+def registry_component_for(step: str) -> str:
+    """Map a composed orchestration step name to its harness registry component.
+
+    Args:
+        step: Composed orchestration step name (plan vocabulary).
+
+    Returns:
+        The ``COMPONENT_REGISTRY`` key that step dispatches to.
+    """
+    if step in _SCREENING_STEPS:
+        return "screen"
+    return step
+
+
 _REFERENCE_RULES: dict[str, str] = {
     "select": "characterisation_run_id <- characterise",
     "extract": "selection_run_id <- select",
@@ -182,17 +211,21 @@ def _require_clean_string(value: str, *, field_name: str) -> str:
 def _enabled_components(depth: AnalysisDepth) -> set[DiscretionaryComponent]:
     settings = ANALYSIS_DEPTH_TABLE[depth]
     enabled: set[DiscretionaryComponent] = set()
-    if settings["screen_stage2"]:
-        enabled.add("screen_stage2")
+    if settings["screen_full"]:
+        enabled.add("screen_full")
     if settings["characterise"]:
         enabled.add("characterise")
-    if settings["deep_chain"]:
-        enabled.update(("select", "extract", "group"))
+    if settings["select"]:
+        enabled.add("select")
+    if settings["findings_chain"]:
+        enabled.update(("extract", "group"))
     return enabled
 
 
 def _validate_registry() -> None:
-    missing = sorted(set(_REGISTRY_COMPONENT_BY_STEP.values()) - set(COMPONENT_REGISTRY))
+    missing = sorted(
+        {registry_component_for(step) for step in ALL_STEPS} - set(COMPONENT_REGISTRY)
+    )
     if missing:
         raise ValueError(f"orchestration references unknown registry component(s): {missing}")
 
@@ -743,9 +776,9 @@ def _directive_delta(component: str, plan: OrchestrationPlan) -> dict[str, Any]:
         if filters:
             search["filters"] = filters
         return {"search": search}
-    if component == "screen" and plan.screening_criteria:
+    if component == "screen_abstract" and plan.screening_criteria:
         return {"screening": {"criteria": list(plan.screening_criteria)}}
-    if component == "screen_stage2":
+    if component == "screen_full":
         screening: dict[str, Any] = {"stage": 2}
         if plan.screening_criteria:
             screening["criteria"] = list(plan.screening_criteria)
@@ -778,13 +811,13 @@ def compose(plan: OrchestrationPlan) -> ComposedChain:
     selected = set(plan.components)
     ordered_components: list[str] = [
         "acquire",
-        "screen",
+        "screen_abstract",
         "classify",
         "appraise",
         "ingest_full_text",
     ]
-    if "screen_stage2" in selected:
-        ordered_components.append("screen_stage2")
+    if "screen_full" in selected:
+        ordered_components.append("screen_full")
     if "characterise" in selected:
         ordered_components.append("characterise")
     if "select" in selected:

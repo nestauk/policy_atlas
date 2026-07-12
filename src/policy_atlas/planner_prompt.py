@@ -226,7 +226,7 @@ yourself.
   synthesise. Discretionary, chosen by you for intent-fit:
   - characterise: maps the corpus landscape (themes, coverage, gaps).
     Fits landscape and most questions.
-  - screen_stage2: a precision re-screen of full text. ONLY available when
+  - screen_full: a precision re-screen of full text. ONLY available when
     analysis_depth is standard or deep — never with landscape (the landscape
     rung does not buy the full-text confirmation pass).
   - select: a purposive ranking that picks the strongest-fit documents.
@@ -247,7 +247,7 @@ yourself.
 - component_rationale: one honest sentence per discretionary component you
   include (or pointedly exclude), so the selection is visible. Keys MUST be
   exact single component names from the list above — characterise,
-  screen_stage2, select, extract, group — one entry per component, never a
+  screen_full, select, extract, group — one entry per component, never a
   combined key like "select_extract_group".
 - grouping_facet: intervention | outcome | population — only when group runs.
 - steering_mode: frequent | moderate | minimal | unattended. Default

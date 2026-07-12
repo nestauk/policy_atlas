@@ -28,7 +28,7 @@ from policy_atlas.schema import (
 from policy_atlas.screen import ScreenContext, screen_sources
 from tests.helpers import delete_project_data, now
 
-FULL_COMPONENTS = ["screen_stage2", "characterise", "select", "extract", "group"]
+FULL_COMPONENTS = ["screen_full", "characterise", "select", "extract", "group"]
 
 
 class RecordingIO:
@@ -93,7 +93,7 @@ def _base_plan(**overrides: Any) -> OrchestrationPlan:
         "analysis_depth": "deep",
         "components": list(FULL_COMPONENTS),
         "component_rationale": {
-            "screen_stage2": "Full-text confirmation is useful for this run",
+            "screen_full": "Full-text confirmation is useful for this run",
             "characterise": "Maps themes and coverage before deeper work",
             "select": "Narrows the relevant corpus for extraction",
             "extract": "Captures intervention-outcome findings",
@@ -381,7 +381,7 @@ def test_full_stub_chain_commits_each_step_and_checks_in(engine: Engine) -> None
         payloads = _payloads_by_component(engine, project_id)
         assert payloads["acquire"][0]["plan_id"] == str(plan_id)
         assert payloads["acquire"][0]["plan_version"] == 3
-        assert payloads["screen_stage2"][0]["registry_component"] == "screen"
+        assert payloads["screen_full"][0]["registry_component"] == "screen"
         assert payloads["select"][0]["characterisation_run_id"] == str(
             next(step.run_id for step in outcome.steps if step.component == "characterise")
         )
@@ -430,6 +430,66 @@ def test_landscape_chain_omits_deep_components_and_synthesises_from_characterisa
             step.run_id for step in outcome.steps if step.component == "characterise"
         )
         assert synth_payload["characterisation_run_id"] == str(char_run_id)
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_standard_depth_composes_select_and_synthesises_referencing_it(
+    engine: Engine,
+) -> None:
+    """019 select-at-standard regrade: standard composes select (never extract/
+    group) and synthesise's deepest-successful-reference resolution (runner.py
+    ``_reference_kwargs``) threads the standard-depth selection run through by
+    construction — the same reference-walk code path deep already exercises,
+    just with extract/group absent from ``successful_runs``.
+    """
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan(
+            search_effort="standard",
+            analysis_depth="standard",
+            components=["screen_full", "characterise", "select"],
+            grouping_facet=None,
+        )
+
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=uuid.uuid4(),
+            plan_version=1,
+            backends=_runner_backends(),
+            io=RecordingIO(),
+        )
+
+        components = [step.component for step in outcome.steps]
+        assert outcome.status == "succeeded"
+        assert components == [
+            "acquire",
+            "screen_abstract",
+            "classify",
+            "appraise",
+            "ingest_full_text",
+            "screen_full",
+            "characterise",
+            "select",
+            "synthesise",
+        ]
+        assert "extract" not in components
+        assert "group" not in components
+
+        select_payload = _payloads_by_component(engine, project_id)["select"][0]
+        assert select_payload["characterisation_run_id"] == str(
+            next(step.run_id for step in outcome.steps if step.component == "characterise")
+        )
+
+        synth_payload = _payloads_by_component(engine, project_id)["synthesise"][0]
+        select_run_id = next(step.run_id for step in outcome.steps if step.component == "select")
+        assert synth_payload["selection_run_id"] == str(select_run_id)
+        assert "extraction_run_id" not in synth_payload
+        assert "grouping_run_id" not in synth_payload
     finally:
         _cleanup(engine, project_id)
 
@@ -534,7 +594,9 @@ def test_spine_component_retries_once_then_continues(
             io=RecordingIO(),
         )
 
-        screen_outcome = next(step for step in outcome.steps if step.component == "screen")
+        screen_outcome = next(
+            step for step in outcome.steps if step.component == "screen_abstract"
+        )
         assert outcome.status == "succeeded"
         assert screen_outcome.status == "succeeded"
         assert screen_outcome.retried is True
@@ -590,7 +652,7 @@ def test_spine_failure_after_retry_stops_without_downstream_runs(
         )
 
         assert outcome.status == "failed"
-        assert [step.component for step in outcome.steps] == ["acquire", "screen"]
+        assert [step.component for step in outcome.steps] == ["acquire", "screen_abstract"]
         screen_outcome = outcome.steps[-1]
         assert screen_outcome.status == "failed"
         assert screen_outcome.retried is True
@@ -598,7 +660,7 @@ def test_spine_failure_after_retry_stops_without_downstream_runs(
         for attempt_run_id in screen_outcome.attempt_run_ids:
             timing_payloads = _component_timing_payloads(engine, project_id, attempt_run_id)
             assert len(timing_payloads) == 1
-            assert timing_payloads[0]["component"] == "screen"
+            assert timing_payloads[0]["component"] == "screen_abstract"
             assert timing_payloads[0]["registry_component"] == "screen"
             assert timing_payloads[0]["status"] == "failed"
             assert timing_payloads[0]["wall_clock_s"] >= 0
@@ -610,8 +672,8 @@ def test_spine_failure_after_retry_stops_without_downstream_runs(
         ]
         assert compiled_components == [
             "acquire",
-            "screen",
-            "screen",
+            "screen_abstract",
+            "screen_abstract",
         ]
     finally:
         _cleanup(engine, project_id)
@@ -666,7 +728,7 @@ def test_db_abort_backstop_records_failure_event_and_fails_spine_plan(
         )
 
         assert outcome.status == "failed"
-        assert [step.component for step in outcome.steps] == ["acquire", "screen"]
+        assert [step.component for step in outcome.steps] == ["acquire", "screen_abstract"]
         screen_outcome = outcome.steps[-1]
         assert screen_outcome.status == "failed"
         assert screen_outcome.retried is True
@@ -825,7 +887,9 @@ def test_backstop_failure_attempt_retries_and_succeeds(
             io=RecordingIO(),
         )
 
-        screen_outcome = next(step for step in outcome.steps if step.component == "screen")
+        screen_outcome = next(
+            step for step in outcome.steps if step.component == "screen_abstract"
+        )
         assert outcome.status == "succeeded"
         assert screen_outcome.status == "succeeded"
         assert screen_outcome.retried is True
