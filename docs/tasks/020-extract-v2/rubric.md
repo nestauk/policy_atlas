@@ -33,10 +33,10 @@ Slice-specific (from the contract):
         `field_coverage` markers; v1-null vs v2-null distinguished (coverage
         key-absence) and tested separately.
 14. [ ] The open ❓s (profile-id bump · vetter payload + guidance line · evidence-type
-        CHECK · annotation payload embedding) are recorded as plan-approval decisions,
-        none silently defaulted; the settled decisions (study_geography finding grain ·
-        effect_basis in / study_geography out of `claim_key`) are honoured, not
-        re-opened.
+        CHECK) are recorded as plan-approval decisions, none silently defaulted; the
+        settled decisions (study_geography finding grain · effect_basis in /
+        study_geography out of `claim_key` · annotation payload does NOT embed record
+        metadata) are honoured, not re-opened.
 15. [ ] Spec flow-back landed: data-model findings-layer base fields updated with a
         task-020 note + spec-bundle `log.md` line; the touched deferred.md entries
         discharged or honestly narrowed (incl. the window-ceiling stays-deferred owner

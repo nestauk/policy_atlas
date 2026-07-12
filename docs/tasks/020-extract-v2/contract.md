@@ -131,14 +131,15 @@ flow-back (the task-011 pattern).
    **Annotation-layer carriage corrected (adversarial finding 2):** the finding-claim
    annotation payload today carries claim text + anchors + cited finding ids, NOT
    record metadata — the new fields are *reachable* at the annotation layer via the
-   cited finding row (read surfaces resolve `finding_id`). Whether the citation payload
-   additionally embeds the two fields is a ❓ plan decision, with a recorded leaning
-   (🟡 owner-checked, 2026-07-12): don't embed in 020 — resolve-via-row is the shipped
-   read-surface pattern (demo readmodels), 018's metadata work landed on the *writer*
-   envelope + judge envelope v2 (quote/chunk-text/context, no record metadata), and no
-   recorded C-slice work touches annotation payloads; the consumer slice that builds the
-   surface decides, and nothing in 020 blocks embedding later. Read side tolerates old
-   rows per item 3's distinguisher.
+   cited finding row (read surfaces resolve `finding_id`). **Payload embedding SETTLED
+   (owner, 2026-07-12): don't embed.** The payload stays verification output (verdict,
+   judge provenance, anchors, spans), never a render cache; no shipped consumer reads
+   record metadata there (resolve-via-row is the pattern, demo readmodels); the slice
+   that builds the annotation rendering surface (C/web-app — or export, where
+   join-free rendering would make embedding load-bearing) decides coherently across
+   ALL fields it needs, and findings' immutability means embedding buys no snapshot
+   honesty meanwhile. Purely additive later; old annotations still resolve via id.
+   Read side tolerates old rows per item 3's distinguisher.
    Also in scope (adversarial finding 7): the stub/fixture surface — the stub extraction
    backend's sentinel payloads and shared test record factories gain the new wire fields
    (default null), named here so they're scope, not mid-build creep.
