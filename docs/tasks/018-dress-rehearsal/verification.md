@@ -6,6 +6,40 @@
 
 ## Phase log
 
+### D1 (2026-07-12): measured-band re-seed + multi-read $ adjudication — complete
+(carried by task 019 Phase E per the owner-adjudicated sequencing; the 019 PR is the commit vehicle)
+
+- **The one composed standard run** (live pin honoured: exactly ONE): heat-pump anchor question,
+  standard×standard, components characterise + screen_full + select (the 019 select-at-standard
+  composition — this run measures the real upcoming shape). Project `b63ac9b0`, plan `8334ecb0`,
+  exit 0, artefact minted. **Wall 805 s ≈ 13.4 min** end to end incl. the planner turn:
+  acquire 12.0s · screen_abstract 14.1s · classify 58.3s · appraise 0.1s · ingest 75.7s ·
+  screen_full 5.8s · characterise 8.1s · select 5.3s · synthesise 602.2s. 58 docs acquired
+  (27 OpenAlex + 31 Overton), stop_condition `completed` (the 019 stop-grain vocabulary, live).
+- **Band verdict (honest): INSIDE the ~15–20 min target** — 13.4 min measured;
+  `TIME_BANDS[("standard","standard")]` re-seeded `~30-45 min` → `~10-20 min` (displayed-band-is-
+  measured; comment carries the full per-component anchor). Select-at-standard adds only ~5 s;
+  synthesise dominates (75% of wall), so band growth tracks corpus size, not composition.
+- **Multi-read `$` verdict: PIN STANDS** (no revert) — see § Review handoff.
+- **Item-4 trace evidence (019 acceptance riding this run):** every per-doc generation nests under
+  its component root — `run:screen_abstract:b180de7f` trace `b2e159e284de6ea4057f4a191910ec1b`:
+  176 observations, 174 generations, 0 parentless generations, exactly 1 root; same shape on
+  screen_full (`2fd83def…`), select (`7ee9ec19…`), synthesise (trace `2936eab6e8ca…`, 60
+  generations, 602.2 s, 1 root, 0 orphans — 019 step-7 correction: the id originally cited here,
+  `5c6a340e…`, is attempt 2's synthesise trace, project `319323bb`). Before-state: the
+  018-recorded detached-root wart on executor fan-outs.
+- **Incidents (amended at 019 step 7 — trace-lane audit):** attempt 1 failed at acquire on the
+  un-migrated dev DB (old `ck_scov_stop_condition` rejected the new `completed` value — the 017
+  failure backstop caught it; `alembic upgrade head` on dev is now a pre-live-run checklist
+  item); attempt 2's run driver lacked a `__main__` guard (the 014 spawn lesson, hit live) AND
+  the planner proposed standard×deep on the same intent (the driver now verifies
+  standard×standard before approving, one edit turn allowed). **Correction:** attempt 2 did not
+  die cheaply — its project (`319323bb`, the approved standard×deep plan) ran the full deep chain
+  to a minted artefact concurrently with the D1 run (event log 05:07→05:38; extract+group;
+  synthesise trace `5c6a340e…`, 1.53 M prompt tokens). One unplanned standard×deep e2e run was
+  spent beyond the live pin; the pin governed intended runs, and this stands recorded as visible,
+  attributed incident spend. Band + `$` numbers are unaffected (both trace to `b63ac9b0`).
+
 ### B1 (2026-07-10): Phase 0 + A-model + A′ baseline-1 — complete
 
 | Gate | Result |
@@ -802,6 +836,17 @@ event rows written before the rename carry the old payload keys.
     eliminated repeated prefixes were exactly the provider-cached tokens
     (hit rate 64%→23%) — the $ sign of the change depends on the cache
     discount rate (B4; adjudicate at D1 billing).
+    **D1 verdict (2026-07-12, task 019 Phase E): PIN STANDS — multi-read
+    `synthesise_section_v5` is cheaper-or-neutral at every plausible discount
+    rate on the measured run.** Realized D1 synthesise usage: 994,517 prompt /
+    419,840 cached (**42.2% hit** — the replay's 23% was pessimistic; live
+    section loops re-share more prefix than the fork-probe pair did) /
+    45,453 completion. Against the v4 counterfactual on the same curve
+    (input ÷ 0.69, cached at 64%): at a 50% cached-token discount v5 bills
+    ≈20% LESS input; at a 90% discount ≈cost-neutral (+1%). The 018 fear case
+    (+30% at 90%) does not materialise at the realized hit rate — no revert,
+    and v5 keeps its quality gains (more evidence read, more verified
+    citations). No prompt change made.
   - High judge-flag volume ≠ judge over-flagging: hand-inspection showed the
     B-smoke's 49 unspanned flags were mostly correct (writer under-anchoring
     — counts in prose without pattern claims, "Inferred gap:" prose without

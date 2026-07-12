@@ -10,11 +10,13 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from policy_atlas.country_filters import ISO_3166_ALPHA2
 from policy_atlas.plan import Config, Plan, compile
 from policy_atlas.search_loop import (
     ROUND_CAP,
     SearchDirectiveError,
     StopDecision,
+    _filter_variants,
     evaluate_deep_stop,
     parse_search_directive,
     to_wire_params,
@@ -76,7 +78,7 @@ def test_validate_scope_filters_full_example_both_backends() -> None:
         },
         "overton": {
             "publisher_type": "government",
-            "publisher_country": "United Kingdom",
+            "publisher_country": "UK",
             "publisher_region": "Europe",
             "language": "eng",
         },
@@ -104,7 +106,7 @@ def test_validate_scope_filters_full_example_both_backends() -> None:
         "published_before": "2023-01-01",
         "sdgcategories": "SDG 3: Good Health and Well-being",
         "source_type": "government",
-        "source_country": "United Kingdom",
+        "source_country": "UK",
         "source_region": "Europe",
         "language": "eng",
     }
@@ -138,8 +140,13 @@ def test_validate_scope_filters_full_example_both_backends() -> None:
         ({"openalex": {"languages": ["eng"]}}, ["openalex"]),
         # openalex author countries: lowercase not accepted (must be uppercase)
         ({"openalex": {"author_affiliation_countries": ["us"]}}, ["openalex"]),
+        # openalex author countries: syntactic code, not ISO-3166 alpha-2
+        ({"openalex": {"author_affiliation_countries": ["XX"]}}, ["openalex"]),
         # overton fields are single-valued: a list is rejected
         ({"overton": {"publisher_type": ["government", "igo"]}}, ["overton"]),
+        # overton publisher_country is the probed display-name allowlist, not ISO/common aliases
+        ({"overton": {"publisher_country": "GB"}}, ["overton"]),
+        ({"overton": {"publisher_country": "United Kingdom"}}, ["overton"]),
         # overton unknown region
         ({"overton": {"publisher_region": "Mars"}}, ["overton"]),
         # overton unknown publisher type
@@ -156,6 +163,73 @@ def test_validate_scope_filters_fail_closed(
 ) -> None:
     with pytest.raises(SearchDirectiveError):
         validate_scope_filters(raw, backend_names=backend_names)
+
+
+def test_validate_scope_filters_publisher_country_hint_names_uk() -> None:
+    with pytest.raises(SearchDirectiveError, match="UK"):
+        validate_scope_filters(
+            {"overton": {"publisher_country": "United Kingdom"}},
+            backend_names=["overton"],
+        )
+
+
+def test_validate_scope_filters_accepts_probed_overton_country_names() -> None:
+    validated = validate_scope_filters(
+        {"overton": {"publisher_country": "USA"}},
+        backend_names=["overton"],
+    )
+
+    assert to_wire_params("overton", validated["overton"]) == {"source_country": "USA"}
+
+
+def test_source_country_post_filter_validates_but_never_maps_to_wire() -> None:
+    validated = validate_scope_filters(
+        {"overton": {"source_country_post_filter": ["UK", "France"]}},
+        backend_names=["overton"],
+    )
+
+    assert validated["overton"] == {"source_country_post_filter": ["UK", "France"]}
+    assert to_wire_params("overton", validated["overton"]) == {}
+
+
+def test_openalex_country_filter_variants_split_after_100_codes() -> None:
+    countries = [f"C{i:03d}" for i in range(101)]
+    validated = {"author_affiliation_countries": countries}
+
+    variants = _filter_variants("openalex", validated)
+
+    assert [len(variant["author_affiliation_countries"]) for variant in variants] == [100, 1]
+    wires = [to_wire_params("openalex", variant)["filter"] for variant in variants]
+    assert all(
+        len(wire.removeprefix("authorships.countries:").split("|")) <= 100
+        for wire in wires
+    )
+    union = [
+        country
+        for variant in variants
+        for country in variant["author_affiliation_countries"]
+    ]
+    assert union == countries
+
+
+def test_openalex_country_filter_variants_pass_through_at_100_codes() -> None:
+    countries = [f"C{i:03d}" for i in range(100)]
+
+    assert _filter_variants("openalex", {"author_affiliation_countries": countries}) == [
+        {"author_affiliation_countries": countries}
+    ]
+
+
+def test_openalex_country_filter_rejects_more_than_200_codes() -> None:
+    with pytest.raises(SearchDirectiveError):
+        validate_scope_filters(
+            {
+                "openalex": {
+                    "author_affiliation_countries": list(ISO_3166_ALPHA2)[:201],
+                }
+            },
+            backend_names=["openalex"],
+        )
 
 
 # --- Plan/Config search_backend_scope ---

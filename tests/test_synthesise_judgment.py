@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import inspect
 import json
-import socket
 import uuid
 from typing import Any
 
@@ -709,10 +708,7 @@ def test_structural_rejection_is_counted_and_flagged(conn: Connection) -> None:
 
 
 # --- Test 8: socket-deny round trip through run_harness (zero egress) ---
-
-
-def _deny_socket(*args: Any, **kwargs: Any) -> Any:
-    raise AssertionError("socket creation attempted during synthesise judgment test")
+# (in-process socket denial is now suite-wide via pytest-socket; see pyproject.toml)
 
 
 def test_socket_deny_synthesise_harness_round_trip(
@@ -740,17 +736,13 @@ def test_socket_deny_synthesise_harness_round_trip(
         )
     )
 
-    monkeypatch.setattr(socket, "socket", _deny_socket)
-    try:
-        run_harness(
-            conn,
-            config=config,
-            project_id=project_id,
-            run_id=run_id,
-            provider=StubEchoProvider(),
-        )
-    finally:
-        monkeypatch.undo()
+    run_harness(
+        conn,
+        config=config,
+        project_id=project_id,
+        run_id=run_id,
+        provider=StubEchoProvider(),
+    )
 
     completed = [
         event

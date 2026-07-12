@@ -226,7 +226,7 @@ def test_minimal_partial_delta_round_trips_despite_composer_injected_siblings(
     engine: Engine,
 ) -> None:
     # compose() always injects sibling keys the caller need not supply
-    # (screen_stage2's {"stage": 2}); a criteria-only delta must still apply.
+    # (screen_full's {"stage": 2}); a criteria-only delta must still apply.
     project_id: uuid.UUID | None = None
     try:
         project_id, scope_id = _seed_project(engine)
@@ -241,7 +241,7 @@ def test_minimal_partial_delta_round_trips_despite_composer_injected_siblings(
             [
                 Adjust(
                     directive_deltas={
-                        "screen_stage2": {
+                        "screen_full": {
                             "screening": {"criteria": ["Exclude opinion pieces."]}
                         }
                     }
@@ -285,7 +285,7 @@ def test_delta_round_trip_still_rejects_a_request_plan_fields_cannot_express() -
     chain = compose(_base_plan())
     with pytest.raises(SteeringAdjustmentError):
         _validate_delta_round_trip(
-            {"screen_stage2": {"screening": {"criteria": ["A rule the plan does not hold."]}}},
+            {"screen_full": {"screening": {"criteria": ["A rule the plan does not hold."]}}},
             amended_chain=chain,
         )
 
@@ -367,7 +367,7 @@ def test_abort_at_pause_stops_walk_marks_plan_abandoned_and_preserves_prior_runs
         )
 
         assert outcome.status == "aborted"
-        assert [step.component for step in outcome.steps] == ["acquire", "screen"]
+        assert [step.component for step in outcome.steps] == ["acquire", "screen_abstract"]
         assert all(step.status == "succeeded" for step in outcome.steps)
         with engine.connect() as conn:
             plan_status = conn.execute(
@@ -445,7 +445,7 @@ def test_render_check_in_and_collation_are_deterministic_and_contain_key_facts()
         "wall_clock_s": 1.23456,
     }
     flagged_events = [
-        {"component": "screen", "status": "failed", "reason": "boom"},
+        {"component": "screen_abstract", "status": "failed", "reason": "boom"},
         {"component": "classify", "status": "retrying", "run_id": "run-1"},
         {"component": "extract", "status": "skipped", "reason": "blocked"},
         {

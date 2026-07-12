@@ -17,8 +17,14 @@ def configure_logging() -> None:
         structlog.processors.TimeStamper(fmt="iso"),
     ]
     if os.getenv("LOG_FORMAT") == "json":
+        # Structured traceback (a JSON-serializable list of frames) so
+        # log.error(..., exc_info=True) renders the exception in JSON output.
+        processors.append(structlog.processors.dict_tracebacks)
         processors.append(structlog.processors.JSONRenderer())
     else:
+        # Formats exc_info into an "exception" string field before the console
+        # renderer, so log.error(..., exc_info=True) renders the traceback.
+        processors.append(structlog.processors.format_exc_info)
         processors.append(structlog.dev.ConsoleRenderer())
 
     structlog.configure(

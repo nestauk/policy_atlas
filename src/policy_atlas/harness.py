@@ -709,7 +709,17 @@ def run_harness(
         "block_ids": {},
         "error": None,
     }
-    final: HarnessState = graph.invoke(initial)
+    # Bind run/component correlation once for every log call this component
+    # execution makes (structlog's merge_contextvars processor picks these up),
+    # instead of hand-threading project_id/run_id through each log call. This is
+    # the innermost boundary that sees exactly one component execution: each
+    # run_harness call dispatches to exactly one node (routed by config.component),
+    # and it's the direct caller of node-level log events (e.g. component.started,
+    # grounding.failed) that today never carry project_id/run_id.
+    with structlog.contextvars.bound_contextvars(
+        project_id=str(project_id), run_id=str(run_id), component=config.component,
+    ):
+        final: HarnessState = graph.invoke(initial)
     return {
         "artefact_id": final.get("artefact_id"),
         **final.get("block_ids", {}),

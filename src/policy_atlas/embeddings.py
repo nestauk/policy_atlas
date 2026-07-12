@@ -11,14 +11,16 @@ from __future__ import annotations
 import hashlib
 import math
 import os
+import random
 import re
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Protocol, TypedDict
 
 import structlog
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 from openai.types.completion_usage import CompletionUsage
 from sqlalchemy import exists, func, select, union
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -46,10 +48,14 @@ UNIT_CHAR_OVERLAP = 200
 
 API_BATCH_SIZE = 128
 DEFAULT_MAX_CHUNKS = 20_000
+EMBEDDING_RATE_LIMIT_BACKOFF_BASE_S = 2.0
+EMBEDDING_RATE_LIMIT_BACKOFF_CAP_S = 60.0
+EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS = 4
 
 _UINT32_MAX = float((2**32) - 1)
 _SENTENCE_BOUNDARY_RE = re.compile(r"(?<=[.!?])\s+")
 _PARAGRAPH_BOUNDARY_RE = re.compile(r"\n\n")
+_sleep = time.sleep
 
 
 class _UnitDict(TypedDict):
@@ -252,8 +258,10 @@ class OpenAIEmbeddingBackend:
     mode = "live"
 
     def __init__(self, api_key: str | None = None) -> None:
+        # The SDK may spend up to 1 + max_retries HTTP attempts per logical
+        # create call; the explicit 429 loop below budgets logical calls.
         self._client = resolve_openai_client(
-            api_key, backend_name="OpenAIEmbeddingBackend", timeout=30.0, max_retries=3
+            api_key, backend_name="OpenAIEmbeddingBackend", timeout=30.0, max_retries=2
         )
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
@@ -266,23 +274,56 @@ class OpenAIEmbeddingBackend:
             One 1536-dimensional vector per input text, in input order.
 
         Raises:
+            RateLimitError: If all logical attempts are exhausted on provider
+                rate limits. With SDK ``max_retries=2``, the HTTP ceiling is
+                ``3 * EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS`` attempts.
             RuntimeError: If the provider returns a different number of vectors.
         """
         if not texts:
             return []
 
         log.info("embedding.openai.request", text_count=len(texts))
-        response = self._client.embeddings.create(
-            model=EMBEDDING_MODEL,
-            input=texts,
-            dimensions=EMBEDDING_DIMENSIONS,
-        )
+        response = self._create_embeddings_with_backoff(texts)
         items = sorted(response.data, key=lambda item: item.index)
         vectors = [list(item.embedding) for item in items]
         log.info("embedding.openai.response", text_count=len(texts), vector_count=len(vectors))
         if len(vectors) != len(texts):
             raise RuntimeError("OpenAI embeddings response length did not match input length.")
         return vectors
+
+    def _create_embeddings_with_backoff(self, texts: list[str]) -> Any:
+        for attempt in range(EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS):
+            try:
+                return self._client.embeddings.create(
+                    model=EMBEDDING_MODEL,
+                    input=texts,
+                    dimensions=EMBEDDING_DIMENSIONS,
+                )
+            except RateLimitError:
+                if attempt == EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS - 1:
+                    raise
+                delay_s = _embedding_rate_limit_delay_s(attempt)
+                log.warning(
+                    "embedding.openai_rate_limited",
+                    attempt=attempt + 1,
+                    max_attempts=EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS,
+                    sleep_s=delay_s,
+                )
+                _sleep(delay_s)
+
+        raise RuntimeError("unreachable embedding retry state")
+
+
+def _embedding_rate_limit_delay_s(attempt: int) -> float:
+    base_s = float(min(
+        EMBEDDING_RATE_LIMIT_BACKOFF_BASE_S * (2**attempt),
+        EMBEDDING_RATE_LIMIT_BACKOFF_CAP_S,
+    ))
+    return float(base_s + _embedding_rate_limit_jitter_s(base_s))
+
+
+def _embedding_rate_limit_jitter_s(base_s: float) -> float:
+    return float(random.uniform(0.0, base_s))
 
 
 def _rightmost_boundary(boundaries: list[int], *, min_end: int, limit: int) -> int | None:
@@ -418,6 +459,46 @@ def validate_vector(vector: object) -> list[float]:
             raise ValueError(f"embedding vector element {index} is not finite")
         validated.append(as_float)
     return validated
+
+
+def _embed_units_with_isolation(
+    embedder: EmbeddingBackend, units: list[_UnitWork]
+) -> tuple[list[tuple[_UnitWork, list[float]]], list[tuple[_UnitWork, Exception]]]:
+    """Embed a batch, recursively splitting failures down to single units.
+
+    The split retries both halves and then only the failing half recursively, so
+    one poisoned unit in ``n`` units adds about ``2 * ceil(log2(n))`` calls over
+    the initial failed batch while allowing healthy sibling units to persist.
+
+    Args:
+        embedder: Live or stub embedding backend.
+        units: Active embedding units in API-call order.
+
+    Returns:
+        Successful ``(unit, vector)`` pairs and failed ``(unit, exception)`` pairs.
+    """
+    if not units:
+        return [], []
+    try:
+        raw_vectors = embedder.embed_texts([unit.text for unit in units])
+        if len(raw_vectors) != len(units):
+            raise ValueError(
+                f"embedding backend returned {len(raw_vectors)} vectors for {len(units)} texts"
+            )
+        vectors = [validate_vector(vector) for vector in raw_vectors]
+    except Exception as exc:
+        if len(units) == 1:
+            return [], [(units[0], exc)]
+        midpoint = len(units) // 2
+        left_vectors, left_failures = _embed_units_with_isolation(
+            embedder, units[:midpoint]
+        )
+        right_vectors, right_failures = _embed_units_with_isolation(
+            embedder, units[midpoint:]
+        )
+        return left_vectors + right_vectors, left_failures + right_failures
+
+    return list(zip(units, vectors, strict=True)), []
 
 
 def _chunk_rows_for_insert(state: _ChunkState) -> list[dict[str, object]]:
@@ -610,16 +691,9 @@ def embed_pending_chunks(
         if not active_units:
             continue
 
-        try:
-            raw_vectors = embedder.embed_texts([unit.text for unit in active_units])
-            if len(raw_vectors) != len(active_units):
-                raise ValueError(
-                    "embedding backend returned "
-                    f"{len(raw_vectors)} vectors for {len(active_units)} texts"
-                )
-            vectors = [validate_vector(vector) for vector in raw_vectors]
-        except Exception as exc:
-            failed_chunk_ids = {unit.chunk_id for unit in active_units}
+        embedded_vectors, failed_units = _embed_units_with_isolation(embedder, active_units)
+        if failed_units:
+            failed_chunk_ids = {unit.chunk_id for unit, _exc in failed_units}
             for chunk_id in failed_chunk_ids:
                 states[chunk_id].failed = True
                 states[chunk_id].vectors.clear()
@@ -627,13 +701,16 @@ def embed_pending_chunks(
                 "embed.batch_failed",
                 batch_index=batch_index,
                 chunk_count=len(failed_chunk_ids),
-                unit_count=len(active_units),
-                error_type=type(exc).__name__,
+                unit_count=len(failed_units),
+                error_type=",".join(
+                    sorted({type(exc).__name__ for _unit, exc in failed_units})
+                ),
                 run_id=str(run_id),
             )
-            continue
 
-        for unit, vector in zip(active_units, vectors, strict=True):
+        for unit, vector in embedded_vectors:
+            if states[unit.chunk_id].failed or states[unit.chunk_id].inserted:
+                continue
             states[unit.chunk_id].vectors[unit.unit_index] = vector
 
         completed_chunk_ids = {

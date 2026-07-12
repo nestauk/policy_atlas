@@ -32,12 +32,12 @@ from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.ingest_full_text import DocumentFetcher
 from policy_atlas.orchestration_plan import (
-    _REGISTRY_COMPONENT_BY_STEP,
     SPINE,
     ComponentStep,
     ComposedChain,
     OrchestrationPlan,
     compose,
+    registry_component_for,
 )
 from policy_atlas.plan import Plan, compile
 from policy_atlas.ranking import RankingBackend
@@ -69,8 +69,8 @@ COMPONENT_RETRY_CAP = 1
 TERMINAL_RUN_STATUSES = frozenset({"succeeded", "failed"})
 LLM_BEARING_COMPONENTS = frozenset(
     {
-        "screen",
-        "screen_stage2",
+        "screen_abstract",
+        "screen_full",
         "classify",
         "characterise",
         "select",
@@ -1006,7 +1006,7 @@ def _run_step_attempt(
     backends: RunnerBackends,
     session_id: uuid.UUID | None,
 ) -> _AttemptOutcome:
-    registry_component = _REGISTRY_COMPONENT_BY_STEP[step.component]
+    registry_component = registry_component_for(step.component)
     run_id = uuid.uuid4()
     plan_payload = _plan_compiled_payload(
         step=step,

@@ -271,7 +271,14 @@ source_screening_result = Table(
         unique=True,
         postgresql_where=text("status != 'failed'"),
     ),
-    CheckConstraint("status IN ('relevant', 'not_relevant', 'failed')", name="ck_ssr_status"),
+    # 'excluded_retracted' (task 019 Phase D, owner decision): a retracted
+    # document (OpenAlex is_retracted) is excluded at screening as policy, a
+    # distinct terminal status never conflated with a 'not_relevant'
+    # relevance verdict.
+    CheckConstraint(
+        "status IN ('relevant', 'not_relevant', 'failed', 'excluded_retracted')",
+        name="ck_ssr_status",
+    ),
     CheckConstraint(
         "screen_basis IS NULL"
         " OR screen_basis IN ('title_abstract', 'title_only', 'full_text')",
@@ -428,9 +435,15 @@ search_coverage_record = Table(
     # Task 015 widened the vocabulary with the deep loop's stops (short_circuit =
     # discovery-rate collapse within one run; budget_exhausted covers every budget
     # incl. the round cap; target_reached = confident-relevant target met).
+    # Task 019 Phase D widened it again with the honest stop-grain pair: 'completed'
+    # (a clean, unforced completion — acquire's new default, replacing the old
+    # breadth_truncated default) and 'wall_clock_exceeded' (the rapid/standard
+    # fan-out's own wall-clock breach). 'breadth_truncated' is retained in the
+    # vocabulary for historical rows only — acquire no longer writes it.
     CheckConstraint(
         "stop_condition IN ('breadth_truncated', 're_searched_still_thin', 'error',"
-        " 'short_circuit', 'budget_exhausted', 'target_reached')",
+        " 'short_circuit', 'budget_exhausted', 'target_reached', 'completed',"
+        " 'wall_clock_exceeded')",
         name="ck_scov_stop_condition",
     ),
     CheckConstraint(

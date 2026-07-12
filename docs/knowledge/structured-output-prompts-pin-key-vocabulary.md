@@ -17,7 +17,7 @@ validated fail-closed (`planner_prompt.py`, task 017 live check):
    like `select_extract_group`") — models invent compound keys to express
    grouped reasoning.
 2. **State cross-field constraints as hard rules.** Constraints the schema
-   cannot express (screen_stage2 fits standard/deep only, never landscape)
+   cannot express (screen_full — renamed from screen_stage2 in 019 — fits standard/deep only, never landscape)
    must be prompt vocabulary ("ONLY available when…") — a soft "fits X"
    phrasing still gets paired wrongly.
 

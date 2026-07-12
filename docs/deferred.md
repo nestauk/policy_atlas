@@ -220,31 +220,26 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   Screen reads `abstract_source` and (015) `title_source`; classify consumes property
   priors (`record_type`, source typing, `indexed_in`, `title_source`) plus the tag layer
   as its uniform label-prior surface (`{tag, tag_type, asserted_by}` visible — ADR 0012
-  decision 8; OpenAlex keywords deliberately exited the prompt). Still open:
-  `is_retracted` retained-but-unread — a 018-gate proposal to surface it in the writer
-  envelope was **struck (user, 2026-07-10): its likely home is earlier in the pipeline,
-  probably screening** (a retracted document arguably should not screen in at all) —
-  that is an eligibility change with flag-not-drop implications, so it needs its own
-  gate when taken up; the appraisal-second-pass visible-flag reading also remains open.
-  Non-English handling beyond English-first title selection still open.
+  decision 8; OpenAlex keywords deliberately exited the prompt). `is_retracted`
+  retained-but-unread — **DISCHARGED (task 019):** retracted docs exclude at
+  stage-1 screening as the distinct `excluded_retracted` status (owner decision
+  2; visible, attributed, never conflated with relevance). Still open: the
+  appraisal-second-pass visible-flag reading, and non-English handling beyond
+  English-first title selection.
 
 ## Live search / depth-graded loop (task 015 seams)
 
-- **Country filter allowlists + deterministic country-group expansion (owner,
-  2026-07-11, 018 review conversation)** — current validation is shape-only:
-  OpenAlex `author_affiliation_countries` accepts any 2-letter alpha pair (`XX`
-  passes; the provider then silently returns nothing) and Overton
-  `publisher_country` accepts near-arbitrary text with the display-name hazard
-  recorded (silent zero on ISO codes / "United Kingdom"). Upgrade both to
-  fail-closed allowlists: a static ISO-3166 set for OpenAlex; a probed
-  display-name list for Overton. Then the real user vocabulary — groupings
-  ("OECD countries", "G7"/"G20", "EU"/"Europe", "developing") — via
-  deterministic membership tables compiled in the grammar: the planner emits a
-  group token, compile expands it from a static provenance-stamped table, NEVER
-  the LLM listing members inline. "Developing" needs a pinned definition (e.g.
-  World Bank income groups) or an honest planner decline. Touches grammar +
-  both wire mappings + the planner capability line (prompt-bearing half is
-  lead-only, replay-evidenced).
+- **Country filter allowlists + deterministic country-group expansion —
+  DISCHARGED (task 019).** Fail-closed ISO-3166 + probed Overton
+  display-name allowlists (186 names, probe 2026-07-12); Tier-1 pinned
+  provenance-stamped group tables (OECD members/G7/G20/EU27/EEA + M49
+  continentals Europe/North America/Oceania, UK∈Europe); Tier-2
+  planner-proposed explicit lists persisted as `{label, countries,
+  authorship}`; Overton multi-country = deterministic post-filter + deeper
+  pagination with exclusion counts on coverage (owner decision 5); planner_v3
+  capability line. Note what did NOT ship: "developing"-specific support
+  (`is_global_south` DROPPED, owner de-scope) — see the filter-vocabulary
+  growth entry below.
 
 Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
@@ -268,10 +263,17 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   name→id resolution; Overton `source_region` `_:` code mapping table; COFOG
   classifications reference table; Overton open-vocabulary `topics`/`document_type` once
   token lists are pinnable. (Live scale note: Overton's publisher tag layer runs ~29
-  tags/record — bounds sized on fixtures now genuinely bind.)
-- **Caching (cache-before-throttle)** — declined at plan; live 429s arrive in bursts right
-  after a fan-out (observed: OpenAlex rate-limited the immediately-following run in the
-  same process), so a response cache pays for itself before a smarter throttle does.
+  tags/record — bounds sized on fixtures now genuinely bind.) **Country-group seams
+  left out at task 019 (contract item 3c):** `Very high human development`
+  (a candidate Tier-1 group, not built); `APAC` (not continental,
+  definitionally fuzzy); V2-style exclusion groups ("All but UK", untested).
+  Also parked: OpenAlex `authorships.institutions.is_global_south:true`
+  exists as a one-boolean native option (probed 2026-07-12, 40.8M works) if
+  "developing"-shaped groups are ever wanted.
+- **Caching (cache-before-throttle) — DISCHARGED (task 019).** In-process
+  TTL+LRU response cache keyed by full non-credential request params, checked
+  before the rate limiter, 2xx-only, env-tunable
+  (`POLICY_ATLAS_SEARCH_CACHE_TTL_S`).
 - **Citation-floor knob** — no citation floor is the recall-first default (decision 12,
   user-approved); a steerable floor, if ever wanted, is a directive knob — never a silent
   transport filter (the V2 lesson).
@@ -283,10 +285,11 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   table is the extensible compile target. Two 015 observations join this seam: whether the
   user-facing "deep ≈ 2–3 min" should include the round-1 rapid-leg screening (a full live
   episode ran 343 s end-to-end while the loop driver honoured its 150 s budget), and the
-  **coverage-record stop-condition grain** (review stack, three lanes convergent): a clean
-  rapid completion and a wall-clock breach both persist `breadth_truncated`, and the
-  deep-thin overlay hides the raw stop value — the per-round facts live only in
-  events/logs; a richer stop/attribution vocabulary is a one-line CHECK migration cousin.
+  **coverage-record stop-condition grain — DISCHARGED (task 019).** Migration
+  `921d3a781f3f` widens the stop-value vocabulary: clean completion now records
+  `completed`, a rapid wall-clock breach records `wall_clock_exceeded`;
+  `breadth_truncated` is retained for historical rows only. The deep-path
+  vocabulary is unchanged.
 - **Rev-3.10 loop seams** — calibrated recall estimate (Chao capture-recapture /
   Undermind exponential-saturation fit → a user-facing "estimated % of relevant found" on
   the coverage record); sliding-window Thompson-sampling arm allocation (eval-gated, must
@@ -305,10 +308,11 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   the screen's relevance-judge quality before trusting loop-steered "adequate" — ADR 0012
   names this the loop's single biggest un-eval'd dependency) · suggest-arm live yield
   (0 proposals in the one live deep run; machinery scripted-test-covered).
-- **Review-stack cleanup candidates** (015 step 7, recorded not ridden): collapse
-  `acquire_sources`' legacy no-executed-calls branch into the executed-calls path; unify
-  the two wire-validator families in `search_loop.py` when the filter grammar next grows;
-  hoist the duplicated `oa_record`/scripted-generation test doubles into `tests/helpers.py`.
+- **Review-stack cleanup candidates — DISCHARGED (task 019, items 10a/10c/10d).**
+  `acquire_sources`' legacy no-executed-calls branch collapsed into the
+  executed-calls path; the two wire-validator families in `search_loop.py`
+  unified; the duplicated `oa_record`/scripted-generation test doubles hoisted
+  into `tests/helpers.py`.
 
 ## Full-text ingestion (task 008 seams)
 
@@ -440,17 +444,13 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Characterise / embeddings / telemetry (task 009 seams)
 
-- **Langfuse trace grouping — "group as much as possible" (owner direction,
-  2026-07-11, 018 review conversation)** — per-doc/window LLM calls made inside
-  `ThreadPoolExecutor` workers (extract windows, screening fan-outs) mint DETACHED
-  root traces because the Langfuse context does not propagate into threads — the
-  009-recorded wart, now user-visible next to properly-nested calls (the finding
-  vetter nests under `run:extract:{run_id}` precisely because it runs sequentially
-  on the main thread). Fix: propagate the component-span context into submitted
-  workers (explicit parent trace/span id in the closure, or a per-worker context
-  manager) so per-doc generations nest under the component root. Second half:
-  planner turns are deliberately separate traces (B2 record), session-correlated —
-  consider one conversation-root trace per orchestrate process with turn spans, or
+- **Langfuse trace grouping — first half DISCHARGED (task 019).**
+  `contextvars.copy_context` propagation via `tracing.submit_with_context` on
+  every traced/LLM executor fan-out closes the per-doc/window DETACHED-root-trace
+  wart (extract windows, screening fan-outs now nest under the component root
+  instead of minting separate traces). Second half stays open: planner turns
+  are deliberately separate traces (B2 record), session-correlated — consider
+  one conversation-root trace per orchestrate process with turn spans, or
   accept the session view as the grouping. Bounded telemetry rider; the
   capability-run entity seam (§ Select) remains the structural home.
 
@@ -479,13 +479,12 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   retrieval-eval seams on the embedding-unit layer (contract decision 2, rev-8 research).
   The unit policy is versioned (`embedding_unit_policy_v1`) so any of these lands as a new
   co-existing policy, not a rewrite.
-- **Embed-pass live robustness** — fixture-scale is single-batch; pre-registered for real
-  corpora: rate-limit backoff under real 429s (the SDK retries transient failures at
-  `max_retries=2`, so the HTTP ceiling is (1+retries)× the logical call budget — comment at
-  the client seam), batch-failure isolation granularity (one bad unit currently fails every
-  chunk sharing its 128-unit API batch — transient over-reporting only, failed chunks
-  re-embed next pass; split-on-failure lands here), and concurrent multi-batch behaviour at
-  n ≫ batch (review adjudication, 2026-07-06).
+- **Embed-pass live robustness — DISCHARGED (task 019)** for the two
+  pre-registered items: explicit 429 backoff outside the SDK's own retries,
+  and recursive split-on-failure isolation (one poisoned unit now fails only
+  its own chunk, not every chunk sharing its API batch). Remaining open
+  residual: concurrent multi-batch behaviour at n ≫ batch (review adjudication,
+  2026-07-06).
 - **Very-large-corpus grouping** — discovery currently reads all titles+abstracts in one
   call; the scale seam is discovery-sampling and/or embedding-based clustering over the
   landed chunk vectors (contract decision 4). Assignment already scales (batched,
@@ -493,10 +492,10 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   the first component to wobble when inputs got real):** a 206-doc corpus produced an
   `APITimeoutError` batch failure and an 85-doc corpus a double `InvalidDiscoveryOutput`
   rejection before a ~60-doc pass succeeded; retry caps and batch sizes are eval-slice
-  calibration targets. Compounding gap (015 review, the 013 corollary):
-  `_discover_themes` discards the validator's rejection detail — only `error_type`
-  reaches the logs, so the rejection *reason* is diagnosable solely from Langfuse traces;
-  persist/log `str(exc)` when this component is next touched.
+  calibration targets. Compounding gap — DISCHARGED (task 019): `str(exc)`,
+  truncated to 500 chars, is now carried in logs and failure records on both
+  the discovery and assignment paths (previously only `error_type` reached
+  the logs).
 - **Grouping-quality + adversarial-content evals** — theme quality is *not* asserted by
   the build (sanitized fixture corpora make it meaningless by construction); the eval seam
   owns: quality bars, adversarial/injection-shaped corpora beyond the shipped unit tests,
@@ -621,9 +620,10 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   cluster-approximated and properly post-extraction.
 - **Second `select` strategies** — Transferability dependency-scoping et al. (other
   capabilities' problem); the strategy registry validates exactly the two built-ins.
-- **Suite-wide socket deny** (010 security-lane note) — per-test socket-deny helpers now
-  exist three times (008/009/010 patterns); `pytest-socket` (deny by default, allowlist
-  the DB host) is the structural defense-in-depth upgrade.
+- **Suite-wide socket deny — DISCHARGED (task 019).** `pytest-socket` 0.8.0
+  deny-by-default with a loopback allowlist in `pyproject.toml` `addopts`;
+  per-test deny patterns retired. The 016 worker-process guard is deliberately
+  kept alongside it — `pytest-socket` is in-process only.
 
 ## Extract / findings layer (task 011 seams)
 
@@ -642,13 +642,10 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   the `causality_by_design` vocabulary instead was considered and disliked: causal
   identification and evidence basis are different dimensions (a model calibrated on
   RCTs is still modelled).
-- **Finding-vetter per-doc calls run sequentially (018 review stack, efficiency lane;
-  component renamed from "junk judge" at 018 step 9, owner call)** —
-  `_apply_finding_vetter` loops one live mini call per extracted doc right after
-  `_run_windows`' 4-wide `ThreadPoolExecutor` fan-out of the same kind of call.
-  Bounded today (~10–25 docs, mini-tier, seconds each); parallelize with the existing
-  executor pattern (plus a thread-safe usage accumulation story) if D-phase timing
-  shows extract wall-clock matters.
+- **Finding-vetter per-doc calls run sequentially — DISCHARGED (task 019).**
+  Parallelized on the extract executor width with context propagation; workers
+  judge, the parent applies in input order; usage is accumulated in the
+  submitting thread.
 
 - **The extraction service + evidence dataset snapshots** — profile resolution against
   existing records, per-source task objects, capability commits declaring extraction
@@ -856,17 +853,17 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   compile target below that nothing authors yet. Parameter authoring on built machinery,
   zero re-plumbing; pairs with the `deepening_selection` steer point the same way select
   pairs with extract.
-- **Selection prior at standard depth + `SELECTION_PRIOR_BOOST` calibration (owner
-  questions, 2026-07-11)** — (1) select currently runs deep-only (018 regrade), so
-  standard-depth synthesis retrieval gets no selection prior; if the prior earns its
-  keep, select-at-standard (without extract) is a legitimate re-composition — weigh
-  against select's cost and the honest question of what selection means without the
-  findings layer. (2) The prior itself is a flat 2.0× multiplicative boost on the fused
-  retrieval score — could over-suppress an unselected-but-highly-relevant chunk for a
-  specific section. Mitigations already in place: it is a soft prior never a filter,
-  unselected docs stay in both retrieval legs, and citations record
-  `origin: selected|unselected_screened` so the effect is measurable. Eval-slice
-  measurement: citation quality/rate by origin as a function of the boost value.
+- **Selection prior at standard depth — DISCHARGED (task 019, owner
+  amendment).** Select now runs at standard (plan-pinned budget 15); synthesise
+  references it via `deepest_successful_reference`; prior + origin accounting
+  apply by construction. Still open: the `SELECTION_PRIOR_BOOST` calibration
+  question — the prior itself is a flat 2.0× multiplicative boost on the fused
+  retrieval score, which could over-suppress an unselected-but-highly-relevant
+  chunk for a specific section. Mitigations already in place: it is a soft
+  prior never a filter, unselected docs stay in both retrieval legs, and
+  citations record `origin: selected|unselected_screened` so the effect is
+  measurable. Eval-slice measurement: citation quality/rate by origin as a
+  function of the boost value.
 - **Writer read-tool scoping arguments (owner direction, 2026-07-11)** — `search_chunks`
   takes only a query today; `query_findings` already scopes (`group_id`, `finding_ids`,
   `effect_direction`) and `lookup` by `doc_id`/`tag`. Give `search_chunks` optional
@@ -1043,10 +1040,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Orchestrator (task 017 seams)
 
-- **`_REGISTRY_COMPONENT_BY_STEP` simplification candidate (owner, 2026-07-11)** —
-  ten of eleven rows are identity; only `screen_stage2 → screen` differs. Collapse
-  to a one-line function + keep the startup parity assert. Queued for the planned
-  ponytail audit / next slice touching `orchestration_plan.py`.
+- **`_REGISTRY_COMPONENT_BY_STEP` simplification candidate — DISCHARGED
+  (task 019).** Collapsed to the `registry_component_for()` one-liner; the
+  startup parity assert is kept.
 
 - **The LLM EB-expert capability agent** — the JIT directive-authoring expert
   sub-agent (system-prompted as an evidence-review expert; reads upstream
@@ -1085,13 +1081,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   arrives with that refactor or the component-progress protocol (contract
   decision 11, rev 2.6). **Scheduled: 018 Phase A telemetry sweep** (usage-return
   refactor + durable per-component wall-clock/counts).
-- **Component-name rename `screen`→`screen_abstract` / `screen_stage2`→`screen_full`**
-  (user, 2026-07-10) — the DB already stores stage as an integer (`ck_ssr_stage`), so
-  this touches only the plan-vocabulary strings (`DiscretionaryComponent`, runner step
-  lists, persisted `orchestration_plan` rows and event payloads that carry step names).
-  Cosmetic (component names never reach the UI — demo/RETRO §2), so it waits for the
-  next slice that touches the screen/plan vocabulary anyway; renaming persisted plan/event
-  vocabulary needs a data migration or a read-side alias, decided then.
+- **Component-name rename `screen`→`screen_abstract` / `screen_stage2`→`screen_full`
+  — DISCHARGED (task 019).** Renamed, with a one-time data migration
+  `b7f3d9a2c5e1` (owner decision 3); no read-side alias.
 - **Direct plan editing on the plan pane** (user, 2026-07-10) — editing the proposed
   plan directly (not only conversationally), with edits synced back to the planner
   conversation and a confirm-changes step before the run button arms. Web-app-slice
@@ -1135,6 +1127,22 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   deferred to user testing.
 - **Support-direction relations** (supports / caveats / contradicts) + user counter-evidence
   search.
+- **Multi-question-project reuse seams (workspace-cluster design input, owner
+  conversation, 2026-07-12)** — docs-only, no build. Project = a container for
+  MULTIPLE EB questions (see `project-multi-question-intent.md`); three
+  recorded reuse questions for when the workspace-cluster contract is drafted:
+  **project-grain classify label reuse** — an extraction-memo-style seam
+  (classify's per-(scope, source) result reused across questions in one
+  project rather than re-run per question), which must respect the
+  Unknown-resolution staged-result pattern (§ Evidence Base internals) rather
+  than bypass it; **appraisal reuse keyed on `rubric_version`** — per-scope
+  appraisal rows are a deliberate hedge for the plan-carried rubric seam
+  (§ Evidence Base internals: Steerable / plan-carried appraisal rubric), so
+  reuse must key on `rubric_version`, not assume one rubric per project; and
+  **pool-wide per-question screening cost growth** — screening re-runs
+  pool-wide per question (verified scope mechanics, 2026-07-12), so cost grows
+  with the number of questions per project, a sizing input for the
+  workspace-cluster contract.
 
 ## Execution / collaboration / ops
 
@@ -1181,10 +1189,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   **Data accrual starts in 018** (durable per-component wall-clock + in/out counts on every
   run); the model itself is eval-slice-or-later work over that accrued telemetry.
 - **Forecast/prewarm extraction** — modelled only if built (no inert forecast object otherwise).
-- **`structlog.contextvars.bind_contextvars` for ambient run/project correlation** —
-  `logging.py` wires `merge_contextvars` into the processor chain but nothing calls
-  `bind_contextvars`, so every log call must manually repeat `project_id`/`run_id` and most
-  don't (e.g. `harness.py`'s `component.started`/`grounding.failed`). Bind once per run/component
-  instead of threading kwargs through every call site. Also: exceptions are logged as `error=str(exc)`
-  with no type/traceback, and the processor chain has no `exc_info`/traceback renderer to make
-  `exc_info=True` useful even if added.
+- **`structlog.contextvars.bind_contextvars` for ambient run/project correlation —
+  DISCHARGED (task 019).** Bound once per component execution at `run_harness`
+  (`bound_contextvars` context manager), instead of threading `project_id`/`run_id`
+  kwargs through every call site. `exc_info` renderers (`dict_tracebacks` for JSON,
+  `format_exc_info` for console) were added to the processor chain so
+  `exc_info=True` now carries type/traceback.

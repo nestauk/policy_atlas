@@ -625,7 +625,7 @@ def _validate_directive_delta(
         _, raw_filters = parse_search_directive({"search": delta["search"]})
         validate_scope_filters(raw_filters, backend_names=_backend_names(backend_scope))
         return
-    if component in {"screen", "screen_stage2"}:
+    if component in {"screen_abstract", "screen_full"}:
         _require_keys(component, delta, {"screening"})
         screen_module._parse_screen_directive({"screening": delta["screening"]})
         return
@@ -665,7 +665,7 @@ def _apply_component_delta_to_payload(
         return
     if component == "acquire":
         _apply_acquire_delta(payload, delta["search"])
-    elif component in {"screen", "screen_stage2"}:
+    elif component in {"screen_abstract", "screen_full"}:
         _apply_screen_delta(payload, component=component, screening=delta["screening"])
     elif component == "select":
         _apply_select_delta(payload, delta["selection"])
@@ -724,7 +724,7 @@ def _apply_screen_delta(
     if not isinstance(screening, dict):
         raise SteeringAdjustmentError("screening directive must be an object")
     stage = screening.get("stage")
-    expected_stage = 2 if component == "screen_stage2" else 1
+    expected_stage = 2 if component == "screen_full" else 1
     if stage is not None and stage != expected_stage:
         raise SteeringAdjustmentError(
             f"{component!r} cannot map screening stage {stage!r} to the plan"
@@ -781,7 +781,7 @@ def _validate_delta_round_trip(
     amended_by_component = {step.component: step.directive_delta for step in amended_chain.steps}
     for component, requested_delta in directive_deltas.items():
         # compose() always injects sibling keys the caller need not supply
-        # (e.g. acquire's "depth", screen_stage2's "stage"), so the recompiled
+        # (e.g. acquire's "depth", screen_full's "stage"), so the recompiled
         # delta is checked to *contain* the request, not to equal it — a
         # requested value the plan fields cannot express still fails closed.
         if requested_delta and not _delta_contains(
