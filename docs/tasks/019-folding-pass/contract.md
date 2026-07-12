@@ -9,6 +9,8 @@ stays post-eval; nothing here retunes quality knobs.
 > **Status:** approved. Contract approved (before planning): 2026-07-12 · owner ·
 > Plan approved (before implementation): 2026-07-12 · owner (all five gate decisions
 > decided — see plan.md § Gate decisions and verification.md § Gate decisions) ·
+> Amended post-approval: item 13 select-at-standard (owner, 2026-07-12 — pulled
+> forward from Slice C so D1 measures the real composition) ·
 > ADR: none (owner accepted the CHECK migration as a constraint-vocabulary widening).
 
 ## Goal
@@ -179,6 +181,21 @@ prompt-bearing half is lead-only):
     function stays one line), and the **persisted** `orchestration_plan` rows and
     event payloads that carry step names. **Gate decision at plan approval:** data
     migration rewriting persisted vocabulary vs a read-side alias (see Constraints).
+13. **Select-at-standard regrade (owner amendment, 2026-07-12 — pulled forward from
+    Slice C so the D1 band measures the real upcoming composition):** select runs at
+    standard AND deep depth, decoupled from extraction; only extract + group stay
+    deep-only. Implementation: split the single `deep_chain` flag in
+    `ANALYSIS_DEPTH_TABLE` (orchestration_plan.py) into per-component gradation +
+    runner step lists; pin a standard-depth `selection_budget` value (plan-pinned
+    constant — *calibration* stays eval work); synthesise references the selection
+    run via the existing deepest-successful-reference rule, so the
+    `SELECTION_PRIOR_BOOST` retrieval prior and `origin: selected|unselected_screened`
+    citation accounting apply at standard by construction. The planner
+    depth-composition text updates accordingly — **prompt-bearing: lead-only, batched
+    into the same planner prompt change + replay set as item 3's capability line**.
+    Must land BEFORE the D1 rider (item 9) so the re-seeded standard×standard band
+    measures the with-select composition; the ~15–20 min target is assessed honestly
+    against the new composition (select adds ranking wall-clock at standard).
 
 **Out:** Slice B (extract schema bump — `effect_basis`, envelope fencing, study
 geography) · Slice C (multi-facet grouping, cost/surface work) · retrieval-boost

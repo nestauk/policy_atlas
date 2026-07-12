@@ -6,6 +6,8 @@
 > 3 rename = one-time data migration · 4 pytest-socket approved · 5 Overton
 > post-filter mechanism approved (fan-out + pure asymmetry rejected;
 > `is_global_south` dropped as owner de-scope).
+> **Amended post-approval (owner, 2026-07-12): contract item 13 select-at-standard
+> joins Phase D** — must precede Phase E so D1 measures the with-select composition.
 > Contract: [contract.md](contract.md) (approved 2026-07-12). Rubric: [rubric.md](rubric.md).
 > Executor marks default to subagents (orchestrator-delegation convention); lead marks
 > carry justification inline.
@@ -79,9 +81,15 @@ test-pinned; one suite runner at a time — per-lane test DBs stay deferred)*
   (one migration file if decision 2 below lands as an enum widening — both ride it).
 - Item 12 screen-stage rename + 10b registry-map collapse together (same vocabulary
   surface), per the decision-3 handling.
+- Item 13 select-at-standard: `ANALYSIS_DEPTH_TABLE` `deep_chain` flag split into
+  per-component gradation + runner step lists + standard `selection_budget` pin —
+  **fast-worker** (behaviour tests pinned: standard composes select, never
+  extract/group); planner depth-composition text — **lead**, batched into the
+  Phase-B planner prompt change + replay set.
 - Gate: full `make verify` at Phase D exit (migrations present).
 
 **Phase E — D1 rider** — **lead + owner** *(owner-present session; live env)*
+- Runs AFTER item 13 lands — the band must measure the with-select composition.
 - ONE composed standard run → `TIME_BANDS` standard×standard re-seed (trace id
   recorded) · band-target verdict (~15–20 min or record honestly) · multi-read `$`
   adjudication on the run's billing; revert (if called) is a lead-only prompt change
@@ -151,4 +159,6 @@ exactly ONE composed standard run. NO other e2e runs.
 ## Dependencies
 
 10a → before B. 4 → before 11. Gates 1/2 → Phase D migration; gate 3 → item 12.
-D1 (Phase E) independent after A. C4/D2 live outside this slice (018 trailing).
+Item 13 → before Phase E (D1 measures the with-select composition); its planner
+text rides the Phase-B prompt change. D1 (Phase E) otherwise independent after A.
+C4/D2 live outside this slice (018 trailing).

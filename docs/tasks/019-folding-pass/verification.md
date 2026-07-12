@@ -102,3 +102,14 @@ Feeds plan § Gate decisions item 5.
    plan § 5); pure asymmetry REJECTED (screen does not enforce membership);
    `is_global_south` adoption DROPPED (owner de-scope: "developing" is a rare ask
    for target users; probe evidence parked at the filter-vocabulary seam).
+
+## Post-approval amendment (owner, 2026-07-12)
+
+Contract item 13 **select-at-standard regrade** added after plan approval, pulled
+forward from Slice C phase 2: select runs at standard depth decoupled from
+extraction (extract + group stay deep-only). Owner rationale: the D1 rider re-seeds
+`TIME_BANDS` standard×standard, and measuring the without-select composition would
+mint a band known to be wrong as soon as the regrade lands — select at standard
+guides synthesis (retrieval prior + citation-origin accounting) and was already an
+owner call (2026-07-12 adjudication). Slice C retains the boost *calibration* and
+the cost-work band re-measure.
