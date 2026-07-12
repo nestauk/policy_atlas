@@ -57,6 +57,16 @@ discharge/narrowing.
 - V2 CFIR implementation-profile field definitions (recorded design input, 011:
   cost/staffing/complexity + the inner-setting rule) — input, not a template; no field
   enters ICF without passing the source-groundability line.
+- **Design research (2026-07-12, this contract's review — owner-commissioned):** the
+  transferability/appraisal frameworks whose source-extractable demands ground the
+  field set — TRANSFER (NIPH), PIET-T, Wang/Moss/Hiller, CICI, RE-AIM, PRECIS-2, GRADE
+  indirectness + Evidence-to-Decision, HM Treasury Green Book options appraisal, CFIR
+  2.0 coding practice, FRAME (adaptations), Carroll/TIDieR (fidelity) — and the V2
+  repo survey (implementation-profile extraction, three transferability surfaces, the
+  forecast CMO layer). Both summarised in this task's `design-research.md`. The design
+  line they converge on: extract the SOURCE side of every comparative judgment;
+  target-context values and transfer verdicts are analyst/capability work, never
+  extraction.
 - `docs/tasks/011-extract/contract.md` + `docs/tasks/020-extract-v2/contract.md` —
   pattern precedents (the schema's own contract; the fencing/field-rules idiom).
 - Code spine: `extraction_records.py` (the wire/stored + `render_field_docs` pattern to
@@ -76,10 +86,16 @@ discharge/narrowing.
    source.** Proposed field set (🛑 gate decision 1 reviews the vocabulary; ❓ items are
    named where open):
    - `context_type` (closed enum, NOT NULL): `mechanism` | `barrier` | `enabler` |
-     `implementation_condition` | `delivery_process`. The core closed vocabulary —
-     barriers and enablers are distinct values (how sources speak; polarity lives in the
-     type, no separate direction field). CHECK-backed, Literal-asserted at import (the
-     IOF drift-guard pattern).
+     `implementation_condition` | `delivery_process` | `adaptation` | `fidelity`. The
+     core closed vocabulary — barriers and enablers are distinct values (how sources
+     speak; polarity lives in the type, no separate direction field);
+     **`adaptation`** (a modification made to the intervention — what/planned-vs-
+     reactive/why carried in the claim prose; FRAME's existence proves modifications
+     are chronically under-documented, making them high-value when reported) and
+     **`fidelity`** (delivered-vs-planned observations — Carroll/TIDieR 11–12; the
+     difference between "the intervention failed" and "the implementation failed")
+     added at the 2026-07-12 research review (V2 forecast + frameworks evidence).
+     CHECK-backed, Literal-asserted at import (the IOF drift-guard pattern).
    - `claim` (NOT NULL Text): the finding as the source states it — source-named prose,
      one claim per record (ICF content is inherently propositional; unlike IOF there is
      no statistics block for the content to live in). The record stays one coherent
@@ -89,22 +105,43 @@ discharge/narrowing.
      mechanism may name the outcome it explains; barriers usually don't), `population`
      (nullable), **`setting`** (nullable — new to the stored vocabulary, the CFIR
      inner-setting rule made source-named: the delivery setting exactly as the source
-     names it, e.g. "primary care", "social housing retrofit"; never inferred).
+     names it, e.g. "primary care", "social housing retrofit"; never inferred. The
+     prompt carries V2's inner-setting rule near-verbatim: the setting where
+     recipients EXPERIENCE the intervention, not the institution that created or
+     mandated it — a parliament passing a school nutrition policy means "school").
+     The setting/population/geography references at finding grain are the **source
+     side of every comparative transferability judgment** (GRADE indirectness, Wang,
+     TRANSFER stage 4) — the target side and the comparison itself stay with the
+     future capability, never in extraction.
    - `study_geography` (nullable, source-named, finding grain — the 020 field's exact
      semantics; implementation context is where transferability lives, and consistency
      with IOF keeps the eval ground-truth instructions uniform).
    - **CFIR profile fields (❓ gate decision 2):** `resource_requirements` and
      `workforce_requirements` — nullable source-named Text, only what the source
-     reports (cost/funding; staffing/skills/training). V2's `complexity` does NOT carry
-     (a judgment scale, not a source-groundable report — it fails the base-field line).
+     reports (cost/funding; staffing/skills/training). Framework-backed at the
+     2026-07-12 research review: GRADE EtD's resources criterion and Green Book cost
+     benchmarks — the only economic input a primary document can supply (downstream
+     repricing reads setting/geography off the same record + the document's year).
+     V2's `complexity` does NOT carry (a judgment scale, not a source-groundable
+     report — it fails the base-field line; V2's High/Moderate/Low ordinals under
+     "infer from context if not explicit" are the recorded anti-pattern).
      Alternative: fold both into `claim` + `context_type=implementation_condition` and
-     ship a 5-field-lighter v1.
-   - **`claim_basis` (❓ gate decision 3):** `studied` | `author_assertion` | null —
-     whether the source *studied* the context claim (process evaluation, qualitative
-     arm) or asserts it in discussion/commentary. The effect_basis precedent: a
-     different dimension from the claim itself, structurally honest about the large
-     author-commentary share of implementation material. Null = indeterminate, never
-     guessed.
+     ship a lighter v1.
+   - **`level` (❓ gate decision 2, rides with the profile fields):** closed nullable
+     enum `system` | `organisation` | `provider` | `recipient` — the socio-ecological
+     level the claim operates at, as the source frames it. CFIR coding practice codes
+     every barrier/enabler with its level; EtD feasibility wants "barriers cluster at
+     organisation level" as a deterministic aggregation. CHECK-backed.
+   - **`claim_basis` (❓ gate decision 3):** `studied` | `author_assertion` |
+     `cited_theory` | null — whether the source *studied* the context claim (process
+     evaluation, qualitative arm), asserts it in discussion/commentary, or carries it
+     from cited literature/theoretical framing. Three-way per V2's forecast
+     `EvidenceBasis` (`empirical | author_hypothesis | theory_background` — the one V2
+     extraction design worth pulling through) and realist practice (mechanisms are
+     usually stated-as-theory, not demonstrated; extraction records the stated basis,
+     never forces CMO completeness). The effect_basis precedent: a different dimension
+     from the claim itself, structurally honest about the large author-commentary
+     share of implementation material. Null = indeterminate, never guessed.
    - **Anchors + machinery (settled, IOF pattern):** ≥1 verbatim quote anchor (`qv_v1`
      reused unchanged), `field_coverage` per nullable field, `grounding` JSONB,
      `stratum_qualifiers` NOT carried (no ICF analogue of effect strata — declined, not
@@ -115,8 +152,8 @@ discharge/narrowing.
      rankings) are analysis enrichment, never base fields.
 2. **DB schema + migration (schema gate):** one new table
    `implementation_context_finding` hanging off `source_extraction_record` via the same
-   composite FK as IOF; CHECKs on `context_type` (+ `claim_basis` if adopted); one
-   up/down migration. **`source_extraction_record` and `extraction_result` are reused
+   composite FK as IOF; CHECKs on `context_type` (+ `claim_basis` and `level` if
+   adopted); one up/down migration. **`source_extraction_record` and `extraction_result` are reused
    unchanged** — ICF rows key on their own fingerprint; no IOF table or column changes
    of any kind (test-pinned).
 3. **Extraction profile + fingerprint domain:** `implementation_context_records.py`
@@ -143,9 +180,11 @@ discharge/narrowing.
    envelope fenced as an id-keyed JSON data object from day one (the 020 pattern — no
    inline title/abstract, structural test); field reference generated from the wire
    models; few-shot example with import-time pre-flight anchor validation; guidance
-   carrying the recommendation/finding line, the studied/author_assertion line (if
-   `claim_basis` adopted), and source-named-never-canonicalised discipline for all
-   reference fields.
+   carrying the recommendation/finding line, the claim_basis lines (if adopted), the
+   inner-setting rule (item 1), source-named-never-canonicalised discipline for all
+   reference fields, and an explicit **never-infer / never-grade line** (the V2
+   lesson: no "infer from context if not explicit", no High/Moderate/Low judgment
+   ordinals, no transferability verdicts — reported-or-null, always anchored).
 6. **Field rules `icf_rules_v1`** (`quote_verify.py`): null-like coercion of the
    free-text fields, full `field_coverage` mapping per nullable field (valid ·
    `not_extracted` · `unclear` — a null is never ambiguous within v1), grain gate,
@@ -221,7 +260,16 @@ discharge/narrowing.
     baselines** (no existing record shape or ground truth changes; a new kind is a new
     eval arm, the with/without-ICF axis pattern repeated), so these land with Baseline
     post-eval, no pre-eval promotion pressure. Schema design stays with the committing
-    capability's contract (the IOF precedent).
+    capability's contract (the IOF precedent). Research-review additions (owner,
+    2026-07-12): **`intervention_specification`** joins the candidate list
+    (TIDieR-shaped delivery facets — dose/mode/provider/training; the most demanded
+    AND most under-reported cluster, 39% adequacy; first readers Transferability +
+    Options Assessment — a specification record, not a context claim, hence not ICF
+    bloat); and a **companion-document retrieval seam** for the future transferability
+    capability (process evaluations publish separately from their trial results 76% of
+    the time, median 15.5 months later — the capability's acquire step should hunt
+    companion process evaluations; ICF's nullable-outcome + reference-mediated design
+    already absorbs findings arriving in different documents than their effects).
 
 **Out:** **cross-schema facet grouping** — `group` stays IOF-only this slice; the design
 property (shared source-named vocabulary) now exists in both tables, but the multi-table
@@ -261,7 +309,9 @@ All code, migrations and spec changes public-safe. Replay evidence as summaries 
 Extraction + vetter on `gpt-5.4-mini` via the OpenAI route (the IOF floor; same
 step-up-is-recorded rule). Prompt-bearing changes: `extract_icf_v1` + `extract_icf_vetter_v1`
 (lead-authored). Replay set: at least one process-evaluation / qualitative-arm document
-rich in implementation material · one effects-only RCT (expect few/zero ICF records —
+rich in implementation material (ideally carrying reported adaptations and a
+fidelity/dose observation, exercising the two new vocabulary values) · one effects-only
+RCT (expect few/zero ICF records —
 honest absence, not manufactured findings) · one document whose implementation content
 is author-recommendation-shaped (the vetter line) · one review pooling implementation
 findings across settings (setting/geography at finding grain) · one hostile-envelope
@@ -345,14 +395,19 @@ facet grouping or eval territory.
 
 ## Decisions for the owner at this gate
 
-1. **`context_type` vocabulary** — the five proposed values (mechanism · barrier ·
-   enabler · implementation_condition · delivery_process). This is the schema's load-bearing
-   closed vocabulary; ground truth and evals will be authored against it.
-2. **CFIR profile fields** — `resource_requirements` + `workforce_requirements` in v1
-   (recommended: in — they are the CFIR design input's surviving source-groundable
-   fields, and transferability/VfM are their eventual readers), or fold into `claim`
-   for a lighter v1. `complexity` dropped either way.
-3. **`claim_basis`** — studied vs author_assertion enum in v1 (recommended: in — the
+1. **`context_type` vocabulary** — the seven proposed values (mechanism · barrier ·
+   enabler · implementation_condition · delivery_process · adaptation · fidelity;
+   the last two added at the research review — FRAME and Carroll/TIDieR make them
+   first-class, and folding them into delivery_process would lose the queryability
+   the future consumers want). This is the schema's load-bearing closed vocabulary;
+   ground truth and evals will be authored against it.
+2. **CFIR profile fields + level** — `resource_requirements` + `workforce_requirements`
+   in v1 (recommended: in — framework-backed: EtD resources, Green Book benchmarks;
+   transferability/VfM are their eventual readers), plus the `level` enum
+   (system·organisation·provider·recipient — CFIR coding practice; recommended: in);
+   or fold the texts into `claim` for a lighter v1. `complexity` dropped either way.
+3. **`claim_basis`** — three-way studied · author_assertion · cited_theory (· null),
+   per V2's forecast EvidenceBasis and realist practice (recommended: in — the
    effect_basis precedent; implementation material is where author commentary
    dominates, and the eval slice will want the axis).
 4. **Composition shape** — second profile inside the extract component, plan-visible
