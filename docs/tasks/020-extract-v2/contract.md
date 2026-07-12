@@ -6,7 +6,9 @@ extraction-schema bump. All pending extraction wire/row/prompt-surface changes l
 truth written against the v1 record shape would need re-authoring, and every fingerprint
 change re-extracts the corpus fresh (one bump = one memo invalidation, not three).
 
-> **Status:** drafted. Contract approved (before planning): _date · owner_ ·
+> **Status:** approved. Contract approved (before planning): 2026-07-12 · owner
+> (with contract-review amendments: three riders folded in; study_geography settled at
+> finding grain; window ceiling declined; ICF promoted to slice 021) ·
 > Plan approved (before implementation): _date · owner_ · ADR: expected (effect-basis
 > dimension decision — see step 4).
 
