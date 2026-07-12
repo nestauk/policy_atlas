@@ -13,6 +13,7 @@ from sqlalchemy.engine import Connection, Engine
 import policy_atlas.runner as runner_module
 from policy_atlas import events, harness
 from policy_atlas.characterise import CharacteriseFailure
+from policy_atlas.extract import KNOWN_PROFILE_IDS
 from policy_atlas.fixtures import get_source
 from policy_atlas.ingest import ingest_upload
 from policy_atlas.orchestration_plan import OrchestrationPlan, compose
@@ -21,6 +22,7 @@ from policy_atlas.schema import (
     chunk,
     event_log,
     evidence_scope,
+    extraction_result,
     project,
     runs,
     source_snapshot,
@@ -29,6 +31,7 @@ from policy_atlas.screen import ScreenContext, screen_sources
 from tests.helpers import delete_project_data, now
 
 FULL_COMPONENTS = ["screen_full", "characterise", "select", "extract", "group"]
+IOF_PROFILE_ID, ICF_PROFILE_ID = KNOWN_PROFILE_IDS
 
 
 class RecordingIO:
@@ -348,8 +351,24 @@ def test_full_stub_chain_commits_each_step_and_checks_in(engine: Engine) -> None
                 select(runs.c.run_id, runs.c.status).where(runs.c.project_id == project_id)
             ).fetchall()
             log_entries = events.read(conn, project_id)
+            extraction_rollup = conn.execute(
+                select(extraction_result.c.counts, extraction_result.c.extraction_provenance)
+                .where(extraction_result.c.project_id == project_id)
+                .where(
+                    extraction_result.c.run_id
+                    == next(step.run_id for step in outcome.steps if step.component == "extract")
+                )
+            ).one()
         assert len(run_rows) == len(expected_components)
         assert {row.status for row in run_rows} == {"succeeded"}
+        assert set(extraction_rollup.counts["profiles"]) == {
+            IOF_PROFILE_ID,
+            ICF_PROFILE_ID,
+        }
+        assert set(extraction_rollup.extraction_provenance["profiles"]) == {
+            IOF_PROFILE_ID,
+            ICF_PROFILE_ID,
+        }
 
         event_types_by_run: dict[uuid.UUID, list[str]] = {}
         for entry in log_entries:
@@ -1054,6 +1073,7 @@ def test_directive_application_replaces_only_top_level_delta_keys(
             "criteria": ["Include empirical or policy-analysis sources"],
         }
         assert context["selection"] == {"budget": 25}
+        assert context["extraction"] == {"profiles": list(KNOWN_PROFILE_IDS)}
         assert context["grouping"] == {"facet": "population"}
     finally:
         _cleanup(engine, project_id)

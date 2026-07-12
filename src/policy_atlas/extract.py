@@ -1437,6 +1437,55 @@ def _selected_profiles(
     ]
 
 
+def _parse_extraction_directive(raw: Any) -> tuple[str, ...]:
+    """Parse the scope-context extraction directive into canonical profile ids.
+
+    Args:
+        raw: The ``context["extraction"]`` object, or ``None``.
+
+    Returns:
+        Requested profile ids in ``KNOWN_PROFILE_IDS`` order.
+
+    Raises:
+        ExtractError: If the directive shape is malformed, names an unknown or
+            duplicate profile id, is empty, or omits the required IOF profile.
+    """
+    if raw is None:
+        return (PROFILE_ID,)
+    if not isinstance(raw, dict):
+        raise ExtractError("extraction directive must be an object")
+    if not raw:
+        return (PROFILE_ID,)
+    if set(raw) != {"profiles"}:
+        raise ExtractError("extraction directive must contain exactly ['profiles']")
+
+    profiles_raw = raw["profiles"]
+    if not isinstance(profiles_raw, list):
+        raise ExtractError("extraction directive profiles must be a list")
+    if not profiles_raw:
+        raise ExtractError("extraction directive profiles must not be empty")
+
+    requested: set[str] = set()
+    for item in profiles_raw:
+        if not isinstance(item, str):
+            raise ExtractError("extraction directive profile id must be a string")
+        if item not in KNOWN_PROFILE_IDS:
+            raise ExtractError(
+                f"extraction directive profiles contains unknown profile id {item!r}"
+            )
+        if item in requested:
+            raise ExtractError(
+                f"extraction directive profiles contains duplicate profile id {item!r}"
+            )
+        requested.add(item)
+    if PROFILE_ID not in requested:
+        raise ExtractError(
+            f"extraction directive profiles must include {PROFILE_ID!r}; "
+            "ICF-only extraction is unsupported"
+        )
+    return tuple(profile_id for profile_id in KNOWN_PROFILE_IDS if profile_id in requested)
+
+
 def _clone_doc_for_profile(doc: _Doc) -> _Doc:
     """Clone shared document state into one profile-local outcome object."""
     return _Doc(

@@ -8,7 +8,8 @@ from typing import Any, Literal, cast
 
 import pytest
 
-from policy_atlas.orchestration_plan import OrchestrationPlan
+from policy_atlas.extract import KNOWN_PROFILE_IDS
+from policy_atlas.orchestration_plan import OrchestrationPlan, compose
 from policy_atlas.planner import (
     OpenAIPlannerBackend,
     PlannerBackend,
@@ -160,6 +161,30 @@ def test_planner_draft_with_select_at_standard_round_trips_into_orchestration_pl
     assert plan.components == ["characterise", "select"]
     assert "extract" not in plan.components
     assert "group" not in plan.components
+
+
+def test_planner_draft_extract_profiles_round_trips_into_orchestration_plan() -> None:
+    draft = PlanDraftWire(
+        title="Evidence review",
+        question="Do school meals improve attainment?",
+        backend_scope="both",
+        search_effort="standard",
+        analysis_depth="deep",
+        components=["characterise", "select", "extract"],
+        component_rationale={
+            "characterise": "Maps the corpus landscape before deeper analysis.",
+            "select": "Selects the strongest-fit documents for extraction.",
+            "extract": "Extracts structured effect findings from selected documents.",
+        },
+        extract_profiles=["iof"],
+        steering_mode="moderate",
+    )
+
+    plan = _plan_from_draft(draft)
+    extract_step = next(step for step in compose(plan).steps if step.component == "extract")
+
+    assert plan.extract_profiles == ["iof"]
+    assert extract_step.directive_delta == {"extraction": {"profiles": [KNOWN_PROFILE_IDS[0]]}}
 
 
 # --- Suggestion degrade ------------------------------------------------------

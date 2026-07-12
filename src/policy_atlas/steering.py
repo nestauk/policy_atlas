@@ -18,11 +18,13 @@ from pydantic import ValidationError
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
+from policy_atlas import extract as extract_module
 from policy_atlas import screen as screen_module
 from policy_atlas import select as select_module
 from policy_atlas.facet_values import parse_grouping_directive
 from policy_atlas.orchestration_plan import (
     ANALYSIS_DEPTH_TABLE,
+    EXTRACT_PROFILE_IDS,
     NAMED_PAIRINGS,
     TIME_BANDS,
     AnalysisDepth,
@@ -633,6 +635,13 @@ def _validate_directive_delta(
         _require_keys(component, delta, {"selection"})
         select_module._parse_directive(delta["selection"])
         return
+    if component == "extract":
+        _require_keys(component, delta, {"extraction"})
+        try:
+            extract_module._parse_extraction_directive(delta["extraction"])
+        except extract_module.ExtractError as exc:
+            raise SteeringAdjustmentError(str(exc)) from exc
+        return
     if component == "group":
         _require_keys(component, delta, {"grouping"})
         parse_grouping_directive({"grouping": delta["grouping"]})
@@ -669,6 +678,8 @@ def _apply_component_delta_to_payload(
         _apply_screen_delta(payload, component=component, screening=delta["screening"])
     elif component == "select":
         _apply_select_delta(payload, delta["selection"])
+    elif component == "extract":
+        _apply_extract_delta(payload, delta["extraction"])
     elif component == "group":
         facet, _ = parse_grouping_directive({"grouping": delta["grouping"]})
         payload["grouping_facet"] = facet
@@ -754,6 +765,15 @@ def _apply_select_delta(payload: dict[str, Any], selection: Any) -> None:
     raise SteeringAdjustmentError("selection budget does not map to a plan analysis_depth")
 
 
+def _apply_extract_delta(payload: dict[str, Any], extraction: Any) -> None:
+    try:
+        profiles = extract_module._parse_extraction_directive(extraction)
+    except extract_module.ExtractError as exc:
+        raise SteeringAdjustmentError(str(exc)) from exc
+    by_profile_id = {profile_id: profile for profile, profile_id in EXTRACT_PROFILE_IDS.items()}
+    payload["extract_profiles"] = [by_profile_id[profile_id] for profile_id in profiles]
+
+
 def _validate_completed_component_stability(
     *,
     current_chain: ComposedChain,
@@ -784,6 +804,25 @@ def _validate_delta_round_trip(
         # (e.g. acquire's "depth", screen_full's "stage"), so the recompiled
         # delta is checked to *contain* the request, not to equal it — a
         # requested value the plan fields cannot express still fails closed.
+        if component == "extract" and requested_delta:
+            try:
+                requested_profiles = extract_module._parse_extraction_directive(
+                    requested_delta.get("extraction")
+                )
+            except extract_module.ExtractError as exc:
+                raise SteeringAdjustmentError(str(exc)) from exc
+            actual = amended_by_component.get(component)
+            actual_extraction = actual.get("extraction") if isinstance(actual, dict) else None
+            actual_profiles = (
+                actual_extraction.get("profiles")
+                if isinstance(actual_extraction, dict)
+                else None
+            )
+            if tuple(actual_profiles or ()) == requested_profiles:
+                continue
+            raise SteeringAdjustmentError(
+                f"adjustment for {component!r} cannot round-trip through plan fields"
+            )
         if requested_delta and not _delta_contains(
             amended_by_component.get(component), requested_delta
         ):

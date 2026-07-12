@@ -28,7 +28,11 @@ from policy_atlas.characterise import CharacteriseContext, CharacteriseFailure, 
 from policy_atlas.classification_backend import ClassificationBackend, StubClassificationBackend
 from policy_atlas.classify import ClassifyContext, classify_sources
 from policy_atlas.embeddings import EmbeddingBackend, StubEmbeddingBackend
-from policy_atlas.extract import ExtractContext, extract_scope
+from policy_atlas.extract import (
+    ExtractContext,
+    _parse_extraction_directive,
+    extract_scope,
+)
 from policy_atlas.extraction_backend import (
     ExtractionBackend,
     StubExtractionBackend,
@@ -266,6 +270,46 @@ def _run_select(state: HarnessState) -> HarnessState:
     return _run_scope_component(state, context_cls, sources_fn)
 
 
+def _run_directed_extract_scope(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    run_id: uuid.UUID,
+    context: ExtractContext,
+    extraction_backend: ExtractionBackend,
+    finding_vetter_backend: FindingVetterBackend | None = None,
+    icf_extraction_backend: Any | None = None,
+    icf_finding_vetter_backend: ICFFindingVetterBackend | None = None,
+) -> dict[str, Any]:
+    """Run extract with profiles parsed from scope context.
+
+    Args:
+        conn: Open database connection.
+        project_id: Owning project id.
+        run_id: Run writing the extraction result.
+        context: Extract context carrying the merged scope directives.
+        extraction_backend: IOF extraction backend.
+        finding_vetter_backend: Optional IOF finding vetter.
+        icf_extraction_backend: Optional ICF extraction backend.
+        icf_finding_vetter_backend: Optional ICF finding vetter.
+
+    Returns:
+        The extraction component summary.
+    """
+    profiles = _parse_extraction_directive(context.context.get("extraction"))
+    return extract_scope(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        context=context,
+        extraction_backend=extraction_backend,
+        finding_vetter_backend=finding_vetter_backend,
+        icf_extraction_backend=icf_extraction_backend,
+        icf_finding_vetter_backend=icf_finding_vetter_backend,
+        profiles=profiles,
+    )
+
+
 def _run_extract(state: HarnessState) -> HarnessState:
     config = state["config"]
     assert config.selection_run_id is not None  # registry-enforced at compile
@@ -273,7 +317,7 @@ def _run_extract(state: HarnessState) -> HarnessState:
         ExtractContext, selection_run_id=config.selection_run_id
     )
     sources_fn = functools.partial(
-        extract_scope,
+        _run_directed_extract_scope,
         extraction_backend=state["extraction_backend"],
         finding_vetter_backend=state["finding_vetter_backend"],
         icf_extraction_backend=state["icf_extraction_backend"],

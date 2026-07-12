@@ -20,6 +20,7 @@ from policy_atlas.country_filters import (
     validate_iso_alpha2,
     validate_overton_display_name,
 )
+from policy_atlas.extract import KNOWN_PROFILE_IDS
 from policy_atlas.plan import COMPONENT_REGISTRY
 from policy_atlas.schema import DIRECTIVE_STRING_MAX
 from policy_atlas.screen import CRITERIA_LIST_MAX, _compose_screen_intent
@@ -28,6 +29,7 @@ from policy_atlas.screen_prompt import SCREEN_INTENT_MAX
 BackendScope = Literal["academic_only", "grey_lit_only", "both"]
 SearchEffort = Literal["rapid", "standard", "deep"]
 AnalysisDepth = Literal["landscape", "standard", "deep"]
+ExtractProfile = Literal["iof", "icf"]
 DiscretionaryComponent = Literal[
     "characterise",
     "screen_full",
@@ -73,6 +75,14 @@ SEARCH_EFFORT_DIRECTIVES: dict[SearchEffort, dict[str, SearchEffort]] = {
     "deep": {"depth": "deep"},
 }
 
+EXTRACT_PROFILE_IDS: dict[ExtractProfile, str] = {
+    "iof": "eb_iof_base_v1",
+    "icf": "eb_icf_base_v1",
+}
+
+if tuple(EXTRACT_PROFILE_IDS.values()) != KNOWN_PROFILE_IDS:
+    raise AssertionError("EXTRACT_PROFILE_IDS values must match extract.KNOWN_PROFILE_IDS")
+
 
 class AnalysisDepthDirective(TypedDict):
     """Depth-row flags compiled by orchestration, not by component code."""
@@ -82,6 +92,7 @@ class AnalysisDepthDirective(TypedDict):
     select: bool
     findings_chain: bool
     selection_budget: int | None
+    extract_profiles: tuple[ExtractProfile, ...] | None
 
 
 ANALYSIS_DEPTH_TABLE: dict[AnalysisDepth, AnalysisDepthDirective] = {
@@ -91,6 +102,7 @@ ANALYSIS_DEPTH_TABLE: dict[AnalysisDepth, AnalysisDepthDirective] = {
         "select": False,
         "findings_chain": False,
         "selection_budget": None,
+        "extract_profiles": None,
     },
     "standard": {
         # 019 select-at-standard regrade: select now runs at standard too, so
@@ -105,6 +117,7 @@ ANALYSIS_DEPTH_TABLE: dict[AnalysisDepth, AnalysisDepthDirective] = {
         # Plan-pinned standard selection budget; calibration is eval-slice
         # work (pre-eval-slice-plan.md), not decided here.
         "selection_budget": 15,
+        "extract_profiles": None,
     },
     "deep": {
         "screen_full": True,
@@ -112,6 +125,7 @@ ANALYSIS_DEPTH_TABLE: dict[AnalysisDepth, AnalysisDepthDirective] = {
         "select": True,
         "findings_chain": True,
         "selection_budget": 25,
+        "extract_profiles": ("iof", "icf"),
     },
 }
 
@@ -537,6 +551,8 @@ class OrchestrationPlan(BaseModel):
         component_rationale: Visible intent-fit rationale keyed by discretionary
             component.
         grouping_facet: Optional grouping facet, valid only when ``group`` runs.
+        extract_profiles: Optional finding profile short names, valid only
+            when ``extract`` runs. ``None`` compiles from depth defaults.
         steering_mode: Steering mode for the later runner.
         steer_point_defaults: Pre-declared steering defaults.
         expected_artefact_shape: Deterministic forecast derived from components.
@@ -557,6 +573,7 @@ class OrchestrationPlan(BaseModel):
     components: list[DiscretionaryComponent] = Field(default_factory=list)
     component_rationale: dict[str, str] = Field(default_factory=dict)
     grouping_facet: GroupingFacet | None = None
+    extract_profiles: list[ExtractProfile] | None = None
     steering_mode: SteeringMode
     steer_point_defaults: list[SteerPointDefault] = Field(default_factory=list)
     expected_artefact_shape: str = ""
@@ -634,6 +651,29 @@ class OrchestrationPlan(BaseModel):
             raise ValueError("components must not contain duplicates")
         return values
 
+    @field_validator("extract_profiles")
+    @classmethod
+    def validate_extract_profiles(
+        cls,
+        values: list[ExtractProfile] | None,
+    ) -> list[ExtractProfile] | None:
+        """Validate optional extraction profile composition.
+
+        Args:
+            values: Candidate short profile names, or ``None``.
+
+        Returns:
+            The validated profile list, or ``None``.
+
+        Raises:
+            ValueError: If a profile appears more than once.
+        """
+        if values is None:
+            return None
+        if len(set(values)) != len(values):
+            raise ValueError("extract_profiles must not contain duplicates")
+        return values
+
     @field_validator("component_rationale")
     @classmethod
     def validate_component_rationale(cls, value: dict[str, str]) -> dict[str, str]:
@@ -683,6 +723,14 @@ class OrchestrationPlan(BaseModel):
             raise ValueError("group requires extract in components")
         if self.grouping_facet is not None and "group" not in component_set:
             raise ValueError("grouping_facet requires group in components")
+        if self.extract_profiles is not None:
+            if "extract" not in component_set:
+                raise ValueError("extract_profiles requires extract in components")
+            if "iof" not in self.extract_profiles:
+                raise ValueError(
+                    "extract_profiles must include 'iof'; ICF-only extraction "
+                    "is unsupported in this slice"
+                )
 
         expected_shape = _derive_expected_artefact_shape(component_set)
         if self.expected_artefact_shape and self.expected_artefact_shape != expected_shape:
@@ -797,6 +845,22 @@ def _directive_delta(component: str, plan: OrchestrationPlan) -> dict[str, Any]:
         if budget is None:
             raise ValueError("select cannot compile without a selection budget")
         return {"selection": {"budget": budget}}
+    if component == "extract":
+        profiles = plan.extract_profiles
+        if profiles is None:
+            profiles = list(ANALYSIS_DEPTH_TABLE[plan.analysis_depth]["extract_profiles"] or ())
+        if not profiles:
+            raise ValueError("extract cannot compile without extraction profiles")
+        requested = set(profiles)
+        return {
+            "extraction": {
+                "profiles": [
+                    profile_id
+                    for profile, profile_id in EXTRACT_PROFILE_IDS.items()
+                    if profile in requested
+                ]
+            }
+        }
     if component == "group" and plan.grouping_facet is not None:
         return {"grouping": {"facet": plan.grouping_facet}}
     return {}

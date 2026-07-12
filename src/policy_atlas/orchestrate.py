@@ -439,6 +439,7 @@ def _render_draft(draft: PlanDraftWire) -> str:
         ("search_effort", draft.search_effort),
         ("analysis_depth", draft.analysis_depth),
         ("components", draft.components),
+        ("extract_profiles", draft.extract_profiles),
         ("steering_mode", draft.steering_mode),
     ):
         if value:
@@ -487,6 +488,7 @@ def _render_full_plan(plan: OrchestrationPlan) -> str:
         f"  analysis_depth: {plan.analysis_depth}",
         f"  components: {plan.components}",
         f"  grouping_facet: {plan.grouping_facet}",
+        f"  extract_profiles: {plan.extract_profiles}",
         f"  steering_mode: {plan.steering_mode}",
         f"  expected_artefact_shape: {plan.expected_artefact_shape}",
         f"  time_band: {plan.time_band}",
