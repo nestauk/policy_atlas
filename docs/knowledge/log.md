@@ -1,5 +1,16 @@
 # Knowledge update log
 
+## 2026-07-12 (task 019 step 8)
+* **Creation**: Added [executor-fanout-context-and-usage](executor-fanout-context-and-usage.md) — copy_context at submit carries Langfuse span context + structlog contextvars in one mechanism; workers return usage, the submitting thread accumulates (019 items 4/7a/11, D1-trace-verified).
+* **Creation**: Added [prompt-honesty-rules-route-around-new-capability](prompt-honesty-rules-route-around-new-capability.md) — an earlier honesty rule silently defeats a new capability line until the prompt states which reading selects which surface; only replay catches it (019 planner replay; first entry in a new Prompting index section).
+* **Creation**: Added [coverage-base-project-pool-wide](coverage-base-project-pool-wide.md) — pool-wide per-question screening; scope-isolation tests assert `unscreened`, not absence (019 deviation 3).
+* **Creation**: Added [pytest-socket-process-local](pytest-socket-process-local.md) — process-local deny, multiprocessing guards stay; `SocketConnectBlockedError` is not a `SocketBlockedError` subclass (019 A3).
+* **Creation**: Added [scope-surface-compiles-within-backend-scope](scope-surface-compiles-within-backend-scope.md) — plan-time validation and compile must agree on backend scope or approved plans die at acquire (019 review stack, adversarial MAJOR + fix).
+* **Creation**: Added [capability-gated-dispatch-fails-closed](capability-gated-dispatch-fails-closed.md) — hasattr dispatch never selects between enforcing and not enforcing (019 review stack, convergent Claude+Codex finding + fix).
+* **Update**: [overton-filter-values-display-names](overton-filter-values-display-names.md) — no enumeration endpoint (allowlists only by per-candidate probing; 265 pp=1 calls); Overton short-name idiom + "IGO"; `source_country` single-valued with silent multi-value failure (019 plan probes + build).
+* **Update**: stale step names in [structured-output-prompts-pin-key-vocabulary](structured-output-prompts-pin-key-vocabulary.md) and [compile-target-parity-covers-composed-wholes](compile-target-parity-covers-composed-wholes.md) — `screen_stage2` → `screen_full` (019 rename, living-doc sweep).
+* **Declined**: wall-clock-breach plumbing shape (task-specific; carried by the acquire code, its tests, and 019 verification.md); dev-DB migration smoke + trace-attribution-by-project_id + codex-sandbox DB-test lessons → process lessons, recorded as two 2026-07-12 entries in `docs/agentic-ops/failure-log.md` (the codex-sandbox one also closes 018's dangling "recorded in failure-log" pointer — the entry never existed; reconcile miss now fixed).
+
 ## 2026-07-11 (task 018 step 8)
 * **Creation**: Added [span-anchoring-text-not-offsets](span-anchoring-text-not-offsets.md) — model-facing wires carry verbatim text, never offsets; splice repair rebuilds offsets one-pass by construction; persist-time round-trip assertion (018 B3, B smoke re-proof).
 * **Creation**: Added [judge-envelope-defines-verdicts](judge-envelope-defines-verdicts.md) — tier distributions incomparable across envelope versions; verification-grade A/B protocol; inspect flags before recalibrating an asymmetric judge rule (018 B3/B4).

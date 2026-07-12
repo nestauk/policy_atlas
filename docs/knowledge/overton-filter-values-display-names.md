@@ -39,6 +39,16 @@ given) and misdiagnosable as thin coverage.
 - Any new search-backend filter inherits this: key verification (schema/400 behaviour)
   and value verification (does a *correct-looking but wrong* value fail loud or silent?)
   are separate checks.
+- **There is no enumeration endpoint** (019 probed every documents.php param shape plus
+  the API docs): display-name allowlists can only be built by per-candidate probing
+  (019's `publisher_country` allowlist took 265 rate-limited `pp=1` calls). Overton's
+  idiom is common short names ("UK", "USA", "South Korea") plus the non-country value
+  "IGO"; 63 valid-ISO countries have no mapping and fail closed. Probe method + data
+  are provenance-stamped in `src/policy_atlas/country_filters.py`.
+- `source_country` is **single-valued**: every multi-value idiom (comma, pipe,
+  repeated param, array param) fails silently — comma/pipe/array return zero, repeated
+  params last-value-win (019 plan-time probes). Multi-country filtering on Overton is
+  post-filter territory, never a wire param.
 
 # Citations
 

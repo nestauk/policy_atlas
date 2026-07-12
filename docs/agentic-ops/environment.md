@@ -1,7 +1,7 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–018 — backend only; setup unchanged since 002; task 007 adds two dev-time
+stands (tasks 001–019 — backend only; setup unchanged since 002; task 007 adds two dev-time
 fixture-recorder scripts needing `OVERTON_API_KEY`/optional OpenAlex vars in `.env` — see
 `.env.example`; task 008 adds parsing deps (pymupdf/pymupdf4llm/trafilatura — arrive via
 `make setup`/`uv sync`) and a keyless dev-time recorder using system `curl`; task 009 adds
@@ -37,6 +37,12 @@ chain); task 018 adds **no new deps or env vars** — model constants move to th
 gpt-5.4/5.5 family, one schema migration rides it (`64ff33416d1a`, effect-direction
 rename — remember the dev-DB `alembic upgrade head` gotcha below), and chain runs are
 now Langfuse-session-correlated with durable per-component usage/timing events;
+task 019 adds one **dev-only** dep, `pytest-socket` (via `uv sync`) — the per-test deny
+patterns became a suite-wide socket deny with a loopback allowlist — plus two schema
+migrations riding the same slice (`921d3a781f3f` stop-grain/retraction widen,
+`b7f3d9a2c5e1` screen-step rename: same dev-DB `alembic upgrade head` gotcha below);
+no new env vars — a live standard×standard composed run ≈ 13.4 min wall (measured at
+D1, see 019 verification.md);
 `make verify` and the test suite need none of them — stub backends + socket-deny keep
 the suite egress-free. One suite runner at a time: concurrent `make verify` runs
 contend on the shared test DB and flake (018 note).

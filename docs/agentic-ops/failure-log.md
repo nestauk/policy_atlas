@@ -4,6 +4,50 @@ Recurring issues encountered during the task cycle. Each entry: what happened, r
 
 ---
 
+## 2026-07-12 — Killed live-run attempt survived its console: an orphaned driver ran a full deep chain to artefact, then got cited as the real run's evidence
+
+**What happened:** During 019's D1 rider, attempt 2's driver lacked a `__main__` spawn
+guard and had approved a planner-proposed standard×deep plan (two known bugs, both
+recorded). The operator saw the ingest crash, fixed the driver, and ran attempt 3 (the
+real D1 run). But attempt 2's process tree survived its console view: project
+`319323bb` ran the full deep chain (extract + group + a 1.53 M-prompt-token synthesise)
+to a minted artefact, **concurrently** with the D1 run. The build then wrote D1's item-4
+trace evidence citing attempt 2's synthesise trace (`5c6a340e…`) — adjacent in the
+Langfuse trace list, right project missing — and recorded "no additional e2e runs were
+spent". The 019 step-7 trace lane caught both by checking every cited trace's
+`project_id` metadata against the run's project and reconstructing attempt 2 from the
+DB event log.
+
+**Root cause:** (1) Run evidence was located by trace-list adjacency (name + time), not
+by `project_id` metadata — two runs finishing 14 s apart made the wrong one citable.
+(2) The incident narrative was written from the console's point of view; nobody asked
+the DB what actually happened to the killed attempt.
+
+**Rule:** cite a trace only after checking its `project_id` metadata matches the run
+under evidence. After any live-run incident (crash, kill, restart), reconstruct the
+incident from the DB (`event_log` by project) — a dead console is not evidence the run
+died. Corollary kept from attempt 1: `alembic upgrade head` on the dev DB is a
+pre-live-run checklist step (the un-migrated CHECK failed the first attempt honestly).
+
+## 2026-07-12 — Codex-sandbox DB-backed tests are untested code: both such tests in 019 carried real bugs (and 018's step-8 said this was already logged here — it wasn't)
+
+**What happened:** The codex sandbox has no Postgres and no localhost sockets, so any
+DB-backed test a codex lane writes has never executed when it comes back. Both
+DB-backed vetter tests codex wrote in 019 Phase C carried real bugs (IOF rows carry no
+pss column; doc identity joins through `source_extraction_record`); the lead ran and
+fixed them before commit. Separately, 018's knowledge log declined this lesson as
+"recorded in docs/agentic-ops/failure-log.md" — no such entry existed; the 019 review
+stack's reconcile found the miss.
+
+**Root cause:** (1) Sandbox capability asymmetry: green-in-sandbox says nothing about
+DB-touching code paths. (2) A step-8 "recorded in X" decline was written without
+verifying X.
+
+**Rule:** the lead runs every codex-authored DB-backed test before its commit lands
+(treat them as unreviewed code, not passed tests). And a decline that claims "already
+recorded elsewhere" names the entry it points at — a pointer nobody can follow is a
+record nobody made.
+
 ## 2026-07-11 — Prompt capability text went stale against a code regrade: three taxonomy pins recorded compile-invalid plans
 
 **Task:** 018 (A3 regrade → C3 pins), caught by the review stack (Codex adversarial + trace lane + contract verifier, convergent).

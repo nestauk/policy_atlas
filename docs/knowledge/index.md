@@ -34,6 +34,11 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [Structured-output prompts pin exact key vocabulary and hard cross-field rules](structured-output-prompts-pin-key-vocabulary.md) - models invent compound dict keys and pair schema-uncross-constrainable fields; `extra="forbid"` is the net, the prompt is the fix, the fail-closed loop is the recovery surface (017 live check, both failures observed and re-run clean).
 * [The event log's run-id FK decides what can carry audit state](run-id-fk-shapes-audit-carriers.md) - no run, no event: plan lifecycle went table-first, skip reasons ride the outcome object + collation, steering substance rides the re-run's selection provenance — the constraint resurfaced three times in task 017.
 * [A runner above self-catching components must distinguish evented failure from escaped exception](two-phase-run-lifecycle-evented-vs-escaped.md) - an escaped exception means the transaction rolled back; committing run identity first (two-phase lifecycle) makes the fresh-transaction `component.failed` backstop's FK trivially valid (017, contract decision 8).
+* [Thread fan-outs submit through copy_context and accumulate usage on the submitting thread](executor-fanout-context-and-usage.md) - one mechanism carries the Langfuse span context AND structlog contextvars; `UsageAccumulator` is not thread-safe — workers return usage, the parent adds in input order (019 items 4/7a/11; nesting live-verified on the D1 traces).
+
+## Prompting
+
+* [An earlier prompt honesty rule can silently defeat a new capability line](prompt-honesty-rules-route-around-new-capability.md) - the planner routed group asks away from the new filter surface via correct study-vs-source reasoning until the prompt said which reading selects which surface; only replay rounds catch this class (019 planner replay, round 1→2).
 
 ## Testing rules
 
@@ -43,6 +48,7 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [Timing/politeness properties are asserted on an injected clock, not live logs](timing-asserts-injected-clock-logs-corroborate.md) - live log timestamps only corroborate; thread-scheduling jitter can put a sub-interval gap between two log lines even when the enforced spacing on the injected clock is correct (016 live check: one 0.845s/1.22s pair still summing to two 1.0s intervals).
 * [Migration-roundtrip tests pin explicit revision targets and never hold seed rows across DDL](alembic-roundtrip-explicit-revisions.md) - a relative `"-1"` target silently retargets when later migrations land; uncommitted seeds on one connection block another connection's FK-dependent DDL — a 14-minute silent hang, not an error (017 build).
 * [A deadline clock starting at Process.start() asserts "spawn + import < deadline"](process-start-deadlines-need-spawn-headroom.md) - under host load, child spawn plus package import alone can exceed a tight deadline, mislabelling a healthy worker as the timeout the test rules out; add spawn headroom or a start-signal handshake (017 build, 5s→20s).
+* [pytest-socket denies only the current process and raises SocketConnectBlockedError](pytest-socket-process-local.md) - multiprocessing-worker guards must stay under the suite-wide deny; the allow-hosts-mode exception is NOT a `SocketBlockedError` subclass (019 A3, gate 4).
 
 ## Invariants (verified)
 
@@ -67,6 +73,9 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [Compile-target parity is checked on the composed whole, with the real composer](compile-target-parity-covers-composed-wholes.md) - per-field caps let a valid plan compose past a downstream cap and silently truncate (criteria vanished while provenance claimed they applied); round-trips against canonicalising composers use containment, not byte equality; runtime-consumed names pin to a registry (017 review stack — three instances of one failure class in one slice).
 * [Span anchoring asks the model for verbatim text and binds offsets code-side](span-anchoring-text-not-offsets.md) - never put char offsets on a model-facing wire; exact-substring binding fail-closed, splice repair recomputes every offset by one-pass rebuild, `_write_section` re-asserts the round-trip at persist time (018 B3; B smoke: 132 units, 0 violations).
 * [Judge verdicts are a function of the envelope](judge-envelope-defines-verdicts.md) - tier distributions are not comparable across envelope versions (re-baseline on change, verification-grade A/B with flip inspection + unchanged sample + self-cert fixture); high first-contact flag volume is usually the writer, not the judge — inspect before recalibrating (018 B3/B4).
+* [The characterise coverage base is project-pool-wide by design](coverage-base-project-pool-wide.md) - pool-wide per-question screening: scope-isolation tests assert the other scope's docs as `unscreened`, never as absent (019 deviation 3, owner-verified).
+* [A scope surface that compiles per-backend must compile within the plan's backend scope](scope-surface-compiles-within-backend-scope.md) - `country_group` compiles both backend blocks; the acquire directive drops the out-of-scope one, or acquire-time validation kills an approved plan (019 review stack, adversarial MAJOR).
+* [Dispatch gated on a backend capability fails closed when the capability is missing](capability-gated-dispatch-fails-closed.md) - a hasattr check may select between implementations, never between enforcing and not enforcing; the silent fallback left no provenance trace (019 review stack, convergent Claude+Codex finding).
 
 ## Integration quirks (model / telemetry providers)
 
@@ -74,7 +83,7 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [Langfuse keys without a host silently export to the SaaS cloud](langfuse-host-must-be-explicit.md) - the SDK defaults to cloud.langfuse.com; with full-I/O traces that is a boundary violation, so `get_langfuse()` requires an explicit host and is loud on partial config.
 * [On reasoning models, max_completion_tokens covers reasoning + output](reasoning-model-output-cap.md) - a cap tuned for output alone truncates real answers on gpt-5-class models (LengthFinishReasonError, task 011 live run 1); keep the cap explicit and fingerprinted, size it for both.
 * [Postgres rejects NUL (U+0000) in TEXT/JSONB — scrub model output at the backend boundary](model-output-nul-scrub.md) - LLMs emit NUL-bearing strings; psycopg aborts at INSERT; strip once where records come off the wire (task 011 live run 2).
-* [Overton source_country takes display names and silently returns zero on anything else](overton-filter-values-display-names.md) - "UK"/"USA"/"Canada" work; ISO codes and "United Kingdom" return zero with no error; live-probe filter VALUES, not just keys, before a prompt promises them (018 B2 — closed 017's open item).
+* [Overton source_country takes display names and silently returns zero on anything else](overton-filter-values-display-names.md) - "UK"/"USA"/"Canada" work; ISO codes and "United Kingdom" return zero with no error; live-probe filter VALUES, not just keys, before a prompt promises them (018 B2 — closed 017's open item; 019: no enumeration endpoint exists — allowlists only by per-candidate probing — and `source_country` is single-valued with silent multi-value failure).
 
 ## Integration quirks (infra / tooling)
 
