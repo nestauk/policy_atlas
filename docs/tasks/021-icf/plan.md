@@ -1,7 +1,12 @@
 # Plan: 021-icf
 
-> **Status:** DRAFTED — plan-stage adversarial review pending, then 🛑 owner approval
-> (gate decisions § below).
+> **Status:** DRAFTED — plan-stage adversarial review **adjudicated 2026-07-12**
+> (codex session 019f57c6, 6 findings: 1 blocker · 4 major · 1 minor — ALL adopted:
+> drift-guard requiredness overrides · Phase E prompt surfaces split to lead
+> (tool-schema + pattern-payload descriptions, `synthesis_backend.py` added) ·
+> `tracing.py` rides the roll-up shape change · claim_basis/claim_level independence
+> clarified in the field text · dependencies corrected A→C, A→D). Awaiting 🛑 owner
+> approval (gate decisions § below).
 > Contract: [contract.md](contract.md) (approved 2026-07-12, adversarial review
 > adjudicated 8/8). Rubric: [rubric.md](rubric.md). Design provenance:
 > [design-research.md](design-research.md).
@@ -36,7 +41,10 @@
   brief** (lead-authored — they generate the prompt's field reference).
 - **Shared reference vocabulary defined once**: one column/field definition set
   (mixin or shared constants) imported by BOTH record modules + the cross-schema
-  drift-guard test (same names, same coercion, same null semantics).
+  drift-guard test — shared source-named MEANING and coercion, with **per-schema
+  requiredness overrides** pinned explicitly (IOF `outcome` required · ICF `outcome`
+  nullable; adversarial finding 1 — "same null semantics" was wrong: requiredness is
+  legitimately per-schema, semantics and coercion are not).
 - `extraction_records.py`: IOF `setting` wire+stored field (description below),
   `SCHEMA_VERSION` → `iof_v3`.
 - `quote_verify.py`: `icf_rules_v1` — null-like coercion of ICF free-text fields ·
@@ -63,6 +71,10 @@ semantic test-pinned)*
   → {fingerprint + version components}; per-profile counts/finding totals; per-doc
   per-profile statuses. "Not selected" (absent) vs "fired, zero findings" (present,
   0, `no_findings`) test-pinned.
+- **`tracing.py` rides the shape change** (adversarial finding 6): the Langfuse
+  extraction score/root-span outputs currently assume the flat
+  `summary["findings"]["total"]` / `summary["counts"]` shape — update to per-profile
+  summaries, tolerating old flat rows; tests cover both shapes.
 - Memo isolation tests: existing IOF memo hits under its (v3) fingerprint while ICF
   extracts fresh on the same document; ICF prompt-constant change re-extracts ICF
   only.
@@ -104,7 +116,13 @@ spec)*
 - Gate: `make verify-fast`.
 
 **Phase E — read surfaces: unified tool + envelope + validators + membership bridge**
-— **codex** *(multi-file, subtle semantics, every behaviour named in the contract)*
+— **codex** mechanics, **lead** prompt surfaces *(adversarial finding 2: the
+`query_findings` tool schema description and the pattern-payload schema description
+in `synthesis_backend.py` are model-facing prompt surfaces — lead-authored,
+version-bumped; codex owns the readers, SQL, validators and tests)*
+- `synthesis_backend.py` (adversarial finding 3): `PatternPayloadWire.computed_from`
+  gains `icf_context_type_count` (+ group-scoped variant); the `query_findings` tool
+  schema gains the kind-typed params/return — description text **lead-authored**.
 - `synthesis_tools.py`: `make_findings_reader` → two scoped setup queries (one per
   kind present in the referenced extraction), server-side filtering preserved;
   unified `query_findings` return `{iof_findings, icf_findings, ...}` kind-segregated;
@@ -193,11 +211,14 @@ Prompt text, byte-exact. ICF wire fields:
   fieldwork or data; 'pooled' if the source synthesises the claim across multiple
   included studies (e.g. 'the most cited barrier across included trials'); null if
   indeterminate."
-- `claim_basis`: "'studied' if the source empirically studied this claim (a process
-  evaluation, qualitative arm, or implementation data); 'author_assertion' if the
-  source's authors assert it in discussion or commentary without having studied it;
-  'cited_theory' if the source carries it from cited literature or theoretical
-  framing; null if indeterminate. Never guess."
+- `claim_basis`: "'studied' if the claim rests on empirical implementation data —
+  the source's own fieldwork (a process evaluation, qualitative arm, implementation
+  data) OR implementation data the source synthesises from its included studies;
+  'author_assertion' if the source's authors assert it in discussion or commentary
+  without empirical grounding; 'cited_theory' if the source carries it from cited
+  literature or theoretical framing; null if indeterminate. Never guess. (A review's
+  pooled empirical barrier is 'studied' + claim_level 'pooled' — the two fields are
+  independent.)"
 - `level`: "The level the claim operates at, as the source frames it: 'system'
   (policy, legal, funding environment), 'organisation' (the delivering organisation),
   'provider' (the staff delivering), 'recipient' (the people receiving), or null."
@@ -226,7 +247,9 @@ selection, never re-search; ~$10–20). NO composed full-chain e2e.
 
 ## Dependencies
 
-Decision 0 → Phase A. A → B (pipeline needs the tables/models) → C (prompts ride the
-parameterised pipeline's few-shot preflight) and B → D (compile needs the profile
-ids) and A+B → E (readers need columns + per-profile roll-up). C, D, E are mutually
-independent once B lands and can overlap. F closes last (live check exercises C+D+E).
+Decision 0 → Phase A. A → B (pipeline needs the tables/models). **A → C and A → D
+directly** (adversarial finding 5: the few-shot preflight is prompt-local against
+`quote_verify` helpers, and the profile ids live in the record modules — B is needed
+only for the integrated extraction-execution tests, which sit in B itself). A+B → E
+(readers need columns + the per-profile roll-up). C, D, E are mutually independent
+and can overlap once their inputs land. F closes last (live check exercises C+D+E).
