@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.engine import Connection
@@ -20,6 +20,8 @@ if TYPE_CHECKING:
     from policy_atlas.implementation_context_records import ICFRecordWire
 
 EVIDENCE_TYPE = "RCTs and Quasi-Experimental Studies"
+IOF_PROFILE_ID = "eb_iof_base_v1"
+ICF_PROFILE_ID = "eb_icf_base_v1"
 
 _UNSET: Any = object()
 
@@ -56,6 +58,56 @@ def make_icf_wire_record(**overrides: Any) -> "ICFRecordWire":
     }
     values.update(overrides)
     return ICFRecordWire.model_validate(values)
+
+
+def profile_counts(
+    summary: dict[str, Any], profile_id: str = IOF_PROFILE_ID
+) -> dict[str, Any]:
+    """Return a profile's count block from a Phase-B extraction summary."""
+    return cast("dict[str, Any]", summary["counts"]["profiles"][profile_id])
+
+
+def profile_findings(
+    summary: dict[str, Any], profile_id: str = IOF_PROFILE_ID
+) -> dict[str, int]:
+    """Return a profile's finding counters from a Phase-B extraction summary."""
+    return cast("dict[str, int]", profile_counts(summary, profile_id)["findings"])
+
+
+def profile_docs(
+    summary: dict[str, Any], profile_id: str = IOF_PROFILE_ID
+) -> list[dict[str, Any]]:
+    """Return old-style document outcome entries for a profile summary."""
+    return [
+        {
+            "pss_id": doc["pss_id"],
+            "basis": doc["basis"],
+            **doc["profiles"][profile_id],
+        }
+        for doc in summary["docs"]
+        if profile_id in doc["profiles"]
+    ]
+
+
+def profile_doc(
+    summary: dict[str, Any], index: int = 0, profile_id: str = IOF_PROFILE_ID
+) -> dict[str, Any]:
+    """Return one profile-projected document entry from a summary."""
+    return profile_docs(summary, profile_id)[index]
+
+
+def profile_provenance(
+    summary: dict[str, Any], profile_id: str = IOF_PROFILE_ID
+) -> dict[str, Any]:
+    """Return a profile's provenance block from a Phase-B extraction summary."""
+    return cast("dict[str, Any]", summary["provenance"]["profiles"][profile_id])
+
+
+def profile_vetted_out(
+    summary: dict[str, Any], profile_id: str = IOF_PROFILE_ID
+) -> dict[str, Any]:
+    """Return a profile's vetted-out accounting block from a summary."""
+    return cast("dict[str, Any]", summary["profiles"][profile_id]["vetted_out"])
 
 
 def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:

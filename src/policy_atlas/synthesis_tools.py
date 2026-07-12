@@ -29,6 +29,7 @@ from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.embeddings import EMBEDDING_PROFILE, UNIT_POLICY, validate_vector
+from policy_atlas.extraction_rollup import extraction_profile_docs
 from policy_atlas.schema import (
     EFFECT_DIRECTIONS,
     characterisation_result,
@@ -1255,7 +1256,8 @@ def _load_extraction_docs(
     docs = row.docs
     if not isinstance(docs, list):
         return []
-    return cast("list[dict[str, Any]]", docs)
+    mapped_docs = [cast("dict[str, Any]", doc) for doc in docs if isinstance(doc, dict)]
+    return extraction_profile_docs(mapped_docs)
 
 
 def _record_ids_from_docs(docs: Sequence[dict[str, Any]]) -> list[uuid.UUID]:

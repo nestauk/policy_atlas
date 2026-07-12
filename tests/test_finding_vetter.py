@@ -33,7 +33,17 @@ from policy_atlas.finding_vetter import (
 from policy_atlas.schema import intervention_outcome_finding
 from policy_atlas.usage import TokenUsage, UsageResult
 
-from .helpers import seed_project_and_run, seed_run, seed_scope
+from .helpers import (
+    profile_counts,
+    profile_doc,
+    profile_docs,
+    profile_findings,
+    profile_provenance,
+    profile_vetted_out,
+    seed_project_and_run,
+    seed_run,
+    seed_scope,
+)
 from .test_extract import _record, _run, _seed_full_text_doc, _seed_selection
 
 
@@ -394,18 +404,18 @@ def test_vetted_out_excluded_from_persistence_and_accounted(conn: Connection) ->
         extraction_backend=backend, finding_vetter_backend=judge,
     )
 
-    assert summary["docs"][0]["finding_count"] == 1
-    assert summary["docs"][0]["vetted_out"] == 1
-    assert summary["findings"]["total"] == 1
-    assert summary["vetted_out"]["total"] == 1
-    assert summary["vetted_out"]["by_class"] == {"deictic_naming": 1}
-    [record] = summary["vetted_out"]["records"]
+    assert profile_doc(summary)["finding_count"] == 1
+    assert profile_doc(summary)["vetted_out"] == 1
+    assert profile_findings(summary)["total"] == 1
+    assert profile_vetted_out(summary)["total"] == 1
+    assert profile_vetted_out(summary)["by_class"] == {"deictic_naming": 1}
+    [record] = profile_vetted_out(summary)["records"]
     assert record["intervention"] == "this Plan"
     assert record["outcome"] == "costs"
     assert record["flag_class"] == "deictic_naming"
     assert record["reason"] == "Names the document itself."
     assert "vetted_out_present" in summary["flags"]
-    assert summary["provenance"]["finding_vetter"] == {
+    assert profile_provenance(summary)["finding_vetter"] == {
         "prompt": FINDING_VETTER_PROMPT_VERSION,
         "model": FINDING_VETTER_MODEL,
         "reasoning_effort": FINDING_VETTER_REASONING_EFFORT,
@@ -486,14 +496,14 @@ def test_parallel_vetter_multi_doc_outcomes_and_usage(conn: Connection) -> None:
     )
 
     assert judge.max_active == 2
-    assert [doc["pss_id"] for doc in summary["docs"]] == [
+    assert [doc["pss_id"] for doc in profile_docs(summary)] == [
         str(coaching_pss),
         str(plan_pss),
     ]
-    assert summary["docs"][0]["status"] == "extracted"
-    assert summary["docs"][0]["finding_count"] == 1
-    assert summary["docs"][1]["status"] == "no_findings"
-    assert summary["docs"][1]["vetted_out"] == 1
+    assert profile_doc(summary, 0)["status"] == "extracted"
+    assert profile_doc(summary, 0)["finding_count"] == 1
+    assert profile_doc(summary, 1)["status"] == "no_findings"
+    assert profile_doc(summary, 1)["vetted_out"] == 1
     assert summary["usage_totals"] == {
         "prompt": 10,
         "completion": 6,
@@ -571,8 +581,8 @@ def test_parallel_vetter_failure_isolates_to_one_doc(conn: Connection) -> None:
         finding_vetter_backend=judge,
     )
 
-    assert summary["counts"]["vetting_failed"] == 1
-    by_pss = {doc["pss_id"]: doc for doc in summary["docs"]}
+    assert profile_counts(summary)["vetting_failed"] == 1
+    by_pss = {doc["pss_id"]: doc for doc in profile_docs(summary)}
     assert by_pss[str(good_pss)]["finding_count"] == 1
     assert by_pss[str(failing_pss)]["finding_count"] == 1
     assert by_pss[str(failing_pss)]["vetted_out"] == 0
@@ -622,12 +632,12 @@ def test_all_vetted_out_doc_reports_no_findings_status(conn: Connection) -> None
         extraction_backend=backend, finding_vetter_backend=judge,
     )
 
-    assert summary["docs"][0]["status"] == "no_findings"
-    assert summary["docs"][0]["finding_count"] == 0
-    assert summary["docs"][0]["vetted_out"] == 2
-    assert summary["counts"]["extracted"] == 0
-    assert summary["counts"]["no_findings"] == 1
-    assert summary["vetted_out"]["total"] == 2
+    assert profile_doc(summary)["status"] == "no_findings"
+    assert profile_doc(summary)["finding_count"] == 0
+    assert profile_doc(summary)["vetted_out"] == 2
+    assert profile_counts(summary)["extracted"] == 0
+    assert profile_counts(summary)["no_findings"] == 1
+    assert profile_vetted_out(summary)["total"] == 2
     assert _findings(conn, project_id) == []
 
 
@@ -651,10 +661,10 @@ def test_vetter_failure_fails_open_and_counts(conn: Connection) -> None:
         extraction_backend=backend, finding_vetter_backend=_FailingJudgeBackend(),
     )
 
-    assert summary["docs"][0]["finding_count"] == 1
-    assert summary["docs"][0]["vetted_out"] == 0
-    assert summary["counts"]["vetting_failed"] == 1
-    assert summary["vetted_out"]["total"] == 0
+    assert profile_doc(summary)["finding_count"] == 1
+    assert profile_doc(summary)["vetted_out"] == 0
+    assert profile_counts(summary)["vetting_failed"] == 1
+    assert profile_vetted_out(summary)["total"] == 0
     assert "vetted_out_present" not in summary["flags"]
     rows = _findings(conn, project_id)
     assert len(rows) == 1
@@ -680,8 +690,8 @@ def test_vetter_coverage_violation_fails_open_and_counts(conn: Connection) -> No
         extraction_backend=backend, finding_vetter_backend=_MismatchedJudgeBackend(),
     )
 
-    assert summary["docs"][0]["finding_count"] == 1
-    assert summary["counts"]["vetting_failed"] == 1
+    assert profile_doc(summary)["finding_count"] == 1
+    assert profile_counts(summary)["vetting_failed"] == 1
     rows = _findings(conn, project_id)
     assert len(rows) == 1
 
@@ -699,10 +709,10 @@ def test_no_backend_is_byte_identical_no_vetter_keys(conn: Connection) -> None:
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
-    assert "vetted_out" not in summary
-    assert "vetted_out" not in summary["docs"][0]
-    assert "vetting_failed" not in summary["counts"]
-    assert summary["provenance"]["finding_vetter"] is None
+    assert "vetted_out" not in summary["profiles"]["eb_iof_base_v1"]
+    assert "vetted_out" not in profile_doc(summary)
+    assert "vetting_failed" not in profile_counts(summary)
+    assert profile_provenance(summary)["finding_vetter"] is None
 
 
 def test_fingerprint_sensitive_to_junk_judge_presence() -> None:

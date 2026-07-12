@@ -20,6 +20,11 @@ import structlog
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.extraction_rollup import (
+    extraction_profile_counts,
+    extraction_profile_docs,
+    extraction_profile_provenance,
+)
 from policy_atlas.facet_grouping import (
     FACET_GROUPING_MODEL,
     FACET_VALUE_CAP,
@@ -273,10 +278,13 @@ def _load_extraction_rollup(
         raise GroupError(
             "corrupt reference: extraction_result.extraction_provenance must be an object"
         )
+    if any(not isinstance(doc, dict) for doc in docs):
+        raise GroupError("corrupt reference: extraction_result.docs entries must be objects")
+    mapped_docs = cast("list[dict[str, Any]]", docs)
     return (
-        cast("list[dict[str, Any]]", docs),
-        cast("dict[str, Any]", counts),
-        cast("dict[str, Any]", provenance),
+        extraction_profile_docs(mapped_docs),
+        extraction_profile_counts(cast("dict[str, Any]", counts)),
+        extraction_profile_provenance(cast("dict[str, Any]", provenance)),
     )
 
 

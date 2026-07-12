@@ -29,13 +29,18 @@ from policy_atlas.classification_backend import ClassificationBackend, StubClass
 from policy_atlas.classify import ClassifyContext, classify_sources
 from policy_atlas.embeddings import EmbeddingBackend, StubEmbeddingBackend
 from policy_atlas.extract import ExtractContext, extract_scope
-from policy_atlas.extraction_backend import ExtractionBackend, StubExtractionBackend
+from policy_atlas.extraction_backend import (
+    ExtractionBackend,
+    StubExtractionBackend,
+    StubICFExtractionBackend,
+)
 from policy_atlas.facet_grouping import FacetGroupingBackend, StubFacetGroupingBackend
 from policy_atlas.finding_vetter import FindingVetterBackend
 from policy_atlas.grounding import GroundingError, produce_grounded_block
 from policy_atlas.grounding_judge import GroundingJudgeBackend, StubGroundingJudgeBackend
 from policy_atlas.group import GroupContext, group_findings
 from policy_atlas.grouping import StubThemeGroupingBackend, ThemeGroupingBackend
+from policy_atlas.icf_finding_vetter import ICFFindingVetterBackend
 from policy_atlas.inference import InferenceProvider
 from policy_atlas.ingest_full_text import (
     DocumentFetcher,
@@ -76,6 +81,8 @@ class HarnessState(TypedDict):
     ranking_backend: RankingBackend | None
     extraction_backend: ExtractionBackend
     finding_vetter_backend: FindingVetterBackend | None
+    icf_extraction_backend: Any
+    icf_finding_vetter_backend: ICFFindingVetterBackend | None
     facet_grouping_backend: FacetGroupingBackend
     synthesis_backend: SynthesisBackend
     grounding_judge_backend: GroundingJudgeBackend
@@ -269,6 +276,8 @@ def _run_extract(state: HarnessState) -> HarnessState:
         extract_scope,
         extraction_backend=state["extraction_backend"],
         finding_vetter_backend=state["finding_vetter_backend"],
+        icf_extraction_backend=state["icf_extraction_backend"],
+        icf_finding_vetter_backend=state["icf_finding_vetter_backend"],
     )
     return _run_scope_component(state, context_cls, sources_fn)
 
@@ -575,6 +584,8 @@ def run_harness(
     ranking_backend: RankingBackend | None = None,
     extraction_backend: ExtractionBackend | None = None,
     finding_vetter_backend: FindingVetterBackend | None = None,
+    icf_extraction_backend: Any | None = None,
+    icf_finding_vetter_backend: ICFFindingVetterBackend | None = None,
     facet_grouping_backend: FacetGroupingBackend | None = None,
     synthesis_backend: SynthesisBackend | None = None,
     grounding_judge_backend: GroundingJudgeBackend | None = None,
@@ -621,6 +632,10 @@ def run_harness(
             with NO stub substitution — ``None`` means judging is off, so a
             caller that does not pass one gets byte-identical extract output
             to the pre-018-C5 pipeline.
+        icf_extraction_backend: ICF extraction backend for the extract component;
+            defaults to ``StubICFExtractionBackend()`` — no default egress.
+        icf_finding_vetter_backend: Post-extract ICF finding vetter. ``None``
+            means judging is off for ICF.
         facet_grouping_backend: Facet grouping backend for the group component;
             defaults to ``StubFacetGroupingBackend()`` — no default egress,
             approved gated change 2, task 012.
@@ -693,6 +708,12 @@ def run_harness(
         # No stub substitution (unlike every other backend key): None must
         # mean judging OFF, so extract_scope's own None default stays reachable.
         "finding_vetter_backend": finding_vetter_backend,
+        "icf_extraction_backend": (
+            icf_extraction_backend
+            if icf_extraction_backend is not None
+            else StubICFExtractionBackend()
+        ),
+        "icf_finding_vetter_backend": icf_finding_vetter_backend,
         "facet_grouping_backend": (
             facet_grouping_backend
             if facet_grouping_backend is not None

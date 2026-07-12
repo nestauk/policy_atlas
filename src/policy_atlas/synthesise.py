@@ -23,6 +23,7 @@ from sqlalchemy import case as sa_case
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.extraction_rollup import extraction_profile_docs
 from policy_atlas.grounding import content_hash
 from policy_atlas.grounding_judge import (
     ENVELOPE_VERSION,
@@ -1162,6 +1163,9 @@ def _extraction_record_ids(extraction_row: Mapping[str, Any] | None) -> list[uui
     docs = extraction_row.get("docs")
     if not isinstance(docs, list):
         return []
+    docs = extraction_profile_docs(
+        [cast("dict[str, Any]", doc) for doc in docs if isinstance(doc, dict)]
+    )
     ids: list[uuid.UUID] = []
     for doc in docs:
         if not isinstance(doc, dict):

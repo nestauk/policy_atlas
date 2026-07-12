@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from policy_atlas.extraction_backend import (
     ExtractionBackend,
     OpenAIExtractionBackend,
+    OpenAIICFExtractionBackend,
     StubExtractionBackend,
     StubICFExtractionBackend,
 )
@@ -93,6 +94,15 @@ def test_openai_extraction_backend_requires_api_key(monkeypatch: pytest.MonkeyPa
 
     with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
         OpenAIExtractionBackend()
+
+
+def test_openai_icf_extraction_backend_requires_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
+        OpenAIICFExtractionBackend()
 
 
 def test_stub_determinism() -> None:
@@ -229,3 +239,4 @@ def test_mode_strings() -> None:
     assert StubExtractionBackend().mode == "stub"
     assert StubICFExtractionBackend().mode == "stub"
     assert OpenAIExtractionBackend(api_key="sk-test").mode == "live"
+    assert OpenAIICFExtractionBackend(api_key="sk-test").mode == "live"

@@ -29,6 +29,7 @@ from policy_atlas.finding_vetter import FindingVetterBackend
 from policy_atlas.grounding_judge import GroundingJudgeBackend
 from policy_atlas.grouping import ThemeGroupingBackend
 from policy_atlas.harness import run_harness
+from policy_atlas.icf_finding_vetter import ICFFindingVetterBackend
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.ingest_full_text import DocumentFetcher
 from policy_atlas.orchestration_plan import (
@@ -103,6 +104,8 @@ class RunnerBackends:
         ranking: Optional selection reranking backend.
         extraction: Optional extraction backend.
         finding_vetter: Optional post-extract finding vetter (``None`` = off).
+        icf_extraction: Optional ICF extraction backend.
+        icf_finding_vetter: Optional ICF post-extract finding vetter.
         facet_grouping: Optional facet-grouping backend.
         synthesis: Optional synthesis backend.
         grounding_judge: Optional grounding-judge backend.
@@ -119,6 +122,8 @@ class RunnerBackends:
     ranking: RankingBackend | None = None
     extraction: ExtractionBackend | None = None
     finding_vetter: FindingVetterBackend | None = None
+    icf_extraction: Any | None = None
+    icf_finding_vetter: ICFFindingVetterBackend | None = None
     facet_grouping: FacetGroupingBackend | None = None
     synthesis: SynthesisBackend | None = None
     grounding_judge: GroundingJudgeBackend | None = None
@@ -1087,6 +1092,8 @@ def _run_step_attempt(
                     ranking_backend=backends.ranking,
                     extraction_backend=backends.extraction,
                     finding_vetter_backend=backends.finding_vetter,
+                    icf_extraction_backend=backends.icf_extraction,
+                    icf_finding_vetter_backend=backends.icf_finding_vetter,
                     facet_grouping_backend=backends.facet_grouping,
                     synthesis_backend=backends.synthesis,
                     grounding_judge_backend=backends.grounding_judge,

@@ -6,15 +6,17 @@ import contextvars
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 from policy_atlas import tracing
 from policy_atlas.characterise import _CallBudget, _run_first_assignment_round
 from policy_atlas.classify import _ClassifyDoc, _run_classification_calls
 from policy_atlas.classify_prompt import ClassifyEnvelopePayload, ClassifyWire
-from policy_atlas.extract import _Doc, _run_windows
+from policy_atlas.extract import _Doc, _iof_profile, _run_windows
+from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.extraction_records import ExtractionWindowPayload
 from policy_atlas.grouping import GroupingDoc, Theme
+from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.ranking import RankedDoc
 from policy_atlas.screen import _run_stage1_reps, _run_stage2_reps, _Stage1Doc
 from policy_atlas.screen_prompt import (
@@ -82,11 +84,85 @@ def test_extract_window_fanout_propagates_context() -> None:
 
     token = _WORKER_CONTEXT.set("extract-context")
     try:
-        _run_windows([doc], extraction_backend=backend)
+        _run_windows([doc], profile=_iof_profile(backend, None))
     finally:
         _WORKER_CONTEXT.reset(token)
 
     assert backend.seen == ["extract-context"]
+
+
+class _ScoreClient:
+    def __init__(self) -> None:
+        self.scores: dict[str, float] = {}
+
+    def score_current_trace(
+        self, *, name: str, value: float, data_type: str
+    ) -> None:
+        assert data_type == "NUMERIC"
+        self.scores[name] = value
+
+
+def test_extraction_score_summary_tolerates_old_flat_shape() -> None:
+    client = _ScoreClient()
+
+    tracing.extraction_score_summary(
+        cast("Any", client),
+        {
+            "selection_run_id": "sel",
+            "counts": {"selected": 2, "no_findings": 1, "failed": 0},
+            "findings": {"total": 4, "quote_unverified": 1, "dedup_collapsed": 2},
+        },
+    )
+
+    assert client.scores == {
+        "quote_verified_share": 0.75,
+        "no_findings_share": 0.5,
+        "extraction_failure_count": 0.0,
+        "dedup_collapsed_count": 2.0,
+    }
+
+
+def test_extraction_score_summary_reads_profile_shape() -> None:
+    client = _ScoreClient()
+
+    tracing.extraction_score_summary(
+        cast("Any", client),
+        {
+            "selection_run_id": "sel",
+            "counts": {
+                "selected": 2,
+                "basis": {},
+                "profiles": {
+                    IOF_PROFILE_ID: {
+                        "no_findings": 1,
+                        "failed": 0,
+                        "findings": {
+                            "total": 4,
+                            "quote_unverified": 1,
+                            "dedup_collapsed": 2,
+                        },
+                    },
+                    ICF_PROFILE_ID: {
+                        "no_findings": 0,
+                        "failed": 1,
+                        "findings": {
+                            "total": 3,
+                            "quote_unverified": 0,
+                            "dedup_collapsed": 0,
+                        },
+                    },
+                },
+            },
+        },
+    )
+
+    assert client.scores == {
+        "quote_verified_share": 0.75,
+        "no_findings_share": 0.5,
+        "extraction_failure_count": 1.0,
+        "dedup_collapsed_count": 2.0,
+        "icf_findings_total": 3.0,
+    }
 
 
 class _ContextScreeningBackend:

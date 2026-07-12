@@ -21,7 +21,10 @@ from langfuse import Langfuse
 
 from policy_atlas import embeddings, grouping
 from policy_atlas.embeddings import EmbeddingBackend
+from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
+from policy_atlas.extraction_rollup import extraction_profile_counts
 from policy_atlas.grouping import GroupingDoc, Theme, ThemeGroupingBackend
+from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.usage import UsageResult
 
 _ObservationType = Literal["embedding", "generation", "span"]
@@ -419,30 +422,60 @@ def extraction_score_summary(
             input={"component": "extract", "selection_run_id": summary["selection_run_id"]},
             output=summary,
         )
-    total = summary["findings"]["total"]
+    counts = summary.get("counts", {})
+    if not isinstance(counts, dict):
+        counts = {}
+    profile_map = counts.get("profiles")
+    profiles = profile_map if isinstance(profile_map, dict) else {}
+    iof_counts = extraction_profile_counts(counts, IOF_PROFILE_ID)
+    iof_findings = iof_counts.get("findings")
+    if not profiles and not isinstance(iof_findings, dict):
+        iof_findings = summary.get("findings")
+    findings = iof_findings if isinstance(iof_findings, dict) else {}
+    total = findings.get("total", 0)
     if total > 0:
         client.score_current_trace(
             name="quote_verified_share",
-            value=1.0 - summary["findings"]["quote_unverified"] / total,
+            value=1.0 - findings.get("quote_unverified", 0) / total,
             data_type="NUMERIC",
         )
-    selected = summary["counts"]["selected"]
-    if selected > 0:
+    selected = counts.get("selected", 0)
+    if selected > 0 and iof_counts:
         client.score_current_trace(
             name="no_findings_share",
-            value=summary["counts"]["no_findings"] / selected,
+            value=iof_counts.get("no_findings", 0) / selected,
             data_type="NUMERIC",
         )
+    if profiles:
+        failure_count = sum(
+            block.get("failed", 0)
+            for block in profiles.values()
+            if isinstance(block, dict)
+        )
+    else:
+        failure_count = iof_counts.get("failed", 0)
     client.score_current_trace(
         name="extraction_failure_count",
-        value=float(summary["counts"]["failed"]),
+        value=float(failure_count),
         data_type="NUMERIC",
     )
     client.score_current_trace(
         name="dedup_collapsed_count",
-        value=float(summary["findings"]["dedup_collapsed"]),
+        value=float(findings.get("dedup_collapsed", 0)),
         data_type="NUMERIC",
     )
+    icf_counts = (
+        extraction_profile_counts(counts, ICF_PROFILE_ID)
+        if isinstance(profiles.get(ICF_PROFILE_ID), dict)
+        else {}
+    )
+    icf_findings = icf_counts.get("findings")
+    if isinstance(icf_findings, dict):
+        client.score_current_trace(
+            name="icf_findings_total",
+            value=float(icf_findings.get("total", 0)),
+            data_type="NUMERIC",
+        )
 
 
 def grouping_score_summary(

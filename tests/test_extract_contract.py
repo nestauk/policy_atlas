@@ -41,6 +41,11 @@ from .helpers import (
     EVIDENCE_TYPE,
     delete_project_data,
     now,
+    profile_counts,
+    profile_doc,
+    profile_docs,
+    profile_findings,
+    profile_provenance,
     seed_project_and_run,
     seed_run,
     seed_scope,
@@ -413,7 +418,7 @@ def test_failed_extraction_never_blocks_or_satisfies_memo(conn: Connection) -> N
     )
 
     first, _ = _run(conn, project_id, scope_id, sel_run)
-    assert first["docs"][0]["status"] == "extraction_failed"
+    assert profile_doc(first)["status"] == "extraction_failed"
 
     # Drop the failure sentinel, add a findings sentinel, on the envelope's metadata.
     envelope_snap_id = conn.execute(
@@ -435,8 +440,8 @@ def test_failed_extraction_never_blocks_or_satisfies_memo(conn: Connection) -> N
     )
 
     second, _ = _run(conn, project_id, scope_id, sel_run)
-    assert second["docs"][0]["reused"] is False
-    assert second["docs"][0]["status"] == "extracted"
+    assert profile_doc(second)["reused"] is False
+    assert profile_doc(second)["status"] == "extracted"
 
     count = conn.execute(
         select(func.count()).select_from(source_extraction_record)
@@ -479,10 +484,13 @@ def test_coverage_invariants_at_payload_boundary(conn: Connection) -> None:
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
     assert {d["pss_id"] for d in summary["docs"]} == selected_ids
-    counts = summary["counts"]
-    assert counts["selected"] == 3
-    assert counts["extracted"] + counts["no_findings"] + counts["failed"] == counts["selected"]
-    assert counts["fresh"] + counts["reused"] == counts["selected"]
+    assert summary["counts"]["selected"] == 3
+    counts = profile_counts(summary)
+    assert (
+        counts["extracted"] + counts["no_findings"] + counts["failed"]
+        == summary["counts"]["selected"]
+    )
+    assert counts["fresh"] + counts["reused"] == summary["counts"]["selected"]
 
     record_ids = [
         row.extraction_record_id
@@ -523,8 +531,8 @@ def test_fabricated_quote_kept_and_flagged(conn: Connection) -> None:
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
-    assert summary["counts"]["extracted"] == 1
-    assert summary["findings"]["quote_unverified"] == 1
+    assert profile_counts(summary)["extracted"] == 1
+    assert profile_findings(summary)["quote_unverified"] == 1
     grounding = conn.execute(
         select(intervention_outcome_finding.c.grounding)
         .where(intervention_outcome_finding.c.project_id == project_id)
@@ -595,7 +603,7 @@ def test_boundary_spanning_quote_verifies_across_chunks(conn: Connection) -> Non
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
-    assert summary["counts"]["extracted"] == 1
+    assert profile_counts(summary)["extracted"] == 1
     grounding = conn.execute(
         select(intervention_outcome_finding.c.grounding)
         .where(intervention_outcome_finding.c.project_id == project_id)
@@ -625,7 +633,7 @@ def test_verified_anchor_match_location_fidelity(conn: Connection) -> None:
     )
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
-    assert summary["counts"]["extracted"] == 1
+    assert profile_counts(summary)["extracted"] == 1
 
     grounding = conn.execute(
         select(intervention_outcome_finding.c.grounding)
@@ -662,7 +670,7 @@ def test_field_rules_out_of_bounds_marks_unclear(conn: Connection) -> None:
     )
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
-    assert summary["counts"]["extracted"] == 1
+    assert profile_counts(summary)["extracted"] == 1
 
     row = conn.execute(
         select(
@@ -698,7 +706,7 @@ def test_null_like_string_coerced_to_null_and_marked(conn: Connection) -> None:
     )
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
-    assert summary["counts"]["extracted"] == 1
+    assert profile_counts(summary)["extracted"] == 1
 
     row = conn.execute(
         select(
@@ -746,7 +754,7 @@ def test_estimate_level_not_applicable_markers(conn: Connection) -> None:
     )
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
-    assert summary["counts"]["extracted"] == 1
+    assert profile_counts(summary)["extracted"] == 1
 
     rows = conn.execute(
         select(
@@ -805,8 +813,8 @@ def test_claim_keyed_dedup_merges_anchors(conn: Connection) -> None:
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
-    assert summary["findings"]["dedup_collapsed"] == 1
-    assert summary["counts"]["extracted"] == 1
+    assert profile_findings(summary)["dedup_collapsed"] == 1
+    assert profile_counts(summary)["extracted"] == 1
     rows = conn.execute(
         select(intervention_outcome_finding.c.grounding)
         .where(intervention_outcome_finding.c.project_id == project_id)
@@ -846,8 +854,8 @@ def test_claim_dedup_distinct_effect_size_stays_separate(conn: Connection) -> No
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
-    assert summary["findings"]["dedup_collapsed"] == 0
-    assert summary["counts"]["extracted"] == 1
+    assert profile_findings(summary)["dedup_collapsed"] == 0
+    assert profile_counts(summary)["extracted"] == 1
     count = conn.execute(
         select(func.count()).select_from(intervention_outcome_finding)
         .where(intervention_outcome_finding.c.project_id == project_id)
@@ -877,10 +885,10 @@ def test_all_grain_invalid_doc_extraction_failed(conn: Connection) -> None:
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
-    doc = summary["docs"][0]
+    doc = profile_doc(summary)
     assert doc["status"] == "extraction_failed"
     assert doc["error"] == "invalid_records"
-    assert summary["findings"]["total"] == 0
+    assert profile_findings(summary)["total"] == 0
     count = conn.execute(
         select(func.count()).select_from(intervention_outcome_finding)
         .where(intervention_outcome_finding.c.project_id == project_id)
@@ -914,10 +922,10 @@ def test_mixed_valid_invalid_records_drops_invalid(conn: Connection) -> None:
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
-    doc = summary["docs"][0]
+    doc = profile_doc(summary)
     assert doc["status"] == "extracted"
     assert doc["finding_count"] == 1
-    assert summary["findings"]["invalid_dropped"] == 1
+    assert profile_findings(summary)["invalid_dropped"] == 1
 
 
 # --- 8. Windowing --------------------------------------------------------------
@@ -952,9 +960,9 @@ def test_windowing_multi_window_doc_extracts(
 
     # Greedy windowing with each chunk <=50 chars but any pair >50: every chunk
     # lands in its own window -> 3 windows, no real 1-segment overlap possible.
-    assert summary["provenance"]["call_budget"]["baseline"] == 3
-    assert summary["docs"][0]["status"] == "extracted"
-    assert summary["findings"]["total"] == 1
+    assert profile_provenance(summary)["call_budget"]["baseline"] == 3
+    assert profile_doc(summary)["status"] == "extracted"
+    assert profile_findings(summary)["total"] == 1
 
 
 def test_oversize_chunk_subsegment_split(
@@ -989,7 +997,7 @@ def test_oversize_chunk_subsegment_split(
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
-    assert summary["docs"][0]["status"] == "extracted"
+    assert profile_doc(summary)["status"] == "extracted"
     grounding = conn.execute(
         select(intervention_outcome_finding.c.grounding)
         .where(intervention_outcome_finding.c.project_id == project_id)
@@ -1015,7 +1023,7 @@ def test_full_text_basis_mismatch_no_snapshot_no_chunks(conn: Connection) -> Non
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
-    doc = summary["docs"][0]
+    doc = profile_doc(summary)
     assert doc["status"] == "extraction_failed"
     assert doc["error"] == "basis_mismatch"
 
@@ -1032,7 +1040,7 @@ def test_abstract_only_missing_abstract_is_empty_basis(conn: Connection) -> None
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
-    doc = summary["docs"][0]
+    doc = profile_doc(summary)
     assert doc["status"] == "extraction_failed"
     assert doc["error"] == "empty_basis"
 
@@ -1064,7 +1072,7 @@ def test_ingested_full_text_zero_chunks_is_empty_basis(conn: Connection) -> None
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
-    doc = summary["docs"][0]
+    doc = profile_doc(summary)
     assert doc["status"] == "extraction_failed"
     assert doc["error"] == "empty_basis"
 
@@ -1129,16 +1137,13 @@ def test_determinism_across_identical_projects(conn: Connection) -> None:
     summary_b, _ = _run(conn, project_b, scope_b, run_b)
 
     assert summary_a["counts"] == summary_b["counts"]
-    assert summary_a["findings"] == summary_b["findings"]
-    assert summary_a["basis"] == summary_b["basis"]
     assert summary_a["flags"] == summary_b["flags"]
-    assert summary_a["field_coverage"] == summary_b["field_coverage"]
     assert summary_a["provenance"] == summary_b["provenance"]
 
     def _doc_sequence(summary: dict[str, Any]) -> list[dict[str, Any]]:
         return [
             {k: v for k, v in doc.items() if k not in {"pss_id", "extraction_record_id"}}
-            for doc in summary["docs"]
+            for doc in profile_docs(summary)
         ]
 
     assert _doc_sequence(summary_a) == _doc_sequence(summary_b)
@@ -1234,18 +1239,26 @@ def test_summary_payload_shape(conn: Connection) -> None:
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
     assert set(summary.keys()) == {
-        "docs", "counts", "findings", "basis", "field_coverage",
-        "selection_run_id", "flags", "provenance", "usage_totals",
+        "docs", "counts", "selection_run_id", "flags", "provenance", "profiles",
+        "usage_totals",
     }
     for doc in summary["docs"]:
-        assert set(doc.keys()) == {
-            "pss_id", "status", "basis", "finding_count", "reused", "error",
-            "extraction_record_id",
+        assert set(doc.keys()) == {"pss_id", "basis", "profiles"}
+        assert set(doc["profiles"]) == {"eb_iof_base_v1"}
+        assert set(doc["profiles"]["eb_iof_base_v1"].keys()) == {
+            "status", "finding_count", "reused", "error", "extraction_record_id",
         }
-    assert set(summary["provenance"].keys()) == {
+    assert set(summary["counts"].keys()) == {"selected", "basis", "profiles"}
+    assert set(summary["counts"]["profiles"].keys()) == {"eb_iof_base_v1"}
+    assert set(profile_counts(summary).keys()) == {
+        "extracted", "no_findings", "failed", "fresh", "reused", "findings",
+        "field_coverage",
+    }
+    assert set(summary["provenance"].keys()) == {"profiles", "pass_count"}
+    assert set(profile_provenance(summary).keys()) == {
         "profile", "schema", "prompt", "model", "mode", "field_rules", "verifier",
-        "window", "max_output_tokens", "retry_cap", "fingerprint", "pass_count",
-        "call_budget", "retry_count", "finding_vetter",
+        "window", "max_output_tokens", "retry_cap", "fingerprint", "call_budget",
+        "retry_count", "finding_vetter",
     }
     # 018 C5: no finding_vetter_backend passed here, so judging is off — null component.
-    assert summary["provenance"]["finding_vetter"] is None
+    assert profile_provenance(summary)["finding_vetter"] is None
