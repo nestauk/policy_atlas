@@ -158,7 +158,11 @@ flow-back (the task-011 pattern).
    grounding judge seeing the structured basis signal (prose asserting an effect while
    citing a modelled projection is a faithfulness question); any judge-envelope change
    is bound by 018's verification-grade A/B protocol, so it lands at the C/eval gate,
-   never silently.
+   never silently. The sweep also RECORDS a discovered dangling item (owner check,
+   2026-07-12): 018's **A/B-gated writer-envelope metadata queue** (author institutions
+   → FWCI → further fields, each adopted only on replay evidence) was contracted but
+   never run and never discharged — it enters deferred.md as an explicit seam at the
+   C/eval gate instead of dangling (silent omission ≠ deferral).
 9. **Evidence-type provenance rider (011 review, Codex — folded in at contract review)**:
    record the `primary_evidence_type` actually sent to the prompt on
    `source_extraction_record` (nullable Text; rides the same migration). Honest
