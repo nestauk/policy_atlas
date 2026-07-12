@@ -15,7 +15,8 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.extract import ExtractContext, ExtractError, extract_scope
+from policy_atlas import extract_prompt
+from policy_atlas.extract import ExtractContext, ExtractError, extract_scope, extraction_fingerprint
 from policy_atlas.extraction_backend import StubExtractionBackend
 from policy_atlas.schema import (
     chunk,
@@ -24,6 +25,7 @@ from policy_atlas.schema import (
     project_source_snapshot,
     selection_result,
     source_classification_result,
+    source_extraction_record,
     source_snapshot,
 )
 from policy_atlas.usage import UsageResult
@@ -68,9 +70,11 @@ def _record(
         "effect_direction": effect_direction,
         "estimate_level": "study",
         "study_design": None,
+        "study_geography": None,
         "stratum_qualifiers": [],
         "statistics": statistics or _stat(),
         "causality_by_design": None,
+        "effect_basis": None,
         "is_primary": None,
         "is_prevalence_only": None,
         "anchors": [{"segment_id": segment_id, "quote": quote}],
@@ -499,3 +503,82 @@ def test_nul_bearing_model_output_is_scrubbed(conn: Connection) -> None:
     assert row.intervention == "free school meals"
     assert row.population == "pupils"
     assert "\x00" not in str(row.grounding)
+
+
+# --- Evidence-type call provenance (task 020) -------------------------------
+
+
+def test_evidence_type_provenance_recorded_on_attempted_call(conn: Connection) -> None:
+    """A doc extracted via an attempted call records its classification value
+    on source_extraction_record.primary_evidence_type; a doc with no live
+    classification records the sentinel 'Unclassified' — the value actually
+    sent to the prompt, which may legitimately diverge from the live
+    classification read elsewhere."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    cid = uuid.uuid4()
+    classified_pss, _ = _seed_full_text_doc(
+        conn, project_id, sel_run, scope_id, title="Classified doc",
+        chunk_content="Coaching increased graduation rates in the trial.",
+        chunk_id=cid, evidence_type="RCTs and Quasi-Experimental Studies",
+        stub_iof=[_record(
+            intervention="coaching", outcome="graduation rates",
+            quote="Coaching increased graduation rates", segment_id=str(cid),
+        )],
+    )
+    unclassified_pss, _ = _seed_full_text_doc(
+        conn, project_id, sel_run, scope_id, title="Unclassified doc",
+        chunk_content="Home visiting reduced admissions in the trial.",
+        evidence_type=None,
+    )
+    _seed_selection(conn, project_id, sel_run, scope_id, [
+        {"pss_id": str(classified_pss), "text_basis": "full_text"},
+        {"pss_id": str(unclassified_pss), "text_basis": "full_text"},
+    ])
+
+    summary, _ = _run(conn, project_id, scope_id, sel_run)
+    assert summary["counts"]["failed"] == 0
+
+    rows = {
+        row.project_source_snapshot_id: row.primary_evidence_type
+        for row in conn.execute(
+            select(source_extraction_record).where(
+                source_extraction_record.c.project_id == project_id
+            )
+        )
+    }
+    assert rows[classified_pss] == "RCTs and Quasi-Experimental Studies"
+    assert rows[unclassified_pss] == extract_prompt.UNCLASSIFIED_EVIDENCE_TYPE
+
+
+def test_evidence_type_provenance_null_on_pre_prompt_failure(conn: Connection) -> None:
+    """A pre-prompt basis failure (empty_basis) never attempts a backend call,
+    so its extraction record's primary_evidence_type stays NULL — never the
+    'Unclassified' sentinel, which would falsely claim a call was made."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    pss_id = _seed_abstract_doc(conn, project_id, title="Empty abstract doc", abstract="")
+    _seed_selection(conn, project_id, sel_run, scope_id,
+                    [{"pss_id": str(pss_id), "text_basis": "abstract_only"}])
+
+    summary, _ = _run(conn, project_id, scope_id, sel_run)
+    doc = summary["docs"][0]
+    assert doc["status"] == "extraction_failed"
+    assert doc["error"] == "empty_basis"
+
+    stored = conn.execute(
+        select(source_extraction_record.c.primary_evidence_type).where(
+            source_extraction_record.c.project_id == project_id
+        )
+    ).scalar_one()
+    assert stored is None
+
+
+def test_extraction_fingerprint_components_v2() -> None:
+    """The fingerprint's component map pins the v2 schema/field-rules names
+    and the live prompt version — pure, no DB."""
+    _fingerprint, components = extraction_fingerprint("stub")
+    assert components["profile"] == "eb_iof_base_v1"
+    assert components["schema"] == "iof_v2"
+    assert components["field_rules"] == "iof_rules_v2"
+    assert components["prompt"] == extract_prompt.PROMPT_VERSION

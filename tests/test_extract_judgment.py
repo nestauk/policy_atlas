@@ -466,9 +466,9 @@ def test_fingerprint_provenance_lists_every_component(conn: Connection) -> None:
     prov = summary["provenance"]
 
     assert prov["profile"] == "eb_iof_base_v1"
-    assert prov["schema"] == "iof_v1"
+    assert prov["schema"] == "iof_v2"
     assert prov["prompt"] == "extract_iof_v5"
-    assert prov["field_rules"] == "iof_rules_v1"
+    assert prov["field_rules"] == "iof_rules_v2"
     assert prov["verifier"] == "qv_v1"
     assert prov["model"] and prov["mode"] == "stub"
     assert {"char_budget", "overlap", "oversize_policy", "oversize_overlap"} <= set(

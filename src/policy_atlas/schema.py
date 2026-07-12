@@ -607,6 +607,7 @@ DIRECTIVE_STRING_MAX = 200
 EXTRACTION_STATUSES: tuple[str, ...] = ("extracted", "no_findings", "extraction_failed")
 EXTRACTION_BASES: tuple[str, ...] = ("full_text", "abstract_only")
 EFFECT_DIRECTIONS: tuple[str, ...] = ("increase", "decrease", "no_effect", "mixed", "unclear")
+EFFECT_BASES: tuple[str, ...] = ("observed", "modelled")
 ESTIMATE_LEVELS: tuple[str, ...] = ("study", "pooled", "claim")
 CAUSALITY_BY_DESIGN: tuple[str, ...] = (
     "attributable",
@@ -618,8 +619,15 @@ CAUSALITY_BY_DESIGN: tuple[str, ...] = (
 _EXTRACTION_STATUSES_SQL = ", ".join(f"'{s}'" for s in EXTRACTION_STATUSES)
 _EXTRACTION_BASES_SQL = ", ".join(f"'{b}'" for b in EXTRACTION_BASES)
 _EFFECT_DIRECTIONS_SQL = ", ".join(f"'{d}'" for d in EFFECT_DIRECTIONS)
+_EFFECT_BASES_SQL = ", ".join(f"'{b}'" for b in EFFECT_BASES)
 _ESTIMATE_LEVELS_SQL = ", ".join(f"'{lv}'" for lv in ESTIMATE_LEVELS)
 _CAUSALITY_SQL = ", ".join(f"'{c}'" for c in CAUSALITY_BY_DESIGN)
+# Keep this schema literal in sync with extract_prompt.UNCLASSIFIED_EVIDENCE_TYPE;
+# schema.py deliberately does not import prompt modules.
+_SER_UNCLASSIFIED_EVIDENCE_TYPE = "Unclassified"
+_SER_EVIDENCE_TYPES_SQL_LIST = ", ".join(
+    f"'{t}'" for t in (*EVIDENCE_TYPES, _SER_UNCLASSIFIED_EVIDENCE_TYPE)
+)
 
 # The two memo (success) states — a failed attempt inserts freely as attempt
 # history and never satisfies or blocks the memo lookup (contract rev 1.5).
@@ -644,6 +652,10 @@ source_extraction_record = Table(
     Column("extraction_fingerprint", Text, nullable=False),
     Column("status", Text, nullable=False),
     Column("basis", Text, nullable=False),
+    # Extraction-call provenance: the evidence type actually sent to the prompt.
+    # NULL means no prompt call was attempted; consumers keep reading the live
+    # classification, and the two values may legitimately diverge.
+    Column("primary_evidence_type", Text, nullable=True),
     Column("error", Text, nullable=True),  # reason-coded on failure
     Column("finding_count", Integer, nullable=False, server_default="0"),
     Column("run_id", UUID(as_uuid=True), nullable=False),  # creating run; assertion provenance
@@ -677,6 +689,11 @@ source_extraction_record = Table(
     ),
     CheckConstraint(f"status IN ({_EXTRACTION_STATUSES_SQL})", name="ck_ser_status"),
     CheckConstraint(f"basis IN ({_EXTRACTION_BASES_SQL})", name="ck_ser_basis"),
+    CheckConstraint(
+        f"primary_evidence_type IS NULL OR primary_evidence_type IN "
+        f"({_SER_EVIDENCE_TYPES_SQL_LIST})",
+        name="ck_ser_evidence_type",
+    ),
     # Failure is never silent: failed ⟺ reason-coded (the pss full-text precedent).
     CheckConstraint(
         "(status = 'extraction_failed') = (error IS NOT NULL)",
@@ -698,11 +715,13 @@ intervention_outcome_finding = Table(
     Column("effect_direction", Text, nullable=False),  # a reported null result is a finding
     Column("estimate_level", Text, nullable=True),
     Column("study_design", Text, nullable=True),
+    Column("study_geography", Text, nullable=True),
     # Canonical sorted array of {type, value}; closed type vocabulary (contract rev 1.5).
     Column("stratum_qualifiers", JSONB, nullable=False),
     # Reported values only: effect size + type, CI/SE, p-value, N, k, I², τ².
     Column("statistics", JSONB, nullable=False),
     Column("causality_by_design", Text, nullable=True),
+    Column("effect_basis", Text, nullable=True),
     Column("is_primary", Boolean, nullable=True),
     Column("is_prevalence_only", Boolean, nullable=True),
     # Per absent nullable field: not_extracted | unclear | not_applicable.
@@ -727,6 +746,10 @@ intervention_outcome_finding = Table(
     CheckConstraint(
         f"causality_by_design IS NULL OR causality_by_design IN ({_CAUSALITY_SQL})",
         name="ck_iof_causality",
+    ),
+    CheckConstraint(
+        f"effect_basis IS NULL OR effect_basis IN ({_EFFECT_BASES_SQL})",
+        name="ck_iof_effect_basis",
     ),
     CheckConstraint("jsonb_typeof(stratum_qualifiers) = 'array'", name="ck_iof_strata_array"),
     CheckConstraint("jsonb_typeof(grounding) = 'array'", name="ck_iof_grounding_array"),

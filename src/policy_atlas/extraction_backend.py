@@ -21,6 +21,22 @@ from policy_atlas.usage import UsageResult, token_usage_from_provider
 log = structlog.get_logger()
 
 
+def _with_iof_v2_defaults(raw_findings: Any) -> Any:
+    """Default legacy stub sentinel records to the current wire shape."""
+    if not isinstance(raw_findings, list):
+        return raw_findings
+    defaulted: list[Any] = []
+    for record in raw_findings:
+        if isinstance(record, dict):
+            updated = dict(record)
+            updated.setdefault("study_geography", None)
+            updated.setdefault("effect_basis", None)
+            defaulted.append(updated)
+            continue
+        defaulted.append(record)
+    return defaulted
+
+
 class ExtractionBackend(Protocol):
     """The extraction seam.
 
@@ -160,7 +176,11 @@ class StubExtractionBackend:
             windows = payload.metadata["_stub_iof_windows"]
             return (
                 ExtractionResponse.model_validate(
-                    {"findings": windows.get(str(payload.window_index), [])}
+                    {
+                        "findings": _with_iof_v2_defaults(
+                            windows.get(str(payload.window_index), [])
+                        )
+                    }
                 ),
                 None,
             )
@@ -169,7 +189,11 @@ class StubExtractionBackend:
             if payload.window_index == 0:
                 return (
                     ExtractionResponse.model_validate(
-                        {"findings": payload.metadata["_stub_iof"]}
+                        {
+                            "findings": _with_iof_v2_defaults(
+                                payload.metadata["_stub_iof"]
+                            )
+                        }
                     ),
                     None,
                 )

@@ -34,6 +34,7 @@ from policy_atlas.extract_prompt import (
     EXTRACT_MAX_OUTPUT_TOKENS,
     EXTRACTION_MODEL,
     PROMPT_VERSION,
+    UNCLASSIFIED_EVIDENCE_TYPE,
 )
 from policy_atlas.extraction_backend import ExtractionBackend
 from policy_atlas.extraction_records import (
@@ -219,6 +220,7 @@ class _Doc:
     error: str | None = None
     extraction_record_id: uuid.UUID | None = None
     finding_count: int = 0
+    sent_evidence_type: str | None = None
 
     # Fresh-run payloads / counters.
     survivors: list[IOFRecord] = field(default_factory=list)
@@ -610,10 +612,15 @@ def _run_windows(
             if not budget.reserve():  # unreachable by construction; fail closed
                 errors[key] = RuntimeError("call budget exhausted")
                 continue
+            doc_index, _ = key
+            payload = payloads[key]
+            docs[doc_index].sent_evidence_type = (
+                payload.primary_evidence_type or UNCLASSIFIED_EVIDENCE_TYPE
+            )
             submitted.append((
                 key,
                 tracing.submit_with_context(
-                    executor, extraction_backend.extract, payloads[key]
+                    executor, extraction_backend.extract, payload
                 ),
             ))
         wait([future for _, future in submitted])
@@ -630,8 +637,13 @@ def _run_windows(
         if not budget.reserve():
             continue
         retry_count += 1
+        doc_index, _ = key
+        payload = payloads[key]
+        docs[doc_index].sent_evidence_type = (
+            payload.primary_evidence_type or UNCLASSIFIED_EVIDENCE_TYPE
+        )
         try:
-            response, usage = extraction_backend.extract(payloads[key])
+            response, usage = extraction_backend.extract(payload)
             results[key] = _scrub_findings(list(response.findings))
             usage_totals.add(usage)
         except Exception as exc:  # noqa: BLE001
@@ -912,6 +924,7 @@ def _write_docs(
                 extraction_fingerprint=fingerprint,
                 status=doc.status,
                 basis=doc.basis,
+                primary_evidence_type=doc.sent_evidence_type,
                 error=doc.error,
                 finding_count=doc.finding_count,
                 run_id=run_id,
@@ -933,12 +946,14 @@ def _write_docs(
                     effect_direction=record.effect_direction,
                     estimate_level=record.estimate_level,
                     study_design=record.study_design,
+                    study_geography=record.study_geography,
                     stratum_qualifiers=[
                         {"type": stratum.type, "value": stratum.value}
                         for stratum in record.stratum_qualifiers
                     ],
                     statistics=record.statistics.model_dump(),
                     causality_by_design=record.causality_by_design,
+                    effect_basis=record.effect_basis,
                     is_primary=record.is_primary,
                     is_prevalence_only=record.is_prevalence_only,
                     field_coverage=coverage,

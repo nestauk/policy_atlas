@@ -1,9 +1,11 @@
-"""Pure unit tests for qv_v1 verification, iof_rules_v1 rules, and dedup.
+"""Pure unit tests for qv_v1 verification, iof_rules_v2 rules, and dedup.
 
 No DB fixtures — every case exercises the pure functions directly.
 """
 
 from __future__ import annotations
+
+import pytest
 
 from policy_atlas.extraction_records import (
     IOFAnchorWire,
@@ -34,9 +36,11 @@ def _wire(
     effect_direction: str = "decrease",
     estimate_level: str | None = "pooled",
     study_design: str | None = None,
+    study_geography: str | None = None,
     stratum_qualifiers: list[IOFStratumWire] | None = None,
     statistics: IOFStatisticsWire | None = None,
     causality_by_design: str | None = "attributable",
+    effect_basis: str | None = None,
     is_primary: bool | None = True,
     is_prevalence_only: bool | None = False,
     anchors: list[IOFAnchorWire] | None = None,
@@ -65,9 +69,11 @@ def _wire(
         effect_direction=effect_direction,  # type: ignore[arg-type]
         estimate_level=estimate_level,  # type: ignore[arg-type]
         study_design=study_design,
+        study_geography=study_geography,
         stratum_qualifiers=stratum_qualifiers or [],
         statistics=statistics,
         causality_by_design=causality_by_design,  # type: ignore[arg-type]
+        effect_basis=effect_basis,  # type: ignore[arg-type]
         is_primary=is_primary,
         is_prevalence_only=is_prevalence_only,
         anchors=anchors,
@@ -79,7 +85,7 @@ def _wire(
 
 def test_version_constants() -> None:
     assert QUOTE_VERIFIER_VERSION == "qv_v1"
-    assert FIELD_RULES_VERSION == "iof_rules_v1"
+    assert FIELD_RULES_VERSION == "iof_rules_v2"
     assert "" in NULL_LIKE_STRINGS
 
 
@@ -431,3 +437,100 @@ def test_claim_key_stable_across_casefold_and_whitespace() -> None:
     r1 = _record(intervention="Home  Visiting", statistics=_stats(effect_size=0.8))
     r2 = _record(intervention="home visiting", statistics=_stats(effect_size=0.8))
     assert claim_key(r1) == claim_key(r2)
+
+
+# --- iof_rules_v2: study_geography / effect_basis coverage -----------------
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_stored", "expect_coverage_key", "expect_coerced"),
+    [
+        ("United Kingdom", "United Kingdom", False, False),
+        ("N/A", None, True, True),
+        (None, None, True, False),
+    ],
+)
+def test_study_geography_coverage_v2(
+    value: str | None,
+    expected_stored: str | None,
+    expect_coverage_key: bool,
+    expect_coerced: bool,
+) -> None:
+    """A real value passes through uncovered; a null-like string is coerced
+    to None (coverage + coerced_null_fields); a wire null completes straight
+    to "not_extracted" without ever touching coerced_null_fields. There is no
+    path to "unclear" for this free-text field in v2 — only coercion applies."""
+    result = validate_record(_wire(study_geography=value))
+    assert result.record is not None
+    assert result.record.study_geography == expected_stored
+    if expect_coverage_key:
+        assert result.field_coverage["study_geography"] == "not_extracted"
+    else:
+        assert "study_geography" not in result.field_coverage
+    assert ("study_geography" in result.coerced_null_fields) is expect_coerced
+    assert "study_geography" not in result.unclear_fields
+
+
+@pytest.mark.parametrize(
+    ("value", "expect_coverage_key"),
+    [
+        ("observed", False),
+        ("modelled", False),
+        (None, True),
+    ],
+)
+def test_effect_basis_coverage_v2(value: str | None, expect_coverage_key: bool) -> None:
+    """A real value passes through uncovered; a wire null completes to
+    "not_extracted". "unclear" is unreachable for effect_basis in v2: it is a
+    strict Literal at the wire model boundary, so an invalid string fails
+    pydantic validation before ever reaching validate_record — there is no
+    unparseable value left for these rules to flag."""
+    result = validate_record(_wire(effect_basis=value))
+    assert result.record is not None
+    assert result.record.effect_basis == value
+    if expect_coverage_key:
+        assert result.field_coverage["effect_basis"] == "not_extracted"
+    else:
+        assert "effect_basis" not in result.field_coverage
+    assert "effect_basis" not in result.coerced_null_fields
+    assert "effect_basis" not in result.unclear_fields
+
+
+def test_v1_null_vs_v2_null_coverage_distinguisher() -> None:
+    """A v2-validated record with both new fields null carries both coverage
+    keys; a v1-era coverage dict (predating these fields) has neither key —
+    the two null states are distinguishable by key-absence in the stored
+    coverage dict, never by a stored None/placeholder value."""
+    result = validate_record(_wire(study_geography=None, effect_basis=None))
+    assert result.record is not None
+    assert result.field_coverage["study_geography"] == "not_extracted"
+    assert result.field_coverage["effect_basis"] == "not_extracted"
+
+    v1_shaped_coverage: dict[str, str] = {"population": "not_extracted"}
+    assert "study_geography" not in v1_shaped_coverage
+    assert "effect_basis" not in v1_shaped_coverage
+
+
+# --- iof_rules_v2: dedup twins (effect_basis in the claim key, geography out) ---
+
+
+def test_dedup_distinct_effect_basis_splits() -> None:
+    """effect_basis rides the claim key: observed vs modelled is a different
+    claim, never collapsed."""
+    r1 = _record(effect_basis="observed", statistics=_stats(effect_size=0.8))
+    r2 = _record(effect_basis="modelled", statistics=_stats(effect_size=0.8))
+    deduped, collapsed = dedup_records([r1, r2])
+    assert collapsed == 0
+    assert len(deduped) == 2
+
+
+def test_dedup_same_claim_different_study_geography_collapses_first_wins() -> None:
+    """study_geography stays out of the claim key: two otherwise-identical
+    records with different study_geography collapse, and the survivor keeps
+    the first record's study_geography (first-wins)."""
+    r1 = _record(study_geography="United Kingdom", statistics=_stats(effect_size=0.8))
+    r2 = _record(study_geography="France", statistics=_stats(effect_size=0.8))
+    deduped, collapsed = dedup_records([r1, r2])
+    assert collapsed == 1
+    assert len(deduped) == 1
+    assert deduped[0].study_geography == "United Kingdom"

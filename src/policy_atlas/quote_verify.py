@@ -8,7 +8,7 @@ Pure functions only — no I/O, no DB. Three responsibilities:
   graded status (``exact`` | ``normalised`` | ``failed``). The offset substrate
   is never normalised (the LangExtract NFC lesson): recorded intervals are
   always raw, half-open ``[start, end)``.
-* ``iof_rules_v1`` field validation — null-like coercion, numeric parsing,
+* ``iof_rules_v2`` field validation — null-like coercion, numeric parsing,
   bounds/consistency checks, estimate-level coherence and field coverage, then
   the grain gate that builds the stored :class:`IOFRecord`.
 * Stratum canonicalisation and claim-keyed within-document dedup.
@@ -35,7 +35,7 @@ from policy_atlas.extraction_records import (
 )
 
 QUOTE_VERIFIER_VERSION = "qv_v1"
-FIELD_RULES_VERSION = "iof_rules_v1"
+FIELD_RULES_VERSION = "iof_rules_v2"
 
 # Strings that mean "the source does not report this", matched case-insensitively
 # on the stripped value. Closed enums are exempt by construction.
@@ -85,7 +85,9 @@ _OTHER_NULLABLE_FIELDS = (
     "comparator",
     "estimate_level",
     "study_design",
+    "study_geography",
     "causality_by_design",
+    "effect_basis",
     "is_primary",
     "is_prevalence_only",
     "effect_size_type",
@@ -319,7 +321,7 @@ class QuoteMatcher:
         return QuoteMatch(status="normalised", spans=spans)
 
 
-# --- iof_rules_v1 field validation ----------------------------------------
+# --- iof_rules_v2 field validation ----------------------------------------
 
 
 @dataclass
@@ -477,7 +479,7 @@ def _apply_estimate_coherence(
 
 
 def validate_record(wire: IOFRecordWire) -> ValidatedRecord:
-    """Validate one wire record under ``iof_rules_v1``.
+    """Validate one wire record under ``iof_rules_v2``.
 
     Runs null-like coercion, numeric parsing, bounds/consistency checks,
     estimate-level coherence and coverage completion, then the grain gate that
@@ -501,6 +503,9 @@ def validate_record(wire: IOFRecordWire) -> ValidatedRecord:
     population = _coerce_text("population", wire.population, coverage, coerced)
     comparator = _coerce_text("comparator", wire.comparator, coverage, coerced)
     study_design = _coerce_text("study_design", wire.study_design, coverage, coerced)
+    study_geography = _coerce_text(
+        "study_geography", wire.study_geography, coverage, coerced
+    )
     effect_size_type = _coerce_text(
         "effect_size_type", wire.statistics.effect_size_type, coverage, coerced
     )
@@ -528,7 +533,9 @@ def validate_record(wire: IOFRecordWire) -> ValidatedRecord:
         "comparator": comparator,
         "estimate_level": wire.estimate_level,
         "study_design": study_design,
+        "study_geography": study_geography,
         "causality_by_design": wire.causality_by_design,
+        "effect_basis": wire.effect_basis,
         "is_primary": wire.is_primary,
         "is_prevalence_only": wire.is_prevalence_only,
         "effect_size_type": effect_size_type,
@@ -581,9 +588,11 @@ def validate_record(wire: IOFRecordWire) -> ValidatedRecord:
         effect_direction=wire.effect_direction,
         estimate_level=wire.estimate_level,
         study_design=study_design,
+        study_geography=study_geography,
         stratum_qualifiers=canonical_strata(wire.stratum_qualifiers),
         statistics=statistics,
         causality_by_design=wire.causality_by_design,
+        effect_basis=wire.effect_basis,
         is_primary=wire.is_primary,
         is_prevalence_only=wire.is_prevalence_only,
         anchors=[
@@ -662,6 +671,7 @@ def claim_key(record: IOFRecord) -> tuple[object, ...]:
             (stratum.type, stratum.value.casefold())
             for stratum in record.stratum_qualifiers
         ),
+        record.effect_basis or "",
     )
 
 

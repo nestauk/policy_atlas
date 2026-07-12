@@ -16,18 +16,28 @@ from typing import Any, Literal, TypedDict, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from policy_atlas.schema import CAUSALITY_BY_DESIGN, EFFECT_DIRECTIONS, ESTIMATE_LEVELS
+from policy_atlas.schema import (
+    CAUSALITY_BY_DESIGN,
+    EFFECT_BASES,
+    EFFECT_DIRECTIONS,
+    ESTIMATE_LEVELS,
+)
 
 # Fingerprint components (contract decision 2): named constants; any
 # output-affecting change bumps a version and thus the extraction fingerprint.
+# PROFILE_ID is a stable requirement-family id ("EB's base IOF extraction");
+# field-set evolution rides the schema/prompt/rules version components, which
+# enter the fingerprint and recorded components map, so field additions do not
+# bump the profile.
 PROFILE_ID = "eb_iof_base_v1"
-SCHEMA_VERSION = "iof_v1"  # covers the wire AND stored model layers
+SCHEMA_VERSION = "iof_v2"  # covers the wire AND stored model layers
 
 # The segment id carried by an abstract-basis payload; anchors naming it map to
 # chunk_id null at write (contract decision 4, abstract-envelope location).
 ABSTRACT_SEGMENT_ID = "abstract"
 
 EffectDirection = Literal["increase", "decrease", "no_effect", "mixed", "unclear"]
+EffectBasis = Literal["observed", "modelled"]
 EstimateLevel = Literal["study", "pooled", "claim"]
 CausalityByDesign = Literal["attributable", "plausibly_causal", "associational", "descriptive"]
 StratumType = Literal["timepoint", "subgroup", "setting"]
@@ -36,6 +46,7 @@ STRATUM_TYPES: tuple[str, ...] = get_args(StratumType)
 
 # The Literal types are the schema CHECK vocabularies — drift fails at import.
 assert get_args(EffectDirection) == EFFECT_DIRECTIONS
+assert get_args(EffectBasis) == EFFECT_BASES
 assert get_args(EstimateLevel) == ESTIMATE_LEVELS
 assert get_args(CausalityByDesign) == CAUSALITY_BY_DESIGN
 
@@ -170,6 +181,16 @@ class IOFRecordWire(BaseModel):
             "or null if not reported."
         )
     )
+    study_geography: str | None = Field(
+        description=(
+            "Where the evidence underlying this finding was conducted, exactly as the document "
+            "reports it (e.g. 'United Kingdom', '12 OECD countries'), or null if not reported. "
+            "This is the study's own setting — never inferred from publisher, venue or author "
+            "affiliation. A geographic subgroup that scopes the claim belongs in "
+            "stratum_qualifiers; this field records where the underlying study or studies took "
+            "place."
+        )
+    )
     stratum_qualifiers: list[IOFStratumWire] = Field(
         description=(
             "Qualifiers that scope this finding (timepoint, subgroup, setting), each "
@@ -190,6 +211,16 @@ class IOFRecordWire(BaseModel):
             "'associational' (observational designs), 'descriptive' (descriptive, "
             "qualitative or modelling reports without causal identification); null "
             "if the design is unknown."
+        )
+    )
+    effect_basis: EffectBasis | None = Field(
+        description=(
+            "Whether this finding's effect was observed ('observed' — measured after something "
+            "happened: trial results, administrative or monitoring data, evaluation "
+            "measurements) or modelled ('modelled' — projected, simulated or forecast: model "
+            "outputs, scenario projections, calibrated estimates of what would happen), or null "
+            "if the document does not make this determinable. A modelled estimate is still "
+            "'modelled' even when built on observed inputs."
         )
     )
     is_primary: bool | None = Field(
@@ -284,9 +315,11 @@ class IOFRecord(BaseModel):
     effect_direction: EffectDirection
     estimate_level: EstimateLevel | None
     study_design: str | None
+    study_geography: str | None
     stratum_qualifiers: list[IOFStratum]
     statistics: IOFStatistics
     causality_by_design: CausalityByDesign | None
+    effect_basis: EffectBasis | None
     is_primary: bool | None
     is_prevalence_only: bool | None
     anchors: list[IOFAnchor] = Field(min_length=1)
