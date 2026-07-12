@@ -20,12 +20,8 @@ import structlog
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.extract import record_ids_by_profile
 from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
-from policy_atlas.extraction_rollup import (
-    extraction_profile_counts,
-    extraction_profile_provenance,
-    extraction_record_ids_by_profile,
-)
 from policy_atlas.facet_grouping import (
     FACET_GROUPING_MODEL,
     FACET_VALUE_CAP,
@@ -284,18 +280,35 @@ def _load_extraction_rollup(
     if any(not isinstance(doc, dict) for doc in docs):
         raise GroupError("corrupt reference: extraction_result.docs entries must be objects")
     mapped_docs = cast("list[dict[str, Any]]", docs)
+    counts_map = cast("dict[str, Any]", counts)
+    provenance_map = cast("dict[str, Any]", provenance)
+    counts_profiles = counts_map.get("profiles")
+    provenance_profiles = provenance_map.get("profiles")
+    if not isinstance(counts_profiles, dict) or IOF_PROFILE_ID not in counts_profiles:
+        raise GroupError(
+            "corrupt reference: extraction_result.counts missing the IOF profile block"
+        )
+    if not isinstance(provenance_profiles, dict) or IOF_PROFILE_ID not in provenance_profiles:
+        raise GroupError(
+            "corrupt reference: extraction_result.extraction_provenance missing "
+            "the IOF profile block"
+        )
+    iof_counts = dict(counts_profiles[IOF_PROFILE_ID])
+    for shared_key in ("selected", "basis"):
+        if shared_key in counts_map:
+            iof_counts[shared_key] = counts_map[shared_key]
     return (
         mapped_docs,
-        extraction_profile_counts(cast("dict[str, Any]", counts)),
-        extraction_profile_provenance(cast("dict[str, Any]", provenance)),
-        cast("dict[str, Any]", counts),
+        iof_counts,
+        dict(provenance_profiles[IOF_PROFILE_ID]),
+        counts_map,
     )
 
 
 def _extraction_record_ids_by_kind(
     docs: Sequence[dict[str, Any]]
 ) -> dict[str, list[uuid.UUID]]:
-    by_profile = extraction_record_ids_by_profile(docs)
+    by_profile = record_ids_by_profile(docs)
     by_kind: dict[str, list[uuid.UUID]] = {"iof": [], "icf": []}
     for kind, profile_id in (("iof", IOF_PROFILE_ID), ("icf", ICF_PROFILE_ID)):
         for raw_id in by_profile.get(profile_id, []):

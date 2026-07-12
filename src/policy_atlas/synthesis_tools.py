@@ -29,8 +29,8 @@ from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.embeddings import EMBEDDING_PROFILE, UNIT_POLICY, validate_vector
+from policy_atlas.extract import record_ids_by_profile
 from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
-from policy_atlas.extraction_rollup import extraction_record_ids_by_profile
 from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.schema import (
     CONTEXT_TYPES,
@@ -1329,7 +1329,6 @@ def _load_extraction_docs(
         profiles = provenance.get("profiles")
         if isinstance(profiles, Mapping):
             return mapped_docs, {key for key in profiles if isinstance(key, str)}
-        return mapped_docs, {IOF_PROFILE_ID}
     return mapped_docs, set()
 
 
@@ -1646,9 +1645,9 @@ def make_findings_reader(
         extraction_run_id=extraction_run_id,
         evidence_scope_id=evidence_scope_id,
     )
-    record_ids_by_profile = {
+    ids_by_profile = {
         profile_id: _record_ids_from_profile_map(raw_ids)
-        for profile_id, raw_ids in extraction_record_ids_by_profile(extraction_docs).items()
+        for profile_id, raw_ids in record_ids_by_profile(extraction_docs).items()
     }
     group_members = _group_member_ids(grouping_groups)
     iof_findings = (
@@ -1656,7 +1655,7 @@ def make_findings_reader(
             conn,
             project_id=project_id,
             evidence_scope_id=evidence_scope_id,
-            extraction_record_ids=record_ids_by_profile.get(IOF_PROFILE_ID, []),
+            extraction_record_ids=ids_by_profile.get(IOF_PROFILE_ID, []),
         )
         if IOF_PROFILE_ID in available_profiles
         else []
@@ -1666,7 +1665,7 @@ def make_findings_reader(
             conn,
             project_id=project_id,
             evidence_scope_id=evidence_scope_id,
-            extraction_record_ids=record_ids_by_profile.get(ICF_PROFILE_ID, []),
+            extraction_record_ids=ids_by_profile.get(ICF_PROFILE_ID, []),
         )
         if ICF_PROFILE_ID in available_profiles
         else []

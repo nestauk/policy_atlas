@@ -23,8 +23,8 @@ from sqlalchemy import case as sa_case
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.extract import record_ids_by_profile
 from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
-from policy_atlas.extraction_rollup import extraction_record_ids_by_profile
 from policy_atlas.grounding import content_hash
 from policy_atlas.grounding_judge import (
     ENVELOPE_VERSION,
@@ -1190,7 +1190,7 @@ def _extraction_record_ids_by_profile(
     if not isinstance(docs, list):
         return {}
     mapped_docs = [cast("dict[str, Any]", doc) for doc in docs if isinstance(doc, dict)]
-    raw_by_profile = extraction_record_ids_by_profile(mapped_docs)
+    raw_by_profile = record_ids_by_profile(mapped_docs)
     record_ids: dict[str, list[uuid.UUID]] = {}
     for profile_id, raw_ids in raw_by_profile.items():
         parsed: list[uuid.UUID] = []

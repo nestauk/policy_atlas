@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.embeddings import EMBEDDING_DIMENSIONS, EMBEDDING_PROFILE, UNIT_POLICY
+from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.grounding import content_hash
 from policy_atlas.schema import chunk as chunk_table
 from policy_atlas.schema import chunk_embedding, project_source_snapshot
@@ -1147,9 +1148,28 @@ def test_make_findings_reader_record_carries_default_metadata_set(
             evidence_scope_id=scope_id,
             run_id=run_id,
             selection_run_id=run_id,
-            extraction_provenance={"fingerprint": "t"},
-            docs=[{"extraction_record_id": str(extraction_record_id)}],
-            counts={"findings": {"total": 1}},
+            extraction_provenance={
+                "profiles": {IOF_PROFILE_ID: {"fingerprint": "t"}}
+            },
+            docs=[
+                {
+                    "pss_id": str(pss_id),
+                    "basis": "full_text",
+                    "profiles": {
+                        IOF_PROFILE_ID: {
+                            "status": "extracted",
+                            "finding_count": 1,
+                            "reused": False,
+                            "error": None,
+                            "extraction_record_id": str(extraction_record_id),
+                        }
+                    },
+                }
+            ],
+            counts={
+                "selected": 1,
+                "profiles": {IOF_PROFILE_ID: {"findings": {"total": 1}}},
+            },
             flags={},
             created_at=now(),
         )
@@ -1277,9 +1297,28 @@ def _seed_reader_finding(
             evidence_scope_id=scope_id,
             run_id=run_id,
             selection_run_id=run_id,
-            extraction_provenance={"fingerprint": "t"},
-            docs=[{"extraction_record_id": str(extraction_record_id)}],
-            counts={"findings": {"total": 1}},
+            extraction_provenance={
+                "profiles": {IOF_PROFILE_ID: {"fingerprint": "t"}}
+            },
+            docs=[
+                {
+                    "pss_id": str(pss_id),
+                    "basis": "full_text",
+                    "profiles": {
+                        IOF_PROFILE_ID: {
+                            "status": "extracted",
+                            "finding_count": 1,
+                            "reused": False,
+                            "error": None,
+                            "extraction_record_id": str(extraction_record_id),
+                        }
+                    },
+                }
+            ],
+            counts={
+                "selected": 1,
+                "profiles": {IOF_PROFILE_ID: {"findings": {"total": 1}}},
+            },
             flags={},
             created_at=now(),
         )
@@ -1648,7 +1687,7 @@ def test_make_findings_reader_kind_filter_mismatch_fails_closed(conn: Connection
         reader({"kinds": ["iof"], "context_type": "barrier"})
 
 
-def test_make_findings_reader_old_flat_row_reports_icf_not_extracted(
+def test_make_findings_reader_iof_only_run_reports_icf_not_extracted(
     conn: Connection,
 ) -> None:
     from policy_atlas.synthesis_tools import make_findings_reader

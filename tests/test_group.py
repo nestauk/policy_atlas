@@ -142,13 +142,17 @@ def seed_extraction(
         doc_payloads.append(
             {
                 "pss_id": str(pss_id),
-                "status": status,
                 "basis": "full_text",
-                "finding_count": len(findings),
-                "reused": record_id in reused_record_ids,
-                "error": None,
-                "extraction_record_id": str(record_id),
                 "order": index,
+                "profiles": {
+                    IOF_PROFILE_ID: {
+                        "status": status,
+                        "finding_count": len(findings),
+                        "reused": record_id in reused_record_ids,
+                        "error": None,
+                        "extraction_record_id": str(record_id),
+                    }
+                },
             }
         )
 
@@ -165,29 +169,37 @@ def seed_extraction(
             run_id=extraction_run_id,
             selection_run_id=selection_run_id,
             extraction_provenance={
-                "fingerprint": f"rollup-fp-{extraction_run_id}",
-                "profile": "test-profile",
+                "profiles": {
+                    IOF_PROFILE_ID: {
+                        "fingerprint": f"rollup-fp-{extraction_run_id}",
+                        "profile": "test-profile",
+                    }
+                }
             },
             docs=doc_payloads,
             counts={
                 "selected": len(docs),
-                "extracted": sum(1 for _, findings in docs if findings),
-                "no_findings": sum(1 for _, findings in docs if not findings),
-                "failed": 0,
-                "fresh": len(docs) - len(reused_record_ids),
-                "reused": len(reused_record_ids),
-                "findings": {
-                    "total": len(finding_ids),
-                    "quote_unverified": 0,
-                    "dedup_collapsed": 0,
-                    "invalid_dropped": 0,
-                },
                 "basis": {
                     "full_text": len(docs),
                     "abstract_only": 0,
                     "shares": {"full_text": 1.0 if docs else 0.0, "abstract_only": 0.0},
                 },
-                "field_coverage": {},
+                "profiles": {
+                    IOF_PROFILE_ID: {
+                        "extracted": sum(1 for _, findings in docs if findings),
+                        "no_findings": sum(1 for _, findings in docs if not findings),
+                        "failed": 0,
+                        "fresh": len(docs) - len(reused_record_ids),
+                        "reused": len(reused_record_ids),
+                        "findings": {
+                            "total": len(finding_ids),
+                            "quote_unverified": 0,
+                            "dedup_collapsed": 0,
+                            "invalid_dropped": 0,
+                        },
+                        "field_coverage": {},
+                    }
+                },
             },
             flags=[],
             created_at=now(),
@@ -498,7 +510,7 @@ def test_integrity_cross_check_fails_on_corrupt_counts(conn: Connection) -> None
             select(extraction_result.c.counts).where(extraction_result.c.run_id == seeded.run_id)
         ).scalar_one(),
     )
-    counts["findings"]["total"] = 2
+    counts["profiles"][IOF_PROFILE_ID]["findings"]["total"] = 2
     conn.execute(
         update(extraction_result)
         .where(extraction_result.c.run_id == seeded.run_id)

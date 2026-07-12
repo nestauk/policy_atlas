@@ -20,7 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -1166,6 +1166,34 @@ def _write_docs(
 
 
 # --- Summary / invariants ---------------------------------------------------
+
+
+def record_ids_by_profile(docs: Sequence[Mapping[str, Any]]) -> dict[str, list[Any]]:
+    """Group a roll-up's extraction record ids by profile id.
+
+    The reader for the per-profile ``extraction_result.docs`` shape this module
+    writes (``_build_summary``), kept next to the writer so the two cannot
+    drift. Entries without a ``profiles`` map are ignored — the roll-up shape
+    is per-profile keyed, full stop.
+
+    Args:
+        docs: Stored ``extraction_result.docs``.
+
+    Returns:
+        Mapping from profile id to extraction record ids in document order.
+    """
+    grouped: dict[str, list[Any]] = {}
+    for doc in docs:
+        profiles = doc.get("profiles")
+        if not isinstance(profiles, Mapping):
+            continue
+        for profile_id, block in profiles.items():
+            if not isinstance(profile_id, str) or not isinstance(block, Mapping):
+                continue
+            record_id = block.get("extraction_record_id")
+            if record_id is not None:
+                grouped.setdefault(profile_id, []).append(record_id)
+    return grouped
 
 
 @dataclass(frozen=True)

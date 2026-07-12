@@ -102,26 +102,6 @@ class _ScoreClient:
         self.scores[name] = value
 
 
-def test_extraction_score_summary_tolerates_old_flat_shape() -> None:
-    client = _ScoreClient()
-
-    tracing.extraction_score_summary(
-        cast("Any", client),
-        {
-            "selection_run_id": "sel",
-            "counts": {"selected": 2, "no_findings": 1, "failed": 0},
-            "findings": {"total": 4, "quote_unverified": 1, "dedup_collapsed": 2},
-        },
-    )
-
-    assert client.scores == {
-        "quote_verified_share": 0.75,
-        "no_findings_share": 0.5,
-        "extraction_failure_count": 0.0,
-        "dedup_collapsed_count": 2.0,
-    }
-
-
 def test_extraction_score_summary_reads_profile_shape() -> None:
     client = _ScoreClient()
 

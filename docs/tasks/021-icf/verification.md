@@ -187,6 +187,19 @@ Flagged deviations / adjudication notes:
 - ICF-only extraction pinned unsupported (Phase D validator; contract names
   both/IOF-only as the expressible compositions — recorded as an explicit
   compile error, seam noted in deferred.md).
+- **Owner-directed amendment (post-step-6, 2026-07-13): old-roll-up tolerance
+  removed.** The plan's "tolerate old flat rows" line (adversarial finding 6)
+  was written for a database with history worth reading; the owner ruled the
+  project greenfield — pre-021 `extraction_result` rows need not stay
+  readable. `extraction_rollup.py` deleted; readers consume the per-profile
+  shape directly (`record_ids_by_profile` lives in extract.py next to the
+  shape's writer); a flat row referenced by group now raises a loud
+  corrupt-reference error instead of being silently projected; the
+  flat-shape tolerance tests were removed/converted (the reader
+  ICF-availability test now seeds a real IOF-only per-profile row).
+  Pre-021 rows in the dev DB (e.g. the 020 live-check run) are no longer
+  referenceable by group/synthesise — accepted by the owner. No effect on
+  the spec flow-back (the specs never claimed old-row tolerance).
 
 ## Executor provenance (review handoff / family flip)
 
@@ -219,7 +232,10 @@ Flagged deviations / adjudication notes:
   schema candidate is where that content actually belongs.
 - Shared roll-up projection helpers must carry the SHARED top-level keys
   (selected/basis) into per-profile views — downstream base-count readers
-  treat the projection as the old flat object.
+  treat the projection as the old flat object. (Superseded same slice: the
+  owner removed old-shape tolerance entirely; the surviving lesson is that
+  per-profile projections still need the shared keys merged in, which group's
+  loader now does inline.)
 - pdftotext-based probe segments produce ~10% qv "normalised" (not exact)
   matches and a few failures from ligatures/hyphenation — probe-side artefact,
   not a prompt or qv defect; the live pipeline chunks from the ingest parser.

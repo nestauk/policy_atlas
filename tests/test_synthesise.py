@@ -1552,7 +1552,11 @@ def test_load_findings_carries_effect_basis_and_study_geography(conn: Connection
     findings, _icf_findings, _icf_available, _bases = _load_findings(
         conn,
         project_id=project_id,
-        extraction_row={"docs": [{"extraction_record_id": str(record_id)}]},
+        extraction_row={
+            "docs": [
+                {"profiles": {IOF_PROFILE_ID: {"extraction_record_id": str(record_id)}}}
+            ]
+        },
     )
 
     record = findings[str(finding_id)].record
@@ -1585,7 +1589,11 @@ def test_load_findings_tolerates_v1_null_rows(conn: Connection) -> None:
     findings, _icf_findings, _icf_available, _bases = _load_findings(
         conn,
         project_id=project_id,
-        extraction_row={"docs": [{"extraction_record_id": str(record_id)}]},
+        extraction_row={
+            "docs": [
+                {"profiles": {IOF_PROFILE_ID: {"extraction_record_id": str(record_id)}}}
+            ]
+        },
     )
 
     record = findings[str(finding_id)].record
@@ -1662,7 +1670,12 @@ def test_load_findings_batches_chunk_basis_query(conn: Connection) -> None:
     )
     expected_basis[str(snap_id)] = build_basis([(None, "The chunkless abstract.")])
 
-    extraction_row = {"docs": [{"extraction_record_id": str(rid)} for rid in record_ids]}
+    extraction_row = {
+        "docs": [
+            {"profiles": {IOF_PROFILE_ID: {"extraction_record_id": str(rid)}}}
+            for rid in record_ids
+        ]
+    }
 
     query_count = 0
 
@@ -1783,9 +1796,16 @@ def _seed_group_with_findings(
             evidence_scope_id=scope_id,
             run_id=extraction_run_id,
             selection_run_id=selection_run_id,
-            extraction_provenance={"fingerprint": "t"},
-            docs=[{"extraction_record_id": str(record_id)}],
-            counts={"findings": {"total": len(findings)}},
+            extraction_provenance={
+                "profiles": {IOF_PROFILE_ID: {"fingerprint": "t"}}
+            },
+            docs=[
+                {"profiles": {IOF_PROFILE_ID: {"extraction_record_id": str(record_id)}}}
+            ],
+            counts={
+                "selected": 1,
+                "profiles": {IOF_PROFILE_ID: {"findings": {"total": len(findings)}}},
+            },
             flags={},
             created_at=now(),
         )
