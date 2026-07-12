@@ -121,11 +121,16 @@ discharge/narrowing.
    of any kind (test-pinned).
 3. **Extraction profile + fingerprint domain:** `implementation_context_records.py`
    (wire/stored models, `PROFILE_ID = "eb_icf_base_v1"`, `SCHEMA_VERSION = "icf_v1"`,
-   own `render_field_docs`; payload types reused). The fingerprint machinery in
-   `extract.py` gains a profile-parameterised path (or a parallel one — plan decision):
-   ICF fingerprints compose from ICF constants only; **IOF's fingerprint components are
-   byte-identical before/after this slice** (test pin: existing IOF memos hit; a
-   fixture project's IOF fingerprint string is unchanged).
+   own `render_field_docs`; payload types reused). **Pipeline shape pinned (owner,
+   2026-07-12): the doc pipeline in `extract.py` (`_process_doc` / `_write_docs` /
+   vetter invocation / fingerprint assembly) goes profile-parameterised** — a
+   per-domain bundle (models + prompt + rules + vetter + table writer) is the plug, so
+   a future third schema is content work, not plumbing. Bounded to what the two real
+   instances force: no profile registry, no plugin machinery, no speculative
+   abstraction (the plan 🛑 reviews the parameterisation seam). ICF fingerprints
+   compose from ICF constants only; **IOF's fingerprint components are byte-identical
+   before/after this slice** (test pin: existing IOF memos hit; a fixture project's
+   IOF fingerprint string is unchanged).
 4. **Composition shape (🛑 gate decision 4):** ICF extraction runs **inside the existing
    extract component as a second per-source pass over the same selection** — one
    component, two profiles; no new component, no second selection. Plan-visible toggle:
@@ -182,7 +187,10 @@ discharge/narrowing.
     narrowed "ICF facets await facet machinery" pointer, §9's claim-type ladder gains
     the ICF pattern/finding rungs; deferred.md ICF entry discharged, replaced by the
     narrowed seams (ICF facet grouping · dimension-promotion for ICF fields ·
-    downstream capability consumers).
+    downstream capability consumers · **per-schema writer tools past ~3 evidence
+    kinds** — separate tools are right at two or three; if the schema count ever grows
+    past that, a schema-typed query interface becomes worth revisiting — a recorded
+    seam, not a 021 problem).
 
 **Out:** **cross-schema facet grouping** — `group` stays IOF-only this slice; the design
 property (shared source-named vocabulary) now exists in both tables, but the multi-table
@@ -226,7 +234,11 @@ rich in implementation material · one effects-only RCT (expect few/zero ICF rec
 honest absence, not manufactured findings) · one document whose implementation content
 is author-recommendation-shaped (the vetter line) · one review pooling implementation
 findings across settings (setting/geography at finding grain) · one hostile-envelope
-fencing probe.
+fencing probe · **one dual-kind document (owner, 2026-07-12)**: the same passage feeds
+both passes and is judged differently by design — an aspiration sentence ("the pilot
+aims to cut bills") flagged by the IOF vetter while an adjacent implementation
+condition ("rollout stalled where installer training was unfunded") extracts cleanly
+as ICF — pinning that the two exclusion lines are independent, not one shared vet.
 **Honesty pin:** eval-blind until ICF ground truth exists — replay evidence shows shape
 and the exclusion lines holding on probes, it does not certify extraction quality; that
 is exactly why this slice precedes ground truth.
