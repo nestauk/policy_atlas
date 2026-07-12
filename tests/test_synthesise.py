@@ -15,12 +15,14 @@ from sqlalchemy import event, func, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.embeddings import StubEmbeddingBackend
+from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.grounding import content_hash
 from policy_atlas.grounding_judge import (
     JudgeResponseWire,
     StubGroundingJudgeBackend,
     UnspannedAssertionWire,
 )
+from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.quote_verify import build_basis
 from policy_atlas.schema import (
     addressable_unit,
@@ -30,6 +32,7 @@ from policy_atlas.schema import (
     citation,
     extraction_result,
     grouping_result,
+    implementation_context_finding,
     intervention_outcome_finding,
     project_source_snapshot,
     search_coverage_record,
@@ -1546,7 +1549,7 @@ def test_load_findings_carries_effect_basis_and_study_geography(conn: Connection
         study_geography="England",
     )
 
-    findings, _bases = _load_findings(
+    findings, _icf_findings, _icf_available, _bases = _load_findings(
         conn,
         project_id=project_id,
         extraction_row={"docs": [{"extraction_record_id": str(record_id)}]},
@@ -1579,7 +1582,7 @@ def test_load_findings_tolerates_v1_null_rows(conn: Connection) -> None:
         field_coverage={"study_design": "not_extracted"},
     )
 
-    findings, _bases = _load_findings(
+    findings, _icf_findings, _icf_available, _bases = _load_findings(
         conn,
         project_id=project_id,
         extraction_row={"docs": [{"extraction_record_id": str(record_id)}]},
@@ -1677,7 +1680,7 @@ def test_load_findings_batches_chunk_basis_query(conn: Connection) -> None:
 
     event.listen(conn, "before_cursor_execute", _count_query)
     try:
-        findings, basis_by_snapshot = _load_findings(
+        findings, _icf_findings, _icf_available, basis_by_snapshot = _load_findings(
             conn, project_id=project_id, extraction_row=extraction_row
         )
     finally:
@@ -1819,6 +1822,207 @@ def _seed_group_with_findings(
         )
     )
     return project_id, run_id, scope_id, extraction_run_id, grouping_run_id, finding_ids
+
+
+def _seed_group_with_iof_and_icf(
+    conn: Connection,
+) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID]:
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="ICF doc")
+    full_snapshot_id = seed_ingested_full_text(
+        conn,
+        pss_id=pss_id,
+        chunks=["Training gaps slowed Alpha service delivery."],
+    )
+    characterisation_run_id = seed_run(conn, project_id)
+    seed_characterisation(
+        conn, project_id, scope_id, characterisation_run_id, themes={"theme-a": [pss_id]}
+    )
+    _, _, selection_run_id = run_select(conn, project_id, scope_id, characterisation_run_id)
+
+    extraction_run_id = seed_run(conn, project_id)
+    iof_record_id = uuid.uuid4()
+    icf_record_id = uuid.uuid4()
+    for record_id, fingerprint in (
+        (iof_record_id, "fp-synth-iof"),
+        (icf_record_id, "fp-synth-icf"),
+    ):
+        conn.execute(
+            source_extraction_record.insert().values(
+                extraction_record_id=record_id,
+                project_id=project_id,
+                source_snapshot_id=full_snapshot_id,
+                project_source_snapshot_id=pss_id,
+                extraction_fingerprint=fingerprint,
+                status="extracted",
+                basis="full_text",
+                error=None,
+                finding_count=1,
+                run_id=extraction_run_id,
+                created_at=now(),
+            )
+        )
+    iof_finding_id = uuid.uuid4()
+    icf_finding_id = uuid.uuid4()
+    conn.execute(
+        intervention_outcome_finding.insert().values(
+            finding_id=iof_finding_id,
+            project_id=project_id,
+            extraction_record_id=iof_record_id,
+            intervention="Alpha service",
+            outcome="Attendance",
+            population=None,
+            comparator=None,
+            effect_direction="increase",
+            estimate_level="study",
+            study_design=None,
+            study_geography=None,
+            stratum_qualifiers=[],
+            statistics={},
+            causality_by_design=None,
+            effect_basis=None,
+            is_primary=None,
+            is_prevalence_only=None,
+            field_coverage={},
+            grounding=[],
+            created_at=now(),
+        )
+    )
+    conn.execute(
+        implementation_context_finding.insert().values(
+            finding_id=icf_finding_id,
+            project_id=project_id,
+            extraction_record_id=icf_record_id,
+            context_type="barrier",
+            claim="Training gaps slowed Alpha service delivery.",
+            intervention="Alpha service",
+            outcome=None,
+            population=None,
+            setting=None,
+            study_geography=None,
+            study_design=None,
+            claim_level="study",
+            claim_basis="studied",
+            level="provider",
+            resource_requirements=None,
+            workforce_requirements="training",
+            field_coverage={},
+            grounding=[{"quote": "Training gaps slowed Alpha service delivery."}],
+            created_at=now(),
+        )
+    )
+
+    def _profile_counts() -> dict[str, Any]:
+        return {
+            "selected": 1,
+            "extracted": 1,
+            "no_findings": 0,
+            "failed": 0,
+            "fresh": 1,
+            "reused": 0,
+            "findings": {
+                "total": 1,
+                "quote_unverified": 0,
+                "dedup_collapsed": 0,
+                "invalid_dropped": 0,
+            },
+        }
+
+    conn.execute(
+        extraction_result.insert().values(
+            extraction_result_id=uuid.uuid4(),
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            run_id=extraction_run_id,
+            selection_run_id=selection_run_id,
+            extraction_provenance={
+                "profiles": {
+                    IOF_PROFILE_ID: {"fingerprint": "fp-synth-iof", "profile": IOF_PROFILE_ID},
+                    ICF_PROFILE_ID: {"fingerprint": "fp-synth-icf", "profile": ICF_PROFILE_ID},
+                },
+                "pass_count": 1,
+            },
+            docs=[
+                {
+                    "pss_id": str(pss_id),
+                    "basis": "full_text",
+                    "profiles": {
+                        IOF_PROFILE_ID: {
+                            "status": "extracted",
+                            "basis": "full_text",
+                            "finding_count": 1,
+                            "reused": False,
+                            "error": None,
+                            "extraction_record_id": str(iof_record_id),
+                            "order": 0,
+                        },
+                        ICF_PROFILE_ID: {
+                            "status": "extracted",
+                            "basis": "full_text",
+                            "finding_count": 1,
+                            "reused": False,
+                            "error": None,
+                            "extraction_record_id": str(icf_record_id),
+                            "order": 0,
+                        },
+                    },
+                }
+            ],
+            counts={
+                "selected": 1,
+                "basis": {"full_text": 1, "abstract_only": 0},
+                "profiles": {
+                    IOF_PROFILE_ID: _profile_counts(),
+                    ICF_PROFILE_ID: _profile_counts(),
+                },
+            },
+            flags={},
+            created_at=now(),
+        )
+    )
+
+    grouping_run_id = seed_run(conn, project_id)
+    conn.execute(
+        grouping_result.insert().values(
+            grouping_result_id=uuid.uuid4(),
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            run_id=grouping_run_id,
+            extraction_run_id=extraction_run_id,
+            facet="intervention",
+            grouping_provenance={},
+            groups={
+                "groups": [
+                    {
+                        "group_id": "g1",
+                        "label": "alpha",
+                        "description": "D",
+                        "member_values": ["Alpha service"],
+                        "member_finding_ids": [str(iof_finding_id), str(icf_finding_id)],
+                        "member_finding_kinds": ["iof", "icf"],
+                        "member_counts": {"iof": 1, "icf": 1},
+                        "size": 2,
+                        "direction_spread": {"increase": 1},
+                    }
+                ],
+                "ungrouped": {},
+                "no_value": {},
+            },
+            counts={},
+            flags={},
+            created_at=now(),
+        )
+    )
+    return (
+        project_id,
+        run_id,
+        scope_id,
+        extraction_run_id,
+        grouping_run_id,
+        iof_finding_id,
+        icf_finding_id,
+    )
 
 
 class _FindingClaimBackend:
@@ -1967,6 +2171,87 @@ class _SeedCapturingBackend:
 
     def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
         return self._inner.write_key_findings(seed)
+
+
+def test_grouped_section_seed_member_findings_include_icf_records(
+    conn: Connection,
+) -> None:
+    (
+        project_id,
+        run_id,
+        scope_id,
+        extraction_run_id,
+        grouping_run_id,
+        _iof_finding_id,
+        icf_finding_id,
+    ) = _seed_group_with_iof_and_icf(conn)
+    capture = _SeedCapturingBackend(
+        StubSynthesisBackend(
+            script=[[{"tool_calls": [], "claims": SectionProseWire(prose="", claims=[])}]],
+            proposal=SectionProposalWire(
+                sections=[SectionWire(title="Alpha", focus="Alpha coverage", group_ids=["g1"])]
+            ),
+        )
+    )
+
+    _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        extraction_run_id=extraction_run_id,
+        grouping_run_id=grouping_run_id,
+        backend=capture,
+    )
+
+    seed = capture.seeds_by_section[0][0]
+    members = {finding["finding_id"]: finding for finding in seed["member_findings"]}
+    assert members[str(icf_finding_id)]["kind"] == "icf"
+    assert members[str(icf_finding_id)]["context_type"] == "barrier"
+
+
+def test_icf_finding_claim_annotation_resolves_via_row(
+    conn: Connection,
+) -> None:
+    (
+        project_id,
+        run_id,
+        scope_id,
+        extraction_run_id,
+        grouping_run_id,
+        _iof_finding_id,
+        icf_finding_id,
+    ) = _seed_group_with_iof_and_icf(conn)
+    backend = _FindingClaimBackend(
+        proposal=SectionProposalWire(
+            sections=[SectionWire(title="Alpha", focus="Alpha coverage", group_ids=["g1"])]
+        ),
+        finding_id=str(icf_finding_id),
+    )
+
+    _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        extraction_run_id=extraction_run_id,
+        grouping_run_id=grouping_run_id,
+        backend=backend,
+    )
+
+    payloads = _project_annotations(conn, project_id)
+    finding_payloads = [
+        payload
+        for payload in payloads
+        if str(icf_finding_id) in payload.get("cited_finding_ids", [])
+    ]
+    assert finding_payloads
+    payload = finding_payloads[0]
+    assert payload["cited_finding_kinds"] == ["icf"]
+    assert payload["anchors"][0]["kind"] == "icf"
+    assert payload["anchors"][0]["match_status"] == "exact"
+    assert "context_type" not in payload
+    assert "claim" not in payload
 
 
 def test_mixed_and_unclear_findings_survive_synthesise_section_seed(

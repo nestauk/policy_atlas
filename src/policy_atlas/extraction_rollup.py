@@ -13,6 +13,35 @@ from typing import Any, cast
 from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 
 
+def extraction_record_ids_by_profile(
+    docs: Sequence[Mapping[str, Any]],
+) -> dict[str, list[Any]]:
+    """Return extraction record ids grouped by profile id.
+
+    Args:
+        docs: Stored ``extraction_result.docs``.
+
+    Returns:
+        Mapping from profile id to extraction record ids in document order. Old
+        flat entries are projected under the IOF profile.
+    """
+    grouped: dict[str, list[Any]] = {}
+    for doc in docs:
+        profiles = doc.get("profiles")
+        if not isinstance(profiles, Mapping):
+            record_id = doc.get("extraction_record_id")
+            if record_id is not None:
+                grouped.setdefault(IOF_PROFILE_ID, []).append(record_id)
+            continue
+        for profile_id, block in profiles.items():
+            if not isinstance(profile_id, str) or not isinstance(block, Mapping):
+                continue
+            record_id = block.get("extraction_record_id")
+            if record_id is not None:
+                grouped.setdefault(profile_id, []).append(record_id)
+    return grouped
+
+
 def extraction_profile_counts(
     counts: Mapping[str, Any], profile_id: str = IOF_PROFILE_ID
 ) -> dict[str, Any]:

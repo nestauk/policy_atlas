@@ -38,6 +38,7 @@ from policy_atlas.schema import (
     source_extraction_record,
     source_snapshot,
 )
+from policy_atlas.synthesis_tools import make_findings_reader
 from policy_atlas.usage import UsageResult
 
 from .helpers import (
@@ -382,6 +383,19 @@ def test_both_profiles_write_separate_records_and_rollup_shape(conn: Connection)
         select(func.count()).select_from(implementation_context_finding)
         .where(implementation_context_finding.c.project_id == project_id)
     ).scalar_one() == 1
+
+    reader = make_findings_reader(
+        conn,
+        project_id=project_id,
+        extraction_run_id=run_id,
+        evidence_scope_id=scope_id,
+        grouping_groups=None,
+    )
+    findings = reader({})
+    assert len(findings["iof_findings"]) == 1
+    assert findings["iof_findings"][0]["kind"] == "iof"
+    assert len(findings["icf_findings"]) == 1
+    assert findings["icf_findings"][0]["kind"] == "icf"
 
     rollup = conn.execute(
         select(extraction_result.c.counts, extraction_result.c.extraction_provenance)

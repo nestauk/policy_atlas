@@ -22,20 +22,24 @@ import re
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, NotRequired, Protocol, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Literal, NotRequired, Protocol, TypedDict, cast
 
 from sqlalchemy import ColumnElement, case, func
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.embeddings import EMBEDDING_PROFILE, UNIT_POLICY, validate_vector
-from policy_atlas.extraction_rollup import extraction_profile_docs
+from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
+from policy_atlas.extraction_rollup import extraction_record_ids_by_profile
+from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.schema import (
+    CONTEXT_TYPES,
     EFFECT_DIRECTIONS,
     characterisation_result,
     chunk_embedding,
     extraction_result,
     grouping_result,
+    implementation_context_finding,
     intervention_outcome_finding,
     project_source_snapshot,
     search_coverage_record,
@@ -119,6 +123,9 @@ LOOKUP_QUERY_KINDS = (
 
 # The closed tool set of the section loop.
 SECTION_TOOL_NAMES = ("search_chunks", "query_findings", "lookup")
+FINDING_KINDS = ("iof", "icf")
+FINDING_KIND_PROFILES = {"iof": IOF_PROFILE_ID, "icf": ICF_PROFILE_ID}
+FINDING_KIND_UNAVAILABLE = "not extracted in this run"
 
 
 # --- Shared record types (id-keyed data records — never instructions) ---
@@ -162,12 +169,15 @@ class FindingRecord(TypedDict):
     authors these quotes — code resolves cited ids back to the stored anchors.
     """
 
+    kind: Literal["iof"]
     finding_id: str
+    extraction_record_id: str
     pss_id: str
     document_title: str
     intervention: str
     outcome: str
     population: str | None
+    setting: str | None
     comparator: str | None
     effect_direction: str
     estimate_level: str | None
@@ -180,6 +190,35 @@ class FindingRecord(TypedDict):
     is_primary: bool | None
     field_coverage: dict[str, str]
     # Owner-adopted default metadata set (ADR 0015 §8 / B-B3): omit-if-absent.
+    year: NotRequired[Any]
+    evidence_type: NotRequired[str]
+    appraisal_label: NotRequired[str]
+    venue: NotRequired[str]
+    cited_by: NotRequired[Any]
+
+
+class ICFFindingRecord(TypedDict):
+    """One implementation-context finding as id-keyed section-loop data."""
+
+    kind: Literal["icf"]
+    finding_id: str
+    extraction_record_id: str
+    pss_id: str
+    document_title: str
+    context_type: str
+    claim: str
+    intervention: str
+    outcome: str | None
+    population: str | None
+    setting: str | None
+    study_geography: str | None
+    study_design: str | None
+    claim_level: str | None
+    claim_basis: str | None
+    level: str | None
+    resource_requirements: str | None
+    workforce_requirements: str | None
+    field_coverage: dict[str, str]
     year: NotRequired[Any]
     evidence_type: NotRequired[str]
     appraisal_label: NotRequired[str]
@@ -417,7 +456,24 @@ def _validate_tool_keys(arguments: dict[str, Any], *, allowed: set[str]) -> None
 
 
 def _validate_findings_tool_arguments(arguments: dict[str, Any]) -> None:
-    _validate_tool_keys(arguments, allowed={"finding_ids", "group_id", "effect_direction"})
+    _validate_tool_keys(
+        arguments,
+        allowed={"kinds", "finding_ids", "group_id", "effect_direction", "context_type"},
+    )
+    raw_kinds = arguments.get("kinds")
+    requested_kinds: set[str] | None = None
+    if raw_kinds is not None:
+        if not isinstance(raw_kinds, list) or len(raw_kinds) > DIRECTIVE_LIST_MAX:
+            _tool_fail("kinds must be a bounded list")
+        requested_kinds = set()
+        for item in raw_kinds:
+            if not isinstance(item, str) or not item:
+                _tool_fail("kinds must contain non-empty strings")
+            if item not in FINDING_KINDS:
+                _tool_fail("unknown kind")
+            requested_kinds.add(item)
+        if not requested_kinds:
+            _tool_fail("kinds must not be empty")
     raw_ids = arguments.get("finding_ids")
     if raw_ids is not None:
         if not isinstance(raw_ids, list) or len(raw_ids) > DIRECTIVE_LIST_MAX:
@@ -431,6 +487,17 @@ def _validate_findings_tool_arguments(arguments: dict[str, Any]) -> None:
     raw_direction = arguments.get("effect_direction")
     if raw_direction is not None and raw_direction not in EFFECT_DIRECTIONS:
         _tool_fail("effect_direction is invalid")
+    raw_context_type = arguments.get("context_type")
+    if raw_context_type is not None and raw_context_type not in CONTEXT_TYPES:
+        _tool_fail("context_type is invalid")
+    if raw_direction is not None and requested_kinds is not None and "iof" not in requested_kinds:
+        _tool_fail("effect_direction requires iof findings")
+    if (
+        raw_context_type is not None
+        and requested_kinds is not None
+        and "icf" not in requested_kinds
+    ):
+        _tool_fail("context_type requires icf findings")
 
 
 def _validate_lookup_tool_arguments(arguments: dict[str, Any]) -> None:
@@ -1244,27 +1311,34 @@ def _load_extraction_docs(
     project_id: uuid.UUID,
     extraction_run_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], set[str]]:
     row = conn.execute(
-        sa_select(extraction_result.c.docs)
+        sa_select(extraction_result.c.docs, extraction_result.c.extraction_provenance)
         .where(extraction_result.c.project_id == project_id)
         .where(extraction_result.c.evidence_scope_id == evidence_scope_id)
         .where(extraction_result.c.run_id == extraction_run_id)
     ).first()
     if row is None:
-        return []
+        return [], set()
     docs = row.docs
     if not isinstance(docs, list):
-        return []
+        return [], set()
     mapped_docs = [cast("dict[str, Any]", doc) for doc in docs if isinstance(doc, dict)]
-    return extraction_profile_docs(mapped_docs)
+    provenance = row.extraction_provenance
+    if isinstance(provenance, Mapping):
+        profiles = provenance.get("profiles")
+        if isinstance(profiles, Mapping):
+            return mapped_docs, {key for key in profiles if isinstance(key, str)}
+        return mapped_docs, {IOF_PROFILE_ID}
+    return mapped_docs, set()
 
 
-def _record_ids_from_docs(docs: Sequence[dict[str, Any]]) -> list[uuid.UUID]:
+def _record_ids_from_profile_map(raw_ids: Sequence[Any]) -> list[uuid.UUID]:
     record_ids: list[uuid.UUID] = []
-    for doc in docs:
-        raw_id = doc.get("extraction_record_id")
-        if isinstance(raw_id, str):
+    for raw_id in raw_ids:
+        if isinstance(raw_id, uuid.UUID):
+            record_ids.append(raw_id)
+        elif isinstance(raw_id, str):
             try:
                 record_ids.append(uuid.UUID(raw_id))
             except ValueError:
@@ -1276,12 +1350,15 @@ def _finding_record(row: Any) -> FindingRecord:
     metadata = row.metadata if isinstance(row.metadata, dict) else {}
     pss_id = cast("uuid.UUID", row.project_source_snapshot_id)
     record: FindingRecord = {
+        "kind": "iof",
         "finding_id": str(row.finding_id),
+        "extraction_record_id": str(row.extraction_record_id),
         "pss_id": str(pss_id),
         "document_title": _metadata_title(metadata, pss_id),
         "intervention": cast("str", row.intervention),
         "outcome": cast("str", row.outcome),
         "population": cast("str | None", row.population),
+        "setting": cast("str | None", row.setting),
         "comparator": cast("str | None", row.comparator),
         "effect_direction": cast("str", row.effect_direction),
         "estimate_level": cast("str | None", row.estimate_level),
@@ -1313,6 +1390,211 @@ def _finding_record(row: Any) -> FindingRecord:
     return record
 
 
+def _icf_finding_record(row: Any) -> ICFFindingRecord:
+    metadata = row.metadata if isinstance(row.metadata, dict) else {}
+    pss_id = cast("uuid.UUID", row.project_source_snapshot_id)
+    record: ICFFindingRecord = {
+        "kind": "icf",
+        "finding_id": str(row.finding_id),
+        "extraction_record_id": str(row.extraction_record_id),
+        "pss_id": str(pss_id),
+        "document_title": _metadata_title(metadata, pss_id),
+        "context_type": cast("str", row.context_type),
+        "claim": cast("str", row.claim),
+        "intervention": cast("str", row.intervention),
+        "outcome": cast("str | None", row.outcome),
+        "population": cast("str | None", row.population),
+        "setting": cast("str | None", row.setting),
+        "study_geography": cast("str | None", row.study_geography),
+        "study_design": cast("str | None", row.study_design),
+        "claim_level": cast("str | None", row.claim_level),
+        "claim_basis": cast("str | None", row.claim_basis),
+        "level": cast("str | None", row.level),
+        "resource_requirements": cast("str | None", row.resource_requirements),
+        "workforce_requirements": cast("str | None", row.workforce_requirements),
+        "field_coverage": cast("dict[str, str]", row.field_coverage),
+    }
+    year = _metadata_year(metadata)
+    if year is not None:
+        record["year"] = year
+    evidence_type = getattr(row, "primary_evidence_type", None)
+    if evidence_type is not None:
+        record["evidence_type"] = cast("str", evidence_type)
+    quality_score = getattr(row, "quality_score", None)
+    if quality_score is not None:
+        record["appraisal_label"] = str(quality_score)
+    venue = _metadata_venue(metadata)
+    if venue is not None:
+        record["venue"] = venue
+    cited_by = _metadata_cited_by(metadata)
+    if cited_by is not None:
+        record["cited_by"] = cited_by
+    return record
+
+
+def _load_iof_finding_records(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    evidence_scope_id: uuid.UUID,
+    extraction_record_ids: Sequence[uuid.UUID],
+) -> list[FindingRecord]:
+    if not extraction_record_ids:
+        return []
+    rows = conn.execute(
+        sa_select(
+            intervention_outcome_finding.c.finding_id,
+            intervention_outcome_finding.c.extraction_record_id,
+            intervention_outcome_finding.c.intervention,
+            intervention_outcome_finding.c.outcome,
+            intervention_outcome_finding.c.population,
+            intervention_outcome_finding.c.setting,
+            intervention_outcome_finding.c.comparator,
+            intervention_outcome_finding.c.effect_direction,
+            intervention_outcome_finding.c.estimate_level,
+            intervention_outcome_finding.c.study_design,
+            intervention_outcome_finding.c.study_geography,
+            intervention_outcome_finding.c.stratum_qualifiers,
+            intervention_outcome_finding.c.statistics,
+            intervention_outcome_finding.c.causality_by_design,
+            intervention_outcome_finding.c.effect_basis,
+            intervention_outcome_finding.c.is_primary,
+            intervention_outcome_finding.c.field_coverage,
+            source_extraction_record.c.project_source_snapshot_id,
+            source_snapshot.c.metadata,
+            source_classification_result.c.primary_evidence_type,
+            source_appraisal_result.c.quality_score,
+        )
+        .select_from(intervention_outcome_finding)
+        .join(
+            source_extraction_record,
+            (
+                source_extraction_record.c.extraction_record_id
+                == intervention_outcome_finding.c.extraction_record_id
+            )
+            & (source_extraction_record.c.project_id == project_id),
+        )
+        .join(
+            project_source_snapshot,
+            (
+                project_source_snapshot.c.project_source_snapshot_id
+                == source_extraction_record.c.project_source_snapshot_id
+            )
+            & (project_source_snapshot.c.project_id == project_id),
+        )
+        .join(
+            source_snapshot,
+            source_snapshot.c.source_snapshot_id == project_source_snapshot.c.source_snapshot_id,
+        )
+        .outerjoin(
+            source_classification_result,
+            (
+                source_classification_result.c.project_source_snapshot_id
+                == project_source_snapshot.c.project_source_snapshot_id
+            )
+            & (source_classification_result.c.project_id == project_id)
+            & (source_classification_result.c.evidence_scope_id == evidence_scope_id),
+        )
+        .outerjoin(
+            source_appraisal_result,
+            (
+                source_appraisal_result.c.project_source_snapshot_id
+                == project_source_snapshot.c.project_source_snapshot_id
+            )
+            & (source_appraisal_result.c.project_id == project_id)
+            & (source_appraisal_result.c.evidence_scope_id == evidence_scope_id),
+        )
+        .where(intervention_outcome_finding.c.project_id == project_id)
+        .where(intervention_outcome_finding.c.extraction_record_id.in_(extraction_record_ids))
+        .order_by(
+            intervention_outcome_finding.c.extraction_record_id,
+            intervention_outcome_finding.c.finding_id,
+        )
+    ).fetchall()
+    return [_finding_record(row) for row in rows]
+
+
+def _load_icf_finding_records(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    evidence_scope_id: uuid.UUID,
+    extraction_record_ids: Sequence[uuid.UUID],
+) -> list[ICFFindingRecord]:
+    if not extraction_record_ids:
+        return []
+    rows = conn.execute(
+        sa_select(
+            implementation_context_finding.c.finding_id,
+            implementation_context_finding.c.extraction_record_id,
+            implementation_context_finding.c.context_type,
+            implementation_context_finding.c.claim,
+            implementation_context_finding.c.intervention,
+            implementation_context_finding.c.outcome,
+            implementation_context_finding.c.population,
+            implementation_context_finding.c.setting,
+            implementation_context_finding.c.study_geography,
+            implementation_context_finding.c.study_design,
+            implementation_context_finding.c.claim_level,
+            implementation_context_finding.c.claim_basis,
+            implementation_context_finding.c.level,
+            implementation_context_finding.c.resource_requirements,
+            implementation_context_finding.c.workforce_requirements,
+            implementation_context_finding.c.field_coverage,
+            source_extraction_record.c.project_source_snapshot_id,
+            source_snapshot.c.metadata,
+            source_classification_result.c.primary_evidence_type,
+            source_appraisal_result.c.quality_score,
+        )
+        .select_from(implementation_context_finding)
+        .join(
+            source_extraction_record,
+            (
+                source_extraction_record.c.extraction_record_id
+                == implementation_context_finding.c.extraction_record_id
+            )
+            & (source_extraction_record.c.project_id == project_id),
+        )
+        .join(
+            project_source_snapshot,
+            (
+                project_source_snapshot.c.project_source_snapshot_id
+                == source_extraction_record.c.project_source_snapshot_id
+            )
+            & (project_source_snapshot.c.project_id == project_id),
+        )
+        .join(
+            source_snapshot,
+            source_snapshot.c.source_snapshot_id == project_source_snapshot.c.source_snapshot_id,
+        )
+        .outerjoin(
+            source_classification_result,
+            (
+                source_classification_result.c.project_source_snapshot_id
+                == project_source_snapshot.c.project_source_snapshot_id
+            )
+            & (source_classification_result.c.project_id == project_id)
+            & (source_classification_result.c.evidence_scope_id == evidence_scope_id),
+        )
+        .outerjoin(
+            source_appraisal_result,
+            (
+                source_appraisal_result.c.project_source_snapshot_id
+                == project_source_snapshot.c.project_source_snapshot_id
+            )
+            & (source_appraisal_result.c.project_id == project_id)
+            & (source_appraisal_result.c.evidence_scope_id == evidence_scope_id),
+        )
+        .where(implementation_context_finding.c.project_id == project_id)
+        .where(implementation_context_finding.c.extraction_record_id.in_(extraction_record_ids))
+        .order_by(
+            implementation_context_finding.c.extraction_record_id,
+            implementation_context_finding.c.finding_id,
+        )
+    ).fetchall()
+    return [_icf_finding_record(row) for row in rows]
+
+
 def _group_member_ids(grouping_groups: list[dict[str, Any]] | None) -> dict[str, set[str]]:
     if grouping_groups is None:
         return {}
@@ -1323,6 +1605,19 @@ def _group_member_ids(grouping_groups: list[dict[str, Any]] | None) -> dict[str,
         if isinstance(raw_id, str) and isinstance(raw_members, list):
             resolved[raw_id] = {member for member in raw_members if isinstance(member, str)}
     return resolved
+
+
+def _requested_finding_kinds(arguments: dict[str, Any]) -> tuple[str, ...]:
+    raw_kinds = arguments.get("kinds")
+    if raw_kinds is None:
+        return FINDING_KINDS
+    requested = []
+    seen: set[str] = set()
+    for kind in raw_kinds:
+        if isinstance(kind, str) and kind in FINDING_KINDS and kind not in seen:
+            requested.append(kind)
+            seen.add(kind)
+    return tuple(kind for kind in FINDING_KINDS if kind in seen)
 
 
 def make_findings_reader(
@@ -1345,101 +1640,50 @@ def make_findings_reader(
     Returns:
         A validated ``query_findings`` implementation.
     """
-    extraction_docs = _load_extraction_docs(
+    extraction_docs, available_profiles = _load_extraction_docs(
         conn,
         project_id=project_id,
         extraction_run_id=extraction_run_id,
         evidence_scope_id=evidence_scope_id,
     )
-    extraction_record_ids = _record_ids_from_docs(extraction_docs)
+    record_ids_by_profile = {
+        profile_id: _record_ids_from_profile_map(raw_ids)
+        for profile_id, raw_ids in extraction_record_ids_by_profile(extraction_docs).items()
+    }
     group_members = _group_member_ids(grouping_groups)
-    if not extraction_record_ids:
-        findings: list[FindingRecord] = []
-    else:
-        rows = conn.execute(
-            sa_select(
-                intervention_outcome_finding.c.finding_id,
-                intervention_outcome_finding.c.extraction_record_id,
-                intervention_outcome_finding.c.intervention,
-                intervention_outcome_finding.c.outcome,
-                intervention_outcome_finding.c.population,
-                intervention_outcome_finding.c.comparator,
-                intervention_outcome_finding.c.effect_direction,
-                intervention_outcome_finding.c.estimate_level,
-                intervention_outcome_finding.c.study_design,
-                intervention_outcome_finding.c.study_geography,
-                intervention_outcome_finding.c.stratum_qualifiers,
-                intervention_outcome_finding.c.statistics,
-                intervention_outcome_finding.c.causality_by_design,
-                intervention_outcome_finding.c.effect_basis,
-                intervention_outcome_finding.c.is_primary,
-                intervention_outcome_finding.c.field_coverage,
-                source_extraction_record.c.project_source_snapshot_id,
-                source_snapshot.c.metadata,
-                source_classification_result.c.primary_evidence_type,
-                source_appraisal_result.c.quality_score,
-            )
-            .select_from(intervention_outcome_finding)
-            .join(
-                source_extraction_record,
-                (
-                    source_extraction_record.c.extraction_record_id
-                    == intervention_outcome_finding.c.extraction_record_id
-                )
-                & (source_extraction_record.c.project_id == project_id),
-            )
-            .join(
-                project_source_snapshot,
-                (
-                    project_source_snapshot.c.project_source_snapshot_id
-                    == source_extraction_record.c.project_source_snapshot_id
-                )
-                & (project_source_snapshot.c.project_id == project_id),
-            )
-            .join(
-                source_snapshot,
-                (
-                    source_snapshot.c.source_snapshot_id
-                    == project_source_snapshot.c.source_snapshot_id
-                ),
-            )
-            # Classification + appraisal for the default metadata set (ADR 0015
-            # §8 / B-B3), scoped to project + evidence scope, outerjoin (the
-            # build_retrieval_scope pattern) so an unclassified/unappraised
-            # finding still returns.
-            .outerjoin(
-                source_classification_result,
-                (
-                    source_classification_result.c.project_source_snapshot_id
-                    == project_source_snapshot.c.project_source_snapshot_id
-                )
-                & (source_classification_result.c.project_id == project_id)
-                & (source_classification_result.c.evidence_scope_id == evidence_scope_id),
-            )
-            .outerjoin(
-                source_appraisal_result,
-                (
-                    source_appraisal_result.c.project_source_snapshot_id
-                    == project_source_snapshot.c.project_source_snapshot_id
-                )
-                & (source_appraisal_result.c.project_id == project_id)
-                & (source_appraisal_result.c.evidence_scope_id == evidence_scope_id),
-            )
-            .where(intervention_outcome_finding.c.project_id == project_id)
-            .where(
-                intervention_outcome_finding.c.extraction_record_id.in_(
-                    extraction_record_ids
-                )
-            )
-            .order_by(
-                intervention_outcome_finding.c.extraction_record_id,
-                intervention_outcome_finding.c.finding_id,
-            )
-        ).fetchall()
-        findings = [_finding_record(row) for row in rows]
-    findings_by_id = {finding["finding_id"]: finding for finding in findings}
+    iof_findings = (
+        _load_iof_finding_records(
+            conn,
+            project_id=project_id,
+            evidence_scope_id=evidence_scope_id,
+            extraction_record_ids=record_ids_by_profile.get(IOF_PROFILE_ID, []),
+        )
+        if IOF_PROFILE_ID in available_profiles
+        else []
+    )
+    icf_findings = (
+        _load_icf_finding_records(
+            conn,
+            project_id=project_id,
+            evidence_scope_id=evidence_scope_id,
+            extraction_record_ids=record_ids_by_profile.get(ICF_PROFILE_ID, []),
+        )
+        if ICF_PROFILE_ID in available_profiles
+        else []
+    )
+    findings_by_kind: dict[str, list[dict[str, Any]]] = {
+        "iof": [dict(finding) for finding in iof_findings],
+        "icf": [dict(finding) for finding in icf_findings],
+    }
+    available_by_kind = {
+        kind
+        for kind, profile_id in FINDING_KIND_PROFILES.items()
+        if profile_id in available_profiles
+    }
 
     def reader(arguments: dict[str, Any]) -> dict[str, Any]:
+        _validate_findings_tool_arguments(arguments)
+        requested_kinds = _requested_finding_kinds(arguments)
         raw_ids = arguments.get("finding_ids")
         requested_ids: set[str] | None = None
         if raw_ids is not None:
@@ -1465,27 +1709,41 @@ def make_findings_reader(
         effect_direction = arguments.get("effect_direction")
         if effect_direction is not None and effect_direction not in EFFECT_DIRECTIONS:
             _tool_fail("effect_direction is invalid")
+        context_type = arguments.get("context_type")
+        if context_type is not None and context_type not in CONTEXT_TYPES:
+            _tool_fail("context_type is invalid")
 
-        selected = list(findings)
-        if requested_ids is not None:
-            selected = [
-                finding for finding in selected if finding["finding_id"] in requested_ids
-            ]
-            missing = requested_ids - set(findings_by_id)
-            if missing:
-                selected = [finding for finding in selected if finding["finding_id"] not in missing]
-        if group_filter is not None:
-            selected = [
-                finding for finding in selected if finding["finding_id"] in group_filter
-            ]
-        if effect_direction is not None:
-            selected = [
-                finding
-                for finding in selected
-                if finding["effect_direction"] == effect_direction
-            ]
-        truncated = len(selected) > 100
-        return {"findings": selected[:100], "truncated": truncated}
+        result: dict[str, Any] = {}
+        for kind in requested_kinds:
+            result_key = f"{kind}_findings"
+            if kind not in available_by_kind:
+                result[result_key] = FINDING_KIND_UNAVAILABLE
+                continue
+            selected = list(findings_by_kind[kind])
+            if requested_ids is not None:
+                selected = [
+                    finding for finding in selected if finding["finding_id"] in requested_ids
+                ]
+            if group_filter is not None:
+                selected = [
+                    finding for finding in selected if finding["finding_id"] in group_filter
+                ]
+            if kind == "iof" and effect_direction is not None:
+                selected = [
+                    finding
+                    for finding in selected
+                    if finding["effect_direction"] == effect_direction
+                ]
+            if kind == "icf" and context_type is not None:
+                selected = [
+                    finding
+                    for finding in selected
+                    if finding["context_type"] == context_type
+                ]
+            truncated = len(selected) > 100
+            result[result_key] = selected[:100]
+            result[f"{kind}_truncated"] = truncated
+        return result
 
     return reader
 
@@ -1957,9 +2215,12 @@ def gathered_ids(transcript: Sequence[ToolExchange]) -> dict[str, set[str]]:
                     if isinstance(chunk, dict) and isinstance(chunk.get("chunk_record_id"), str):
                         chunk_ids.add(cast("str", chunk["chunk_record_id"]))
         elif exchange["tool"] == "query_findings":
-            findings = result.get("findings", [])
-            if isinstance(findings, list):
-                for finding in findings:
-                    if isinstance(finding, dict) and isinstance(finding.get("finding_id"), str):
-                        finding_ids.add(cast("str", finding["finding_id"]))
+            for key in ("findings", "iof_findings", "icf_findings"):
+                findings = result.get(key, [])
+                if isinstance(findings, list):
+                    for finding in findings:
+                        if isinstance(finding, dict) and isinstance(
+                            finding.get("finding_id"), str
+                        ):
+                            finding_ids.add(cast("str", finding["finding_id"]))
     return {"chunk_ids": chunk_ids, "finding_ids": finding_ids}

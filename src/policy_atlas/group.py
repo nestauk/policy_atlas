@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -20,10 +20,11 @@ import structlog
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.extraction_rollup import (
     extraction_profile_counts,
-    extraction_profile_docs,
     extraction_profile_provenance,
+    extraction_record_ids_by_profile,
 )
 from policy_atlas.facet_grouping import (
     FACET_GROUPING_MODEL,
@@ -49,9 +50,11 @@ from policy_atlas.facet_values import (
     validate_partition,
     value_records,
 )
+from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.schema import (
     extraction_result,
     grouping_result,
+    implementation_context_finding,
     intervention_outcome_finding,
 )
 from policy_atlas.usage import UsageAccumulator
@@ -114,19 +117,19 @@ def group_findings(
             is exceeded, the backend fails, or grouping invariants fail.
     """
     facet, facet_source = parse_grouping_directive(context.context)
-    docs, extraction_counts, extraction_provenance = _load_extraction_rollup(
+    docs, extraction_counts, extraction_provenance, raw_counts = _load_extraction_rollup(
         conn,
         project_id=project_id,
         scope_id=context.scope_id,
         extraction_run_id=context.extraction_run_id,
     )
-    extraction_record_ids = _extraction_record_ids(docs)
+    extraction_record_ids_by_kind = _extraction_record_ids_by_kind(docs)
     findings = _load_findings(
         conn,
         project_id=project_id,
-        extraction_record_ids=extraction_record_ids,
+        extraction_record_ids_by_kind=extraction_record_ids_by_kind,
     )
-    expected_findings_total = _extraction_findings_total(extraction_counts)
+    expected_findings_total = _all_extraction_findings_total(raw_counts)
     if len(findings) != expected_findings_total:
         raise GroupError(
             "corrupt reference: resolved "
@@ -250,7 +253,7 @@ def _load_extraction_rollup(
     project_id: uuid.UUID,
     scope_id: uuid.UUID,
     extraction_run_id: uuid.UUID,
-) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any], dict[str, Any]]:
     row = conn.execute(
         sa_select(
             extraction_result.c.docs,
@@ -282,56 +285,79 @@ def _load_extraction_rollup(
         raise GroupError("corrupt reference: extraction_result.docs entries must be objects")
     mapped_docs = cast("list[dict[str, Any]]", docs)
     return (
-        extraction_profile_docs(mapped_docs),
+        mapped_docs,
         extraction_profile_counts(cast("dict[str, Any]", counts)),
         extraction_profile_provenance(cast("dict[str, Any]", provenance)),
+        cast("dict[str, Any]", counts),
     )
 
 
-def _extraction_record_ids(docs: Sequence[dict[str, Any]]) -> list[uuid.UUID]:
-    record_ids: list[uuid.UUID] = []
-    for index, doc in enumerate(docs):
-        raw_id = doc.get("extraction_record_id")
-        if not isinstance(raw_id, str):
-            raise GroupError(
-                "corrupt reference: "
-                f"docs[{index}].extraction_record_id must be a string"
-            )
-        try:
-            record_ids.append(uuid.UUID(raw_id))
-        except ValueError as exc:
-            raise GroupError(
-                "corrupt reference: "
-                f"docs[{index}].extraction_record_id is not a UUID"
-            ) from exc
-    return record_ids
+def _extraction_record_ids_by_kind(
+    docs: Sequence[dict[str, Any]]
+) -> dict[str, list[uuid.UUID]]:
+    by_profile = extraction_record_ids_by_profile(docs)
+    by_kind: dict[str, list[uuid.UUID]] = {"iof": [], "icf": []}
+    for kind, profile_id in (("iof", IOF_PROFILE_ID), ("icf", ICF_PROFILE_ID)):
+        for raw_id in by_profile.get(profile_id, []):
+            if not isinstance(raw_id, str):
+                raise GroupError(
+                    "corrupt reference: extraction_record_id must be a string"
+                )
+            try:
+                by_kind[kind].append(uuid.UUID(raw_id))
+            except ValueError as exc:
+                raise GroupError(
+                    "corrupt reference: extraction_record_id is not a UUID"
+                ) from exc
+    return by_kind
 
 
 def _load_findings(
     conn: Connection,
     *,
     project_id: uuid.UUID,
-    extraction_record_ids: Sequence[uuid.UUID],
+    extraction_record_ids_by_kind: Mapping[str, Sequence[uuid.UUID]],
 ) -> list[dict[str, Any]]:
-    if not extraction_record_ids:
-        return []
-    rows = conn.execute(
-        sa_select(
-            intervention_outcome_finding.c.finding_id,
-            intervention_outcome_finding.c.extraction_record_id,
-            intervention_outcome_finding.c.intervention,
-            intervention_outcome_finding.c.outcome,
-            intervention_outcome_finding.c.population,
-            intervention_outcome_finding.c.effect_direction,
-        )
-        .where(intervention_outcome_finding.c.project_id == project_id)
-        .where(intervention_outcome_finding.c.extraction_record_id.in_(extraction_record_ids))
-        .order_by(
-            intervention_outcome_finding.c.extraction_record_id,
-            intervention_outcome_finding.c.finding_id,
-        )
-    ).mappings().fetchall()
-    return [dict(row) for row in rows]
+    findings: list[dict[str, Any]] = []
+    iof_record_ids = list(extraction_record_ids_by_kind.get("iof", []))
+    if iof_record_ids:
+        rows = conn.execute(
+            sa_select(
+                intervention_outcome_finding.c.finding_id,
+                intervention_outcome_finding.c.extraction_record_id,
+                intervention_outcome_finding.c.intervention,
+                intervention_outcome_finding.c.outcome,
+                intervention_outcome_finding.c.population,
+                intervention_outcome_finding.c.effect_direction,
+            )
+            .where(intervention_outcome_finding.c.project_id == project_id)
+            .where(intervention_outcome_finding.c.extraction_record_id.in_(iof_record_ids))
+            .order_by(
+                intervention_outcome_finding.c.extraction_record_id,
+                intervention_outcome_finding.c.finding_id,
+            )
+        ).mappings().fetchall()
+        findings.extend({"kind": "iof", **dict(row)} for row in rows)
+
+    icf_record_ids = list(extraction_record_ids_by_kind.get("icf", []))
+    if icf_record_ids:
+        rows = conn.execute(
+            sa_select(
+                implementation_context_finding.c.finding_id,
+                implementation_context_finding.c.extraction_record_id,
+                implementation_context_finding.c.intervention,
+                implementation_context_finding.c.outcome,
+                implementation_context_finding.c.population,
+            )
+            .where(implementation_context_finding.c.project_id == project_id)
+            .where(implementation_context_finding.c.extraction_record_id.in_(icf_record_ids))
+            .order_by(
+                implementation_context_finding.c.extraction_record_id,
+                implementation_context_finding.c.finding_id,
+            )
+        ).mappings().fetchall()
+        findings.extend({"kind": "icf", "effect_direction": None, **dict(row)} for row in rows)
+    return findings
 
 
 def _extraction_findings_total(counts: dict[str, Any]) -> int:
@@ -344,6 +370,19 @@ def _extraction_findings_total(counts: dict[str, Any]) -> int:
     return total
 
 
+def _all_extraction_findings_total(counts: dict[str, Any]) -> int:
+    profiles = counts.get("profiles")
+    if isinstance(profiles, dict):
+        total = 0
+        for profile_id in (IOF_PROFILE_ID, ICF_PROFILE_ID):
+            block = profiles.get(profile_id)
+            if not isinstance(block, dict):
+                continue
+            total += _extraction_findings_total(block)
+        return total
+    return _extraction_findings_total(counts)
+
+
 def _project_findings(findings: Sequence[dict[str, Any]], *, facet: str) -> list[FindingFacetView]:
     counterpart = FACET_COUNTERPART[facet]
     views: list[FindingFacetView] = []
@@ -353,7 +392,8 @@ def _project_findings(findings: Sequence[dict[str, Any]], *, facet: str) -> list
                 finding_id=str(row["finding_id"]),
                 facet_value=cast("str | None", row[facet]),
                 counterpart_value=cast("str | None", row[counterpart]),
-                effect_direction=cast("str", row["effect_direction"]),
+                effect_direction=cast("str | None", row["effect_direction"]),
+                kind=cast("str", row["kind"]),
             )
         )
     return views

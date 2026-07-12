@@ -18,11 +18,13 @@ from policy_atlas.grounding_judge import (
 from policy_atlas.synthesis_backend import (
     EMIT_SECTION_TOOL_SCHEMA,
     FORBIDDEN_SECTION_TITLES,
+    QUERY_FINDINGS_TOOL_SCHEMA,
     SECTION_PROMPT_VERSION,
     SECTION_SYSTEM_PROMPT,
     SECTION_TOOL_SCHEMAS,
     SECTIONS_PROMPT_VERSION,
     SECTIONS_SYSTEM_PROMPT,
+    PatternPayloadWire,
     SectionProseWire,
     build_section_messages,
     build_section_repair_messages,
@@ -40,9 +42,22 @@ from policy_atlas.synthesis_tools import (
 
 def test_prompt_versions_are_distinct_constants() -> None:
     assert SECTIONS_PROMPT_VERSION == "synthesise_sections_v2"
-    assert SECTION_PROMPT_VERSION == "synthesise_section_v5"
+    assert SECTION_PROMPT_VERSION == "synthesise_section_v6"
     assert JUDGE_PROMPT_VERSION == "grounding_judge_v2"
     assert ENVELOPE_VERSION == "synthesis_envelope_v2"
+
+
+def test_query_findings_schema_is_kind_typed_and_pattern_payload_knows_icf() -> None:
+    schema = QUERY_FINDINGS_TOOL_SCHEMA["function"]
+    params = schema["parameters"]["properties"]
+    assert "iof_findings" in schema["description"]
+    assert "icf_findings" in schema["description"]
+    assert params["kinds"]["items"]["enum"] == ["iof", "icf"]
+    assert params["context_type"]["enum"]
+    assert "effect_direction" in params
+    assert "icf_context_type_count" in PatternPayloadWire.model_json_schema()[
+        "properties"
+    ]["computed_from"]["enum"]
 
 
 # --- synthesise_sections_v1 ---

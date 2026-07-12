@@ -775,6 +775,8 @@ def _empty_substrate() -> Any:
         chunk_by_id={},
         chunks_by_pss_id={},
         finding_by_id={},
+        icf_finding_by_id={},
+        icf_profile_available=False,
         basis_by_snapshot_id={},
         selected_pss_ids=set(),
     )
