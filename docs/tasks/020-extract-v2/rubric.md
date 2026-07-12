@@ -30,9 +30,9 @@ Slice-specific (from the contract):
 13. [ ] `effect_basis` and `study_geography` are carried end-to-end: wire → stored →
         row → `query_findings` writer envelope → annotation payload, with
         `field_coverage` markers and old-row null tolerance tested.
-14. [ ] The open ❓s (study_geography wire shape · profile-id bump · vetter guidance
-        line · evidence-type CHECK) are recorded as plan-approval decisions, none
-        silently defaulted.
+14. [ ] The open ❓s (profile-id bump · vetter guidance line · evidence-type CHECK) are
+        recorded as plan-approval decisions, none silently defaulted; the settled
+        `study_geography` finding-grain decision is honoured, not re-opened.
 15. [ ] Spec flow-back landed: data-model findings-layer base fields updated with a
         task-020 note + spec-bundle `log.md` line; the touched deferred.md entries
         discharged or honestly narrowed (incl. the window-ceiling stays-deferred owner

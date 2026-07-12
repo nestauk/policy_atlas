@@ -70,10 +70,17 @@ flow-back (the task-011 pattern).
    (`observed` | `modelled`) | null and `study_geography` source-named nullable field on
    `IOFRecordWire`/`IOFRecord`; field descriptions (they generate the prompt's field
    reference); `SCHEMA_VERSION` → `iof_v2`; import-time CHECK-vocabulary asserts extended.
-   ❓ `study_geography` wire shape — single source-named string (as the document reports
-   it, e.g. "12 OECD countries") vs structured list — adjudicated at plan approval;
-   default: single source-named string, canonicalisation stays downstream (the data-model
-   source-named-reference discipline).
+   **`study_geography` grain settled (owner, 2026-07-12, contract review): finding
+   grain**, single source-named string — "the geography of the evidence underlying this
+   finding, exactly as the document reports it" (e.g. "United Kingdom", "12 OECD
+   countries"), null when unreported, never inferred. Rationale: geography is
+   document-constant only for primary studies; in reviews (the corpus's dominant shape)
+   it varies per finding — the same usually-constant-but-review-variable pattern
+   `population`/`study_design`/`comparator` already sit at finding grain for. A
+   document-grain field would need a new doc-level wire surface + cross-window
+   reconciliation; document-level geography is instead a derived aggregation, deferred
+   with the diversity consumers. Canonicalisation stays downstream (source-named-reference
+   discipline).
 2. **DB schema + migration** (`schema.py`, `alembic/versions/`): two nullable columns on
    `intervention_outcome_finding`, CHECK on `effect_basis`, up/down migration. **No
    backfill** — existing v1 rows keep null (the spec's upgrades-never-invalidate rule);
@@ -86,8 +93,12 @@ flow-back (the task-011 pattern).
    and enter as a JSON data object; (b) `effect_basis` guidance (observed vs
    modelled/projected; the existing aspiration exclusions stand — a modelled *result* is
    a finding with `effect_basis` "modelled", a target is still not a finding);
-   (c) `study_geography` guidance (where conducted, as the document names it — not
-   publisher country); (d) few-shot example updated (pre-flight validation binding).
+   (c) `study_geography` guidance carrying two distinctions: stratum-vs-geography (a
+   geographic subgroup estimate is a `stratum_qualifiers` entry scoping the *claim*;
+   `study_geography` records where the underlying evidence was *conducted* — they
+   coexist) and study-vs-publisher (never inferred from publisher, venue or author
+   affiliation; reported-or-null); (d) few-shot example updated (pre-flight validation
+   binding).
 5. **Fingerprint + memo**: version-constant bumps flow into `extraction_fingerprint`
    (components map already carries profile/schema/prompt/rules). ❓ whether `PROFILE_ID`
    `eb_iof_base_v1` also bumps — plan decision. Test pins: old-fingerprint records reuse;
@@ -156,8 +167,10 @@ in `verification.md`; raw traces stay in Langfuse.
 Extraction stays `gpt-5.4-mini` via the OpenAI route (contracted floor; a step-up remains
 a recorded option, not a silent switch). One prompt-bearing change: `extract_iof_v6`
 (lead-authored). Replay set: recorded extraction probes over fixture/real corpus docs,
-including at least one modelled-projection document, one document with reported study
-geography, and one hostile-envelope (instruction-like abstract) fencing probe.
+including at least one modelled-projection document, one primary study with reported
+study geography, one review-shaped document where geography attaches at finding grain
+(pooled scope or per-included-study), and one hostile-envelope (instruction-like
+abstract) fencing probe.
 **Honesty pin:** prompt changes are eval-blind until the extraction-quality evals exist —
 replay evidence shows shape and non-regression on probes, it does not certify quality;
 that is exactly why this bump precedes ground truth.
