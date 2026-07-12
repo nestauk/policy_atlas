@@ -101,8 +101,11 @@ flow-back (the task-011 pattern).
 3. **Field rules v2** (`quote_verify.py`): `iof_rules_v2` — coercion + `field_coverage`
    markers for the two new nullable fields; version constant bump. The rules define the
    full coverage mapping per field (adversarial finding 6): valid value · null/unreported
-   (`not_extracted`) · unclear/indeterminate · invalid enum value (coerce-and-flag, never
-   reject the record) — so a null is never ambiguous within v2.
+   (`not_extracted`) · unclear/indeterminate — so a null is never ambiguous within v2.
+   (Amended at plan adversarial: NO invalid-enum recovery row for `effect_basis` — it is
+   a strict wire Literal under schema-constrained structured output, the
+   `causality_by_design` precedent, so an invalid value is unrepresentable at the API
+   boundary; string-tolerance remains a numerics-only pattern.)
    **Old-row distinguisher (adversarial finding 3):** a v1 row's `field_coverage` lacks
    the new keys entirely — key-absence (plus the extraction record's schema version) IS
    the "not recorded under v1" signal, distinct from a v2 null. Readers must not conflate
@@ -167,7 +170,9 @@ flow-back (the task-011 pattern).
 9. **Evidence-type provenance rider (011 review, Codex — folded in at contract review)**:
    record the `primary_evidence_type` actually sent to the prompt on
    `source_extraction_record` (nullable Text; rides the same migration). Honest
-   provenance for ground-truth annotation. The memo-match rule stays deferred — its
+   provenance for ground-truth annotation — which means (plan adversarial, finding 4)
+   it is recorded ONLY when a prompt call was attempted; pre-prompt failure rows
+   (`empty_basis`, `basis_mismatch`) record null, never a fabricated `Unclassified`. The memo-match rule stays deferred — its
    trigger (extract-before-classify plans) still doesn't exist. ❓ whether the column
    gets a CHECK against the classify vocabulary + `Unclassified` — plan decision.
    **Consumption semantics pinned (adversarial finding 4):** the column is
