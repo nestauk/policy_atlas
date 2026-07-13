@@ -1,5 +1,12 @@
 # Knowledge update log
 
+## 2026-07-13 (task 021 step 8)
+* **Creation**: Added [removing-shape-tolerance-sweeps-every-reader](removing-shape-tolerance-sweeps-every-reader.md) — dropping old-shape tolerance is only done when every reader fails closed; the 021 amendment's missed twin fallback in synthesise, caught by the review stack.
+* **Creation**: Added [validate-effective-defaults-not-explicit-args](validate-effective-defaults-not-explicit-args.md) — query_findings' kind/filter guard skipped the omitted-kinds default path; validate resolved values, test the default path (021 Codex adversarial).
+* **Creation**: Added [facet-partition-value-list-scale-limit](facet-partition-value-list-scale-limit.md) — duplicate value ids at ~184 distinct values, 4/4 live attempts, reasons persisted; REQUIRED Slice-C facet-redesign input (021 live check).
+* **Creation**: Added [refine-replay-revert-exit](refine-replay-revert-exit.md) — round 3 regressed vs round 2 on extract_icf_v1; the loop's revert exit is the mechanism, not ceremony (021 phase C).
+* **Declined**: wire-model few-shot carriage cost → already fully covered by [wire-field-additions-break-all-construction-sites](wire-field-additions-break-all-construction-sites.md) (021's `setting` rider re-verified it); shared-projection keys lesson → superseded same slice by the owner's tolerance removal; pdftotext probe qv artefact → probe-harness quirk recorded in verification.md (the live pipeline chunks from the ingest parser); specification-vs-finding frontier → lives in deferred.md's `intervention_specification` candidate, the eval slice owns its measurement; Codex clean-tree discipline → process lesson, recorded as a 2026-07-13 entry in `docs/agentic-ops/failure-log.md`.
+
 ## 2026-07-12 (task 020 step 8)
 * **Creation**: Added [fingerprint-covers-subcomponent-knobs](fingerprint-covers-subcomponent-knobs.md) — the vetter's model/effort are fingerprint components; the 018-latent gap the 020 review stack's Codex adversarial lane caught and fixed, per-knob test-pinned.
 * **Creation**: Added [wire-field-additions-break-all-construction-sites](wire-field-additions-break-all-construction-sites.md) — all-fields-required wire models + import-time few-shot pre-flight; nulls-first staging across schema/prompt phases (020 A/B).

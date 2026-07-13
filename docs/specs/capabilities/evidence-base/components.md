@@ -365,7 +365,8 @@ on what the run produced:
   `query_findings` serves both schemas behind one unified, kind-typed tool call
   (`iof_findings` / `icf_findings` as separate typed sections, never interleaved), a `kinds`
   filter defaulting to all kinds present, kind-specific filters (`effect_direction` IOF-only,
-  `context_type` ICF-only) rejected loudly on a mismatched kind/filter combo, and honest
+  `context_type` ICF-only) requiring `kinds` to name exactly their own kind — rejected
+  loudly otherwise, **including on the omitted-`kinds` default** (021 review stack) — and honest
   per-kind availability ("context findings: not extracted in this run" when a run's
   extraction lacks the ICF profile — a visible coverage fact, not a silently absent tool). A characterisation-only
   run is the landscape degenerate case (pattern/theme/gap/reasoning sections).

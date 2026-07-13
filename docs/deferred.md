@@ -193,9 +193,37 @@ architectural decision to defer, not an omission. Sources: architecture referenc
     arriving in different documents than their effects.
   - **ICF-only extraction composition** — unsupported this slice (`extract_profiles` must
     include `iof`; ICF-only is not expressible), noted at the Phase D directive validator.
+  - **Two-profile extraction parallelism** (021 review stack, efficiency lane): profile
+    bundles run strictly sequentially — IOF's whole window batch completes before ICF's
+    starts (~2× extract wall-clock on both-profile runs). Real but non-trivial: both
+    profiles share one SQLAlchemy `Connection` for memo reads/roll-up writes, so
+    parallelising needs a second connection or memo/write phases restructured out of the
+    parallel region. Revisit when extract wall-clock matters (eval-slice cost axis input).
+  - **`claim_basis` coverage cannot distinguish "indeterminate after reading" from
+    "not attempted"** (021 review stack, Codex adversarial): the prompt instructs
+    `null if indeterminate` but every nullable-enum null lands as `not_extracted` — a
+    coverage-vocabulary refinement (e.g. an `indeterminate` marker) for the eval slice /
+    schema-candidate ladder, decided against ground truth, not speculatively.
+  - **Planner two-profile narrowing decidability** (021 review stack, Codex adversarial):
+    an over-narrow planner (`extract_profiles=["iof"]` on an ordinary "what works" ask)
+    silently drops the ICF pass — the compile only rejects ICF-only. The eval slice's
+    intent set should probe narrowing behaviour across phrasings before any tightening of
+    the planner prompt.
+  - **Model-output control-character scrubbing** (021 security lane, LOW): extraction and
+    vetter output is NUL-scrubbed only, while directive strings get
+    `has_control_character`; a document's ANSI escapes copied verbatim into a claim ride
+    into DB rows and operator surfaces. Defense-in-depth: extend the backend-boundary
+    scrub to C0/C1 controls (except `\n`/`\t`) — note `prompt_fields.scrub_nul` and
+    `extract._scrub_nul` are parallel implementations to change together.
   The formerly-mooted **per-schema-writer-tools seam is pre-discharged by gate decision 6**:
   the unified kind-typed `query_findings` IS the schema-typed query interface — a future
-  third schema adds a kind section + filters (content work), not a new tool.
+  third schema adds a kind section + filters (content work), not a new tool. **Cost note
+  (021 review stack, three lanes convergent):** the ICF build cloned IOF plumbing rather
+  than generalising it — backends, vetter scaffolding, dedup loops, and per-kind literals
+  in group/facet_values/synthesis_tools/synthesise (19 verified cleanup/altitude
+  candidates). Deliberate for two kinds; the third schema's slice should budget a
+  consolidation pass (profile registry / shared judge scaffolding) rather than a third
+  hand-written copy.
 - **Saturation-based search stopping** — `saturated` is still not a
   `search_coverage_record` stop value (kept out by migration 15's widening, task 015):
   within-run discovery-RATE collapse now stops honestly as `short_circuit`, but
