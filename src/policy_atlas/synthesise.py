@@ -13,7 +13,7 @@ import hashlib
 import json
 import uuid
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -23,6 +23,8 @@ from sqlalchemy import case as sa_case
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.extract import record_ids_by_profile
+from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.grounding import content_hash
 from policy_atlas.grounding_judge import (
     ENVELOPE_VERSION,
@@ -31,6 +33,7 @@ from policy_atlas.grounding_judge import (
     GroundingJudgeBackend,
     build_envelope,
 )
+from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.quote_verify import BasisText, QuoteMatcher, build_basis
 from policy_atlas.schema import (
     addressable_unit,
@@ -40,6 +43,7 @@ from policy_atlas.schema import (
     characterisation_result,
     extraction_result,
     grouping_result,
+    implementation_context_finding,
     intervention_outcome_finding,
     project_source_snapshot,
     search_coverage_record,
@@ -392,12 +396,13 @@ class ChunkInfo:
 class FindingInfo:
     """One extracted finding plus the data required for synthesis validation."""
 
+    kind: str
     finding_id: str
     pss_id: str
     source_snapshot_id: str
     record: dict[str, Any]
     grounding: list[dict[str, Any]]
-    effect_direction: str
+    effect_direction: str | None
 
 
 @dataclass(frozen=True)
@@ -423,6 +428,8 @@ class SubstrateView:
     chunk_by_id: dict[str, ChunkInfo]
     chunks_by_pss_id: dict[str, list[ChunkInfo]]
     finding_by_id: dict[str, FindingInfo]
+    icf_finding_by_id: dict[str, FindingInfo]
+    icf_profile_available: bool
     basis_by_snapshot_id: dict[str, BasisText]
     selected_pss_ids: set[str]
 
@@ -480,8 +487,14 @@ class SubstrateView:
         """Compute effect-direction spread over all referenced extraction findings."""
         counts: Counter[str] = Counter()
         for finding in self.finding_by_id.values():
-            counts[finding.effect_direction] += 1
+            if finding.effect_direction is not None:
+                counts[finding.effect_direction] += 1
         return dict(sorted(counts.items()))
+
+    @property
+    def all_finding_by_id(self) -> dict[str, FindingInfo]:
+        """Return IOF and ICF findings keyed by finding id."""
+        return {**self.finding_by_id, **self.icf_finding_by_id}
 
 
 @dataclass(frozen=True)
@@ -1156,24 +1169,46 @@ def _load_coverage_records(
     }
 
 
-def _extraction_record_ids(extraction_row: Mapping[str, Any] | None) -> list[uuid.UUID]:
+def _extraction_profile_ids(extraction_row: Mapping[str, Any] | None) -> set[str]:
     if extraction_row is None:
-        return []
+        return set()
+    provenance = extraction_row.get("extraction_provenance")
+    if not isinstance(provenance, Mapping):
+        raise SynthesiseFailure(
+            "corrupt_reference: extraction_result.extraction_provenance must be an object"
+        )
+    profiles = provenance.get("profiles")
+    if not isinstance(profiles, Mapping):
+        raise SynthesiseFailure(
+            "corrupt_reference: extraction_result.extraction_provenance missing "
+            "the profiles map"
+        )
+    return {key for key in profiles if isinstance(key, str)}
+
+
+def _extraction_record_ids_by_profile(
+    extraction_row: Mapping[str, Any] | None,
+) -> dict[str, list[uuid.UUID]]:
+    if extraction_row is None:
+        return {}
     docs = extraction_row.get("docs")
     if not isinstance(docs, list):
-        return []
-    ids: list[uuid.UUID] = []
-    for doc in docs:
-        if not isinstance(doc, dict):
-            continue
-        raw_id = doc.get("extraction_record_id")
-        if not isinstance(raw_id, str):
-            continue
-        try:
-            ids.append(uuid.UUID(raw_id))
-        except ValueError:
-            continue
-    return ids
+        return {}
+    mapped_docs = [cast("dict[str, Any]", doc) for doc in docs if isinstance(doc, dict)]
+    raw_by_profile = record_ids_by_profile(mapped_docs)
+    record_ids: dict[str, list[uuid.UUID]] = {}
+    for profile_id, raw_ids in raw_by_profile.items():
+        parsed: list[uuid.UUID] = []
+        for raw_id in raw_ids:
+            if isinstance(raw_id, uuid.UUID):
+                parsed.append(raw_id)
+            elif isinstance(raw_id, str):
+                try:
+                    parsed.append(uuid.UUID(raw_id))
+                except ValueError:
+                    continue
+        record_ids[profile_id] = parsed
+    return record_ids
 
 
 def _load_findings(
@@ -1181,75 +1216,134 @@ def _load_findings(
     *,
     project_id: uuid.UUID,
     extraction_row: Mapping[str, Any] | None,
-) -> tuple[dict[str, FindingInfo], dict[str, BasisText]]:
-    record_ids = _extraction_record_ids(extraction_row)
-    if not record_ids:
-        return {}, {}
-    rows = conn.execute(
-        sa_select(
-            intervention_outcome_finding.c.finding_id,
-            intervention_outcome_finding.c.intervention,
-            intervention_outcome_finding.c.outcome,
-            intervention_outcome_finding.c.population,
-            intervention_outcome_finding.c.comparator,
-            intervention_outcome_finding.c.effect_direction,
-            intervention_outcome_finding.c.estimate_level,
-            intervention_outcome_finding.c.study_design,
-            intervention_outcome_finding.c.study_geography,
-            intervention_outcome_finding.c.stratum_qualifiers,
-            intervention_outcome_finding.c.statistics,
-            intervention_outcome_finding.c.causality_by_design,
-            intervention_outcome_finding.c.effect_basis,
-            intervention_outcome_finding.c.is_primary,
-            intervention_outcome_finding.c.field_coverage,
-            intervention_outcome_finding.c.grounding,
-            source_extraction_record.c.project_source_snapshot_id,
-            source_extraction_record.c.source_snapshot_id,
-            source_snapshot.c.metadata,
-        )
-        .select_from(intervention_outcome_finding)
-        .join(
-            source_extraction_record,
-            (
-                source_extraction_record.c.extraction_record_id
-                == intervention_outcome_finding.c.extraction_record_id
+) -> tuple[dict[str, FindingInfo], dict[str, FindingInfo], bool, dict[str, BasisText]]:
+    profile_ids = _extraction_profile_ids(extraction_row)
+    record_ids_by_profile = _extraction_record_ids_by_profile(extraction_row)
+    iof_record_ids = record_ids_by_profile.get(IOF_PROFILE_ID, [])
+    icf_record_ids = record_ids_by_profile.get(ICF_PROFILE_ID, [])
+    iof_rows: Sequence[Any] = []
+    if iof_record_ids:
+        iof_rows = conn.execute(
+            sa_select(
+                intervention_outcome_finding.c.finding_id,
+                intervention_outcome_finding.c.intervention,
+                intervention_outcome_finding.c.outcome,
+                intervention_outcome_finding.c.population,
+                intervention_outcome_finding.c.setting,
+                intervention_outcome_finding.c.comparator,
+                intervention_outcome_finding.c.effect_direction,
+                intervention_outcome_finding.c.estimate_level,
+                intervention_outcome_finding.c.study_design,
+                intervention_outcome_finding.c.study_geography,
+                intervention_outcome_finding.c.stratum_qualifiers,
+                intervention_outcome_finding.c.statistics,
+                intervention_outcome_finding.c.causality_by_design,
+                intervention_outcome_finding.c.effect_basis,
+                intervention_outcome_finding.c.is_primary,
+                intervention_outcome_finding.c.field_coverage,
+                intervention_outcome_finding.c.grounding,
+                source_extraction_record.c.project_source_snapshot_id,
+                source_extraction_record.c.source_snapshot_id,
+                source_snapshot.c.metadata,
             )
-            & (source_extraction_record.c.project_id == project_id),
-        )
-        .join(
-            source_snapshot,
-            source_snapshot.c.source_snapshot_id == source_extraction_record.c.source_snapshot_id,
-        )
-        .where(intervention_outcome_finding.c.project_id == project_id)
-        .where(intervention_outcome_finding.c.extraction_record_id.in_(record_ids))
-        .order_by(
-            source_extraction_record.c.extraction_record_id,
-            intervention_outcome_finding.c.finding_id,
-        )
-    ).fetchall()
+            .select_from(intervention_outcome_finding)
+            .join(
+                source_extraction_record,
+                (
+                    source_extraction_record.c.extraction_record_id
+                    == intervention_outcome_finding.c.extraction_record_id
+                )
+                & (source_extraction_record.c.project_id == project_id),
+            )
+            .join(
+                source_snapshot,
+                source_snapshot.c.source_snapshot_id
+                == source_extraction_record.c.source_snapshot_id,
+            )
+            .where(intervention_outcome_finding.c.project_id == project_id)
+            .where(intervention_outcome_finding.c.extraction_record_id.in_(iof_record_ids))
+            .order_by(
+                source_extraction_record.c.extraction_record_id,
+                intervention_outcome_finding.c.finding_id,
+            )
+        ).fetchall()
+    icf_rows: Sequence[Any] = []
+    if icf_record_ids:
+        icf_rows = conn.execute(
+            sa_select(
+                implementation_context_finding.c.finding_id,
+                implementation_context_finding.c.context_type,
+                implementation_context_finding.c.claim,
+                implementation_context_finding.c.intervention,
+                implementation_context_finding.c.outcome,
+                implementation_context_finding.c.population,
+                implementation_context_finding.c.setting,
+                implementation_context_finding.c.study_geography,
+                implementation_context_finding.c.study_design,
+                implementation_context_finding.c.claim_level,
+                implementation_context_finding.c.claim_basis,
+                implementation_context_finding.c.level,
+                implementation_context_finding.c.resource_requirements,
+                implementation_context_finding.c.workforce_requirements,
+                implementation_context_finding.c.field_coverage,
+                implementation_context_finding.c.grounding,
+                source_extraction_record.c.project_source_snapshot_id,
+                source_extraction_record.c.source_snapshot_id,
+                source_snapshot.c.metadata,
+            )
+            .select_from(implementation_context_finding)
+            .join(
+                source_extraction_record,
+                (
+                    source_extraction_record.c.extraction_record_id
+                    == implementation_context_finding.c.extraction_record_id
+                )
+                & (source_extraction_record.c.project_id == project_id),
+            )
+            .join(
+                source_snapshot,
+                source_snapshot.c.source_snapshot_id
+                == source_extraction_record.c.source_snapshot_id,
+            )
+            .where(implementation_context_finding.c.project_id == project_id)
+            .where(implementation_context_finding.c.extraction_record_id.in_(icf_record_ids))
+            .order_by(
+                source_extraction_record.c.extraction_record_id,
+                implementation_context_finding.c.finding_id,
+            )
+        ).fetchall()
     findings: dict[str, FindingInfo] = {}
+    icf_findings: dict[str, FindingInfo] = {}
     snapshot_ids: list[uuid.UUID] = []
     seen_snapshots: set[str] = set()
     metadata_by_snapshot: dict[str, Any] = {}
-    for row in rows:
+
+    def _remember_snapshot(row: Any) -> tuple[str, str]:
         pss_id = str(row.project_source_snapshot_id)
         metadata = row.metadata if isinstance(row.metadata, dict) else {}
-        title = metadata.get("title")
-        finding_id = str(row.finding_id)
         source_snapshot_id = cast("uuid.UUID", row.source_snapshot_id)
         basis_key = str(source_snapshot_id)
         if basis_key not in seen_snapshots:
             seen_snapshots.add(basis_key)
             snapshot_ids.append(source_snapshot_id)
             metadata_by_snapshot[basis_key] = metadata
+        return pss_id, basis_key
+
+    for row in iof_rows:
+        pss_id, basis_key = _remember_snapshot(row)
+        metadata = row.metadata if isinstance(row.metadata, dict) else {}
+        title = metadata.get("title")
+        finding_id = str(row.finding_id)
         grounding = row.grounding if isinstance(row.grounding, list) else []
         record = {
+            "kind": "iof",
             "finding_id": finding_id,
             "pss_id": pss_id,
             "document_title": title if isinstance(title, str) and title else f"source {pss_id}",
             "intervention": row.intervention,
             "outcome": row.outcome,
             "population": row.population,
+            "setting": row.setting,
             "comparator": row.comparator,
             "effect_direction": row.effect_direction,
             "estimate_level": row.estimate_level,
@@ -1263,6 +1357,7 @@ def _load_findings(
             "field_coverage": row.field_coverage,
         }
         findings[finding_id] = FindingInfo(
+            kind="iof",
             finding_id=finding_id,
             pss_id=pss_id,
             source_snapshot_id=basis_key,
@@ -1270,8 +1365,43 @@ def _load_findings(
             grounding=cast("list[dict[str, Any]]", grounding),
             effect_direction=cast("str", row.effect_direction),
         )
+    for row in icf_rows:
+        pss_id, basis_key = _remember_snapshot(row)
+        metadata = row.metadata if isinstance(row.metadata, dict) else {}
+        title = metadata.get("title")
+        finding_id = str(row.finding_id)
+        grounding = row.grounding if isinstance(row.grounding, list) else []
+        record = {
+            "kind": "icf",
+            "finding_id": finding_id,
+            "pss_id": pss_id,
+            "document_title": title if isinstance(title, str) and title else f"source {pss_id}",
+            "context_type": row.context_type,
+            "claim": row.claim,
+            "intervention": row.intervention,
+            "outcome": row.outcome,
+            "population": row.population,
+            "setting": row.setting,
+            "study_geography": row.study_geography,
+            "study_design": row.study_design,
+            "claim_level": row.claim_level,
+            "claim_basis": row.claim_basis,
+            "level": row.level,
+            "resource_requirements": row.resource_requirements,
+            "workforce_requirements": row.workforce_requirements,
+            "field_coverage": row.field_coverage,
+        }
+        icf_findings[finding_id] = FindingInfo(
+            kind="icf",
+            finding_id=finding_id,
+            pss_id=pss_id,
+            source_snapshot_id=basis_key,
+            record=record,
+            grounding=cast("list[dict[str, Any]]", grounding),
+            effect_direction=None,
+        )
     basis_by_snapshot = _load_bases_for_snapshots(conn, snapshot_ids, metadata_by_snapshot)
-    return findings, basis_by_snapshot
+    return findings, icf_findings, ICF_PROFILE_ID in profile_ids, basis_by_snapshot
 
 
 def _characterisation_summary(row: Mapping[str, Any] | None) -> dict[str, Any] | None:
@@ -1382,6 +1512,8 @@ def _substrate_view(
     chunk_by_id: dict[str, ChunkInfo],
     chunks_by_pss_id: dict[str, list[ChunkInfo]],
     finding_by_id: dict[str, FindingInfo],
+    icf_finding_by_id: dict[str, FindingInfo],
+    icf_profile_available: bool,
     basis_by_snapshot_id: dict[str, BasisText],
     selected_pss_ids: set[str],
 ) -> SubstrateView:
@@ -1395,6 +1527,8 @@ def _substrate_view(
         chunk_by_id=chunk_by_id,
         chunks_by_pss_id=chunks_by_pss_id,
         finding_by_id=finding_by_id,
+        icf_finding_by_id=icf_finding_by_id,
+        icf_profile_available=icf_profile_available,
         basis_by_snapshot_id=basis_by_snapshot_id,
         selected_pss_ids=selected_pss_ids,
     )
@@ -1698,12 +1832,14 @@ def _validate_finding_claim(
         )
     payload = _base_payload(claim_id, claim)
     payload["cited_finding_ids"] = list(claim.cited_finding_ids)
+    all_findings = substrate.all_finding_by_id
+    cited_kinds: list[str] = []
     anchors_payload: list[dict[str, Any]] = []
     citation_rows: list[CitationDraft] = []
     judge_chunk_ids: set[str] = set()
     flags: list[str] = []
     for finding_id in claim.cited_finding_ids:
-        finding = substrate.finding_by_id.get(finding_id)
+        finding = all_findings.get(finding_id)
         if finding is None:
             return _reject(
                 claim,
@@ -1711,6 +1847,7 @@ def _validate_finding_claim(
                 claim_index=claim_index,
                 reason="unknown_finding_id",
             )
+        cited_kinds.append(finding.kind)
         basis = substrate.basis_by_snapshot_id.get(finding.source_snapshot_id)
         if basis is None:
             return _reject(
@@ -1727,6 +1864,7 @@ def _validate_finding_claim(
             anchors_payload.append(
                 {
                     "finding_id": finding_id,
+                    "kind": finding.kind,
                     "quote": None,
                     "match_status": "failed",
                     "spans": [],
@@ -1739,6 +1877,7 @@ def _validate_finding_claim(
                 anchors_payload.append(
                     {
                         "finding_id": finding_id,
+                        "kind": finding.kind,
                         "quote": quote,
                         "match_status": "failed",
                         "spans": [],
@@ -1752,6 +1891,7 @@ def _validate_finding_claim(
             ]
             anchor_record = {
                 "finding_id": finding_id,
+                "kind": finding.kind,
                 "quote": quote,
                 "match_status": match.status,
                 "spans": spans_payload,
@@ -1766,6 +1906,7 @@ def _validate_finding_claim(
             citation_rows.extend(span_rows)
             judge_chunk_ids.update(span_chunk_ids)
             anchors_payload.append(anchor_record)
+    payload["cited_finding_kinds"] = cited_kinds
     payload["anchors"] = anchors_payload
     if "quote_unverified" in flags:
         payload["quote_unverified"] = True
@@ -1959,6 +2100,33 @@ def _validate_pattern_claim(
                 reason="substrate_ungated_type",
             )
         computed = substrate.extraction_direction_spread
+    elif pattern.computed_from == "icf_context_type_count":
+        if substrate.extraction is None or not substrate.icf_profile_available:
+            return _reject(
+                claim,
+                claim_id=claim_id,
+                claim_index=claim_index,
+                reason="substrate_ungated_type",
+            )
+        if pattern.group_id is not None:
+            if substrate.grouping is None or pattern.group_id not in section_group_ids:
+                return _reject(
+                    claim,
+                    claim_id=claim_id,
+                    claim_index=claim_index,
+                    reason="pattern_reference_invalid",
+                )
+            group = substrate.group_by_id.get(pattern.group_id)
+            members = group.get("member_finding_ids", []) if group is not None else []
+            if not isinstance(members, list):
+                members = []
+            computed = _icf_context_type_counts(
+                substrate.icf_finding_by_id.get(member)
+                for member in members
+                if isinstance(member, str)
+            )
+        else:
+            computed = _icf_context_type_counts(substrate.icf_finding_by_id.values())
     if computed is None:
         return _reject(
             claim,
@@ -1985,6 +2153,17 @@ def _validate_pattern_claim(
         annotation_type="pattern",
         payload=payload,
     )
+
+
+def _icf_context_type_counts(findings: Iterable[FindingInfo | None]) -> dict[str, int]:
+    counts: Counter[str] = Counter()
+    for finding in findings:
+        if finding is None:
+            continue
+        context_type = finding.record.get("context_type")
+        if isinstance(context_type, str):
+            counts[context_type] += 1
+    return dict(sorted(counts.items()))
 
 
 def _validate_theme_claim(
@@ -2876,18 +3055,23 @@ def _group_member_findings(
 ) -> list[dict[str, Any]]:
     if substrate.grouping is None:
         return []
-    member_ids: set[str] = set()
+    member_ids: list[str] = []
+    seen: set[str] = set()
     for group_id in section.group_ids:
         group = substrate.group_by_id.get(group_id)
         if group is None:
             continue
         members = group.get("member_finding_ids", [])
         if isinstance(members, list):
-            member_ids.update(str(member) for member in members if isinstance(member, str))
+            for member in members:
+                if isinstance(member, str) and member not in seen:
+                    member_ids.append(member)
+                    seen.add(member)
+    all_findings = substrate.all_finding_by_id
     return [
-        substrate.finding_by_id[finding_id].record
-        for finding_id in sorted(member_ids)
-        if finding_id in substrate.finding_by_id
+        all_findings[finding_id].record
+        for finding_id in member_ids
+        if finding_id in all_findings
     ]
 
 
@@ -3073,7 +3257,9 @@ def _rollup_counts(
         "findings_cited_distinct": len(finding_ids),
     }
     if substrate.extraction is not None:
-        counts["findings_total"] = len(substrate.finding_by_id)
+        counts["findings_total"] = len(substrate.finding_by_id) + len(
+            substrate.icf_finding_by_id
+        )
     if substrate.grouping is not None:
         counts["groups_total"] = len(substrate.grouping_group_ids)
         counts["groups_unsectioned"] = groups_unsectioned or 0
@@ -3395,7 +3581,7 @@ def synthesise_scope(
         selected_pss_ids=selected_pss_ids_str,
         appraised_pss_ids=corpus.appraised_pss_ids,
     )
-    finding_by_id, finding_bases = _load_findings(
+    finding_by_id, icf_finding_by_id, icf_profile_available, finding_bases = _load_findings(
         conn, project_id=project_id, extraction_row=refs.extraction_row
     )
     basis_by_snapshot = {**chunk_bases, **finding_bases}
@@ -3409,6 +3595,8 @@ def synthesise_scope(
         chunk_by_id=chunk_by_id,
         chunks_by_pss_id=chunks_by_pss_id,
         finding_by_id=finding_by_id,
+        icf_finding_by_id=icf_finding_by_id,
+        icf_profile_available=icf_profile_available,
         basis_by_snapshot_id=basis_by_snapshot,
         selected_pss_ids=selected_pss_ids_str,
     )

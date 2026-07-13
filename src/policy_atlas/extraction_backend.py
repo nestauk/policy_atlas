@@ -17,12 +17,19 @@ from policy_atlas.extract_prompt import (
     build_extract_messages,
 )
 from policy_atlas.extraction_records import ExtractionResponse, ExtractionWindowPayload
+from policy_atlas.implementation_context_prompt import (
+    ICF_EXTRACT_MAX_OUTPUT_TOKENS,
+    ICF_EXTRACTION_MODEL,
+    ICF_PROMPT_VERSION,
+    build_icf_extract_messages,
+)
+from policy_atlas.implementation_context_records import ICFExtractionResponse
 from policy_atlas.usage import UsageResult, token_usage_from_provider
 
 log = structlog.get_logger()
 
 
-def _with_iof_v2_defaults(raw_findings: Any) -> Any:
+def _with_iof_defaults(raw_findings: Any) -> Any:
     """Default legacy stub sentinel records to the current wire shape."""
     if not isinstance(raw_findings, list):
         return raw_findings
@@ -30,6 +37,7 @@ def _with_iof_v2_defaults(raw_findings: Any) -> Any:
     for record in raw_findings:
         if isinstance(record, dict):
             updated = dict(record)
+            updated.setdefault("setting", None)
             updated.setdefault("study_geography", None)
             updated.setdefault("effect_basis", None)
             defaulted.append(updated)
@@ -151,6 +159,98 @@ class OpenAIExtractionBackend:
         return response, usage
 
 
+class OpenAIICFExtractionBackend:
+    """Live OpenAI implementation of the ICF extraction seam.
+
+    Args:
+        api_key: Optional OpenAI API key. If omitted, ``OPENAI_API_KEY`` is read
+            from the environment; keys are never read from persistent config.
+        langfuse_client: Optional Langfuse client. When omitted, tracing is a
+            no-op and no Langfuse object is created.
+
+    Raises:
+        RuntimeError: If no OpenAI API key is provided or configured.
+    """
+
+    mode = "live"
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        langfuse_client: Langfuse | None = None,
+    ) -> None:
+        self._client = resolve_openai_client(
+            api_key,
+            backend_name="OpenAIICFExtractionBackend",
+            timeout=300.0,
+            max_retries=2,
+        )
+        self._langfuse_client = langfuse_client
+
+    def _extract_once(
+        self,
+        payload: ExtractionWindowPayload,
+    ) -> UsageResult[ICFExtractionResponse]:
+        messages = build_icf_extract_messages(payload)
+        response = self._client.chat.completions.parse(
+            model=ICF_EXTRACTION_MODEL,
+            messages=messages,
+            response_format=ICFExtractionResponse,
+            max_completion_tokens=ICF_EXTRACT_MAX_OUTPUT_TOKENS,
+        )
+        log_usage("extraction.extract_icf.usage", response.usage)
+        if not response.choices:
+            raise RuntimeError("OpenAI ICF extraction response had no choices.")
+        parsed = response.choices[0].message.parsed
+        if parsed is None:
+            raise RuntimeError("OpenAI ICF extraction response was not parsed.")
+        parsed_model: ICFExtractionResponse = parsed
+        return parsed_model, token_usage_from_provider(response.usage)
+
+    def extract(
+        self, payload: ExtractionWindowPayload
+    ) -> UsageResult[ICFExtractionResponse]:
+        """Extract ICF findings through structured OpenAI output.
+
+        Args:
+            payload: The window's basis segments plus envelope context.
+
+        Returns:
+            Raw structurally parsed ICF extraction output plus token usage.
+
+        Raises:
+            RuntimeError: If the response cannot be parsed into the expected shape.
+        """
+        messages = build_icf_extract_messages(payload)
+
+        def _update(
+            span: Any, result: UsageResult[ICFExtractionResponse]
+        ) -> None:
+            response, usage = result
+            span.update(
+                input={"messages": messages},
+                output={"findings": [f.model_dump() for f in response.findings]},
+                model=ICF_EXTRACTION_MODEL,
+                metadata={
+                    "prompt_version": ICF_PROMPT_VERSION,
+                    "pss_id": payload.pss_id,
+                    "window_index": payload.window_index,
+                    "segment_ids": [s["segment_id"] for s in payload.segments],
+                    "finding_count": len(response.findings),
+                    **usage_metadata(usage),
+                },
+            )
+
+        response, usage = tracing.traced_call(
+            self._langfuse_client,
+            name=f"extract_icf:{payload.pss_id[:8]}:w{payload.window_index}",
+            as_type="generation",
+            call=lambda: self._extract_once(payload),
+            update=_update,
+        )
+        return response, usage
+
+
 class StubExtractionBackend:
     """Deterministic zero-egress extraction backend for tests and local runs."""
 
@@ -178,7 +278,7 @@ class StubExtractionBackend:
             return (
                 ExtractionResponse.model_validate(
                     {
-                        "findings": _with_iof_v2_defaults(
+                        "findings": _with_iof_defaults(
                             windows.get(str(payload.window_index), [])
                         )
                     }
@@ -191,9 +291,7 @@ class StubExtractionBackend:
                 return (
                     ExtractionResponse.model_validate(
                         {
-                            "findings": _with_iof_v2_defaults(
-                                payload.metadata["_stub_iof"]
-                            )
+                            "findings": _with_iof_defaults(payload.metadata["_stub_iof"])
                         }
                     ),
                     None,
@@ -201,3 +299,47 @@ class StubExtractionBackend:
             return ExtractionResponse(findings=[]), None
 
         return ExtractionResponse(findings=[]), None
+
+
+class StubICFExtractionBackend:
+    """Deterministic zero-egress ICF extraction backend for tests and local runs."""
+
+    mode = "stub"
+
+    def extract(self, payload: ExtractionWindowPayload) -> UsageResult[ICFExtractionResponse]:
+        """Return sentinel-driven ICF findings from the payload metadata.
+
+        Args:
+            payload: The window's basis segments plus envelope context. The
+                ``metadata`` dict carries ``_stub_icf*`` sentinels for the
+                stub only; it never enters a live prompt.
+
+        Returns:
+            Deterministic ICF extraction output plus no token usage.
+
+        Raises:
+            RuntimeError: If ``_stub_icf_extract_failed`` is truthy.
+        """
+        if payload.metadata.get("_stub_icf_extract_failed"):
+            raise RuntimeError("Stub ICF extraction failure sentinel.")
+
+        if "_stub_icf_windows" in payload.metadata:
+            windows = payload.metadata["_stub_icf_windows"]
+            return (
+                ICFExtractionResponse.model_validate(
+                    {"findings": windows.get(str(payload.window_index), [])}
+                ),
+                None,
+            )
+
+        if "_stub_icf" in payload.metadata:
+            if payload.window_index == 0:
+                return (
+                    ICFExtractionResponse.model_validate(
+                        {"findings": payload.metadata["_stub_icf"]}
+                    ),
+                    None,
+                )
+            return ICFExtractionResponse(findings=[]), None
+
+        return ICFExtractionResponse(findings=[]), None

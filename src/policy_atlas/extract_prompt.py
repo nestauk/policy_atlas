@@ -1,5 +1,10 @@
-"""The ``extract_iof_v6`` prompt — the repo's third product prompt (task 011).
+"""The ``extract_iof_v7`` prompt — the repo's third product prompt (task 011).
 
+v7 (task 021, the IOF ``setting`` rider) = v6 plus the top-level delivery
+``setting`` field: one guidance block (the study-geography two-distinction
+pattern applied to setting vs setting-typed strata) and the few-shot touch (the
+example segment now names its delivery setting); every other rule is
+byte-identical to v6.
 v6 (task 020) = v5 with the document envelope fenced as one id-keyed JSON data
 object (title/abstract/evidence type leave the inline template — a hostile
 abstract can no longer structurally spoof the template) plus guidance for the
@@ -35,7 +40,7 @@ from policy_atlas.extraction_records import (
     render_field_docs,
 )
 
-PROMPT_VERSION = "extract_iof_v6"
+PROMPT_VERSION = "extract_iof_v7"
 
 # The contracted model floor (the 009 nano lesson is binding); a step-up is a
 # recorded option, not a silent switch.
@@ -58,7 +63,8 @@ EXAMPLE_SEGMENT_TEXT = (
     "structured home-visiting programmes reduced unplanned child hospital "
     "admissions compared with usual care (pooled risk ratio 0.82, 95% CI 0.71 "
     "to 0.94; I-squared = 41%). Effects at 24 months were smaller and not "
-    "statistically significant (RR 0.93, 95% CI 0.80 to 1.08)."
+    "statistically significant (RR 0.93, 95% CI 0.80 to 1.08). Visits were "
+    "delivered in families' homes."
 )
 
 EXAMPLE_RESPONSE = ExtractionResponse(
@@ -67,6 +73,7 @@ EXAMPLE_RESPONSE = ExtractionResponse(
             intervention="structured home-visiting programmes",
             outcome="unplanned child hospital admissions",
             population=None,
+            setting="families' homes",
             comparator="usual care",
             effect_direction="decrease",
             estimate_level="pooled",
@@ -105,6 +112,7 @@ EXAMPLE_RESPONSE = ExtractionResponse(
             intervention="structured home-visiting programmes",
             outcome="unplanned child hospital admissions",
             population=None,
+            setting="families' homes",
             comparator="usual care",
             effect_direction="no_effect",
             estimate_level="pooled",
@@ -258,6 +266,18 @@ Study geography:
 - In reviews, geography can differ per finding: a pooled estimate may span
   "12 OECD countries" while an individual study's finding sits in "Norway" —
   record what the document ties to THIS finding's evidence.
+
+Setting:
+- setting records where recipients experienced the intervention underlying
+  this finding, exactly as the document reports it ("primary care",
+  "secondary schools"), or null when it does not say. Use the delivery
+  setting, never the institution that created or mandated the intervention:
+  a parliament passing a school nutrition policy means the setting is the
+  school, not parliament. Never inferred.
+- A setting-scoped subgroup estimate is a stratum_qualifiers entry, and the
+  two coexist: a study delivered in primary care reporting a nurse-led-clinics
+  subgroup estimate has setting "primary care" and a setting stratum for that
+  subgroup on that finding.
 
 Evidence-type guidance (the envelope object names this document's type):
 - Systematic reviews and meta-analyses: report the pooled estimates, one record

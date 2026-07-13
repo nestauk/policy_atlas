@@ -4,7 +4,7 @@ The wire models drive the OpenAI structured-output schema *and* generate the
 prompt's field documentation — one source of truth, so prompt/schema drift is
 structurally impossible (V2 silently discarded three requested fields that way).
 Wire grain fields are nullable and numerics string-tolerant so that null-like
-strings and unparseable values arrive intact for iof_rules_v1 to coerce and
+strings and unparseable values arrive intact for iof_rules_v3 to coerce and
 flag, instead of being silently rejected or model-conformed at the API boundary.
 The stored models are the final typed shape after grain validation + field rules.
 """
@@ -16,6 +16,12 @@ from typing import Any, Literal, TypedDict, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from policy_atlas.finding_references import (
+    INTERVENTION_DESC,
+    POPULATION_DESC,
+    STUDY_DESIGN_DESC,
+    STUDY_GEOGRAPHY_DESC,
+)
 from policy_atlas.schema import (
     CAUSALITY_BY_DESIGN,
     EFFECT_BASES,
@@ -30,7 +36,7 @@ from policy_atlas.schema import (
 # enter the fingerprint and recorded components map, so field additions do not
 # bump the profile.
 PROFILE_ID = "eb_iof_base_v1"
-SCHEMA_VERSION = "iof_v2"  # covers the wire AND stored model layers
+SCHEMA_VERSION = "iof_v3"  # covers the wire AND stored model layers
 
 # The segment id carried by an abstract-basis payload; anchors naming it map to
 # chunk_id null at write (contract decision 4, abstract-envelope location).
@@ -133,10 +139,7 @@ class IOFRecordWire(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     intervention: str | None = Field(
-        description=(
-            "The intervention exactly as this document names it (source-named, never "
-            "a standardised term). Control or comparison arms are not interventions."
-        )
+        description=INTERVENTION_DESC
     )
     outcome: str | None = Field(
         description=(
@@ -146,9 +149,16 @@ class IOFRecordWire(BaseModel):
         )
     )
     population: str | None = Field(
+        description=POPULATION_DESC
+    )
+    setting: str | None = Field(
         description=(
-            "The study population exactly as the document describes it, or null if "
-            "not reported."
+            "The setting where the intervention underlying this finding was "
+            "delivered, exactly as the document reports it (e.g. 'primary care', "
+            "'secondary schools'), or null if not reported. Use the delivery setting, "
+            "not the mandating institution. A setting-scoped subgroup estimate belongs "
+            "in stratum_qualifiers; this field records where the underlying evidence "
+            "was conducted — they can coexist."
         )
     )
     comparator: str | None = Field(
@@ -176,20 +186,10 @@ class IOFRecordWire(BaseModel):
         )
     )
     study_design: str | None = Field(
-        description=(
-            "The study design underlying this finding, as the document reports it, "
-            "or null if not reported."
-        )
+        description=STUDY_DESIGN_DESC
     )
     study_geography: str | None = Field(
-        description=(
-            "Where the evidence underlying this finding was conducted, exactly as the document "
-            "reports it (e.g. 'United Kingdom', '12 OECD countries'), or null if not reported. "
-            "This is the study's own setting — never inferred from publisher, venue or author "
-            "affiliation. A geographic subgroup that scopes the claim belongs in "
-            "stratum_qualifiers; this field records where the underlying study or studies took "
-            "place."
-        )
+        description=STUDY_GEOGRAPHY_DESC
     )
     stratum_qualifiers: list[IOFStratumWire] = Field(
         description=(
@@ -261,7 +261,7 @@ class ExtractionResponse(BaseModel):
     )
 
 
-# --- Stored models (the final typed shape after grain validation + iof_rules_v1) ---
+# --- Stored models (the final typed shape after grain validation + iof_rules_v3) ---
 
 
 class IOFStratum(BaseModel):
@@ -311,6 +311,7 @@ class IOFRecord(BaseModel):
     intervention: str = Field(min_length=1)
     outcome: str = Field(min_length=1)
     population: str | None
+    setting: str | None
     comparator: str | None
     effect_direction: EffectDirection
     estimate_level: EstimateLevel | None

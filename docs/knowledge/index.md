@@ -36,11 +36,13 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [Wire-model field additions break every construction site at import — stage nulls first](wire-field-additions-break-all-construction-sites.md) - strict structured output makes wire models all-fields-required; the few-shot example's import-time pre-flight turns a partial addition into a module error — mechanical nulls at the schema phase, real values at the prompt phase (020 A/B).
 * [A runner above self-catching components must distinguish evented failure from escaped exception](two-phase-run-lifecycle-evented-vs-escaped.md) - an escaped exception means the transaction rolled back; committing run identity first (two-phase lifecycle) makes the fresh-transaction `component.failed` backstop's FK trivially valid (017, contract decision 8).
 * [Thread fan-outs submit through copy_context and accumulate usage on the submitting thread](executor-fanout-context-and-usage.md) - one mechanism carries the Langfuse span context AND structlog contextvars; `UsageAccumulator` is not thread-safe — workers return usage, the parent adds in input order (019 items 4/7a/11; nesting live-verified on the D1 traces).
+* [Removing a persisted-shape tolerance must sweep every reader of the shape](removing-shape-tolerance-sweeps-every-reader.md) - the sweep is defined by readers (grep the access pattern), not the module the decision named; a twin fallback in a parallel module turned "raise loudly" into "silently degrade" on one of two paths, and fixture seeds are readers too (021 amendment gap, caught by the review stack).
 
 ## Prompting
 
 * [An earlier prompt honesty rule can silently defeat a new capability line](prompt-honesty-rules-route-around-new-capability.md) - the planner routed group asks away from the new filter surface via correct study-vs-source reasoning until the prompt said which reading selects which surface; only replay rounds catch this class (019 planner replay, round 1→2).
 * [Replay-diff a guidance line to learn whether it is prophylactic or corrective — and record which](replay-diff-prophylactic-vs-corrective.md) - 0 flips means the old prompt already behaved and the line pins behaviour against a text risk; claiming it "fixed" an unobserved failure inflates the evidence (020 vetter v3 pre/post replay).
+* [The refine-replay loop's revert-not-iterate exit is load-bearing](refine-replay-revert-exit.md) - round 3 regressed against round 2 (an over-specific rule re-admitted the defect round 2 fixed); single-sample mini-model variance + rule interaction mean more words is not more control — revert and ship the earlier text (021 extract_icf_v1).
 
 ## Testing rules
 
@@ -80,6 +82,7 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [The characterise coverage base is project-pool-wide by design](coverage-base-project-pool-wide.md) - pool-wide per-question screening: scope-isolation tests assert the other scope's docs as `unscreened`, never as absent (019 deviation 3, owner-verified).
 * [A scope surface that compiles per-backend must compile within the plan's backend scope](scope-surface-compiles-within-backend-scope.md) - `country_group` compiles both backend blocks; the acquire directive drops the out-of-scope one, or acquire-time validation kills an approved plan (019 review stack, adversarial MAJOR).
 * [Dispatch gated on a backend capability fails closed when the capability is missing](capability-gated-dispatch-fails-closed.md) - a hasattr check may select between implementations, never between enforcing and not enforcing; the silent fallback left no provenance trace (019 review stack, convergent Claude+Codex finding).
+* [Cross-parameter validation runs on effective (defaulted) values, not explicit arguments](validate-effective-defaults-not-explicit-args.md) - a mismatch check guarded by `arg is not None` exempts the default path — the one a tool-calling model takes most; resolve the default first, then validate unconditionally, and test the default path explicitly (021 review stack, Codex adversarial catch on query_findings).
 
 ## Integration quirks (model / telemetry providers)
 
@@ -88,6 +91,7 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 * [On reasoning models, max_completion_tokens covers reasoning + output](reasoning-model-output-cap.md) - a cap tuned for output alone truncates real answers on gpt-5-class models (LengthFinishReasonError, task 011 live run 1); keep the cap explicit and fingerprinted, size it for both.
 * [Postgres rejects NUL (U+0000) in TEXT/JSONB — scrub model output at the backend boundary](model-output-nul-scrub.md) - LLMs emit NUL-bearing strings; psycopg aborts at INSERT; strip once where records come off the wire (task 011 live run 2).
 * [Overton source_country takes display names and silently returns zero on anything else](overton-filter-values-display-names.md) - "UK"/"USA"/"Canada" work; ISO codes and "United Kingdom" return zero with no error; live-probe filter VALUES, not just keys, before a prompt promises them (018 B2 — closed 017's open item; 019: no enumeration endpoint exists — allowlists only by per-candidate probing — and `source_country` is single-valued with silent multi-value failure).
+* [Facet partitioning has a hard value-list scale limit on the current prompt/model](facet-partition-value-list-scale-limit.md) - group_facet_v1 on gpt-5.4-mini emits duplicate value ids at ~184 distinct values (4/4 live attempts incl. repairs, reasons persisted); kind-spanning doubles the list — Slice C's facet redesign must bound the per-call value list, not retry (021 live check).
 
 ## Integration quirks (infra / tooling)
 

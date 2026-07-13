@@ -12,6 +12,7 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas import events
 from policy_atlas.characterise import ScreenedSource
+from policy_atlas.extract import KNOWN_PROFILE_IDS
 from policy_atlas.orchestration_plan import OrchestrationPlan, compose
 from policy_atlas.runner import NullIO, run_plan
 from policy_atlas.schema import (
@@ -35,6 +36,7 @@ from policy_atlas.steering import (
     SteeringAdjustmentError,
     SteeringResponse,
     _validate_delta_round_trip,
+    _validate_directive_delta,
     build_steer_point_options,
     pause_points,
     refuse_inexpressible,
@@ -44,6 +46,8 @@ from policy_atlas.steering import (
 )
 from tests.helpers import now
 from tests.test_runner import _base_plan, _cleanup, _runner_backends, _seed_project
+
+IOF_PROFILE_ID, ICF_PROFILE_ID = KNOWN_PROFILE_IDS
 
 
 class ScriptedIO:
@@ -95,6 +99,26 @@ def _cleanup_project(engine: Engine, project_id: uuid.UUID | None) -> None:
             orchestration_plan.delete().where(orchestration_plan.c.project_id == project_id)
         )
     _cleanup(engine, project_id)
+
+
+@pytest.mark.parametrize(
+    ("delta", "match"),
+    [
+        ({"extraction": {"profiles": []}}, "must not be empty"),
+        ({"extraction": {"profiles": ["not-a-profile"]}}, "not-a-profile"),
+        (
+            {"extraction": {"profiles": [IOF_PROFILE_ID, IOF_PROFILE_ID]}},
+            "duplicate",
+        ),
+        ({"extraction": {"profiles": [ICF_PROFILE_ID]}}, "must include"),
+    ],
+)
+def test_extract_directive_delta_validation_fails_closed(
+    delta: dict[str, Any],
+    match: str,
+) -> None:
+    with pytest.raises(SteeringAdjustmentError, match=match):
+        _validate_directive_delta("extract", delta, backend_scope="both")
 
 
 def test_pause_points_compile_pinned_for_all_modes() -> None:

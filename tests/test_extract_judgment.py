@@ -48,7 +48,16 @@ from policy_atlas.schema import (
 )
 from policy_atlas.usage import UsageResult
 
-from .helpers import EVIDENCE_TYPE, seed_project_and_run, seed_run, seed_scope
+from .helpers import (
+    EVIDENCE_TYPE,
+    profile_counts,
+    profile_doc,
+    profile_findings,
+    profile_provenance,
+    seed_project_and_run,
+    seed_run,
+    seed_scope,
+)
 from .test_extract import (
     _record,
     _run,
@@ -210,11 +219,13 @@ def test_injection_prompt_level_lands_only_in_segments() -> None:
     assert INJECTION not in user.replace(seg_json, "")
 
 
-def test_render_field_docs_carries_v2_fields() -> None:
-    """Acceptance check (task 020): the generated field reference documents
-    both v2 fields — it renders from the wire model's Field descriptions, so a
+def test_render_field_docs_carries_current_schema_fields() -> None:
+    """Acceptance check: the generated field reference documents current fields.
+
+    It renders from the wire model's Field descriptions, so a
     dropped description would silently weaken the prompt's field guidance."""
     docs = render_field_docs()
+    assert "setting" in docs
     assert "effect_basis" in docs
     assert "study_geography" in docs
 
@@ -289,8 +300,8 @@ def test_injection_component_level_is_inert_data(conn: Connection) -> None:
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
-    assert summary["docs"][0]["status"] == "no_findings"
-    assert summary["counts"]["no_findings"] == 1
+    assert profile_doc(summary)["status"] == "no_findings"
+    assert profile_counts(summary)["no_findings"] == 1
     assert conn.execute(
         select(func.count())
         .select_from(intervention_outcome_finding)
@@ -315,8 +326,8 @@ def test_injection_hijacked_model_stored_as_data(conn: Connection) -> None:
         conn, project_id, scope_id, sel_run, _HijackedBackend(str(cid))
     )
 
-    assert summary["docs"][0]["status"] == "extracted"
-    assert summary["docs"][0]["finding_count"] == 1
+    assert profile_doc(summary)["status"] == "extracted"
+    assert profile_doc(summary)["finding_count"] == 1
     rows = _findings(conn, project_id)
     assert len(rows) == 1
     row = rows[0]
@@ -408,11 +419,11 @@ def test_counting_only_fresh_docs_sent_and_calls_match_budget(conn: Connection) 
     backend = _RecordingBackend(StubExtractionBackend())
     summary, _ = _run_backend(conn, project_id, scope_id, sel_run2, backend)
 
-    assert summary["counts"]["reused"] == 1
-    assert summary["counts"]["fresh"] == 2
+    assert profile_counts(summary)["reused"] == 1
+    assert profile_counts(summary)["fresh"] == 2
     sent = {payload.pss_id for payload in backend.payloads}
     assert sent == {str(b_pss), str(c_pss)}  # the reused doc's pss never appears
-    assert len(backend.payloads) == summary["provenance"]["call_budget"]["used"]
+    assert len(backend.payloads) == profile_provenance(summary)["call_budget"]["used"]
 
 
 # --- 4. Misbehaving backend doubles ----------------------------------------
@@ -439,8 +450,8 @@ def test_misbehaving_duplicate_findings_dedup(conn: Connection) -> None:
 
     summary, _ = _run_backend(conn, project_id, scope_id, sel_run, backend)
 
-    assert summary["docs"][0]["finding_count"] == 1
-    assert summary["findings"]["dedup_collapsed"] == 1
+    assert profile_doc(summary)["finding_count"] == 1
+    assert profile_findings(summary)["dedup_collapsed"] == 1
     assert len(_findings(conn, project_id)) == 1
 
 
@@ -461,8 +472,8 @@ def test_misbehaving_all_grain_invalid_fails_extraction(conn: Connection) -> Non
         conn, project_id, scope_id, sel_run, _GrainInvalidBackend(str(cid))
     )
 
-    assert summary["docs"][0]["status"] == "extraction_failed"
-    assert summary["docs"][0]["error"] == "invalid_records"
+    assert profile_doc(summary)["status"] == "extraction_failed"
+    assert profile_doc(summary)["error"] == "invalid_records"
     assert len(_findings(conn, project_id)) == 0
 
 
@@ -512,8 +523,8 @@ def test_misbehaving_oversized_output_all_stored(conn: Connection) -> None:
 
     summary, _ = _run_backend(conn, project_id, scope_id, sel_run, backend)
 
-    assert summary["docs"][0]["finding_count"] == 200
-    assert summary["findings"]["total"] == 200
+    assert profile_doc(summary)["finding_count"] == 200
+    assert profile_findings(summary)["total"] == 200
     assert len(_findings(conn, project_id)) == 200
 
 
@@ -532,12 +543,12 @@ def test_fingerprint_provenance_lists_every_component(conn: Connection) -> None:
     )
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
-    prov = summary["provenance"]
+    prov = profile_provenance(summary)
 
     assert prov["profile"] == "eb_iof_base_v1"
-    assert prov["schema"] == "iof_v2"
-    assert prov["prompt"] == "extract_iof_v6"
-    assert prov["field_rules"] == "iof_rules_v2"
+    assert prov["schema"] == "iof_v3"
+    assert prov["prompt"] == "extract_iof_v7"
+    assert prov["field_rules"] == "iof_rules_v3"
     assert prov["verifier"] == "qv_v1"
     assert prov["model"] and prov["mode"] == "stub"
     assert {"char_budget", "overlap", "oversize_policy", "oversize_overlap"} <= set(
@@ -630,7 +641,7 @@ def test_repeated_quote_grounds_to_successive_occurrences(conn: Connection) -> N
 def test_preflight_rejects_non_verbatim_example(monkeypatch: pytest.MonkeyPatch) -> None:
     """A doctored few-shot example whose quote is not verbatim fails loudly at pre-flight."""
     # The real module imported fine (its own pre-flight ran at import).
-    assert extract_prompt.PROMPT_VERSION == "extract_iof_v6"
+    assert extract_prompt.PROMPT_VERSION == "extract_iof_v7"
 
     doctored = extract_prompt.EXAMPLE_RESPONSE.model_copy(deep=True)
     doctored.findings[0].anchors[0].quote = "this quote is absent from the example segment text"
@@ -669,7 +680,7 @@ def test_socket_deny_extract_round_trip(conn: Connection) -> None:
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
     assert summary["counts"]["selected"] == 2
-    assert summary["counts"]["extracted"] == 2
+    assert profile_counts(summary)["extracted"] == 2
 
 
 # --- 9. Key hygiene ---------------------------------------------------------

@@ -567,3 +567,21 @@ The shim now does the one thing the plugin genuinely leaves unsolved for the lea
 shell (path resolution) and delegates waiting to the native flag. Meta-lesson: read
 the tool's own invocation docs BEFORE building the fix — the first wrapper was written
 from the failure, not from the docs.
+
+## 2026-07-13 — Codex job git-reverted uncommitted lead edits outside its scope (task 021 phase B)
+
+**What happened:** The phase-B Codex job clobbered the lead's uncommitted planner-prompt
+edits in the working tree — files entirely outside the job's brief — apparently via a
+git-revert-style cleanup the runtime performed on files it decided it hadn't changed.
+The edits had to be re-authored.
+
+**Root cause:** Launching a write-capable Codex job onto a dirty tree. The job's scope
+boundary is prompt text, not an enforced sandbox; uncommitted work by anyone else in the
+tree is at risk from the runtime's own hygiene behaviour.
+
+**Fix (held for phases D/E, no recurrence):** commit lead edits BEFORE launching any
+codex job, and carry a "do not revert files you did not change" line in every write
+brief. Clean-tree discipline is the real control; the brief line is belt-and-braces.
+
+**Rule:** never launch a write-capable codex job with uncommitted work in the tree —
+commit first, always.

@@ -33,13 +33,14 @@ from policy_atlas.classification_backend import OpenAIClassificationBackend
 from policy_atlas.country_filters import TIER1_GROUPS, expand_tier1
 from policy_atlas.db import get_engine
 from policy_atlas.embeddings import EmbeddingBackend, OpenAIEmbeddingBackend
-from policy_atlas.extraction_backend import OpenAIExtractionBackend
+from policy_atlas.extraction_backend import OpenAIExtractionBackend, OpenAIICFExtractionBackend
 from policy_atlas.facet_grouping import OpenAIFacetGroupingBackend
 from policy_atlas.fetch_live import LiveDocumentFetcher
 from policy_atlas.finding_vetter import OpenAIFindingVetterBackend
 from policy_atlas.fixtures import get_source
 from policy_atlas.grounding_judge import OpenAIGroundingJudgeBackend
 from policy_atlas.grouping import OpenAIThemeGroupingBackend, ThemeGroupingBackend
+from policy_atlas.icf_finding_vetter import OpenAIICFFindingVetterBackend
 from policy_atlas.ingest import ingest_upload
 from policy_atlas.logging import configure_logging
 from policy_atlas.orchestration_plan import CountryGroupAuthorship, OrchestrationPlan
@@ -438,6 +439,7 @@ def _render_draft(draft: PlanDraftWire) -> str:
         ("search_effort", draft.search_effort),
         ("analysis_depth", draft.analysis_depth),
         ("components", draft.components),
+        ("extract_profiles", draft.extract_profiles),
         ("steering_mode", draft.steering_mode),
     ):
         if value:
@@ -486,6 +488,7 @@ def _render_full_plan(plan: OrchestrationPlan) -> str:
         f"  analysis_depth: {plan.analysis_depth}",
         f"  components: {plan.components}",
         f"  grouping_facet: {plan.grouping_facet}",
+        f"  extract_profiles: {plan.extract_profiles}",
         f"  steering_mode: {plan.steering_mode}",
         f"  expected_artefact_shape: {plan.expected_artefact_shape}",
         f"  time_band: {plan.time_band}",
@@ -564,6 +567,10 @@ def _live_planner_and_backends(
         ranking=OpenAIRankingBackend(langfuse_client=langfuse_client),
         extraction=OpenAIExtractionBackend(langfuse_client=langfuse_client),
         finding_vetter=OpenAIFindingVetterBackend(langfuse_client=langfuse_client),
+        icf_extraction=OpenAIICFExtractionBackend(langfuse_client=langfuse_client),
+        icf_finding_vetter=OpenAIICFFindingVetterBackend(
+            langfuse_client=langfuse_client
+        ),
         facet_grouping=OpenAIFacetGroupingBackend(langfuse_client=langfuse_client),
         synthesis=OpenAISynthesisBackend(langfuse_client=langfuse_client),
         grounding_judge=OpenAIGroundingJudgeBackend(langfuse_client=langfuse_client),

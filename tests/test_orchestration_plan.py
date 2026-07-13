@@ -8,8 +8,10 @@ import pytest
 from pydantic import ValidationError
 
 from policy_atlas.country_filters import ISO_3166_ALPHA2
+from policy_atlas.extract import KNOWN_PROFILE_IDS
 from policy_atlas.orchestration_plan import (
     ANALYSIS_DEPTH_TABLE,
+    EXTRACT_PROFILE_IDS,
     SPINE,
     TIME_BANDS,
     AnalysisDepth,
@@ -124,6 +126,17 @@ def test_spine_is_present_in_order_for_valid_plan_matrix() -> None:
         {"analysis_depth": "standard", "components": ["characterise", "select", "group"]},
         {"analysis_depth": "standard", "components": ["select"]},
         {"analysis_depth": "landscape", "components": ["screen_full"]},
+        {"extract_profiles": ["iof"]},
+        {
+            "analysis_depth": "deep",
+            "components": ["characterise", "select", "extract"],
+            "extract_profiles": ["iof", "iof"],
+        },
+        {
+            "analysis_depth": "deep",
+            "components": ["characterise", "select", "extract"],
+            "extract_profiles": ["iof", "xyz"],
+        },
         {
             "steer_point_defaults": [
                 {"steer_point": "deepening-selection", "action": "continue"}
@@ -287,16 +300,15 @@ def test_extract_without_select_and_group_without_extract_rejected_at_deep() -> 
         )
 
 
-def test_landscape_and_deep_depth_rows_are_unchanged_by_the_standard_regrade() -> None:
-    """Pin landscape/deep ANALYSIS_DEPTH_TABLE + TIME_BANDS rows byte-identical
-    to their pre-019-regrade shape; only the "standard" row buys select.
-    """
+def test_depth_rows_pin_findings_chain_defaults() -> None:
+    """Pin the depth table rows, including Phase-D extract profile defaults."""
     assert ANALYSIS_DEPTH_TABLE["landscape"] == {
         "screen_full": False,
         "characterise": True,
         "select": False,
         "findings_chain": False,
         "selection_budget": None,
+        "extract_profiles": None,
     }
     assert ANALYSIS_DEPTH_TABLE["deep"] == {
         "screen_full": True,
@@ -304,16 +316,84 @@ def test_landscape_and_deep_depth_rows_are_unchanged_by_the_standard_regrade() -
         "select": True,
         "findings_chain": True,
         "selection_budget": 25,
+        "extract_profiles": ("iof", "icf"),
     }
     assert ANALYSIS_DEPTH_TABLE["standard"]["select"] is True
     assert ANALYSIS_DEPTH_TABLE["standard"]["findings_chain"] is False
     assert ANALYSIS_DEPTH_TABLE["standard"]["selection_budget"] == 15
+    assert ANALYSIS_DEPTH_TABLE["standard"]["extract_profiles"] is None
     assert TIME_BANDS[("rapid", "landscape")] == "~10-15 min"
     assert TIME_BANDS[("standard", "landscape")] == "~15-20 min"
     assert TIME_BANDS[("deep", "landscape")] == "~20-25 min"
     assert TIME_BANDS[("rapid", "deep")] == "~75-90 min"
     assert TIME_BANDS[("standard", "deep")] == "~80-95 min"
     assert TIME_BANDS[("deep", "deep")] == "~90-100 min"
+
+
+def test_extract_profile_id_mapping_matches_extract_registry() -> None:
+    assert tuple(EXTRACT_PROFILE_IDS.values()) == KNOWN_PROFILE_IDS
+
+
+def test_deep_extract_default_compiles_both_profiles_iof_first() -> None:
+    plan = _plan(
+        search_effort="deep",
+        analysis_depth="deep",
+        components=["characterise", "select", "extract"],
+    )
+
+    extract_step = next(step for step in compose(plan).steps if step.component == "extract")
+
+    assert extract_step.directive_delta == {
+        "extraction": {"profiles": list(KNOWN_PROFILE_IDS)}
+    }
+
+
+def test_explicit_iof_only_extract_profile_compiles_narrowly() -> None:
+    plan = _plan(
+        search_effort="deep",
+        analysis_depth="deep",
+        components=["characterise", "select", "extract"],
+        extract_profiles=["iof"],
+    )
+
+    extract_step = next(step for step in compose(plan).steps if step.component == "extract")
+
+    assert extract_step.directive_delta == {
+        "extraction": {"profiles": [EXTRACT_PROFILE_IDS["iof"]]}
+    }
+
+
+@pytest.mark.parametrize(
+    ("analysis_depth", "components"),
+    [
+        ("landscape", ["characterise"]),
+        ("standard", ["characterise", "select"]),
+    ],
+)
+def test_non_findings_depths_have_no_extraction_directive(
+    analysis_depth: AnalysisDepth,
+    components: list[str],
+) -> None:
+    plan = _plan(
+        search_effort="standard",
+        analysis_depth=analysis_depth,
+        components=components,
+    )
+
+    chain = compose(plan)
+
+    assert "extract" not in chain.components
+    assert all("extraction" not in step.directive_delta for step in chain.steps)
+
+
+def test_icf_only_extract_profile_rejected_plainly() -> None:
+    with pytest.raises(ValidationError, match="ICF-only extraction is unsupported"):
+        _plan(
+            search_effort="deep",
+            analysis_depth="deep",
+            components=["characterise", "select", "extract"],
+            extract_profiles=["icf"],
+        )
 
 
 def test_round_trip_payload_composes_to_identical_chain() -> None:

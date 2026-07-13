@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.embeddings import EMBEDDING_DIMENSIONS, EMBEDDING_PROFILE, UNIT_POLICY
+from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.grounding import content_hash
 from policy_atlas.schema import chunk as chunk_table
 from policy_atlas.schema import chunk_embedding, project_source_snapshot
@@ -704,7 +705,10 @@ def test_gathered_ids_extracts_chunks_and_findings() -> None:
         {
             "tool": "query_findings",
             "arguments": {},
-            "result": {"findings": [{"finding_id": "f1"}, {"finding_id": "f2"}]},
+            "result": {
+                "iof_findings": [{"finding_id": "f1"}],
+                "icf_findings": [{"finding_id": "f2"}],
+            },
         },
         {"tool": "lookup", "arguments": {"kind": "coverage_records"}, "result": {}},
     ]
@@ -1144,9 +1148,28 @@ def test_make_findings_reader_record_carries_default_metadata_set(
             evidence_scope_id=scope_id,
             run_id=run_id,
             selection_run_id=run_id,
-            extraction_provenance={"fingerprint": "t"},
-            docs=[{"extraction_record_id": str(extraction_record_id)}],
-            counts={"findings": {"total": 1}},
+            extraction_provenance={
+                "profiles": {IOF_PROFILE_ID: {"fingerprint": "t"}}
+            },
+            docs=[
+                {
+                    "pss_id": str(pss_id),
+                    "basis": "full_text",
+                    "profiles": {
+                        IOF_PROFILE_ID: {
+                            "status": "extracted",
+                            "finding_count": 1,
+                            "reused": False,
+                            "error": None,
+                            "extraction_record_id": str(extraction_record_id),
+                        }
+                    },
+                }
+            ],
+            counts={
+                "selected": 1,
+                "profiles": {IOF_PROFILE_ID: {"findings": {"total": 1}}},
+            },
             flags={},
             created_at=now(),
         )
@@ -1159,7 +1182,7 @@ def test_make_findings_reader_record_carries_default_metadata_set(
         evidence_scope_id=scope_id,
         grouping_groups=None,
     )
-    findings = reader({})["findings"]
+    findings = reader({})["iof_findings"]
     assert len(findings) == 1
     record = findings[0]
     assert record["year"] == 2021
@@ -1274,14 +1297,217 @@ def _seed_reader_finding(
             evidence_scope_id=scope_id,
             run_id=run_id,
             selection_run_id=run_id,
-            extraction_provenance={"fingerprint": "t"},
-            docs=[{"extraction_record_id": str(extraction_record_id)}],
-            counts={"findings": {"total": 1}},
+            extraction_provenance={
+                "profiles": {IOF_PROFILE_ID: {"fingerprint": "t"}}
+            },
+            docs=[
+                {
+                    "pss_id": str(pss_id),
+                    "basis": "full_text",
+                    "profiles": {
+                        IOF_PROFILE_ID: {
+                            "status": "extracted",
+                            "finding_count": 1,
+                            "reused": False,
+                            "error": None,
+                            "extraction_record_id": str(extraction_record_id),
+                        }
+                    },
+                }
+            ],
+            counts={
+                "selected": 1,
+                "profiles": {IOF_PROFILE_ID: {"findings": {"total": 1}}},
+            },
             flags={},
             created_at=now(),
         )
     )
     return extraction_record_id, finding_id
+
+
+def _seed_profiled_reader_findings(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    run_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    pss_id: uuid.UUID,
+    snap_id: uuid.UUID,
+    iof_count: int,
+    icf_count: int,
+) -> tuple[list[uuid.UUID], list[uuid.UUID]]:
+    from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
+    from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
+    from policy_atlas.schema import (
+        extraction_result,
+        implementation_context_finding,
+        intervention_outcome_finding,
+        selection_result,
+        source_extraction_record,
+    )
+
+    conn.execute(
+        selection_result.insert().values(
+            selection_result_id=uuid.uuid4(),
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            run_id=run_id,
+            strategy="coverage_stratified_v1",
+            budget=1,
+            selection_provenance={},
+            selected=[{"pss_id": str(pss_id), "text_basis": "full_text"}],
+            excluded={},
+            flags={},
+            created_at=now(),
+        )
+    )
+    iof_record_id = uuid.uuid4()
+    icf_record_id = uuid.uuid4()
+    for record_id, fingerprint, count in (
+        (iof_record_id, "fp-reader-iof", iof_count),
+        (icf_record_id, "fp-reader-icf", icf_count),
+    ):
+        conn.execute(
+            source_extraction_record.insert().values(
+                extraction_record_id=record_id,
+                project_id=project_id,
+                source_snapshot_id=snap_id,
+                project_source_snapshot_id=pss_id,
+                extraction_fingerprint=fingerprint,
+                status="extracted" if count else "no_findings",
+                basis="full_text",
+                error=None,
+                finding_count=count,
+                run_id=run_id,
+                created_at=now(),
+            )
+        )
+    iof_ids: list[uuid.UUID] = []
+    for index in range(iof_count):
+        finding_id = uuid.uuid4()
+        iof_ids.append(finding_id)
+        conn.execute(
+            intervention_outcome_finding.insert().values(
+                finding_id=finding_id,
+                project_id=project_id,
+                extraction_record_id=iof_record_id,
+                intervention="Coaching",
+                outcome=f"Score {index}",
+                population=None,
+                comparator=None,
+                effect_direction="increase",
+                estimate_level="study",
+                study_design=None,
+                study_geography=None,
+                stratum_qualifiers=[],
+                statistics={},
+                causality_by_design=None,
+                effect_basis=None,
+                is_primary=None,
+                is_prevalence_only=None,
+                field_coverage={},
+                grounding=[],
+                created_at=now(),
+            )
+        )
+    icf_ids: list[uuid.UUID] = []
+    for index in range(icf_count):
+        finding_id = uuid.uuid4()
+        icf_ids.append(finding_id)
+        conn.execute(
+            implementation_context_finding.insert().values(
+                finding_id=finding_id,
+                project_id=project_id,
+                extraction_record_id=icf_record_id,
+                context_type="barrier",
+                claim=f"Training gap {index} slowed delivery.",
+                intervention="Coaching",
+                outcome=None,
+                population=None,
+                setting=None,
+                study_geography=None,
+                study_design=None,
+                claim_level="study",
+                claim_basis="studied",
+                level="provider",
+                resource_requirements=None,
+                workforce_requirements="training",
+                field_coverage={},
+                grounding=[],
+                created_at=now(),
+            )
+        )
+
+    def _profile_counts(total: int) -> dict[str, Any]:
+        return {
+            "selected": 1,
+            "extracted": 1 if total else 0,
+            "no_findings": 0 if total else 1,
+            "failed": 0,
+            "fresh": 1,
+            "reused": 0,
+            "findings": {
+                "total": total,
+                "quote_unverified": 0,
+                "dedup_collapsed": 0,
+                "invalid_dropped": 0,
+            },
+        }
+
+    conn.execute(
+        extraction_result.insert().values(
+            extraction_result_id=uuid.uuid4(),
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            run_id=run_id,
+            selection_run_id=run_id,
+            extraction_provenance={
+                "profiles": {
+                    IOF_PROFILE_ID: {"fingerprint": "fp-reader-iof", "profile": IOF_PROFILE_ID},
+                    ICF_PROFILE_ID: {"fingerprint": "fp-reader-icf", "profile": ICF_PROFILE_ID},
+                },
+                "pass_count": 1,
+            },
+            docs=[
+                {
+                    "pss_id": str(pss_id),
+                    "basis": "full_text",
+                    "profiles": {
+                        IOF_PROFILE_ID: {
+                            "status": "extracted" if iof_count else "no_findings",
+                            "basis": "full_text",
+                            "finding_count": iof_count,
+                            "reused": False,
+                            "error": None,
+                            "extraction_record_id": str(iof_record_id),
+                            "order": 0,
+                        },
+                        ICF_PROFILE_ID: {
+                            "status": "extracted" if icf_count else "no_findings",
+                            "basis": "full_text",
+                            "finding_count": icf_count,
+                            "reused": False,
+                            "error": None,
+                            "extraction_record_id": str(icf_record_id),
+                            "order": 0,
+                        },
+                    },
+                }
+            ],
+            counts={
+                "selected": 1,
+                "basis": {"full_text": 1, "abstract_only": 0},
+                "profiles": {
+                    IOF_PROFILE_ID: _profile_counts(iof_count),
+                    ICF_PROFILE_ID: _profile_counts(icf_count),
+                },
+            },
+            flags={},
+            created_at=now(),
+        )
+    )
+    return iof_ids, icf_ids
 
 
 def test_make_findings_reader_carries_effect_basis_and_study_geography(
@@ -1314,7 +1540,7 @@ def test_make_findings_reader_carries_effect_basis_and_study_geography(
         evidence_scope_id=scope_id,
         grouping_groups=None,
     )
-    findings = reader({})["findings"]
+    findings = reader({})["iof_findings"]
     record = next(f for f in findings if f["finding_id"] == str(finding_id))
     assert record["effect_basis"] == "observed"
     assert record["study_geography"] == "England"
@@ -1352,7 +1578,7 @@ def test_make_findings_reader_effect_basis_study_geography_null_for_v1_rows(
         evidence_scope_id=scope_id,
         grouping_groups=None,
     )
-    findings = reader({})["findings"]
+    findings = reader({})["iof_findings"]
     record = next(f for f in findings if f["finding_id"] == str(finding_id))
     assert record["effect_basis"] is None
     assert record["study_geography"] is None
@@ -1392,6 +1618,142 @@ def test_make_findings_reader_evidence_type_reads_live_classification_not_proven
         evidence_scope_id=scope_id,
         grouping_groups=None,
     )
-    findings = reader({})["findings"]
+    findings = reader({})["iof_findings"]
     record = next(f for f in findings if f["finding_id"] == str(finding_id))
     assert record["evidence_type"] == "RCTs and Quasi-Experimental Studies"
+
+
+def test_make_findings_reader_returns_kind_segregated_sections(conn: Connection) -> None:
+    from policy_atlas.synthesis_tools import make_findings_reader
+
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    snap_id, pss_id = seed_source(conn, project_id, meta={"title": "Both kinds"})
+    iof_ids, icf_ids = _seed_profiled_reader_findings(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        pss_id=pss_id,
+        snap_id=snap_id,
+        iof_count=1,
+        icf_count=1,
+    )
+
+    reader = make_findings_reader(
+        conn,
+        project_id=project_id,
+        extraction_run_id=run_id,
+        evidence_scope_id=scope_id,
+        grouping_groups=None,
+    )
+    result = reader({})
+
+    assert set(result) == {"iof_findings", "iof_truncated", "icf_findings", "icf_truncated"}
+    assert result["iof_findings"][0]["finding_id"] == str(iof_ids[0])
+    assert result["iof_findings"][0]["kind"] == "iof"
+    assert result["icf_findings"][0]["finding_id"] == str(icf_ids[0])
+    assert result["icf_findings"][0]["kind"] == "icf"
+    assert "findings" not in result
+
+
+def test_make_findings_reader_kind_filter_mismatch_fails_closed(conn: Connection) -> None:
+    from policy_atlas.synthesis_tools import make_findings_reader
+
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    snap_id, pss_id = seed_source(conn, project_id)
+    _seed_profiled_reader_findings(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        pss_id=pss_id,
+        snap_id=snap_id,
+        iof_count=1,
+        icf_count=1,
+    )
+    reader = make_findings_reader(
+        conn,
+        project_id=project_id,
+        extraction_run_id=run_id,
+        evidence_scope_id=scope_id,
+        grouping_groups=None,
+    )
+
+    with pytest.raises(ToolValidationError, match="effect_direction requires iof"):
+        reader({"kinds": ["icf"], "effect_direction": "increase"})
+    with pytest.raises(ToolValidationError, match="context_type requires icf"):
+        reader({"kinds": ["iof"], "context_type": "barrier"})
+    # Omitted kinds defaults to both — a kind-specific filter must still fail
+    # closed, never return the other kind unfiltered alongside.
+    with pytest.raises(ToolValidationError, match="effect_direction requires iof"):
+        reader({"effect_direction": "increase"})
+    with pytest.raises(ToolValidationError, match="context_type requires icf"):
+        reader({"context_type": "barrier"})
+    with pytest.raises(ToolValidationError, match="context_type requires icf"):
+        reader({"kinds": ["iof", "icf"], "context_type": "barrier"})
+
+
+def test_make_findings_reader_iof_only_run_reports_icf_not_extracted(
+    conn: Connection,
+) -> None:
+    from policy_atlas.synthesis_tools import make_findings_reader
+
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    snap_id, pss_id = seed_source(conn, project_id)
+    _record_id, finding_id = _seed_reader_finding(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        pss_id=pss_id,
+        snap_id=snap_id,
+    )
+    reader = make_findings_reader(
+        conn,
+        project_id=project_id,
+        extraction_run_id=run_id,
+        evidence_scope_id=scope_id,
+        grouping_groups=None,
+    )
+
+    result = reader({})
+    assert [finding["finding_id"] for finding in result["iof_findings"]] == [
+        str(finding_id)
+    ]
+    assert result["icf_findings"] == "not extracted in this run"
+    assert "icf_truncated" not in result
+    assert set(reader({"kinds": ["iof"]})) == {"iof_findings", "iof_truncated"}
+
+
+def test_make_findings_reader_caps_per_kind(conn: Connection) -> None:
+    from policy_atlas.synthesis_tools import make_findings_reader
+
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    snap_id, pss_id = seed_source(conn, project_id)
+    _seed_profiled_reader_findings(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        pss_id=pss_id,
+        snap_id=snap_id,
+        iof_count=101,
+        icf_count=3,
+    )
+    reader = make_findings_reader(
+        conn,
+        project_id=project_id,
+        extraction_run_id=run_id,
+        evidence_scope_id=scope_id,
+        grouping_groups=None,
+    )
+
+    result = reader({})
+    assert len(result["iof_findings"]) == 100
+    assert result["iof_truncated"] is True
+    assert len(result["icf_findings"]) == 3
+    assert result["icf_truncated"] is False

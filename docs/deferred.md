@@ -137,21 +137,93 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   level; thin landing-page text reported `ok`) are structurally closed (reason-coded
   `full_text_status`/`full_text_error`, thin-text guard). Snapshot identity resolved as a
   **new immutable `full_text` snapshot linked at the project-source link** (ADR 0003).
-- **`implementation_context_finding` — PROMOTED to pre-eval slice 021 (owner, 2026-07-12,
-  020 contract review)** — the second reusable finding schema (mechanisms, barriers,
-  implementation conditions); cross-schema linkage is reference-mediated via `group`.
-  Re-adjudicated from "other capabilities' reader" to a pre-eval slice: **EB synthesis is
-  its first reader** — ICF records are the deterministic validator that makes
-  implementation-shaped theme/pattern claims possible (content-scan pattern claims are
-  prohibited in v1 precisely for lack of one), full-read coverage + honest absence beat
-  top-k RAG for diffuse implementation material, and the eval slice's synthesis baselines
-  should be cut on the intended composition (the select-at-standard precedent). Posture
-  pinned at the 020 gate: separate extraction call/profile, own fingerprint domain —
-  never invalidates IOF memos. Eval slice authors ICF ground truth alongside IOF's, with
-  a with/without-ICF composition comparison as an explicit axis. Extract-side note
-  (task 011): V2's CFIR implementation-profile field definitions (cost/staffing/complexity
-  + the inner-setting rule) are recorded design input for this schema; no field of it
-  entered `intervention_outcome_finding`.
+- **`implementation_context_finding` — DISCHARGED (task 021, ADR 0017).** The second
+  reusable finding schema (mechanisms, barriers, implementation conditions) shipped:
+  the `implementation_context_finding` table + `eb_icf_base_v1` extraction profile (own
+  fingerprint domain — never invalidates IOF memos), `extract_icf_v1` + the ICF vetter, the
+  unified kind-typed `query_findings` read surface, and the `icf_context_type_count`
+  deterministic pattern validator — EB synthesis's first-reader payoff realised, per the
+  posture pinned at the 020 gate. Eval slice ground truth (with/without-ICF composition
+  comparison) is unstarted — this slice was deliberately eval-blind. Extract-side design
+  input from task 011 (V2's CFIR implementation-profile field definitions:
+  cost/staffing/complexity + the inner-setting rule) is folded into the shipped field set —
+  `resource_requirements` / `workforce_requirements` / the inner-setting rule on `setting`;
+  `complexity` did not carry (a judgment scale, not source-groundable — the recorded
+  anti-pattern). Narrowed seams left open by this slice (contract item 10):
+  - **ICF facet grouping** (grouping BY `context_type` — barrier/mechanism/condition) —
+    awaits **Slice C's multi-facet redesign**; task 021 only widened `group`'s membership
+    reach to span both schemas via shared references, never its facet shape.
+  - **Dimension-promotion for ICF fields** — hybrid-indexing any ICF dimension is gated on
+    the same **observed-query-behaviour** promotion gate as IOF's dimensions
+    (data-model.md), not shipped by schema existence alone.
+  - **Downstream capability consumers** — Options Assessment / Impact / Transferability /
+    Value for Money read ICF records later; EB synthesis is the reader now.
+  - **Cross-kind UNION reference view** — the shared-vocabulary read surface over both
+    finding tables (item 1's design payoff); a **Slice C** seam, first reader = Slice C's
+    cross-schema grouping.
+  - **Hybrid dimension search over finding reference values** — the data-model's committed
+    intervention/outcome dimension indexing, with ICF's source-named reference values riding
+    the same index target as co-riders (shared vocabulary = shared index target, free by
+    construction); build-or-defer decided on the **Slice C contract agenda**, alongside the
+    writer's retrieval-surface rework, while pre-eval sequencing still holds.
+  - **The schema-candidate ladder** (owner adjudication, 2026-07-12, task 021 contract
+    review): the generic findings container and runtime intent-shaped custom extraction
+    REMAIN declined (the task-011 rulings hold — typed records are what deterministic
+    validation, ground truth, memo reuse and cross-question interpretability rest on; the
+    long tail is served by verified chunk-grounded synthesis, ADR 0010); named candidates
+    `reported_statistic` and `case_example` (V2 question-taxonomy categories 4 + 6), **first
+    reader = the Baseline analysis / problem-identification capability** (quantitative +
+    qualitative — its qualitative half may name a further kind, e.g. a `reported_problem`;
+    the candidate list is open, not exhaustive); trigger = Baseline's contract committing
+    the extraction profile, with per-category eval evidence (the eval intent set keeps
+    categories 4/6 in and scores chunk-grounded synthesis on them) as the demonstration;
+    sequencing note — **additive schemas never invalidate eval baselines** (no existing
+    record shape or ground truth changes; a new kind is a new eval arm, the with/without-ICF
+    axis pattern repeated), so these land with Baseline post-eval, no pre-eval promotion
+    pressure. Schema design stays with the committing capability's contract (the IOF
+    precedent). Research-review additions (owner, 2026-07-12): **`intervention_specification`**
+    joins the candidate list (TIDieR-shaped delivery facets — dose/mode/provider/training;
+    the most demanded AND most under-reported cluster, 39% adequacy; first readers
+    Transferability + Options Assessment — a specification record, not a context claim,
+    hence not ICF bloat).
+  - **Companion-document retrieval seam** for the future Transferability capability:
+    process evaluations publish separately from their trial results 76% of the time, median
+    15.5 months later — the capability's acquire step should hunt companion process
+    evaluations. ICF's nullable-outcome + reference-mediated design already absorbs findings
+    arriving in different documents than their effects.
+  - **ICF-only extraction composition** — unsupported this slice (`extract_profiles` must
+    include `iof`; ICF-only is not expressible), noted at the Phase D directive validator.
+  - **Two-profile extraction parallelism** (021 review stack, efficiency lane): profile
+    bundles run strictly sequentially — IOF's whole window batch completes before ICF's
+    starts (~2× extract wall-clock on both-profile runs). Real but non-trivial: both
+    profiles share one SQLAlchemy `Connection` for memo reads/roll-up writes, so
+    parallelising needs a second connection or memo/write phases restructured out of the
+    parallel region. Revisit when extract wall-clock matters (eval-slice cost axis input).
+  - **`claim_basis` coverage cannot distinguish "indeterminate after reading" from
+    "not attempted"** (021 review stack, Codex adversarial): the prompt instructs
+    `null if indeterminate` but every nullable-enum null lands as `not_extracted` — a
+    coverage-vocabulary refinement (e.g. an `indeterminate` marker) for the eval slice /
+    schema-candidate ladder, decided against ground truth, not speculatively.
+  - **Planner two-profile narrowing decidability** (021 review stack, Codex adversarial):
+    an over-narrow planner (`extract_profiles=["iof"]` on an ordinary "what works" ask)
+    silently drops the ICF pass — the compile only rejects ICF-only. The eval slice's
+    intent set should probe narrowing behaviour across phrasings before any tightening of
+    the planner prompt.
+  - **Model-output control-character scrubbing** (021 security lane, LOW): extraction and
+    vetter output is NUL-scrubbed only, while directive strings get
+    `has_control_character`; a document's ANSI escapes copied verbatim into a claim ride
+    into DB rows and operator surfaces. Defense-in-depth: extend the backend-boundary
+    scrub to C0/C1 controls (except `\n`/`\t`) — note `prompt_fields.scrub_nul` and
+    `extract._scrub_nul` are parallel implementations to change together.
+  The formerly-mooted **per-schema-writer-tools seam is pre-discharged by gate decision 6**:
+  the unified kind-typed `query_findings` IS the schema-typed query interface — a future
+  third schema adds a kind section + filters (content work), not a new tool. **Cost note
+  (021 review stack, three lanes convergent):** the ICF build cloned IOF plumbing rather
+  than generalising it — backends, vetter scaffolding, dedup loops, and per-kind literals
+  in group/facet_values/synthesis_tools/synthesise (19 verified cleanup/altitude
+  candidates). Deliberate for two kinds; the third schema's slice should budget a
+  consolidation pass (profile registry / shared judge scaffolding) rather than a third
+  hand-written copy.
 - **Saturation-based search stopping** — `saturated` is still not a
   `search_coverage_record` stop value (kept out by migration 15's widening, task 015):
   within-run discovery-RATE collapse now stops honestly as `short_circuit`, but
@@ -831,11 +903,13 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   (SectionSpec, 018 B) is the extension point — roles extend without schema change.
   Eval slice: judge composition quality across the 7 intent shapes with this
   boundary in mind.
-- **Cross-schema reference-mediated linkage** — activates with
-  `implementation_context_finding` (EB internals entry): the shared source-named
-  vocabulary means a facet group's member values can link findings across schemas by
-  reference. 012 ships the design property (source-named values, run-referenced
-  groupings), no linkage machinery.
+- **Cross-schema reference-mediated linkage — DISCHARGED (task 021, item 12):** the
+  membership bridge landed — `group`'s loader reads both finding tables via the shared
+  reference columns, `FindingFacetView` carries a `kind` tag with nullable
+  `effect_direction`, `direction_spread` stays IOF-members-only, and group payloads
+  carry per-kind member counts. The design property 012 shipped is now machinery.
+  What remains deferred rides the EB-internals ICF entry (ICF facets, UNION view —
+  Slice C).
 - **Re-grouping / steering UX** — a different facet is simply a new run with a different
   directive (shipped semantics); mode-governed steer-points around grouping (pause,
   re-group, facet-switch UX) are plan-as-object machinery at the standing steering seam.

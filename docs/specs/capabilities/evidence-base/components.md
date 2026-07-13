@@ -48,7 +48,7 @@ fail-closed. Breadth and depth are independent — a targeted question compiles 
 | 4 | appraise | `appraise` (steerable rubric → quality tier) | — (core) | per-doc fan-out |
 | 5 | characterise | `cluster` (topic) + deterministic metadata patterns | `cluster` | procedure + agent |
 | 6 | select | `select` (strategy-parameterised) | `select` | procedure (+ optional bounded generative rerank) |
-| 7 | extract | `extract` → `intervention_outcome_finding` | `extract` | per-source fan-out |
+| 7 | extract | `extract` → `intervention_outcome_finding` / `implementation_context_finding` | `extract` | per-source fan-out |
 | 8 | group | `cluster` (facet, over findings) + `query-findings` | `cluster`, `query-findings` | agent |
 | 9 | synthesise | `produce-grounded-block` (intent-led sections over available substrate) | `query-findings`, `search_chunks` (the `retrieve` increment) | agent-loop |
 
@@ -233,28 +233,59 @@ steer-point** reads (see [capability.md](capability.md)).
 
 ## 7 — extract (Tier-1)
 
-Per selected document, extracts **`intervention_outcome_finding`** records (the framework schema —
-see [../../system/data-model.md](../../system/data-model.md) for grain + base fields).
-**EB's extraction profile** (the EB-specific part) = its commitment to extract those **base
-fields** over the **selected** subset. Question-relative judgements (normalised magnitude, causal
-weighting, is-beneficial) are **not** extracted by EB — they are analysis enrichment for
-Impact/VfM.
+Per selected document, extracts finding records under a **plan-visible `profiles`
+directive** — **two profiles running through one component, over the same selection; no
+second component, no second selection** (task 021, ADR 0017): **`intervention_outcome_finding`**
+(`eb_iof_base_v1`) and **`implementation_context_finding`** (`eb_icf_base_v1`) — see
+[../../system/data-model.md](../../system/data-model.md) for grain + base fields of each.
+**EB's extraction profile(s)** (the EB-specific part) = its commitment to extract those **base
+fields** over the **selected** subset, per selected profile. Question-relative judgements
+(normalised magnitude, causal weighting, is-beneficial) are **not** extracted by EB — they are
+analysis enrichment for Impact/VfM.
 
-⏸ **v3.0 deep-synthesis scope:** centred on **intervention–outcome(–population) evidence**. The
-shallow landscape covers any facet (mechanisms, barriers, delivery models) via topic
-clusters/tags/metadata, but **deep grounded synthesis is schema-bound**. The
-**`implementation_context_finding`** second schema (mechanisms/barriers/conditions) is a deferred
-seam (named, not built; cross-schema linkage reference-mediated via `group`).
+**Composition, as built:** the `profiles` directive compiles **fail-closed** — an unknown
+profile name is a compile error — and **defaults to both profiles at deep depth**
+(`ANALYSIS_DEPTH_TABLE`; extract stays deep-only, and `findings_chain` — extract + group — is
+only ever meaningful once `select` has run). IOF-only remains expressible; **ICF-only is not**
+this slice (`docs/deferred.md` § Extract names the seam). Each profile is its own fingerprint
+domain (own schema version, own prompt, own field rules, own vetter) hanging off
+`source_extraction_record` via the same composite FK — a profile's arrival or version bump
+never invalidates the other profile's memoised findings. `extraction_result` stays one row per
+`(evidence_scope_id, run_id)`; its provenance/counts/per-doc statuses are keyed per profile, so
+"profile not selected" (absent) and "profile fired, zero findings" (present, count 0) stay
+distinguishable. The two-profile extract semantics are **plan-visible**: the planner prompt
+describes them, so composition is never silently compiled.
+
+⏸ **v3.0 deep-synthesis scope remains schema-bound:** deep grounded synthesis reads whichever
+of the two schemas' records a run produced; a facet or claim shape outside both schemas is
+still shallow-landscape-only (topic clusters/tags/metadata). A future third schema is content
+work (a new profile bundle plugged into the profile-parameterised pipeline), not plumbing —
+see `docs/deferred.md` § Extract / findings layer for the schema-candidate ladder.
 
 ## 8 — group (facet-level theming)
 
 A distinct component between extract and synthesise (not folded into the write-up). Groups the
 extracted findings on the **intent-derived facet** — in v3.0 the facets the schema supports
 (**interventions / outcomes / populations** — the source-named references), *not* v2's fixed
-four. Mechanisms/barriers/conditions stay **landscape-only** until the
-`implementation_context_finding` seam lands. The **second clustering** in the chain (topic-level
-at characterise; facet-level over extracted findings here) — via `cluster` over finding records /
-dimension values + `query-findings`.
+four. The **second clustering** in the chain (topic-level at characterise; facet-level over
+extracted findings here) — via `cluster` over finding records / dimension values +
+`query-findings`.
+
+**Kind-spanning membership (task 021, ADR 0017, gate decision 8 — the minimal bridge):** the
+loader reads **both finding tables** via the shared reference columns, so a facet group's
+members can span IOF and ICF records — the cross-schema linkage the shared vocabulary was
+designed for, made real. `group`'s **facet shape is untouched** (single facet per run, current
+grain, current clustering, no new facets); only its *membership reach* widened.
+`FindingFacetView` tolerates kind-specific fields (`effect_direction` nullable, a `kind` tag
+carried); `direction_spread` is computed over **IOF members only** (ICF members have no
+direction — never zero-filled into the spread); the group payload carries per-kind member
+counts. Closes the hole where, on a deep grouped run, ICF findings would never reach the
+synthesise envelope's `member_findings`.
+
+⏸ **ICF-specific facets** (grouping BY `context_type` — barrier/mechanism/condition) **await
+facet machinery** — Slice C's multi-facet redesign, which inherits kind-spanning membership as
+a requirement and reworks fan-out/grain around it; the membership principle (members join by
+shared reference, regardless of kind) survives that rework.
 
 ## 9 — synthesise (run terminus)
 
@@ -309,21 +340,35 @@ on what the run produced:
   definition, aggregate queries over columns/tags included; closed query vocabulary,
   project-guarded), under a hard per-section turn cap, then emits typed claims.
   **Availability by substrate**: **pattern claims** (coverage counts with a
-  characterisation; direction spreads with extraction/grouping — deterministically
-  validated; v2's `effect_consensus` counts as this steer) · **theme claims**
-  (characterise themes with a characterisation; facet groups with grouping — validated
-  against the referenced clustering row; softest interpretive grade, base-labelled) ·
-  **gap claims** (always; graded per [provenance.md](provenance.md) with deterministic
-  per-grade validation and the required coverage base — sparsity-grade gaps need the
-  characterisation coverage; base-labelled to the narrowest base the substrate supports,
-  promoted to corpus absence only on a non-`inadequate` `search_coverage_record`, else
-  fail-closed degraded) · **reasoning claims** (always; visibly-labelled Tier 4 authoring;
-  judge strict-routing keeps empirical content out; never counts toward strength
-  roll-ups) · **chunk claims** (with screened-in ingested documents — screen's relevance
-  discipline bounds them, the selection prior steers them, each citation carries its
-  origin; not extraction — so a question outside the intervention–outcome schema is
-  served without extract) · **finding claims** (with an **extraction** — cite finding ids resolved to
-  extract-verified anchors; the model never authors these quotes). A characterisation-only
+  characterisation; direction spreads with extraction/grouping — **IOF-only**,
+  deterministically validated; v2's `effect_consensus` counts as this steer — plus, with an
+  ICF extraction referenced, the **`icf_context_type_count`** pattern (counts by
+  `context_type` / intervention over the referenced extraction's ICF records, with a
+  group-scoped variant — task 021, ADR 0017: the deterministic validator that makes
+  implementation-shaped pattern claims possible, content-scan pattern claims being
+  prohibited in v1 for lack of one)) · **theme claims** (characterise themes with a
+  characterisation; facet groups with grouping — validated against the referenced
+  clustering row, **available over kind-spanning groups at their existing grade** now that
+  `group`'s membership reach spans both finding schemas (task 021, item 12); softest
+  interpretive grade, base-labelled) · **gap claims** (always; graded per
+  [provenance.md](provenance.md) with deterministic per-grade validation and the required
+  coverage base — sparsity-grade gaps need the characterisation coverage; base-labelled to
+  the narrowest base the substrate supports, promoted to corpus absence only on a
+  non-`inadequate` `search_coverage_record`, else fail-closed degraded) · **reasoning
+  claims** (always; visibly-labelled Tier 4 authoring; judge strict-routing keeps empirical
+  content out; never counts toward strength roll-ups) · **chunk claims** (with screened-in
+  ingested documents — screen's relevance discipline bounds them, the selection prior
+  steers them, each citation carries its origin; not extraction — so a question outside
+  both finding schemas is served without extract) · **finding claims** (with an
+  **extraction** — cite IOF or ICF finding ids resolved to extract-verified anchors; the
+  model never authors these quotes). **IOF and ICF findings never blend**: the writer's
+  `query_findings` serves both schemas behind one unified, kind-typed tool call
+  (`iof_findings` / `icf_findings` as separate typed sections, never interleaved), a `kinds`
+  filter defaulting to all kinds present, kind-specific filters (`effect_direction` IOF-only,
+  `context_type` ICF-only) requiring `kinds` to name exactly their own kind — rejected
+  loudly otherwise, **including on the omitted-`kinds` default** (021 review stack) — and honest
+  per-kind availability ("context findings: not extracted in this run" when a run's
+  extraction lacks the ICF profile — a visible coverage fact, not a silently absent tool). A characterisation-only
   run is the landscape degenerate case (pattern/theme/gap/reasoning sections).
   **Groups, where present, are input, not structure** (uncovered groups counted, never
   silently dropped). Every cited claim goes through the settled `produce-grounded-block`

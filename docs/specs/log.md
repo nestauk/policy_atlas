@@ -10,6 +10,28 @@
   they read as "not recorded under v1" via `field_coverage` key-absence, per the
   upgrades-never-invalidate rule. Task 020, ADR 0016.
 
+* **Update**: [system/data-model.md § The findings layer](system/data-model.md) — the
+  second reusable finding schema `implementation_context_finding` ships (mechanisms,
+  barriers, implementation conditions — the "how/why/under what conditions"). Grain:
+  one implementation-context claim about a named intervention, single source. The
+  shared source-named reference vocabulary (`intervention` / `outcome` / `population` /
+  `setting` / `study_geography` / `study_design`) is now defined once, with per-schema
+  requiredness overrides (IOF `outcome` required, ICF `outcome` nullable); `setting`
+  joins the stored vocabulary on BOTH schemas (ICF from day one, IOF via the bounded
+  `iof_v3` rider — deliberate, pre-ground-truth, nothing else riding the bump). Storage
+  stays parallel tables; the cross-kind UNION read view is a Slice C seam. ICF is its
+  own fingerprint domain — its arrival never invalidates IOF memos. Task 021, ADR 0017.
+* **Update**: [capabilities/evidence-base/components.md](capabilities/evidence-base/components.md)
+  §7/§8/§9 — extract runs ICF as a second plan-visible profile alongside IOF through the
+  same component (`profiles` directive, fail-closed compile, default both at deep,
+  IOF-only expressible); `group`'s membership reach spans both finding kinds via the
+  shared reference columns (facet shape untouched; `direction_spread` stays IOF-members-
+  only; ICF-specific facets await Slice C's multi-facet redesign); synthesise's
+  claim-type ladder gains ICF finding claims (id-cited, resolve-via-row) and the
+  `icf_context_type_count` pattern claim (extraction-wide + group-scoped), with theme
+  claims available over kind-spanning groups at their existing (softest, base-labelled)
+  grade. The unified `query_findings` tool serves both schemas kind-segregated, never
+  blended. Task 021, ADR 0017.
 ## 2026-07-11 (b)
 * **Creation**: [system/prompting.md](system/prompting.md) — the prompting doctrine promoted
   out of the 018 task folder (owner decision, 2026-07-11; task-cycle step 8): the 12

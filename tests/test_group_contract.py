@@ -24,6 +24,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
 from policy_atlas import events
+from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.plan import Plan, compile
@@ -127,12 +128,16 @@ def _seed_mixed_status_extraction(
             conn.execute(intervention_outcome_finding.insert().values(**values))
         doc_payloads.append({
             "pss_id": str(pss_id),
-            "status": status,
             "basis": "full_text",
-            "finding_count": len(findings),
-            "reused": False,
-            "error": error,
-            "extraction_record_id": str(record_id),
+            "profiles": {
+                IOF_PROFILE_ID: {
+                    "status": status,
+                    "finding_count": len(findings),
+                    "reused": False,
+                    "error": error,
+                    "extraction_record_id": str(record_id),
+                }
+            },
         })
 
     conn.execute(selection_result.insert().values(
@@ -155,28 +160,36 @@ def _seed_mixed_status_extraction(
         run_id=extraction_run_id,
         selection_run_id=selection_run_id,
         extraction_provenance={
-            "fingerprint": f"rollup-fp-{extraction_run_id}",
-            "profile": "test-profile",
+            "profiles": {
+                IOF_PROFILE_ID: {
+                    "fingerprint": f"rollup-fp-{extraction_run_id}",
+                    "profile": "test-profile",
+                }
+            }
         },
         docs=doc_payloads,
         counts={
             "selected": len(specs),
-            "extracted": 2,
-            "no_findings": 1,
-            "failed": 1,
-            "fresh": len(specs),
-            "reused": 0,
-            "findings": {
-                "total": len(finding_ids),
-                "quote_unverified": 0,
-                "dedup_collapsed": 0,
-                "invalid_dropped": 0,
-            },
             "basis": {
                 "full_text": len(specs), "abstract_only": 0,
                 "shares": {"full_text": 1.0, "abstract_only": 0.0},
             },
-            "field_coverage": {},
+            "profiles": {
+                IOF_PROFILE_ID: {
+                    "extracted": 2,
+                    "no_findings": 1,
+                    "failed": 1,
+                    "fresh": len(specs),
+                    "reused": 0,
+                    "findings": {
+                        "total": len(finding_ids),
+                        "quote_unverified": 0,
+                        "dedup_collapsed": 0,
+                        "invalid_dropped": 0,
+                    },
+                    "field_coverage": {},
+                }
+            },
         },
         flags=[],
         created_at=now(),

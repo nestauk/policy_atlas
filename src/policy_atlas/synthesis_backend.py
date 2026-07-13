@@ -1,12 +1,13 @@
-"""The ``synthesise_sections_v2`` and ``synthesise_section_v5`` prompt surfaces (task 013).
+"""The ``synthesise_sections_v2`` and ``synthesise_section_v6`` prompt surfaces (task 013).
 
 The repo's fifth and sixth product prompts — lead-authored, versioned, recorded
 in synthesis provenance and event payloads. ``synthesise_sections_v2`` (v2, 018 C2:
 the evidence-descriptive role menu — owner-scoped addition) is a
 single bounded schema-constrained call proposing the intent-led section list.
-``synthesise_section_v5`` (v3, task 018 B-B2: the deliberate voice design; v4,
+``synthesise_section_v6`` (v3, task 018 B-B2: the deliberate voice design; v4,
 018 C2 round 2: repetition/label-translation rules; v5 = 018 C2 round 3
-multi-read-tool turns) is the section-loop surface: one system prompt plus
+multi-read-tool turns; v6 = task 021 Phase E unified kind-typed findings read)
+is the section-loop surface: one system prompt plus
 the three tool JSON schemas, **versioned as one unit** — the OpenAI form runs
 the bounded tool-calling loop (the repo's first agent loop; the loop runner and
 turn accounting live in :mod:`policy_atlas.synthesis_tools`).
@@ -44,7 +45,7 @@ from policy_atlas.embeddings import (
     usage_metadata,
 )
 from policy_atlas.facet_grouping import FORBIDDEN_GROUP_LABELS
-from policy_atlas.schema import EFFECT_DIRECTIONS
+from policy_atlas.schema import CONTEXT_TYPES, EFFECT_DIRECTIONS
 from policy_atlas.synthesis_tools import (
     REASONING_CLAIMS_MAX,
     SECTION_CAP,
@@ -57,7 +58,7 @@ from policy_atlas.usage import UsageResult, token_usage_from_provider
 log = structlog.get_logger()
 
 SECTIONS_PROMPT_VERSION = "synthesise_sections_v2"
-SECTION_PROMPT_VERSION = "synthesise_section_v5"
+SECTION_PROMPT_VERSION = "synthesise_section_v6"
 KEY_FINDINGS_PROMPT_VERSION = "synthesise_key_findings_v1"
 
 # The contracted model floor (the 009 nano lesson is binding); section/prose
@@ -131,8 +132,11 @@ class PatternPayloadWire(BaseModel):
     ``computed_from`` names the deterministic source: ``characterisation_coverage``
     (with ``path`` into the coverage ``distributions``), ``group_direction_spread``
     (with ``group_id``), or ``extraction_direction_spread`` (the referenced
-    extraction's overall spread). ``stated`` maps labels to the integer counts
-    the claim asserts; any mismatch with the computed values rejects the claim.
+    extraction's overall spread). ``icf_context_type_count`` counts the
+    referenced extraction's implementation-context findings by context_type;
+    with ``group_id``, only that group's ICF members are counted. ``stated``
+    maps labels to the integer counts the claim asserts; any mismatch with the
+    computed values rejects the claim.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -142,6 +146,7 @@ class PatternPayloadWire(BaseModel):
         "characterisation_coverage",
         "group_direction_spread",
         "extraction_direction_spread",
+        "icf_context_type_count",
     ]
     path: list[str] = []
     group_id: str | None = None
@@ -296,29 +301,60 @@ QUERY_FINDINGS_TOOL_SCHEMA: dict[str, Any] = {
     "function": {
         "name": "query_findings",
         "description": (
-            "Read extracted intervention–outcome findings from the referenced "
-            "extraction. Returns id-keyed finding records with extract-verified "
-            "anchors. Filters combine with AND; omit all filters to list "
-            "findings (capped)."
+            "Read extracted findings from the referenced extraction — both kinds in "
+            "one call, returned in separate typed sections: iof_findings "
+            "(intervention–outcome effect findings) and icf_findings "
+            "(implementation-context findings: mechanisms, barriers, enablers, "
+            "conditions, delivery processes, adaptations, fidelity). Records are "
+            "id-keyed with extract-verified anchors; the two kinds are never blended "
+            "into one list. When a kind was not extracted in this run, its section "
+            "reports that as a coverage fact. Filters combine with AND; a "
+            "kind-specific filter (effect_direction, context_type) requires kinds to "
+            "name exactly its own kind — any other kinds value, including the "
+            "omitted-kinds default, is an error; omit all filters to list findings "
+            "(capped per kind)."
         ),
         "parameters": {
             "type": "object",
             "properties": {
+                "kinds": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": ["iof", "icf"]},
+                    "description": (
+                        "Which finding kinds to return: 'iof' "
+                        "(intervention–outcome effect findings) and/or 'icf' "
+                        "(implementation-context findings). Omit for all kinds "
+                        "present in the referenced extraction."
+                    ),
+                },
                 "finding_ids": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Specific finding ids to fetch.",
+                    "description": "Specific finding ids to fetch (either kind).",
                 },
                 "group_id": {
                     "type": "string",
-                    "description": "Restrict to a grouping group's member findings.",
+                    "description": (
+                        "Restrict to a grouping group's member findings (members may "
+                        "span both kinds)."
+                    ),
                 },
                 "effect_direction": {
                     "type": "string",
                     "enum": list(EFFECT_DIRECTIONS),
                     "description": (
-                        "Restrict to findings whose outcome measure moved this "
-                        "way (observed movement, not desirability)."
+                        "Restrict IOF findings to those whose outcome measure moved "
+                        "this way (observed movement, not desirability). IOF-only: "
+                        "an error when 'iof' is not among the requested kinds."
+                    ),
+                },
+                "context_type": {
+                    "type": "string",
+                    "enum": list(CONTEXT_TYPES),
+                    "description": (
+                        "Restrict ICF findings to one implementation-context type. "
+                        "ICF-only: an error when 'icf' is not among the requested "
+                        "kinds."
                     ),
                 },
             },
@@ -482,7 +518,7 @@ of the original rules.
 """
 
 
-# --- The section-loop prompt (synthesise_section_v5; v3 = the 018 B-B2 voice
+# --- The section-loop prompt (synthesise_section_v6; v3 = the 018 B-B2 voice
 # design; v4 = 018 C2 round 2 repetition/label-translation rules; v5 = 018 C2
 # round 3 multi-read-tool turns) ---
 
@@ -1141,7 +1177,10 @@ def _transcript_chunks(transcript: list[ToolExchange]) -> list[dict[str, Any]]:
 
 
 def _transcript_findings(transcript: list[ToolExchange]) -> list[dict[str, Any]]:
-    return _transcript_records(transcript, tool="query_findings", key="findings")
+    records = _transcript_records(transcript, tool="query_findings", key="findings")
+    records.extend(_transcript_records(transcript, tool="query_findings", key="iof_findings"))
+    records.extend(_transcript_records(transcript, tool="query_findings", key="icf_findings"))
+    return records
 
 
 def _chunk_content_by_id(transcript: list[ToolExchange]) -> dict[str, str]:
