@@ -106,7 +106,7 @@ fills them as the conversation converges. Never trust an optional field.
   "scope_constraints": {"published_after": "2015-01-01", "publisher_country": "GB"},
   "search_effort": "rapid" | "standard" | "deep",
   "analysis_depth": "landscape" | "standard" | "deep",
-  "components": ["screen_stage2", "characterise", "select", "extract", "group"],
+  "components": ["screen_full", "characterise", "select", "extract", "group"],
   "component_rationale": {"select": "…why this component fits the intent…"},
   "steering_mode": "frequent" | "moderate" | "minimal" | "unattended",
   "assumptions": ["…"],
@@ -128,11 +128,13 @@ fills them as the conversation converges. Never trust an optional field.
 
 ## Stage order (for the journey timeline)
 Order = `plan.steps` (the composed chain). Full standard/deep chain:
-acquire → screen → classify → appraise → ingest_full_text → screen_stage2 →
-characterise → select → extract → group → synthesise. Landscape depth drops
-screen_stage2/select/extract/group. Deep search rounds run INSIDE acquire/screen
-(surfacing as `stage.progress kind:"round"` ticks); a steering adjustment can re-run
-select (`stage.started` for select may repeat). UI labels come from `stage_label`.
+acquire → screen_abstract → classify → appraise → ingest_full_text → screen_full →
+characterise → select → extract → group → synthesise. (Task 019 renamed the plan
+vocabulary: screen → screen_abstract, screen_stage2 → screen_full.) Landscape depth
+drops screen_full/select/extract/group. Deep search rounds run INSIDE
+acquire/screen_abstract (surfacing as `stage.progress kind:"round"` ticks); a steering
+adjustment can re-run select (`stage.started` for select may repeat). UI labels come
+from `stage_label`.
 
 ## Added read models (feature-showcase pass)
 
@@ -160,3 +162,14 @@ select (`stage.started` for select may repeat). UI labels come from `stage_label
   flattened stage payload for expandable rows.
 - `GET /api/projects/{id}/landscape` now carries `tags: {"<tag_type>/<asserter>": {tag: count}}`
   — the tag layer with assertion provenance, screened-in set only.
+
+## 019–021 catch-up pass
+
+- Plan/step vocabulary renamed (019): `screen` → `screen_abstract`, `screen_stage2` →
+  `screen_full` — in `plan.components`, `component_rationale` keys and `steps[].stage`.
+  `component.completed` events in the canonical log still carry the registry name
+  (`screen` for both passes); the server maps it to `screen_abstract` on replay.
+- `GET /api/projects/{id}/findings` rows now also carry `effect_basis` and
+  `study_geography` (020 extraction schema v2; nullable, absent on pre-v2 rows).
+- Implementation-context findings (021) are NOT surfaced as a demo read model yet —
+  they reach the user through the synthesis artefact.

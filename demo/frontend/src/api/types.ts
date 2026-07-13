@@ -166,6 +166,9 @@ export interface Finding {
   study_design: string | null
   estimate_level: string | null
   causality: string | null
+  // 020 extraction schema v2 — optional so pre-v2 mock data still type-checks
+  effect_basis?: string | null
+  study_geography?: string | null
   is_primary: boolean | null
   statistics: Record<string, unknown>
   stratum_qualifiers: { type: string; value: string }[]

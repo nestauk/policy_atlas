@@ -1019,6 +1019,8 @@ def findings(conn: Connection, project_id: uuid.UUID, cap: int = 200) -> list[di
             intervention_outcome_finding.c.study_design,
             intervention_outcome_finding.c.estimate_level,
             intervention_outcome_finding.c.causality_by_design,
+            intervention_outcome_finding.c.effect_basis,
+            intervention_outcome_finding.c.study_geography,
             intervention_outcome_finding.c.is_primary,
             intervention_outcome_finding.c.stratum_qualifiers,
             intervention_outcome_finding.c.statistics,
@@ -1081,6 +1083,9 @@ def findings(conn: Connection, project_id: uuid.UUID, cap: int = 200) -> list[di
                 "study_design": row.study_design,
                 "estimate_level": row.estimate_level,
                 "causality": row.causality_by_design,
+                # 020 extraction schema v2 — nullable, absent on pre-v2 rows
+                "effect_basis": row.effect_basis,
+                "study_geography": row.study_geography,
                 "is_primary": row.is_primary,
                 # reported-only values: effect size + type, CI/SE, p, N, k, I², τ²
                 "statistics": statistics,

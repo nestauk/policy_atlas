@@ -91,10 +91,17 @@ def _hydrate_backlog(state: ProjectState, conn: Any) -> None:
     if state.plan:
         state.bus.emit("plan.updated", {"plan": state.plan})
 
+    # component.completed/.failed carry the harness REGISTRY name; both screen
+    # steps dispatch to registry "screen" (019 renamed only the plan vocabulary),
+    # so replay maps it to the stage-1 step for display.
+    def _stage(payload: dict) -> str | None:
+        component = payload.get("component")
+        return "screen_abstract" if component == "screen" else component
+
     stage_events = [
         e for e in events.read(conn, pid)
         if e["event_type"] in ("component.completed", "component.failed")
-        and e["payload"].get("component") in orchestrator.STAGES
+        and _stage(e["payload"]) in orchestrator.STAGES
     ]
     has_artefact = conn.execute(
         select(func.count()).select_from(synthesis_result)
@@ -104,16 +111,16 @@ def _hydrate_backlog(state: ProjectState, conn: Any) -> None:
         return
     state.bus.emit("analysis.started", {})
     for entry in stage_events:
-        component = entry["payload"]["component"]
-        label, blurb = orchestrator.STAGES[component]
+        stage = _stage(entry["payload"])
+        label, blurb = orchestrator.STAGES[stage]
         if entry["event_type"] == "component.completed":
             summary = _summarise({k: v for k, v in entry["payload"].items()
                                   if k != "component"})
-            state.bus.emit("stage.completed", {"stage": component, "stage_label": label,
+            state.bus.emit("stage.completed", {"stage": stage, "stage_label": label,
                                                "summary": summary})
         else:
             state.bus.emit("stage.failed", {
-                "stage": component, "stage_label": label,
+                "stage": stage, "stage_label": label,
                 "reason": str(entry["payload"].get("error", "unknown")), "skipped": False,
             })
     if has_artefact:

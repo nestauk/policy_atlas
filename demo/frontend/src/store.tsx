@@ -282,7 +282,8 @@ export function ProjectProvider({ projectId, children }: { projectId: string; ch
           refetch('funnel')
           if (event.data.stage === 'characterise') refetch('landscape')
           if (event.data.stage === 'group') refetch('groups')
-          if (event.data.stage === 'screen' || event.data.stage === 'deep_search') refetch('coverage')
+          // 'screen' kept for the mock API's pre-019 stage vocabulary
+          if (['screen_abstract', 'screen', 'deep_search'].includes(event.data.stage)) refetch('coverage')
         }
         if (event.type === 'analysis.completed') {
           refetch('funnel'); refetch('landscape'); refetch('groups'); refetch('coverage')

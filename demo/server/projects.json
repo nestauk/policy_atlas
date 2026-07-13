@@ -31,7 +31,7 @@
    "analysis_depth": "standard",
    "components": [
     "characterise",
-    "screen_stage2",
+    "screen_full",
     "select",
     "extract",
     "group"
@@ -41,7 +41,7 @@
     "select": "Included because this is an intervention-effectiveness question, so a subset of relevant documents should be selected for structured extraction.",
     "extract": "Included because intervention-outcome findings can be captured in the schema for effects on heat pump adoption.",
     "characterise": "Included to map intervention types, evidence coverage, UK relevance and gaps across the corpus.",
-    "screen_stage2": "Included because standard depth supports a full-text precision check before synthesis."
+    "screen_full": "Included because standard depth supports a full-text precision check before synthesis."
    },
    "steering_mode": "moderate",
    "assumptions": [
@@ -63,7 +63,7 @@
     {
      "label": "Screening for relevance",
      "blurb": "Every title and abstract, against your question",
-     "stage": "screen"
+     "stage": "screen_abstract"
     },
     {
      "label": "Sorting by evidence type",
@@ -83,7 +83,7 @@
     {
      "label": "Screening the full texts",
      "blurb": "A second relevance pass, now over the documents themselves",
-     "stage": "screen_stage2"
+     "stage": "screen_full"
     },
     {
      "label": "Mapping the landscape",
@@ -229,7 +229,7 @@
    "search_effort": "deep",
    "analysis_depth": "deep",
    "components": [
-    "screen_stage2",
+    "screen_full",
     "characterise",
     "select",
     "extract",
@@ -283,7 +283,7 @@
    ],
    "component_rationale": {
     "characterise": "Included to quickly map how the evidence defines optimism, pessimism and the personal-national outlook gap across sources.",
-    "screen_stage2": "Excluded because a landscape analysis does not include the full-text confirmation pass bought by standard or deep analysis.",
+    "screen_full": "Excluded because a landscape analysis does not include the full-text confirmation pass bought by standard or deep analysis.",
     "select": "Excluded because the question is not about interventions and their effects, so intervention-outcome document selection is not a good fit.",
     "extract": "Excluded because schema-bound intervention-outcome extraction does not fit an associational and explanatory attitudes question.",
     "group": "Excluded because there will be no intervention-outcome extraction to organise by intervention, outcome or population."
@@ -308,7 +308,7 @@
     {
      "label": "Screening for relevance",
      "blurb": "Every title and abstract, against your question",
-     "stage": "screen"
+     "stage": "screen_abstract"
     },
     {
      "label": "Sorting by evidence type",
@@ -370,7 +370,7 @@
    ],
    "component_rationale": {
     "characterise": "Included to quickly map how the evidence defines optimism, pessimism and the personal-national outlook gap across sources.",
-    "screen_stage2": "Excluded because a landscape analysis does not include the full-text confirmation pass bought by standard or deep analysis.",
+    "screen_full": "Excluded because a landscape analysis does not include the full-text confirmation pass bought by standard or deep analysis.",
     "select": "Excluded because the question is not about interventions and their effects, so intervention-outcome document selection is not a good fit.",
     "extract": "Excluded because schema-bound intervention-outcome extraction does not fit an associational and explanatory attitudes question.",
     "group": "Excluded because there will be no intervention-outcome extraction to organise by intervention, outcome or population."
@@ -446,7 +446,7 @@
    ],
    "component_rationale": {
     "characterise": "Included to quickly map intervention types, settings, populations, outcomes and obvious evidence gaps across the initial corpus.",
-    "screen_stage2": "Excluded because landscape depth does not include the full-text precision re-screen.",
+    "screen_full": "Excluded because landscape depth does not include the full-text precision re-screen.",
     "select": "Excluded because a quick landscape scan will not select documents for in-depth extraction.",
     "extract": "Excluded because rapid landscape work will not extract structured intervention-outcome findings from selected documents.",
     "group": "Excluded because grouping depends on structured extraction, which is not part of this quick scan."
@@ -470,7 +470,7 @@
     {
      "label": "Screening for relevance",
      "blurb": "Every title and abstract, against your question",
-     "stage": "screen"
+     "stage": "screen_abstract"
     },
     {
      "label": "Sorting by evidence type",
@@ -533,7 +533,7 @@
    ],
    "component_rationale": {
     "characterise": "Included to quickly map intervention types, settings, populations, outcomes and obvious evidence gaps across the initial corpus.",
-    "screen_stage2": "Excluded because landscape depth does not include the full-text precision re-screen.",
+    "screen_full": "Excluded because landscape depth does not include the full-text precision re-screen.",
     "select": "Excluded because a quick landscape scan will not select documents for in-depth extraction.",
     "extract": "Excluded because rapid landscape work will not extract structured intervention-outcome findings from selected documents.",
     "group": "Excluded because grouping depends on structured extraction, which is not part of this quick scan."

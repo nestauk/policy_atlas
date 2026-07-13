@@ -57,12 +57,13 @@ def build_plan(draft: PlannerTurnWire | Any) -> OrchestrationPlan:
 
 STAGES: dict[str, tuple[str, str]] = {
     "acquire": ("Searching sources", "Queries out to academic and policy databases"),
-    "screen": ("Screening for relevance", "Every title and abstract, against your question"),
+    "screen_abstract": ("Screening for relevance",
+                        "Every title and abstract, against your question"),
     "classify": ("Sorting by evidence type", "Trial, review, evaluation — each source labelled"),
     "appraise": ("Appraising quality", "How much weight each source can bear"),
     "ingest_full_text": ("Reading in full", "Fetching the documents; paywalls noted, not hidden"),
-    "screen_stage2": ("Screening the full texts", "A second relevance pass, now over the "
-                      "documents themselves"),
+    "screen_full": ("Screening the full texts", "A second relevance pass, now over the "
+                    "documents themselves"),
     "characterise": ("Mapping the landscape", "What the evidence covers, and where it's thin"),
     "select": ("Shortlisting", "The strongest, most varied set for close reading"),
     "extract": ("Extracting findings", "Each claim pulled out with its exact quote"),

@@ -157,6 +157,12 @@ function FindingRow({ f, group, expanded, onToggle }: {
                     {f.comparator && (
                       <div className="contents"><dt className="text-grey">Comparator</dt><dd className="font-medium text-navy">{f.comparator}</dd></div>
                     )}
+                    {f.effect_basis && (
+                      <div className="contents"><dt className="text-grey">Effect basis</dt><dd className="font-medium text-navy">{f.effect_basis.split('_').join(' ')}</dd></div>
+                    )}
+                    {f.study_geography && (
+                      <div className="contents"><dt className="text-grey">Geography</dt><dd className="font-medium text-navy">{f.study_geography}</dd></div>
+                    )}
                   </dl>
                 )}
                 {f.is_primary && <span className="chip chip--blue mt-2">Primary outcome</span>}
