@@ -350,6 +350,12 @@ limitation, both already recorded above).
 reseeds made seeds *stricter* (real per-profile shapes); all new guards are
 raises, not fallbacks; `make verify` green (1273 tests, +1 net).
 
+**`/simplify` skipped (recorded justification):** the `/code-review` pass ran
+dedicated reuse / simplification / efficiency / altitude finder angles; their
+19 candidates were adjudicated above (consolidation deliberately deferred to
+the third-schema slice, deferred.md cost note). A separate same-family
+cleanup pass would re-surface the same theme.
+
 ## Public safety
 
 Probe summaries above are public-safe (titles + counts + short claim
