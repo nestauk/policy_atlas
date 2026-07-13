@@ -2,7 +2,8 @@
 
 Per selected document: load the selection row, resolve the extraction basis
 (full-text chunks or the envelope abstract), check the durable memo, window and
-fan out the ``extract_iof_v5`` calls, validate / verify / dedup the emitted
+fan out the ``extract_iof`` prompt calls (versioned by
+``extract_prompt.PROMPT_VERSION``), validate / verify / dedup the emitted
 records, then write the durable ``source_extraction_record`` +
 ``intervention_outcome_finding`` rows and, last of all, the run-scoped
 ``extraction_result`` roll-up.
@@ -19,7 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -29,12 +30,14 @@ import structlog
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
+from policy_atlas import tracing
 from policy_atlas.extract_prompt import (
     EXTRACT_MAX_OUTPUT_TOKENS,
     EXTRACTION_MODEL,
     PROMPT_VERSION,
+    UNCLASSIFIED_EVIDENCE_TYPE,
 )
-from policy_atlas.extraction_backend import ExtractionBackend
+from policy_atlas.extraction_backend import ExtractionBackend, StubICFExtractionBackend
 from policy_atlas.extraction_records import (
     ABSTRACT_SEGMENT_ID,
     PROFILE_ID,
@@ -45,25 +48,56 @@ from policy_atlas.extraction_records import (
 )
 from policy_atlas.finding_vetter import (
     FINDING_VETTER_MAX_OUTPUT_TOKENS,
+    FINDING_VETTER_MODEL,
     FINDING_VETTER_PROMPT_VERSION,
+    FINDING_VETTER_REASONING_EFFORT,
     FindingVetterBackend,
     VetterVerdictWire,
     validate_verdict_coverage,
 )
+from policy_atlas.icf_finding_vetter import (
+    ICF_FINDING_VETTER_MAX_OUTPUT_TOKENS,
+    ICF_FINDING_VETTER_MODEL,
+    ICF_FINDING_VETTER_PROMPT_VERSION,
+    ICF_FINDING_VETTER_REASONING_EFFORT,
+    ICFFindingVetterBackend,
+    ICFVetterVerdictWire,
+    validate_icf_verdict_coverage,
+)
+from policy_atlas.implementation_context_prompt import (
+    ICF_EXTRACT_MAX_OUTPUT_TOKENS,
+    ICF_EXTRACTION_MODEL,
+    ICF_PROMPT_VERSION,
+)
+from policy_atlas.implementation_context_records import (
+    PROFILE_ID as ICF_PROFILE_ID,
+)
+from policy_atlas.implementation_context_records import (
+    SCHEMA_VERSION as ICF_SCHEMA_VERSION,
+)
+from policy_atlas.implementation_context_records import (
+    ICFRecord,
+    ICFRecordWire,
+)
 from policy_atlas.quote_verify import (
     FIELD_RULES_VERSION,
+    ICF_FIELD_RULES_VERSION,
     QUOTE_VERIFIER_VERSION,
     QuoteMatch,
     QuoteMatcher,
     build_basis,
     claim_key,
+    dedup_icf_records,
     dedup_records,
+    icf_claim_key,
+    validate_icf_record,
     validate_record,
 )
 from policy_atlas.schema import (
     MEMO_STATUSES,
     chunk,
     extraction_result,
+    implementation_context_finding,
     intervention_outcome_finding,
     project_source_snapshot,
     selection_result,
@@ -85,10 +119,34 @@ OVERSIZE_POLICY = "char_split_v1"
 EXTRACT_RETRY_CAP = 1
 MAX_CONCURRENT_EXTRACT = 4
 EXTRACTION_PROFILE = PROFILE_ID
+KNOWN_PROFILE_IDS = (PROFILE_ID, ICF_PROFILE_ID)
 
 # 018 C5 finding vetter: component.completed payload record cap (flag-not-drop —
 # every flagged finding is counted; only the displayed record list is capped).
 VETTED_OUT_RECORDS_CAP = 50
+
+
+@dataclass(frozen=True)
+class ExtractionProfileBundle:
+    """Concrete extraction profile wiring for the shared document pipeline.
+
+    The two instances in this module are deliberately plain data, not a
+    registry. Each bundle carries every profile-specific seam: fingerprint,
+    backend, validation/dedup, table writer and optional vetter.
+    """
+
+    profile_id: str
+    fingerprint: Callable[[str, bool], tuple[str, dict[str, Any]]]
+    backend: Any
+    wire_record_model: type[Any]
+    validate_record: Callable[..., Any]
+    dedup_records: Callable[..., tuple[list[Any], int]]
+    claim_key: Callable[..., tuple[object, ...]]
+    write_finding: Callable[..., None]
+    vetter_backend: Any | None
+    validate_vetter_coverage: Callable[..., None]
+    judge_payload_entry: Callable[..., dict[str, Any]]
+    vetted_out_record: Callable[..., dict[str, Any]]
 
 
 class ExtractError(Exception):
@@ -165,7 +223,53 @@ def extraction_fingerprint(
         "finding_vetter": (
             {
                 "prompt": FINDING_VETTER_PROMPT_VERSION,
+                "model": FINDING_VETTER_MODEL,
+                "reasoning_effort": FINDING_VETTER_REASONING_EFFORT,
                 "max_output_tokens": FINDING_VETTER_MAX_OUTPUT_TOKENS,
+            }
+            if finding_vetter_active
+            else None
+        ),
+    }
+    canonical = json.dumps(components, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return digest, components
+
+
+def icf_extraction_fingerprint(
+    mode: str, *, finding_vetter_active: bool = False
+) -> tuple[str, dict[str, Any]]:
+    """Build the ICF extraction fingerprint and canonical component map.
+
+    Args:
+        mode: The ICF backend mode (``"live"`` or ``"stub"``).
+        finding_vetter_active: Whether the ICF finding-vetter backend was supplied.
+
+    Returns:
+        A ``(fingerprint_hex, components)`` pair for the ICF profile only.
+    """
+    components: dict[str, Any] = {
+        "profile": ICF_PROFILE_ID,
+        "schema": ICF_SCHEMA_VERSION,
+        "prompt": ICF_PROMPT_VERSION,
+        "model": ICF_EXTRACTION_MODEL,
+        "mode": mode,
+        "field_rules": ICF_FIELD_RULES_VERSION,
+        "verifier": QUOTE_VERIFIER_VERSION,
+        "window": {
+            "char_budget": WINDOW_CHAR_BUDGET,
+            "overlap": WINDOW_OVERLAP_CHUNKS,
+            "oversize_policy": OVERSIZE_POLICY,
+            "oversize_overlap": OVERSIZE_SUBSEGMENT_OVERLAP,
+        },
+        "max_output_tokens": ICF_EXTRACT_MAX_OUTPUT_TOKENS,
+        "retry_cap": EXTRACT_RETRY_CAP,
+        "finding_vetter": (
+            {
+                "prompt": ICF_FINDING_VETTER_PROMPT_VERSION,
+                "model": ICF_FINDING_VETTER_MODEL,
+                "reasoning_effort": ICF_FINDING_VETTER_REASONING_EFFORT,
+                "max_output_tokens": ICF_FINDING_VETTER_MAX_OUTPUT_TOKENS,
             }
             if finding_vetter_active
             else None
@@ -218,9 +322,10 @@ class _Doc:
     error: str | None = None
     extraction_record_id: uuid.UUID | None = None
     finding_count: int = 0
+    sent_evidence_type: str | None = None
 
     # Fresh-run payloads / counters.
-    survivors: list[IOFRecord] = field(default_factory=list)
+    survivors: list[Any] = field(default_factory=list)
     groundings: list[list[dict[str, Any]]] = field(default_factory=list)
     coverage_by_survivor: list[dict[str, str]] = field(default_factory=list)
     invalid_dropped: int = 0
@@ -552,7 +657,7 @@ def _scrub_nul(value: Any) -> Any:
     return value
 
 
-def _scrub_findings(findings: list[IOFRecordWire]) -> list[IOFRecordWire]:
+def _scrub_findings(findings: list[Any], wire_record_model: type[Any]) -> list[Any]:
     """Strip NUL characters from every string in the wire records.
 
     Model output is untrusted data; Postgres rejects ``\\u0000`` in TEXT and
@@ -561,7 +666,7 @@ def _scrub_findings(findings: list[IOFRecordWire]) -> list[IOFRecordWire]:
     validation/verification, like any other encoding hygiene.
     """
     return [
-        IOFRecordWire.model_validate(_scrub_nul(record.model_dump()))
+        wire_record_model.model_validate(_scrub_nul(record.model_dump()))
         for record in findings
     ]
 
@@ -569,9 +674,9 @@ def _scrub_findings(findings: list[IOFRecordWire]) -> list[IOFRecordWire]:
 def _run_windows(
     docs: list[_Doc],
     *,
-    extraction_backend: ExtractionBackend,
+    profile: ExtractionProfileBundle,
 ) -> tuple[
-    dict[int, dict[int, list[IOFRecordWire]]],
+    dict[int, dict[int, list[Any]]],
     dict[int, Exception],
     int,
     _ExtractCallBudget,
@@ -584,6 +689,7 @@ def _run_windows(
     succeeded), the surviving per-document failure exception, the call budget,
     and the total retry count.
     """
+    extraction_backend = profile.backend
     tasks: list[tuple[int, int]] = []
     payloads: dict[tuple[int, int], ExtractionWindowPayload] = {}
     for doc_index, doc in enumerate(docs):
@@ -599,7 +705,7 @@ def _run_windows(
     budget = _ExtractCallBudget(maximum=maximum)
     log.info("extract.call_budget", baseline=baseline, maximum=maximum)
 
-    results: dict[tuple[int, int], list[IOFRecordWire]] = {}
+    results: dict[tuple[int, int], list[Any]] = {}
     errors: dict[tuple[int, int], Exception] = {}
     usage_totals = UsageAccumulator()
 
@@ -609,12 +715,24 @@ def _run_windows(
             if not budget.reserve():  # unreachable by construction; fail closed
                 errors[key] = RuntimeError("call budget exhausted")
                 continue
-            submitted.append((key, executor.submit(extraction_backend.extract, payloads[key])))
+            doc_index, _ = key
+            payload = payloads[key]
+            docs[doc_index].sent_evidence_type = (
+                payload.primary_evidence_type or UNCLASSIFIED_EVIDENCE_TYPE
+            )
+            submitted.append((
+                key,
+                tracing.submit_with_context(
+                    executor, extraction_backend.extract, payload
+                ),
+            ))
         wait([future for _, future in submitted])
         for key, future in submitted:
             try:
                 response, usage = future.result()
-                results[key] = _scrub_findings(list(response.findings))
+                results[key] = _scrub_findings(
+                    list(response.findings), profile.wire_record_model
+                )
                 usage_totals.add(usage)
             except Exception as exc:  # noqa: BLE001 — reduced to a type name for the record
                 errors[key] = exc
@@ -624,16 +742,23 @@ def _run_windows(
         if not budget.reserve():
             continue
         retry_count += 1
+        doc_index, _ = key
+        payload = payloads[key]
+        docs[doc_index].sent_evidence_type = (
+            payload.primary_evidence_type or UNCLASSIFIED_EVIDENCE_TYPE
+        )
         try:
-            response, usage = extraction_backend.extract(payloads[key])
-            results[key] = _scrub_findings(list(response.findings))
+            response, usage = extraction_backend.extract(payload)
+            results[key] = _scrub_findings(
+                list(response.findings), profile.wire_record_model
+            )
             usage_totals.add(usage)
         except Exception as exc:  # noqa: BLE001
             errors[key] = exc
         else:
             del errors[key]
 
-    per_doc: dict[int, dict[int, list[IOFRecordWire]]] = {}
+    per_doc: dict[int, dict[int, list[Any]]] = {}
     for (doc_index, window_index), records in results.items():
         per_doc.setdefault(doc_index, {})[window_index] = records
     # The earliest failing window (window order) wins the recorded type name.
@@ -669,9 +794,14 @@ def _grounding_entry(segment_id: str | None, quote: str, match: QuoteMatch) -> d
     }
 
 
-def _process_doc(doc: _Doc, window_findings: dict[int, list[IOFRecordWire]]) -> None:
+def _process_doc(
+    doc: _Doc,
+    window_findings: dict[int, list[Any]],
+    *,
+    profile: ExtractionProfileBundle,
+) -> None:
     """Run the within-document pipeline for a document whose windows all succeeded."""
-    wire_records: list[IOFRecordWire] = []
+    wire_records: list[Any] = []
     for window_index in sorted(window_findings):
         wire_records.extend(window_findings[window_index])
 
@@ -680,7 +810,7 @@ def _process_doc(doc: _Doc, window_findings: dict[int, list[IOFRecordWire]]) -> 
         doc.finding_count = 0
         return
 
-    validated = [validate_record(wire) for wire in wire_records]
+    validated = [profile.validate_record(wire) for wire in wire_records]
     doc.invalid_dropped = sum(1 for item in validated if item.grain_invalid)
     valid = [item for item in validated if not item.grain_invalid]
     if not valid:
@@ -690,15 +820,15 @@ def _process_doc(doc: _Doc, window_findings: dict[int, list[IOFRecordWire]]) -> 
         return
 
     coverage_by_claim: dict[tuple[object, ...], dict[str, str]] = {}
-    stored: list[IOFRecord] = []
+    stored: list[Any] = []
     for item in valid:
-        record = cast("IOFRecord", item.record)
+        record = item.record
         stored.append(record)
-        key = claim_key(record)
+        key = profile.claim_key(record)
         if key not in coverage_by_claim:
             coverage_by_claim[key] = item.field_coverage
 
-    survivors, collapsed = dedup_records(stored)
+    survivors, collapsed = profile.dedup_records(stored)
     doc.dedup_collapsed = collapsed
 
     matcher = QuoteMatcher(build_basis(doc.original_segments))
@@ -716,7 +846,7 @@ def _process_doc(doc: _Doc, window_findings: dict[int, list[IOFRecordWire]]) -> 
         if any_failed:
             quote_unverified += 1
         groundings.append(entries)
-        coverage_list.append(coverage_by_claim[claim_key(record)])
+        coverage_list.append(coverage_by_claim[profile.claim_key(record)])
 
     doc.status = "extracted"
     doc.finding_count = len(survivors)
@@ -727,6 +857,12 @@ def _process_doc(doc: _Doc, window_findings: dict[int, list[IOFRecordWire]]) -> 
 
 
 # --- Finding vetter (018 C5) --------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _FindingVetterJudgment:
+    verdicts: list[Any]
+    usage: TokenUsage | None
 
 
 def _judge_payload_entry(index: int, record: IOFRecord) -> dict[str, Any]:
@@ -745,42 +881,80 @@ def _judge_payload_entry(index: int, record: IOFRecord) -> dict[str, Any]:
     }
 
 
-def _apply_finding_vetter(
-    doc: _Doc, finding_vetter_backend: FindingVetterBackend
-) -> TokenUsage | None:
-    """Vet one document's dedup survivors, excluding clear non-findings (flag-not-drop).
+def _icf_judge_payload_entry(index: int, record: ICFRecord) -> dict[str, Any]:
+    """Build one ICF dedup survivor's id-keyed judge input entry."""
+    return {
+        "index": index,
+        "context_type": record.context_type,
+        "claim": record.claim,
+        "intervention": record.intervention,
+        "claim_level": record.claim_level,
+        "claim_basis": record.claim_basis,
+        "quotes": [anchor.quote for anchor in record.anchors],
+    }
+
+
+def _iof_vetted_out_record(record: IOFRecord, verdict: VetterVerdictWire) -> dict[str, Any]:
+    """Build the summary record for one IOF finding excluded by the vetter."""
+    return {
+        "intervention": record.intervention,
+        "outcome": record.outcome,
+        "flag_class": verdict.flag_class,
+        "reason": verdict.reason,
+    }
+
+
+def _icf_vetted_out_record(
+    record: ICFRecord, verdict: ICFVetterVerdictWire
+) -> dict[str, Any]:
+    """Build the summary record for one ICF finding excluded by the vetter."""
+    return {
+        "context_type": record.context_type,
+        "claim": record.claim,
+        "intervention": record.intervention,
+        "flag_class": verdict.flag_class,
+        "reason": verdict.reason,
+    }
+
+
+def _judge_finding_vetter(doc: _Doc, profile: ExtractionProfileBundle) -> _FindingVetterJudgment:
+    """Call the finding vetter for one document's dedup survivors.
 
     Runs AFTER ``dedup_records`` and BEFORE the IOF insert (``doc.survivors``
-    etc. are mutated in place, so ``_write_docs`` never sees excluded
-    findings). A judge call/parse/coverage failure is fail-open: the document
-    persists unfiltered and ``doc.vetting_failed`` is set for accounting —
-    the filter is an enhancement, never an extraction blocker.
+    etc. are still parent-owned until verdict application). A judge
+    call/parse/coverage failure is handled by the submitting thread so one
+    failed document cannot affect another document's filtering.
 
     Args:
         doc: An ``extracted`` document with dedup survivors already resolved.
-        finding_vetter_backend: The judge seam.
+        profile: The extraction profile bundle carrying the judge seam.
 
     Returns:
-        The judge call's token usage, or ``None`` on failure or no usage.
+        Covered verdicts plus the judge call's token usage.
     """
-    findings = [_judge_payload_entry(index, record) for index, record in enumerate(doc.survivors)]
-    try:
-        response, usage = finding_vetter_backend.judge({"findings": findings})
-        validate_verdict_coverage(findings, response.verdicts)
-    except Exception as exc:  # noqa: BLE001 — reduced to a type name for the record
-        doc.vetting_failed = True
-        log.warning(
-            "extract.vetting_failed", pss_id=str(doc.pss_id), error=type(exc).__name__
-        )
-        return None
+    if profile.vetter_backend is None:
+        raise RuntimeError("finding vetter backend is not configured")
+    findings = [
+        profile.judge_payload_entry(index, record)
+        for index, record in enumerate(doc.survivors)
+    ]
+    response, usage = profile.vetter_backend.judge({"findings": findings})
+    profile.validate_vetter_coverage(findings, list(response.verdicts))
+    return _FindingVetterJudgment(verdicts=list(response.verdicts), usage=usage)
 
-    vetted_out_by_index: dict[int, VetterVerdictWire] = {
+
+def _apply_finding_vetter_verdicts(
+    doc: _Doc, verdicts: list[Any], *, profile: ExtractionProfileBundle
+) -> None:
+    """Apply covered finding-vetter verdicts to one document in the parent thread."""
+
+    vetted_out_by_index: dict[int, Any] = {
         verdict.finding_index: verdict
-        for verdict in response.verdicts
+        for verdict in verdicts
         if verdict.verdict == "flagged"
     }
     if not vetted_out_by_index:
-        return usage
+        return
 
     kept_survivors: list[IOFRecord] = []
     kept_groundings: list[list[dict[str, Any]]] = []
@@ -794,14 +968,7 @@ def _apply_finding_vetter(
             kept_groundings.append(grounding)
             kept_coverage.append(coverage)
             continue
-        doc.vetted_out_records.append(
-            {
-                "intervention": record.intervention,
-                "outcome": record.outcome,
-                "flag_class": verdict.flag_class,
-                "reason": verdict.reason,
-            }
-        )
+        doc.vetted_out_records.append(profile.vetted_out_record(record, verdict))
 
     doc.vetted_out_count = len(doc.vetted_out_records)
     doc.survivors = kept_survivors
@@ -813,10 +980,143 @@ def _apply_finding_vetter(
         # evidence, so its status says so honestly — `vetted_out_count`
         # preserves the distinction from a genuinely-empty extraction.
         doc.status = "no_findings"
-    return usage
+
+
+def _run_finding_vetters(
+    docs: list[_Doc], profile: ExtractionProfileBundle
+) -> dict[str, int]:
+    """Run finding-vetter calls in parallel and apply verdicts deterministically.
+
+    Args:
+        docs: Documents after extraction post-processing.
+        profile: The extraction profile bundle carrying the judge seam.
+
+    Returns:
+        Aggregated vetter token usage. Usage accumulation stays on the
+        submitting thread because ``UsageAccumulator`` is mutable and has no
+        internal locking.
+    """
+    candidates = [
+        (doc_index, doc)
+        for doc_index, doc in enumerate(docs)
+        if doc.extractable and doc.status == "extracted" and doc.survivors
+    ]
+    usage_totals = UsageAccumulator()
+    if not candidates:
+        return usage_totals.payload()
+
+    judgments: dict[int, _FindingVetterJudgment] = {}
+    errors: dict[int, Exception] = {}
+    with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_EXTRACT) as executor:
+        submitted: list[tuple[int, Future[Any]]] = [
+            (
+                doc_index,
+                tracing.submit_with_context(
+                    executor, _judge_finding_vetter, doc, profile
+                ),
+            )
+            for doc_index, doc in candidates
+        ]
+        wait([future for _, future in submitted])
+        for doc_index, future in submitted:
+            try:
+                judgments[doc_index] = future.result()
+            except Exception as exc:  # noqa: BLE001 — reduced to a type name for the record
+                errors[doc_index] = exc
+
+    for doc_index, doc in candidates:
+        error = errors.get(doc_index)
+        if error is not None:
+            doc.vetting_failed = True
+            log.warning(
+                "extract.vetting_failed",
+                pss_id=str(doc.pss_id),
+                error=type(error).__name__,
+            )
+            continue
+        judgment = judgments[doc_index]
+        _apply_finding_vetter_verdicts(doc, judgment.verdicts, profile=profile)
+        usage_totals.add(judgment.usage)
+
+    return usage_totals.payload()
 
 
 # --- Writes -----------------------------------------------------------------
+
+
+def _write_iof_finding(
+    conn: Connection,
+    project_id: uuid.UUID,
+    record_id: uuid.UUID,
+    record: IOFRecord,
+    grounding: list[dict[str, Any]],
+    coverage: dict[str, str],
+    created_at: datetime,
+) -> None:
+    """Write one validated IOF finding."""
+    conn.execute(
+        intervention_outcome_finding.insert().values(
+            finding_id=uuid.uuid4(),
+            project_id=project_id,
+            extraction_record_id=record_id,
+            intervention=record.intervention,
+            outcome=record.outcome,
+            population=record.population,
+            setting=record.setting,
+            comparator=record.comparator,
+            effect_direction=record.effect_direction,
+            estimate_level=record.estimate_level,
+            study_design=record.study_design,
+            study_geography=record.study_geography,
+            stratum_qualifiers=[
+                {"type": stratum.type, "value": stratum.value}
+                for stratum in record.stratum_qualifiers
+            ],
+            statistics=record.statistics.model_dump(),
+            causality_by_design=record.causality_by_design,
+            effect_basis=record.effect_basis,
+            is_primary=record.is_primary,
+            is_prevalence_only=record.is_prevalence_only,
+            field_coverage=coverage,
+            grounding=grounding,
+            created_at=created_at,
+        )
+    )
+
+
+def _write_icf_finding(
+    conn: Connection,
+    project_id: uuid.UUID,
+    record_id: uuid.UUID,
+    record: ICFRecord,
+    grounding: list[dict[str, Any]],
+    coverage: dict[str, str],
+    created_at: datetime,
+) -> None:
+    """Write one validated ICF finding."""
+    conn.execute(
+        implementation_context_finding.insert().values(
+            finding_id=uuid.uuid4(),
+            project_id=project_id,
+            extraction_record_id=record_id,
+            context_type=record.context_type,
+            claim=record.claim,
+            intervention=record.intervention,
+            outcome=record.outcome,
+            population=record.population,
+            setting=record.setting,
+            study_geography=record.study_geography,
+            study_design=record.study_design,
+            claim_level=record.claim_level,
+            claim_basis=record.claim_basis,
+            level=record.level,
+            resource_requirements=record.resource_requirements,
+            workforce_requirements=record.workforce_requirements,
+            field_coverage=coverage,
+            grounding=grounding,
+            created_at=created_at,
+        )
+    )
 
 
 def _write_docs(
@@ -827,6 +1127,7 @@ def _write_docs(
     fingerprint: str,
     docs: list[_Doc],
     created_at: datetime,
+    profile: ExtractionProfileBundle,
 ) -> None:
     """Write each non-reused document's record + findings in selected-set order."""
     for doc in docs:
@@ -843,6 +1144,7 @@ def _write_docs(
                 extraction_fingerprint=fingerprint,
                 status=doc.status,
                 basis=doc.basis,
+                primary_evidence_type=doc.sent_evidence_type,
                 error=doc.error,
                 finding_count=doc.finding_count,
                 run_id=run_id,
@@ -852,41 +1154,67 @@ def _write_docs(
         for record, grounding, coverage in zip(
             doc.survivors, doc.groundings, doc.coverage_by_survivor, strict=True
         ):
-            conn.execute(
-                intervention_outcome_finding.insert().values(
-                    finding_id=uuid.uuid4(),
-                    project_id=project_id,
-                    extraction_record_id=record_id,
-                    intervention=record.intervention,
-                    outcome=record.outcome,
-                    population=record.population,
-                    comparator=record.comparator,
-                    effect_direction=record.effect_direction,
-                    estimate_level=record.estimate_level,
-                    study_design=record.study_design,
-                    stratum_qualifiers=[
-                        {"type": stratum.type, "value": stratum.value}
-                        for stratum in record.stratum_qualifiers
-                    ],
-                    statistics=record.statistics.model_dump(),
-                    causality_by_design=record.causality_by_design,
-                    is_primary=record.is_primary,
-                    is_prevalence_only=record.is_prevalence_only,
-                    field_coverage=coverage,
-                    grounding=grounding,
-                    created_at=created_at,
-                )
+            profile.write_finding(
+                conn,
+                project_id,
+                record_id,
+                record,
+                grounding,
+                coverage,
+                created_at,
             )
 
 
 # --- Summary / invariants ---------------------------------------------------
 
 
-def _doc_summary(doc: _Doc, *, finding_vetter_active: bool) -> dict[str, Any]:
+def record_ids_by_profile(docs: Sequence[Mapping[str, Any]]) -> dict[str, list[Any]]:
+    """Group a roll-up's extraction record ids by profile id.
+
+    The reader for the per-profile ``extraction_result.docs`` shape this module
+    writes (``_build_summary``), kept next to the writer so the two cannot
+    drift. Entries without a ``profiles`` map are ignored — the roll-up shape
+    is per-profile keyed, full stop.
+
+    Args:
+        docs: Stored ``extraction_result.docs``.
+
+    Returns:
+        Mapping from profile id to extraction record ids in document order.
+    """
+    grouped: dict[str, list[Any]] = {}
+    for doc in docs:
+        profiles = doc.get("profiles")
+        if not isinstance(profiles, Mapping):
+            continue
+        for profile_id, block in profiles.items():
+            if not isinstance(profile_id, str) or not isinstance(block, Mapping):
+                continue
+            record_id = block.get("extraction_record_id")
+            if record_id is not None:
+                grouped.setdefault(profile_id, []).append(record_id)
+    return grouped
+
+
+@dataclass(frozen=True)
+class _ProfileRun:
+    """Completed extraction pass for one selected profile."""
+
+    profile_id: str
+    docs: list[_Doc]
+    components: dict[str, Any]
+    fingerprint: str
+    budget_baseline: int
+    budget_maximum: int
+    budget_used: int
+    retry_count: int
+    usage_totals: dict[str, int]
+    finding_vetter_active: bool
+
+
+def _doc_profile_summary(doc: _Doc, *, finding_vetter_active: bool) -> dict[str, Any]:
     summary: dict[str, Any] = {
-        "pss_id": str(doc.pss_id),
         "status": doc.status,
-        "basis": doc.basis,
         "finding_count": doc.finding_count,
         "reused": doc.reused,
         "error": doc.error,
@@ -917,22 +1245,22 @@ def _assert_invariants(docs: list[_Doc], *, selected_count: int) -> None:
         raise ExtractError("extract invariant violated: a failed doc is reused")
 
 
-def _build_summary(
-    docs: list[_Doc],
-    *,
-    selection_run_id: uuid.UUID,
-    components: dict[str, Any],
-    fingerprint: str,
-    budget_baseline: int,
-    budget_maximum: int,
-    budget_used: int,
-    retry_count: int,
-    usage_totals: dict[str, int],
-    finding_vetter_active: bool,
-) -> dict[str, Any]:
+def _basis_counts(docs: Sequence[_Doc]) -> dict[str, Any]:
     selected = len(docs)
-    counts = {
-        "selected": selected,
+    full_text = sum(1 for doc in docs if doc.basis == "full_text")
+    abstract_only = sum(1 for doc in docs if doc.basis == "abstract_only")
+    return {
+        "full_text": full_text,
+        "abstract_only": abstract_only,
+        "shares": {
+            "full_text": full_text / selected if selected else 0.0,
+            "abstract_only": abstract_only / selected if selected else 0.0,
+        },
+    }
+
+
+def _profile_counts(docs: Sequence[_Doc], *, finding_vetter_active: bool) -> dict[str, Any]:
+    counts: dict[str, Any] = {
         "extracted": sum(1 for doc in docs if doc.status == "extracted"),
         "no_findings": sum(1 for doc in docs if doc.status == "no_findings"),
         "failed": sum(1 for doc in docs if doc.status == "extraction_failed"),
@@ -941,22 +1269,7 @@ def _build_summary(
     }
     if finding_vetter_active:
         counts["vetting_failed"] = sum(1 for doc in docs if doc.vetting_failed)
-    findings = {
-        "total": sum(doc.finding_count for doc in docs if doc.status == "extracted"),
-        "quote_unverified": sum(doc.quote_unverified for doc in docs if not doc.reused),
-        "dedup_collapsed": sum(doc.dedup_collapsed for doc in docs if not doc.reused),
-        "invalid_dropped": sum(doc.invalid_dropped for doc in docs if not doc.reused),
-    }
-    full_text = sum(1 for doc in docs if doc.basis == "full_text")
-    abstract_only = sum(1 for doc in docs if doc.basis == "abstract_only")
-    basis = {
-        "full_text": full_text,
-        "abstract_only": abstract_only,
-        "shares": {
-            "full_text": full_text / selected if selected else 0.0,
-            "abstract_only": abstract_only / selected if selected else 0.0,
-        },
-    }
+
     field_coverage: dict[str, dict[str, int]] = {}
     for doc in docs:
         if doc.reused or doc.status != "extracted":
@@ -966,57 +1279,327 @@ def _build_summary(
                 field_coverage.setdefault(name, {})
                 field_coverage[name][marker] = field_coverage[name].get(marker, 0) + 1
 
-    vetted_out: dict[str, Any] | None = None
-    if finding_vetter_active:
-        vetted_out_by_class: dict[str, int] = {}
-        vetted_out_records: list[dict[str, Any]] = []
-        for doc in docs:
-            for record in doc.vetted_out_records:
-                flag_class = cast("str", record["flag_class"])
-                vetted_out_by_class[flag_class] = vetted_out_by_class.get(flag_class, 0) + 1
-                vetted_out_records.append(record)
-        vetted_out = {
-            "total": len(vetted_out_records),
-            "by_class": vetted_out_by_class,
-            "records": vetted_out_records[:VETTED_OUT_RECORDS_CAP],
-        }
-        if len(vetted_out_records) > VETTED_OUT_RECORDS_CAP:
-            vetted_out["records_truncated"] = True
+    counts["findings"] = {
+        "total": sum(doc.finding_count for doc in docs if doc.status == "extracted"),
+        "quote_unverified": sum(doc.quote_unverified for doc in docs if not doc.reused),
+        "dedup_collapsed": sum(doc.dedup_collapsed for doc in docs if not doc.reused),
+        "invalid_dropped": sum(doc.invalid_dropped for doc in docs if not doc.reused),
+    }
+    counts["field_coverage"] = field_coverage
+    return counts
 
+
+def _profile_vetted_out(
+    docs: Sequence[_Doc], *, finding_vetter_active: bool
+) -> dict[str, Any] | None:
+    if not finding_vetter_active:
+        return None
+    vetted_out_by_class: dict[str, int] = {}
+    vetted_out_records: list[dict[str, Any]] = []
+    for doc in docs:
+        for record in doc.vetted_out_records:
+            flag_class = cast("str", record["flag_class"])
+            vetted_out_by_class[flag_class] = vetted_out_by_class.get(flag_class, 0) + 1
+            vetted_out_records.append(record)
+    vetted_out: dict[str, Any] = {
+        "total": len(vetted_out_records),
+        "by_class": vetted_out_by_class,
+        "records": vetted_out_records[:VETTED_OUT_RECORDS_CAP],
+    }
+    if len(vetted_out_records) > VETTED_OUT_RECORDS_CAP:
+        vetted_out["records_truncated"] = True
+    return vetted_out
+
+
+def _build_summary(
+    base_docs: Sequence[_Doc],
+    profile_runs: Sequence[_ProfileRun],
+    *,
+    selection_run_id: uuid.UUID,
+) -> dict[str, Any]:
+    selected = len(base_docs)
+    counts_profiles: dict[str, Any] = {}
+    provenance_profiles: dict[str, Any] = {}
+    summary_profiles: dict[str, Any] = {}
     flags: list[str] = []
-    if counts["failed"] > 0:
-        flags.append("extraction_failures")
+    usage_accumulator = UsageAccumulator()
+
     if selected == 0:
         flags.append("empty_selection")
-    if vetted_out is not None and vetted_out["total"] > 0:
-        flags.append("vetted_out_present")
-    # thin_extraction is deliberately NOT computed in v1 (contract "where computed").
 
-    provenance = {
-        **components,
-        "fingerprint": fingerprint,
-        "pass_count": 1,
-        "call_budget": {
-            "baseline": budget_baseline,
-            "maximum": budget_maximum,
-            "used": budget_used,
+    profile_docs_by_id: dict[str, dict[uuid.UUID, _Doc]] = {}
+    for run in profile_runs:
+        counts = _profile_counts(run.docs, finding_vetter_active=run.finding_vetter_active)
+        counts_profiles[run.profile_id] = counts
+        if counts["failed"] > 0 and "extraction_failures" not in flags:
+            flags.append("extraction_failures")
+        if counts.get("vetting_failed", 0) > 0 and "vetting_failed" not in flags:
+            flags.append("vetting_failed")
+
+        vetted_out = _profile_vetted_out(
+            run.docs, finding_vetter_active=run.finding_vetter_active
+        )
+        profile_summary: dict[str, Any] = {"usage_totals": run.usage_totals}
+        if vetted_out is not None:
+            profile_summary["vetted_out"] = vetted_out
+            if vetted_out["total"] > 0 and "vetted_out_present" not in flags:
+                flags.append("vetted_out_present")
+        summary_profiles[run.profile_id] = profile_summary
+        profile_docs_by_id[run.profile_id] = {doc.pss_id: doc for doc in run.docs}
+        provenance_profiles[run.profile_id] = {
+            **run.components,
+            "fingerprint": run.fingerprint,
+            "call_budget": {
+                "baseline": run.budget_baseline,
+                "maximum": run.budget_maximum,
+                "used": run.budget_used,
+            },
+            "retry_count": run.retry_count,
+        }
+        usage_accumulator.add_payload(run.usage_totals)
+
+    docs_summary: list[dict[str, Any]] = []
+    for doc in base_docs:
+        profiles: dict[str, Any] = {}
+        for run in profile_runs:
+            profile_doc = profile_docs_by_id[run.profile_id][doc.pss_id]
+            profiles[run.profile_id] = _doc_profile_summary(
+                profile_doc, finding_vetter_active=run.finding_vetter_active
+            )
+        docs_summary.append(
+            {
+                "pss_id": str(doc.pss_id),
+                "basis": doc.basis,
+                "profiles": profiles,
+            }
+        )
+
+    return {
+        "docs": docs_summary,
+        "counts": {
+            "selected": selected,
+            "basis": _basis_counts(base_docs),
+            "profiles": counts_profiles,
         },
-        "retry_count": retry_count,
-    }
-    summary: dict[str, Any] = {
-        "docs": [_doc_summary(doc, finding_vetter_active=finding_vetter_active) for doc in docs],
-        "counts": counts,
-        "findings": findings,
-        "basis": basis,
-        "field_coverage": field_coverage,
         "selection_run_id": str(selection_run_id),
         "flags": flags,
-        "provenance": provenance,
-        "usage_totals": usage_totals,
+        "provenance": {"profiles": provenance_profiles, "pass_count": 1},
+        "profiles": summary_profiles,
+        "usage_totals": usage_accumulator.payload(),
     }
-    if vetted_out is not None:
-        summary["vetted_out"] = vetted_out
-    return summary
+
+
+def _iof_fingerprint(mode: str, finding_vetter_active: bool) -> tuple[str, dict[str, Any]]:
+    return extraction_fingerprint(mode, finding_vetter_active=finding_vetter_active)
+
+
+def _icf_fingerprint(mode: str, finding_vetter_active: bool) -> tuple[str, dict[str, Any]]:
+    return icf_extraction_fingerprint(mode, finding_vetter_active=finding_vetter_active)
+
+
+def _iof_profile(
+    extraction_backend: ExtractionBackend,
+    finding_vetter_backend: FindingVetterBackend | None,
+) -> ExtractionProfileBundle:
+    return ExtractionProfileBundle(
+        profile_id=PROFILE_ID,
+        fingerprint=_iof_fingerprint,
+        backend=extraction_backend,
+        wire_record_model=IOFRecordWire,
+        validate_record=validate_record,
+        dedup_records=dedup_records,
+        claim_key=claim_key,
+        write_finding=_write_iof_finding,
+        vetter_backend=finding_vetter_backend,
+        validate_vetter_coverage=validate_verdict_coverage,
+        judge_payload_entry=_judge_payload_entry,
+        vetted_out_record=_iof_vetted_out_record,
+    )
+
+
+def _icf_profile(
+    icf_extraction_backend: Any,
+    icf_finding_vetter_backend: ICFFindingVetterBackend | None,
+) -> ExtractionProfileBundle:
+    return ExtractionProfileBundle(
+        profile_id=ICF_PROFILE_ID,
+        fingerprint=_icf_fingerprint,
+        backend=icf_extraction_backend,
+        wire_record_model=ICFRecordWire,
+        validate_record=validate_icf_record,
+        dedup_records=dedup_icf_records,
+        claim_key=icf_claim_key,
+        write_finding=_write_icf_finding,
+        vetter_backend=icf_finding_vetter_backend,
+        validate_vetter_coverage=validate_icf_verdict_coverage,
+        judge_payload_entry=_icf_judge_payload_entry,
+        vetted_out_record=_icf_vetted_out_record,
+    )
+
+
+def _selected_profiles(
+    requested: Sequence[str],
+    *,
+    extraction_backend: ExtractionBackend,
+    finding_vetter_backend: FindingVetterBackend | None,
+    icf_extraction_backend: Any,
+    icf_finding_vetter_backend: ICFFindingVetterBackend | None,
+) -> list[ExtractionProfileBundle]:
+    requested_tuple = tuple(requested)
+    if not requested_tuple:
+        raise ExtractError("at least one extraction profile id must be requested")
+    if len(set(requested_tuple)) != len(requested_tuple):
+        raise ExtractError("duplicate extraction profile id requested")
+    unknown = [profile_id for profile_id in requested_tuple if profile_id not in KNOWN_PROFILE_IDS]
+    if unknown:
+        raise ExtractError(f"unknown extraction profile id requested: {unknown[0]}")
+
+    bundles = {
+        PROFILE_ID: _iof_profile(extraction_backend, finding_vetter_backend),
+        ICF_PROFILE_ID: _icf_profile(
+            icf_extraction_backend, icf_finding_vetter_backend
+        ),
+    }
+    return [
+        bundles[profile_id]
+        for profile_id in KNOWN_PROFILE_IDS
+        if profile_id in requested_tuple
+    ]
+
+
+def _parse_extraction_directive(raw: Any) -> tuple[str, ...]:
+    """Parse the scope-context extraction directive into canonical profile ids.
+
+    Args:
+        raw: The ``context["extraction"]`` object, or ``None``.
+
+    Returns:
+        Requested profile ids in ``KNOWN_PROFILE_IDS`` order.
+
+    Raises:
+        ExtractError: If the directive shape is malformed, names an unknown or
+            duplicate profile id, is empty, or omits the required IOF profile.
+    """
+    if raw is None:
+        return (PROFILE_ID,)
+    if not isinstance(raw, dict):
+        raise ExtractError("extraction directive must be an object")
+    if not raw:
+        return (PROFILE_ID,)
+    if set(raw) != {"profiles"}:
+        raise ExtractError("extraction directive must contain exactly ['profiles']")
+
+    profiles_raw = raw["profiles"]
+    if not isinstance(profiles_raw, list):
+        raise ExtractError("extraction directive profiles must be a list")
+    if not profiles_raw:
+        raise ExtractError("extraction directive profiles must not be empty")
+
+    requested: set[str] = set()
+    for item in profiles_raw:
+        if not isinstance(item, str):
+            raise ExtractError("extraction directive profile id must be a string")
+        if item not in KNOWN_PROFILE_IDS:
+            raise ExtractError(
+                f"extraction directive profiles contains unknown profile id {item!r}"
+            )
+        if item in requested:
+            raise ExtractError(
+                f"extraction directive profiles contains duplicate profile id {item!r}"
+            )
+        requested.add(item)
+    if PROFILE_ID not in requested:
+        raise ExtractError(
+            f"extraction directive profiles must include {PROFILE_ID!r}; "
+            "ICF-only extraction is unsupported"
+        )
+    return tuple(profile_id for profile_id in KNOWN_PROFILE_IDS if profile_id in requested)
+
+
+def _clone_doc_for_profile(doc: _Doc) -> _Doc:
+    """Clone shared document state into one profile-local outcome object."""
+    return _Doc(
+        pss_id=doc.pss_id,
+        text_basis=doc.text_basis,
+        envelope_snapshot_id=doc.envelope_snapshot_id,
+        full_text_snapshot_id=doc.full_text_snapshot_id,
+        metadata=doc.metadata,
+        primary_evidence_type=doc.primary_evidence_type,
+        chunks=list(doc.chunks),
+        basis=doc.basis,
+        basis_snapshot_id=doc.basis_snapshot_id,
+        record_snapshot_id=doc.record_snapshot_id,
+        original_segments=doc.original_segments,
+        window_payloads=list(doc.window_payloads),
+        status=doc.status,
+        error=doc.error,
+    )
+
+
+def _run_profile(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    run_id: uuid.UUID,
+    base_docs: Sequence[_Doc],
+    selected_count: int,
+    profile: ExtractionProfileBundle,
+    created_at: datetime,
+) -> _ProfileRun:
+    finding_vetter_active = profile.vetter_backend is not None
+    fingerprint, components = profile.fingerprint(
+        profile.backend.mode, finding_vetter_active
+    )
+    docs = [_clone_doc_for_profile(doc) for doc in base_docs]
+    _apply_memo(conn, project_id=project_id, fingerprint=fingerprint, docs=docs)
+
+    per_doc, doc_errors, baseline, budget, retry_count, window_usage_totals = _run_windows(
+        docs, profile=profile
+    )
+    usage_accumulator = UsageAccumulator()
+    usage_accumulator.add_payload(window_usage_totals)
+    for doc_index, doc in enumerate(docs):
+        if not doc.extractable:
+            continue
+        error = doc_errors.get(doc_index)
+        if error is not None:
+            doc.status = "extraction_failed"
+            doc.error = f"window_failed: {type(error).__name__}"
+            doc.finding_count = 0
+            log.info(
+                "extract.doc_failed",
+                profile=profile.profile_id,
+                pss_id=str(doc.pss_id),
+                error=doc.error,
+            )
+            continue
+        _process_doc(doc, per_doc.get(doc_index, {}), profile=profile)
+    if profile.vetter_backend is not None:
+        usage_accumulator.add_payload(_run_finding_vetters(docs, profile))
+    usage_totals = usage_accumulator.payload()
+
+    _assert_invariants(docs, selected_count=selected_count)
+    _write_docs(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        fingerprint=fingerprint,
+        docs=docs,
+        created_at=created_at,
+        profile=profile,
+    )
+    return _ProfileRun(
+        profile_id=profile.profile_id,
+        docs=docs,
+        components=components,
+        fingerprint=fingerprint,
+        budget_baseline=baseline,
+        budget_maximum=budget.maximum,
+        budget_used=budget.used,
+        retry_count=retry_count,
+        usage_totals=usage_totals,
+        finding_vetter_active=finding_vetter_active,
+    )
 
 
 # --- Public entry point -----------------------------------------------------
@@ -1030,34 +1613,48 @@ def extract_scope(
     context: ExtractContext,
     extraction_backend: ExtractionBackend,
     finding_vetter_backend: FindingVetterBackend | None = None,
+    icf_extraction_backend: Any | None = None,
+    icf_finding_vetter_backend: ICFFindingVetterBackend | None = None,
+    profiles: Sequence[str] = (PROFILE_ID,),
 ) -> dict[str, Any]:
-    """Extract intervention-outcome findings for one evidence scope's selection.
+    """Extract findings for one evidence scope's selection.
 
     Loads the referenced selection row, resolves each document's basis, checks
-    the durable memo, fans out the windowed extraction calls, validates /
-    verifies / dedups the emitted records, writes the durable finding + record
-    rows and finally the run-scoped roll-up, then returns the extraction summary.
+    the durable memo per selected profile, fans out the windowed extraction
+    calls, validates / verifies / dedups emitted records, writes durable
+    profile records + findings and finally the run-scoped roll-up.
 
     Args:
         conn: Open database connection; all writes use its active transaction.
         project_id: Owning project.
         run_id: Run writing the extraction result.
         context: Scope-level extract input (carries the explicit selection run).
-        extraction_backend: The extraction seam (stub by default; live on key).
-        finding_vetter_backend: The 018 C5 post-extract finding vetter (per-doc, after
-            dedup, before the IOF insert). ``None`` (the default) turns judging
-            off entirely — byte-identical behaviour to the pre-018-C5 pipeline.
+        extraction_backend: The IOF extraction seam.
+        finding_vetter_backend: Optional IOF post-extract finding vetter.
+        icf_extraction_backend: The ICF extraction seam. ``None`` resolves to the
+            deterministic ICF stub, preserving no-default-egress behaviour.
+        icf_finding_vetter_backend: Optional ICF post-extract finding vetter.
+        profiles: Selected extraction profile ids. Profiles run in
+            ``KNOWN_PROFILE_IDS`` order regardless of caller order.
 
     Returns:
         The extraction summary payload for ``component.completed``.
 
     Raises:
-        ExtractError: If the selection row is missing, a selected pss lacks its
-            snapshot row, or a coverage invariant fails.
+        ExtractError: If the selection row is missing, a profile id is unknown
+            or duplicated, a selected pss lacks its snapshot row, or a coverage
+            invariant fails.
     """
-    finding_vetter_active = finding_vetter_backend is not None
-    fingerprint, components = extraction_fingerprint(
-        extraction_backend.mode, finding_vetter_active=finding_vetter_active
+    profile_bundles = _selected_profiles(
+        profiles,
+        extraction_backend=extraction_backend,
+        finding_vetter_backend=finding_vetter_backend,
+        icf_extraction_backend=(
+            icf_extraction_backend
+            if icf_extraction_backend is not None
+            else StubICFExtractionBackend()
+        ),
+        icf_finding_vetter_backend=icf_finding_vetter_backend,
     )
     selected = _load_selection(
         conn,
@@ -1067,33 +1664,6 @@ def extract_scope(
     )
     created_at = datetime.now(UTC)
 
-    if not selected:
-        # Honest zero-doc run — group needs this reference row (unlike select's
-        # no-row rule for an empty scope).
-        summary = _build_summary(
-            [],
-            selection_run_id=context.selection_run_id,
-            components=components,
-            fingerprint=fingerprint,
-            budget_baseline=0,
-            budget_maximum=0,
-            budget_used=0,
-            retry_count=0,
-            usage_totals=UsageAccumulator().payload(),
-            finding_vetter_active=finding_vetter_active,
-        )
-        _write_rollup(
-            conn,
-            project_id=project_id,
-            run_id=run_id,
-            scope_id=context.scope_id,
-            selection_run_id=context.selection_run_id,
-            summary=summary,
-            created_at=created_at,
-        )
-        log.info("extract.completed", **summary["counts"])
-        return summary
-
     docs = _load_docs(
         conn,
         project_id=project_id,
@@ -1102,52 +1672,23 @@ def extract_scope(
     )
     for doc in docs:
         _resolve_basis(doc)
-    _apply_memo(conn, project_id=project_id, fingerprint=fingerprint, docs=docs)
 
-    per_doc, doc_errors, baseline, budget, retry_count, window_usage_totals = _run_windows(
-        docs, extraction_backend=extraction_backend
-    )
-    usage_accumulator = UsageAccumulator()
-    usage_accumulator.add_payload(window_usage_totals)
-    for doc_index, doc in enumerate(docs):
-        if not doc.extractable:
-            continue
-        error = doc_errors.get(doc_index)
-        if error is not None:
-            doc.status = "extraction_failed"
-            doc.error = f"window_failed: {type(error).__name__}"
-            doc.finding_count = 0
-            log.info("extract.doc_failed", pss_id=str(doc.pss_id), error=doc.error)
-            continue
-        _process_doc(doc, per_doc.get(doc_index, {}))
-        if finding_vetter_backend is not None and doc.status == "extracted" and doc.survivors:
-            usage_accumulator.add(_apply_finding_vetter(doc, finding_vetter_backend))
-    usage_totals = usage_accumulator.payload()
-
-    # Asserted BEFORE any row is written: the harness catches without rollback,
-    # so a violation raising here must precede the writes it would indict.
-    _assert_invariants(docs, selected_count=len(selected))
-
-    _write_docs(
-        conn,
-        project_id=project_id,
-        run_id=run_id,
-        fingerprint=fingerprint,
-        docs=docs,
-        created_at=created_at,
-    )
-
+    profile_runs = [
+        _run_profile(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            base_docs=docs,
+            selected_count=len(selected),
+            profile=profile,
+            created_at=created_at,
+        )
+        for profile in profile_bundles
+    ]
     summary = _build_summary(
         docs,
+        profile_runs,
         selection_run_id=context.selection_run_id,
-        components=components,
-        fingerprint=fingerprint,
-        budget_baseline=baseline,
-        budget_maximum=budget.maximum,
-        budget_used=budget.used,
-        retry_count=retry_count,
-        usage_totals=usage_totals,
-        finding_vetter_active=finding_vetter_active,
     )
     # The roll-up is the LAST fallible statement (the 010 pattern): the harness
     # catches without rollback, so nothing may fail after this insert.
@@ -1160,7 +1701,12 @@ def extract_scope(
         summary=summary,
         created_at=created_at,
     )
-    log.info("extract.completed", **summary["counts"])
+    log.info(
+        "extract.completed",
+        selected=summary["counts"]["selected"],
+        profiles=list(summary["counts"]["profiles"].keys()),
+        flags=summary["flags"],
+    )
     return summary
 
 
@@ -1174,12 +1720,6 @@ def _write_rollup(
     summary: dict[str, Any],
     created_at: datetime,
 ) -> None:
-    counts = {
-        **summary["counts"],
-        "findings": summary["findings"],
-        "basis": summary["basis"],
-        "field_coverage": summary["field_coverage"],
-    }
     conn.execute(
         extraction_result.insert().values(
             extraction_result_id=uuid.uuid4(),
@@ -1189,7 +1729,7 @@ def _write_rollup(
             selection_run_id=selection_run_id,
             extraction_provenance=summary["provenance"],
             docs=summary["docs"],
-            counts=counts,
+            counts=summary["counts"],
             flags=summary["flags"],
             created_at=created_at,
         )

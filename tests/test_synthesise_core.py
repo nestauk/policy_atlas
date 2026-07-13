@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.embeddings import EMBEDDING_PROFILE, UNIT_POLICY, StubEmbeddingBackend
+from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.grounding import content_hash
 from policy_atlas.grounding_judge import JudgeResponseWire, StubGroundingJudgeBackend
 from policy_atlas.schema import (
@@ -546,7 +547,10 @@ def test_how_resolved_records_explicit_extraction_not_transitive(conn: Connectio
             evidence_scope_id=scope_id,
             run_id=extraction_run_id,
             selection_run_id=selection_run_id,
-            extraction_provenance={"fingerprint": "t"},
+            extraction_provenance={
+                "fingerprint": "t",
+                "profiles": {IOF_PROFILE_ID: {"fingerprint": "t"}},
+            },
             docs=[],
             counts={"findings": {"total": 0}},
             flags={},

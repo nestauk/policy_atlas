@@ -6,6 +6,8 @@ from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 from policy_atlas.grounding_judge import (
     StubGroundingJudgeBackend,
     build_envelope,
@@ -66,7 +68,7 @@ def _substrate() -> SubstrateView:
         pss_id="pss-1",
         source_snapshot_id="snap-1",
         sequence=0,
-        content="alpha quoted evidence appears here",
+        content="alpha quoted evidence appears here. icf anchor quote",
         segmentation_policy="manual_v1",
         text_basis="abstract_only",
         origin="unselected_screened",
@@ -84,6 +86,7 @@ def _substrate() -> SubstrateView:
         appraised=False,
     )
     finding = FindingInfo(
+        kind="iof",
         finding_id="finding-1",
         pss_id="pss-1",
         source_snapshot_id="snap-finding",
@@ -109,6 +112,29 @@ def _substrate() -> SubstrateView:
         ],
         effect_direction="increase",
     )
+    icf_finding = FindingInfo(
+        kind="icf",
+        finding_id="icf-1",
+        pss_id="pss-1",
+        source_snapshot_id="snap-icf",
+        record={
+            "kind": "icf",
+            "finding_id": "icf-1",
+            "context_type": "barrier",
+            "claim": "Training gaps slowed delivery.",
+            "intervention": "A",
+            "outcome": None,
+        },
+        grounding=[
+            {
+                "quote": "icf anchor quote",
+                "match_status": "exact",
+                "quote_verified": True,
+                "spans": [],
+            }
+        ],
+        effect_direction=None,
+    )
     return SubstrateView(
         characterisation={
             "coverage": {
@@ -126,7 +152,7 @@ def _substrate() -> SubstrateView:
                     "group_id": "group-1",
                     "label": "Group 1",
                     "direction_spread": {"increase": 1},
-                    "member_finding_ids": ["finding-1"],
+                    "member_finding_ids": ["finding-1", "icf-1"],
                 }
             ],
         },
@@ -154,10 +180,15 @@ def _substrate() -> SubstrateView:
         chunk_by_id={chunk.chunk_id: chunk, unappraised.chunk_id: unappraised},
         chunks_by_pss_id={"pss-1": [chunk], "pss-2": [unappraised]},
         finding_by_id={"finding-1": finding},
+        icf_finding_by_id={"icf-1": icf_finding},
+        icf_profile_available=True,
         basis_by_snapshot_id={
             "snap-finding": build_basis(
                 [("11111111-1111-1111-1111-111111111111", "finding anchor quote")]
-            )
+            ),
+            "snap-icf": build_basis(
+                [("11111111-1111-1111-1111-111111111111", "icf anchor quote")]
+            ),
         },
         selected_pss_ids={"pss-2"},
     )
@@ -369,6 +400,93 @@ def test_pattern_theme_gap_and_reasoning_validation_edges() -> None:
     assert [rejection.reason for rejection in batch.rejected] == ["reasoning_over_cap"]
 
 
+def test_icf_context_type_count_pattern_validation() -> None:
+    extraction_wide = validate_claims(
+        [
+            ClaimWire(
+                claim_type="pattern",
+                text="Barriers appear once.",
+                pattern=PatternPayloadWire(
+                    kind="coverage_count",
+                    computed_from="icf_context_type_count",
+                    stated={"barrier": 1},
+                    base="referenced extraction ICF findings",
+                ),
+            )
+        ],
+        substrate=_substrate(),
+        section_index=0,
+        section_group_ids={"group-1"},
+        citable_finding_ids=set(),
+        citable_chunk_ids=set(),
+        spans=[(0, 1)],
+    )
+    assert not extraction_wide.rejected
+    assert extraction_wide.drafts[0].payload["computed"] == {"barrier": 1}
+
+    grouped = validate_claims(
+        [
+            ClaimWire(
+                claim_type="pattern",
+                text="This group has one barrier.",
+                pattern=PatternPayloadWire(
+                    kind="coverage_count",
+                    computed_from="icf_context_type_count",
+                    group_id="group-1",
+                    stated={"barrier": 1},
+                    base="group ICF members",
+                ),
+            )
+        ],
+        substrate=_substrate(),
+        section_index=0,
+        section_group_ids={"group-1"},
+        citable_finding_ids=set(),
+        citable_chunk_ids=set(),
+        spans=[(0, 1)],
+    )
+    assert not grouped.rejected
+
+    assert (
+        _rejected_reason(
+            ClaimWire(
+                claim_type="pattern",
+                text="Wrong ICF count.",
+                pattern=PatternPayloadWire(
+                    kind="coverage_count",
+                    computed_from="icf_context_type_count",
+                    stated={"barrier": 2},
+                    base="referenced extraction ICF findings",
+                ),
+            )
+        )
+        == "pattern_mismatch"
+    )
+
+    unavailable = replace(_substrate(), icf_finding_by_id={}, icf_profile_available=False)
+    batch = validate_claims(
+        [
+            ClaimWire(
+                claim_type="pattern",
+                text="No ICF profile.",
+                pattern=PatternPayloadWire(
+                    kind="coverage_count",
+                    computed_from="icf_context_type_count",
+                    stated={},
+                    base="referenced extraction ICF findings",
+                ),
+            )
+        ],
+        substrate=unavailable,
+        section_index=0,
+        section_group_ids={"group-1"},
+        citable_finding_ids=set(),
+        citable_chunk_ids=set(),
+        spans=[(0, 1)],
+    )
+    assert [rejection.reason for rejection in batch.rejected] == ["substrate_ungated_type"]
+
+
 def test_gap_degradation_and_caveat_payloads() -> None:
     substrate = _substrate()
     degraded = validate_claims(
@@ -485,9 +603,42 @@ def test_finding_claim_with_empty_grounding_is_weakly_grounded() -> None:
     assert draft.weakly_grounded is True
     assert "quote_unverified" in draft.flags
     assert draft.payload["anchors"] == [
-        {"finding_id": "finding-1", "quote": None, "match_status": "failed", "spans": []}
+        {
+            "finding_id": "finding-1",
+            "kind": "iof",
+            "quote": None,
+            "match_status": "failed",
+            "spans": [],
+        }
     ]
     assert draft.citation_rows == []
+
+
+def test_icf_finding_claim_resolves_anchor_and_carries_kind_only() -> None:
+    batch = validate_claims(
+        [
+            _claim(
+                {
+                    "claim_type": "finding",
+                    "text": "Training gaps slowed delivery.",
+                    "cited_finding_ids": ["icf-1"],
+                }
+            )
+        ],
+        substrate=_substrate(),
+        section_index=0,
+        section_group_ids={"group-1"},
+        citable_finding_ids={"icf-1"},
+        citable_chunk_ids={"11111111-1111-1111-1111-111111111111"},
+        spans=[(0, 1)],
+    )
+
+    assert not batch.rejected
+    draft = batch.drafts[0]
+    assert draft.payload["cited_finding_kinds"] == ["icf"]
+    assert draft.payload["anchors"][0]["kind"] == "icf"
+    assert "context_type" not in draft.payload
+    assert draft.citation_rows
 
 
 def test_anchor_counts_tallies_verified_and_failed_anchors() -> None:
@@ -641,17 +792,21 @@ def test_doc_record_default_metadata_present_and_absent() -> None:
 def test_finding_record_default_metadata_present_and_absent() -> None:
     present = SimpleNamespace(
         finding_id="finding-1",
+        extraction_record_id="record-1",
         project_source_snapshot_id="11111111-1111-1111-1111-111111111111",
         intervention="A",
         outcome="B",
         population=None,
+        setting="clinic",
         comparator=None,
         effect_direction="increase",
         estimate_level=None,
         study_design=None,
+        study_geography="England",
         stratum_qualifiers=[],
         statistics={},
         causality_by_design=None,
+        effect_basis="observed",
         is_primary=None,
         field_coverage={},
         primary_evidence_type="systematic_review",
@@ -670,20 +825,30 @@ def test_finding_record_default_metadata_present_and_absent() -> None:
     assert record["venue"] == "Review Press"
     assert record["cited_by"] == 7
     assert "is_retracted" not in record
+    # Task 020 C1: effect_basis/study_geography are always-present-nullable,
+    # exactly like study_design — never omit-if-absent.
+    assert record["study_geography"] == "England"
+    assert record["effect_basis"] == "observed"
+    assert record["kind"] == "iof"
+    assert record["setting"] == "clinic"
 
     absent = SimpleNamespace(
         finding_id="finding-2",
+        extraction_record_id="record-2",
         project_source_snapshot_id="22222222-2222-2222-2222-222222222222",
         intervention="A",
         outcome="B",
         population=None,
+        setting=None,
         comparator=None,
         effect_direction="increase",
         estimate_level=None,
         study_design=None,
+        study_geography=None,
         stratum_qualifiers=[],
         statistics={},
         causality_by_design=None,
+        effect_basis=None,
         is_primary=None,
         field_coverage={},
         primary_evidence_type=None,
@@ -694,6 +859,9 @@ def test_finding_record_default_metadata_present_and_absent() -> None:
     for key in ("year", "evidence_type", "appraisal_label", "venue", "cited_by"):
         assert key not in bare
     assert "is_retracted" not in bare
+    # Always-present-nullable: present even for a bare row, just None.
+    assert bare["study_geography"] is None
+    assert bare["effect_basis"] is None
 
 
 # --- ADR 0015 §2 / B-B3: judge envelope v2 (intent + section_focus + finding
@@ -783,7 +951,7 @@ def test_judge_envelope_includes_finding_anchor_chunks_deduped_and_context() -> 
     anchored = next(
         chunk for chunk in envelope["chunks"] if chunk["chunk_record_id"] == anchored_chunk_id
     )
-    assert anchored["content"] == "alpha quoted evidence appears here"
+    assert anchored["content"] == "alpha quoted evidence appears here. icf anchor quote"
     assert anchored["text_basis"] == "abstract_only"
     assert anchored["segmentation_policy"] == "manual_v1"
 
@@ -907,3 +1075,19 @@ def test_unspanned_lane_not_skipped_when_judge_scanned() -> None:
     accounting = _accounting()
     _run_section_claims(wire, accounting, available_claim_types={"gap", "reasoning"})
     assert accounting.unspanned_lane_skipped is False
+
+
+def test_extraction_profile_ids_fails_closed_on_flat_provenance() -> None:
+    """Post-021 amendment: a pre-021 flat roll-up (provenance without a
+    profiles map) is a corrupt reference for synthesise, mirroring group's
+    loud error — never a silent IOF-only fallback."""
+    from policy_atlas.synthesise import SynthesiseFailure, _extraction_profile_ids
+
+    assert _extraction_profile_ids(None) == set()
+    assert _extraction_profile_ids(
+        {"extraction_provenance": {"profiles": {"eb_iof_base_v1": {}}}}
+    ) == {"eb_iof_base_v1"}
+    with pytest.raises(SynthesiseFailure, match="corrupt_reference"):
+        _extraction_profile_ids({"extraction_provenance": {"fingerprint": "fp"}})
+    with pytest.raises(SynthesiseFailure, match="corrupt_reference"):
+        _extraction_profile_ids({"extraction_provenance": "flat"})

@@ -8,9 +8,11 @@ no-op, keeping the suite deterministic and egress-free and avoiding SDK auto-ini
 
 from __future__ import annotations
 
+import contextvars
 import os
 import uuid
 from collections.abc import Callable, Iterator
+from concurrent.futures import Executor, Future
 from contextlib import contextmanager
 from threading import Lock
 from typing import Any, Literal
@@ -19,10 +21,33 @@ from langfuse import Langfuse
 
 from policy_atlas import embeddings, grouping
 from policy_atlas.embeddings import EmbeddingBackend
+from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.grouping import GroupingDoc, Theme, ThemeGroupingBackend
+from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.usage import UsageResult
 
 _ObservationType = Literal["embedding", "generation", "span"]
+
+
+def submit_with_context[T](
+    executor: Executor, fn: Callable[..., T], *args: Any, **kwargs: Any
+) -> Future[T]:
+    """Submit a worker under the caller's current contextvars context.
+
+    Capturing at submit time carries both the active Langfuse/OTel observation
+    context and structlog's bound contextvars into executor workers.
+
+    Args:
+        executor: Executor receiving the work item.
+        fn: Callable to run inside the captured context.
+        *args: Positional arguments for ``fn``.
+        **kwargs: Keyword arguments for ``fn``.
+
+    Returns:
+        Future for the submitted call.
+    """
+    ctx = contextvars.copy_context()
+    return executor.submit(ctx.run, fn, *args, **kwargs)
 
 
 def get_langfuse() -> Langfuse | None:
@@ -396,30 +421,49 @@ def extraction_score_summary(
             input={"component": "extract", "selection_run_id": summary["selection_run_id"]},
             output=summary,
         )
-    total = summary["findings"]["total"]
+    counts = summary["counts"]
+    profiles = counts["profiles"]
+    iof_counts = profiles.get(IOF_PROFILE_ID, {})
+    iof_findings = iof_counts.get("findings")
+    findings = iof_findings if isinstance(iof_findings, dict) else {}
+    total = findings.get("total", 0)
     if total > 0:
         client.score_current_trace(
             name="quote_verified_share",
-            value=1.0 - summary["findings"]["quote_unverified"] / total,
+            value=1.0 - findings.get("quote_unverified", 0) / total,
             data_type="NUMERIC",
         )
-    selected = summary["counts"]["selected"]
-    if selected > 0:
+    selected = counts.get("selected", 0)
+    if selected > 0 and iof_counts:
         client.score_current_trace(
             name="no_findings_share",
-            value=summary["counts"]["no_findings"] / selected,
+            value=iof_counts.get("no_findings", 0) / selected,
             data_type="NUMERIC",
         )
+    failure_count = sum(
+        block.get("failed", 0)
+        for block in profiles.values()
+        if isinstance(block, dict)
+    )
     client.score_current_trace(
         name="extraction_failure_count",
-        value=float(summary["counts"]["failed"]),
+        value=float(failure_count),
         data_type="NUMERIC",
     )
     client.score_current_trace(
         name="dedup_collapsed_count",
-        value=float(summary["findings"]["dedup_collapsed"]),
+        value=float(findings.get("dedup_collapsed", 0)),
         data_type="NUMERIC",
     )
+    icf_block = profiles.get(ICF_PROFILE_ID)
+    icf_counts = icf_block if isinstance(icf_block, dict) else {}
+    icf_findings = icf_counts.get("findings")
+    if isinstance(icf_findings, dict):
+        client.score_current_trace(
+            name="icf_findings_total",
+            value=float(icf_findings.get("total", 0)),
+            data_type="NUMERIC",
+        )
 
 
 def grouping_score_summary(

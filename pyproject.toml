@@ -49,7 +49,11 @@ packages = ["src/policy_atlas"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v"
+# Task 019 item 7b (approved gated change 4): suite-wide network denial via
+# pytest-socket, replacing the per-test socket-deny monkeypatch guards from
+# tasks 008/009/010. The test DB is postgres on localhost TCP; allow-hosts
+# covers loopback in both address families plus the unix-socket path.
+addopts = "-v --disable-socket --allow-hosts=127.0.0.1,::1,localhost --allow-unix-socket"
 
 [tool.mypy]
 python_version = "3.12"
@@ -78,4 +82,5 @@ dev = [
     "mypy>=1.10",
     "ruff>=0.4",
     "types-psycopg2",
+    "pytest-socket>=0.8.0",
 ]

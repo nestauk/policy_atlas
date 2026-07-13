@@ -51,16 +51,21 @@ from policy_atlas.search_loop import (
 from policy_atlas.search_prompts import (
     EXEMPLAR_ABSTRACT_MAX,
     EXEMPLAR_TITLE_MAX,
-    QueriesPayload,
-    ReformulatePayload,
     SearchQueriesWire,
     SearchSuggestWire,
     SuggestedPaper,
-    SuggestPayload,
     build_reformulate_messages,
 )
 from policy_atlas.usage import UsageResult
-from tests.helpers import now, seed_project_and_run, seed_run, seed_scope, seed_source
+from tests.helpers import (
+    ScriptedGenerationBackend,
+    now,
+    oa_record,
+    seed_project_and_run,
+    seed_run,
+    seed_scope,
+    seed_source,
+)
 
 ScriptResult = list[dict[str, Any]] | BaseException
 SearchVerb = Literal["search", "fetch_citations", "fetch_references", "lookup_title", "lookup_dois"]
@@ -177,57 +182,6 @@ class ScriptedBackend:
         return self._limit(self._consume("lookup_dois", key), max_results)
 
 
-class ScriptedGenerationBackend:
-    """SearchGenerationBackend double with payload capture."""
-
-    mode = "scripted"
-
-    def __init__(
-        self,
-        *,
-        queries: list[SearchQueriesWire | BaseException] | None = None,
-        reformulations: list[SearchQueriesWire | BaseException] | None = None,
-        suggestions: list[SearchSuggestWire | BaseException] | None = None,
-    ) -> None:
-        self._queries = list(queries or [])
-        self._reformulations = list(reformulations or [])
-        self._suggestions = list(suggestions or [])
-        self.query_payloads: list[QueriesPayload] = []
-        self.reformulate_payloads: list[ReformulatePayload] = []
-        self.suggest_payloads: list[SuggestPayload] = []
-
-    @staticmethod
-    def _pop_wire[T](queue: list[T | BaseException], fallback: T) -> T:
-        item = queue.pop(0) if queue else fallback
-        if isinstance(item, BaseException):
-            raise item
-        return item
-
-    def generate_queries(self, payload: QueriesPayload) -> UsageResult[SearchQueriesWire]:
-        self.query_payloads.append(payload)
-        return (
-            self._pop_wire(
-                self._queries,
-                SearchQueriesWire(queries=[], overton_paraphrases=[]),
-            ),
-            None,
-        )
-
-    def reformulate(self, payload: ReformulatePayload) -> UsageResult[SearchQueriesWire]:
-        self.reformulate_payloads.append(payload)
-        return (
-            self._pop_wire(
-                self._reformulations,
-                SearchQueriesWire(queries=[], overton_paraphrases=[]),
-            ),
-            None,
-        )
-
-    def suggest(self, payload: SuggestPayload) -> UsageResult[SearchSuggestWire]:
-        self.suggest_payloads.append(payload)
-        return self._pop_wire(self._suggestions, SearchSuggestWire(papers=[])), None
-
-
 class TitleScriptedScreeningBackend:
     """Stage-1 screening double driven by acquired document titles."""
 
@@ -286,39 +240,6 @@ def _standard_context(scope_id: uuid.UUID, *, intent: str = "Test intent") -> Ac
         intent=intent,
         context={"search": {"depth": "standard"}},
     )
-
-
-def _index(text: str) -> dict[str, list[int]]:
-    index: dict[str, list[int]] = {}
-    for position, token in enumerate(text.split()):
-        index.setdefault(token, []).append(position)
-    return index
-
-
-def oa_record(
-    suffix: str,
-    *,
-    title: str | None = None,
-    abstract: str = "relevant evidence abstract",
-    doi: str | None = None,
-    referenced_works: list[str] | None = None,
-) -> dict[str, Any]:
-    record: dict[str, Any] = {
-        "id": f"https://openalex.org/W{suffix}",
-        "display_name": title or f"OpenAlex record {suffix}",
-        "abstract_inverted_index": _index(abstract),
-        "publication_year": 2024,
-        "publication_date": "2024-01-01",
-        "doi": doi,
-        "language": "en",
-        "type": "article",
-        "primary_location": {"source": {"display_name": "Journal of Search Tests"}},
-        "open_access": {"is_oa": True},
-        "authorships": [],
-    }
-    if referenced_works is not None:
-        record["referenced_works"] = referenced_works
-    return record
 
 
 def ov_record(
@@ -745,6 +666,10 @@ def test_rapid_result_cap_http_budget_and_wall_clock_stop(
     assert all(call.max_results == 3 for call in capped_backend.calls)
     assert capped["results_returned"] == 45
     assert capped["search"]["queries_executed"]["openalex"] == 15
+    # Honest stop attribution (task 019 item 5): capping on the run/http
+    # budget is not a wall-clock breach and not an error — a clean completion.
+    assert capped["search"]["wall_clock_breached"] is False
+    assert capped["stop_condition"] == "completed"
 
     second_run = seed_run(conn, project_id)
     generation_2 = ScriptedGenerationBackend(
@@ -768,6 +693,17 @@ def test_rapid_result_cap_http_budget_and_wall_clock_stop(
     assert len(clock_backend.calls) == 3
     assert stopped["search"]["queries_executed"]["openalex"] == 3
     assert stopped["search"]["wall_clock_breached"] is True
+
+    # Honest stop attribution (task 019 item 5): the rapid/standard fan-out's
+    # own wall-clock breach reaches the coverage record run_search creates,
+    # with no update-after pass — acquire_sources sees wall_clock_breached
+    # before it ever writes the row.
+    assert stopped["stop_condition"] == "wall_clock_exceeded"
+    row = conn.execute(
+        select(search_coverage_record)
+        .where(search_coverage_record.c.acquired_by_run_id == second_run)
+    ).one()
+    assert row.stop_condition == "wall_clock_exceeded"
 
 
 def test_deep_round_exemplar_payload_is_top_k_anchored_and_bounded(

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import math
-import socket
 import uuid
 from collections import Counter
 from threading import Lock
@@ -221,10 +220,6 @@ class _MisbehavingRankingBackend:
             ],
             None,
         )
-
-
-def _deny_socket_task10(*args: Any, **kwargs: Any) -> Any:
-    raise AssertionError("socket creation attempted during select judgment test")
 
 
 def test_contested_strata_only_and_call_accounting(conn: Connection) -> None:
@@ -678,18 +673,14 @@ def test_socket_deny_select_harness_round_trip(
         )
     )
 
-    monkeypatch.setattr(socket, "socket", _deny_socket_task10)
-    try:
-        run_harness(
-            conn,
-            config=config,
-            project_id=pid,
-            run_id=run_id,
-            provider=StubEchoProvider(),
-            ranking_backend=StubRankingBackend(),
-        )
-    finally:
-        monkeypatch.undo()
+    run_harness(
+        conn,
+        config=config,
+        project_id=pid,
+        run_id=run_id,
+        provider=StubEchoProvider(),
+        ranking_backend=StubRankingBackend(),
+    )
 
     completed = [
         event

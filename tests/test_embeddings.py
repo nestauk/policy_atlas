@@ -1,7 +1,8 @@
 """Tests for the embeddings module — schema, unit derivation, embed pass, stubs."""
 
 import uuid
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 import sqlalchemy as sa
@@ -68,7 +69,7 @@ def _insert_chunk(
 
 
 def test_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 26
+    assert len(metadata.tables) == 27
 
 
 def test_uq_chunk_embedding_unit_rejects_duplicate(conn: Connection) -> None:
@@ -261,6 +262,41 @@ def test_embed_pending_chunks_failure_isolation_and_retry(conn: Connection) -> N
     assert retry["failed"] == 0
 
 
+class _PoisoningEmbedder:
+    mode = "stub"
+
+    def __init__(self, poison: str) -> None:
+        self._poison = poison
+        self.call_sizes: list[int] = []
+
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        self.call_sizes.append(len(texts))
+        if any(self._poison in text for text in texts):
+            raise RuntimeError("poisoned unit")
+        return [[0.0] * EMBEDDING_DIMENSIONS for _text in texts]
+
+
+def test_embed_unit_split_isolates_one_poisoned_unit_in_128() -> None:
+    poison_chunk_id = uuid.uuid4()
+    units = [
+        embeddings_module._UnitWork(
+            chunk_id=poison_chunk_id if index == 0 else uuid.uuid4(),
+            unit_index=0,
+            start=0,
+            end=1,
+            text="poison" if index == 0 else f"healthy {index}",
+        )
+        for index in range(128)
+    ]
+    embedder = _PoisoningEmbedder("poison")
+
+    successes, failures = embeddings_module._embed_units_with_isolation(embedder, units)
+
+    assert len(successes) == 127
+    assert [unit.chunk_id for unit, _exc in failures] == [poison_chunk_id]
+    assert embedder.call_sizes == [128, 64, 32, 16, 8, 4, 2, 1, 1, 2, 4, 8, 16, 32, 64]
+
+
 # --- Budget guard ---
 
 
@@ -383,6 +419,74 @@ def test_openai_embedding_backend_requires_api_key(monkeypatch: pytest.MonkeyPat
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
         OpenAIEmbeddingBackend()
+
+
+class _FakeRateLimitError(Exception):
+    pass
+
+
+class _FakeEmbeddingCreate:
+    def __init__(self, outcomes: list[Any]) -> None:
+        self._outcomes = outcomes
+        self.calls: list[dict[str, Any]] = []
+
+    def create(self, **kwargs: Any) -> Any:
+        self.calls.append(kwargs)
+        outcome = self._outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+
+class _FakeEmbeddingClient:
+    def __init__(self, outcomes: list[Any]) -> None:
+        self.embeddings = _FakeEmbeddingCreate(outcomes)
+
+
+def _embedding_response(*vectors: list[float]) -> Any:
+    return SimpleNamespace(
+        data=[
+            SimpleNamespace(index=index, embedding=vector)
+            for index, vector in enumerate(vectors)
+        ]
+    )
+
+
+def test_openai_embedding_backend_rate_limit_backoff_then_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr(embeddings_module, "RateLimitError", _FakeRateLimitError)
+    monkeypatch.setattr(embeddings_module, "_sleep", sleeps.append)
+    monkeypatch.setattr(embeddings_module, "_embedding_rate_limit_jitter_s", lambda _base: 0.0)
+    response = _embedding_response([0.25] * EMBEDDING_DIMENSIONS)
+    backend: OpenAIEmbeddingBackend = object.__new__(OpenAIEmbeddingBackend)
+    fake_client = _FakeEmbeddingClient([_FakeRateLimitError("429"), response])
+    cast("Any", backend)._client = fake_client
+
+    vectors = backend.embed_texts(["hello"])
+
+    assert vectors == [[0.25] * EMBEDDING_DIMENSIONS]
+    assert sleeps == [2.0]
+    assert len(fake_client.embeddings.calls) == 2
+
+
+def test_openai_embedding_backend_rate_limit_exhaustion_fails_loudly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr(embeddings_module, "RateLimitError", _FakeRateLimitError)
+    monkeypatch.setattr(embeddings_module, "_sleep", sleeps.append)
+    monkeypatch.setattr(embeddings_module, "_embedding_rate_limit_jitter_s", lambda _base: 0.0)
+    backend: OpenAIEmbeddingBackend = object.__new__(OpenAIEmbeddingBackend)
+    fake_client = _FakeEmbeddingClient([_FakeRateLimitError("429") for _ in range(4)])
+    cast("Any", backend)._client = fake_client
+
+    with pytest.raises(_FakeRateLimitError):
+        backend.embed_texts(["hello"])
+
+    assert sleeps == [2.0, 4.0, 8.0]
+    assert len(fake_client.embeddings.calls) == 4
 
 
 # --- delete_project_data ---

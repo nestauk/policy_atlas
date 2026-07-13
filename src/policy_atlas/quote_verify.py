@@ -8,9 +8,11 @@ Pure functions only — no I/O, no DB. Three responsibilities:
   graded status (``exact`` | ``normalised`` | ``failed``). The offset substrate
   is never normalised (the LangExtract NFC lesson): recorded intervals are
   always raw, half-open ``[start, end)``.
-* ``iof_rules_v1`` field validation — null-like coercion, numeric parsing,
+* ``iof_rules_v3`` field validation — null-like coercion, numeric parsing,
   bounds/consistency checks, estimate-level coherence and field coverage, then
   the grain gate that builds the stored :class:`IOFRecord`.
+* ``icf_rules_v1`` field validation — null-like coercion, non-valid-only field
+  coverage, the ICF grain gate, and claim-keyed within-document dedup.
 * Stratum canonicalisation and claim-keyed within-document dedup.
 
 Closed enums are exempt from coercion by construction (``no_effect`` is a value,
@@ -33,9 +35,11 @@ from policy_atlas.extraction_records import (
     IOFStratum,
     IOFStratumWire,
 )
+from policy_atlas.implementation_context_records import ICFRecord, ICFRecordWire
 
 QUOTE_VERIFIER_VERSION = "qv_v1"
-FIELD_RULES_VERSION = "iof_rules_v1"
+FIELD_RULES_VERSION = "iof_rules_v3"
+ICF_FIELD_RULES_VERSION = "icf_rules_v1"
 
 # Strings that mean "the source does not report this", matched case-insensitively
 # on the stripped value. Closed enums are exempt by construction.
@@ -82,10 +86,13 @@ _POOLED_ONLY_FIELDS = ("k", "i_squared", "tau2")
 # Nullable fields whose absence is completed to "not_extracted" in step 5.
 _OTHER_NULLABLE_FIELDS = (
     "population",
+    "setting",
     "comparator",
     "estimate_level",
     "study_design",
+    "study_geography",
     "causality_by_design",
+    "effect_basis",
     "is_primary",
     "is_prevalence_only",
     "effect_size_type",
@@ -319,7 +326,7 @@ class QuoteMatcher:
         return QuoteMatch(status="normalised", spans=spans)
 
 
-# --- iof_rules_v1 field validation ----------------------------------------
+# --- iof_rules_v3 field validation ----------------------------------------
 
 
 @dataclass
@@ -346,6 +353,25 @@ class ValidatedRecord:
     grain_invalid: bool
 
 
+@dataclass
+class ValidatedICFRecord:
+    """The outcome of validating one ICF wire record.
+
+    Attributes:
+        record: The stored :class:`ICFRecord`, or ``None`` when the grain is
+            invalid.
+        field_coverage: Per-field coverage markers. Present valid fields are
+            absent; coerced or absent nullable fields are ``not_extracted``.
+        coerced_null_fields: Fields whose null-like value was coerced to None.
+        grain_invalid: True if intervention, claim, or anchors fail the grain.
+    """
+
+    record: ICFRecord | None
+    field_coverage: dict[str, str]
+    coerced_null_fields: list[str]
+    grain_invalid: bool
+
+
 def _coerce_text(
     field_name: str,
     value: str | None,
@@ -360,6 +386,19 @@ def _coerce_text(
         coerced.append(field_name)
         return None
     return value
+
+
+def _coerce_icf_text(
+    field_name: str,
+    value: str | None,
+    coverage: dict[str, str],
+    coerced: list[str],
+) -> str | None:
+    """Coerce one ICF free-text field and mark absent nullable values."""
+    result = _coerce_text(field_name, value, coverage, coerced)
+    if result is None and field_name not in coverage:
+        coverage[field_name] = "not_extracted"
+    return result
 
 
 def _parse_numeric(
@@ -477,7 +516,7 @@ def _apply_estimate_coherence(
 
 
 def validate_record(wire: IOFRecordWire) -> ValidatedRecord:
-    """Validate one wire record under ``iof_rules_v1``.
+    """Validate one wire record under ``iof_rules_v3``.
 
     Runs null-like coercion, numeric parsing, bounds/consistency checks,
     estimate-level coherence and coverage completion, then the grain gate that
@@ -499,8 +538,12 @@ def validate_record(wire: IOFRecordWire) -> ValidatedRecord:
     intervention = _coerce_text("intervention", wire.intervention, coverage, coerced)
     outcome = _coerce_text("outcome", wire.outcome, coverage, coerced)
     population = _coerce_text("population", wire.population, coverage, coerced)
+    setting = _coerce_text("setting", wire.setting, coverage, coerced)
     comparator = _coerce_text("comparator", wire.comparator, coverage, coerced)
     study_design = _coerce_text("study_design", wire.study_design, coverage, coerced)
+    study_geography = _coerce_text(
+        "study_geography", wire.study_geography, coverage, coerced
+    )
     effect_size_type = _coerce_text(
         "effect_size_type", wire.statistics.effect_size_type, coverage, coerced
     )
@@ -525,10 +568,13 @@ def validate_record(wire: IOFRecordWire) -> ValidatedRecord:
     # Step 5 — coverage completion for remaining absent nullable fields.
     other_values: dict[str, object | None] = {
         "population": population,
+        "setting": setting,
         "comparator": comparator,
         "estimate_level": wire.estimate_level,
         "study_design": study_design,
+        "study_geography": study_geography,
         "causality_by_design": wire.causality_by_design,
+        "effect_basis": wire.effect_basis,
         "is_primary": wire.is_primary,
         "is_prevalence_only": wire.is_prevalence_only,
         "effect_size_type": effect_size_type,
@@ -577,13 +623,16 @@ def validate_record(wire: IOFRecordWire) -> ValidatedRecord:
         intervention=intervention.strip(),
         outcome=outcome.strip(),
         population=population,
+        setting=setting,
         comparator=comparator,
         effect_direction=wire.effect_direction,
         estimate_level=wire.estimate_level,
         study_design=study_design,
+        study_geography=study_geography,
         stratum_qualifiers=canonical_strata(wire.stratum_qualifiers),
         statistics=statistics,
         causality_by_design=wire.causality_by_design,
+        effect_basis=wire.effect_basis,
         is_primary=wire.is_primary,
         is_prevalence_only=wire.is_prevalence_only,
         anchors=[
@@ -595,6 +644,101 @@ def validate_record(wire: IOFRecordWire) -> ValidatedRecord:
         record=record,
         field_coverage=coverage,
         unclear_fields=unclear,
+        coerced_null_fields=coerced,
+        grain_invalid=False,
+    )
+
+
+# --- icf_rules_v1 field validation ----------------------------------------
+
+
+_ICF_FREE_TEXT_FIELDS = (
+    "claim",
+    "intervention",
+    "outcome",
+    "population",
+    "setting",
+    "study_geography",
+    "study_design",
+    "resource_requirements",
+    "workforce_requirements",
+)
+_ICF_NULLABLE_ENUM_FIELDS = ("claim_level", "claim_basis", "level")
+
+
+def validate_icf_record(wire: ICFRecordWire) -> ValidatedICFRecord:
+    """Validate one wire record under ``icf_rules_v1``.
+
+    Args:
+        wire: The tolerant ICF wire record as parsed from the model response.
+
+    Returns:
+        A :class:`ValidatedICFRecord` carrying the stored record (or ``None``
+        when grain-invalid) plus coverage and coerced-null metadata.
+    """
+    coverage: dict[str, str] = {}
+    coerced: list[str] = []
+
+    text_values = {
+        field_name: _coerce_icf_text(
+            field_name,
+            getattr(wire, field_name),
+            coverage,
+            coerced,
+        )
+        for field_name in _ICF_FREE_TEXT_FIELDS
+    }
+
+    enum_values: dict[str, object | None] = {
+        "claim_level": wire.claim_level,
+        "claim_basis": wire.claim_basis,
+        "level": wire.level,
+    }
+    for field_name in _ICF_NULLABLE_ENUM_FIELDS:
+        if enum_values[field_name] is None:
+            coverage[field_name] = "not_extracted"
+
+    intervention = text_values["intervention"]
+    claim = text_values["claim"]
+    grain_invalid = False
+    if intervention is None or not intervention.strip():
+        grain_invalid = True
+    if claim is None or not claim.strip():
+        grain_invalid = True
+    if len(wire.anchors) == 0:
+        grain_invalid = True
+
+    if grain_invalid:
+        return ValidatedICFRecord(
+            record=None,
+            field_coverage=coverage,
+            coerced_null_fields=coerced,
+            grain_invalid=True,
+        )
+
+    assert intervention is not None and claim is not None  # narrowed by grain validation
+    record = ICFRecord(
+        context_type=wire.context_type,
+        claim=claim.strip(),
+        intervention=intervention.strip(),
+        outcome=text_values["outcome"],
+        population=text_values["population"],
+        setting=text_values["setting"],
+        study_geography=text_values["study_geography"],
+        study_design=text_values["study_design"],
+        claim_level=wire.claim_level,
+        claim_basis=wire.claim_basis,
+        level=wire.level,
+        resource_requirements=text_values["resource_requirements"],
+        workforce_requirements=text_values["workforce_requirements"],
+        anchors=[
+            IOFAnchor(segment_id=anchor.segment_id, quote=anchor.quote)
+            for anchor in wire.anchors
+        ],
+    )
+    return ValidatedICFRecord(
+        record=record,
+        field_coverage=coverage,
         coerced_null_fields=coerced,
         grain_invalid=False,
     )
@@ -662,6 +806,7 @@ def claim_key(record: IOFRecord) -> tuple[object, ...]:
             (stratum.type, stratum.value.casefold())
             for stratum in record.stratum_qualifiers
         ),
+        record.effect_basis or "",
     )
 
 
@@ -685,6 +830,54 @@ def dedup_records(records: list[IOFRecord]) -> tuple[list[IOFRecord], int]:
     collapsed = 0
     for record in records:
         key = claim_key(record)
+        survivor = survivors.get(key)
+        if survivor is None:
+            survivors[key] = record.model_copy(deep=True)
+            order.append(key)
+            continue
+        collapsed += 1
+        present = {(anchor.segment_id, anchor.quote) for anchor in survivor.anchors}
+        for anchor in record.anchors:
+            pair = (anchor.segment_id, anchor.quote)
+            if pair not in present:
+                survivor.anchors.append(anchor.model_copy(deep=True))
+                present.add(pair)
+    return [survivors[key] for key in order], collapsed
+
+
+def icf_claim_key(record: ICFRecord) -> tuple[object, ...]:
+    """Compute the claim-dimension dedup key for a stored ICF record.
+
+    Args:
+        record: A stored :class:`ICFRecord`.
+
+    Returns:
+        A hashable tuple over context type, claim level, intervention and
+        claim text, with text components casefolded and whitespace-normalised.
+    """
+    return (
+        record.context_type,
+        record.claim_level or "",
+        _canonical_text(record.intervention),
+        _canonical_text(record.claim),
+    )
+
+
+def dedup_icf_records(records: list[ICFRecord]) -> tuple[list[ICFRecord], int]:
+    """Collapse claim-identical ICF records, merging their anchors.
+
+    Args:
+        records: Stored ICF records in emission order.
+
+    Returns:
+        A ``(deduped, collapsed_count)`` tuple: the survivors in
+        first-occurrence order and the number of records absorbed.
+    """
+    survivors: dict[tuple[object, ...], ICFRecord] = {}
+    order: list[tuple[object, ...]] = []
+    collapsed = 0
+    for record in records:
+        key = icf_claim_key(record)
         survivor = survivors.get(key)
         if survivor is None:
             survivors[key] = record.model_copy(deep=True)

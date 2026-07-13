@@ -12,6 +12,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
+from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.facet_grouping import (
     FACET_VALUE_CAP,
     LABEL_MAX,
@@ -24,9 +25,11 @@ from policy_atlas.facet_grouping import (
 )
 from policy_atlas.facet_values import FacetDirectiveError
 from policy_atlas.group import GroupContext, GroupError, group_findings
+from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.schema import (
     extraction_result,
     grouping_result,
+    implementation_context_finding,
     intervention_outcome_finding,
     selection_result,
     source_extraction_record,
@@ -139,13 +142,17 @@ def seed_extraction(
         doc_payloads.append(
             {
                 "pss_id": str(pss_id),
-                "status": status,
                 "basis": "full_text",
-                "finding_count": len(findings),
-                "reused": record_id in reused_record_ids,
-                "error": None,
-                "extraction_record_id": str(record_id),
                 "order": index,
+                "profiles": {
+                    IOF_PROFILE_ID: {
+                        "status": status,
+                        "finding_count": len(findings),
+                        "reused": record_id in reused_record_ids,
+                        "error": None,
+                        "extraction_record_id": str(record_id),
+                    }
+                },
             }
         )
 
@@ -162,29 +169,37 @@ def seed_extraction(
             run_id=extraction_run_id,
             selection_run_id=selection_run_id,
             extraction_provenance={
-                "fingerprint": f"rollup-fp-{extraction_run_id}",
-                "profile": "test-profile",
+                "profiles": {
+                    IOF_PROFILE_ID: {
+                        "fingerprint": f"rollup-fp-{extraction_run_id}",
+                        "profile": "test-profile",
+                    }
+                }
             },
             docs=doc_payloads,
             counts={
                 "selected": len(docs),
-                "extracted": sum(1 for _, findings in docs if findings),
-                "no_findings": sum(1 for _, findings in docs if not findings),
-                "failed": 0,
-                "fresh": len(docs) - len(reused_record_ids),
-                "reused": len(reused_record_ids),
-                "findings": {
-                    "total": len(finding_ids),
-                    "quote_unverified": 0,
-                    "dedup_collapsed": 0,
-                    "invalid_dropped": 0,
-                },
                 "basis": {
                     "full_text": len(docs),
                     "abstract_only": 0,
                     "shares": {"full_text": 1.0 if docs else 0.0, "abstract_only": 0.0},
                 },
-                "field_coverage": {},
+                "profiles": {
+                    IOF_PROFILE_ID: {
+                        "extracted": sum(1 for _, findings in docs if findings),
+                        "no_findings": sum(1 for _, findings in docs if not findings),
+                        "failed": 0,
+                        "fresh": len(docs) - len(reused_record_ids),
+                        "reused": len(reused_record_ids),
+                        "findings": {
+                            "total": len(finding_ids),
+                            "quote_unverified": 0,
+                            "dedup_collapsed": 0,
+                            "invalid_dropped": 0,
+                        },
+                        "field_coverage": {},
+                    }
+                },
             },
             flags=[],
             created_at=now(),
@@ -404,16 +419,12 @@ def test_happy_path_writes_rollup_summary_and_provenance(conn: Connection) -> No
     assert provenance["repair_count"] == 0
     assert provenance["distinct_value_count"] == 6
     base = cast("dict[str, Any]", provenance["extraction_base"])
-    assert base.keys() == {
-        "extraction_fingerprint",
-        "profile",
-        "counts",
-        "finding_set",
-        "facet_coverage",
-    }
-    assert base["extraction_fingerprint"] == f"rollup-fp-{seeded.run_id}"
-    assert base["profile"] == "test-profile"
-    assert base["counts"] == {
+    assert base.keys() == {"profiles", "finding_set", "facet_coverage"}
+    assert base["profiles"].keys() == {IOF_PROFILE_ID}
+    iof_base = cast("dict[str, Any]", base["profiles"][IOF_PROFILE_ID])
+    assert iof_base.keys() == {"extraction_fingerprint", "counts"}
+    assert iof_base["extraction_fingerprint"] == f"rollup-fp-{seeded.run_id}"
+    assert iof_base["counts"] == {
         "selected": 1,
         "extracted": 1,
         "no_findings": 0,
@@ -495,7 +506,7 @@ def test_integrity_cross_check_fails_on_corrupt_counts(conn: Connection) -> None
             select(extraction_result.c.counts).where(extraction_result.c.run_id == seeded.run_id)
         ).scalar_one(),
     )
-    counts["findings"]["total"] = 2
+    counts["profiles"][IOF_PROFILE_ID]["findings"]["total"] = 2
     conn.execute(
         update(extraction_result)
         .where(extraction_result.c.run_id == seeded.run_id)
@@ -533,8 +544,19 @@ def test_zero_findings_writes_empty_rollup_without_backend_call(conn: Connection
     assert row["flags"] == ["empty_findings"]
     assert row["groups"] == {
         "groups": [],
-        "ungrouped": {"values": [], "finding_ids": [], "direction_spread": _zero_spread()},
-        "no_value": {"finding_ids": [], "direction_spread": _zero_spread()},
+        "ungrouped": {
+            "values": [],
+            "finding_ids": [],
+            "finding_kinds": [],
+            "member_counts": {"iof": 0, "icf": 0},
+            "direction_spread": _zero_spread(),
+        },
+        "no_value": {
+            "finding_ids": [],
+            "finding_kinds": [],
+            "member_counts": {"iof": 0, "icf": 0},
+            "direction_spread": _zero_spread(),
+        },
         "overall_direction_spread": _zero_spread(),
     }
     assert summary["counts"] == {
@@ -645,6 +667,242 @@ def test_mixed_unclear_directions_are_first_class_in_spreads(conn: Connection) -
     stored_group = cast("list[dict[str, Any]]", payload["groups"])[0]
     assert cast("dict[str, int]", stored_group["direction_spread"])["mixed"] == 1
     assert cast("dict[str, int]", payload["ungrouped"]["direction_spread"])["unclear"] == 1
+
+
+def test_group_membership_spans_iof_and_icf_with_iof_only_spread(
+    conn: Connection,
+) -> None:
+    project_id, _ = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    extraction_run_id = seed_run(conn, project_id)
+    selection_run_id = seed_run(conn, project_id)
+    snap_id, pss_id = seed_source(conn, project_id)
+    conn.execute(
+        selection_result.insert().values(
+            selection_result_id=uuid.uuid4(),
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            run_id=selection_run_id,
+            strategy="coverage_stratified_v1",
+            budget=1,
+            selection_provenance={"strategy": "test"},
+            selected=[{"pss_id": str(pss_id), "text_basis": "full_text"}],
+            excluded={},
+            flags=[],
+            created_at=now(),
+        )
+    )
+
+    iof_record_id = uuid.uuid4()
+    icf_record_id = uuid.uuid4()
+    iof_finding_id = uuid.uuid4()
+    icf_finding_id = uuid.uuid4()
+    for record_id, fingerprint in (
+        (iof_record_id, "fp-iof-group-bridge"),
+        (icf_record_id, "fp-icf-group-bridge"),
+    ):
+        conn.execute(
+            source_extraction_record.insert().values(
+                extraction_record_id=record_id,
+                project_id=project_id,
+                source_snapshot_id=snap_id,
+                project_source_snapshot_id=pss_id,
+                extraction_fingerprint=fingerprint,
+                status="extracted",
+                basis="full_text",
+                error=None,
+                finding_count=1,
+                run_id=extraction_run_id,
+                created_at=now(),
+            )
+        )
+    conn.execute(
+        intervention_outcome_finding.insert().values(
+            **_finding_values(
+                project_id,
+                iof_record_id,
+                finding_id=iof_finding_id,
+                intervention="Alpha service",
+                outcome="Attendance",
+                population="Adults",
+                effect_direction="increase",
+            )
+        )
+    )
+    conn.execute(
+        implementation_context_finding.insert().values(
+            finding_id=icf_finding_id,
+            project_id=project_id,
+            extraction_record_id=icf_record_id,
+            context_type="barrier",
+            claim="Training gaps slowed Alpha service delivery.",
+            intervention="Alpha service",
+            outcome="Attendance",
+            population="Adults",
+            setting=None,
+            study_geography=None,
+            study_design=None,
+            claim_level="study",
+            claim_basis="studied",
+            level="provider",
+            resource_requirements=None,
+            workforce_requirements="training",
+            field_coverage={},
+            grounding=[],
+            created_at=now(),
+        )
+    )
+    profile_counts = {
+        "selected": 1,
+        "extracted": 1,
+        "no_findings": 0,
+        "failed": 0,
+        "fresh": 1,
+        "reused": 0,
+        "findings": {
+            "total": 1,
+            "quote_unverified": 0,
+            "dedup_collapsed": 0,
+            "invalid_dropped": 0,
+        },
+        "basis": {
+            "full_text": 1,
+            "abstract_only": 0,
+            "shares": {"full_text": 1.0, "abstract_only": 0.0},
+        },
+        "field_coverage": {},
+    }
+    conn.execute(
+        extraction_result.insert().values(
+            extraction_result_id=uuid.uuid4(),
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            run_id=extraction_run_id,
+            selection_run_id=selection_run_id,
+            extraction_provenance={
+                "profiles": {
+                    IOF_PROFILE_ID: {"fingerprint": "rollup-iof", "profile": IOF_PROFILE_ID},
+                    ICF_PROFILE_ID: {"fingerprint": "rollup-icf", "profile": ICF_PROFILE_ID},
+                },
+                "pass_count": 1,
+            },
+            docs=[
+                {
+                    "pss_id": str(pss_id),
+                    "basis": "full_text",
+                    "profiles": {
+                        IOF_PROFILE_ID: {
+                            "status": "extracted",
+                            "basis": "full_text",
+                            "finding_count": 1,
+                            "reused": False,
+                            "error": None,
+                            "extraction_record_id": str(iof_record_id),
+                            "order": 0,
+                        },
+                        ICF_PROFILE_ID: {
+                            "status": "extracted",
+                            "basis": "full_text",
+                            "finding_count": 1,
+                            "reused": False,
+                            "error": None,
+                            "extraction_record_id": str(icf_record_id),
+                            "order": 0,
+                        },
+                    },
+                }
+            ],
+            counts={
+                "selected": 1,
+                "basis": profile_counts["basis"],
+                "profiles": {
+                    IOF_PROFILE_ID: profile_counts,
+                    ICF_PROFILE_ID: profile_counts,
+                },
+            },
+            flags=[],
+            created_at=now(),
+        )
+    )
+
+    summary, group_run_id = _run_group(
+        conn,
+        project_id,
+        scope_id,
+        extraction_run_id,
+        backend=CountingFacetGroupingBackend(
+            partition_result={
+                "groups": [
+                    {
+                        "label": "Alpha",
+                        "description": "Alpha implementation and effects.",
+                        "member_ids": ["v1"],
+                    }
+                ],
+                "ungroupable": [],
+            }
+        ),
+    )
+
+    assert summary["counts"]["findings_total"] == 2
+    payload = cast("dict[str, Any]", _group_row(conn, project_id, group_run_id)["groups"])
+    group = payload["groups"][0]
+    assert group["member_finding_ids"] == [str(iof_finding_id), str(icf_finding_id)]
+    assert group["member_finding_kinds"] == ["iof", "icf"]
+    assert group["member_counts"] == {"iof": 1, "icf": 1}
+    assert group["direction_spread"]["increase"] == 1
+    assert sum(group["direction_spread"].values()) == 1
+    assert sum(cast("dict[str, int]", payload["overall_direction_spread"]).values()) == 1
+    provenance = cast(
+        "dict[str, Any]", _group_row(conn, project_id, group_run_id)["grouping_provenance"]
+    )
+    base = cast("dict[str, Any]", provenance["extraction_base"])
+    assert base["profiles"].keys() == {IOF_PROFILE_ID, ICF_PROFILE_ID}
+    assert base["profiles"][IOF_PROFILE_ID]["extraction_fingerprint"] == "rollup-iof"
+    assert base["profiles"][ICF_PROFILE_ID]["extraction_fingerprint"] == "rollup-icf"
+    assert base["profiles"][ICF_PROFILE_ID]["counts"]["findings_total"] == 1
+
+
+def test_mixed_unclear_findings_never_dropped_by_group(conn: Connection) -> None:
+    """V2 silent-zeroing autopsy (task 020 C7): findings with effect_direction
+    'mixed'/'unclear' are first-class group members, not just spread-count
+    entries — every finding_id must survive into the persisted membership
+    (a group, or a residual bucket), never silently dropped at aggregation."""
+    project_id, _ = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    seeded = seed_extraction(
+        conn,
+        project_id,
+        scope_id,
+        docs=[
+            (
+                uuid.uuid4(),
+                [
+                    {
+                        "intervention": "Alpha service",
+                        "outcome": "Outcome A",
+                        "effect_direction": "mixed",
+                    },
+                    {
+                        "intervention": "Alpha programme",
+                        "outcome": "Outcome B",
+                        "effect_direction": "unclear",
+                    },
+                    {
+                        "intervention": "Alpha clinic",
+                        "outcome": "Outcome C",
+                        "effect_direction": "increase",
+                    },
+                ],
+            )
+        ],
+    )
+
+    _summary, group_run_id = _run_group(conn, project_id, scope_id, seeded.run_id)
+    row = _group_row(conn, project_id, group_run_id)
+    membership = _payload_finding_ids(cast("dict[str, Any]", row["groups"]))
+
+    assert membership == {str(finding_id) for finding_id in seeded.finding_ids}
 
 
 def test_backend_failure_raises_without_rollup_row(conn: Connection) -> None:

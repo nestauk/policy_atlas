@@ -241,7 +241,7 @@ _STUB_LANDSCAPE_SENTINEL = "landscape only"
 _STUB_ASSUMPTIONS: tuple[str, ...] = ("Stub planner: deterministic fixture proposal.",)
 _STUB_COMPONENT_RATIONALE: dict[str, str] = {
     "characterise": "Maps the corpus landscape before deeper analysis.",
-    "screen_stage2": "Full-text re-screen improves precision once documents are fetched.",
+    "screen_full": "Full-text re-screen improves precision once documents are fetched.",
     "select": "Selects documents for structured extraction.",
     "extract": "Pulls structured intervention-outcome findings from selected documents.",
     "group": "Organises findings by outcome for synthesis.",
@@ -309,7 +309,7 @@ class StubPlannerBackend:
                 ready=True,
             )
 
-        components = ["characterise", "screen_stage2", "select", "extract", "group"]
+        components = ["characterise", "screen_full", "select", "extract", "group"]
         return PlannerTurnWire(
             reply="Deterministic stub planner: complete draft proposed.",
             plan_draft=PlanDraftWire(

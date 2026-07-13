@@ -10,7 +10,9 @@ from pydantic import ValidationError
 from policy_atlas.extraction_backend import (
     ExtractionBackend,
     OpenAIExtractionBackend,
+    OpenAIICFExtractionBackend,
     StubExtractionBackend,
+    StubICFExtractionBackend,
 )
 from policy_atlas.extraction_records import (
     ExtractionWindowPayload,
@@ -18,6 +20,7 @@ from policy_atlas.extraction_records import (
     IOFRecordWire,
     IOFStatisticsWire,
 )
+from tests.helpers import make_icf_wire_record
 
 
 def _valid_wire_record() -> dict[str, Any]:
@@ -25,10 +28,12 @@ def _valid_wire_record() -> dict[str, Any]:
         intervention="structured home-visiting programmes",
         outcome="unplanned child hospital admissions",
         population=None,
+        setting=None,
         comparator="usual care",
         effect_direction="decrease",
         estimate_level="pooled",
         study_design="pooled analysis of randomised trials",
+        study_geography=None,
         stratum_qualifiers=[],
         statistics=IOFStatisticsWire(
             effect_size=0.82,
@@ -43,6 +48,7 @@ def _valid_wire_record() -> dict[str, Any]:
             tau2=None,
         ),
         causality_by_design="attributable",
+        effect_basis=None,
         is_primary=True,
         is_prevalence_only=False,
         anchors=[
@@ -52,6 +58,10 @@ def _valid_wire_record() -> dict[str, Any]:
             )
         ],
     ).model_dump()
+
+
+def _valid_icf_wire_record() -> dict[str, Any]:
+    return make_icf_wire_record().model_dump()
 
 
 def _payload(
@@ -86,6 +96,15 @@ def test_openai_extraction_backend_requires_api_key(monkeypatch: pytest.MonkeyPa
         OpenAIExtractionBackend()
 
 
+def test_openai_icf_extraction_backend_requires_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
+        OpenAIICFExtractionBackend()
+
+
 def test_stub_determinism() -> None:
     backend = StubExtractionBackend()
     payload = _payload(metadata={"_stub_iof": [_valid_wire_record()]})
@@ -108,11 +127,29 @@ def test_no_sentinel_returns_empty_findings() -> None:
     assert result.findings == []
 
 
+def test_icf_stub_no_sentinel_returns_empty_findings() -> None:
+    backend = StubICFExtractionBackend()
+    payload = _payload(metadata={})
+
+    result, usage = backend.extract(payload)
+
+    assert usage is None
+    assert result.findings == []
+
+
 def test_stub_extract_failed_sentinel_raises() -> None:
     backend = StubExtractionBackend()
     payload = _payload(metadata={"_stub_extract_failed": True})
 
     with pytest.raises(RuntimeError, match="Stub extraction failure sentinel."):
+        backend.extract(payload)
+
+
+def test_icf_stub_extract_failed_sentinel_raises() -> None:
+    backend = StubICFExtractionBackend()
+    payload = _payload(metadata={"_stub_icf_extract_failed": True})
+
+    with pytest.raises(RuntimeError, match="Stub ICF extraction failure sentinel."):
         backend.extract(payload)
 
 
@@ -152,6 +189,42 @@ def test_stub_iof_windows_sentinel_routes_per_window_index() -> None:
     assert window_two.findings == []
 
 
+def test_stub_icf_sentinel_only_on_window_zero() -> None:
+    backend = StubICFExtractionBackend()
+    record = _valid_icf_wire_record()
+
+    window_zero, zero_usage = backend.extract(
+        _payload(window_index=0, metadata={"_stub_icf": [record]})
+    )
+    window_one, one_usage = backend.extract(
+        _payload(window_index=1, metadata={"_stub_icf": [record]})
+    )
+
+    assert zero_usage is None
+    assert one_usage is None
+    assert [f.model_dump() for f in window_zero.findings] == [record]
+    assert window_one.findings == []
+
+
+def test_stub_icf_windows_sentinel_routes_per_window_index() -> None:
+    backend = StubICFExtractionBackend()
+    record_zero = _valid_icf_wire_record()
+    record_one = _valid_icf_wire_record()
+    record_one["intervention"] = "a different intervention"
+    metadata = {"_stub_icf_windows": {"0": [record_zero], "1": [record_one]}}
+
+    window_zero, zero_usage = backend.extract(_payload(window_index=0, metadata=metadata))
+    window_one, one_usage = backend.extract(_payload(window_index=1, metadata=metadata))
+    window_two, two_usage = backend.extract(_payload(window_index=2, metadata=metadata))
+
+    assert zero_usage is None
+    assert one_usage is None
+    assert two_usage is None
+    assert [f.model_dump() for f in window_zero.findings] == [record_zero]
+    assert [f.model_dump() for f in window_one.findings] == [record_one]
+    assert window_two.findings == []
+
+
 def test_malformed_sentinel_raises_validation_error() -> None:
     backend = StubExtractionBackend()
     malformed_record = _valid_wire_record()
@@ -164,4 +237,6 @@ def test_malformed_sentinel_raises_validation_error() -> None:
 
 def test_mode_strings() -> None:
     assert StubExtractionBackend().mode == "stub"
+    assert StubICFExtractionBackend().mode == "stub"
     assert OpenAIExtractionBackend(api_key="sk-test").mode == "live"
+    assert OpenAIICFExtractionBackend(api_key="sk-test").mode == "live"

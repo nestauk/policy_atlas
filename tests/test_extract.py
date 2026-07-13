@@ -12,23 +12,50 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+import pytest
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.extract import ExtractContext, ExtractError, extract_scope
+from policy_atlas import extract_prompt
+from policy_atlas.extract import (
+    ExtractContext,
+    ExtractError,
+    _judge_payload_entry,
+    extract_scope,
+    extraction_fingerprint,
+)
 from policy_atlas.extraction_backend import StubExtractionBackend
+from policy_atlas.extraction_records import IOFAnchor, IOFRecord, IOFStatistics, IOFStratum
+from policy_atlas.icf_finding_vetter import ICFFindingVetterResponse, ICFVetterVerdictWire
 from policy_atlas.schema import (
     chunk,
     extraction_result,
+    implementation_context_finding,
     intervention_outcome_finding,
     project_source_snapshot,
     selection_result,
     source_classification_result,
+    source_extraction_record,
     source_snapshot,
 )
+from policy_atlas.synthesis_tools import make_findings_reader
 from policy_atlas.usage import UsageResult
 
-from .helpers import EVIDENCE_TYPE, now, seed_project_and_run, seed_run, seed_scope
+from .helpers import (
+    EVIDENCE_TYPE,
+    ICF_PROFILE_ID,
+    IOF_PROFILE_ID,
+    make_icf_wire_record,
+    now,
+    profile_counts,
+    profile_doc,
+    profile_docs,
+    profile_findings,
+    profile_vetted_out,
+    seed_project_and_run,
+    seed_run,
+    seed_scope,
+)
 
 # --- Local seeding helpers (reused/extended by the later contract suite) ---
 
@@ -64,19 +91,41 @@ def _record(
         "intervention": intervention,
         "outcome": outcome,
         "population": None,
+        "setting": None,
         "comparator": None,
         "effect_direction": effect_direction,
         "estimate_level": "study",
         "study_design": None,
+        "study_geography": None,
         "stratum_qualifiers": [],
         "statistics": statistics or _stat(),
         "causality_by_design": None,
+        "effect_basis": None,
         "is_primary": None,
         "is_prevalence_only": None,
         "anchors": [{"segment_id": segment_id, "quote": quote}],
     }
     record.update(over)
     return record
+
+
+def _icf_record(
+    *,
+    claim: str,
+    intervention: str,
+    quote: str,
+    segment_id: str | None,
+    context_type: str = "barrier",
+    **over: Any,
+) -> dict[str, Any]:
+    record = make_icf_wire_record(
+        context_type=context_type,
+        claim=claim,
+        intervention=intervention,
+        anchors=[{"segment_id": segment_id, "quote": quote}],
+        **over,
+    )
+    return record.model_dump()
 
 
 def _seed_full_text_doc(
@@ -89,6 +138,7 @@ def _seed_full_text_doc(
     chunk_content: str,
     chunk_id: uuid.UUID | None = None,
     stub_iof: list[dict[str, Any]] | None = None,
+    stub_icf: list[dict[str, Any]] | None = None,
     stub_failed: bool = False,
     evidence_type: str | None = EVIDENCE_TYPE,
 ) -> tuple[uuid.UUID, uuid.UUID]:
@@ -104,6 +154,8 @@ def _seed_full_text_doc(
     meta: dict[str, Any] = {"title": title, "abstract": f"Abstract for {title}."}
     if stub_iof is not None:
         meta["_stub_iof"] = stub_iof
+    if stub_icf is not None:
+        meta["_stub_icf"] = stub_icf
     if stub_failed:
         meta["_stub_extract_failed"] = True
 
@@ -179,6 +231,8 @@ def _run(
     project_id: uuid.UUID,
     scope_id: uuid.UUID,
     selection_run_id: uuid.UUID,
+    *,
+    profiles: tuple[str, ...] = (IOF_PROFILE_ID,),
 ) -> tuple[dict[str, Any], uuid.UUID]:
     """Seed a fresh extract run and execute extract_scope; return (summary, run_id)."""
     run_id = seed_run(conn, project_id)
@@ -190,6 +244,7 @@ def _run(
             scope_id=scope_id, intent="unused", context={}, selection_run_id=selection_run_id
         ),
         extraction_backend=StubExtractionBackend(),
+        profiles=profiles,
     )
     return summary, run_id
 
@@ -223,13 +278,22 @@ def test_fresh_full_text_extraction(conn: Connection) -> None:
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
-    assert summary["counts"] == {
-        "selected": 1, "extracted": 1, "no_findings": 0, "failed": 0, "fresh": 1, "reused": 0
+    assert summary["counts"]["selected"] == 1
+    counts = profile_counts(summary)
+    count_keys = ("extracted", "no_findings", "failed", "fresh", "reused")
+    assert {key: counts[key] for key in count_keys} == {
+        "extracted": 1,
+        "no_findings": 0,
+        "failed": 0,
+        "fresh": 1,
+        "reused": 0,
     }
+    assert counts["findings"]["total"] == 1
+    assert isinstance(counts["field_coverage"], dict)
     assert [d["pss_id"] for d in summary["docs"]] == [str(pss_id)]
-    doc = summary["docs"][0]
+    doc = profile_doc(summary)
     assert doc["status"] == "extracted" and doc["basis"] == "full_text" and doc["reused"] is False
-    assert summary["findings"]["total"] == 1
+    assert profile_findings(summary)["total"] == 1
 
     rows = conn.execute(
         select(intervention_outcome_finding.c.grounding)
@@ -245,6 +309,353 @@ def test_fresh_full_text_extraction(conn: Connection) -> None:
         select(extraction_result).where(extraction_result.c.project_id == project_id)
     ).one()
     assert rollup.selection_run_id == sel_run
+
+
+def test_both_profiles_write_separate_records_and_rollup_shape(conn: Connection) -> None:
+    """A both-profile run writes independent records/findings and profile roll-up blocks."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    content = (
+        "Structured tutoring raised reading scores. "
+        "Training gaps slowed delivery of structured tutoring."
+    )
+    cid = uuid.uuid4()
+    pss_id, _ = _seed_full_text_doc(
+        conn,
+        project_id,
+        sel_run,
+        scope_id,
+        title="Dual doc",
+        chunk_content=content,
+        chunk_id=cid,
+        stub_iof=[
+            _record(
+                intervention="structured tutoring",
+                outcome="reading scores",
+                quote="Structured tutoring raised reading scores",
+                segment_id=str(cid),
+            )
+        ],
+        stub_icf=[
+            _icf_record(
+                claim="Training gaps slowed delivery of structured tutoring.",
+                intervention="structured tutoring",
+                quote="Training gaps slowed delivery of structured tutoring",
+                segment_id=str(cid),
+            )
+        ],
+    )
+    _seed_selection(
+        conn,
+        project_id,
+        sel_run,
+        scope_id,
+        [{"pss_id": str(pss_id), "text_basis": "full_text"}],
+    )
+
+    summary, run_id = _run(
+        conn, project_id, scope_id, sel_run, profiles=(IOF_PROFILE_ID, ICF_PROFILE_ID)
+    )
+
+    assert list(summary["provenance"]["profiles"]) == [IOF_PROFILE_ID, ICF_PROFILE_ID]
+    assert list(summary["counts"]["profiles"]) == [IOF_PROFILE_ID, ICF_PROFILE_ID]
+    assert set(summary["docs"][0]["profiles"]) == {IOF_PROFILE_ID, ICF_PROFILE_ID}
+    assert profile_findings(summary, IOF_PROFILE_ID)["total"] == 1
+    assert profile_findings(summary, ICF_PROFILE_ID)["total"] == 1
+    assert profile_doc(summary, profile_id=IOF_PROFILE_ID)["status"] == "extracted"
+    assert profile_doc(summary, profile_id=ICF_PROFILE_ID)["status"] == "extracted"
+
+    extraction_rows = conn.execute(
+        select(
+            source_extraction_record.c.extraction_record_id,
+            source_extraction_record.c.extraction_fingerprint,
+        )
+        .where(source_extraction_record.c.project_id == project_id)
+        .order_by(source_extraction_record.c.created_at)
+    ).fetchall()
+    assert len(extraction_rows) == 2
+    assert len({row.extraction_fingerprint for row in extraction_rows}) == 2
+    assert conn.execute(
+        select(func.count()).select_from(intervention_outcome_finding)
+        .where(intervention_outcome_finding.c.project_id == project_id)
+    ).scalar_one() == 1
+    assert conn.execute(
+        select(func.count()).select_from(implementation_context_finding)
+        .where(implementation_context_finding.c.project_id == project_id)
+    ).scalar_one() == 1
+
+    reader = make_findings_reader(
+        conn,
+        project_id=project_id,
+        extraction_run_id=run_id,
+        evidence_scope_id=scope_id,
+        grouping_groups=None,
+    )
+    findings = reader({})
+    assert len(findings["iof_findings"]) == 1
+    assert findings["iof_findings"][0]["kind"] == "iof"
+    assert len(findings["icf_findings"]) == 1
+    assert findings["icf_findings"][0]["kind"] == "icf"
+
+    rollup = conn.execute(
+        select(extraction_result.c.counts, extraction_result.c.extraction_provenance)
+        .where(extraction_result.c.run_id == run_id)
+    ).one()
+    assert set(rollup.counts["profiles"]) == {IOF_PROFILE_ID, ICF_PROFILE_ID}
+    assert set(rollup.extraction_provenance["profiles"]) == {
+        IOF_PROFILE_ID,
+        ICF_PROFILE_ID,
+    }
+
+
+def test_profile_not_selected_differs_from_selected_zero_findings(conn: Connection) -> None:
+    """Absent ICF profile and fired-with-zero ICF profile have distinct payload shapes."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    cid = uuid.uuid4()
+    pss_id, _ = _seed_full_text_doc(
+        conn,
+        project_id,
+        sel_run,
+        scope_id,
+        title="Zero ICF doc",
+        chunk_content="Structured tutoring raised reading scores.",
+        chunk_id=cid,
+        stub_iof=[
+            _record(
+                intervention="structured tutoring",
+                outcome="reading scores",
+                quote="Structured tutoring raised reading scores",
+                segment_id=str(cid),
+            )
+        ],
+        stub_icf=[],
+    )
+    _seed_selection(
+        conn,
+        project_id,
+        sel_run,
+        scope_id,
+        [{"pss_id": str(pss_id), "text_basis": "full_text"}],
+    )
+
+    iof_only, _ = _run(conn, project_id, scope_id, sel_run)
+    assert ICF_PROFILE_ID not in iof_only["provenance"]["profiles"]
+    assert ICF_PROFILE_ID not in iof_only["counts"]["profiles"]
+    assert ICF_PROFILE_ID not in iof_only["docs"][0]["profiles"]
+
+    both, _ = _run(
+        conn, project_id, scope_id, sel_run, profiles=(IOF_PROFILE_ID, ICF_PROFILE_ID)
+    )
+    assert profile_findings(both, ICF_PROFILE_ID)["total"] == 0
+    assert profile_counts(both, ICF_PROFILE_ID)["no_findings"] == 1
+    assert profile_doc(both, profile_id=ICF_PROFILE_ID)["status"] == "no_findings"
+
+
+def test_profile_memo_isolated_between_iof_and_icf(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """IOF memo reuse never implies ICF reuse; an ICF bump re-extracts ICF only."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    content = (
+        "Home visiting reduced admissions. "
+        "Nurse shortages slowed home visiting delivery."
+    )
+    cid = uuid.uuid4()
+    pss_id, _ = _seed_full_text_doc(
+        conn,
+        project_id,
+        sel_run,
+        scope_id,
+        title="Memo isolation doc",
+        chunk_content=content,
+        chunk_id=cid,
+        stub_iof=[
+            _record(
+                intervention="home visiting",
+                outcome="admissions",
+                effect_direction="decrease",
+                quote="Home visiting reduced admissions",
+                segment_id=str(cid),
+            )
+        ],
+        stub_icf=[
+            _icf_record(
+                claim="Nurse shortages slowed home visiting delivery.",
+                intervention="home visiting",
+                quote="Nurse shortages slowed home visiting delivery",
+                segment_id=str(cid),
+            )
+        ],
+    )
+    _seed_selection(
+        conn,
+        project_id,
+        sel_run,
+        scope_id,
+        [{"pss_id": str(pss_id), "text_basis": "full_text"}],
+    )
+
+    first, _ = _run(conn, project_id, scope_id, sel_run)
+    first_iof_record_id = profile_doc(first)["extraction_record_id"]
+
+    second, _ = _run(
+        conn, project_id, scope_id, sel_run, profiles=(IOF_PROFILE_ID, ICF_PROFILE_ID)
+    )
+    assert profile_counts(second, IOF_PROFILE_ID)["reused"] == 1
+    assert profile_counts(second, ICF_PROFILE_ID)["fresh"] == 1
+    assert profile_doc(second, profile_id=IOF_PROFILE_ID)["extraction_record_id"] == (
+        first_iof_record_id
+    )
+    second_icf_record_id = profile_doc(second, profile_id=ICF_PROFILE_ID)[
+        "extraction_record_id"
+    ]
+
+    with monkeypatch.context() as m:
+        m.setattr("policy_atlas.extract.ICF_PROMPT_VERSION", "extract_icf_vNEXT")
+        third, _ = _run(
+            conn, project_id, scope_id, sel_run, profiles=(IOF_PROFILE_ID, ICF_PROFILE_ID)
+        )
+
+    assert profile_counts(third, IOF_PROFILE_ID)["reused"] == 1
+    assert profile_counts(third, ICF_PROFILE_ID)["reused"] == 0
+    assert profile_counts(third, ICF_PROFILE_ID)["fresh"] == 1
+    assert profile_doc(third, profile_id=IOF_PROFILE_ID)["extraction_record_id"] == (
+        first_iof_record_id
+    )
+    assert (
+        profile_doc(third, profile_id=ICF_PROFILE_ID)["extraction_record_id"]
+        != second_icf_record_id
+    )
+
+
+def test_unknown_and_duplicate_profile_ids_fail_closed(conn: Connection) -> None:
+    """Profile selection validates before any writes."""
+    project_id, _ = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    run_id = seed_run(conn, project_id)
+    context = ExtractContext(
+        scope_id=scope_id,
+        intent="unused",
+        context={},
+        selection_run_id=uuid.uuid4(),
+    )
+
+    with pytest.raises(ExtractError, match="unknown extraction profile"):
+        extract_scope(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            context=context,
+            extraction_backend=StubExtractionBackend(),
+            profiles=("not-a-profile",),
+        )
+    with pytest.raises(ExtractError, match="duplicate extraction profile"):
+        extract_scope(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            context=context,
+            extraction_backend=StubExtractionBackend(),
+            profiles=(IOF_PROFILE_ID, IOF_PROFILE_ID),
+        )
+
+
+class _FlaggingICFVetter:
+    mode = "stub"
+
+    def __init__(self) -> None:
+        self.payloads: list[dict[str, Any]] = []
+
+    def judge(self, payload: dict[str, Any]) -> UsageResult[ICFFindingVetterResponse]:
+        self.payloads.append(payload)
+        verdicts = [
+            ICFVetterVerdictWire(
+                finding_index=int(finding["index"]),
+                verdict="flagged",
+                flag_class="recommendation",
+                reason="Recommendation-shaped implementation claim.",
+            )
+            for finding in payload["findings"]
+        ]
+        return ICFFindingVetterResponse(verdicts=verdicts), None
+
+
+def test_icf_vetter_excludes_icf_without_affecting_iof(conn: Connection) -> None:
+    """ICF vetting is per-profile; a flagged ICF survivor leaves IOF untouched."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    cid = uuid.uuid4()
+    pss_id, _ = _seed_full_text_doc(
+        conn,
+        project_id,
+        sel_run,
+        scope_id,
+        title="ICF vetter doc",
+        chunk_content=(
+            "Structured tutoring raised reading scores. "
+            "Schools should fund structured tutoring training."
+        ),
+        chunk_id=cid,
+        stub_iof=[
+            _record(
+                intervention="structured tutoring",
+                outcome="reading scores",
+                quote="Structured tutoring raised reading scores",
+                segment_id=str(cid),
+            )
+        ],
+        stub_icf=[
+            _icf_record(
+                claim="Schools should fund structured tutoring training.",
+                intervention="structured tutoring",
+                quote="Schools should fund structured tutoring training",
+                segment_id=str(cid),
+                claim_basis="author_assertion",
+            )
+        ],
+    )
+    _seed_selection(
+        conn,
+        project_id,
+        sel_run,
+        scope_id,
+        [{"pss_id": str(pss_id), "text_basis": "full_text"}],
+    )
+    icf_vetter = _FlaggingICFVetter()
+    run_id = seed_run(conn, project_id)
+
+    summary = extract_scope(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        context=ExtractContext(
+            scope_id=scope_id,
+            intent="unused",
+            context={},
+            selection_run_id=sel_run,
+        ),
+        extraction_backend=StubExtractionBackend(),
+        icf_finding_vetter_backend=icf_vetter,
+        profiles=(IOF_PROFILE_ID, ICF_PROFILE_ID),
+    )
+
+    assert profile_counts(summary, IOF_PROFILE_ID)["extracted"] == 1
+    assert profile_findings(summary, IOF_PROFILE_ID)["total"] == 1
+    assert profile_counts(summary, ICF_PROFILE_ID)["no_findings"] == 1
+    assert profile_findings(summary, ICF_PROFILE_ID)["total"] == 0
+    assert profile_doc(summary, profile_id=ICF_PROFILE_ID)["vetted_out"] == 1
+    assert profile_vetted_out(summary, ICF_PROFILE_ID)["total"] == 1
+    assert conn.execute(
+        select(func.count()).select_from(intervention_outcome_finding)
+        .where(intervention_outcome_finding.c.project_id == project_id)
+    ).scalar_one() == 1
+    assert conn.execute(
+        select(func.count()).select_from(implementation_context_finding)
+        .where(implementation_context_finding.c.project_id == project_id)
+    ).scalar_one() == 0
+    assert icf_vetter.payloads[0]["findings"][0]["context_type"] == "barrier"
 
 
 def test_memo_reuse(conn: Connection) -> None:
@@ -266,17 +677,76 @@ def test_memo_reuse(conn: Connection) -> None:
                     [{"pss_id": str(pss_id), "text_basis": "full_text"}])
 
     first, _ = _run(conn, project_id, scope_id, sel_run)
-    first_record_id = first["docs"][0]["extraction_record_id"]
+    first_record_id = profile_doc(first)["extraction_record_id"]
     findings_after_first = _finding_count(conn, project_id)
 
     second, _ = _run(conn, project_id, scope_id, sel_run)
 
-    assert second["counts"]["reused"] == 1
-    assert second["counts"]["fresh"] == 0
-    assert second["docs"][0]["reused"] is True
-    assert second["docs"][0]["extraction_record_id"] == first_record_id
+    assert profile_counts(second)["reused"] == 1
+    assert profile_counts(second)["fresh"] == 0
+    assert profile_doc(second)["reused"] is True
+    assert profile_doc(second)["extraction_record_id"] == first_record_id
     # No new finding rows were written on the reused run.
     assert _finding_count(conn, project_id) == findings_after_first
+
+
+def test_fingerprint_change_extracts_fresh_alongside(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fingerprint bump never reuses old records and never rewrites them.
+
+    The task-020 acceptance pair in one deterministic test (its two halves
+    were previously pinned only by composition): records extracted under one
+    fingerprint are memo-missed after any component changes — the run
+    extracts FRESH, creating a new record and new finding rows ALONGSIDE —
+    while the old record and its findings survive byte-untouched
+    (upgrades-never-invalidate)."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    content = "Home visiting reduced hospital admissions among infants."
+    cid = uuid.uuid4()
+    pss_id, _ = _seed_full_text_doc(
+        conn, project_id, sel_run, scope_id, title="Home visiting", chunk_content=content,
+        chunk_id=cid,
+        stub_iof=[_record(
+            intervention="home visiting", outcome="hospital admissions",
+            quote="Home visiting reduced hospital admissions", segment_id=str(cid),
+            effect_direction="decrease",
+        )],
+    )
+    _seed_selection(conn, project_id, sel_run, scope_id,
+                    [{"pss_id": str(pss_id), "text_basis": "full_text"}])
+
+    first, _ = _run(conn, project_id, scope_id, sel_run)
+    first_record_id = profile_doc(first)["extraction_record_id"]
+    findings_after_first = _finding_count(conn, project_id)
+    old_findings = conn.execute(
+        select(intervention_outcome_finding)
+        .where(intervention_outcome_finding.c.project_id == project_id)
+    ).mappings().all()
+
+    with monkeypatch.context() as m:
+        m.setattr("policy_atlas.extract.PROMPT_VERSION", "extract_iof_vNEXT")
+        second, _ = _run(conn, project_id, scope_id, sel_run)
+
+    assert profile_counts(second)["reused"] == 0
+    assert profile_counts(second)["fresh"] == 1
+    assert profile_doc(second)["extraction_record_id"] != first_record_id
+    # New finding rows landed alongside; the old rows are byte-identical.
+    assert _finding_count(conn, project_id) == 2 * findings_after_first
+    surviving = conn.execute(
+        select(intervention_outcome_finding)
+        .where(intervention_outcome_finding.c.finding_id.in_(
+            [row["finding_id"] for row in old_findings]
+        ))
+    ).mappings().all()
+    assert sorted(surviving, key=lambda r: str(r["finding_id"])) == sorted(
+        old_findings, key=lambda r: str(r["finding_id"])
+    )
+    # And the untouched original fingerprint still reuses its own record.
+    third, _ = _run(conn, project_id, scope_id, sel_run)
+    assert profile_counts(third)["reused"] == 1
+    assert profile_doc(third)["extraction_record_id"] == first_record_id
 
 
 def test_abstract_basis(conn: Connection) -> None:
@@ -296,8 +766,8 @@ def test_abstract_basis(conn: Connection) -> None:
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
-    assert summary["counts"]["extracted"] == 1
-    assert summary["docs"][0]["basis"] == "abstract_only"
+    assert profile_counts(summary)["extracted"] == 1
+    assert profile_doc(summary)["basis"] == "abstract_only"
     anchor = conn.execute(
         select(intervention_outcome_finding.c.grounding)
         .where(intervention_outcome_finding.c.project_id == project_id)
@@ -333,10 +803,10 @@ def test_window_failure_does_not_fail_component(conn: Connection) -> None:
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
     assert summary["counts"]["selected"] == 2
-    assert summary["counts"]["extracted"] == 1
-    assert summary["counts"]["failed"] == 1
+    assert profile_counts(summary)["extracted"] == 1
+    assert profile_counts(summary)["failed"] == 1
     assert "extraction_failures" in summary["flags"]
-    by_pss = {d["pss_id"]: d for d in summary["docs"]}
+    by_pss = {d["pss_id"]: d for d in profile_docs(summary)}
     assert by_pss[str(fail_pss)]["status"] == "extraction_failed"
     assert by_pss[str(fail_pss)]["error"] == "window_failed: RuntimeError"
     assert by_pss[str(ok_pss)]["status"] == "extracted"
@@ -354,13 +824,13 @@ def test_no_findings_and_memo(conn: Connection) -> None:
                     [{"pss_id": str(pss_id), "text_basis": "full_text"}])
 
     first, _ = _run(conn, project_id, scope_id, sel_run)
-    assert first["counts"]["no_findings"] == 1
-    assert first["docs"][0]["status"] == "no_findings"
+    assert profile_counts(first)["no_findings"] == 1
+    assert profile_doc(first)["status"] == "no_findings"
 
     second, _ = _run(conn, project_id, scope_id, sel_run)
-    assert second["counts"]["reused"] == 1
-    assert second["docs"][0]["reused"] is True
-    assert second["docs"][0]["status"] == "no_findings"
+    assert profile_counts(second)["reused"] == 1
+    assert profile_doc(second)["reused"] is True
+    assert profile_doc(second)["status"] == "no_findings"
 
 
 def test_empty_selection(conn: Connection) -> None:
@@ -372,9 +842,18 @@ def test_empty_selection(conn: Connection) -> None:
     summary, run_id = _run(conn, project_id, scope_id, sel_run)
 
     assert summary["flags"] == ["empty_selection"]
-    assert summary["counts"] == {
-        "selected": 0, "extracted": 0, "no_findings": 0, "failed": 0, "fresh": 0, "reused": 0
+    assert summary["counts"]["selected"] == 0
+    counts = profile_counts(summary)
+    count_keys = ("extracted", "no_findings", "failed", "fresh", "reused")
+    assert {key: counts[key] for key in count_keys} == {
+        "extracted": 0,
+        "no_findings": 0,
+        "failed": 0,
+        "fresh": 0,
+        "reused": 0,
     }
+    assert counts["findings"]["total"] == 0
+    assert counts["field_coverage"] == {}
     assert conn.execute(
         select(func.count()).select_from(extraction_result)
         .where(extraction_result.c.run_id == run_id)
@@ -435,11 +914,11 @@ def test_uploaded_full_text_doc_extracts_from_envelope_chunks(conn: Connection) 
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
-    doc = summary["docs"][0]
+    doc = profile_doc(summary)
     assert doc["status"] == "extracted"
     assert doc["basis"] == "full_text"
     assert doc["error"] is None
-    assert summary["findings"]["total"] == 1
+    assert profile_findings(summary)["total"] == 1
     grounding = conn.execute(
         select(intervention_outcome_finding.c.grounding)
         .where(intervention_outcome_finding.c.project_id == project_id)
@@ -491,7 +970,7 @@ def test_nul_bearing_model_output_is_scrubbed(conn: Connection) -> None:
         extraction_backend=_NulBackend(),
     )
 
-    assert summary["docs"][0]["status"] == "extracted"
+    assert profile_doc(summary)["status"] == "extracted"
     row = conn.execute(
         select(intervention_outcome_finding)
         .where(intervention_outcome_finding.c.project_id == project_id)
@@ -499,3 +978,121 @@ def test_nul_bearing_model_output_is_scrubbed(conn: Connection) -> None:
     assert row.intervention == "free school meals"
     assert row.population == "pupils"
     assert "\x00" not in str(row.grounding)
+
+
+# --- Evidence-type call provenance (task 020) -------------------------------
+
+
+def test_evidence_type_provenance_recorded_on_attempted_call(conn: Connection) -> None:
+    """A doc extracted via an attempted call records its classification value
+    on source_extraction_record.primary_evidence_type; a doc with no live
+    classification records the sentinel 'Unclassified' — the value actually
+    sent to the prompt, which may legitimately diverge from the live
+    classification read elsewhere."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    cid = uuid.uuid4()
+    classified_pss, _ = _seed_full_text_doc(
+        conn, project_id, sel_run, scope_id, title="Classified doc",
+        chunk_content="Coaching increased graduation rates in the trial.",
+        chunk_id=cid, evidence_type="RCTs and Quasi-Experimental Studies",
+        stub_iof=[_record(
+            intervention="coaching", outcome="graduation rates",
+            quote="Coaching increased graduation rates", segment_id=str(cid),
+        )],
+    )
+    unclassified_pss, _ = _seed_full_text_doc(
+        conn, project_id, sel_run, scope_id, title="Unclassified doc",
+        chunk_content="Home visiting reduced admissions in the trial.",
+        evidence_type=None,
+    )
+    _seed_selection(conn, project_id, sel_run, scope_id, [
+        {"pss_id": str(classified_pss), "text_basis": "full_text"},
+        {"pss_id": str(unclassified_pss), "text_basis": "full_text"},
+    ])
+
+    summary, _ = _run(conn, project_id, scope_id, sel_run)
+    assert profile_counts(summary)["failed"] == 0
+
+    rows = {
+        row.project_source_snapshot_id: row.primary_evidence_type
+        for row in conn.execute(
+            select(source_extraction_record).where(
+                source_extraction_record.c.project_id == project_id
+            )
+        )
+    }
+    assert rows[classified_pss] == "RCTs and Quasi-Experimental Studies"
+    assert rows[unclassified_pss] == extract_prompt.UNCLASSIFIED_EVIDENCE_TYPE
+
+
+def test_evidence_type_provenance_null_on_pre_prompt_failure(conn: Connection) -> None:
+    """A pre-prompt basis failure (empty_basis) never attempts a backend call,
+    so its extraction record's primary_evidence_type stays NULL — never the
+    'Unclassified' sentinel, which would falsely claim a call was made."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    pss_id = _seed_abstract_doc(conn, project_id, title="Empty abstract doc", abstract="")
+    _seed_selection(conn, project_id, sel_run, scope_id,
+                    [{"pss_id": str(pss_id), "text_basis": "abstract_only"}])
+
+    summary, _ = _run(conn, project_id, scope_id, sel_run)
+    doc = profile_doc(summary)
+    assert doc["status"] == "extraction_failed"
+    assert doc["error"] == "empty_basis"
+
+    stored = conn.execute(
+        select(source_extraction_record.c.primary_evidence_type).where(
+            source_extraction_record.c.project_id == project_id
+        )
+    ).scalar_one()
+    assert stored is None
+
+
+def test_extraction_fingerprint_components_v3() -> None:
+    """The fingerprint's component map pins the v3 schema/field-rules names
+    and the live prompt version — pure, no DB."""
+    _fingerprint, components = extraction_fingerprint("stub")
+    assert components["profile"] == "eb_iof_base_v1"
+    assert components["schema"] == "iof_v3"
+    assert components["field_rules"] == "iof_rules_v3"
+    assert components["prompt"] == extract_prompt.PROMPT_VERSION
+
+
+def test_judge_payload_entry_key_set_excludes_effect_basis_and_study_geography() -> None:
+    """Vetter payload shape-snapshot (owner gate decision 2, task 020): the
+    payload deliberately does NOT carry ``effect_basis``/``study_geography``
+    even though the record itself does — self-label bias risk (the vetter's
+    verdict must not be swayed by a field it never itself judged). Pure,
+    no DB; pins the exact key set so a future ``IOFRecord`` field addition
+    can't silently leak into the judge payload."""
+    record = IOFRecord(
+        intervention="Coaching",
+        outcome="Test scores",
+        population=None,
+        setting=None,
+        comparator=None,
+        effect_direction="increase",
+        estimate_level="study",
+        study_design="RCT",
+        study_geography="England",
+        stratum_qualifiers=[IOFStratum(type="subgroup", value="Girls")],
+        statistics=IOFStatistics(),
+        causality_by_design=None,
+        effect_basis="observed",
+        is_primary=None,
+        is_prevalence_only=None,
+        anchors=[IOFAnchor(segment_id="seg-1", quote="scores rose")],
+    )
+
+    entry = _judge_payload_entry(0, record)
+
+    assert set(entry.keys()) == {
+        "index",
+        "intervention",
+        "outcome",
+        "effect_direction",
+        "estimate_level",
+        "stratum_qualifiers",
+        "quotes",
+    }

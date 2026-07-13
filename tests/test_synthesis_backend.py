@@ -76,11 +76,8 @@ def _finding_exchange() -> ToolExchange:
         "tool": "query_findings",
         "arguments": {},
         "result": {
-            "findings": [
-                {"finding_id": "finding-1"},
-                {"finding_id": "finding-2"},
-                {"finding_id": "finding-3"},
-            ]
+            "iof_findings": [{"finding_id": "finding-1"}, {"finding_id": "finding-2"}],
+            "icf_findings": [{"finding_id": "finding-3"}],
         },
     }
 

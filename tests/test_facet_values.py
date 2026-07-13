@@ -34,13 +34,15 @@ def finding(
     finding_id: str,
     facet_value: str | None,
     counterpart_value: str | None = None,
-    effect_direction: str = "increase",
+    effect_direction: str | None = "increase",
+    kind: str = "iof",
 ) -> FindingFacetView:
     return FindingFacetView(
         finding_id=finding_id,
         facet_value=facet_value,
         counterpart_value=counterpart_value,
         effect_direction=effect_direction,
+        kind=kind,
     )
 
 
@@ -374,6 +376,8 @@ def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() 
             "description": "School provision.",
             "member_values": ["Breakfast clubs"],
             "member_finding_ids": ["f4"],
+            "member_finding_kinds": ["iof"],
+            "member_counts": {"iof": 1, "icf": 0},
             "size": 1,
             "direction_spread": {
                 "increase": 0,
@@ -388,6 +392,8 @@ def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() 
             "description": "Housing interventions.",
             "member_values": ["Housing First"],
             "member_finding_ids": ["f1", "f2"],
+            "member_finding_kinds": ["iof", "iof"],
+            "member_counts": {"iof": 2, "icf": 0},
             "size": 2,
             "direction_spread": {
                 "increase": 1,
@@ -401,6 +407,8 @@ def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() 
     assert payload["ungrouped"] == {
         "values": ["Rapid rehousing"],
         "finding_ids": ["f3"],
+        "finding_kinds": ["iof"],
+        "member_counts": {"iof": 1, "icf": 0},
         "direction_spread": {
             "increase": 0,
             "decrease": 0,
@@ -411,6 +419,8 @@ def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() 
     }
     assert payload["no_value"] == {
         "finding_ids": ["f5", "f6"],
+        "finding_kinds": ["iof", "iof"],
+        "member_counts": {"iof": 2, "icf": 0},
         "direction_spread": {
             "increase": 0,
             "decrease": 0,
@@ -463,6 +473,33 @@ def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() 
         assert_grouping_invariants(
             dropped, finding_ids=[finding.finding_id for finding in findings]
         )
+
+
+def test_build_groups_payload_counts_kinds_and_spreads_iof_only() -> None:
+    findings = [
+        finding("iof-1", "Alpha", "Outcome", "increase", kind="iof"),
+        finding("icf-1", "Alpha", "Outcome", None, kind="icf"),
+        finding("icf-2", None, "Outcome", None, kind="icf"),
+    ]
+    values, no_value = extract_facet_values(findings)
+    payload = build_groups_payload(
+        findings,
+        values=values,
+        groups=[AcceptedGroup("Alpha", "Alpha members.", ("v1",))],
+        ungrouped_value_ids=set(),
+        no_value_finding_ids=no_value,
+    )
+
+    group = payload["groups"][0]
+    assert group["member_finding_ids"] == ["iof-1", "icf-1"]
+    assert group["member_finding_kinds"] == ["iof", "icf"]
+    assert group["member_counts"] == {"iof": 1, "icf": 1}
+    assert sum(group["direction_spread"].values()) == 1
+    assert payload["no_value"]["finding_ids"] == ["icf-2"]
+    assert payload["no_value"]["finding_kinds"] == ["icf"]
+    assert payload["no_value"]["member_counts"] == {"iof": 0, "icf": 1}
+    assert payload["no_value"]["direction_spread"] == dict.fromkeys(EFFECT_DIRECTIONS, 0)
+    assert_grouping_invariants(payload, finding_ids=[finding.finding_id for finding in findings])
 
 
 def test_direction_spread_keys_come_from_the_schema_tuple_not_hardcoded_strings() -> None:

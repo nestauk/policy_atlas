@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — twenty-six tables, fourteen alembic migrations.
+"""SQLAlchemy Core table metadata — twenty-seven tables, fifteen alembic migrations.
 
 No deferred columns (no block/artefact summary, no same_content_as, no lineage key).
 """
@@ -271,7 +271,14 @@ source_screening_result = Table(
         unique=True,
         postgresql_where=text("status != 'failed'"),
     ),
-    CheckConstraint("status IN ('relevant', 'not_relevant', 'failed')", name="ck_ssr_status"),
+    # 'excluded_retracted' (task 019 Phase D, owner decision): a retracted
+    # document (OpenAlex is_retracted) is excluded at screening as policy, a
+    # distinct terminal status never conflated with a 'not_relevant'
+    # relevance verdict.
+    CheckConstraint(
+        "status IN ('relevant', 'not_relevant', 'failed', 'excluded_retracted')",
+        name="ck_ssr_status",
+    ),
     CheckConstraint(
         "screen_basis IS NULL"
         " OR screen_basis IN ('title_abstract', 'title_only', 'full_text')",
@@ -428,9 +435,15 @@ search_coverage_record = Table(
     # Task 015 widened the vocabulary with the deep loop's stops (short_circuit =
     # discovery-rate collapse within one run; budget_exhausted covers every budget
     # incl. the round cap; target_reached = confident-relevant target met).
+    # Task 019 Phase D widened it again with the honest stop-grain pair: 'completed'
+    # (a clean, unforced completion — acquire's new default, replacing the old
+    # breadth_truncated default) and 'wall_clock_exceeded' (the rapid/standard
+    # fan-out's own wall-clock breach). 'breadth_truncated' is retained in the
+    # vocabulary for historical rows only — acquire no longer writes it.
     CheckConstraint(
         "stop_condition IN ('breadth_truncated', 're_searched_still_thin', 'error',"
-        " 'short_circuit', 'budget_exhausted', 'target_reached')",
+        " 'short_circuit', 'budget_exhausted', 'target_reached', 'completed',"
+        " 'wall_clock_exceeded')",
         name="ck_scov_stop_condition",
     ),
     CheckConstraint(
@@ -594,6 +607,7 @@ DIRECTIVE_STRING_MAX = 200
 EXTRACTION_STATUSES: tuple[str, ...] = ("extracted", "no_findings", "extraction_failed")
 EXTRACTION_BASES: tuple[str, ...] = ("full_text", "abstract_only")
 EFFECT_DIRECTIONS: tuple[str, ...] = ("increase", "decrease", "no_effect", "mixed", "unclear")
+EFFECT_BASES: tuple[str, ...] = ("observed", "modelled")
 ESTIMATE_LEVELS: tuple[str, ...] = ("study", "pooled", "claim")
 CAUSALITY_BY_DESIGN: tuple[str, ...] = (
     "attributable",
@@ -601,12 +615,35 @@ CAUSALITY_BY_DESIGN: tuple[str, ...] = (
     "associational",
     "descriptive",
 )
+CONTEXT_TYPES: tuple[str, ...] = (
+    "mechanism",
+    "barrier",
+    "enabler",
+    "implementation_condition",
+    "delivery_process",
+    "adaptation",
+    "fidelity",
+)
+CLAIM_LEVELS: tuple[str, ...] = ("study", "pooled")
+CLAIM_BASES: tuple[str, ...] = ("studied", "author_assertion", "cited_theory")
+CONTEXT_LEVELS: tuple[str, ...] = ("system", "organisation", "provider", "recipient")
 
 _EXTRACTION_STATUSES_SQL = ", ".join(f"'{s}'" for s in EXTRACTION_STATUSES)
 _EXTRACTION_BASES_SQL = ", ".join(f"'{b}'" for b in EXTRACTION_BASES)
 _EFFECT_DIRECTIONS_SQL = ", ".join(f"'{d}'" for d in EFFECT_DIRECTIONS)
+_EFFECT_BASES_SQL = ", ".join(f"'{b}'" for b in EFFECT_BASES)
 _ESTIMATE_LEVELS_SQL = ", ".join(f"'{lv}'" for lv in ESTIMATE_LEVELS)
 _CAUSALITY_SQL = ", ".join(f"'{c}'" for c in CAUSALITY_BY_DESIGN)
+_CONTEXT_TYPES_SQL = ", ".join(f"'{t}'" for t in CONTEXT_TYPES)
+_CLAIM_LEVELS_SQL = ", ".join(f"'{lv}'" for lv in CLAIM_LEVELS)
+_CLAIM_BASES_SQL = ", ".join(f"'{b}'" for b in CLAIM_BASES)
+_CONTEXT_LEVELS_SQL = ", ".join(f"'{lv}'" for lv in CONTEXT_LEVELS)
+# Keep this schema literal in sync with extract_prompt.UNCLASSIFIED_EVIDENCE_TYPE;
+# schema.py deliberately does not import prompt modules.
+_SER_UNCLASSIFIED_EVIDENCE_TYPE = "Unclassified"
+_SER_EVIDENCE_TYPES_SQL_LIST = ", ".join(
+    f"'{t}'" for t in (*EVIDENCE_TYPES, _SER_UNCLASSIFIED_EVIDENCE_TYPE)
+)
 
 # The two memo (success) states — a failed attempt inserts freely as attempt
 # history and never satisfies or blocks the memo lookup (contract rev 1.5).
@@ -631,6 +668,10 @@ source_extraction_record = Table(
     Column("extraction_fingerprint", Text, nullable=False),
     Column("status", Text, nullable=False),
     Column("basis", Text, nullable=False),
+    # Extraction-call provenance: the evidence type actually sent to the prompt.
+    # NULL means no prompt call was attempted; consumers keep reading the live
+    # classification, and the two values may legitimately diverge.
+    Column("primary_evidence_type", Text, nullable=True),
     Column("error", Text, nullable=True),  # reason-coded on failure
     Column("finding_count", Integer, nullable=False, server_default="0"),
     Column("run_id", UUID(as_uuid=True), nullable=False),  # creating run; assertion provenance
@@ -664,6 +705,11 @@ source_extraction_record = Table(
     ),
     CheckConstraint(f"status IN ({_EXTRACTION_STATUSES_SQL})", name="ck_ser_status"),
     CheckConstraint(f"basis IN ({_EXTRACTION_BASES_SQL})", name="ck_ser_basis"),
+    CheckConstraint(
+        f"primary_evidence_type IS NULL OR primary_evidence_type IN "
+        f"({_SER_EVIDENCE_TYPES_SQL_LIST})",
+        name="ck_ser_evidence_type",
+    ),
     # Failure is never silent: failed ⟺ reason-coded (the pss full-text precedent).
     CheckConstraint(
         "(status = 'extraction_failed') = (error IS NOT NULL)",
@@ -681,15 +727,18 @@ intervention_outcome_finding = Table(
     Column("intervention", Text, nullable=False),
     Column("outcome", Text, nullable=False),  # base measure only; qualifiers are stratum
     Column("population", Text, nullable=True),
+    Column("setting", Text, nullable=True),
     Column("comparator", Text, nullable=True),
     Column("effect_direction", Text, nullable=False),  # a reported null result is a finding
     Column("estimate_level", Text, nullable=True),
     Column("study_design", Text, nullable=True),
+    Column("study_geography", Text, nullable=True),
     # Canonical sorted array of {type, value}; closed type vocabulary (contract rev 1.5).
     Column("stratum_qualifiers", JSONB, nullable=False),
     # Reported values only: effect size + type, CI/SE, p-value, N, k, I², τ².
     Column("statistics", JSONB, nullable=False),
     Column("causality_by_design", Text, nullable=True),
+    Column("effect_basis", Text, nullable=True),
     Column("is_primary", Boolean, nullable=True),
     Column("is_prevalence_only", Boolean, nullable=True),
     # Per absent nullable field: not_extracted | unclear | not_applicable.
@@ -715,9 +764,64 @@ intervention_outcome_finding = Table(
         f"causality_by_design IS NULL OR causality_by_design IN ({_CAUSALITY_SQL})",
         name="ck_iof_causality",
     ),
+    CheckConstraint(
+        f"effect_basis IS NULL OR effect_basis IN ({_EFFECT_BASES_SQL})",
+        name="ck_iof_effect_basis",
+    ),
     CheckConstraint("jsonb_typeof(stratum_qualifiers) = 'array'", name="ck_iof_strata_array"),
     CheckConstraint("jsonb_typeof(grounding) = 'array'", name="ck_iof_grounding_array"),
     Index("ix_iof_record", "extraction_record_id"),
+)
+
+implementation_context_finding = Table(
+    "implementation_context_finding",
+    metadata,
+    Column("finding_id", UUID(as_uuid=True), primary_key=True),
+    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("extraction_record_id", UUID(as_uuid=True), nullable=False),
+    # One implementation-context claim about a named intervention, grounded in one source.
+    Column("context_type", Text, nullable=False),
+    Column("claim", Text, nullable=False),
+    # Source-named references — shared meaning with IOF; requiredness is per schema.
+    Column("intervention", Text, nullable=False),
+    Column("outcome", Text, nullable=True),
+    Column("population", Text, nullable=True),
+    Column("setting", Text, nullable=True),
+    Column("study_geography", Text, nullable=True),
+    Column("study_design", Text, nullable=True),
+    Column("claim_level", Text, nullable=True),
+    Column("claim_basis", Text, nullable=True),
+    Column("level", Text, nullable=True),
+    Column("resource_requirements", Text, nullable=True),
+    Column("workforce_requirements", Text, nullable=True),
+    # Per absent nullable field: not_extracted.
+    Column("field_coverage", JSONB, nullable=False),
+    # Anchors: same qv_v1 grounding payload shape as IOF.
+    Column("grounding", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    ForeignKeyConstraint(
+        ["extraction_record_id", "project_id"],
+        [
+            "source_extraction_record.extraction_record_id",
+            "source_extraction_record.project_id",
+        ],
+        name="fk_icf_record_project",
+    ),
+    CheckConstraint(f"context_type IN ({_CONTEXT_TYPES_SQL})", name="ck_icf_context_type"),
+    CheckConstraint(
+        f"claim_level IS NULL OR claim_level IN ({_CLAIM_LEVELS_SQL})",
+        name="ck_icf_claim_level",
+    ),
+    CheckConstraint(
+        f"claim_basis IS NULL OR claim_basis IN ({_CLAIM_BASES_SQL})",
+        name="ck_icf_claim_basis",
+    ),
+    CheckConstraint(
+        f"level IS NULL OR level IN ({_CONTEXT_LEVELS_SQL})",
+        name="ck_icf_level",
+    ),
+    CheckConstraint("jsonb_typeof(grounding) = 'array'", name="ck_icf_grounding_array"),
+    Index("ix_icf_record", "extraction_record_id"),
 )
 
 extraction_result = Table(

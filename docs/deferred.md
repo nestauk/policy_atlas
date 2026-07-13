@@ -137,11 +137,93 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   level; thin landing-page text reported `ok`) are structurally closed (reason-coded
   `full_text_status`/`full_text_error`, thin-text guard). Snapshot identity resolved as a
   **new immutable `full_text` snapshot linked at the project-source link** (ADR 0003).
-- **`implementation_context_finding`** — the second reusable finding schema (mechanisms, barriers,
-  implementation conditions); cross-schema linkage is reference-mediated via `group`. Extract-side
-  note (task 011): V2's CFIR implementation-profile field definitions (cost/staffing/complexity +
-  the inner-setting rule) are recorded design input for this schema; no field of it entered
-  `intervention_outcome_finding`.
+- **`implementation_context_finding` — DISCHARGED (task 021, ADR 0017).** The second
+  reusable finding schema (mechanisms, barriers, implementation conditions) shipped:
+  the `implementation_context_finding` table + `eb_icf_base_v1` extraction profile (own
+  fingerprint domain — never invalidates IOF memos), `extract_icf_v1` + the ICF vetter, the
+  unified kind-typed `query_findings` read surface, and the `icf_context_type_count`
+  deterministic pattern validator — EB synthesis's first-reader payoff realised, per the
+  posture pinned at the 020 gate. Eval slice ground truth (with/without-ICF composition
+  comparison) is unstarted — this slice was deliberately eval-blind. Extract-side design
+  input from task 011 (V2's CFIR implementation-profile field definitions:
+  cost/staffing/complexity + the inner-setting rule) is folded into the shipped field set —
+  `resource_requirements` / `workforce_requirements` / the inner-setting rule on `setting`;
+  `complexity` did not carry (a judgment scale, not source-groundable — the recorded
+  anti-pattern). Narrowed seams left open by this slice (contract item 10):
+  - **ICF facet grouping** (grouping BY `context_type` — barrier/mechanism/condition) —
+    awaits **Slice C's multi-facet redesign**; task 021 only widened `group`'s membership
+    reach to span both schemas via shared references, never its facet shape.
+  - **Dimension-promotion for ICF fields** — hybrid-indexing any ICF dimension is gated on
+    the same **observed-query-behaviour** promotion gate as IOF's dimensions
+    (data-model.md), not shipped by schema existence alone.
+  - **Downstream capability consumers** — Options Assessment / Impact / Transferability /
+    Value for Money read ICF records later; EB synthesis is the reader now.
+  - **Cross-kind UNION reference view** — the shared-vocabulary read surface over both
+    finding tables (item 1's design payoff); a **Slice C** seam, first reader = Slice C's
+    cross-schema grouping.
+  - **Hybrid dimension search over finding reference values** — the data-model's committed
+    intervention/outcome dimension indexing, with ICF's source-named reference values riding
+    the same index target as co-riders (shared vocabulary = shared index target, free by
+    construction); build-or-defer decided on the **Slice C contract agenda**, alongside the
+    writer's retrieval-surface rework, while pre-eval sequencing still holds.
+  - **The schema-candidate ladder** (owner adjudication, 2026-07-12, task 021 contract
+    review): the generic findings container and runtime intent-shaped custom extraction
+    REMAIN declined (the task-011 rulings hold — typed records are what deterministic
+    validation, ground truth, memo reuse and cross-question interpretability rest on; the
+    long tail is served by verified chunk-grounded synthesis, ADR 0010); named candidates
+    `reported_statistic` and `case_example` (V2 question-taxonomy categories 4 + 6), **first
+    reader = the Baseline analysis / problem-identification capability** (quantitative +
+    qualitative — its qualitative half may name a further kind, e.g. a `reported_problem`;
+    the candidate list is open, not exhaustive); trigger = Baseline's contract committing
+    the extraction profile, with per-category eval evidence (the eval intent set keeps
+    categories 4/6 in and scores chunk-grounded synthesis on them) as the demonstration;
+    sequencing note — **additive schemas never invalidate eval baselines** (no existing
+    record shape or ground truth changes; a new kind is a new eval arm, the with/without-ICF
+    axis pattern repeated), so these land with Baseline post-eval, no pre-eval promotion
+    pressure. Schema design stays with the committing capability's contract (the IOF
+    precedent). Research-review additions (owner, 2026-07-12): **`intervention_specification`**
+    joins the candidate list (TIDieR-shaped delivery facets — dose/mode/provider/training;
+    the most demanded AND most under-reported cluster, 39% adequacy; first readers
+    Transferability + Options Assessment — a specification record, not a context claim,
+    hence not ICF bloat).
+  - **Companion-document retrieval seam** for the future Transferability capability:
+    process evaluations publish separately from their trial results 76% of the time, median
+    15.5 months later — the capability's acquire step should hunt companion process
+    evaluations. ICF's nullable-outcome + reference-mediated design already absorbs findings
+    arriving in different documents than their effects.
+  - **ICF-only extraction composition** — unsupported this slice (`extract_profiles` must
+    include `iof`; ICF-only is not expressible), noted at the Phase D directive validator.
+  - **Two-profile extraction parallelism** (021 review stack, efficiency lane): profile
+    bundles run strictly sequentially — IOF's whole window batch completes before ICF's
+    starts (~2× extract wall-clock on both-profile runs). Real but non-trivial: both
+    profiles share one SQLAlchemy `Connection` for memo reads/roll-up writes, so
+    parallelising needs a second connection or memo/write phases restructured out of the
+    parallel region. Revisit when extract wall-clock matters (eval-slice cost axis input).
+  - **`claim_basis` coverage cannot distinguish "indeterminate after reading" from
+    "not attempted"** (021 review stack, Codex adversarial): the prompt instructs
+    `null if indeterminate` but every nullable-enum null lands as `not_extracted` — a
+    coverage-vocabulary refinement (e.g. an `indeterminate` marker) for the eval slice /
+    schema-candidate ladder, decided against ground truth, not speculatively.
+  - **Planner two-profile narrowing decidability** (021 review stack, Codex adversarial):
+    an over-narrow planner (`extract_profiles=["iof"]` on an ordinary "what works" ask)
+    silently drops the ICF pass — the compile only rejects ICF-only. The eval slice's
+    intent set should probe narrowing behaviour across phrasings before any tightening of
+    the planner prompt.
+  - **Model-output control-character scrubbing** (021 security lane, LOW): extraction and
+    vetter output is NUL-scrubbed only, while directive strings get
+    `has_control_character`; a document's ANSI escapes copied verbatim into a claim ride
+    into DB rows and operator surfaces. Defense-in-depth: extend the backend-boundary
+    scrub to C0/C1 controls (except `\n`/`\t`) — note `prompt_fields.scrub_nul` and
+    `extract._scrub_nul` are parallel implementations to change together.
+  The formerly-mooted **per-schema-writer-tools seam is pre-discharged by gate decision 6**:
+  the unified kind-typed `query_findings` IS the schema-typed query interface — a future
+  third schema adds a kind section + filters (content work), not a new tool. **Cost note
+  (021 review stack, three lanes convergent):** the ICF build cloned IOF plumbing rather
+  than generalising it — backends, vetter scaffolding, dedup loops, and per-kind literals
+  in group/facet_values/synthesis_tools/synthesise (19 verified cleanup/altitude
+  candidates). Deliberate for two kinds; the third schema's slice should budget a
+  consolidation pass (profile registry / shared judge scaffolding) rather than a third
+  hand-written copy.
 - **Saturation-based search stopping** — `saturated` is still not a
   `search_coverage_record` stop value (kept out by migration 15's widening, task 015):
   within-run discovery-RATE collapse now stops honestly as `short_circuit`, but
@@ -220,31 +302,26 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   Screen reads `abstract_source` and (015) `title_source`; classify consumes property
   priors (`record_type`, source typing, `indexed_in`, `title_source`) plus the tag layer
   as its uniform label-prior surface (`{tag, tag_type, asserted_by}` visible — ADR 0012
-  decision 8; OpenAlex keywords deliberately exited the prompt). Still open:
-  `is_retracted` retained-but-unread — a 018-gate proposal to surface it in the writer
-  envelope was **struck (user, 2026-07-10): its likely home is earlier in the pipeline,
-  probably screening** (a retracted document arguably should not screen in at all) —
-  that is an eligibility change with flag-not-drop implications, so it needs its own
-  gate when taken up; the appraisal-second-pass visible-flag reading also remains open.
-  Non-English handling beyond English-first title selection still open.
+  decision 8; OpenAlex keywords deliberately exited the prompt). `is_retracted`
+  retained-but-unread — **DISCHARGED (task 019):** retracted docs exclude at
+  stage-1 screening as the distinct `excluded_retracted` status (owner decision
+  2; visible, attributed, never conflated with relevance). Still open: the
+  appraisal-second-pass visible-flag reading, and non-English handling beyond
+  English-first title selection.
 
 ## Live search / depth-graded loop (task 015 seams)
 
-- **Country filter allowlists + deterministic country-group expansion (owner,
-  2026-07-11, 018 review conversation)** — current validation is shape-only:
-  OpenAlex `author_affiliation_countries` accepts any 2-letter alpha pair (`XX`
-  passes; the provider then silently returns nothing) and Overton
-  `publisher_country` accepts near-arbitrary text with the display-name hazard
-  recorded (silent zero on ISO codes / "United Kingdom"). Upgrade both to
-  fail-closed allowlists: a static ISO-3166 set for OpenAlex; a probed
-  display-name list for Overton. Then the real user vocabulary — groupings
-  ("OECD countries", "G7"/"G20", "EU"/"Europe", "developing") — via
-  deterministic membership tables compiled in the grammar: the planner emits a
-  group token, compile expands it from a static provenance-stamped table, NEVER
-  the LLM listing members inline. "Developing" needs a pinned definition (e.g.
-  World Bank income groups) or an honest planner decline. Touches grammar +
-  both wire mappings + the planner capability line (prompt-bearing half is
-  lead-only, replay-evidenced).
+- **Country filter allowlists + deterministic country-group expansion —
+  DISCHARGED (task 019).** Fail-closed ISO-3166 + probed Overton
+  display-name allowlists (186 names, probe 2026-07-12); Tier-1 pinned
+  provenance-stamped group tables (OECD members/G7/G20/EU27/EEA + M49
+  continentals Europe/North America/Oceania, UK∈Europe); Tier-2
+  planner-proposed explicit lists persisted as `{label, countries,
+  authorship}`; Overton multi-country = deterministic post-filter + deeper
+  pagination with exclusion counts on coverage (owner decision 5); planner_v3
+  capability line. Note what did NOT ship: "developing"-specific support
+  (`is_global_south` DROPPED, owner de-scope) — see the filter-vocabulary
+  growth entry below.
 
 Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
@@ -268,10 +345,17 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   name→id resolution; Overton `source_region` `_:` code mapping table; COFOG
   classifications reference table; Overton open-vocabulary `topics`/`document_type` once
   token lists are pinnable. (Live scale note: Overton's publisher tag layer runs ~29
-  tags/record — bounds sized on fixtures now genuinely bind.)
-- **Caching (cache-before-throttle)** — declined at plan; live 429s arrive in bursts right
-  after a fan-out (observed: OpenAlex rate-limited the immediately-following run in the
-  same process), so a response cache pays for itself before a smarter throttle does.
+  tags/record — bounds sized on fixtures now genuinely bind.) **Country-group seams
+  left out at task 019 (contract item 3c):** `Very high human development`
+  (a candidate Tier-1 group, not built); `APAC` (not continental,
+  definitionally fuzzy); V2-style exclusion groups ("All but UK", untested).
+  Also parked: OpenAlex `authorships.institutions.is_global_south:true`
+  exists as a one-boolean native option (probed 2026-07-12, 40.8M works) if
+  "developing"-shaped groups are ever wanted.
+- **Caching (cache-before-throttle) — DISCHARGED (task 019).** In-process
+  TTL+LRU response cache keyed by full non-credential request params, checked
+  before the rate limiter, 2xx-only, env-tunable
+  (`POLICY_ATLAS_SEARCH_CACHE_TTL_S`).
 - **Citation-floor knob** — no citation floor is the recall-first default (decision 12,
   user-approved); a steerable floor, if ever wanted, is a directive knob — never a silent
   transport filter (the V2 lesson).
@@ -283,18 +367,22 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   table is the extensible compile target. Two 015 observations join this seam: whether the
   user-facing "deep ≈ 2–3 min" should include the round-1 rapid-leg screening (a full live
   episode ran 343 s end-to-end while the loop driver honoured its 150 s budget), and the
-  **coverage-record stop-condition grain** (review stack, three lanes convergent): a clean
-  rapid completion and a wall-clock breach both persist `breadth_truncated`, and the
-  deep-thin overlay hides the raw stop value — the per-round facts live only in
-  events/logs; a richer stop/attribution vocabulary is a one-line CHECK migration cousin.
+  **coverage-record stop-condition grain — DISCHARGED (task 019).** Migration
+  `921d3a781f3f` widens the stop-value vocabulary: clean completion now records
+  `completed`, a rapid wall-clock breach records `wall_clock_exceeded`;
+  `breadth_truncated` is retained for historical rows only. The deep-path
+  vocabulary is unchanged.
 - **Rev-3.10 loop seams** — calibrated recall estimate (Chao capture-recapture /
   Undermind exponential-saturation fit → a user-facing "estimated % of relevant found" on
   the coverage record); sliding-window Thompson-sampling arm allocation (eval-gated, must
   beat round-robin); RCS-style abstract compression before screen (only if screen tokens
   bind the wall-clock); best-of-N query selection.
-- **Study-geography extraction field** (rev 3.2, user) — no search API supplies study
-  geography; an extraction-schema gate joining the 010 selection-diversity seam,
-  characterise's post-extraction coverage dimensions and the Transferability capability.
+- **Study-geography extraction field** (rev 3.2, user) — **field + render surfaces
+  landed (task 020, ADR 0016):** `study_geography` is a source-named, finding-grain
+  string (`iof_v2`/`extract_iof_v6`), null when unreported, never inferred from
+  publisher/venue/affiliation. Still open: the 010 selection-diversity consumer,
+  characterise's post-extraction coverage dimensions, the Transferability capability,
+  and canonicalisation/ISO-mapping (raw source-named strings today, no normalisation).
 - **Eval-reuse pointers** (the eval slice's search seed): PaperFindingBench zero-adapter
   first run · the parity-tested `metrics.py` recall@k_est port · SYNERGY true-recall ·
   CODEC policy topics · the Campbell/3ie/EPPI "unzip" golden-dataset build · the
@@ -305,10 +393,11 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   the screen's relevance-judge quality before trusting loop-steered "adequate" — ADR 0012
   names this the loop's single biggest un-eval'd dependency) · suggest-arm live yield
   (0 proposals in the one live deep run; machinery scripted-test-covered).
-- **Review-stack cleanup candidates** (015 step 7, recorded not ridden): collapse
-  `acquire_sources`' legacy no-executed-calls branch into the executed-calls path; unify
-  the two wire-validator families in `search_loop.py` when the filter grammar next grows;
-  hoist the duplicated `oa_record`/scripted-generation test doubles into `tests/helpers.py`.
+- **Review-stack cleanup candidates — DISCHARGED (task 019, items 10a/10c/10d).**
+  `acquire_sources`' legacy no-executed-calls branch collapsed into the
+  executed-calls path; the two wire-validator families in `search_loop.py`
+  unified; the duplicated `oa_record`/scripted-generation test doubles hoisted
+  into `tests/helpers.py`.
 
 ## Full-text ingestion (task 008 seams)
 
@@ -440,17 +529,13 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Characterise / embeddings / telemetry (task 009 seams)
 
-- **Langfuse trace grouping — "group as much as possible" (owner direction,
-  2026-07-11, 018 review conversation)** — per-doc/window LLM calls made inside
-  `ThreadPoolExecutor` workers (extract windows, screening fan-outs) mint DETACHED
-  root traces because the Langfuse context does not propagate into threads — the
-  009-recorded wart, now user-visible next to properly-nested calls (the finding
-  vetter nests under `run:extract:{run_id}` precisely because it runs sequentially
-  on the main thread). Fix: propagate the component-span context into submitted
-  workers (explicit parent trace/span id in the closure, or a per-worker context
-  manager) so per-doc generations nest under the component root. Second half:
-  planner turns are deliberately separate traces (B2 record), session-correlated —
-  consider one conversation-root trace per orchestrate process with turn spans, or
+- **Langfuse trace grouping — first half DISCHARGED (task 019).**
+  `contextvars.copy_context` propagation via `tracing.submit_with_context` on
+  every traced/LLM executor fan-out closes the per-doc/window DETACHED-root-trace
+  wart (extract windows, screening fan-outs now nest under the component root
+  instead of minting separate traces). Second half stays open: planner turns
+  are deliberately separate traces (B2 record), session-correlated — consider
+  one conversation-root trace per orchestrate process with turn spans, or
   accept the session view as the grouping. Bounded telemetry rider; the
   capability-run entity seam (§ Select) remains the structural home.
 
@@ -471,21 +556,20 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   storage migration, and the chunk-volume-bias controls (per-doc caps / MMR /
   doc-grain grouping, 008 entry). Also at this seam: **judge-envelope widening +
   re-gather repair** (the repair alternative that re-gathers targeted evidence needs
-  `retrieve`; v1 repair is reword-down over already-gathered evidence only), and
-  **`_load_findings` batch loading** (013 review stack: one basis query per distinct
-  source snapshot — a confirmed N+1, harmless at v1 corpus scale, batch it when
-  corpus-scale work lands here).
+  `retrieve`; v1 repair is reword-down over already-gathered evidence only).
+  **`_load_findings` batch loading — DISCHARGED (task 020).** The per-snapshot N+1
+  basis-query loop (013 review stack) is now one batched `IN (...)` query; the
+  surrounding corpus-scale retrieval seams above remain open.
 - **Contextual retrieval, late chunking, exact-token budgeting, semantic re-chunking** —
   retrieval-eval seams on the embedding-unit layer (contract decision 2, rev-8 research).
   The unit policy is versioned (`embedding_unit_policy_v1`) so any of these lands as a new
   co-existing policy, not a rewrite.
-- **Embed-pass live robustness** — fixture-scale is single-batch; pre-registered for real
-  corpora: rate-limit backoff under real 429s (the SDK retries transient failures at
-  `max_retries=2`, so the HTTP ceiling is (1+retries)× the logical call budget — comment at
-  the client seam), batch-failure isolation granularity (one bad unit currently fails every
-  chunk sharing its 128-unit API batch — transient over-reporting only, failed chunks
-  re-embed next pass; split-on-failure lands here), and concurrent multi-batch behaviour at
-  n ≫ batch (review adjudication, 2026-07-06).
+- **Embed-pass live robustness — DISCHARGED (task 019)** for the two
+  pre-registered items: explicit 429 backoff outside the SDK's own retries,
+  and recursive split-on-failure isolation (one poisoned unit now fails only
+  its own chunk, not every chunk sharing its API batch). Remaining open
+  residual: concurrent multi-batch behaviour at n ≫ batch (review adjudication,
+  2026-07-06).
 - **Very-large-corpus grouping** — discovery currently reads all titles+abstracts in one
   call; the scale seam is discovery-sampling and/or embedding-based clustering over the
   landed chunk vectors (contract decision 4). Assignment already scales (batched,
@@ -493,10 +577,10 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   the first component to wobble when inputs got real):** a 206-doc corpus produced an
   `APITimeoutError` batch failure and an 85-doc corpus a double `InvalidDiscoveryOutput`
   rejection before a ~60-doc pass succeeded; retry caps and batch sizes are eval-slice
-  calibration targets. Compounding gap (015 review, the 013 corollary):
-  `_discover_themes` discards the validator's rejection detail — only `error_type`
-  reaches the logs, so the rejection *reason* is diagnosable solely from Langfuse traces;
-  persist/log `str(exc)` when this component is next touched.
+  calibration targets. Compounding gap — DISCHARGED (task 019): `str(exc)`,
+  truncated to 500 chars, is now carried in logs and failure records on both
+  the discovery and assignment paths (previously only `error_type` reached
+  the logs).
 - **Grouping-quality + adversarial-content evals** — theme quality is *not* asserted by
   the build (sanitized fixture corpora make it meaningless by construction); the eval seam
   owns: quality bars, adversarial/injection-shaped corpora beyond the shipped unit tests,
@@ -621,34 +705,45 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   cluster-approximated and properly post-extraction.
 - **Second `select` strategies** — Transferability dependency-scoping et al. (other
   capabilities' problem); the strategy registry validates exactly the two built-ins.
-- **Suite-wide socket deny** (010 security-lane note) — per-test socket-deny helpers now
-  exist three times (008/009/010 patterns); `pytest-socket` (deny by default, allowlist
-  the DB host) is the structural defense-in-depth upgrade.
+- **Suite-wide socket deny — DISCHARGED (task 019).** `pytest-socket` 0.8.0
+  deny-by-default with a loopback allowlist in `pyproject.toml` `addopts`;
+  per-test deny patterns retired. The 016 worker-process guard is deliberately
+  kept alongside it — `pytest-socket` is in-process only.
 
 ## Extract / findings layer (task 011 seams)
 
-- **Modelled vs observed effect basis at the finding grain (owner, 2026-07-11, 018
-  review conversation)** — the IOF schema cannot cleanly separate a modelled/projected
-  effect from an observed one: `causality_by_design` folds modelling into
-  `descriptive` (alongside observed descriptive statistics), and `study_design` is
-  free text, null-when-unreported (61/122 not_extracted on the step-9 replay). The
-  vetter correctly keeps modelled RESULTS (targets are flagged as aspirations), and
-  the writer narrates "projected" when the quote makes it obvious — but nothing
-  structured lets a surface render "this is a projection, not something that
-  happened". Candidate: a new `effect_basis` enum (`observed` | `modelled`, null
-  if indeterminate) on the IOF wire + row — a ⚠️ schema-gate item needing its own
-  contract approval, plus extraction-prompt guidance (lead, replay-evidenced), the
-  writer-envelope field (terse-adjacent), and annotation-layer rendering. Extending
-  the `causality_by_design` vocabulary instead was considered and disliked: causal
-  identification and evidence basis are different dimensions (a model calibrated on
-  RCTs is still modelled).
-- **Finding-vetter per-doc calls run sequentially (018 review stack, efficiency lane;
-  component renamed from "junk judge" at 018 step 9, owner call)** —
-  `_apply_finding_vetter` loops one live mini call per extracted doc right after
-  `_run_windows`' 4-wide `ThreadPoolExecutor` fan-out of the same kind of call.
-  Bounded today (~10–25 docs, mini-tier, seconds each); parallelize with the existing
-  executor pattern (plus a thread-safe usage accumulation story) if D-phase timing
-  shows extract wall-clock matters.
+- **Modelled vs observed effect basis at the finding grain — DISCHARGED (task 020,
+  ADR 0016).** `effect_basis` enum (`observed` | `modelled`, null if indeterminate)
+  landed on the IOF wire + row + `iof_rules_v2` coverage, its own dimension (never
+  folded into `causality_by_design` — causal identification and evidence basis are
+  different axes). Lands in the writer envelope (terse-adjacent) and is reachable at
+  the annotation layer via resolve-via-row (not embedded — owner call, purely additive
+  later). `extract_iof_v6` carries extraction guidance; `extract_finding_vetter_v3`
+  gains one guidance line so modelled/projected results aren't mis-flagged as
+  aspirations (payload itself unchanged — self-label bias risk). No backfill; v1 rows
+  stay null (`field_coverage` key-absence reads as "not recorded under v1", distinct
+  from a genuine v2 null). One candidate deliberately NOT riding, entered as its own
+  seam below.
+- **`effect_basis` as a judge-envelope candidate (task 020 sweep).** The grounding
+  judge seeing the structured basis signal — prose asserting an effect while citing a
+  modelled projection is a faithfulness question the judge cannot see today. Any
+  judge-envelope change is bound by 018's verification-grade A/B protocol (replay the
+  same claim set through both envelopes, hand-inspect every flipped verdict); it lands
+  at the C/eval gate, never silently.
+- **Length bound on free-text finding fields (task 020 security lane, LOW).** No cap
+  exists between model output and storage on the finding free-text class
+  (`study_geography`, and pre-existing `intervention`/`outcome`/`study_design`/
+  `comparator`/`population`) — all prompt-feeding columns re-serialized into every
+  downstream synthesis seed and `query_findings` result, so a hostile document can
+  induce prompt bloat / cost amplification (not breakout — carriage is JSON-fenced
+  throughout). One bound applied in `validate_record` (coerce-with-coverage-marker,
+  `DIRECTIVE_STRING_MAX = 200` precedent in `schema.py`) covers the whole class.
+  Practical exposure is limited today (schema-constrained structured output + the
+  document's own influence bound size); a `iof_rules` version bump when picked up.
+- **Finding-vetter per-doc calls run sequentially — DISCHARGED (task 019).**
+  Parallelized on the extract executor width with context propagation; workers
+  judge, the parent applies in input order; usage is accumulated in the
+  submitting thread.
 
 - **The extraction service + evidence dataset snapshots** — profile resolution against
   existing records, per-source task objects, capability commits declaring extraction
@@ -714,10 +809,12 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Hybrid-indexing of `intervention`/`outcome`** — committed for v3.0; the mechanism is
   the `retrieve` adapter's second index target and lands with `retrieve`. Columns are
   filterable now.
-- **Mixed/unclear findings are first-class — requirement carried forward** — V2 extracted
-  `mixed`/`unclear` effect directions and then aggregation silently zeroed them;
-  flag-not-drop must survive the whole deep chain: `group` and `synthesise` must carry
-  these findings, never discard them at aggregation.
+- **Mixed/unclear findings are first-class — requirement carried forward; test-pinned
+  (task 020).** V2 extracted `mixed`/`unclear` effect directions and then aggregation
+  silently zeroed them; flag-not-drop must survive the whole deep chain: `group` and
+  `synthesise` must carry these findings, never discard them at aggregation. Tests now
+  pin this behaviour end-to-end across the chain — already-correct, no drop existed to
+  fix.
 - **Intra-run shared-basis-snapshot memo** — two selected docs whose basis resolves to the
   *same* content-keyed snapshot (identical full text dedup'd across docs) would both
   fresh-extract and collide on the memo key (IntegrityError → honest loud failure).
@@ -729,26 +826,25 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   second fails loudly on `uq_ser_memo` — wasted spend, never corruption; a single-writer
   operating model makes this a non-path today.
 - **Evidence type is prompt input but not a memo/record key component** (011 review,
-  Codex) — `primary_evidence_type` conditions the extraction prompt, yet the memo keys on
-  (project, basis snapshot, fingerprint) only and the record does not store the evidence
-  type used. Unreachable today: classification is insert-once per (scope, doc) and the
-  skeleton orders classify before extract — the only trigger is a hand-rolled plan that
-  extracts *before* classifying (docs extract as "Unclassified" and memo-reuse after
-  classification lands). If such plans become supported, record the evidence type on
-  `source_extraction_record` and make memo hits require a match.
+  Codex) — **provenance column landed (task 020, ADR 0016 decision 7):**
+  `source_extraction_record.primary_evidence_type` now records what was actually sent
+  to the prompt (CHECK'd against `EVIDENCE_TYPES` + `'Unclassified'`; null on
+  pre-prompt failure rows only — `empty_basis`/`basis_mismatch` never fabricate a
+  value). The memo-match rule stays deferred: the memo still keys on (project, basis
+  snapshot, fingerprint) only, and its trigger — a hand-rolled plan that extracts
+  *before* classifying — still doesn't exist. If such plans become supported, make
+  memo hits require an evidence-type match too.
 - **Per-run window/call ceiling** (011 review, security) — the enforced call budget is
   `windows × (1 + retry_cap)`, which scales with document length; there is no absolute
   per-run cap, so a pathological oversized corpus drives spend linearly ("within
   budget"). Bounded today by `select`'s budget (the designed cost control) and the
   fixture corpus. If arbitrary corpora land, add an absolute window ceiling as a
   fingerprint component with a per-doc `window_cap_exceeded` failure reason.
-- **Prompt envelope fencing** (011 review, security) — segment text enters the prompt as
-  id-keyed JSON data records, but the envelope title/abstract are interpolated inline in
-  the user template, so a hostile abstract can structurally spoof the template around
-  them (impact bounded: wrong findings for its own document, quotes still
-  verified-or-flagged). Fence the envelope as a JSON data object at the next
-  `extract_iof_v1` version bump — prompt changes are eval-blind until the
-  extraction-quality evals exist, so this deliberately does not ride the review phase.
+- **Prompt envelope fencing — DISCHARGED (task 020, ADR 0016 decision 6).** Title,
+  abstract AND `primary_evidence_type` now enter `extract_iof_v6` as one id-keyed JSON
+  data object (the same treatment the segment text already got), closing the
+  structural spoof-around-template seam identified here. Evidence type was
+  closed-vocabulary already but is fenced too, for a uniform envelope shape.
 - **`thin_extraction` roll-up flag** — named in the contract "where computed"; no
   definition was pinned and v1 deliberately does not compute it. Define (e.g. findings per
   extracted full-text doc below a floor) when a consumer needs it.
@@ -807,11 +903,13 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   (SectionSpec, 018 B) is the extension point — roles extend without schema change.
   Eval slice: judge composition quality across the 7 intent shapes with this
   boundary in mind.
-- **Cross-schema reference-mediated linkage** — activates with
-  `implementation_context_finding` (EB internals entry): the shared source-named
-  vocabulary means a facet group's member values can link findings across schemas by
-  reference. 012 ships the design property (source-named values, run-referenced
-  groupings), no linkage machinery.
+- **Cross-schema reference-mediated linkage — DISCHARGED (task 021, item 12):** the
+  membership bridge landed — `group`'s loader reads both finding tables via the shared
+  reference columns, `FindingFacetView` carries a `kind` tag with nullable
+  `effect_direction`, `direction_spread` stays IOF-members-only, and group payloads
+  carry per-kind member counts. The design property 012 shipped is now machinery.
+  What remains deferred rides the EB-internals ICF entry (ICF facets, UNION view —
+  Slice C).
 - **Re-grouping / steering UX** — a different facet is simply a new run with a different
   directive (shipped semantics); mode-governed steer-points around grouping (pause,
   re-group, facet-switch UX) are plan-as-object machinery at the standing steering seam.
@@ -856,17 +954,17 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   compile target below that nothing authors yet. Parameter authoring on built machinery,
   zero re-plumbing; pairs with the `deepening_selection` steer point the same way select
   pairs with extract.
-- **Selection prior at standard depth + `SELECTION_PRIOR_BOOST` calibration (owner
-  questions, 2026-07-11)** — (1) select currently runs deep-only (018 regrade), so
-  standard-depth synthesis retrieval gets no selection prior; if the prior earns its
-  keep, select-at-standard (without extract) is a legitimate re-composition — weigh
-  against select's cost and the honest question of what selection means without the
-  findings layer. (2) The prior itself is a flat 2.0× multiplicative boost on the fused
-  retrieval score — could over-suppress an unselected-but-highly-relevant chunk for a
-  specific section. Mitigations already in place: it is a soft prior never a filter,
-  unselected docs stay in both retrieval legs, and citations record
-  `origin: selected|unselected_screened` so the effect is measurable. Eval-slice
-  measurement: citation quality/rate by origin as a function of the boost value.
+- **Selection prior at standard depth — DISCHARGED (task 019, owner
+  amendment).** Select now runs at standard (plan-pinned budget 15); synthesise
+  references it via `deepest_successful_reference`; prior + origin accounting
+  apply by construction. Still open: the `SELECTION_PRIOR_BOOST` calibration
+  question — the prior itself is a flat 2.0× multiplicative boost on the fused
+  retrieval score, which could over-suppress an unselected-but-highly-relevant
+  chunk for a specific section. Mitigations already in place: it is a soft
+  prior never a filter, unselected docs stay in both retrieval legs, and
+  citations record `origin: selected|unselected_screened` so the effect is
+  measurable. Eval-slice measurement: citation quality/rate by origin as a
+  function of the boost value.
 - **Writer read-tool scoping arguments (owner direction, 2026-07-11)** — `search_chunks`
   takes only a query today; `query_findings` already scopes (`group_id`, `finding_ids`,
   `effect_direction`) and `lookup` by `doc_id`/`tag`. Give `search_chunks` optional
@@ -876,6 +974,13 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   researcher". Interacts with the Cohere/Bedrock cross-encoder rerank recorded at the
   `retrieve` seam; prompt guidance for WHEN to scope is the prompt-bearing half
   (lead-only, replay-evidenced).
+- **018's A/B-gated writer-envelope metadata queue — dangling, recorded here (owner
+  check, 2026-07-12; task 020 sweep).** Contracted in 018 (contract § Writer envelope
+  widening) but never run and never discharged: author institution(s) (first in the
+  queue) · FWCI · further loop-suggested fields, each adopted only on replay evidence.
+  (018's *default-adopt* set — publication year, evidence type, appraisal label,
+  venue/publisher, cited-by count — already shipped and is not part of this seam.)
+  Silent omission is not deferral; this entry is the explicit seam at the C/eval gate.
 - **Plan-compile section machinery** — the fail-closed `context["synthesis"]` directive
   (sections + retrieval_boosts, normative grammar per contract rev 8 M5) is the compile
   target the future plan-shaped-sections machinery and the source/evidence policy compile
@@ -1043,10 +1148,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Orchestrator (task 017 seams)
 
-- **`_REGISTRY_COMPONENT_BY_STEP` simplification candidate (owner, 2026-07-11)** —
-  ten of eleven rows are identity; only `screen_stage2 → screen` differs. Collapse
-  to a one-line function + keep the startup parity assert. Queued for the planned
-  ponytail audit / next slice touching `orchestration_plan.py`.
+- **`_REGISTRY_COMPONENT_BY_STEP` simplification candidate — DISCHARGED
+  (task 019).** Collapsed to the `registry_component_for()` one-liner; the
+  startup parity assert is kept.
 
 - **The LLM EB-expert capability agent** — the JIT directive-authoring expert
   sub-agent (system-prompted as an evidence-review expert; reads upstream
@@ -1085,13 +1189,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   arrives with that refactor or the component-progress protocol (contract
   decision 11, rev 2.6). **Scheduled: 018 Phase A telemetry sweep** (usage-return
   refactor + durable per-component wall-clock/counts).
-- **Component-name rename `screen`→`screen_abstract` / `screen_stage2`→`screen_full`**
-  (user, 2026-07-10) — the DB already stores stage as an integer (`ck_ssr_stage`), so
-  this touches only the plan-vocabulary strings (`DiscretionaryComponent`, runner step
-  lists, persisted `orchestration_plan` rows and event payloads that carry step names).
-  Cosmetic (component names never reach the UI — demo/RETRO §2), so it waits for the
-  next slice that touches the screen/plan vocabulary anyway; renaming persisted plan/event
-  vocabulary needs a data migration or a read-side alias, decided then.
+- **Component-name rename `screen`→`screen_abstract` / `screen_stage2`→`screen_full`
+  — DISCHARGED (task 019).** Renamed, with a one-time data migration
+  `b7f3d9a2c5e1` (owner decision 3); no read-side alias.
 - **Direct plan editing on the plan pane** (user, 2026-07-10) — editing the proposed
   plan directly (not only conversationally), with edits synced back to the planner
   conversation and a confirm-changes step before the run button arms. Web-app-slice
@@ -1135,6 +1235,22 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   deferred to user testing.
 - **Support-direction relations** (supports / caveats / contradicts) + user counter-evidence
   search.
+- **Multi-question-project reuse seams (workspace-cluster design input, owner
+  conversation, 2026-07-12)** — docs-only, no build. Project = a container for
+  MULTIPLE EB questions (see `project-multi-question-intent.md`); three
+  recorded reuse questions for when the workspace-cluster contract is drafted:
+  **project-grain classify label reuse** — an extraction-memo-style seam
+  (classify's per-(scope, source) result reused across questions in one
+  project rather than re-run per question), which must respect the
+  Unknown-resolution staged-result pattern (§ Evidence Base internals) rather
+  than bypass it; **appraisal reuse keyed on `rubric_version`** — per-scope
+  appraisal rows are a deliberate hedge for the plan-carried rubric seam
+  (§ Evidence Base internals: Steerable / plan-carried appraisal rubric), so
+  reuse must key on `rubric_version`, not assume one rubric per project; and
+  **pool-wide per-question screening cost growth** — screening re-runs
+  pool-wide per question (verified scope mechanics, 2026-07-12), so cost grows
+  with the number of questions per project, a sizing input for the
+  workspace-cluster contract.
 
 ## Execution / collaboration / ops
 
@@ -1181,10 +1297,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   **Data accrual starts in 018** (durable per-component wall-clock + in/out counts on every
   run); the model itself is eval-slice-or-later work over that accrued telemetry.
 - **Forecast/prewarm extraction** — modelled only if built (no inert forecast object otherwise).
-- **`structlog.contextvars.bind_contextvars` for ambient run/project correlation** —
-  `logging.py` wires `merge_contextvars` into the processor chain but nothing calls
-  `bind_contextvars`, so every log call must manually repeat `project_id`/`run_id` and most
-  don't (e.g. `harness.py`'s `component.started`/`grounding.failed`). Bind once per run/component
-  instead of threading kwargs through every call site. Also: exceptions are logged as `error=str(exc)`
-  with no type/traceback, and the processor chain has no `exc_info`/traceback renderer to make
-  `exc_info=True` useful even if added.
+- **`structlog.contextvars.bind_contextvars` for ambient run/project correlation —
+  DISCHARGED (task 019).** Bound once per component execution at `run_harness`
+  (`bound_contextvars` context manager), instead of threading `project_id`/`run_id`
+  kwargs through every call site. `exc_info` renderers (`dict_tracebacks` for JSON,
+  `format_exc_info` for console) were added to the processor chain so
+  `exc_info=True` now carries type/traceback.

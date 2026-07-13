@@ -19,7 +19,7 @@ canonical shape, plan validation must exercise **the real composer** against
   claimed they governed screening (017 review stack; Codex + security lanes
   convergent, proven empirically).
 - Round-trip checks against a composer that canonicalises (injects sibling
-  keys like acquire's `depth`, screen_stage2's `stage`) use **containment**
+  keys like acquire's `depth`, screen_full's `stage` (step renamed from screen_stage2 in 019)) use **containment**
   (`steering._delta_contains`), not byte equality — raw `!=` rejected every
   legitimate partial-key adjustment while inexpressible requests still fail
   closed.

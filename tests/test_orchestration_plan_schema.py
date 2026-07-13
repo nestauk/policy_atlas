@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
+from policy_atlas.orchestration_plan import OrchestrationPlan
 from policy_atlas.schema import orchestration_plan
 from tests.helpers import now, seed_project_and_run, seed_scope
 
@@ -52,6 +53,49 @@ def test_orchestration_plan_insert_and_read_back(conn: Connection) -> None:
     assert row.created_by == "planner"
     assert row.evidence_scope_id is None
     assert row.approved_at is None
+
+
+def test_orchestration_plan_country_group_round_trips_all_fields(
+    conn: Connection,
+) -> None:
+    """A plan payload preserves country_group label, countries and authorship."""
+    pid, _ = seed_project_and_run(conn)
+    plan = OrchestrationPlan.model_validate(
+        {
+            "title": "Nordic review",
+            "question": "What evidence exists on Nordic housing policy outcomes?",
+            "backend_scope": "both",
+            "scope_constraints": {
+                "country_group": {
+                    "label": "Nordic countries",
+                    "countries": ["NO", "SE", "DK", "FI", "IS"],
+                    "authorship": "user-amended",
+                }
+            },
+            "search_effort": "rapid",
+            "analysis_depth": "landscape",
+            "components": ["characterise"],
+            "steering_mode": "moderate",
+        }
+    )
+    plan_id = _insert_plan(conn, pid, payload=plan.model_dump(mode="json"))
+
+    row = conn.execute(
+        select(orchestration_plan.c.payload).where(orchestration_plan.c.plan_id == plan_id)
+    ).one()
+    reloaded = OrchestrationPlan.model_validate(row.payload)
+
+    assert reloaded == plan
+    assert reloaded.scope_constraints.country_group is not None
+    assert reloaded.scope_constraints.country_group.label == "Nordic countries"
+    assert reloaded.scope_constraints.country_group.countries == [
+        "NO",
+        "SE",
+        "DK",
+        "FI",
+        "IS",
+    ]
+    assert reloaded.scope_constraints.country_group.authorship == "user-amended"
 
 
 def test_orchestration_plan_amendment_version_inserts_alongside(conn: Connection) -> None:

@@ -49,7 +49,7 @@ from tests.helpers import (
 # --- Schema ---
 
 def test_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 26
+    assert len(metadata.tables) == 27
 
 
 # --- Stub logic (pure Python, no DB) ---
@@ -290,6 +290,34 @@ def test_classify_count_invariant(conn: Connection) -> None:
     counts = classify_sources(conn, project_id=pid, run_id=rid, context=ctx)
 
     assert counts["classified"] + counts["skipped"] + counts["already_classified"] == 3
+
+
+def test_excluded_retracted_never_reaches_classify_eligibility(conn: Connection) -> None:
+    """A retracted doc (task 019 item 8) has an effective screening row but
+    never a 'relevant' one, so it is never classified — it lands in 'skipped'
+    like a not_relevant doc, not silently dropped from the funnel invariant."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _, pss_relevant = seed_source(conn, pid)
+    _, pss_retracted = seed_source(conn, pid)
+    seed_screening_result(conn, pid, rid, scope_id, pss_relevant, status="relevant")
+    seed_screening_result(
+        conn, pid, rid, scope_id, pss_retracted, status="excluded_retracted"
+    )
+
+    ctx = ClassifyContext(scope_id=scope_id, intent="Test", context={})
+    counts = classify_sources(conn, project_id=pid, run_id=rid, context=ctx)
+
+    assert counts["classified"] == 1
+    assert counts["skipped"] == 1
+    assert counts["classified"] + counts["skipped"] + counts["already_classified"] == 2
+
+    rows = conn.execute(
+        select(source_classification_result.c.project_source_snapshot_id).where(
+            source_classification_result.c.project_id == pid
+        )
+    ).fetchall()
+    assert [row.project_source_snapshot_id for row in rows] == [pss_relevant]
 
 
 def test_classify_sources_idempotent_rerun(conn: Connection) -> None:

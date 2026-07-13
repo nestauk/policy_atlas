@@ -4,6 +4,96 @@ Recurring issues encountered during the task cycle. Each entry: what happened, r
 
 ---
 
+## 2026-07-12 — Phase commit swept in 6,230 node_modules files: no JS ignores existed and nobody looked at the stat line
+
+**What happened:** Task 020's phase C commit staged `demo/frontend/node_modules`
+(6,230 files, ~1.5M lines), `.vite/` dep bundles and `tsconfig.tsbuildinfo` alongside
+the slice code. It rode two commits unnoticed and was caught only by the step-7
+review conversation reading `git diff dev...HEAD --stat` before dispatching lanes.
+
+**Root cause:** two-part. The repo's `.gitignore` predates the demo frontend and had
+no `node_modules/`/`.vite/`/`*.tsbuildinfo` entries — someone ran `npm install`
+locally (018/019 demo work) and the tree became stageable. Then a broad `git add`
+staged it, and the commit's stat line (6k+ files) was never read.
+
+**Fix (installed):** review commit untracked the artifacts and added the Node ignores
+to `.gitignore`. Branch-history rewrite recommended at the PR gate (branch unpushed —
+the blobs need never reach origin).
+
+**Rule:** read the `--stat` tail of every phase commit — a file count wildly above
+the plan's touched-file list is a stop-and-look, not a scroll-past. When a new
+toolchain (npm, cargo, etc.) first appears in the repo, its ignore entries land in
+the same slice.
+
+## 2026-07-12 — Codex died mid-turn ("model at capacity") but left a complete product-code diff: salvage beats rerun
+
+**What happened:** Task 020 phase A's codex job delivered the full product-code diff,
+then failed before authoring tests. The build salvaged it: lead reviewed the delivered
+diff, test authoring re-routed to fast-worker (the codex-exhaustion ladder).
+
+**Root cause / what made salvage safe:** the failure mode leaves working-tree output,
+not corrupt state. The one wart found was a *duplicate constant* — codex re-added
+`UNCLASSIFIED_EVIDENCE_TYPE` when it already existed later in the file — i.e. the
+signature wart class of a model losing track of a file it partially read.
+
+**Rule:** on a codex mid-turn death, diff-review-then-reroute the remainder instead
+of rerunning the whole brief; grep the salvage for duplicate definitions/constants
+first (`grep -c` per new constant name), and byte-verify any spec-copied strings.
+
+## 2026-07-12 — mypy incremental cache produced a false attr-defined after multi-agent edits
+
+**What happened:** During 020's phase B+C gate, mypy flagged an `attr-defined` error
+on a submodule import that a just-green full run had accepted; `rm -rf .mypy_cache`
+cleared it and the clean-cache run was green.
+
+**Rule:** when a type error contradicts a just-green full run — especially after
+several agents edited overlapping modules in one session — clear `.mypy_cache`
+before believing it (and before "fixing" code that isn't broken).
+
+## 2026-07-12 — Killed live-run attempt survived its console: an orphaned driver ran a full deep chain to artefact, then got cited as the real run's evidence
+
+**What happened:** During 019's D1 rider, attempt 2's driver lacked a `__main__` spawn
+guard and had approved a planner-proposed standard×deep plan (two known bugs, both
+recorded). The operator saw the ingest crash, fixed the driver, and ran attempt 3 (the
+real D1 run). But attempt 2's process tree survived its console view: project
+`319323bb` ran the full deep chain (extract + group + a 1.53 M-prompt-token synthesise)
+to a minted artefact, **concurrently** with the D1 run. The build then wrote D1's item-4
+trace evidence citing attempt 2's synthesise trace (`5c6a340e…`) — adjacent in the
+Langfuse trace list, right project missing — and recorded "no additional e2e runs were
+spent". The 019 step-7 trace lane caught both by checking every cited trace's
+`project_id` metadata against the run's project and reconstructing attempt 2 from the
+DB event log.
+
+**Root cause:** (1) Run evidence was located by trace-list adjacency (name + time), not
+by `project_id` metadata — two runs finishing 14 s apart made the wrong one citable.
+(2) The incident narrative was written from the console's point of view; nobody asked
+the DB what actually happened to the killed attempt.
+
+**Rule:** cite a trace only after checking its `project_id` metadata matches the run
+under evidence. After any live-run incident (crash, kill, restart), reconstruct the
+incident from the DB (`event_log` by project) — a dead console is not evidence the run
+died. Corollary kept from attempt 1: `alembic upgrade head` on the dev DB is a
+pre-live-run checklist step (the un-migrated CHECK failed the first attempt honestly).
+
+## 2026-07-12 — Codex-sandbox DB-backed tests are untested code: both such tests in 019 carried real bugs (and 018's step-8 said this was already logged here — it wasn't)
+
+**What happened:** The codex sandbox has no Postgres and no localhost sockets, so any
+DB-backed test a codex lane writes has never executed when it comes back. Both
+DB-backed vetter tests codex wrote in 019 Phase C carried real bugs (IOF rows carry no
+pss column; doc identity joins through `source_extraction_record`); the lead ran and
+fixed them before commit. Separately, 018's knowledge log declined this lesson as
+"recorded in docs/agentic-ops/failure-log.md" — no such entry existed; the 019 review
+stack's reconcile found the miss.
+
+**Root cause:** (1) Sandbox capability asymmetry: green-in-sandbox says nothing about
+DB-touching code paths. (2) A step-8 "recorded in X" decline was written without
+verifying X.
+
+**Rule:** the lead runs every codex-authored DB-backed test before its commit lands
+(treat them as unreviewed code, not passed tests). And a decline that claims "already
+recorded elsewhere" names the entry it points at — a pointer nobody can follow is a
+record nobody made.
+
 ## 2026-07-11 — Prompt capability text went stale against a code regrade: three taxonomy pins recorded compile-invalid plans
 
 **Task:** 018 (A3 regrade → C3 pins), caught by the review stack (Codex adversarial + trace lane + contract verifier, convergent).
@@ -477,3 +567,21 @@ The shim now does the one thing the plugin genuinely leaves unsolved for the lea
 shell (path resolution) and delegates waiting to the native flag. Meta-lesson: read
 the tool's own invocation docs BEFORE building the fix — the first wrapper was written
 from the failure, not from the docs.
+
+## 2026-07-13 — Codex job git-reverted uncommitted lead edits outside its scope (task 021 phase B)
+
+**What happened:** The phase-B Codex job clobbered the lead's uncommitted planner-prompt
+edits in the working tree — files entirely outside the job's brief — apparently via a
+git-revert-style cleanup the runtime performed on files it decided it hadn't changed.
+The edits had to be re-authored.
+
+**Root cause:** Launching a write-capable Codex job onto a dirty tree. The job's scope
+boundary is prompt text, not an enforced sandbox; uncommitted work by anyone else in the
+tree is at risk from the runtime's own hygiene behaviour.
+
+**Fix (held for phases D/E, no recurrence):** commit lead edits BEFORE launching any
+codex job, and carry a "do not revert files you did not change" line in every write
+brief. Clean-tree discipline is the real control; the brief line is belt-and-braces.
+
+**Rule:** never launch a write-capable codex job with uncommitted work in the tree —
+commit first, always.

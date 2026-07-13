@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from threading import Barrier, BrokenBarrierError, Lock
 from typing import Any, cast
 
 import pytest
@@ -30,9 +31,19 @@ from policy_atlas.finding_vetter import (
     validate_verdict_coverage,
 )
 from policy_atlas.schema import intervention_outcome_finding
-from policy_atlas.usage import UsageResult
+from policy_atlas.usage import TokenUsage, UsageResult
 
-from .helpers import seed_project_and_run, seed_run, seed_scope
+from .helpers import (
+    profile_counts,
+    profile_doc,
+    profile_docs,
+    profile_findings,
+    profile_provenance,
+    profile_vetted_out,
+    seed_project_and_run,
+    seed_run,
+    seed_scope,
+)
 from .test_extract import _record, _run, _seed_full_text_doc, _seed_selection
 
 
@@ -42,6 +53,26 @@ def _findings(conn: Connection, project_id: uuid.UUID) -> list[Any]:
             select(intervention_outcome_finding).where(
                 intervention_outcome_finding.c.project_id == project_id
             )
+        ).fetchall()
+    )
+
+
+def _findings_with_pss(conn: Connection, project_id: uuid.UUID) -> list[Any]:
+    """Findings joined to their extraction record's doc (findings carry no pss id)."""
+    from policy_atlas.schema import source_extraction_record
+
+    return list(
+        conn.execute(
+            select(
+                intervention_outcome_finding,
+                source_extraction_record.c.project_source_snapshot_id,
+            )
+            .join(
+                source_extraction_record,
+                intervention_outcome_finding.c.extraction_record_id
+                == source_extraction_record.c.extraction_record_id,
+            )
+            .where(intervention_outcome_finding.c.project_id == project_id)
         ).fetchall()
     )
 
@@ -84,6 +115,25 @@ class _FixedBackend:
         return ExtractionResponse.model_validate({"findings": self._findings}), None
 
 
+class _ByPssBackend:
+    """A backend returning per-document scripted findings keyed by payload pss_id."""
+
+    mode = "stub"
+
+    def __init__(self, findings_by_pss: dict[str, list[dict[str, Any]]]) -> None:
+        self._findings_by_pss = findings_by_pss
+
+    def extract(self, payload: Any) -> Any:
+        from policy_atlas.extraction_records import ExtractionResponse
+
+        return (
+            ExtractionResponse.model_validate({
+                "findings": self._findings_by_pss[payload.pss_id]
+            }),
+            None,
+        )
+
+
 class _ScriptedJudgeBackend:
     """A judge backend flagging a fixed set of finding indices as flagged."""
 
@@ -122,6 +172,68 @@ class _ScriptedJudgeBackend:
                     )
                 )
         return FindingVetterResponse(verdicts=verdicts), None
+
+
+class _ParallelScriptedJudgeBackend:
+    """A judge backend pinning parallel overlap, failures and token usage."""
+
+    mode = "stub"
+
+    def __init__(
+        self,
+        *,
+        flag_interventions: set[str] | None = None,
+        fail_interventions: set[str] | None = None,
+        usage: TokenUsage | None = None,
+        barrier_parties: int | None = None,
+    ) -> None:
+        self._flag_interventions = flag_interventions or set()
+        self._fail_interventions = fail_interventions or set()
+        self._usage = usage
+        self._barrier = Barrier(barrier_parties) if barrier_parties is not None else None
+        self._lock = Lock()
+        self._active = 0
+        self.max_active = 0
+
+    def judge(self, payload: dict[str, Any]) -> UsageResult[FindingVetterResponse]:
+        with self._lock:
+            self._active += 1
+            self.max_active = max(self.max_active, self._active)
+        try:
+            if self._barrier is not None:
+                try:
+                    self._barrier.wait(timeout=2.0)
+                except BrokenBarrierError as exc:
+                    raise RuntimeError("vetter calls did not overlap") from exc
+            intervention = cast("str", payload["findings"][0]["intervention"])
+            if intervention in self._fail_interventions:
+                raise RuntimeError("scripted vetter failure")
+            verdicts: list[VetterVerdictWire] = []
+            for finding in payload["findings"]:
+                index = cast("int", finding["index"])
+                finding_intervention = cast("str", finding["intervention"])
+                if finding_intervention in self._flag_interventions:
+                    verdicts.append(
+                        VetterVerdictWire(
+                            finding_index=index,
+                            verdict="flagged",
+                            flag_class="deictic_naming",
+                            reason="Names the document itself.",
+                        )
+                    )
+                else:
+                    verdicts.append(
+                        VetterVerdictWire(
+                            finding_index=index,
+                            verdict="sound",
+                            flag_class=None,
+                            reason="Sound.",
+                        )
+                    )
+            return FindingVetterResponse(verdicts=verdicts), self._usage
+        finally:
+            with self._lock:
+                self._active -= 1
 
 
 class _FailingJudgeBackend:
@@ -292,19 +404,21 @@ def test_vetted_out_excluded_from_persistence_and_accounted(conn: Connection) ->
         extraction_backend=backend, finding_vetter_backend=judge,
     )
 
-    assert summary["docs"][0]["finding_count"] == 1
-    assert summary["docs"][0]["vetted_out"] == 1
-    assert summary["findings"]["total"] == 1
-    assert summary["vetted_out"]["total"] == 1
-    assert summary["vetted_out"]["by_class"] == {"deictic_naming": 1}
-    [record] = summary["vetted_out"]["records"]
+    assert profile_doc(summary)["finding_count"] == 1
+    assert profile_doc(summary)["vetted_out"] == 1
+    assert profile_findings(summary)["total"] == 1
+    assert profile_vetted_out(summary)["total"] == 1
+    assert profile_vetted_out(summary)["by_class"] == {"deictic_naming": 1}
+    [record] = profile_vetted_out(summary)["records"]
     assert record["intervention"] == "this Plan"
     assert record["outcome"] == "costs"
     assert record["flag_class"] == "deictic_naming"
     assert record["reason"] == "Names the document itself."
     assert "vetted_out_present" in summary["flags"]
-    assert summary["provenance"]["finding_vetter"] == {
+    assert profile_provenance(summary)["finding_vetter"] == {
         "prompt": FINDING_VETTER_PROMPT_VERSION,
+        "model": FINDING_VETTER_MODEL,
+        "reasoning_effort": FINDING_VETTER_REASONING_EFFORT,
         "max_output_tokens": FINDING_VETTER_MAX_OUTPUT_TOKENS,
     }
 
@@ -313,6 +427,178 @@ def test_vetted_out_excluded_from_persistence_and_accounted(conn: Connection) ->
     assert rows[0].intervention == "coaching"
     assert len(judge.payloads) == 1
     assert judge.payloads[0]["findings"][0]["index"] == 0
+
+
+def test_parallel_vetter_multi_doc_outcomes_and_usage(conn: Connection) -> None:
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    coaching_chunk_id = uuid.uuid4()
+    plan_chunk_id = uuid.uuid4()
+    coaching_pss, _ = _seed_full_text_doc(
+        conn,
+        project_id,
+        sel_run,
+        scope_id,
+        title="Coaching doc",
+        chunk_content="Coaching improved attendance.",
+        chunk_id=coaching_chunk_id,
+    )
+    plan_pss, _ = _seed_full_text_doc(
+        conn,
+        project_id,
+        sel_run,
+        scope_id,
+        title="Plan doc",
+        chunk_content="This Plan will reduce costs.",
+        chunk_id=plan_chunk_id,
+    )
+    _seed_selection(
+        conn,
+        project_id,
+        sel_run,
+        scope_id,
+        [
+            {"pss_id": str(coaching_pss), "text_basis": "full_text"},
+            {"pss_id": str(plan_pss), "text_basis": "full_text"},
+        ],
+    )
+    backend = _ByPssBackend({
+        str(coaching_pss): [
+            _record(
+                intervention="coaching",
+                outcome="attendance",
+                quote="Coaching improved attendance",
+                segment_id=str(coaching_chunk_id),
+            )
+        ],
+        str(plan_pss): [
+            _record(
+                intervention="this Plan",
+                outcome="costs",
+                quote="This Plan will reduce costs",
+                segment_id=str(plan_chunk_id),
+            )
+        ],
+    })
+    judge = _ParallelScriptedJudgeBackend(
+        flag_interventions={"this Plan"},
+        usage=TokenUsage(prompt=5, completion=3, total=8, cached=1),
+        barrier_parties=2,
+    )
+
+    summary, _ = _run_with_judge(
+        conn,
+        project_id,
+        scope_id,
+        sel_run,
+        extraction_backend=backend,
+        finding_vetter_backend=judge,
+    )
+
+    assert judge.max_active == 2
+    assert [doc["pss_id"] for doc in profile_docs(summary)] == [
+        str(coaching_pss),
+        str(plan_pss),
+    ]
+    assert profile_doc(summary, 0)["status"] == "extracted"
+    assert profile_doc(summary, 0)["finding_count"] == 1
+    assert profile_doc(summary, 1)["status"] == "no_findings"
+    assert profile_doc(summary, 1)["vetted_out"] == 1
+    assert summary["usage_totals"] == {
+        "prompt": 10,
+        "completion": 6,
+        "total": 16,
+        "cached": 2,
+    }
+    rows = _findings_with_pss(conn, project_id)
+    assert len(rows) == 1
+    assert rows[0].project_source_snapshot_id == coaching_pss
+    assert rows[0].intervention == "coaching"
+
+
+def test_parallel_vetter_failure_isolates_to_one_doc(conn: Connection) -> None:
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    good_chunk_id = uuid.uuid4()
+    failing_chunk_id = uuid.uuid4()
+    good_pss, _ = _seed_full_text_doc(
+        conn,
+        project_id,
+        sel_run,
+        scope_id,
+        title="Good doc",
+        chunk_content="Coaching improved attendance.",
+        chunk_id=good_chunk_id,
+    )
+    failing_pss, _ = _seed_full_text_doc(
+        conn,
+        project_id,
+        sel_run,
+        scope_id,
+        title="Failing doc",
+        chunk_content="Transport failure should not block this finding.",
+        chunk_id=failing_chunk_id,
+    )
+    _seed_selection(
+        conn,
+        project_id,
+        sel_run,
+        scope_id,
+        [
+            {"pss_id": str(good_pss), "text_basis": "full_text"},
+            {"pss_id": str(failing_pss), "text_basis": "full_text"},
+        ],
+    )
+    backend = _ByPssBackend({
+        str(good_pss): [
+            _record(
+                intervention="coaching",
+                outcome="attendance",
+                quote="Coaching improved attendance",
+                segment_id=str(good_chunk_id),
+            )
+        ],
+        str(failing_pss): [
+            _record(
+                intervention="failing intervention",
+                outcome="retention",
+                quote="Transport failure should not block this finding",
+                segment_id=str(failing_chunk_id),
+            )
+        ],
+    })
+    judge = _ParallelScriptedJudgeBackend(
+        fail_interventions={"failing intervention"},
+        usage=TokenUsage(prompt=5, completion=3, total=8, cached=1),
+    )
+
+    summary, _ = _run_with_judge(
+        conn,
+        project_id,
+        scope_id,
+        sel_run,
+        extraction_backend=backend,
+        finding_vetter_backend=judge,
+    )
+
+    assert profile_counts(summary)["vetting_failed"] == 1
+    assert "vetting_failed" in summary["flags"]
+    by_pss = {doc["pss_id"]: doc for doc in profile_docs(summary)}
+    assert by_pss[str(good_pss)]["finding_count"] == 1
+    assert by_pss[str(failing_pss)]["finding_count"] == 1
+    assert by_pss[str(failing_pss)]["vetted_out"] == 0
+    assert summary["usage_totals"] == {
+        "prompt": 5,
+        "completion": 3,
+        "total": 8,
+        "cached": 1,
+    }
+    assert {
+        row.project_source_snapshot_id for row in _findings_with_pss(conn, project_id)
+    } == {
+        good_pss,
+        failing_pss,
+    }
 
 
 def test_all_vetted_out_doc_reports_no_findings_status(conn: Connection) -> None:
@@ -347,12 +633,12 @@ def test_all_vetted_out_doc_reports_no_findings_status(conn: Connection) -> None
         extraction_backend=backend, finding_vetter_backend=judge,
     )
 
-    assert summary["docs"][0]["status"] == "no_findings"
-    assert summary["docs"][0]["finding_count"] == 0
-    assert summary["docs"][0]["vetted_out"] == 2
-    assert summary["counts"]["extracted"] == 0
-    assert summary["counts"]["no_findings"] == 1
-    assert summary["vetted_out"]["total"] == 2
+    assert profile_doc(summary)["status"] == "no_findings"
+    assert profile_doc(summary)["finding_count"] == 0
+    assert profile_doc(summary)["vetted_out"] == 2
+    assert profile_counts(summary)["extracted"] == 0
+    assert profile_counts(summary)["no_findings"] == 1
+    assert profile_vetted_out(summary)["total"] == 2
     assert _findings(conn, project_id) == []
 
 
@@ -376,10 +662,10 @@ def test_vetter_failure_fails_open_and_counts(conn: Connection) -> None:
         extraction_backend=backend, finding_vetter_backend=_FailingJudgeBackend(),
     )
 
-    assert summary["docs"][0]["finding_count"] == 1
-    assert summary["docs"][0]["vetted_out"] == 0
-    assert summary["counts"]["vetting_failed"] == 1
-    assert summary["vetted_out"]["total"] == 0
+    assert profile_doc(summary)["finding_count"] == 1
+    assert profile_doc(summary)["vetted_out"] == 0
+    assert profile_counts(summary)["vetting_failed"] == 1
+    assert profile_vetted_out(summary)["total"] == 0
     assert "vetted_out_present" not in summary["flags"]
     rows = _findings(conn, project_id)
     assert len(rows) == 1
@@ -405,8 +691,8 @@ def test_vetter_coverage_violation_fails_open_and_counts(conn: Connection) -> No
         extraction_backend=backend, finding_vetter_backend=_MismatchedJudgeBackend(),
     )
 
-    assert summary["docs"][0]["finding_count"] == 1
-    assert summary["counts"]["vetting_failed"] == 1
+    assert profile_doc(summary)["finding_count"] == 1
+    assert profile_counts(summary)["vetting_failed"] == 1
     rows = _findings(conn, project_id)
     assert len(rows) == 1
 
@@ -424,10 +710,10 @@ def test_no_backend_is_byte_identical_no_vetter_keys(conn: Connection) -> None:
 
     summary, _ = _run(conn, project_id, scope_id, sel_run)
 
-    assert "vetted_out" not in summary
-    assert "vetted_out" not in summary["docs"][0]
-    assert "vetting_failed" not in summary["counts"]
-    assert summary["provenance"]["finding_vetter"] is None
+    assert "vetted_out" not in summary["profiles"]["eb_iof_base_v1"]
+    assert "vetted_out" not in profile_doc(summary)
+    assert "vetting_failed" not in profile_counts(summary)
+    assert profile_provenance(summary)["finding_vetter"] is None
 
 
 def test_fingerprint_sensitive_to_junk_judge_presence() -> None:

@@ -10,7 +10,7 @@ import structlog
 from sqlalchemy import exists, func, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas import events
+from policy_atlas import events, tracing
 from policy_atlas.classification_backend import ClassificationBackend, StubClassificationBackend
 from policy_atlas.classify_prompt import (
     TAG_MAX_CHARS,
@@ -184,11 +184,20 @@ def _count_effective_skipped(
     scope_id: uuid.UUID,
 ) -> int:
     effective = effective_screen_rows()
-    effective_not_relevant = conn.execute(
+    # task 019: excluded_retracted docs never reach classify eligibility
+    # (_load_relevant_docs filters status == 'relevant') but still have an
+    # effective screening row, so they must land in this "skipped" bucket —
+    # otherwise the classified+skipped+already_classified funnel invariant
+    # would silently drop them. Named a distinct bucket in screen's own
+    # summary, but classify's "skipped" is already a blended catch-all
+    # (not_relevant + all-attempts-failed), so folding it in here is not the
+    # don't-flatten-status violation that lumping it into a literal
+    # "not_relevant" would be.
+    effective_not_relevant_or_excluded_retracted = conn.execute(
         select(func.count())
         .select_from(effective)
         .where(effective.c.evidence_scope_id == scope_id)
-        .where(effective.c.status == "not_relevant")
+        .where(effective.c.status.in_(("not_relevant", "excluded_retracted")))
         .where(effective.c.project_id == project_id)
     ).scalar_one()
 
@@ -216,7 +225,7 @@ def _count_effective_skipped(
         )
         .where(effective_sources.c.project_source_snapshot_id.is_(None))
     ).scalar_one()
-    return effective_not_relevant + failed_only
+    return effective_not_relevant_or_excluded_retracted + failed_only
 
 
 def _run_classification_calls(
@@ -233,7 +242,12 @@ def _run_classification_calls(
     usage_totals = UsageAccumulator()
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_CLASSIFY) as executor:
         submitted: list[tuple[int, Future[Any]]] = [
-            (doc_index, executor.submit(classification_backend.classify, doc.payload))
+            (
+                doc_index,
+                tracing.submit_with_context(
+                    executor, classification_backend.classify, doc.payload
+                ),
+            )
             for doc_index, doc in enumerate(docs)
         ]
         wait([future for _, future in submitted])

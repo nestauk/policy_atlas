@@ -12,6 +12,15 @@ from typing import Any, Literal, Self, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from policy_atlas.country_filters import (
+    TIER1_GROUPS,
+    SearchDirectiveError,
+    expand_tier1,
+    overton_display_names,
+    validate_iso_alpha2,
+    validate_overton_display_name,
+)
+from policy_atlas.extract import KNOWN_PROFILE_IDS
 from policy_atlas.plan import COMPONENT_REGISTRY
 from policy_atlas.schema import DIRECTIVE_STRING_MAX
 from policy_atlas.screen import CRITERIA_LIST_MAX, _compose_screen_intent
@@ -20,9 +29,10 @@ from policy_atlas.screen_prompt import SCREEN_INTENT_MAX
 BackendScope = Literal["academic_only", "grey_lit_only", "both"]
 SearchEffort = Literal["rapid", "standard", "deep"]
 AnalysisDepth = Literal["landscape", "standard", "deep"]
+ExtractProfile = Literal["iof", "icf"]
 DiscretionaryComponent = Literal[
     "characterise",
-    "screen_stage2",
+    "screen_full",
     "select",
     "extract",
     "group",
@@ -30,6 +40,7 @@ DiscretionaryComponent = Literal[
 GroupingFacet = Literal["intervention", "outcome", "population"]
 SteeringMode = Literal["frequent", "moderate", "minimal", "unattended"]
 SteerAction = Literal["proceed_flag", "stop"]
+CountryGroupAuthorship = Literal["pinned-table", "planner-proposed", "user-amended"]
 
 PUBLISHER_COUNTRY_MAX = 100
 
@@ -40,7 +51,7 @@ STEER_POINTS: tuple[str, ...] = ("deepening_selection",)
 
 SPINE: tuple[str, ...] = (
     "acquire",
-    "screen",
+    "screen_abstract",
     "classify",
     "appraise",
     "ingest_full_text",
@@ -48,11 +59,12 @@ SPINE: tuple[str, ...] = (
 )
 DISCRETIONARY_COMPONENTS: tuple[DiscretionaryComponent, ...] = (
     "characterise",
-    "screen_stage2",
+    "screen_full",
     "select",
     "extract",
     "group",
 )
+ALL_STEPS: tuple[str, ...] = SPINE + DISCRETIONARY_COMPONENTS
 DEEP_CHAIN_COMPONENTS: frozenset[DiscretionaryComponent] = frozenset(
     ("select", "extract", "group")
 )
@@ -63,40 +75,70 @@ SEARCH_EFFORT_DIRECTIVES: dict[SearchEffort, dict[str, SearchEffort]] = {
     "deep": {"depth": "deep"},
 }
 
+EXTRACT_PROFILE_IDS: dict[ExtractProfile, str] = {
+    "iof": "eb_iof_base_v1",
+    "icf": "eb_icf_base_v1",
+}
+
+if tuple(EXTRACT_PROFILE_IDS.values()) != KNOWN_PROFILE_IDS:
+    raise AssertionError("EXTRACT_PROFILE_IDS values must match extract.KNOWN_PROFILE_IDS")
+
 
 class AnalysisDepthDirective(TypedDict):
     """Depth-row flags compiled by orchestration, not by component code."""
 
-    screen_stage2: bool
+    screen_full: bool
     characterise: bool
-    deep_chain: bool
+    select: bool
+    findings_chain: bool
     selection_budget: int | None
+    extract_profiles: tuple[ExtractProfile, ...] | None
 
 
 ANALYSIS_DEPTH_TABLE: dict[AnalysisDepth, AnalysisDepthDirective] = {
     "landscape": {
-        "screen_stage2": False,
+        "screen_full": False,
         "characterise": True,
-        "deep_chain": False,
+        "select": False,
+        "findings_chain": False,
         "selection_budget": None,
+        "extract_profiles": None,
     },
     "standard": {
-        # 018 regrade: select/extract/group are deep-only now (ADR 0013 spine
-        # untouched). Standard keeps ingest + stage-2 screening +
-        # characterisation, so synthesise grounds in full-text chunks plus
-        # characterisation without the findings layer.
-        "screen_stage2": True,
+        # 019 select-at-standard regrade: select now runs at standard too, so
+        # synthesise gets the SELECTION_PRIOR_BOOST retrieval prior and
+        # origin: selected|unselected_screened citation accounting over the
+        # full-text corpus, without the findings-extraction layer (extract/
+        # group stay deep-only).
+        "screen_full": True,
         "characterise": True,
-        "deep_chain": False,
-        "selection_budget": None,
+        "select": True,
+        "findings_chain": False,
+        # Plan-pinned standard selection budget; calibration is eval-slice
+        # work (pre-eval-slice-plan.md), not decided here.
+        "selection_budget": 15,
+        "extract_profiles": None,
     },
     "deep": {
-        "screen_stage2": True,
+        "screen_full": True,
         "characterise": True,
-        "deep_chain": True,
+        "select": True,
+        "findings_chain": True,
         "selection_budget": 25,
+        "extract_profiles": ("iof", "icf"),
     },
 }
+
+# findings_chain (extract+group) is only ever meaningful once select has run —
+# a depth row that buys the findings chain without buying select is an
+# incoherent table entry, checked once at import time rather than re-derived
+# at every compose() call.
+for _depth, _settings in ANALYSIS_DEPTH_TABLE.items():
+    if _settings["findings_chain"] and not _settings["select"]:
+        raise AssertionError(
+            f"ANALYSIS_DEPTH_TABLE[{_depth!r}]: findings_chain requires select"
+        )
+del _depth, _settings
 
 NAMED_PAIRINGS: dict[str, tuple[SearchEffort, AnalysisDepth]] = {
     "lighter": ("rapid", "landscape"),
@@ -120,12 +162,14 @@ TIME_BANDS: dict[tuple[SearchEffort, AnalysisDepth], str] = {
     ("standard", "landscape"): "~15-20 min",
     ("deep", "landscape"): "~20-25 min",
     ("rapid", "standard"): "~30-45 min",
-    # This anchor was measured pre-regrade, with the deep chain (select/
-    # extract/group) still running at standard depth — it is stale now that
-    # standard drops the deep chain and gets re-seeded from a fresh measured
-    # run in 018 Phase D (displayed-band-is-measured discipline: not invented
-    # here).
-    ("standard", "standard"): "~30-45 min",
+    # Re-seeded from the 019 Phase E measured run (2026-07-12, heat-pump
+    # question, standard x standard WITH select-at-standard, 58 docs acquired,
+    # 20 full-text screened): 805 s ≈ 13.4 min end to end incl. the planner
+    # turn — acquire 12s + screen_abstract 14s + classify 58s + appraise 0.1s
+    # + ingest 76s + screen_full 6s + characterise 8s + select 5s +
+    # synthesise 602s. Displayed-band-is-measured; synthesise dominates, so
+    # the band widens with corpus size, not composition.
+    ("standard", "standard"): "~10-20 min",
     ("deep", "standard"): "~35-50 min",
     ("rapid", "deep"): "~75-90 min",
     ("standard", "deep"): "~80-95 min",
@@ -133,19 +177,29 @@ TIME_BANDS: dict[tuple[SearchEffort, AnalysisDepth], str] = {
 }
 
 _DISCRETIONARY_COMPONENT_SET = set(DISCRETIONARY_COMPONENTS)
-_REGISTRY_COMPONENT_BY_STEP: dict[str, str] = {
-    "acquire": "acquire",
-    "screen": "screen",
-    "classify": "classify",
-    "appraise": "appraise",
-    "ingest_full_text": "ingest_full_text",
-    "screen_stage2": "screen",
-    "characterise": "characterise",
-    "select": "select",
-    "extract": "extract",
-    "group": "group",
-    "synthesise": "synthesise",
-}
+# The screening harness component is keyed "screen" in COMPONENT_REGISTRY
+# (plan.py) regardless of which plan-vocabulary step invokes it: both
+# screen_abstract (mandatory spine, stage 1) and screen_full (discretionary,
+# stage 2) dispatch to it. Every other step name is its own registry
+# component, so a function replaces what was previously a mostly-identity
+# dict (task 019 item 10b).
+_SCREENING_STEPS = frozenset(("screen_abstract", "screen_full"))
+
+
+def registry_component_for(step: str) -> str:
+    """Map a composed orchestration step name to its harness registry component.
+
+    Args:
+        step: Composed orchestration step name (plan vocabulary).
+
+    Returns:
+        The ``COMPONENT_REGISTRY`` key that step dispatches to.
+    """
+    if step in _SCREENING_STEPS:
+        return "screen"
+    return step
+
+
 _REFERENCE_RULES: dict[str, str] = {
     "select": "characterisation_run_id <- characterise",
     "extract": "selection_run_id <- select",
@@ -173,17 +227,21 @@ def _require_clean_string(value: str, *, field_name: str) -> str:
 def _enabled_components(depth: AnalysisDepth) -> set[DiscretionaryComponent]:
     settings = ANALYSIS_DEPTH_TABLE[depth]
     enabled: set[DiscretionaryComponent] = set()
-    if settings["screen_stage2"]:
-        enabled.add("screen_stage2")
+    if settings["screen_full"]:
+        enabled.add("screen_full")
     if settings["characterise"]:
         enabled.add("characterise")
-    if settings["deep_chain"]:
-        enabled.update(("select", "extract", "group"))
+    if settings["select"]:
+        enabled.add("select")
+    if settings["findings_chain"]:
+        enabled.update(("extract", "group"))
     return enabled
 
 
 def _validate_registry() -> None:
-    missing = sorted(set(_REGISTRY_COMPONENT_BY_STEP.values()) - set(COMPONENT_REGISTRY))
+    missing = sorted(
+        {registry_component_for(step) for step in ALL_STEPS} - set(COMPONENT_REGISTRY)
+    )
     if missing:
         raise ValueError(f"orchestration references unknown registry component(s): {missing}")
 
@@ -198,6 +256,88 @@ def _derive_expected_artefact_shape(
     return "grounded answer over the screened corpus"
 
 
+class CountryGroup(BaseModel):
+    """Named country group compiled into backend-specific search filters.
+
+    Args:
+        label: Pinned Tier-1 label, or a user/planner label for an explicit
+            Tier-2 country list.
+        countries: Explicit ISO-3166 alpha-2 country list for Tier-2 groups.
+            Must be ``None`` for pinned Tier-1 labels.
+        authorship: Deterministic provenance of the group membership.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    label: str
+    countries: list[str] | None = None
+    authorship: CountryGroupAuthorship
+
+    @field_validator("label")
+    @classmethod
+    def validate_label(cls, value: str) -> str:
+        """Validate the group label.
+
+        Args:
+            value: Candidate group label.
+
+        Returns:
+            The validated label.
+
+        Raises:
+            ValueError: If the label is empty or padded with whitespace.
+        """
+        return _require_clean_string(value, field_name="country_group.label")
+
+    @field_validator("countries")
+    @classmethod
+    def validate_countries(cls, value: list[str] | None) -> list[str] | None:
+        """Validate explicit Tier-2 country membership.
+
+        Args:
+            value: Candidate country list, or ``None``.
+
+        Returns:
+            The validated list, normalised to upper-case, or ``None``.
+
+        Raises:
+            ValueError: If the list is empty, duplicated, too long, or contains
+                a non-ISO-3166 alpha-2 code.
+        """
+        if value is None:
+            return None
+        if len(value) > 200:
+            raise ValueError("country_group.countries must contain at most 200 codes")
+        try:
+            return validate_iso_alpha2(value)
+        except SearchDirectiveError as exc:
+            raise ValueError(f"country_group.countries {exc}") from exc
+
+    @model_validator(mode="after")
+    def validate_group_shape(self) -> Self:
+        """Validate pinned-vs-explicit group shape and authorship.
+
+        Returns:
+            The validated group.
+
+        Raises:
+            ValueError: If a pinned group carries inline countries, a custom
+                group omits countries, or authorship does not match the group
+                source.
+        """
+        if self.label in TIER1_GROUPS:
+            if self.countries is not None:
+                raise ValueError("pinned country_group labels must not carry countries")
+            if self.authorship != "pinned-table":
+                raise ValueError("pinned country_group labels require authorship 'pinned-table'")
+            return self
+        if self.countries is None:
+            raise ValueError("custom country_group labels require countries")
+        if self.authorship == "pinned-table":
+            raise ValueError("custom country_group labels cannot use authorship 'pinned-table'")
+        return self
+
+
 class ScopeConstraints(BaseModel):
     """Search-scope constraints compiled into the search filter grammar.
 
@@ -207,6 +347,7 @@ class ScopeConstraints(BaseModel):
         publisher_country: Optional Overton publisher-country filter.
         author_affiliation_countries: Optional OpenAlex author-affiliation
             country filter, as 2-letter alpha codes normalised to upper-case.
+        country_group: Optional named group applied to both search backends.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -215,6 +356,7 @@ class ScopeConstraints(BaseModel):
     published_before: str | None = None
     publisher_country: str | None = None
     author_affiliation_countries: list[str] | None = None
+    country_group: CountryGroup | None = None
 
     @field_validator("published_after", "published_before")
     @classmethod
@@ -260,7 +402,10 @@ class ScopeConstraints(BaseModel):
             raise ValueError(
                 "publisher_country must contain only letters, spaces, hyphens or apostrophes"
             )
-        return value
+        try:
+            return validate_overton_display_name(value, field_name="publisher_country")
+        except SearchDirectiveError as exc:
+            raise ValueError(str(exc)) from exc
 
     @field_validator("author_affiliation_countries")
     @classmethod
@@ -285,26 +430,22 @@ class ScopeConstraints(BaseModel):
             raise ValueError(
                 "author_affiliation_countries must not be empty; omit the field instead"
             )
-        normalised: list[str] = []
-        for entry in value:
-            if len(entry) != 2 or not entry.isalpha():
-                raise ValueError(
-                    "author_affiliation_countries must contain 2-letter alphabetic codes"
-                )
-            normalised.append(entry.upper())
-        if len(set(normalised)) != len(normalised):
-            raise ValueError("author_affiliation_countries must not contain duplicates")
-        return normalised
+        try:
+            return validate_iso_alpha2(value)
+        except SearchDirectiveError as exc:
+            raise ValueError(f"author_affiliation_countries {exc}") from exc
 
     @model_validator(mode="after")
-    def validate_date_window(self) -> Self:
-        """Validate chronological ordering for the optional recency window.
+    def validate_scope_shape(self) -> Self:
+        """Validate cross-field scope rules.
 
         Returns:
             The validated model.
 
         Raises:
             ValueError: If ``published_after`` is later than ``published_before``.
+            ValueError: If ``country_group`` is combined with single-country
+                geography filters.
         """
         if (
             self.published_after is not None
@@ -312,6 +453,14 @@ class ScopeConstraints(BaseModel):
             and date.fromisoformat(self.published_after) > date.fromisoformat(self.published_before)
         ):
             raise ValueError("published_after must not be later than published_before")
+        if self.country_group is not None and (
+            self.publisher_country is not None
+            or self.author_affiliation_countries is not None
+        ):
+            raise ValueError(
+                "country_group is mutually exclusive with publisher_country "
+                "and author_affiliation_countries"
+            )
         return self
 
     def to_filters(self) -> dict[str, dict[str, Any]]:
@@ -330,6 +479,19 @@ class ScopeConstraints(BaseModel):
             shared["published_before"] = self.published_before
         if shared:
             filters["shared"] = shared
+        if self.country_group is not None:
+            group = self.country_group
+            if group.label in TIER1_GROUPS:
+                countries = list(expand_tier1(group.label))
+                filters["openalex"] = {"author_affiliation_countries": countries}
+                filters["overton"] = {"publisher_region": group.label}
+                return filters
+            countries = group.countries or []
+            filters["openalex"] = {"author_affiliation_countries": countries}
+            filters["overton"] = {
+                "source_country_post_filter": sorted(overton_display_names(countries)),
+            }
+            return filters
         if self.publisher_country is not None:
             filters["overton"] = {"publisher_country": self.publisher_country}
         if self.author_affiliation_countries is not None:
@@ -389,6 +551,8 @@ class OrchestrationPlan(BaseModel):
         component_rationale: Visible intent-fit rationale keyed by discretionary
             component.
         grouping_facet: Optional grouping facet, valid only when ``group`` runs.
+        extract_profiles: Optional finding profile short names, valid only
+            when ``extract`` runs. ``None`` compiles from depth defaults.
         steering_mode: Steering mode for the later runner.
         steer_point_defaults: Pre-declared steering defaults.
         expected_artefact_shape: Deterministic forecast derived from components.
@@ -409,6 +573,7 @@ class OrchestrationPlan(BaseModel):
     components: list[DiscretionaryComponent] = Field(default_factory=list)
     component_rationale: dict[str, str] = Field(default_factory=dict)
     grouping_facet: GroupingFacet | None = None
+    extract_profiles: list[ExtractProfile] | None = None
     steering_mode: SteeringMode
     steer_point_defaults: list[SteerPointDefault] = Field(default_factory=list)
     expected_artefact_shape: str = ""
@@ -486,6 +651,29 @@ class OrchestrationPlan(BaseModel):
             raise ValueError("components must not contain duplicates")
         return values
 
+    @field_validator("extract_profiles")
+    @classmethod
+    def validate_extract_profiles(
+        cls,
+        values: list[ExtractProfile] | None,
+    ) -> list[ExtractProfile] | None:
+        """Validate optional extraction profile composition.
+
+        Args:
+            values: Candidate short profile names, or ``None``.
+
+        Returns:
+            The validated profile list, or ``None``.
+
+        Raises:
+            ValueError: If a profile appears more than once.
+        """
+        if values is None:
+            return None
+        if len(set(values)) != len(values):
+            raise ValueError("extract_profiles must not contain duplicates")
+        return values
+
     @field_validator("component_rationale")
     @classmethod
     def validate_component_rationale(cls, value: dict[str, str]) -> dict[str, str]:
@@ -535,6 +723,14 @@ class OrchestrationPlan(BaseModel):
             raise ValueError("group requires extract in components")
         if self.grouping_facet is not None and "group" not in component_set:
             raise ValueError("grouping_facet requires group in components")
+        if self.extract_profiles is not None:
+            if "extract" not in component_set:
+                raise ValueError("extract_profiles requires extract in components")
+            if "iof" not in self.extract_profiles:
+                raise ValueError(
+                    "extract_profiles must include 'iof'; ICF-only extraction "
+                    "is unsupported in this slice"
+                )
 
         expected_shape = _derive_expected_artefact_shape(component_set)
         if self.expected_artefact_shape and self.expected_artefact_shape != expected_shape:
@@ -627,12 +823,19 @@ def _directive_delta(component: str, plan: OrchestrationPlan) -> dict[str, Any]:
     if component == "acquire":
         search: dict[str, Any] = dict(SEARCH_EFFORT_DIRECTIVES[plan.search_effort])
         filters = plan.scope_constraints.to_filters()
+        # country_group compiles blocks for both backends; drop the block for
+        # a backend the plan's scope excludes, or acquire-time directive
+        # validation rejects the whole (approved) plan as out of scope.
+        if plan.backend_scope == "academic_only":
+            filters.pop("overton", None)
+        elif plan.backend_scope == "grey_lit_only":
+            filters.pop("openalex", None)
         if filters:
             search["filters"] = filters
         return {"search": search}
-    if component == "screen" and plan.screening_criteria:
+    if component == "screen_abstract" and plan.screening_criteria:
         return {"screening": {"criteria": list(plan.screening_criteria)}}
-    if component == "screen_stage2":
+    if component == "screen_full":
         screening: dict[str, Any] = {"stage": 2}
         if plan.screening_criteria:
             screening["criteria"] = list(plan.screening_criteria)
@@ -642,6 +845,22 @@ def _directive_delta(component: str, plan: OrchestrationPlan) -> dict[str, Any]:
         if budget is None:
             raise ValueError("select cannot compile without a selection budget")
         return {"selection": {"budget": budget}}
+    if component == "extract":
+        profiles = plan.extract_profiles
+        if profiles is None:
+            profiles = list(ANALYSIS_DEPTH_TABLE[plan.analysis_depth]["extract_profiles"] or ())
+        if not profiles:
+            raise ValueError("extract cannot compile without extraction profiles")
+        requested = set(profiles)
+        return {
+            "extraction": {
+                "profiles": [
+                    profile_id
+                    for profile, profile_id in EXTRACT_PROFILE_IDS.items()
+                    if profile in requested
+                ]
+            }
+        }
     if component == "group" and plan.grouping_facet is not None:
         return {"grouping": {"facet": plan.grouping_facet}}
     return {}
@@ -665,13 +884,13 @@ def compose(plan: OrchestrationPlan) -> ComposedChain:
     selected = set(plan.components)
     ordered_components: list[str] = [
         "acquire",
-        "screen",
+        "screen_abstract",
         "classify",
         "appraise",
         "ingest_full_text",
     ]
-    if "screen_stage2" in selected:
-        ordered_components.append("screen_stage2")
+    if "screen_full" in selected:
+        ordered_components.append("screen_full")
     if "characterise" in selected:
         ordered_components.append("characterise")
     if "select" in selected:

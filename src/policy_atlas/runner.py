@@ -29,15 +29,16 @@ from policy_atlas.finding_vetter import FindingVetterBackend
 from policy_atlas.grounding_judge import GroundingJudgeBackend
 from policy_atlas.grouping import ThemeGroupingBackend
 from policy_atlas.harness import run_harness
+from policy_atlas.icf_finding_vetter import ICFFindingVetterBackend
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.ingest_full_text import DocumentFetcher
 from policy_atlas.orchestration_plan import (
-    _REGISTRY_COMPONENT_BY_STEP,
     SPINE,
     ComponentStep,
     ComposedChain,
     OrchestrationPlan,
     compose,
+    registry_component_for,
 )
 from policy_atlas.plan import Plan, compile
 from policy_atlas.ranking import RankingBackend
@@ -69,8 +70,8 @@ COMPONENT_RETRY_CAP = 1
 TERMINAL_RUN_STATUSES = frozenset({"succeeded", "failed"})
 LLM_BEARING_COMPONENTS = frozenset(
     {
-        "screen",
-        "screen_stage2",
+        "screen_abstract",
+        "screen_full",
         "classify",
         "characterise",
         "select",
@@ -103,6 +104,8 @@ class RunnerBackends:
         ranking: Optional selection reranking backend.
         extraction: Optional extraction backend.
         finding_vetter: Optional post-extract finding vetter (``None`` = off).
+        icf_extraction: Optional ICF extraction backend.
+        icf_finding_vetter: Optional ICF post-extract finding vetter.
         facet_grouping: Optional facet-grouping backend.
         synthesis: Optional synthesis backend.
         grounding_judge: Optional grounding-judge backend.
@@ -119,6 +122,8 @@ class RunnerBackends:
     ranking: RankingBackend | None = None
     extraction: ExtractionBackend | None = None
     finding_vetter: FindingVetterBackend | None = None
+    icf_extraction: Any | None = None
+    icf_finding_vetter: ICFFindingVetterBackend | None = None
     facet_grouping: FacetGroupingBackend | None = None
     synthesis: SynthesisBackend | None = None
     grounding_judge: GroundingJudgeBackend | None = None
@@ -1006,7 +1011,7 @@ def _run_step_attempt(
     backends: RunnerBackends,
     session_id: uuid.UUID | None,
 ) -> _AttemptOutcome:
-    registry_component = _REGISTRY_COMPONENT_BY_STEP[step.component]
+    registry_component = registry_component_for(step.component)
     run_id = uuid.uuid4()
     plan_payload = _plan_compiled_payload(
         step=step,
@@ -1087,6 +1092,8 @@ def _run_step_attempt(
                     ranking_backend=backends.ranking,
                     extraction_backend=backends.extraction,
                     finding_vetter_backend=backends.finding_vetter,
+                    icf_extraction_backend=backends.icf_extraction,
+                    icf_finding_vetter_backend=backends.icf_finding_vetter,
                     facet_grouping_backend=backends.facet_grouping,
                     synthesis_backend=backends.synthesis,
                     grounding_judge_backend=backends.grounding_judge,

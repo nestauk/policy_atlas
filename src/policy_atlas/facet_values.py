@@ -50,13 +50,15 @@ class FindingFacetView:
         finding_id: Stable finding identifier.
         facet_value: Raw value of the chosen facet column, or ``None``.
         counterpart_value: Raw value of the paired counterpart column, or ``None``.
-        effect_direction: Finding effect direction.
+        effect_direction: Finding effect direction for IOF members, or ``None``.
+        kind: Finding kind (``"iof"`` or ``"icf"``).
     """
 
     finding_id: str
     facet_value: str | None
     counterpart_value: str | None
-    effect_direction: str
+    effect_direction: str | None
+    kind: str = "iof"
 
 
 @dataclass(frozen=True)
@@ -376,6 +378,7 @@ def build_groups_payload(
     """
     value_by_id = _value_by_id(values)
     finding_direction_by_id = _finding_direction_by_id(findings)
+    finding_kind_by_id = _finding_kind_by_id(findings)
     ungrouped_ids: set[str] = set()
     assigned_value_ids: set[str] = set()
 
@@ -417,13 +420,21 @@ def build_groups_payload(
             if value.value_id in member_set
             for finding_id in value.finding_ids
         ]
-        spread = _spread_for_finding_ids(member_finding_ids, finding_direction_by_id)
+        spread = _spread_for_finding_ids(
+            member_finding_ids,
+            finding_direction_by_id,
+            finding_kind_by_id,
+        )
         group_payloads.append(
             {
                 "label": group.label,
                 "description": group.description,
                 "member_values": member_values,
                 "member_finding_ids": member_finding_ids,
+                "member_finding_kinds": [
+                    finding_kind_by_id[finding_id] for finding_id in member_finding_ids
+                ],
+                "member_counts": _member_counts(member_finding_ids, finding_kind_by_id),
                 "size": len(member_finding_ids),
                 "direction_spread": spread,
             }
@@ -442,18 +453,32 @@ def build_groups_payload(
         "ungrouped": {
             "values": ungrouped_values,
             "finding_ids": ungrouped_finding_ids,
+            "finding_kinds": [
+                finding_kind_by_id[finding_id] for finding_id in ungrouped_finding_ids
+            ],
+            "member_counts": _member_counts(ungrouped_finding_ids, finding_kind_by_id),
             "direction_spread": _spread_for_finding_ids(
-                ungrouped_finding_ids, finding_direction_by_id
+                ungrouped_finding_ids,
+                finding_direction_by_id,
+                finding_kind_by_id,
             ),
         },
         "no_value": {
             "finding_ids": list(no_value_finding_ids),
+            "finding_kinds": [
+                finding_kind_by_id[finding_id] for finding_id in no_value_finding_ids
+            ],
+            "member_counts": _member_counts(no_value_finding_ids, finding_kind_by_id),
             "direction_spread": _spread_for_finding_ids(
-                no_value_finding_ids, finding_direction_by_id
+                no_value_finding_ids,
+                finding_direction_by_id,
+                finding_kind_by_id,
             ),
         },
         "overall_direction_spread": direction_spread(
-            finding.effect_direction for finding in findings
+            finding.effect_direction
+            for finding in findings
+            if finding.kind == "iof" and finding.effect_direction is not None
         ),
     }
 
@@ -484,9 +509,19 @@ def assert_grouping_invariants(
         size_total += size
         if len(member_finding_ids) != size:
             raise InvalidPartitionOutput(f"group {index} size does not match finding ids")
+        member_kinds = cast(list[str], group["member_finding_kinds"])
+        if len(member_kinds) != len(member_finding_ids):
+            raise InvalidPartitionOutput(f"group {index} kind count does not match finding ids")
+        member_counts = cast(dict[str, int], group["member_counts"])
+        if sum(member_counts.values()) != size:
+            raise InvalidPartitionOutput(f"group {index} member counts do not sum to size")
+        if member_counts != _counts_from_kinds(member_kinds):
+            raise InvalidPartitionOutput(f"group {index} member counts do not match kinds")
         spread = cast(dict[str, int], group["direction_spread"])
-        if sum(spread.values()) != size:
-            raise InvalidPartitionOutput(f"group {index} direction spread does not sum to size")
+        if sum(spread.values()) != member_counts.get("iof", 0):
+            raise InvalidPartitionOutput(
+                f"group {index} direction spread does not sum to IOF members"
+            )
 
     ungrouped = cast(dict[str, Any], payload["ungrouped"])
     no_value = cast(dict[str, Any], payload["no_value"])
@@ -500,8 +535,9 @@ def assert_grouping_invariants(
     _assert_residual_spread(no_value, "no_value")
 
     overall = cast(dict[str, int], payload["overall_direction_spread"])
-    if sum(overall.values()) != len(finding_ids):
-        raise InvalidPartitionOutput("overall direction spread does not sum to finding count")
+    overall_counts = _bucket_member_counts(groups, ungrouped, no_value)
+    if sum(overall.values()) != overall_counts.get("iof", 0):
+        raise InvalidPartitionOutput("overall direction spread does not sum to IOF members")
 
     if actual != expected:
         raise InvalidPartitionOutput("finding ids are not covered exactly once")
@@ -570,23 +606,82 @@ def _finding_direction_by_id(findings: Sequence[FindingFacetView]) -> dict[str, 
     for finding in findings:
         if finding.finding_id in directions:
             raise InvalidPartitionOutput(f"duplicate finding id {finding.finding_id}")
-        directions[finding.finding_id] = finding.effect_direction
+        if finding.kind == "iof":
+            if finding.effect_direction is None:
+                raise InvalidPartitionOutput(f"IOF finding missing direction {finding.finding_id}")
+            directions[finding.finding_id] = finding.effect_direction
     return directions
 
 
+def _finding_kind_by_id(findings: Sequence[FindingFacetView]) -> dict[str, str]:
+    kinds: dict[str, str] = {}
+    for finding in findings:
+        if finding.finding_id in kinds:
+            raise InvalidPartitionOutput(f"duplicate finding id {finding.finding_id}")
+        kinds[finding.finding_id] = finding.kind
+    return kinds
+
+
 def _spread_for_finding_ids(
-    finding_ids: Iterable[str], finding_direction_by_id: dict[str, str]
+    finding_ids: Iterable[str],
+    finding_direction_by_id: dict[str, str],
+    finding_kind_by_id: dict[str, str],
 ) -> dict[str, int]:
     directions: list[str] = []
     for finding_id in finding_ids:
-        if finding_id not in finding_direction_by_id:
+        kind = finding_kind_by_id.get(finding_id)
+        if kind is None:
             raise InvalidPartitionOutput(f"unknown finding id {finding_id}")
+        if kind != "iof":
+            continue
+        if finding_id not in finding_direction_by_id:
+            raise InvalidPartitionOutput(f"IOF finding missing direction {finding_id}")
         directions.append(finding_direction_by_id[finding_id])
     return direction_spread(directions)
 
 
 def _assert_residual_spread(bucket: dict[str, Any], name: str) -> None:
     finding_ids = cast(list[str], bucket["finding_ids"])
+    finding_kinds = cast(list[str], bucket["finding_kinds"])
+    if len(finding_kinds) != len(finding_ids):
+        raise InvalidPartitionOutput(f"{name} kind count does not match finding ids")
+    member_counts = cast(dict[str, int], bucket["member_counts"])
+    if sum(member_counts.values()) != len(finding_ids):
+        raise InvalidPartitionOutput(f"{name} member counts do not sum to finding ids")
+    if member_counts != _counts_from_kinds(finding_kinds):
+        raise InvalidPartitionOutput(f"{name} member counts do not match kinds")
     spread = cast(dict[str, int], bucket["direction_spread"])
-    if sum(spread.values()) != len(finding_ids):
-        raise InvalidPartitionOutput(f"{name} direction spread does not sum to finding ids")
+    if sum(spread.values()) != member_counts.get("iof", 0):
+        raise InvalidPartitionOutput(f"{name} direction spread does not sum to IOF members")
+
+
+def _member_counts(
+    finding_ids: Iterable[str], finding_kind_by_id: dict[str, str]
+) -> dict[str, int]:
+    counts = {"iof": 0, "icf": 0}
+    for finding_id in finding_ids:
+        kind = finding_kind_by_id.get(finding_id)
+        if kind is None:
+            raise InvalidPartitionOutput(f"unknown finding id {finding_id}")
+        counts[kind] = counts.get(kind, 0) + 1
+    return counts
+
+
+def _counts_from_kinds(kinds: Iterable[str]) -> dict[str, int]:
+    counts = {"iof": 0, "icf": 0}
+    for kind in kinds:
+        counts[kind] = counts.get(kind, 0) + 1
+    return counts
+
+
+def _bucket_member_counts(
+    groups: Sequence[dict[str, Any]], ungrouped: dict[str, Any], no_value: dict[str, Any]
+) -> dict[str, int]:
+    counts = {"iof": 0, "icf": 0}
+    for group in groups:
+        for kind, count in cast(dict[str, int], group["member_counts"]).items():
+            counts[kind] = counts.get(kind, 0) + count
+    for bucket in (ungrouped, no_value):
+        for kind, count in cast(dict[str, int], bucket["member_counts"]).items():
+            counts[kind] = counts.get(kind, 0) + count
+    return counts

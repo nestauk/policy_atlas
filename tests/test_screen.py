@@ -56,7 +56,7 @@ from tests.helpers import (
 # --- Schema / structure ---
 
 def test_screen_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 26
+    assert len(metadata.tables) == 27
 
 
 def test_pss_has_composite_unique(conn: Connection) -> None:
@@ -582,6 +582,147 @@ def test_cross_project_fk_rejected(conn: Connection) -> None:
     conn.begin()
 
 
+# --- is_retracted screening exclusion (task 019 item 8) ---
+
+class _CallCountingBackend:
+    """Delegates to the deterministic stub but records which pss_id every
+    envelope call carried, so tests can assert the backend was never called
+    for a retracted doc."""
+
+    mode = "stub"
+
+    def __init__(self) -> None:
+        self._stub = StubScreeningBackend()
+        self.envelope_pss_ids: list[str] = []
+
+    def screen_envelope(
+        self,
+        payload: ScreenEnvelopePayload,
+        *,
+        rep_index: int = 0,
+    ) -> UsageResult[ScreenRepWire]:
+        self.envelope_pss_ids.append(payload.pss_id)
+        return self._stub.screen_envelope(payload, rep_index=rep_index)
+
+    def screen_fulltext(
+        self, payload: ScreenFullTextPayload
+    ) -> UsageResult[ScreenRepWire]:
+        return self._stub.screen_fulltext(payload)
+
+
+def _seed_retracted_source(conn: Connection, project_id: uuid.UUID) -> uuid.UUID:
+    _, pss_id = seed_source(
+        conn,
+        project_id,
+        meta={"abstract": "Some policy text.", "provider_fields": {"is_retracted": True}},
+    )
+    return pss_id
+
+
+def test_screen_sources_excludes_retracted_doc_without_backend_call(conn: Connection) -> None:
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    retracted_pss = _seed_retracted_source(conn, pid)
+    _, clean_pss = seed_source(conn, pid, meta={"abstract": "Clean policy text."})
+    ctx = ScreenContext(scope_id=scope_id, intent="Test", context={})
+    backend = _CallCountingBackend()
+
+    counts = screen_sources(
+        conn, project_id=pid, run_id=rid, context=ctx, screening_backend=backend
+    )
+
+    assert str(retracted_pss) not in backend.envelope_pss_ids
+    assert str(clean_pss) in backend.envelope_pss_ids
+
+    retracted_row = conn.execute(
+        select(source_screening_result)
+        .where(source_screening_result.c.project_source_snapshot_id == retracted_pss)
+    ).one()
+    assert retracted_row.status == "excluded_retracted"
+    assert retracted_row.screen_basis == "title_abstract"
+    assert retracted_row.screen_decision_confidence is not None
+
+    clean_row = conn.execute(
+        select(source_screening_result)
+        .where(source_screening_result.c.project_source_snapshot_id == clean_pss)
+    ).one()
+    assert clean_row.status == "relevant"
+
+    # Funnel counts: excluded_retracted is its own bucket, never folded into
+    # not_relevant or relevant.
+    assert counts["screened"] == 2
+    assert counts["excluded_retracted"] == 1
+    assert counts["relevant"] == 1
+    assert counts["not_relevant"] == 0
+
+
+def test_screen_sources_excluded_retracted_event_payload(conn: Connection) -> None:
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _seed_retracted_source(conn, pid)
+    ctx = ScreenContext(scope_id=scope_id, intent="Test", context={})
+
+    screen_sources(conn, project_id=pid, run_id=rid, context=ctx)
+
+    screened_events = [
+        e["payload"] for e in events.read(conn, pid) if e["event_type"] == "source.screened"
+    ]
+    assert len(screened_events) == 1
+    assert screened_events[0]["status"] == "excluded_retracted"
+    assert screened_events[0]["aggregation_flags"] == ["is_retracted"]
+
+
+def test_excluded_retracted_effective_row_has_no_stage2_row(conn: Connection) -> None:
+    """A retracted doc's stage-1 exclusion is terminal: it never becomes a
+    stage-2 candidate, because stage-2 eligibility requires an effective
+    'relevant' row (screen.py::_load_stage2_docs)."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    retracted_pss = _seed_retracted_source(conn, pid)
+    seed_ingested_full_text(conn, pss_id=retracted_pss, chunks=["Full text, if it mattered."])
+    ctx1 = ScreenContext(scope_id=scope_id, intent="Test", context={})
+    screen_sources(conn, project_id=pid, run_id=rid, context=ctx1)
+
+    ctx2 = ScreenContext(
+        scope_id=scope_id, intent="Test", context={"screening": {"stage": 2}}
+    )
+    stage2_counts = screen_sources(
+        conn, project_id=pid, run_id=seed_run(conn, pid), context=ctx2
+    )
+    assert stage2_counts["stage2_screened"] == 0
+
+    rows = conn.execute(
+        select(source_screening_result)
+        .where(source_screening_result.c.project_source_snapshot_id == retracted_pss)
+    ).fetchall()
+    assert len(rows) == 1
+    assert rows[0].status == "excluded_retracted"
+    assert rows[0].screen_stage == 1
+
+
+def test_screen_sources_excluded_retracted_idempotent_rerun(conn: Connection) -> None:
+    """Re-running screen_sources never re-excludes or re-calls the backend for
+    an already-excluded_retracted doc (same insert-once semantics as any other
+    effective, non-failed stage-1 row)."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    retracted_pss = _seed_retracted_source(conn, pid)
+    ctx = ScreenContext(scope_id=scope_id, intent="Test", context={})
+
+    first = screen_sources(conn, project_id=pid, run_id=rid, context=ctx)
+    assert first["excluded_retracted"] == 1
+
+    second = screen_sources(conn, project_id=pid, run_id=seed_run(conn, pid), context=ctx)
+    assert second["screened"] == 0
+    assert second["excluded_retracted"] == 0
+
+    rows = conn.execute(
+        select(source_screening_result)
+        .where(source_screening_result.c.project_source_snapshot_id == retracted_pss)
+    ).fetchall()
+    assert len(rows) == 1
+
+
 # --- Harness integration ---
 
 def test_harness_screen_component(conn: Connection) -> None:
@@ -608,7 +749,7 @@ def test_harness_screen_component(conn: Connection) -> None:
     payload = completed[0]["payload"]
     expected_keys = {
         "component", "screened", "relevant", "not_relevant",
-        "failed", "title_abstract", "title_only", "unsure_reps",
+        "failed", "excluded_retracted", "title_abstract", "title_only", "unsure_reps",
         "non_unanimous", "rep_failures", "tie_broken", "retries",
         "usage_totals",
     }

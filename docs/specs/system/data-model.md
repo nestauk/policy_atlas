@@ -135,20 +135,98 @@ historical state.**
   source reports: effect direction; effect size + type; uncertainty (CI/SE); p-value;
   study-design/sample metadata (design, N, k, I², τ²); source-named **population**;
   source-named nullable **comparator** (an effect direction is *versus something* — reported
-  by the source, so a base field); the **estimate-level discriminator** (`study` | `pooled` |
+  by the source, so a base field); source-named nullable finding-grain **`study_geography`**
+  (the geography of the evidence underlying *this* finding, exactly as the source reports it;
+  null when unreported, never inferred from publisher/venue/affiliation — same source-named,
+  finding-grain treatment as population/comparator, not a document-level field); source-named
+  nullable finding-grain **`setting`** (the delivery setting the intervention underlying *this*
+  finding was experienced in, exactly as the source reports it — the CFIR inner-setting rule;
+  coexists with the pre-existing **stratum-qualifier** `setting`, which scopes a specific
+  subgroup estimate rather than describing the underlying evidence; the top-level column does
+  not join the claim key — the `study_design`/`study_geography` precedent); the
+  **estimate-level discriminator** (`study` | `pooled` |
   `claim` — a review's pooled estimate and a primary study's own estimate are different
   evidence shapes sharing one schema); **stratum qualifiers** (timepoint/subgroup/setting as
   structured qualifiers on the finding — the outcome reference stays the **base measure only**,
   "BMI", never "BMI at 12 months", which keeps outcome references groupable); descriptive
-  **causality-by-design** label; primacy/prevalence flags. *(Comparator, estimate level,
-  stratum qualifiers and τ² made explicit by the task-011 flow-back — all inside the
-  source-groundability line, surfaced by the V2 extraction autopsy.)* **Question-relative
+  **causality-by-design** label; a distinct nullable **`effect_basis`** label (`observed` |
+  `modelled`, null if indeterminate — evidence basis is a different dimension from causal
+  identification, deliberately not folded into causality-by-design); primacy/prevalence flags.
+  *(Comparator, estimate level, stratum qualifiers and τ² made explicit by the task-011
+  flow-back; `study_geography` and `effect_basis` made explicit by the task-020 flow-back
+  (ADR 0016); top-level `setting` added by the task-021 flow-back (ADR 0017, the `iof_v3`
+  rider — deliberate, pre-ground-truth, and bounded: nothing else rides that bump) — all
+  inside the source-groundability line, surfaced by the V2 extraction autopsy / the 018
+  live-run gap. None of these fields backfill existing prior-version rows — per the
+  upgrades-never-invalidate rule above, an old row reads as **"not recorded under
+  [version]"** via `field_coverage` key-absence, distinct from a genuine null recorded
+  under the current version.)* **Question-relative
   judgements** (normalised magnitude, causal *weighting*, is-beneficial) are **analysis
   enrichment** layered by Impact/VfM — **not base fields** (keeps the record reusable, not
   pre-committed to one analysis).
-- ⏸ **`implementation_context_finding`** (mechanisms/barriers/conditions — the "how/why") —
-  named, not built. Carries the **same source-named reference vocabulary** so cross-schema
-  linkage is **reference-mediated** via `group` (no explicit link objects).
+- **Second reusable schema: `implementation_context_finding`** (mechanisms, barriers,
+  implementation conditions — the "how/why/under what conditions", not "what effect"; task
+  021, ADR 0017). **Grain:** one implementation-context claim about a named intervention,
+  grounded in a **single source**. **Base fields** = what the source reports: closed
+  **`context_type`** (`mechanism` | `barrier` | `enabler` | `implementation_condition` |
+  `delivery_process` | `adaptation` | `fidelity` — barriers and enablers are distinct values
+  because that is how sources speak, polarity lives in the type, no separate direction field;
+  `adaptation` and `fidelity` cover reported modifications and delivered-vs-planned
+  observations respectively); source-named prose **`claim`** (one claim per record — ICF has
+  no statistics block for content to live in, so the record stays one coherent typed unit:
+  claim + dimensions + anchors); the **shared source-named reference set** (below); nullable
+  **`claim_level`** (`study` | `pooled` — the IOF estimate-level logic applied to context
+  claims, joining the claim key so a review's pooled barrier and a primary study's own
+  observation never double-count); nullable **`claim_basis`** (`studied` | `author_assertion`
+  | `cited_theory` — whether the source studied, asserted, or carried the claim from cited
+  literature; independent of `claim_level` — a review's pooled empirical barrier is
+  `studied` + `pooled`, not one or the other); nullable **`level`** (`system` |
+  `organisation` | `provider` | `recipient` — the socio-ecological level the claim operates
+  at, as the source frames it); nullable source-named Text **`resource_requirements`** and
+  **`workforce_requirements`** (only what the source reports — cost/funding,
+  staffing/skills/training; never estimated or graded, no judgment ordinals — V2's
+  `complexity` did not carry for exactly this reason). **Anchors + machinery** mirror IOF:
+  ≥1 verbatim quote anchor, `field_coverage` per nullable field (markers for non-valid
+  outcomes only — a present valid field is absent from the map), `grounding` JSONB. **No
+  stratum qualifiers** (no ICF analogue of effect strata — declined, not deferred). Excluded
+  by design, vetter-enforced: recommendations and aspirations are not findings
+  ("policymakers should fund training" — no; "the programme stalled where training was
+  unfunded" — yes); question-relative judgements (severity, importance rankings) are
+  analysis enrichment, never base fields.
+- **Shared source-named reference vocabulary, defined once** (task 021): `intervention` /
+  `outcome` / `population` / `setting` / `study_geography` / `study_design` carry one shared
+  meaning-and-coercion definition imported by both schemas, with a cross-schema drift guard
+  asserting they never diverge, and **requiredness pinned per schema** (semantics and
+  coercion are shared; requiredness legitimately is not): `intervention` NOT NULL on both
+  (implementation context is context *of* something); `outcome` NOT NULL on IOF (an effect
+  claim is always *of* an outcome), nullable on ICF (a mechanism may name the outcome it
+  explains; most barriers and conditions don't); `population`, `study_geography` and
+  `study_design` nullable on both. **`setting`** — the delivery setting exactly as the
+  source names it (the CFIR inner-setting rule, carried near-verbatim in both prompts: the
+  setting where recipients *experience* the intervention, never the institution that created
+  or mandated it — a parliament passing a school nutrition policy means "school") — is **new
+  to the stored vocabulary on BOTH schemas**: a nullable finding-grain column on ICF from
+  day one, and a nullable top-level column added to IOF by the same flow-back (the `iof_v3`
+  rider — see Edit 1 above). Cross-schema linkage between IOF and ICF stays
+  **reference-mediated via `group`** (no explicit link objects) — the shared vocabulary
+  definition is what makes that reference-mediation real rather than aspirational.
+- **Storage stays parallel tables** (`intervention_outcome_finding` /
+  `implementation_context_finding`, disjoint payloads — a single merged table is the
+  generic-container failure mode this data model rejects). A **cross-kind UNION read view**
+  over the shared reference columns is a recorded seam, not built this slice (Slice C, first
+  reader = Slice C's cross-schema grouping).
+- **ICF is its own fingerprint domain** (own extraction profile/call `eb_icf_base_v1`, own
+  `SCHEMA_VERSION` `icf_v1`, hanging off `source_extraction_record` via the same composite FK
+  as IOF): nothing about ICF's arrival, prompt, or schema version invalidates existing IOF
+  memos, and vice versa — **upgrades-never-invalidate** applies per schema, not globally.
+  (The one deliberate, bounded exception is IOF's own `setting` rider in Edit 1 above — a
+  pre-ground-truth, once-only fingerprint bump owned by IOF's own version history, not
+  triggered by ICF's arrival.)
+- **Presentation-grain design note** (owner, 2026-07-12, task 021 flow-back): finding
+  **kinds are production/validation categories, never reader-facing navigation** — reader
+  surfaces pivot on the shared references and on `group`'s facet clusters (one card/section
+  per intervention or theme, effects and implementation context as facets of one entity — the
+  V2 `InterventionCard` precedent), recorded here so the web-app slice inherits it.
 - **Coverage states are gap provenance**: `searched_and_absent` · `not_applicable` ·
   `not_selected` (doc-level — screened-in but not chosen) · `not_extracted` (field-level) ·
   `unclear` · `extraction_failed`. A source that **reports** a null is a **finding**; a source

@@ -20,6 +20,14 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas import acquire, screen
+from policy_atlas.country_filters import (
+    OVERTON_DISPLAY_ALLOWLIST,
+    validate_iso_alpha2,
+    validate_overton_display_name,
+)
+from policy_atlas.country_filters import (
+    SearchDirectiveError as _SearchDirectiveError,
+)
 from policy_atlas.embeddings import EmbeddingBackend
 from policy_atlas.schema import (
     event_log,
@@ -40,6 +48,7 @@ from policy_atlas.search_prompts import (
 from policy_atlas.usage import UsageAccumulator
 
 SearchDepth = Literal["rapid", "standard", "deep"]
+SearchDirectiveError = _SearchDirectiveError
 QueryOrigin = Literal[
     "generated",
     "variant_sr",
@@ -221,13 +230,10 @@ _OVERTON_FILTER_KEYS = {
     "publisher_type",
     "publisher_country",
     "publisher_region",
+    "source_country_post_filter",
     "language",
 }
 _BACKEND_NAMES = {"openalex", "overton"}
-
-
-class SearchDirectiveError(ValueError):
-    """Raised when a search directive or filter block fails closed."""
 
 
 @dataclass(frozen=True)
@@ -243,6 +249,8 @@ class ExecutedCall:
         records: Raw provider records returned by the call.
         status: ``"ok"`` or ``"error"``.
         error: Redacted error string for failed calls.
+        post_filter_excluded: Records excluded by a compiled post-filter, or
+            ``None`` when no post-filter was active for the call.
     """
 
     backend_name: str
@@ -253,6 +261,7 @@ class ExecutedCall:
     records: list[dict[str, Any]]
     status: CallStatus
     error: str | None
+    post_filter_excluded: int | None = None
 
 
 @dataclass(frozen=True)
@@ -261,6 +270,7 @@ class _PlannedCall:
     query: str
     query_origin: QueryOrigin
     group_key: str | None = None
+    filter_variant_index: int = 0
 
 
 @dataclass(frozen=True)
@@ -285,52 +295,185 @@ class StopDecision:
     overlay_applied: bool
 
 
-def _str_values(key: str, value: Any) -> list[str]:
-    if not isinstance(value, list) or not value:
-        raise ValueError(f"{key} must be a non-empty list")
-    return [str(item) for item in value]
+# Unified filter-directive validator/raiser family.
+#
+# Two call paths share these helpers, distinguished by keyword args:
+#   - Wire mapping (openalex_wire_params/overton_wire_params) operates on
+#     already-validated directive dicts, so it coerces loosely and raises
+#     plain ValueError (the defaults below).
+#   - Raw-directive validation (validate_scope_filters, via the
+#     _validate_*_block functions) operates on untrusted JSON, so it passes
+#     error=SearchDirectiveError and strict=True (type-check, no coercion,
+#     reject surrounding whitespace) plus accept_list_of_one=False for
+#     single-value fields (a list is always invalid there).
+#
+# To add a new key validator: pick the matching shape helper below, decide
+# strict/coerce semantics for the raw-JSON side, and wire it into both an
+# openalex/overton wire_params branch and a _validate_*_block branch.
 
 
-def _int_values(key: str, value: Any, min_value: int, max_value: int) -> list[int]:
+def _str_values(
+    key: str,
+    value: Any,
+    *,
+    error: type[Exception] = ValueError,
+    strict: bool = False,
+) -> list[str]:
     if not isinstance(value, list) or not value:
-        raise ValueError(f"{key} must be a non-empty list")
-    ints = [int(item) for item in value]
+        raise error(f"{key} must be a non-empty list")
+    if not strict:
+        return [str(item) for item in value]
+    out: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip() or item != item.strip():
+            raise error(f"{key} must contain non-empty strings")
+        out.append(item)
+    return out
+
+
+def _int_values(
+    key: str,
+    value: Any,
+    min_value: int,
+    max_value: int,
+    *,
+    error: type[Exception] = ValueError,
+    strict: bool = False,
+) -> list[int]:
+    if not isinstance(value, list) or not value:
+        raise error(f"{key} must be a non-empty list")
+    ints: list[int] = []
+    for item in value:
+        if strict:
+            if isinstance(item, bool) or not isinstance(item, int):
+                raise error(f"{key} must contain integers")
+            ints.append(item)
+        else:
+            ints.append(int(item))
     if any(item < min_value or item > max_value for item in ints):
-        raise ValueError(f"{key} contains an out-of-range value")
+        raise error(f"{key} contains an out-of-range value")
     return ints
 
 
-def _single_str_value(key: str, value: Any) -> str:
+def _single_str_value(
+    key: str,
+    value: Any,
+    *,
+    error: type[Exception] = ValueError,
+    accept_list_of_one: bool = True,
+    strict: bool = False,
+) -> str:
     if isinstance(value, list):
+        if not accept_list_of_one:
+            raise error(f"{key} must be a non-empty string")
         if len(value) != 1:
-            raise ValueError(f"{key} must be single-valued")
+            raise error(f"{key} must be single-valued")
         value = value[0]
-    return str(value)
+    if not strict:
+        return str(value)
+    if not isinstance(value, str) or not value.strip() or value != value.strip():
+        raise error(f"{key} must be a non-empty string")
+    return value
 
 
-def _single_int_value(key: str, value: Any, min_value: int, max_value: int) -> int:
+def _single_int_value(
+    key: str,
+    value: Any,
+    min_value: int,
+    max_value: int,
+    *,
+    error: type[Exception] = ValueError,
+) -> int:
     if not isinstance(value, list) or len(value) != 1:
-        raise ValueError(f"{key} must be a single-item list")
+        raise error(f"{key} must be a single-item list")
     item = int(value[0])
     if item < min_value or item > max_value:
-        raise ValueError(f"{key} contains an out-of-range value")
+        raise error(f"{key} contains an out-of-range value")
     return item
 
 
-def _enum_values(key: str, value: Any, allowed: tuple[str, ...]) -> list[str]:
-    values = _str_values(key, value)
+def _enum_values(
+    key: str,
+    value: Any,
+    allowed: tuple[str, ...],
+    *,
+    error: type[Exception] = ValueError,
+    strict: bool = False,
+) -> list[str]:
+    values = _str_values(key, value, error=error, strict=strict)
     allowed_set = set(allowed)
     unknown = [item for item in values if item not in allowed_set]
     if unknown:
-        raise ValueError(f"{key} contains unknown value(s): {unknown}")
+        raise error(f"{key} contains unknown value(s): {unknown}")
     return values
 
 
-def _single_enum_value(key: str, value: Any, allowed: tuple[str, ...]) -> str:
-    item = _single_str_value(key, value)
+def _single_enum_value(
+    key: str,
+    value: Any,
+    allowed: tuple[str, ...],
+    *,
+    error: type[Exception] = ValueError,
+    accept_list_of_one: bool = True,
+    strict: bool = False,
+) -> str:
+    item = _single_str_value(
+        key, value, error=error, accept_list_of_one=accept_list_of_one, strict=strict
+    )
     if item not in set(allowed):
-        raise ValueError(f"{key} contains unknown value: {item}")
+        raise error(f"{key} contains unknown value: {item}")
     return item
+
+
+def _alpha_code_values(
+    key: str,
+    value: Any,
+    *,
+    length: int,
+    case: Literal["lower", "upper"],
+    error: type[Exception] = SearchDirectiveError,
+) -> list[str]:
+    values = _str_values(key, value, error=error, strict=True)
+    for item in values:
+        if len(item) != length or not item.isalpha():
+            raise error(f"{key} must contain {length}-letter codes")
+        if case == "lower" and item != item.lower():
+            raise error(f"{key} must contain lowercase codes")
+        if case == "upper" and item != item.upper():
+            raise error(f"{key} must contain uppercase codes")
+    return values
+
+
+def _single_alpha_code_value(
+    key: str,
+    value: Any,
+    *,
+    length: int,
+    case: Literal["lower", "upper"],
+    error: type[Exception] = SearchDirectiveError,
+) -> str:
+    text = _single_str_value(key, value, error=error, accept_list_of_one=False, strict=True)
+    if len(text) != length or not text.isalpha():
+        raise error(f"{key} must be a {length}-letter code")
+    if case == "lower" and text != text.lower():
+        raise error(f"{key} must be lowercase")
+    if case == "upper" and text != text.upper():
+        raise error(f"{key} must be uppercase")
+    return text
+
+
+def _iso_date_value(
+    key: str, value: Any, *, error: type[Exception] = SearchDirectiveError
+) -> str:
+    if not isinstance(value, str):
+        raise error(f"{key} must be an ISO date string")
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError as exc:
+        raise error(f"{key} must be a valid ISO date") from exc
+    if parsed.isoformat() != value:
+        raise error(f"{key} must be a YYYY-MM-DD ISO date")
+    return value
 
 
 def openalex_wire_params(filters: dict[str, Any] | None) -> dict[str, str]:
@@ -415,6 +558,8 @@ def overton_wire_params(filters: dict[str, Any] | None) -> dict[str, str]:
             params["source_region"] = _single_enum_value(key, value, OVERTON_REGION_GROUPS)
         elif key == "language":
             params["language"] = _single_str_value(key, value)
+        elif key == "source_country_post_filter":
+            continue
         else:
             raise ValueError(f"unknown Overton filter key: {key}")
     return params
@@ -463,98 +608,6 @@ def _object_block(raw: Any, *, label: str) -> dict[str, Any]:
     return cast(dict[str, Any], raw)
 
 
-def _validate_iso_date(key: str, value: Any) -> str:
-    if not isinstance(value, str):
-        raise SearchDirectiveError(f"{key} must be an ISO date string")
-    try:
-        parsed = date.fromisoformat(value)
-    except ValueError as exc:
-        raise SearchDirectiveError(f"{key} must be a valid ISO date") from exc
-    if parsed.isoformat() != value:
-        raise SearchDirectiveError(f"{key} must be a YYYY-MM-DD ISO date")
-    return value
-
-
-def _validate_sdgs(value: Any) -> list[int]:
-    if not isinstance(value, list) or not value:
-        raise SearchDirectiveError("sdgs must be a non-empty list")
-    out: list[int] = []
-    for item in value:
-        if isinstance(item, bool) or not isinstance(item, int):
-            raise SearchDirectiveError("sdgs must contain integers")
-        if item < 1 or item > 17:
-            raise SearchDirectiveError("sdgs must contain values from 1 to 17")
-        out.append(item)
-    return out
-
-
-def _validate_str_list(key: str, value: Any) -> list[str]:
-    if not isinstance(value, list) or not value:
-        raise SearchDirectiveError(f"{key} must be a non-empty list")
-    out: list[str] = []
-    for item in value:
-        if not isinstance(item, str) or not item.strip() or item != item.strip():
-            raise SearchDirectiveError(f"{key} must contain non-empty strings")
-        out.append(item)
-    return out
-
-
-def _validate_enum_list(key: str, value: Any, allowed: tuple[str, ...]) -> list[str]:
-    values = _validate_str_list(key, value)
-    unknown = [item for item in values if item not in set(allowed)]
-    if unknown:
-        raise SearchDirectiveError(f"{key} contains unknown value(s): {unknown}")
-    return values
-
-
-def _validate_single_str(key: str, value: Any) -> str:
-    if not isinstance(value, str) or not value.strip() or value != value.strip():
-        raise SearchDirectiveError(f"{key} must be a non-empty string")
-    return value
-
-
-def _validate_single_enum(key: str, value: Any, allowed: tuple[str, ...]) -> str:
-    text = _validate_single_str(key, value)
-    if text not in set(allowed):
-        raise SearchDirectiveError(f"{key} contains unknown value: {text}")
-    return text
-
-
-def _validate_alpha_code_list(
-    key: str,
-    value: Any,
-    *,
-    length: int,
-    case: Literal["lower", "upper"],
-) -> list[str]:
-    values = _validate_str_list(key, value)
-    for item in values:
-        if len(item) != length or not item.isalpha():
-            raise SearchDirectiveError(f"{key} must contain {length}-letter codes")
-        if case == "lower" and item != item.lower():
-            raise SearchDirectiveError(f"{key} must contain lowercase codes")
-        if case == "upper" and item != item.upper():
-            raise SearchDirectiveError(f"{key} must contain uppercase codes")
-    return values
-
-
-def _validate_single_alpha_code(
-    key: str,
-    value: Any,
-    *,
-    length: int,
-    case: Literal["lower", "upper"],
-) -> str:
-    text = _validate_single_str(key, value)
-    if len(text) != length or not text.isalpha():
-        raise SearchDirectiveError(f"{key} must be a {length}-letter code")
-    if case == "lower" and text != text.lower():
-        raise SearchDirectiveError(f"{key} must be lowercase")
-    if case == "upper" and text != text.upper():
-        raise SearchDirectiveError(f"{key} must be uppercase")
-    return text
-
-
 def _validate_shared_block(block: dict[str, Any]) -> dict[str, Any]:
     unknown = set(block) - _SHARED_FILTER_KEYS
     if unknown:
@@ -562,9 +615,9 @@ def _validate_shared_block(block: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for key, value in block.items():
         if key in {"published_after", "published_before"}:
-            out[key] = _validate_iso_date(key, value)
+            out[key] = _iso_date_value(key, value)
         elif key == "sdgs":
-            out[key] = _validate_sdgs(value)
+            out[key] = _int_values(key, value, 1, 17, error=SearchDirectiveError, strict=True)
     return out
 
 
@@ -575,17 +628,39 @@ def _validate_openalex_block(block: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for key, value in block.items():
         if key == "types":
-            out[key] = _validate_enum_list(key, value, OPENALEX_TYPES)
+            out[key] = _enum_values(
+                key, value, OPENALEX_TYPES, error=SearchDirectiveError, strict=True
+            )
         elif key == "languages":
-            out[key] = _validate_alpha_code_list(key, value, length=2, case="lower")
+            out[key] = _alpha_code_values(key, value, length=2, case="lower")
         elif key in {"exclude_retracted", "exclude_paratext"}:
             if not isinstance(value, bool):
                 raise SearchDirectiveError(f"{key} must be a boolean")
             out[key] = value
         elif key == "oa_status":
-            out[key] = _validate_enum_list(key, value, OA_STATUS_VALUES)
+            out[key] = _enum_values(
+                key, value, OA_STATUS_VALUES, error=SearchDirectiveError, strict=True
+            )
         elif key == "author_affiliation_countries":
-            out[key] = _validate_alpha_code_list(key, value, length=2, case="upper")
+            countries = _alpha_code_values(key, value, length=2, case="upper")
+            if len(countries) > 200:
+                raise SearchDirectiveError(
+                    "author_affiliation_countries must contain at most 200 codes"
+                )
+            out[key] = validate_iso_alpha2(countries)
+    return out
+
+
+def _overton_post_filter_values(key: str, value: Any) -> list[str]:
+    if not isinstance(value, list):
+        raise SearchDirectiveError(f"{key} must be a list")
+    out: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or item != item.strip():
+            raise SearchDirectiveError(f"{key} must contain display-country strings")
+        if item not in OVERTON_DISPLAY_ALLOWLIST:
+            raise SearchDirectiveError(f"{key} contains an unsupported Overton country")
+        out.append(item)
     return out
 
 
@@ -596,13 +671,32 @@ def _validate_overton_block(block: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for key, value in block.items():
         if key == "publisher_type":
-            out[key] = _validate_single_enum(key, value, OVERTON_PUBLISHER_TYPES)
+            out[key] = _single_enum_value(
+                key,
+                value,
+                OVERTON_PUBLISHER_TYPES,
+                error=SearchDirectiveError,
+                accept_list_of_one=False,
+                strict=True,
+            )
         elif key == "publisher_country":
-            out[key] = _validate_single_str(key, value)
+            country = _single_str_value(
+                key, value, error=SearchDirectiveError, accept_list_of_one=False, strict=True
+            )
+            out[key] = validate_overton_display_name(country, field_name=key)
         elif key == "publisher_region":
-            out[key] = _validate_single_enum(key, value, OVERTON_REGION_GROUPS)
+            out[key] = _single_enum_value(
+                key,
+                value,
+                OVERTON_REGION_GROUPS,
+                error=SearchDirectiveError,
+                accept_list_of_one=False,
+                strict=True,
+            )
         elif key == "language":
-            out[key] = _validate_single_alpha_code(key, value, length=3, case="lower")
+            out[key] = _single_alpha_code_value(key, value, length=3, case="lower")
+        elif key == "source_country_post_filter":
+            out[key] = _overton_post_filter_values(key, value)
     return out
 
 
@@ -684,6 +778,46 @@ def to_wire_params(backend_name: str, validated: dict[str, Any]) -> dict[str, st
     except ValueError as exc:
         raise SearchDirectiveError(str(exc)) from exc
     raise SearchDirectiveError(f"unsupported search backend for filters: {backend_name}")
+
+
+def _filter_variants(backend_name: str, validated: dict[str, Any]) -> list[dict[str, Any]]:
+    if backend_name != "openalex":
+        return [validated]
+    countries = validated.get("author_affiliation_countries")
+    if not isinstance(countries, list) or len(countries) <= 100:
+        return [validated]
+    if len(countries) > 200:
+        raise SearchDirectiveError(
+            "author_affiliation_countries must contain at most 200 codes"
+        )
+    return [
+        {**validated, "author_affiliation_countries": countries[start : start + 100]}
+        for start in range(0, len(countries), 100)
+    ]
+
+
+def _scope_wire_params_payload(
+    wire_params_by_backend: dict[str, list[dict[str, str]]],
+) -> dict[str, Any]:
+    return {
+        name: variants[0] if len(variants) == 1 else {"variants": variants}
+        for name, variants in wire_params_by_backend.items()
+    }
+
+
+def _with_filter_variants(plan: _PlannedCall, variant_count: int) -> list[_PlannedCall]:
+    if variant_count <= 1:
+        return [plan]
+    return [
+        _PlannedCall(
+            backend_name=plan.backend_name,
+            query=plan.query,
+            query_origin=plan.query_origin,
+            group_key=plan.group_key,
+            filter_variant_index=index,
+        )
+        for index in range(variant_count)
+    ]
 
 
 def _count_existing_rounds(
@@ -1107,10 +1241,16 @@ def run_search(
     constants = DEPTH_CONSTANTS[depth]
     backend_names = [backend.name for backend in backends]
     validated_filters = validate_scope_filters(raw_filters, backend_names=backend_names)
-    wire_params_by_backend = {
-        name: to_wire_params(name, validated_filters[name]) for name in backend_names
+    filter_variants_by_backend = {
+        name: _filter_variants(name, validated_filters[name]) for name in backend_names
     }
-    scope_wire_params = wire_params_by_backend if raw_filters is not None else None
+    wire_params_by_backend = {
+        name: [to_wire_params(name, variant) for variant in filter_variants_by_backend[name]]
+        for name in backend_names
+    }
+    scope_wire_params = (
+        _scope_wire_params_payload(wire_params_by_backend) if raw_filters is not None else None
+    )
 
     round_index = _count_existing_rounds(
         conn,
@@ -1159,6 +1299,7 @@ def run_search(
         query_origin: QueryOrigin,
         wire_params: dict[str, str],
         fetch: Callable[[int], list[dict[str, Any]]],
+        post_filter_excluded: Callable[[], int | None] | None = None,
         max_records: int | None = None,
         arm: ArmName | None = None,
     ) -> ExecutedCall | None:
@@ -1182,6 +1323,7 @@ def run_search(
         try:
             records = fetch(remaining)
             records = records[:remaining]
+            excluded = post_filter_excluded() if post_filter_excluded is not None else None
             raw_results_by_backend[backend.name] += len(records)
             call = ExecutedCall(
                 backend_name=backend.name,
@@ -1192,6 +1334,7 @@ def run_search(
                 records=records,
                 status="ok",
                 error=None,
+                post_filter_excluded=excluded,
             )
         except Exception as exc:
             call = ExecutedCall(
@@ -1216,7 +1359,35 @@ def run_search(
         arm: ArmName | None = None,
         max_records: int | None = None,
     ) -> ExecutedCall | None:
-        wire_params = wire_params_by_backend[backend.name]
+        wire_params = wire_params_by_backend[backend.name][plan.filter_variant_index]
+        validated = filter_variants_by_backend[backend.name][plan.filter_variant_index]
+        post_filter = validated.get("source_country_post_filter")
+        if backend.name == "overton" and isinstance(post_filter, list):
+            if not hasattr(backend, "search_with_post_filter"):
+                # Fail closed: silently searching unfiltered would admit
+                # out-of-group records with no provenance trace.
+                raise SearchDirectiveError(
+                    "source_country_post_filter requires an Overton backend "
+                    "with search_with_post_filter; refusing to search unfiltered"
+                )
+            return execute_call(
+                backend,
+                verb="search",
+                query=plan.query,
+                query_origin=plan.query_origin,
+                wire_params=wire_params,
+                max_records=max_records,
+                arm=arm,
+                post_filter_excluded=lambda: cast(
+                    int | None, getattr(backend, "last_post_filter_excluded", None)
+                ),
+                fetch=lambda remaining: cast(Any, backend).search_with_post_filter(
+                    plan.query,
+                    wire_params=wire_params,
+                    source_country_post_filter=post_filter,
+                    max_results=remaining,
+                ),
+            )
         return execute_call(
             backend,
             verb="search",
@@ -1234,7 +1405,13 @@ def run_search(
 
     if all(backend.mode == "fixture" for backend in backends):
         for backend in backends:
-            execute_plan(backend, _PlannedCall(backend.name, context.intent, "verbatim"))
+            for plan in _with_filter_variants(
+                _PlannedCall(backend.name, context.intent, "verbatim"),
+                len(filter_variants_by_backend[backend.name]),
+            ):
+                execute_plan(backend, plan)
+                if stop_all:
+                    break
             if stop_all:
                 break
     elif depth in ("deep", "standard") and round_index >= 2:
@@ -1266,27 +1443,43 @@ def run_search(
                 constants["result_cap_per_backend"] - raw_results_by_backend[backend.name],
             )
             if backend.name == "openalex":
-                planned = min(len(queries), REFORMULATE_CALL_CAP) + DIVERSITY_CALL_MIN
+                variant_count = len(filter_variants_by_backend[backend.name])
+                planned = (
+                    min(len(queries), REFORMULATE_CALL_CAP) * variant_count
+                    + DIVERSITY_CALL_MIN * variant_count
+                )
                 quota = _distribute_quota(episode_remaining, planned)
                 for query in queries[:REFORMULATE_CALL_CAP]:
-                    execute_plan(
-                        backend,
+                    for plan in _with_filter_variants(
                         _PlannedCall(backend.name, query, "generated"),
-                        arm="reformulate",
-                        max_records=quota,
-                    )
+                        variant_count,
+                    ):
+                        execute_plan(
+                            backend,
+                            plan,
+                            arm="reformulate",
+                            max_records=quota,
+                        )
+                        if stop_all:
+                            break
                     if stop_all:
                         break
             elif backend.name == "overton":
                 planned = min(len(overton_paraphrases), 2)
                 quota = _distribute_quota(episode_remaining, planned)
                 for paraphrase in overton_paraphrases[:2]:
-                    execute_plan(
-                        backend,
+                    for plan in _with_filter_variants(
                         _PlannedCall(backend.name, paraphrase, "paraphrase"),
-                        arm="reformulate",
-                        max_records=quota,
-                    )
+                        len(filter_variants_by_backend[backend.name]),
+                    ):
+                        execute_plan(
+                            backend,
+                            plan,
+                            arm="reformulate",
+                            max_records=quota,
+                        )
+                        if stop_all:
+                            break
                     if stop_all:
                         break
             if stop_all:
@@ -1508,16 +1701,22 @@ def run_search(
                 reserve = max(
                     1, int(constants["result_cap_per_backend"] * DIVERSITY_FRACTION)
                 )
-                execute_plan(
-                    diversity_backend,
+                for plan in _with_filter_variants(
                     _PlannedCall(
                         diversity_backend.name,
                         diversity_query,
                         diversity_origin,
                     ),
-                    arm="diversity",
-                    max_records=reserve,
-                )
+                    len(filter_variants_by_backend[diversity_backend.name]),
+                ):
+                    execute_plan(
+                        diversity_backend,
+                        plan,
+                        arm="diversity",
+                        max_records=reserve,
+                    )
+                    if stop_all:
+                        break
     else:
         wire, usage = generation_backend.generate_queries(QueriesPayload(intent=context.intent))
         usage_totals.add(usage)
@@ -1531,6 +1730,14 @@ def run_search(
                 queries=queries,
                 overton_paraphrases=overton_paraphrases,
             )
+            plans = [
+                variant
+                for plan in plans
+                for variant in _with_filter_variants(
+                    plan,
+                    len(filter_variants_by_backend[backend.name]),
+                )
+            ]
             quota = _distribute_quota(constants["result_cap_per_backend"], len(plans))
             backend_calls: list[ExecutedCall] = []
             generated_groups: dict[str, list[ExecutedCall]] = {}
@@ -1572,13 +1779,23 @@ def run_search(
             if backend.name == "openalex" and not generated_calls:
                 all_generated_zero = True
             if all_generated_zero and not has_verbatim:
-                fallback = _PlannedCall(backend.name, context.intent, "fallback_verbatim")
-                if execute_plan(backend, fallback) is not None:
-                    fallback_to_verbatim[backend.name] = True
+                for fallback in _with_filter_variants(
+                    _PlannedCall(backend.name, context.intent, "fallback_verbatim"),
+                    len(filter_variants_by_backend[backend.name]),
+                ):
+                    if execute_plan(backend, fallback) is not None:
+                        fallback_to_verbatim[backend.name] = True
+                    if stop_all:
+                        break
             if stop_all:
                 break
 
     elapsed = clock() - start
+    # wall_clock_breached is already known here — the loop above set it before
+    # this call, in the same synchronous invocation — so acquire's coverage
+    # row gets the honest stop condition on creation; no update-after pass is
+    # needed (unlike the deep loop's cross-round finalise_deep_stop, whose
+    # final stop condition isn't known until later rounds complete).
     counts = acquire.acquire_sources(
         conn,
         project_id=project_id,
@@ -1589,6 +1806,7 @@ def run_search(
         executed_calls=executed_calls,
         depth=depth,
         scope_wire_params=scope_wire_params,
+        wall_clock_breached=wall_clock_breached,
     )
     counts["search"] = {
         "depth": depth,

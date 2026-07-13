@@ -1,5 +1,8 @@
 """Finding-vetter backend seam for the 018 C5 extraction post-filter.
 
+The vetter system prompt below is prompt-bearing: lead-authored and versioned
+(``FINDING_VETTER_PROMPT_VERSION``), like every other prompt module.
+
 A post-extract, pre-write vetting pass that flags non-findings — aspirations,
 document-deictic naming, vague outcomes, self-referential housekeeping — so
 they never enter the evidence base. The filter is flag-not-drop and fail-open
@@ -34,7 +37,7 @@ from policy_atlas.embeddings import (
 from policy_atlas.prompt_fields import scrub_nul
 from policy_atlas.usage import UsageResult, token_usage_from_provider
 
-FINDING_VETTER_PROMPT_VERSION = "extract_finding_vetter_v2"
+FINDING_VETTER_PROMPT_VERSION = "extract_finding_vetter_v3"
 FINDING_VETTER_MODEL = "gpt-5.4-mini"
 # effort per the 018 C2 classify A/B evidence — xhigh exhausts completion caps
 # on 5.4-mini judgment calls
@@ -130,7 +133,10 @@ Flag a finding ONLY when it clearly matches a flag class:
 - "aspiration": the quoted text states a target, commitment, hope, plan or
   recommendation rather than something that happened — including quantified
   targets for future dates and concerns or expectations voiced in testimony.
-  Reported delivery and monitoring results are NOT aspirations.
+  Reported delivery and monitoring results are NOT aspirations. Modelled or
+  projected results the document reports (model outputs, scenario
+  projections, forecast effects) are NOT aspirations either — flag only
+  targets, commitments, hopes, plans and recommendations.
 - "deictic_naming": the intervention or outcome only makes sense inside the
   document ("this Plan", "our programme", "the problems this report
   identifies") — a reader seeing the finding alone cannot tell what it names.

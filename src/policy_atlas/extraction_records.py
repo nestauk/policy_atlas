@@ -4,7 +4,7 @@ The wire models drive the OpenAI structured-output schema *and* generate the
 prompt's field documentation — one source of truth, so prompt/schema drift is
 structurally impossible (V2 silently discarded three requested fields that way).
 Wire grain fields are nullable and numerics string-tolerant so that null-like
-strings and unparseable values arrive intact for iof_rules_v1 to coerce and
+strings and unparseable values arrive intact for iof_rules_v3 to coerce and
 flag, instead of being silently rejected or model-conformed at the API boundary.
 The stored models are the final typed shape after grain validation + field rules.
 """
@@ -16,18 +16,34 @@ from typing import Any, Literal, TypedDict, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from policy_atlas.schema import CAUSALITY_BY_DESIGN, EFFECT_DIRECTIONS, ESTIMATE_LEVELS
+from policy_atlas.finding_references import (
+    INTERVENTION_DESC,
+    POPULATION_DESC,
+    STUDY_DESIGN_DESC,
+    STUDY_GEOGRAPHY_DESC,
+)
+from policy_atlas.schema import (
+    CAUSALITY_BY_DESIGN,
+    EFFECT_BASES,
+    EFFECT_DIRECTIONS,
+    ESTIMATE_LEVELS,
+)
 
 # Fingerprint components (contract decision 2): named constants; any
 # output-affecting change bumps a version and thus the extraction fingerprint.
+# PROFILE_ID is a stable requirement-family id ("EB's base IOF extraction");
+# field-set evolution rides the schema/prompt/rules version components, which
+# enter the fingerprint and recorded components map, so field additions do not
+# bump the profile.
 PROFILE_ID = "eb_iof_base_v1"
-SCHEMA_VERSION = "iof_v1"  # covers the wire AND stored model layers
+SCHEMA_VERSION = "iof_v3"  # covers the wire AND stored model layers
 
 # The segment id carried by an abstract-basis payload; anchors naming it map to
 # chunk_id null at write (contract decision 4, abstract-envelope location).
 ABSTRACT_SEGMENT_ID = "abstract"
 
 EffectDirection = Literal["increase", "decrease", "no_effect", "mixed", "unclear"]
+EffectBasis = Literal["observed", "modelled"]
 EstimateLevel = Literal["study", "pooled", "claim"]
 CausalityByDesign = Literal["attributable", "plausibly_causal", "associational", "descriptive"]
 StratumType = Literal["timepoint", "subgroup", "setting"]
@@ -36,6 +52,7 @@ STRATUM_TYPES: tuple[str, ...] = get_args(StratumType)
 
 # The Literal types are the schema CHECK vocabularies — drift fails at import.
 assert get_args(EffectDirection) == EFFECT_DIRECTIONS
+assert get_args(EffectBasis) == EFFECT_BASES
 assert get_args(EstimateLevel) == ESTIMATE_LEVELS
 assert get_args(CausalityByDesign) == CAUSALITY_BY_DESIGN
 
@@ -122,10 +139,7 @@ class IOFRecordWire(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     intervention: str | None = Field(
-        description=(
-            "The intervention exactly as this document names it (source-named, never "
-            "a standardised term). Control or comparison arms are not interventions."
-        )
+        description=INTERVENTION_DESC
     )
     outcome: str | None = Field(
         description=(
@@ -135,9 +149,16 @@ class IOFRecordWire(BaseModel):
         )
     )
     population: str | None = Field(
+        description=POPULATION_DESC
+    )
+    setting: str | None = Field(
         description=(
-            "The study population exactly as the document describes it, or null if "
-            "not reported."
+            "The setting where the intervention underlying this finding was "
+            "delivered, exactly as the document reports it (e.g. 'primary care', "
+            "'secondary schools'), or null if not reported. Use the delivery setting, "
+            "not the mandating institution. A setting-scoped subgroup estimate belongs "
+            "in stratum_qualifiers; this field records where the underlying evidence "
+            "was conducted — they can coexist."
         )
     )
     comparator: str | None = Field(
@@ -165,10 +186,10 @@ class IOFRecordWire(BaseModel):
         )
     )
     study_design: str | None = Field(
-        description=(
-            "The study design underlying this finding, as the document reports it, "
-            "or null if not reported."
-        )
+        description=STUDY_DESIGN_DESC
+    )
+    study_geography: str | None = Field(
+        description=STUDY_GEOGRAPHY_DESC
     )
     stratum_qualifiers: list[IOFStratumWire] = Field(
         description=(
@@ -190,6 +211,16 @@ class IOFRecordWire(BaseModel):
             "'associational' (observational designs), 'descriptive' (descriptive, "
             "qualitative or modelling reports without causal identification); null "
             "if the design is unknown."
+        )
+    )
+    effect_basis: EffectBasis | None = Field(
+        description=(
+            "Whether this finding's effect was observed ('observed' — measured after something "
+            "happened: trial results, administrative or monitoring data, evaluation "
+            "measurements) or modelled ('modelled' — projected, simulated or forecast: model "
+            "outputs, scenario projections, calibrated estimates of what would happen), or null "
+            "if the document does not make this determinable. A modelled estimate is still "
+            "'modelled' even when built on observed inputs."
         )
     )
     is_primary: bool | None = Field(
@@ -230,7 +261,7 @@ class ExtractionResponse(BaseModel):
     )
 
 
-# --- Stored models (the final typed shape after grain validation + iof_rules_v1) ---
+# --- Stored models (the final typed shape after grain validation + iof_rules_v3) ---
 
 
 class IOFStratum(BaseModel):
@@ -280,13 +311,16 @@ class IOFRecord(BaseModel):
     intervention: str = Field(min_length=1)
     outcome: str = Field(min_length=1)
     population: str | None
+    setting: str | None
     comparator: str | None
     effect_direction: EffectDirection
     estimate_level: EstimateLevel | None
     study_design: str | None
+    study_geography: str | None
     stratum_qualifiers: list[IOFStratum]
     statistics: IOFStatistics
     causality_by_design: CausalityByDesign | None
+    effect_basis: EffectBasis | None
     is_primary: bool | None
     is_prevalence_only: bool | None
     anchors: list[IOFAnchor] = Field(min_length=1)

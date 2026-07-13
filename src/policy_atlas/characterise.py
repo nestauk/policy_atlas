@@ -13,7 +13,7 @@ import structlog
 from sqlalchemy import exists, func, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas import grouping
+from policy_atlas import grouping, tracing
 from policy_atlas.embeddings import EMBEDDING_PROFILE, UNIT_POLICY
 from policy_atlas.grouping import (
     UNCLUSTERED,
@@ -110,6 +110,7 @@ class _AssignmentAttempt:
     batch: list[GroupingDoc]
     assignments: dict[str, str] | None
     error_type: str | None
+    error_detail: str | None = None
 
 
 @dataclass(frozen=True)
@@ -131,6 +132,14 @@ class _CallBudget:
         if self.count >= self.maximum:
             raise CharacteriseFailure(coverage=self.coverage, error="call budget exceeded")
         self.count += 1
+
+
+_REJECTION_DETAIL_MAX_LEN = 500
+
+
+def _truncate_detail(text: str) -> str:
+    """Defensively cap an exception message before it enters logs or provenance."""
+    return text[:_REJECTION_DETAIL_MAX_LEN]
 
 
 def _share(count: int, base: int) -> float:
@@ -207,11 +216,17 @@ def _base_counts(conn: Connection, *, project_id: uuid.UUID, scope_id: uuid.UUID
     )
     screened_in = status_counts.get("relevant", 0)
     not_relevant = status_counts.get("not_relevant", 0)
+    # excluded_retracted (task 019): a distinct, visible effective status —
+    # never folded into not_relevant (don't-flatten-status, owner decision).
+    excluded_retracted = status_counts.get("excluded_retracted", 0)
     return {
         "screened_in": screened_in,
         "not_relevant": not_relevant,
+        "excluded_retracted": excluded_retracted,
         "screen_failed": screen_failed,
-        "unscreened": project_sources - screened_in - not_relevant - screen_failed,
+        "unscreened": (
+            project_sources - screened_in - not_relevant - excluded_retracted - screen_failed
+        ),
     }
 
 
@@ -513,11 +528,12 @@ def _discover_themes(
             )
         except InvalidDiscoveryOutput as exc:
             error_type = type(exc).__name__
-            error_detail = str(exc)
+            error_detail = _truncate_detail(str(exc))
             rejection_details.append(error_detail)
         except Exception as exc:
             error_type = type(exc).__name__
-            error_detail = type(exc).__name__
+            error_detail = _truncate_detail(str(exc))
+            rejection_details.append(error_detail)
         else:
             return themes, attempt, usage_totals.payload(), rejection_details
         log.warning(
@@ -527,9 +543,13 @@ def _discover_themes(
             error_type=error_type,
             error=error_detail,
         )
+    last_detail = rejection_details[-1] if rejection_details else "no detail captured"
     raise CharacteriseFailure(
         coverage=budget.coverage,
-        error=f"discovery failed after {grouping.DISCOVERY_RETRY_CAP + 1} attempts",
+        error=(
+            f"discovery failed after {grouping.DISCOVERY_RETRY_CAP + 1} attempts: "
+            f"{last_detail}"
+        ),
     )
 
 
@@ -589,7 +609,13 @@ def _run_first_assignment_round(
     with ThreadPoolExecutor(max_workers=grouping.MAX_CONCURRENT_BATCHES) as executor:
         for batch_index, batch in enumerate(batches, start=1):
             submitted.append(
-                (batch_index, batch, executor.submit(backend.assign, batch, themes=themes))
+                (
+                    batch_index,
+                    batch,
+                    tracing.submit_with_context(
+                        executor, backend.assign, batch, themes=themes
+                    ),
+                )
             )
         wait([future for _, _, future in submitted])
 
@@ -599,11 +625,13 @@ def _run_first_assignment_round(
             assignments, usage = future.result()
             usage_totals.add(usage)
         except Exception as exc:
+            error_detail = _truncate_detail(str(exc))
             log.warning(
                 "characterise.assignment_batch_failed",
                 batch_index=batch_index,
                 batch_size=len(batch),
                 error_type=type(exc).__name__,
+                error=error_detail,
             )
             attempts.append(
                 _AssignmentAttempt(
@@ -611,6 +639,7 @@ def _run_first_assignment_round(
                     batch=batch,
                     assignments=None,
                     error_type=type(exc).__name__,
+                    error_detail=error_detail,
                 )
             )
         else:
@@ -653,15 +682,20 @@ def _resolve_assignment_batch(
         missing_count=validation.missing_count,
         unknown_theme_count=validation.unknown_theme_count,
         first_error_type=attempt.error_type,
+        first_error_detail=attempt.error_detail,
     )
     budget.reserve()
     try:
         repair_assignments, usage = backend.assign(validation.residue, themes=themes)
         usage_totals.add(usage)
     except Exception as exc:
+        error_detail = _truncate_detail(str(exc))
         raise CharacteriseFailure(
             coverage=budget.coverage,
-            error=f"assignment repair failed for batch {attempt.batch_index}: {type(exc).__name__}",
+            error=(
+                f"assignment repair failed for batch {attempt.batch_index}: "
+                f"{type(exc).__name__}: {error_detail}"
+            ),
         ) from exc
 
     repair_validation = _validate_assignments(
