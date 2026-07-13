@@ -103,9 +103,31 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
    scheme. `FACET_VALUE_CAP` semantics (fail-closed, loud) survive whatever lands —
    the cap may rise, never silently degrade.
 5. **Facet vocabulary this slice** (🛑 decision 3): `intervention` / `outcome` /
-   `population` (existing) + **ICF `context_type`** (the promised first ICF facet;
-   kind-scoped — only ICF members carry `context_type`, honest per-kind handling per
-   the 021 pattern: never zero-filled). Which facets a given run requests stays
+   `population` (existing) + **the first ICF facet — whose shape is the decision**
+   (owner probe, 2026-07-14). ICF stores no short open-vocabulary content values
+   (deliberate 021 call: no extraction-time canonicalisation) — the content is
+   `claim` prose scoped by the closed `context_type` enum. So "what distinct
+   barriers/mechanisms were extracted" does NOT fit the value-string partition
+   machinery. Candidates:
+   - **(a) Claim-theme clustering scoped by `context_type`** (e.g. `barrier_theme`):
+     discover themes across the type's claim texts, assign every claim — the lens
+     that delivers the promised payoff ("planning delays recur as a barrier across
+     heat-pump programmes" backed by a validated group). New machinery: a claim-text
+     projection (prose, not value strings) and likely the characterise-style
+     two-stage discover/assign split (the owner's recorded candidate, deferred.md
+     § Group), designed against the tail-discovery risk and the partition-exactness
+     invariant. Its scale story is claim count (203 live), distinct from the
+     value-list limit.
+   - **(b) No ICF-content facet this slice** — kind-spanning membership already
+     puts ICF findings in intervention/outcome groups, and `icf_context_type_count`
+     already validates type × intervention counts; claim-theme clustering
+     re-defers explicitly.
+   - (c) A short source-named ICF label field: **rejected, not open** —
+     extraction-time canonicalisation plus a pre-ground-truth fingerprint
+     invalidation.
+   (A bare deterministic partition BY the seven-value enum is not a facet — that
+   read surface already exists as `icf_context_type_count`; named here so nobody
+   ships it as one.) Which facets a given run requests stays
    orchestrator-discretionary; the deep-depth default facet set is a plan-time
    constant (named in the plan, not silently compiled).
 6. **Per-facet honesty** (🛑 decision 4): per-facet residuals, per-facet CAP
@@ -291,8 +313,10 @@ correctness · scope creep toward the Out list.
 2. **Value-list scale design** — batched partition + merge vs hierarchical
    discover/assign vs id-scheme-only (or a combination); what `FACET_VALUE_CAP`
    becomes.
-3. **Facet vocabulary** — intervention/outcome/population + ICF `context_type` in;
-   deep-depth default facet set.
+3. **First ICF facet shape** — claim-theme clustering scoped by `context_type`
+   (new machinery, the payoff lens) vs explicit re-defer (kind-spanning membership
+   + `icf_context_type_count` already serve the cheap half); a short ICF label
+   field is rejected. Plus the deep-depth default facet set.
 4. **Per-facet failure isolation** — honest per-facet failure rows (proposed) vs
    all-or-nothing.
 5. **Cross-kind UNION view** — build (if the loader reads through it) or explicit
