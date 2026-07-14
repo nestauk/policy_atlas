@@ -359,6 +359,23 @@ def _publication_countries(conn: Connection, project_id: uuid.UUID) -> dict[str,
 # --- 3. groups ---
 
 
+def _latest_groups_by_facet(conn: Connection, project_id: uuid.UUID) -> dict[str, dict[str, Any]]:
+    """Latest grouping run's ``groups`` jsonb, keyed by facet.
+
+    Post-022 schema: one grouping_result row per run, ``groups`` keyed by
+    facet name — the per-facet ``facet`` column is gone.
+    """
+    row = conn.execute(
+        sa_select(grouping_result.c.groups)
+        .where(grouping_result.c.project_id == project_id)
+        .order_by(grouping_result.c.created_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if not isinstance(row, dict):
+        return {}
+    return {facet: payload for facet, payload in row.items() if isinstance(payload, dict)}
+
+
 def groups(conn: Connection, project_id: uuid.UUID) -> dict[str, Any] | None:
     """Return the latest grouping result per facet for a project.
 
@@ -371,25 +388,19 @@ def groups(conn: Connection, project_id: uuid.UUID) -> dict[str, Any] | None:
         ungrouped}``) per ``demo/API.md`` ``/groups``, or ``None`` if group
         has never run for this project.
     """
-    rows = conn.execute(
-        sa_select(grouping_result.c.facet, grouping_result.c.groups)
-        .where(grouping_result.c.project_id == project_id)
-        .order_by(grouping_result.c.facet, grouping_result.c.created_at.desc())
-    ).all()
-
-    latest_by_facet: dict[str, Any] = {}
-    for row in rows:
-        latest_by_facet.setdefault(row.facet, row.groups)
-
+    latest_by_facet = _latest_groups_by_facet(conn, project_id)
     if not latest_by_facet:
         return None
 
+    # Known facets first (stable UI order), then any newer theme facets the
+    # demo-branch GROUPING_FACETS constant predates.
+    facet_order = [*GROUPING_FACETS, *sorted(f for f in latest_by_facet if f not in GROUPING_FACETS)]
+
     facets_out: list[dict[str, Any]] = []
-    for facet in GROUPING_FACETS:
+    for facet in facet_order:
         if facet not in latest_by_facet:
             continue
         payload = latest_by_facet[facet]
-        payload = payload if isinstance(payload, dict) else {}
 
         raw_groups = payload.get("groups")
         raw_groups = raw_groups if isinstance(raw_groups, list) else []
@@ -1105,17 +1116,9 @@ def findings(conn: Connection, project_id: uuid.UUID, cap: int = 200) -> list[di
 def _finding_group_labels(
     conn: Connection, project_id: uuid.UUID
 ) -> dict[str, dict[str, str]]:
-    """finding_id → {facet: group label} from the latest grouping run per facet."""
+    """finding_id → {facet: group label} from the latest grouping run."""
     labels: dict[str, dict[str, str]] = {}
-    for facet in GROUPING_FACETS:
-        row = conn.execute(
-            sa_select(grouping_result.c.groups)
-            .where(grouping_result.c.project_id == project_id)
-            .where(grouping_result.c.facet == facet)
-            .order_by(grouping_result.c.created_at.desc())
-            .limit(1)
-        ).scalar_one_or_none()
-        groups_obj = row if isinstance(row, dict) else {}
+    for facet, groups_obj in _latest_groups_by_facet(conn, project_id).items():
         group_list = groups_obj.get("groups")
         if not isinstance(group_list, list):
             continue
