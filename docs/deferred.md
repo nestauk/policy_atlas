@@ -1406,3 +1406,11 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   serial gate re-runs + dropdb/createdb resets + the smoke recipe
   (`docs/knowledge/orchestrate-stub-smoke.md`). If parallel lanes stay routine, promote
   this to per-lane disposable DATABASE_URLs.
+- **Monorepo hoist: `backend/` (owner layout intent, 2026-07-14)** — when the frontend
+  is pulled into this repo it lands at `front-end/`, the CDK at `infra/` (the reason
+  023's shared-layer package is `core/`, not `infra/` — ADR 0019). At that point the
+  whole Python project (pyproject.toml, src/, tests/, alembic/, Makefile) hoists into
+  `backend/` as a sibling. The `policy_atlas` import name is untouched — src-layout
+  makes the hoist import-neutral; the cost is tooling paths only (CI working-directory,
+  Docker contexts, CDK references, doc links). Do it in the slice that brings the
+  frontend in, not before.
