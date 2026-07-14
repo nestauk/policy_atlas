@@ -9,7 +9,12 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.embeddings import EMBEDDING_DIMENSIONS, EMBEDDING_PROFILE, UNIT_POLICY
+from policy_atlas.embeddings import (
+    EMBEDDING_DIMENSIONS,
+    EMBEDDING_PROFILE,
+    UNIT_CHAR_BUDGET,
+    UNIT_POLICY,
+)
 from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.grounding import content_hash
 from policy_atlas.schema import chunk as chunk_table
@@ -19,6 +24,7 @@ from policy_atlas.synthesis_tools import (
     BOOST_CLAMP_MAX,
     BOOST_CLAMP_MIN,
     CANDIDATE_POOL_PER_LEG,
+    OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS,
     READ_CALLS_PER_TURN_CAP,
     RETRIEVAL_UNIT_CAP,
     SECTION_TURN_CAP,
@@ -42,6 +48,7 @@ from policy_atlas.synthesis_tools import (
 )
 from policy_atlas.usage import UsageResult
 from tests.helpers import (
+    EVIDENCE_TYPE,
     now,
     seed_project_and_run,
     seed_scope,
@@ -323,6 +330,38 @@ def test_parse_synthesis_directive_rejects_bad_boosts() -> None:
         )
 
 
+def test_parse_synthesis_directive_screen_confidence_defaults_and_bounds() -> None:
+    directive = parse_synthesis_directive(
+        {"synthesis": {"retrieval_boosts": {"screen_confidence": {}}}},
+        grouping_group_ids=None,
+    )
+    assert directive.screen_confidence.lo == 1.0
+    assert directive.screen_confidence.hi == 2.0
+
+    directive = parse_synthesis_directive(
+        {
+            "synthesis": {
+                "retrieval_boosts": {"screen_confidence": {"lo": 0.5, "hi": 4.0}}
+            }
+        },
+        grouping_group_ids=None,
+    )
+    assert directive.screen_confidence.lo == 0.5
+    assert directive.screen_confidence.hi == 4.0
+
+    for boost in (
+        {"lo": 0.49, "hi": 2.0},
+        {"lo": 2.0, "hi": 1.0},
+        {"lo": 1.0, "hi": 4.01},
+        {"lo": True, "hi": 2.0},
+    ):
+        with pytest.raises(SynthesisDirectiveError, match="screen_confidence"):
+            parse_synthesis_directive(
+                {"synthesis": {"retrieval_boosts": {"screen_confidence": boost}}},
+                grouping_group_ids=None,
+            )
+
+
 def test_retriever_ranking_is_deterministic_and_lexical_match_is_reachable() -> None:
     scope = _scope(
         docs={
@@ -438,6 +477,190 @@ def test_retriever_directive_boosts_reweight_but_do_not_surface_zero_relevance()
     assert ids[0] == "chunk-b"
     assert "chunk-c" not in ids
     assert retriever.provenance()["unmatched_boosts"] == {"tags": ["missing"]}
+
+
+def test_retriever_screen_confidence_multiplier_defaults_missing_and_suppresses() -> None:
+    directive = parse_synthesis_directive(
+        {
+            "synthesis": {
+                "retrieval_boosts": {"screen_confidence": {"lo": 2.0, "hi": 4.0}}
+            }
+        },
+        grouping_group_ids=None,
+    )
+    scope = _scope(
+        docs={
+            "doc-conf": {
+                "title": "Confident",
+                "origin": "uploaded",
+                "primary_evidence_type": None,
+                "text_basis": "full_text",
+                "appraisal_tier": None,
+                "tags": [],
+                "selected": False,
+                "screen_confidence": 0.25,
+            },
+            "doc-missing": {
+                "title": "Missing",
+                "origin": "uploaded",
+                "primary_evidence_type": None,
+                "text_basis": "full_text",
+                "appraisal_tier": None,
+                "tags": [],
+                "selected": False,
+            },
+        },
+        chunks={
+            "chunk-conf": {
+                "content": "policy confidence evidence",
+                "sequence": 1,
+                "pss_id": "doc-conf",
+                "segmentation_policy": "manual_v1",
+                "text_basis": "full_text",
+            },
+            "chunk-missing": {
+                "content": "policy missing evidence",
+                "sequence": 2,
+                "pss_id": "doc-missing",
+                "segmentation_policy": "manual_v1",
+                "text_basis": "full_text",
+            },
+        },
+        units=[
+            {
+                "unit_id": "unit-conf",
+                "chunk_id": "chunk-conf",
+                "pss_id": "doc-conf",
+                "vector": _vector(1.0),
+                "text": "policy confidence evidence",
+            },
+            {
+                "unit_id": "unit-missing",
+                "chunk_id": "chunk-missing",
+                "pss_id": "doc-missing",
+                "vector": _vector(1.0),
+                "text": "policy missing evidence",
+            },
+        ],
+    )
+    retriever = ChunkRetriever(
+        scope,
+        embedder=FakeEmbedder({"policy": _vector(1.0)}),
+        directive=directive,
+        reranker=PassThroughChunkReranker(),
+    )
+    retriever.search("policy")
+    factors = retriever.provenance()["soft_prior_factors"]
+    assert factors["chunk-conf"]["screen_confidence"] == 2.5
+    assert factors["chunk-conf"]["executed_multiplier"] == 2.5
+    assert factors["chunk-missing"]["screen_confidence"] == 1.0
+    assert factors["chunk-missing"]["executed_multiplier"] == 1.0
+
+    suppressed = ChunkRetriever(
+        scope,
+        embedder=FakeEmbedder({"policy": _vector(1.0)}),
+        directive=directive,
+        reranker=PassThroughChunkReranker(),
+        selection_reference_resolved=True,
+    )
+    suppressed.search("policy")
+    suppressed_provenance = suppressed.provenance()
+    assert suppressed_provenance["confidence_suppressed"] is True
+    assert (
+        suppressed_provenance["soft_prior_factors"]["chunk-conf"][
+            "screen_confidence"
+        ]
+        == 1.0
+    )
+    assert (
+        suppressed_provenance["soft_prior_factors"]["chunk-conf"][
+            "confidence_suppressed"
+        ]
+        is True
+    )
+
+
+def test_retriever_soft_prior_product_clamps_and_records_raw_factors() -> None:
+    scope = _scope(
+        docs={
+            "doc-high": {
+                "title": "High",
+                "origin": "uploaded",
+                "primary_evidence_type": None,
+                "text_basis": "full_text",
+                "appraisal_tier": "5",
+                "tags": ["housing"],
+                "selected": True,
+                "screen_confidence": 1.0,
+            },
+            "doc-low": {
+                "title": "Low",
+                "origin": "acquired",
+                "primary_evidence_type": None,
+                "text_basis": "full_text",
+                "appraisal_tier": "1",
+                "tags": ["health"],
+                "selected": False,
+                "screen_confidence": 0.0,
+            },
+        },
+        chunks={
+            "chunk-high": {
+                "content": "policy high evidence",
+                "sequence": 1,
+                "pss_id": "doc-high",
+                "segmentation_policy": "manual_v1",
+                "text_basis": "full_text",
+            },
+            "chunk-low": {
+                "content": "policy low evidence",
+                "sequence": 2,
+                "pss_id": "doc-low",
+                "segmentation_policy": "manual_v1",
+                "text_basis": "full_text",
+            },
+        },
+        units=[
+            {
+                "unit_id": "unit-high",
+                "chunk_id": "chunk-high",
+                "pss_id": "doc-high",
+                "vector": _vector(1.0),
+                "text": "policy high evidence",
+            },
+            {
+                "unit_id": "unit-low",
+                "chunk_id": "chunk-low",
+                "pss_id": "doc-low",
+                "vector": _vector(1.0),
+                "text": "policy low evidence",
+            },
+        ],
+    )
+    directive = SynthesisDirective(
+        column_boosts={"origin": {"uploaded": 10.0, "acquired": 0.1}},
+        tag_boosts={"housing": 10.0, "health": 0.1},
+        appraisal_tier_boosts={"5": 10.0, "1": 0.1},
+    )
+    retriever = ChunkRetriever(
+        scope,
+        embedder=FakeEmbedder({"policy": _vector(1.0)}),
+        directive=directive,
+        reranker=PassThroughChunkReranker(),
+    )
+    retriever.search("policy")
+    factors = retriever.provenance()["soft_prior_factors"]
+
+    assert factors["chunk-high"]["selection"] == 2.0
+    assert factors["chunk-high"]["columns"] == {"origin": {"uploaded": 10.0}}
+    assert factors["chunk-high"]["tags"] == {"housing": 10.0}
+    assert factors["chunk-high"]["appraisal_tier"] == 10.0
+    assert factors["chunk-high"]["screen_confidence"] == 2.0
+    assert factors["chunk-high"]["raw_multiplier"] == 4000.0
+    assert factors["chunk-high"]["executed_multiplier"] == BOOST_CLAMP_MAX
+
+    assert factors["chunk-low"]["raw_multiplier"] == pytest.approx(0.001)
+    assert factors["chunk-low"]["executed_multiplier"] == BOOST_CLAMP_MIN
 
 
 def test_retriever_reranker_invoked_and_top_k_cap_enforced() -> None:
@@ -573,7 +796,7 @@ def test_build_section_tools_substrate_availability_and_argument_validation() ->
         tools["lookup"]({"kind": "coverage_records", "extra": True})
 
 
-def test_search_chunks_char_budget_tail_drop_and_zero_budget() -> None:
+def test_search_chunks_char_budget_charges_only_new_content_and_repeats_stay_citable() -> None:
     scope = _one_chunk_scope()
     retriever = ChunkRetriever(
         scope,
@@ -592,7 +815,324 @@ def test_search_chunks_char_budget_tail_drop_and_zero_budget() -> None:
     assert first["chunks"][0]["text_basis"] == "full_text"
     assert first["truncated"] is True
     second = tools["search_chunks"]({"query": "policy"})
-    assert second == {"chunks": [], "truncated": True}
+    # Contract 022 item 12: repeated records are reference-only and charge no
+    # additional content budget while still conferring citation eligibility.
+    assert second["chunks"] == [
+        {"id": "chunk-a", "chunk_record_id": "chunk-a", "already_returned": True}
+    ]
+    assert second["truncated"] is True
+    assert gathered_ids([
+        {"tool": "search_chunks", "arguments": {}, "result": second},
+    ]) == {"chunk_ids": {"chunk-a"}, "finding_ids": set()}
+
+
+def test_section_tools_deduplicate_findings_and_lookup_records() -> None:
+    finding = {
+        "kind": "iof",
+        "finding_id": "finding-1",
+        "document_title": "Doc",
+        "intervention": "Coaching",
+    }
+    tools = build_section_tools(
+        retriever=None,
+        findings_reader=lambda _args: {"iof_findings": [finding], "iof_truncated": False},
+        lookup_reader=lambda args: {
+            "kind": args["kind"],
+            "result": [
+                {
+                    "search_coverage_record_id": "coverage-1",
+                    "stop_condition": "saturated",
+                }
+            ],
+        },
+    )
+
+    first_findings = tools["query_findings"]({"kinds": ["iof"]})
+    second_findings = tools["query_findings"]({"kinds": ["iof"]})
+    assert first_findings["iof_findings"] == [finding]
+    assert second_findings["iof_findings"] == [
+        {
+            "id": "finding-1",
+            "finding_id": "finding-1",
+            "kind": "iof",
+            "already_returned": True,
+        }
+    ]
+    assert gathered_ids([
+        {"tool": "query_findings", "arguments": {}, "result": second_findings}
+    ]) == {"chunk_ids": set(), "finding_ids": {"finding-1"}}
+
+    first_lookup = tools["lookup"]({"kind": "coverage_records"})
+    second_lookup = tools["lookup"]({"kind": "coverage_records"})
+    assert first_lookup["result"][0]["search_coverage_record_id"] == "coverage-1"
+    assert second_lookup["already_returned"] is True
+    assert second_lookup["kind"] == "coverage_records"
+    assert second_lookup["id"].startswith("lookup:")
+
+
+def test_search_chunks_budget_skip_and_continue_returns_later_smaller_candidate() -> None:
+    doc_big = str(uuid.uuid4())
+    doc_small = str(uuid.uuid4())
+    scope = _scope(
+        docs={
+            doc_big: {
+                "title": "Big",
+                "origin": "uploaded",
+                "primary_evidence_type": None,
+                "text_basis": "full_text",
+                "appraisal_tier": None,
+                "tags": [],
+                "selected": False,
+            },
+            doc_small: {
+                "title": "Small",
+                "origin": "uploaded",
+                "primary_evidence_type": None,
+                "text_basis": "full_text",
+                "appraisal_tier": None,
+                "tags": [],
+                "selected": False,
+            },
+        },
+        chunks={
+            "chunk-big": {
+                "content": "policy " + ("x" * 40),
+                "sequence": 1,
+                "pss_id": doc_big,
+                "segmentation_policy": "manual_v1",
+                "text_basis": "full_text",
+            },
+            "chunk-small": {
+                "content": "tiny",
+                "sequence": 2,
+                "pss_id": doc_small,
+                "segmentation_policy": "manual_v1",
+                "text_basis": "full_text",
+            },
+        },
+        units=[
+            {
+                "unit_id": "unit-big",
+                "chunk_id": "chunk-big",
+                "pss_id": doc_big,
+                "vector": _vector(2.0),
+                "text": "policy big",
+            },
+            {
+                "unit_id": "unit-small",
+                "chunk_id": "chunk-small",
+                "pss_id": doc_small,
+                "vector": _vector(1.0),
+                "text": "policy tiny",
+            },
+        ],
+    )
+    retriever = ChunkRetriever(
+        scope,
+        embedder=FakeEmbedder({"policy": _vector(1.0)}),
+        directive=SynthesisDirective(),
+        reranker=PassThroughChunkReranker(),
+    )
+    tools = build_section_tools(
+        retriever=retriever,
+        findings_reader=None,
+        lookup_reader=lambda args: {"kind": args["kind"], "result": {}},
+        char_budget=len("tiny"),
+    )
+
+    result = tools["search_chunks"]({"query": "policy"})
+
+    assert [chunk["chunk_record_id"] for chunk in result["chunks"]] == ["chunk-small"]
+    assert result["truncated"] is True
+
+
+def test_windowed_returns_only_for_oversized_chunks_and_use_retained_offsets() -> None:
+    normal_doc = str(uuid.uuid4())
+    oversized_doc = str(uuid.uuid4())
+    normal_content = "normal chunk content with policy signal"
+    oversized_content = (
+        "a" * 900
+        + "matched oversized policy unit"
+        + "b" * (UNIT_CHAR_BUDGET + 200)
+    )
+    match_start = oversized_content.index("matched")
+    match_end = match_start + len("matched oversized policy unit")
+    scope = _scope(
+        docs={
+            normal_doc: {
+                "title": "Normal",
+                "origin": "uploaded",
+                "primary_evidence_type": None,
+                "text_basis": "full_text",
+                "appraisal_tier": None,
+                "tags": [],
+                "selected": False,
+            },
+            oversized_doc: {
+                "title": "Oversized",
+                "origin": "uploaded",
+                "primary_evidence_type": None,
+                "text_basis": "full_text",
+                "appraisal_tier": None,
+                "tags": [],
+                "selected": False,
+            },
+        },
+        chunks={
+            "chunk-normal": {
+                "content": normal_content,
+                "sequence": 1,
+                "pss_id": normal_doc,
+                "segmentation_policy": "manual_v1",
+                "text_basis": "full_text",
+            },
+            "chunk-oversized": {
+                "content": oversized_content,
+                "sequence": 2,
+                "pss_id": oversized_doc,
+                "segmentation_policy": "manual_v1",
+                "text_basis": "full_text",
+            },
+        },
+        units=[
+            {
+                "unit_id": "unit-normal",
+                "chunk_id": "chunk-normal",
+                "pss_id": normal_doc,
+                "vector": _vector(1.0),
+                "text": normal_content,
+                "start": 5,
+                "end": 15,
+            },
+            {
+                "unit_id": "unit-oversized",
+                "chunk_id": "chunk-oversized",
+                "pss_id": oversized_doc,
+                "vector": _vector(2.0),
+                "text": oversized_content[match_start:match_end],
+                "start": match_start,
+                "end": match_end,
+            },
+        ],
+    )
+    retriever = ChunkRetriever(
+        scope,
+        embedder=FakeEmbedder(
+            {"normal": _vector(1.0), "oversized": _vector(2.0)}
+        ),
+        directive=SynthesisDirective(),
+        reranker=PassThroughChunkReranker(),
+    )
+
+    normal = next(
+        chunk
+        for chunk in retriever.search("normal")
+        if chunk["chunk_record_id"] == "chunk-normal"
+    )
+    assert normal["content"] == normal_content
+    assert "window_start" not in normal
+    oversized = retriever.search("oversized")[0]
+    window_start = max(0, match_start - OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS)
+    window_end = min(
+        len(oversized_content),
+        match_end + OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS,
+    )
+    assert oversized["chunk_record_id"] == "chunk-oversized"
+    assert oversized["content"] == oversized_content[window_start:window_end]
+    assert oversized["content"] in oversized_content
+    assert oversized["window_start"] == window_start
+    assert oversized["window_end"] == window_end
+
+
+def test_search_chunks_scope_filters_fail_closed_per_argument_and_combine() -> None:
+    doc_a = str(uuid.uuid4())
+    doc_b = str(uuid.uuid4())
+    scope = _scope(
+        docs={
+            doc_a: {
+                "title": "A",
+                "origin": "uploaded",
+                "primary_evidence_type": EVIDENCE_TYPE,
+                "text_basis": "full_text",
+                "appraisal_tier": None,
+                "tags": ["housing"],
+                "selected": False,
+            },
+            doc_b: {
+                "title": "B",
+                "origin": "uploaded",
+                "primary_evidence_type": "Observational Research Studies",
+                "text_basis": "full_text",
+                "appraisal_tier": None,
+                "tags": ["health"],
+                "selected": False,
+            },
+        },
+        chunks={
+            "chunk-a": {
+                "content": "alpha policy evidence",
+                "sequence": 1,
+                "pss_id": doc_a,
+                "segmentation_policy": "manual_v1",
+                "text_basis": "full_text",
+            },
+            "chunk-b": {
+                "content": "beta policy evidence",
+                "sequence": 1,
+                "pss_id": doc_b,
+                "segmentation_policy": "manual_v1",
+                "text_basis": "full_text",
+            },
+        },
+        units=[
+            {
+                "unit_id": "unit-a",
+                "chunk_id": "chunk-a",
+                "pss_id": doc_a,
+                "vector": _vector(1.0),
+                "text": "alpha policy evidence",
+            },
+            {
+                "unit_id": "unit-b",
+                "chunk_id": "chunk-b",
+                "pss_id": doc_b,
+                "vector": _vector(2.0),
+                "text": "beta policy evidence",
+            },
+        ],
+    )
+    retriever = ChunkRetriever(
+        scope,
+        embedder=FakeEmbedder({"policy": _vector(1.0)}),
+        directive=SynthesisDirective(),
+        reranker=PassThroughChunkReranker(),
+    )
+    tools = build_section_tools(
+        retriever=retriever,
+        findings_reader=None,
+        lookup_reader=lambda args: {"kind": args["kind"], "result": {}},
+        group_doc_ids_by_group_id={"intervention:g01": {doc_a}},
+    )
+
+    with pytest.raises(ToolValidationError, match="doc_ids"):
+        tools["search_chunks"]({"query": "policy", "doc_ids": ["not-a-uuid"]})
+    with pytest.raises(ToolValidationError, match="doc_ids"):
+        tools["search_chunks"]({"query": "policy", "doc_ids": [str(uuid.uuid4())]})
+    with pytest.raises(ToolValidationError, match="group_ids"):
+        tools["search_chunks"]({"query": "policy", "group_ids": ["intervention:g99"]})
+    with pytest.raises(ToolValidationError, match="evidence_types"):
+        tools["search_chunks"]({"query": "policy", "evidence_types": ["unknown"]})
+    with pytest.raises(ToolValidationError, match="tags"):
+        tools["search_chunks"]({"query": "policy", "tags": ["missing"]})
+
+    result = tools["search_chunks"]({
+        "query": "policy",
+        "doc_ids": [doc_a],
+        "group_ids": ["intervention:g01"],
+        "evidence_types": [EVIDENCE_TYPE],
+        "tags": ["housing"],
+    })
+    assert [chunk["chunk_record_id"] for chunk in result["chunks"]] == ["chunk-a"]
 
 
 def test_loop_runner_voluntary_emission_before_cap() -> None:

@@ -757,6 +757,8 @@ def test_doc_record_default_metadata_present_and_absent() -> None:
         primary_evidence_type="rct",
         text_basis="full_text",
         quality_score=3,
+        screen_decision_confidence=0.9,
+        screen_stage=2,
         metadata={
             "title": "Doc with metadata",
             "year": 2024,
@@ -779,6 +781,8 @@ def test_doc_record_default_metadata_present_and_absent() -> None:
         primary_evidence_type=None,
         text_basis="full_text",
         quality_score=None,
+        screen_decision_confidence=None,
+        screen_stage=1,
         metadata={"title": "Bare doc"},
     )
     bare = _doc_record(absent, set())

@@ -1597,6 +1597,35 @@ def _substrate_view(
     )
 
 
+def _group_doc_ids_by_group_id(
+    grouping_summary: dict[str, Any] | None,
+    all_findings: Mapping[str, FindingInfo],
+) -> dict[str, set[str]]:
+    if grouping_summary is None:
+        return {}
+    resolved: dict[str, set[str]] = {}
+    raw_groups = grouping_summary.get("groups", [])
+    if not isinstance(raw_groups, list):
+        return resolved
+    for group in raw_groups:
+        if not isinstance(group, dict):
+            continue
+        group_id = group.get("group_id")
+        if not isinstance(group_id, str):
+            continue
+        docs: set[str] = set()
+        members = group.get("member_finding_ids", [])
+        if isinstance(members, list):
+            for member_id in members:
+                if not isinstance(member_id, str):
+                    continue
+                finding = all_findings.get(member_id)
+                if finding is not None:
+                    docs.add(finding.pss_id)
+        resolved[group_id] = docs
+    return resolved
+
+
 def _validate_sections(
     proposal: SectionProposalWire,
     *,
@@ -3658,6 +3687,7 @@ def synthesise_scope(
             embedder=embedding_backend,
             directive=directive,
             reranker=reranker,
+            selection_reference_resolved=refs.selection_run_id is not None,
         )
 
     selected_pss_ids_str = {str(item) for item in selected_pss_ids}
@@ -3670,6 +3700,10 @@ def synthesise_scope(
     )
     finding_by_id, icf_finding_by_id, icf_profile_available, finding_bases = _load_findings(
         conn, project_id=project_id, extraction_row=refs.extraction_row
+    )
+    group_doc_ids_by_group_id = _group_doc_ids_by_group_id(
+        grouping_summary,
+        {**finding_by_id, **icf_finding_by_id},
     )
     basis_by_snapshot = {**chunk_bases, **finding_bases}
     coverage_records = _load_coverage_records(
@@ -3846,6 +3880,7 @@ def synthesise_scope(
             retriever=retriever,
             findings_reader=findings_reader,
             lookup_reader=lookup_reader,
+            group_doc_ids_by_group_id=group_doc_ids_by_group_id,
         )
         try:
             loop_result = run_section_loop(
@@ -4026,6 +4061,8 @@ def synthesise_scope(
         else None,
         "executed_retrieval_boosts": retrieval_provenance.get("executed_boosts", {}),
         "unmatched_boosts": retrieval_provenance.get("unmatched_boosts", {}),
+        "soft_prior_factors": retrieval_provenance.get("soft_prior_factors", {}),
+        "confidence_suppressed": retrieval_provenance.get("confidence_suppressed", False),
         "reranker": retrieval_provenance.get("reranker", getattr(reranker, "mode", "none")),
     }
     provenance = {
