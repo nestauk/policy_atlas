@@ -1,7 +1,7 @@
 # Knowledge update log
 
 ## 2026-07-14 (task 023 build, step 6)
-* **Creation**: Added [orchestrate-stub-smoke](orchestrate-stub-smoke.md) — the standardised zero-egress full-chain check after skeleton's retirement; no-key stub mode, scripted console, and the commits-rows caveat (run after the suite, reset the test DB). Authored in-build per the approved 023 plan (Phase H); remaining 023 knowledge candidates land at step 8 from verification.md § Review handoff.
+* **Creation**: Added [orchestrate-stub-smoke](orchestrate-stub-smoke.md) — orchestrate as the one check vehicle after skeleton's retirement. Amended same day (owner correction at step-6 close): the automated gate smoke is the suite's own `test_full_stub_end_to_end_mints_artefact` (self-cleaning); the manual no-key command is the ad-hoc/live vehicle only, with the commits-rows caveat scoped to ad-hoc runs. Authored in-build per the approved 023 plan (Phase H); remaining 023 knowledge candidates land at step 8 from verification.md § Review handoff.
 * **Update**: [reasoning-model-output-cap](reasoning-model-output-cap.md) — living-doc sweep: `extract_prompt.py` citation repointed to `evidence_base/extract/iof_prompt.py` (023 regroup).
 
 ## 2026-07-14 (task 022 step 8)

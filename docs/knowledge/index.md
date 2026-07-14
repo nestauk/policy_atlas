@@ -108,6 +108,6 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 
 ## Runbooks
 
-* [The orchestrate stub smoke is the standardised zero-egress full-chain check](orchestrate-stub-smoke.md) - skeleton retired (023); no-key stub mode + scripted five-prompt console; the smoke COMMITS rows — run after the suite, reset the test DB after.
+* [Orchestrate is the one check vehicle — stub smoke automated in the suite; manual command for ad-hoc/live](orchestrate-stub-smoke.md) - skeleton retired (023); the gate's smoke is test_full_stub_end_to_end_mints_artefact (self-cleaning, in make verify); the manual no-key command is ad-hoc/live only and COMMITS rows — reset a shared DB after.
 * [Per-run $ cost is recoverable from Langfuse by time-window sum](langfuse-cost-by-time-window.md) - sum trace totalCost over the run's wall-clock window via the public API; no run-id key needed; serialize cost-protocol arms so windows don't overlap (022 cost protocol, same source as the historical baseline).
 * [macOS swap exhaustion presents as a Docker daemon wedge](macos-swap-presents-as-docker-wedge.md) - Docker Desktop's VM wedges (API 500s, vCPU spin) with nothing naming memory; `sysctl vm.swapusage` first when Docker "breaks" mid-suite (017 build: ~15.8/17 GB swap, load ~240, two restarts burned before the reading explained both symptom families).

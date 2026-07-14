@@ -16,8 +16,17 @@ Evidence for the pre-eval codebase-health slice. Public-safe. Filled at step 6;
 
 ## End-to-end command
 
-The standardised zero-egress smoke (orchestrate stub mode — skeleton is retired; this
-replaces the skeleton smoke per the owner's 2026-07-14 ruling):
+**The zero-egress full-chain check is automated in the gate** (owner correction at step-6
+close, 2026-07-14 — the review stack should verify this reframing):
+`tests/runtime/test_orchestrate.py::test_full_stub_end_to_end_mints_artefact` drives the
+scripted five-prompt stub flow through `main()`, asserts the artefact is minted, and
+cleans up its committed rows — it ran green inside every full `make verify` gate of this
+build. Together with the runner-level
+`test_full_stub_chain_commits_each_step_and_checks_in`, that is the behaviour evidence;
+the pin tests carry the prompt-surface byte-identity.
+
+The manual form was additionally run twice during the build (post-E and at the exit
+gate) as an ad-hoc check of the `python -m` entry under the new layout:
 
 ```sh
 printf 'What works to reduce childhood obesity?\n1\napprove\n1\n1\n' \
@@ -25,12 +34,13 @@ printf 'What works to reduce childhood obesity?\n1\napprove\n1\n1\n' \
     DATABASE_URL="postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas_test" \
     uv run python -m policy_atlas.runtime.orchestrate
 # exit 0 · "Run status: succeeded" · "Artefact minted: True"
-# NB: the smoke commits rows — reset the test DB afterwards (see Incidents).
+# Ad-hoc runs commit rows and don't clean up — reset a shared DB afterwards
+# (see Incidents; the suite test needs no such ceremony).
 ```
 
-Run twice (post-E under the new layout; re-run at the exit gate). No live run this slice
-(contract pin): no prompt/model/schema/egress change; pin tests + full suite +
-`test_full_stub_chain_commits_each_step_and_checks_in` are the behaviour evidence.
+Its ongoing role is ad-hoc demos and the **live-check form** (same command with keys) —
+see `docs/knowledge/orchestrate-stub-smoke.md`. No live run this slice (contract pin):
+no prompt/model/schema/egress change.
 
 ## Diff summary
 
@@ -134,9 +144,11 @@ the C4 `_scrub_nul` decline.
 - Parallel build lanes: the file fence must include **done-check resources** — the shared
   test DB is part of the fence; concurrent DB-backed pytest runs contaminate migration
   roundtrips across sessions.
-- The orchestrate stub smoke **commits rows** — the smoke recipe is: run it AFTER the
-  suite, against a scratch/test DB, and reset the DB afterwards (see the smoke concept
-  authored this slice).
+- The zero-egress full-chain check belongs in the suite, and already was there
+  (`test_full_stub_end_to_end_mints_artefact`, self-cleaning) — the manual orchestrate
+  command is the ad-hoc/live vehicle only, and ad-hoc runs against a shared DB **commit
+  rows** and need a reset (owner correction at step-6 close; runbook amended in-slice —
+  review stack: verify the reframing).
 - Gate results must be read from the gate's exit code directly: `| tail` eats it, zsh
   spells it `pipestatus`, and `&&`-chaining a commit onto a gate is how a red-gate commit
   happens.
