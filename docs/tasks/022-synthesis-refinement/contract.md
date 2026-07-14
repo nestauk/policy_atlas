@@ -95,10 +95,14 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
    (`fk_synr_grouping` untouched). This dissolves the recorded multi-run design
    questions (reference shape, share-one-extraction rule, capability-run-entity
    dependency) by construction — record that in the ADR.
-2. **Facet moves to group grain** (🛑 schema gate — decision 1): each group carries
-   its `facet`; the row-level `facet` column + `ck_grr_facet` are replaced by the
-   run's facet list (provenance) + per-facet payload keys. One migration on
-   `grouping_result`. `uq_grr_scope_run` stays (one row per scope+run).
+2. **Facet moves to group grain** (schema gate, decision 1 — **SETTLED: migrate in
+   place**, owner 2026-07-14): each group carries its `facet`; the migration stamps
+   every existing row's groups with that row's single facet, then drops the
+   row-level `facet` column + `ck_grr_facet`; the run's facet list joins provenance
+   + per-facet payload keys. One read path forever — no dual-shape reader
+   (greenfield: no users, nothing in production, old rows carry no obligations
+   beyond honest migration). One migration on `grouping_result`. `uq_grr_scope_run`
+   stays (one row per scope+run).
 3. **Facet-qualified group ids** — labels collide across facets; ids become
    facet-qualified everywhere they travel: directive `group_ids`, `query_findings`
    `group_id` filter, section assignment, `groups_unsectioned`, envelope carriage.
@@ -195,23 +199,24 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
    outcome facet's counted `no_value` residual, never force-joined. Which facets a
    given run requests stays orchestrator-discretionary; the deep-depth default
    facet set is a plan-time constant (named in the plan, not silently compiled).
-6. **Per-facet honesty** (🛑 decision 4): per-facet residuals, per-facet CAP
-   accounting, per-facet `groups_unsectioned`; and **per-facet failure isolation** —
-   flag-not-drop argues one facet's partition failure lands an honest per-facet
-   failure row (rejection reasons persisted, the 013 lesson) while sibling facets
-   survive, not all-or-nothing. The gate confirms this shape.
+6. **Per-facet honesty** (decision 4 — **SETTLED: per-facet**, owner 2026-07-14):
+   per-facet residuals, per-facet CAP accounting, per-facet `groups_unsectioned`;
+   one facet's clustering failure lands an honest per-facet failure row (rejection
+   reasons persisted, the 013 lesson) while sibling facets survive — never
+   all-or-nothing.
 7. **Cross-kind UNION read view** (decision 5 — **SETTLED: build**, owner
    2026-07-14): the recorded seam whose named first reader is this slice's
    cross-schema grouping. The multi-facet loader reads through it (retiring the
    direct two-table read), making it the one shared-reference read surface over
    both finding tables — the improved reader for anything downstream that queries
    across kinds.
-8. **Hybrid dimension search over finding reference values — build-or-defer**
-   (🛑 decision 6): the data-model's committed intervention/outcome dimension
-   indexing (ICF's source-named values co-ride free by construction), recorded for
-   decision "on the Slice C contract agenda, alongside the writer's retrieval-surface
-   rework". Interacts with item 12 (scoped `search_chunks` may be the cheaper way to
-   reach the same behaviour).
+8. **Hybrid dimension search over finding reference values** (decision 6 —
+   **SETTLED: defer**, owner 2026-07-14): the data-model's committed
+   intervention/outcome dimension indexing (ICF's source-named values co-ride free
+   by construction) stays behind its own observed-query-behaviour promotion gate —
+   no observed behaviour exists yet, evals will generate it, and item 13's scoped
+   `search_chunks` + kind-typed `query_findings` cover every reader this slice
+   has. Deferred.md entry updated with this adjudication.
 
 **In — Phase 2 (cost + surface; ONE writer prompt bump, `synthesise_section_v6`):**
 
@@ -241,10 +246,10 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
     directive (sections + group_ids + retrieval_boosts — its first author).
     Parameter authoring on built machinery; mode-governed pause UX stays deferred
     (plan-as-object seam).
-15. **Screen-confidence retrieval boost — this contract is its gate** (🛑 decision 7):
-    the pre-decided grammar (linear clamped functional multiplier, product clamped
-    [0.1, 10], steerable-never-baked) wired as a directive boost over screen
-    confidence. Constants plan-pinned; calibration is eval-slice work.
+15. **Screen-confidence retrieval boost** (decision 7 — **SETTLED: build**, owner
+    2026-07-14): the pre-decided grammar (linear clamped functional multiplier,
+    product clamped [0.1, 10], steerable-never-baked) wired as a directive boost
+    over screen confidence. Constants plan-pinned; calibration is eval-slice work.
 16. **Riders:** `lookup` widening to screening rows · the cost-work wall-time band
     re-measure (D1's ~10–20 min band re-measured on the post-phase-2 config, so the
     rehearsal numbers stay honest).
@@ -262,12 +267,17 @@ inherit the deferral" is the owner's own instruction):**
 - **C. Unspanned-lane coverage half** — build the dedicated judge call for
   judge-skipped blocks now, or keep it eval-slice work (flag-volume calibration
   lives there). 018 already closed the honesty half (`unspanned_lane_skipped`).
-- **D. 018's dangling writer-envelope metadata A/B queue** — run the first queued
-  field (author institutions) under the A/B protocol in this slice, or explicitly
-  re-defer. Contracted in 018, never run; silent inheritance is not an option.
-- **E. `effect_basis` as judge-envelope candidate** — adopt under the same A/B
-  protocol, or re-defer to the eval gate. (Pairs with B: both are judge-envelope
-  changes; adopting either forces one re-baseline event.)
+- **D. 018's dangling writer-envelope metadata A/B queue** — **SETTLED: explicit
+  re-defer to the eval gate** (owner, 2026-07-14). Phase 2 already rebuilds the
+  writer surface (`synthesise_section_v6`); stacking an envelope-content A/B on
+  the cache/repair changes would muddy attribution of both, and this slice's cost
+  measurement wants a clean before/after. Deferred.md entry re-recorded with this
+  adjudication — the "dangling" state is discharged by the explicit decision.
+- **E. `effect_basis` as judge-envelope candidate** — **SETTLED: re-defer to the
+  eval gate, bundled with D** (owner, 2026-07-14). Judge verdicts are a function
+  of the envelope — every envelope change forces a re-baseline — so all
+  judge-envelope candidates bundle into one re-baseline event at the eval gate,
+  where baselines are being cut anyway.
 
 **Out:**
 
@@ -302,9 +312,8 @@ inherit the deferral" is the owner's own instruction):**
 - **Egress unchanged**: existing approved OpenAI routes only; no new backends.
 - **No OpenAI-specific coupling** in the cache work (Bedrock constraint).
 - Upgrades-never-invalidate: the group prompt bump changes future grouping runs
-  only; existing `grouping_result` rows are readable as-written (the migration must
-  keep old rows queryable or migrate them honestly — plan decides which, gate
-  approves).
+  only; existing `grouping_result` rows are migrated in place to the new shape
+  (decision 1, settled) — honest one-time migration, one read path after it.
 
 ## Public / private boundary
 
@@ -380,9 +389,9 @@ correctness · scope creep toward the Out list.
 
 ## Decisions for the owner at this gate
 
-1. **Facet-at-group-grain migration shape** (schema 🛑) — facet list in provenance +
-   per-facet payload keys, row-level `facet` column retired; old rows' readability
-   posture.
+1. **Facet-at-group-grain migration — SETTLED (owner, 2026-07-14): migrate in
+   place, drop the column** — greenfield call: no users, nothing in production;
+   one read path, no dual-shape reader.
 2. **The two-stage clustering engine — SETTLED in full (owner, 2026-07-14)**: open
    discovery + batch-validated exhaustive assignment, parameterised by unit
    projection; **characterise refactors onto the engine this slice**
@@ -396,14 +405,19 @@ correctness · scope creep toward the Out list.
    reopening the earlier rejection): nullable, strictly source-named, `icf_v2`
    bump, nothing else rides — the 021 setting-rider precedent. Residual for the
    plan: the deep-depth default facet set.
-4. **Per-facet failure isolation** — honest per-facet failure rows (proposed) vs
-   all-or-nothing.
+4. **Per-facet failure isolation — SETTLED (owner, 2026-07-14): per-facet** —
+   honest per-facet failure rows, rejection reasons persisted, siblings survive.
 5. **Cross-kind UNION view — SETTLED: build (owner, 2026-07-14)** — the multi-facet
    loader reads through it; the shared-reference read surface over both finding
    tables.
-6. **Hybrid dimension search** — build or defer, decided against item 13's scoped
-   `search_chunks` alternative.
-7. **Screen-confidence boost** — gate the pre-decided grammar in; constants
-   plan-pinned, calibration eval-owned.
-8. **Agenda A–E** — grammar-v2 boundary · judge-envelope clamp · unspanned coverage
-   half · 018 metadata A/B queue · effect_basis judge-envelope candidate.
+6. **Hybrid dimension search — SETTLED (owner, 2026-07-14): defer** — stays behind
+   the observed-query-behaviour promotion gate; item 13's scoped `search_chunks`
+   covers this slice's readers.
+7. **Screen-confidence boost — SETTLED (owner, 2026-07-14): build** — pre-decided
+   grammar in; constants plan-pinned, calibration eval-owned.
+8. **Agenda D + E — SETTLED (owner, 2026-07-14): both re-defer to the eval gate**,
+   E bundled with D into one judge-envelope re-baseline event.
+9. **Agenda A–C — OPEN**: grammar-v2 boundary (under discussion — subsumption
+   analysis in the A entry) · judge-envelope clamp + the tool-return clamp shape
+   (owner questioning whether clamping is right at all) · unspanned-lane coverage
+   half (explanation requested).
