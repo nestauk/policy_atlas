@@ -564,10 +564,15 @@ class SectionAccounting:
     gap_claims_degraded: int = 0
     # Span-anchored counters (ADR 0015): claims whose text never bound into the
     # prose (exhausted); judge-flagged unspanned assertions bound into the prose;
-    # unspanned excerpts the judge returned that did not bind.
+    # unspanned excerpts the judge returned that did not bind, split by reason
+    # (item 17(ii), first-match precedence): the excerpt overlapped a final
+    # claim span, was an exact duplicate of an already-bound excerpt / a stale
+    # pre-splice result, or was not locatable in the final prose.
     span_bind_failures: int = 0
     unspanned_assertions: int = 0
-    unspanned_unbound: int = 0
+    unspanned_overlap_filtered: int = 0
+    unspanned_duplicate_stale: int = 0
+    unspanned_unlocated: int = 0
     # Tool calls the section loop refused to execute (unknown tool, invalid
     # arguments, per-turn read-batch overflow) — counted so protocol drift is
     # visible next to the successful tool_call_count.
@@ -2430,14 +2435,25 @@ def _judge_claims(
     section_prose: str,
     intent: str = "",
     section_focus: str = "",
+    occupied_claims: Sequence[ClaimDraft] | None = None,
 ) -> tuple[int, dict[str, int], list[dict[str, Any]]]:
-    judged = [claim for claim in claims if claim.claim_type in JUDGED_TYPES]
-    if not judged:
+    # Verdict coverage is JUDGED_TYPES only (unchanged): finding/chunk take the
+    # full lane, reasoning is strict-routed; pattern/theme/gap are validated
+    # deterministically and never judged.
+    claims_to_judge = [claim for claim in claims if claim.claim_type in JUDGED_TYPES]
+    if not claims_to_judge:
         return 0, UsageAccumulator().payload(), []
+    # The occupied-span map (item 17(i)) spans EVERY final valid claim, ALL
+    # claim types — a pattern/theme/gap claim's prose is legitimately claimed,
+    # so the judge must not flag it as unspanned. It is kept separate from the
+    # judged set so verdict coverage is unaffected. It defaults to the judged
+    # input's own claims (the initial call passes all valid drafts); the
+    # re-judge passes the full post-splice claim set (kept + rejudged)
+    # explicitly.
+    span_source = claims if occupied_claims is None else occupied_claims
     envelope_claims: list[dict[str, Any]] = []
-    span_map: list[dict[str, Any]] = []
     chunk_ids: set[str] = set()
-    for claim in judged:
+    for claim in claims_to_judge:
         chunk_ids.update(claim.judge_chunk_ids)
         record = {
             "claim_id": claim.claim_id,
@@ -2448,16 +2464,17 @@ def _judge_claims(
         if claim.claim_type == "finding":
             record["cited_finding_ids"] = claim.payload.get("cited_finding_ids", [])
         envelope_claims.append(record)
-        if claim.span is not None:
-            span_map.append(
-                {"claim_id": claim.claim_id, "start": claim.span[0], "end": claim.span[1]}
-            )
+    occupied_claim_spans: list[dict[str, Any]] = [
+        {"claim_id": claim.claim_id, "start": claim.span[0], "end": claim.span[1]}
+        for claim in span_source
+        if claim.span is not None
+    ]
     # Envelope chunks, sourced from the substrate's stored chunk data
     # (SubstrateView), de-duped by id. In addition to the chunk claims' cited
     # chunks, each FINDING claim's verified anchors point into chunk records —
     # the judge must see that anchored text, not just the anchor quote
     # (ADR 0015 §8 / B-B3).
-    for claim in judged:
+    for claim in claims_to_judge:
         if claim.claim_type != "finding":
             continue
         for anchor in claim.payload.get("anchors", []):
@@ -2481,7 +2498,7 @@ def _judge_claims(
         claims=envelope_claims,
         chunks=chunks,
         section_prose=section_prose,
-        span_map=span_map,
+        span_map=occupied_claim_spans,
         intent=intent,
         section_focus=section_focus,
     )
@@ -2489,7 +2506,7 @@ def _judge_claims(
     usage_totals = UsageAccumulator()
     usage_totals.add(usage)
     verdicts = response.verdicts
-    expected = {claim.claim_id for claim in judged}
+    expected = {claim.claim_id for claim in claims_to_judge}
     actual = {verdict.claim_id for verdict in verdicts}
     if expected != actual:
         raise SynthesiseFailure("judge_coverage_invalid")
@@ -2497,7 +2514,7 @@ def _judge_claims(
     judge_io_ref = _json_sha256(
         {"envelope": envelope, "verdicts": response.model_dump(mode="json")}
     )
-    for claim in judged:
+    for claim in claims_to_judge:
         verdict = by_id[claim.claim_id]
         claim.verdict = verdict.verdict
         claim.weakly_grounded = claim.weakly_grounded or verdict.weakly_grounded
@@ -3004,6 +3021,49 @@ def _repair_id_mismatch(
     )
 
 
+def _classify_unbound(
+    excerpt: str,
+    prose: str,
+    *,
+    claim_spans: Sequence[tuple[int, int]],
+    accounting: SectionAccounting,
+) -> None:
+    """Classify an unspanned excerpt that failed to bind into one of three
+    observability counters, by fixed first-match precedence (item 17(ii)).
+
+    An excerpt can qualify for more than one bucket; the order is fixed so the
+    counts stay disjoint and comparable across runs:
+
+    1. ``unspanned_overlap_filtered`` — present in the prose but a locatable
+       occurrence overlaps a final claim span (the judge over-reported inside
+       claimed prose). Checked first, so an overlap-and-duplicate excerpt
+       counts here.
+    2. ``unspanned_duplicate_stale`` — present in the prose but every
+       occurrence is already taken by an earlier-bound excerpt (an exact
+       duplicate of an already-bound assertion, or a stale pre-splice result).
+    3. ``unspanned_unlocated`` — not locatable in the final prose at all.
+
+    ``claim_spans`` are the final claim spans only (never the bound-excerpt
+    spans), so overlap classification measures judge over-report specifically.
+    Prose is never modified (ADR 0015 §5); this lane only counts.
+    """
+    occurrences: list[tuple[int, int]] = []
+    if excerpt:
+        search = 0
+        while True:
+            index = prose.find(excerpt, search)
+            if index == -1:
+                break
+            occurrences.append((index, index + len(excerpt)))
+            search = index + 1
+    if any(_spans_overlap(occ, claim_spans) for occ in occurrences):
+        accounting.unspanned_overlap_filtered += 1
+    elif occurrences:
+        accounting.unspanned_duplicate_stale += 1
+    else:
+        accounting.unspanned_unlocated += 1
+
+
 def _bind_unspanned(
     records: Sequence[dict[str, Any]],
     prose: str,
@@ -3013,23 +3073,25 @@ def _bind_unspanned(
 ) -> list[dict[str, Any]]:
     """Bind judge-returned unspanned excerpts into the final prose (flag-not-drop).
 
-    Bound excerpts become addressable-unit + annotation mint records; unbound
-    excerpts are counted (``unspanned_unbound``) and logged. Prose is never
-    modified by this lane (ADR 0015 §5). ``claim_spans`` are blocked: an
-    excerpt may not bind inside claimed prose — the lane flags text OUTSIDE
-    claim spans by definition, so a claim-overlapping excerpt counts as
-    unbound rather than double-covering claimed text.
+    Bound excerpts become addressable-unit + annotation mint records; excerpts
+    that fail to bind are classified into the three unspanned counters
+    (:func:`_classify_unbound`) and logged. Prose is never modified by this
+    lane (ADR 0015 §5). ``claim_spans`` are blocked: an excerpt may not bind
+    inside claimed prose — the lane flags text OUTSIDE claim spans by
+    definition, so a claim-overlapping excerpt is filtered out rather than
+    double-covering claimed text.
     """
+    claim_span_list: list[tuple[int, int]] = list(claim_spans)
     blocked: list[tuple[int, int]] = list(claim_spans)
     minted: list[dict[str, Any]] = []
     for record in records:
-        span = _bind_into(prose, str(record["excerpt"]), blocked)
+        excerpt = str(record["excerpt"])
+        span = _bind_into(prose, excerpt, blocked)
         if span is None:
-            accounting.unspanned_unbound += 1
-            log.info(
-                "synthesise.unspanned_unbound",
-                excerpt=str(record["excerpt"])[:120],
+            _classify_unbound(
+                excerpt, prose, claim_spans=claim_span_list, accounting=accounting
             )
+            log.info("synthesise.unspanned_unbound", excerpt=excerpt[:120])
             continue
         accounting.unspanned_assertions += 1
         blocked.append(span)
@@ -3249,21 +3311,27 @@ def _apply_and_rebuild(
         rebound_drafts.append(result)
 
     rejudged = replacement_drafts + rebound_drafts
-    rejudge_calls, rejudge_usage, rejudge_unspanned = _judge_claims(
-        claims=rejudged,
-        substrate=substrate,
-        grounding_judge_backend=grounding_judge_backend,
-        section_prose=new_prose,
-        intent=intent,
-        section_focus=section_focus,
-    )
 
+    # The final claim set is assembled BEFORE the re-judge: its span map must
+    # span EVERY final valid claim (kept + rejudged, all types), not only the
+    # rejudged subset, so the unspanned lane sees the whole claimed surface of
+    # the rebuilt prose (item 17(i)).
     final_by_index: dict[int, ClaimDraft] = {
         idx: draft_by_index[idx] for idx in kept_draft_indices
     }
     for draft in rejudged:
         final_by_index[draft.claim_index] = draft
     final = [final_by_index[idx] for idx in sorted(final_by_index)]
+
+    rejudge_calls, rejudge_usage, rejudge_unspanned = _judge_claims(
+        claims=rejudged,
+        occupied_claims=final,
+        substrate=substrate,
+        grounding_judge_backend=grounding_judge_backend,
+        section_prose=new_prose,
+        intent=intent,
+        section_focus=section_focus,
+    )
     return final, new_prose, rejudge_calls, rejudge_usage, rejudge_unspanned
 
 
@@ -3318,6 +3386,7 @@ def _section_claims(
 
     final: list[ClaimDraft]
     final_prose = prose
+    rejudge_unspanned: list[dict[str, Any]] = []
     if not failing:
         final = _finalize_no_repair(initial=initial, accounting=accounting)
     else:
@@ -3364,7 +3433,6 @@ def _section_claims(
             )
             call_counts["rejudge"] += rejudge_calls
             usage_totals.add_payload(rejudge_usage)
-            unspanned = unspanned + rejudge_unspanned
 
     for claim in final:
         if "gap_degraded" in claim.flags:
@@ -3380,6 +3448,16 @@ def _section_claims(
     )
     if final_prose.strip() and scanning_calls == 0:
         accounting.unspanned_lane_skipped = True
+    # Supersede, never concatenate (item 17(iii)): when the repair splice
+    # rebuilt the prose, the initial scan's unspanned excerpts were located in
+    # prose that no longer exists, so the re-judge's results (scanned against
+    # the rebuilt prose) REPLACE them — never extend. A rebuild with no
+    # re-judge (rejudged carried no judged claim → rejudge_unspanned == [])
+    # therefore keeps no stale flags; unspanned_lane_skipped carries the
+    # honesty. When the prose is unchanged (no repair, or a repair that kept
+    # every segment verbatim), the initial scan stands.
+    if final_prose != prose:
+        unspanned = rejudge_unspanned
     minted_unspanned = _bind_unspanned(
         unspanned,
         final_prose,
@@ -3717,7 +3795,9 @@ def _blocks_rollup(
         "gap_claims_degraded": accounting.gap_claims_degraded,
         "span_bind_failures": accounting.span_bind_failures,
         "unspanned_assertions": accounting.unspanned_assertions,
-        "unspanned_unbound": accounting.unspanned_unbound,
+        "unspanned_overlap_filtered": accounting.unspanned_overlap_filtered,
+        "unspanned_duplicate_stale": accounting.unspanned_duplicate_stale,
+        "unspanned_unlocated": accounting.unspanned_unlocated,
         "repair_taken": accounting.repair_taken,
         "repair_count_mismatch": accounting.repair_count_mismatch,
         "repair_unparseable": accounting.repair_unparseable,
@@ -3740,7 +3820,9 @@ def _rollup_counts(
     gap_claims_degraded: int,
     span_bind_failures: int,
     unspanned_assertions: int,
-    unspanned_unbound: int,
+    unspanned_overlap_filtered: int,
+    unspanned_duplicate_stale: int,
+    unspanned_unlocated: int,
     tool_calls_total: int,
 ) -> dict[str, Any]:
     verdict_counts: Counter[str] = Counter()
@@ -3772,7 +3854,9 @@ def _rollup_counts(
         "gap_claims_degraded": gap_claims_degraded,
         "span_bind_failures": span_bind_failures,
         "unspanned_assertions": unspanned_assertions,
-        "unspanned_unbound": unspanned_unbound,
+        "unspanned_overlap_filtered": unspanned_overlap_filtered,
+        "unspanned_duplicate_stale": unspanned_duplicate_stale,
+        "unspanned_unlocated": unspanned_unlocated,
         "tool_calls_total": tool_calls_total,
         "findings_cited_distinct": len(finding_ids),
     }
@@ -4255,7 +4339,9 @@ def synthesise_scope(
     total_gap_degraded = 0
     total_span_bind_failures = 0
     total_unspanned_assertions = 0
-    total_unspanned_unbound = 0
+    total_unspanned_overlap_filtered = 0
+    total_unspanned_duplicate_stale = 0
+    total_unspanned_unlocated = 0
     total_tool_calls = 0
     turn_cap_hit_any = False
     repair_path_taken = False
@@ -4372,7 +4458,9 @@ def synthesise_scope(
         total_gap_degraded += accounting.gap_claims_degraded
         total_span_bind_failures += accounting.span_bind_failures
         total_unspanned_assertions += accounting.unspanned_assertions
-        total_unspanned_unbound += accounting.unspanned_unbound
+        total_unspanned_overlap_filtered += accounting.unspanned_overlap_filtered
+        total_unspanned_duplicate_stale += accounting.unspanned_duplicate_stale
+        total_unspanned_unlocated += accounting.unspanned_unlocated
         total_tool_calls += accounting.tool_call_count
         turn_cap_hit_any = turn_cap_hit_any or accounting.turn_cap_hit
         repair_path_taken = repair_path_taken or accounting.repair_taken
@@ -4445,7 +4533,9 @@ def synthesise_scope(
         total_gap_degraded += kf_accounting.gap_claims_degraded
         total_span_bind_failures += kf_accounting.span_bind_failures
         total_unspanned_assertions += kf_accounting.unspanned_assertions
-        total_unspanned_unbound += kf_accounting.unspanned_unbound
+        total_unspanned_overlap_filtered += kf_accounting.unspanned_overlap_filtered
+        total_unspanned_duplicate_stale += kf_accounting.unspanned_duplicate_stale
+        total_unspanned_unlocated += kf_accounting.unspanned_unlocated
         repair_path_taken = repair_path_taken or kf_accounting.repair_taken
         repair_count_mismatch_any = (
             repair_count_mismatch_any or kf_accounting.repair_count_mismatch
@@ -4536,7 +4626,9 @@ def synthesise_scope(
         gap_claims_degraded=total_gap_degraded,
         span_bind_failures=total_span_bind_failures,
         unspanned_assertions=total_unspanned_assertions,
-        unspanned_unbound=total_unspanned_unbound,
+        unspanned_overlap_filtered=total_unspanned_overlap_filtered,
+        unspanned_duplicate_stale=total_unspanned_duplicate_stale,
+        unspanned_unlocated=total_unspanned_unlocated,
         tool_calls_total=total_tool_calls,
     )
     # Conditional-required key-findings marker (ADR 0015 §8): present iff a

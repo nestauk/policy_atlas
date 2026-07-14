@@ -18,8 +18,10 @@ from policy_atlas.synthesis_backend import (
     ClaimWire,
     GapPayloadWire,
     PatternPayloadWire,
+    RepairItemWire,
     SectionProposalWire,
     SectionProseWire,
+    SectionRepairWire,
     SectionWire,
     SparsitySignalWire,
     StubSynthesisBackend,
@@ -45,6 +47,7 @@ from policy_atlas.synthesise import (
     SpliceItem,
     SubstrateView,
     _anchor_counts,
+    _bind_unspanned,
     _conclusions_focus,
     _judge_claims,
     _section_claims,
@@ -960,6 +963,172 @@ def test_judge_envelope_includes_finding_anchor_chunks_deduped_and_context() -> 
     assert anchored["segmentation_policy"] == "manual_v1"
 
 
+# --- task 022 item 17(i): occupied span map spans ALL valid claim types ---
+
+
+def test_judge_span_map_covers_all_claim_types_verdict_coverage_unchanged() -> None:
+    """The initial judge call's span map spans EVERY valid claim (all types), so
+    a pattern claim's prose is a known occupied span the judge must not flag as
+    unspanned. Verdict coverage stays JUDGED_TYPES only — the envelope's judged
+    claims exclude the pattern claim (item 17(i))."""
+    substrate = _substrate()
+    reasoning_claim = ClaimDraft(
+        claim_id="s0c0",
+        claim_index=0,
+        claim_type="reasoning",
+        text="As reasoning, the strands point one way.",
+        annotation_type="reasoning",
+        payload={},
+        judge_chunk_ids=set(),
+        span=(0, 40),
+    )
+    pattern_claim = ClaimDraft(
+        claim_id="s0c1",
+        claim_index=1,
+        claim_type="pattern",
+        text="The corpus shows a recurring pattern.",
+        annotation_type="pattern",
+        payload={},
+        judge_chunk_ids=set(),
+        span=(41, 78),
+    )
+    judge = _CapturingJudge()
+    calls, _usage, _unspanned = _judge_claims(
+        claims=[reasoning_claim, pattern_claim],
+        substrate=substrate,
+        grounding_judge_backend=judge,
+        section_prose="prose",
+    )
+    assert calls == 1
+    envelope = judge.envelopes[0]
+    span_claim_ids = {entry["claim_id"] for entry in envelope["span_map"]}
+    # Both spans occupy the map — the pattern claim's prose is claimed territory.
+    assert span_claim_ids == {"s0c0", "s0c1"}
+    # Verdict coverage is unchanged: only the reasoning (JUDGED_TYPES) claim is
+    # judged; the pattern claim carries no verdict.
+    judged_ids = {claim["claim_id"] for claim in envelope["claims"]}
+    assert judged_ids == {"s0c0"}
+
+
+def test_judge_rejudge_span_map_spans_kept_plus_rejudged_claims() -> None:
+    """On the re-judge call the span map must span the FULL post-splice claim set
+    (kept + rejudged, all types), not only the rejudged subset — passed through
+    ``occupied_claims`` while verdict coverage stays the rejudged judged claims
+    (item 17(i))."""
+    substrate = _substrate()
+    kept_pattern = ClaimDraft(
+        claim_id="s0c0",
+        claim_index=0,
+        claim_type="pattern",
+        text="A kept pattern claim.",
+        annotation_type="pattern",
+        payload={},
+        judge_chunk_ids=set(),
+        span=(0, 21),
+    )
+    rejudged_reasoning = ClaimDraft(
+        claim_id="s0c1",
+        claim_index=1,
+        claim_type="reasoning",
+        text="Reworded reasoning claim.",
+        annotation_type="reasoning",
+        payload={},
+        judge_chunk_ids=set(),
+        span=(22, 47),
+    )
+    judge = _CapturingJudge()
+    calls, _usage, _unspanned = _judge_claims(
+        claims=[rejudged_reasoning],
+        occupied_claims=[kept_pattern, rejudged_reasoning],
+        substrate=substrate,
+        grounding_judge_backend=judge,
+        section_prose="prose",
+    )
+    assert calls == 1
+    envelope = judge.envelopes[0]
+    span_claim_ids = {entry["claim_id"] for entry in envelope["span_map"]}
+    # The kept claim occupies the rebuilt prose too, even though only the
+    # rejudged claim is judged for a verdict.
+    assert span_claim_ids == {"s0c0", "s0c1"}
+    judged_ids = {claim["claim_id"] for claim in envelope["claims"]}
+    assert judged_ids == {"s0c1"}
+
+
+# --- task 022 item 17(ii): three unspanned counters, first-match precedence ---
+
+
+def _unspanned_record(excerpt: str) -> dict[str, Any]:
+    return {"excerpt": excerpt, "rationale": "r", "judge_io_ref": "io"}
+
+
+def test_unspanned_counter_unlocated() -> None:
+    accounting = _accounting()
+    minted = _bind_unspanned(
+        [_unspanned_record("ABSENT PHRASE")],
+        "Prose that does not contain the excerpt.",
+        accounting=accounting,
+        claim_spans=(),
+    )
+    assert minted == []
+    assert accounting.unspanned_unlocated == 1
+    assert accounting.unspanned_overlap_filtered == 0
+    assert accounting.unspanned_duplicate_stale == 0
+    assert accounting.unspanned_assertions == 0
+
+
+def test_unspanned_counter_overlap_filtered() -> None:
+    prose = "Claimed evidential phrase remains here."
+    minted = _bind_unspanned(
+        [_unspanned_record("evidential phrase")],
+        prose,
+        accounting=(accounting := _accounting()),
+        claim_spans=[(0, 25)],
+    )
+    assert minted == []
+    assert accounting.unspanned_overlap_filtered == 1
+    assert accounting.unspanned_duplicate_stale == 0
+    assert accounting.unspanned_unlocated == 0
+
+
+def test_unspanned_counter_duplicate_stale() -> None:
+    prose = "A repeated line appears once here."
+    excerpt = "repeated line appears once"
+    accounting = _accounting()
+    minted = _bind_unspanned(
+        [_unspanned_record(excerpt), _unspanned_record(excerpt)],
+        prose,
+        accounting=accounting,
+        claim_spans=(),
+    )
+    # The first binds; the exact-duplicate second has no free occurrence left.
+    assert len(minted) == 1
+    assert accounting.unspanned_assertions == 1
+    assert accounting.unspanned_duplicate_stale == 1
+    assert accounting.unspanned_overlap_filtered == 0
+    assert accounting.unspanned_unlocated == 0
+
+
+def test_unspanned_counter_precedence_overlap_beats_duplicate() -> None:
+    """An excerpt qualifying for BOTH overlap and duplicate counts as
+    overlap_filtered (first-match precedence, item 17(ii))."""
+    prose = "foo bar foo bar tail"
+    excerpt = "foo bar"
+    accounting = _accounting()
+    minted = _bind_unspanned(
+        [_unspanned_record(excerpt), _unspanned_record(excerpt)],
+        prose,
+        accounting=accounting,
+        claim_spans=[(8, 15)],
+    )
+    # First binds at the free (0, 7) occurrence; the second's remaining
+    # occurrences overlap a bound excerpt AND a claim span — overlap wins.
+    assert len(minted) == 1
+    assert accounting.unspanned_assertions == 1
+    assert accounting.unspanned_overlap_filtered == 1
+    assert accounting.unspanned_duplicate_stale == 0
+    assert accounting.unspanned_unlocated == 0
+
+
 # --- ADR 0015 §8 / B-B3: conclusions exemption + focus ---
 
 
@@ -1022,8 +1191,9 @@ def _run_section_claims(
     accounting: SectionAccounting,
     *,
     available_claim_types: set[str] | None = None,
-) -> None:
-    _section_claims(
+    synthesis_backend: StubSynthesisBackend | None = None,
+) -> tuple[list[ClaimDraft], str, list[dict[str, Any]], dict[str, int], dict[str, int]]:
+    return _section_claims(
         section_index=0,
         raw_claims=wire,
         seed={},
@@ -1032,7 +1202,7 @@ def _run_section_claims(
         section_group_ids={"intervention:g01"},
         citable_finding_ids=set(),
         citable_chunk_ids={"11111111-1111-1111-1111-111111111111"},
-        synthesis_backend=StubSynthesisBackend(),
+        synthesis_backend=synthesis_backend or StubSynthesisBackend(),
         grounding_judge_backend=StubGroundingJudgeBackend(),
         available_claim_types=available_claim_types or {"gap", "chunk"},
         accounting=accounting,
@@ -1079,6 +1249,98 @@ def test_unspanned_lane_not_skipped_when_judge_scanned() -> None:
     accounting = _accounting()
     _run_section_claims(wire, accounting, available_claim_types={"gap", "reasoning"})
     assert accounting.unspanned_lane_skipped is False
+
+
+# --- task 022 item 17(iii): supersede, never concatenate ---
+
+
+def test_supersede_replaces_initial_unspanned_on_prose_changing_repair() -> None:
+    """A prose-changing repair triggers a re-judge; the re-judge's unspanned
+    results REPLACE the initial scan's (item 17(iii)). The initial scan's
+    identical flag is dropped, so it is never counted as a stale duplicate."""
+    prose = (
+        "As reasoning this stubsmuggle holds.\n"
+        "An evidential stubunspanned sentence."
+    )
+    wire = SectionProseWire(
+        prose=prose,
+        claims=[
+            _claim(
+                {
+                    "claim_type": "reasoning",
+                    "text": "As reasoning this stubsmuggle holds.",
+                }
+            )
+        ],
+    )
+    accounting = _accounting()
+    _final, final_prose, minted, call_counts, _usage = _run_section_claims(
+        wire, accounting, available_claim_types={"reasoning"}
+    )
+    # The smuggled reasoning claim fails its verdict, so repair rebuilds the
+    # prose and the reworded (still-judged) claim is re-judged.
+    assert call_counts["repair"] == 1
+    assert call_counts["rejudge"] == 1
+    assert final_prose != prose
+    # Supersede: the re-judge flags the surviving unspanned sentence once and it
+    # binds; the initial scan's identical flag was dropped, NOT re-bound as a
+    # stale duplicate (the concatenation bug this fix retires).
+    assert accounting.unspanned_assertions == 1
+    assert accounting.unspanned_duplicate_stale == 0
+    assert len(minted) == 1
+
+
+def test_supersede_rebuild_without_rejudge_keeps_no_stale_flags() -> None:
+    """A repair that rebuilds the prose but leaves no judged claim to re-judge
+    keeps no stale unspanned flags — the initial scan's flag is dropped and
+    unspanned_lane_skipped carries the honesty (item 17(iii))."""
+    prose = (
+        "As reasoning beta strand holds.\n"
+        "As reasoning this stubsmuggle holds.\n"
+        "An evidential stubunspanned sentence."
+    )
+    wire = SectionProseWire(
+        prose=prose,
+        claims=[
+            _claim(
+                {
+                    "claim_type": "reasoning",
+                    "text": "As reasoning beta strand holds.",
+                }
+            ),
+            _claim(
+                {
+                    "claim_type": "reasoning",
+                    "text": "As reasoning this stubsmuggle holds.",
+                }
+            ),
+        ],
+    )
+    # A deletion repair for the failing second claim: no replacement claim, so
+    # the re-judge set is empty and no re-judge call fires — but the prose is
+    # still rebuilt (the failing claim's segment is spliced out).
+    backend = StubSynthesisBackend(
+        repair=SectionRepairWire(
+            repairs=[
+                RepairItemWire(claim_id="s0c1", replacement_segment="", claim=None)
+            ]
+        )
+    )
+    accounting = _accounting()
+    _final, final_prose, minted, call_counts, _usage = _run_section_claims(
+        wire, accounting, available_claim_types={"reasoning"}, synthesis_backend=backend
+    )
+    assert call_counts["repair"] == 1
+    assert call_counts["rejudge"] == 0
+    assert final_prose != prose
+    # No re-judge scanned the rebuilt prose: the initial flag is dropped (not a
+    # stale mint) and the lane is honestly marked skipped.
+    assert accounting.unspanned_lane_skipped is True
+    assert accounting.unspanned_assertions == 0
+    assert accounting.unspanned_overlap_filtered == 0
+    assert accounting.unspanned_duplicate_stale == 0
+    assert accounting.unspanned_unlocated == 0
+    assert minted == []
 
 
 def test_extraction_profile_ids_fails_closed_on_flat_provenance() -> None:

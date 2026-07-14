@@ -635,7 +635,9 @@ def test_migrated_single_facet_grouping_row_consumed_by_qualified_read_paths() -
         gap_claims_degraded=0,
         span_bind_failures=0,
         unspanned_assertions=0,
-        unspanned_unbound=0,
+        unspanned_overlap_filtered=0,
+        unspanned_duplicate_stale=0,
+        unspanned_unlocated=0,
         tool_calls_total=0,
     )
     assert counts["groups_total"] == 1
@@ -686,7 +688,9 @@ def test_multi_facet_grouping_row_consumed_with_per_facet_honesty() -> None:
         gap_claims_degraded=0,
         span_bind_failures=0,
         unspanned_assertions=0,
-        unspanned_unbound=0,
+        unspanned_overlap_filtered=0,
+        unspanned_duplicate_stale=0,
+        unspanned_unlocated=0,
         tool_calls_total=0,
     )
     assert counts["groups_total"] == 2
@@ -1946,9 +1950,13 @@ def test_unspanned_assertion_bound_minted_unbound_counted(conn: Connection) -> N
 
     # Two blocks now carry stub claims (the proposed section + the code-injected
     # conclusions section, ADR 0015 §8); the judge flags the same bound + unbound
-    # excerpt on each, so the run-level counts are two of each.
+    # excerpt on each, so the run-level counts are two of each. The unbound
+    # excerpt is absent from the prose, so it lands in unspanned_unlocated
+    # (item 17(ii)).
     assert summary["counts"]["unspanned_assertions"] == 2
-    assert summary["counts"]["unspanned_unbound"] == 2
+    assert summary["counts"]["unspanned_unlocated"] == 2
+    assert summary["counts"]["unspanned_overlap_filtered"] == 0
+    assert summary["counts"]["unspanned_duplicate_stale"] == 0
     assert summary["flags"].get("unspanned_assertions_present") is True
 
     block_ids = select(block.c.block_id).where(
