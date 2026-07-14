@@ -231,10 +231,15 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
 11. **Id-carrying repair schema** (013 seam) — replacements carry the failing claim's
     id, validated against the failing set; kills the positional-binding fragility.
     Rides the same prompt bump.
-12. **Tool-return hygiene** — chunk dedup across turns (the writer re-reads what it
-    already saw) + the character clamp at **tool-return** surfaces, windowed around
-    the relevant span. The **judge envelope stays unclamped** unless the owner
-    reopens it (agenda item B).
+12. **Tool-return hygiene** (shape owner-settled, 2026-07-14) — chunk dedup across
+    turns (the writer re-reads what it already saw), unconditional; plus
+    **oversized-chunk-only windowed returns**: under `embedding_unit_policy_v1` a
+    normal chunk (≤ unit budget) IS its one unit and returns whole; a collapsed
+    chunk returns the **matched unit's span widened by a margin** instead of the
+    full frozen text (unit offsets anchor the window; quotes still verify — the
+    window is a substring of the frozen chunk; the chunk stays the citation
+    grain). Never a universal truncation. The **judge envelope stays unclamped**
+    (agenda B, settled).
 13. **Writer read-tool scoping plumbing** — `search_chunks` gains optional
     fail-closed scope filters (tags · doc ids · facet-group members · evidence
     types), validated against the closed vocabularies like the directive boosts.
@@ -253,6 +258,26 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
 16. **Riders:** `lookup` widening to screening rows · the cost-work wall-time band
     re-measure (D1's ~10–20 min band re-measured on the post-phase-2 config, so the
     rehearsal numbers stay honest).
+17. **Unspanned-lane precision fixes** (owner-adopted 2026-07-14, from the live
+    trace scan — 404 `synthesise:judge` observations, 429 unspanned excerpts:
+    ~16% re-judge artifacts, ~24% judge over-reports inside mapped spans, ~59%
+    genuine writer-authored unclaimed evidential prose, ~1% span-edge):
+    - **(i) Re-judge span-map completeness** — the post-repair re-judge envelope
+      carries the FULL claim span map (kept + rejudged claims), not just the
+      rejudged subset (`_apply_repair` → `_judge_claims` passes only `rejudged`
+      today), so kept claims' content stops minting false unspanned flags.
+      Envelope-content completeness fix; checked with a re-judge-set replay
+      (verdict-flip inspection on the rejudged claims).
+    - **(ii) Deterministic overlap post-filter** — code-side: a judge-returned
+      unspanned excerpt overlapping a mapped claim span is dropped (by
+      definition not unspanned), counted on accounting as filtered — no judge
+      prompt change needed for cause 2.
+    - The genuine ~59% (evidential summary sentences, "As an inference…"
+      labelled-inference prose, cluster descriptions) is a named input to the
+      `synthesise_section_v6` replay work — claim-or-flag is a v6 taste call
+      made on replay evidence, not pre-decided here.
+    - **Eval note:** `unspanned_assertions` counts before/after these fixes are
+      NOT comparable — the eval slice must re-baseline that metric.
 
 **Agenda — owner-reopened rulings, decided at this gate (🛑 decisions A–E; "don't
 inherit the deferral" is the owner's own instruction):**
@@ -264,12 +289,14 @@ inherit the deferral" is the owner's own instruction):**
   grammar, trigger = observed steer-point demand for it (no author exists today —
   the recorded steer examples compile against the existing grammar). The
   grammar-v2 deferred entry is discharged with this adjudication.
-- **B. Judge-envelope char clamp** — keep the judge envelope unclamped (013 call) or
-  clamp it too. Any judge-envelope change binds to 018's verification-grade A/B
-  protocol (replay the same claim set through both envelopes, hand-inspect flips).
-- **C. Unspanned-lane coverage half** — build the dedicated judge call for
-  judge-skipped blocks now, or keep it eval-slice work (flag-volume calibration
-  lives there). 018 already closed the honesty half (`unspanned_lane_skipped`).
+- **B. Judge-envelope char clamp — SETTLED: judge envelope stays unclamped**
+  (owner, 2026-07-14). The tool-return clamp is reshaped as item 12's
+  oversized-only windowed return (matched unit's span + margin — the owner's own
+  formulation); no judge-input change, no re-baseline triggered.
+- **C. Unspanned-lane coverage half — SETTLED: stays parked for the eval slice**
+  (owner, 2026-07-14) — the live trace scan showed the lane's problem is
+  precision, not coverage; the two precision fixes are adopted instead as
+  item 17. `unspanned_lane_skipped` honesty flag unchanged.
 - **D. 018's dangling writer-envelope metadata A/B queue** — **SETTLED: explicit
   re-defer to the eval gate** (owner, 2026-07-14). Phase 2 already rebuilds the
   writer surface (`synthesise_section_v6`); stacking an envelope-content A/B on
@@ -420,7 +447,11 @@ correctness · scope creep toward the Out list.
    grammar in; constants plan-pinned, calibration eval-owned.
 8. **Agenda D + E — SETTLED (owner, 2026-07-14): both re-defer to the eval gate**,
    E bundled with D into one judge-envelope re-baseline event.
-9. **Agenda A–C — OPEN**: grammar-v2 boundary (under discussion — subsumption
-   analysis in the A entry) · judge-envelope clamp + the tool-return clamp shape
-   (owner questioning whether clamping is right at all) · unspanned-lane coverage
-   half (explanation requested).
+9. **Agenda A–C — SETTLED (owner, 2026-07-14)**: A = grammar v2 subsumed and
+   retired · B = judge envelope unclamped, tool-return clamp reshaped as
+   oversized-only windowed returns (item 12) · C = coverage half parked,
+   precision fixes adopted (item 17, trace-scan-evidenced).
+
+**All contract-gate decisions are now settled.** Remaining plan-time residuals:
+`FACET_VALUE_CAP` value · deep-depth default facet set · granularity ceiling
+ratio · context-payload bounds · engine refactor sequencing.
