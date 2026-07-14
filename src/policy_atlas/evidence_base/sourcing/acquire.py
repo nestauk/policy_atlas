@@ -215,23 +215,43 @@ class OpenAlexFixtureBackend:
         wire_params: dict[str, str] | None = None,
         max_results: int | None = None,
     ) -> list[dict[str, Any]]:
-        """Return the sanitized fixture Work records (query is not interpreted)."""
+        """Return the sanitized fixture Work records (query is not interpreted).
+
+        Args:
+            query: Ignored; fixture replay is query-independent.
+            wire_params: Ignored; accepted for protocol parity with live backends.
+            max_results: Optional result cap applied to the fixture page.
+        """
         return _limit_fixture_records(_load_fixture("openalex_works.json"), max_results)
 
     def fetch_citations(
         self, record_id: str, *, max_results: int | None = None
     ) -> list[dict[str, Any]]:
-        """Return a deterministic small citation slice from the fixture page."""
+        """Return a deterministic small citation slice from the fixture page.
+
+        Args:
+            record_id: Ignored; fixture replay is record-independent.
+            max_results: Optional result cap applied to the citation slice.
+        """
         return _limit_fixture_records(_load_fixture("openalex_works.json")[:3], max_results)
 
     def fetch_references(
         self, record_ids: list[str], *, max_results: int | None = None
     ) -> list[dict[str, Any]]:
-        """Return a deterministic small reference slice from the fixture page."""
+        """Return a deterministic small reference slice from the fixture page.
+
+        Args:
+            record_ids: Ignored; fixture replay is record-independent.
+            max_results: Optional result cap applied to the reference slice.
+        """
         return _limit_fixture_records(_load_fixture("openalex_works.json")[:3], max_results)
 
     def lookup_title(self, title: str) -> list[dict[str, Any]]:
-        """Return fixture records whose titles contain the query string."""
+        """Return fixture records whose titles contain the query string.
+
+        Args:
+            title: Title text matched (casefolded) against fixture record titles.
+        """
         needle = title.casefold().strip()
         if not needle:
             return []
@@ -244,7 +264,12 @@ class OpenAlexFixtureBackend:
     def lookup_dois(
         self, dois: list[str], *, max_results: int | None = None
     ) -> list[dict[str, Any]]:
-        """Return fixture records whose normalized DOI matches a requested DOI."""
+        """Return fixture records whose normalized DOI matches a requested DOI.
+
+        Args:
+            dois: DOI identifiers to match, normalized before comparison.
+            max_results: Optional result cap applied to the matched records.
+        """
         wanted = {_normalize_doi(doi) for doi in dois}
         wanted.discard(None)
         records = [
@@ -270,29 +295,66 @@ class OvertonFixtureBackend:
         wire_params: dict[str, str] | None = None,
         max_results: int | None = None,
     ) -> list[dict[str, Any]]:
-        """Return the sanitized fixture policy-document records (query is not interpreted)."""
+        """Return the sanitized fixture policy-document records (query is not interpreted).
+
+        Args:
+            query: Ignored; fixture replay is query-independent.
+            wire_params: Ignored; accepted for protocol parity with live backends.
+            max_results: Optional result cap applied to the fixture page.
+        """
         return _limit_fixture_records(_load_fixture("overton_documents.json"), max_results)
 
     def fetch_citations(
         self, record_id: str, *, max_results: int | None = None
     ) -> list[dict[str, Any]]:
-        """Raise because Overton v1 declares no snowball capability."""
+        """Raise because Overton v1 declares no snowball capability.
+
+        Args:
+            record_id: Ignored; the call always raises.
+            max_results: Ignored; the call always raises.
+
+        Raises:
+            NotImplementedError: Always — ``caps.has_snowball`` is False.
+        """
         raise NotImplementedError("OvertonFixtureBackend caps.has_snowball=False")
 
     def fetch_references(
         self, record_ids: list[str], *, max_results: int | None = None
     ) -> list[dict[str, Any]]:
-        """Raise because Overton v1 declares no snowball capability."""
+        """Raise because Overton v1 declares no snowball capability.
+
+        Args:
+            record_ids: Ignored; the call always raises.
+            max_results: Ignored; the call always raises.
+
+        Raises:
+            NotImplementedError: Always — ``caps.has_snowball`` is False.
+        """
         raise NotImplementedError("OvertonFixtureBackend caps.has_snowball=False")
 
     def lookup_title(self, title: str) -> list[dict[str, Any]]:
-        """Raise because Overton v1 declares no title-lookup capability."""
+        """Raise because Overton v1 declares no title-lookup capability.
+
+        Args:
+            title: Ignored; the call always raises.
+
+        Raises:
+            NotImplementedError: Always — ``caps.has_title_lookup`` is False.
+        """
         raise NotImplementedError("OvertonFixtureBackend caps.has_title_lookup=False")
 
     def lookup_dois(
         self, dois: list[str], *, max_results: int | None = None
     ) -> list[dict[str, Any]]:
-        """Raise because Overton v1 declares no DOI-lookup capability."""
+        """Raise because Overton v1 declares no DOI-lookup capability.
+
+        Args:
+            dois: Ignored; the call always raises.
+            max_results: Ignored; the call always raises.
+
+        Raises:
+            NotImplementedError: Always — ``caps.has_doi_lookup`` is False.
+        """
         raise NotImplementedError("OvertonFixtureBackend caps.has_doi_lookup=False")
 
 

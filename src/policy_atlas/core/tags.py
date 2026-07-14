@@ -18,7 +18,11 @@ from policy_atlas.core.schema import TOPIC_THEME, source_tag
 
 
 def has_control_character(value: str) -> bool:
-    """Return True when any character is in a Unicode C (control/format) category."""
+    """Return True when any character is in a Unicode C (control/format) category.
+
+    Args:
+        value: Text to scan.
+    """
     return any(unicodedata.category(char).startswith("C") for char in value)
 
 

@@ -318,7 +318,11 @@ def _exemplars_json(exemplars: list[ExemplarRecord]) -> str:
 
 
 def build_queries_messages(payload: QueriesPayload) -> list[ChatCompletionMessageParam]:
-    """Assemble the two-message prompt for one query-generation call."""
+    """Assemble the two-message prompt for one query-generation call.
+
+    Args:
+        payload: Scope intent, ready for one query-generation call.
+    """
     return [
         {"role": "system", "content": SEARCH_QUERIES_SYSTEM_PROMPT},
         {
@@ -337,6 +341,9 @@ def build_reformulate_messages(
 
     Exemplars are sanitized and truncated at assembly; the caller owns
     per-round selection (strictly this-round, non-accumulating) and counts.
+
+    Args:
+        payload: Intent anchor + this round's graded exemplars.
     """
     return [
         {"role": "system", "content": SEARCH_REFORMULATE_SYSTEM_PROMPT},
@@ -353,7 +360,11 @@ def build_reformulate_messages(
 
 
 def build_suggest_messages(payload: SuggestPayload) -> list[ChatCompletionMessageParam]:
-    """Assemble the two-message prompt for one suggestion call."""
+    """Assemble the two-message prompt for one suggestion call.
+
+    Args:
+        payload: Intent anchor + positive exemplars, ready for one call.
+    """
     return [
         {"role": "system", "content": SEARCH_SUGGEST_SYSTEM_PROMPT},
         {
@@ -373,6 +384,9 @@ def validated_queries(wire: SearchQueriesWire) -> tuple[list[str], list[str]]:
     the output side): NUL-scrubbed, whitespace-normalised, deduplicated
     case-insensitively, length- and count-capped. Backend-specific sanitizers
     (wildcard stripping etc.) run later in the transport layer.
+
+    Args:
+        wire: Parsed query-generation or reformulation model output.
 
     Returns:
         ``(queries, overton_paraphrases)`` — possibly empty lists.
@@ -407,6 +421,9 @@ def validated_suggestions(wire: SearchSuggestWire) -> list[dict[str, Any]]:
     Titles are NUL-scrubbed, whitespace-normalised and capped; DOIs and years
     pass through for grounding (grounding, not this function, decides what a
     suggestion is worth). Deduplicated case-insensitively by title.
+
+    Args:
+        wire: Parsed suggestion model output.
     """
     papers: list[dict[str, Any]] = []
     seen: set[str] = set()

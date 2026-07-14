@@ -26,6 +26,9 @@ def metadata_dict(raw: Any) -> dict[str, Any]:
     Shared by every reader of the acquired-envelope ``metadata``/``payload``
     column (screen, classify, search_loop): non-dict storage (``None`` or a
     malformed row) degrades to empty rather than raising.
+
+    Args:
+        raw: Stored column value, expected to be a dict but not guaranteed.
     """
     return dict(raw) if isinstance(raw, dict) else {}
 

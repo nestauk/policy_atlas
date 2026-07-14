@@ -474,6 +474,12 @@ def facet_of_group_id(group_id: str) -> str:
 
     Owns the prefix-derivation half of the ``<facet>:gNN`` grammar so callers
     never re-implement the split.
+
+    Args:
+        group_id: Facet-qualified group id (``<facet>:gNN`` shape).
+
+    Returns:
+        The facet prefix.
     """
     return group_id.split(":", 1)[0]
 

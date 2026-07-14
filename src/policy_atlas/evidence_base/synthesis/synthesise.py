@@ -742,7 +742,11 @@ def validate_claims(
 
 
 def available_claim_types_for_substrate(substrate: SubstrateView) -> set[str]:
-    """Return claim types currently gated on by the substrate."""
+    """Return claim types currently gated on by the substrate.
+
+    Args:
+        substrate: The run's assembled substrate view.
+    """
     claim_types = {"gap", "reasoning"}
     if substrate.extraction is not None:
         claim_types.add("finding")

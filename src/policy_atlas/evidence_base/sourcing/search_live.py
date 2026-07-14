@@ -538,23 +538,54 @@ class OvertonLiveBackend(_TransportMixin):
     def fetch_citations(
         self, record_id: str, *, max_results: int | None = None
     ) -> list[dict[str, Any]]:
-        """Raise because Overton v1 declares no snowball capability."""
+        """Raise because Overton v1 declares no snowball capability.
+
+        Args:
+            record_id: Ignored; the call always raises.
+            max_results: Ignored; the call always raises.
+
+        Raises:
+            NotImplementedError: Always — ``caps.has_snowball`` is False.
+        """
         raise NotImplementedError("OvertonLiveBackend caps.has_snowball=False")
 
     def fetch_references(
         self, record_ids: list[str], *, max_results: int | None = None
     ) -> list[dict[str, Any]]:
-        """Raise because Overton v1 declares no snowball capability."""
+        """Raise because Overton v1 declares no snowball capability.
+
+        Args:
+            record_ids: Ignored; the call always raises.
+            max_results: Ignored; the call always raises.
+
+        Raises:
+            NotImplementedError: Always — ``caps.has_snowball`` is False.
+        """
         raise NotImplementedError("OvertonLiveBackend caps.has_snowball=False")
 
     def lookup_title(self, title: str) -> list[dict[str, Any]]:
-        """Raise because Overton v1 declares no title-lookup capability."""
+        """Raise because Overton v1 declares no title-lookup capability.
+
+        Args:
+            title: Ignored; the call always raises.
+
+        Raises:
+            NotImplementedError: Always — ``caps.has_title_lookup`` is False.
+        """
         raise NotImplementedError("OvertonLiveBackend caps.has_title_lookup=False")
 
     def lookup_dois(
         self, dois: list[str], *, max_results: int | None = None
     ) -> list[dict[str, Any]]:
-        """Raise because Overton v1 declares no DOI-lookup capability."""
+        """Raise because Overton v1 declares no DOI-lookup capability.
+
+        Args:
+            dois: Ignored; the call always raises.
+            max_results: Ignored; the call always raises.
+
+        Raises:
+            NotImplementedError: Always — ``caps.has_doi_lookup`` is False.
+        """
         raise NotImplementedError("OvertonLiveBackend caps.has_doi_lookup=False")
 
     def _wait_rate_limit(self) -> None:

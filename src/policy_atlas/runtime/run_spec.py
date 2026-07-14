@@ -63,5 +63,12 @@ class Config(_ValidatedRunSpec):
 
 
 def compile(plan: Plan) -> Config:  # noqa: A001
-    """Compile a validated Plan into a machine-level Config."""
+    """Compile a validated Plan into a machine-level Config.
+
+    Args:
+        plan: Human-readable, already-validated plan.
+
+    Returns:
+        The equivalent machine-level Config.
+    """
     return Config.model_validate(plan.model_dump())
