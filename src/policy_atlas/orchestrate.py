@@ -409,8 +409,6 @@ def _build_plan(
         ValidationError: If the draft is not a valid orchestration plan.
     """
     data = draft.model_dump(exclude_none=True)
-    if "grouping_facet" in data:
-        data["grouping_facets"] = [data.pop("grouping_facet")]
     constraints: dict[str, object] = {}
     for key in (
         "published_after",
@@ -441,7 +439,7 @@ def _render_draft(draft: PlanDraftWire) -> str:
         ("search_effort", draft.search_effort),
         ("analysis_depth", draft.analysis_depth),
         ("components", draft.components),
-        ("grouping_facet", draft.grouping_facet),
+        ("grouping_facets", draft.grouping_facets),
         ("extract_profiles", draft.extract_profiles),
         ("steering_mode", draft.steering_mode),
     ):

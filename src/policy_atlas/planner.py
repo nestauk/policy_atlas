@@ -301,7 +301,7 @@ class StubPlannerBackend:
                     components=["characterise"],
                     component_rationale={"characterise": _STUB_COMPONENT_RATIONALE["characterise"]},
                     steering_mode="moderate",
-                    grouping_facet=None,
+                    grouping_facets=None,
                     assumptions=list(_STUB_ASSUMPTIONS),
                 ),
                 question=None,
@@ -327,7 +327,7 @@ class StubPlannerBackend:
                     component: _STUB_COMPONENT_RATIONALE[component] for component in components
                 },
                 steering_mode="moderate",
-                grouping_facet="outcome",
+                grouping_facets=["outcome"],
                 assumptions=list(_STUB_ASSUMPTIONS),
             ),
             question=None,

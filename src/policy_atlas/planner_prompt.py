@@ -26,7 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.prompt_fields import sanitize_prompt_field
 
-PLANNER_PROMPT_VERSION = "planner_v4"
+PLANNER_PROMPT_VERSION = "planner_v5"
 
 # Input-side caps at prompt assembly. Generous for legitimate intents; a
 # bound, not a filter (the screen prompt's M10 discipline).
@@ -88,7 +88,7 @@ class PlanDraftWire(BaseModel):
     analysis_depth: str | None = None
     components: list[str] | None = None
     component_rationale: dict[str, str] | None = None
-    grouping_facet: str | None = None
+    grouping_facets: list[str] | None = None
     extract_profiles: list[str] | None = None
     steering_mode: str | None = None
     steer_point_defaults: list[dict[str, str]] | None = None
@@ -243,8 +243,13 @@ yourself.
     (intervention-outcome effect findings: what changed, by how much) and
     "icf" (implementation-context findings: mechanisms, barriers, enablers,
     conditions the intervention depends on, delivery processes, adaptations,
-    fidelity — the how and under-what-conditions half) — and group organises
-    the extracted findings by facet. Both profiles are anchored to named
+    fidelity — the how and under-what-conditions half) — and group themes
+    the extracted findings per requested facet, several facets in one run:
+    value facets cluster the source-named references; claim-theme facets
+    cluster the ICF claims of one type into named recurring themes (e.g.
+    "planning delays" as a barrier theme across programmes), so a synthesis
+    can read intervention, outcome and implementation-context lenses
+    together. Both profiles are anchored to named
     interventions: for questions that are NOT about interventions and their
     effects or delivery (statistics or fact-finding, stakeholder mapping,
     purely descriptive landscape questions), the findings chain does not fit
@@ -255,7 +260,14 @@ yourself.
   exact single component names from the list above — characterise,
   screen_full, select, extract, group — one entry per component, never a
   combined key like "select_extract_group".
-- grouping_facet: intervention | outcome | population — only when group runs.
+- grouping_facets: which lenses group clusters, a non-empty list drawn from
+  intervention | outcome | population (value facets — the source-named
+  references) and barrier_theme | enabler_theme | mechanism_theme
+  (claim-theme facets — recurring themes across the ICF claims of that
+  type). Only when group runs. Omit the field to accept the deep default
+  (intervention, outcome and the three claim themes); population is
+  request-only — include it when the user's question pivots on who was
+  studied. Never list a facet twice.
 - extract_profiles: which finding profiles extract runs — only when extract
   is in components. ["iof", "icf"] is the default at deep (both halves of
   the evidence); ["iof"] alone fits when implementation context would add

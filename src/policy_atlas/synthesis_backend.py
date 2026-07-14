@@ -286,10 +286,16 @@ SEARCH_CHUNKS_TOOL_SCHEMA: dict[str, Any] = {
         "name": "search_chunks",
         "description": (
             "Retrieve the most relevant frozen text chunks from the screened-in "
-            "corpus for a query. Returns id-keyed chunk records with their full "
-            "frozen content — the only text you may quote verbatim. Each record "
-            "carries its origin (selected | unselected_screened) and whether its "
-            "document is appraised (only appraised chunks are citable)."
+            "corpus for a query. Returns id-keyed chunk records with verbatim "
+            "frozen content — the only text you may quote (a repeat read of a "
+            "record already returned this section comes back as an "
+            "already_returned reference; a very long chunk returns the matched "
+            "window). Each record carries its origin (selected | "
+            "unselected_screened) and whether its document is appraised (only "
+            "appraised chunks are citable). Optional scope filters narrow the "
+            "search; every filter value is validated and an unknown value is an "
+            "error, so scope only to ids and vocabulary you have read on this "
+            "run."
         ),
         "parameters": {
             "type": "object",
@@ -297,7 +303,41 @@ SEARCH_CHUNKS_TOOL_SCHEMA: dict[str, Any] = {
                 "query": {
                     "type": "string",
                     "description": "What evidence to look for, phrased as content.",
-                }
+                },
+                "doc_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Restrict to these documents (pss ids read from this "
+                        "run's records). Unknown or foreign ids are an error."
+                    ),
+                },
+                "group_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Restrict to documents carrying findings in these facet "
+                        "groups — facet-qualified ids copied exactly from the "
+                        "grouping records (e.g. 'intervention:g03')."
+                    ),
+                },
+                "evidence_types": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Restrict to documents classified as these evidence "
+                        "types (the classification vocabulary as shown in the "
+                        "substrate summaries)."
+                    ),
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Restrict to documents carrying these tags (tag labels "
+                        "that exist in this project's tag set)."
+                    ),
+                },
             },
             "required": ["query"],
             "additionalProperties": False,
@@ -568,6 +608,16 @@ How to work:
   resource, not calls. Call emit_section on a turn of its own, never alongside
   reads. Your turn budget is hard-capped; when told a turn is
   your final one you must call emit_section with whatever you have gathered.
+- Tool results never repeat content: the first time a chunk, finding or
+  lookup record is returned in this section it carries its full content; any
+  later result that would return the same record carries only
+  {{"id": ..., "already_returned": true}}. Such a reference means you already
+  have that record's content earlier in this conversation — reread it there,
+  and cite it exactly as if it had been returned again. Never re-issue a read
+  just to see content a reference points to.
+- A very long source chunk may be returned as a window: the matched passage
+  plus surrounding text, with its character interval marked. The window is
+  verbatim source text — quote from what was returned exactly as given.
 - Only the tools listed in "available_tools" exist on this run. Only the claim
   types listed in "available_claim_types" may be emitted; a claim of any other
   type will be rejected.
@@ -643,9 +693,11 @@ The claim types:
   shape you cannot point to computed numbers for (no "the literature tends
   to…" from reading alone) — that claim type is not available.
 - "theme": an interpretive grouping statement referencing the substrate's
-  clustering (characterisation themes or facet groups) by id. This is the
-  softest interpretive grade: label it as the clustering's reading of the
-  corpus, on its stated base.
+  clustering (characterisation themes or facet groups) by id — facet group
+  ids are facet-qualified and copied exactly as shown (e.g.
+  "intervention:g03", "barrier_theme:g01"). This is the softest interpretive
+  grade: label it as the clustering's reading of the corpus, on its stated
+  base.
 - "gap": an absence statement, graded and carrying its coverage base. Absence
   may only be asserted as a gap claim. "corpus_absence" (nothing found in the
   searched space) requires the search coverage record id from lookup;

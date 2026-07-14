@@ -31,8 +31,6 @@ def _plan_from_draft(draft: PlanDraftWire) -> OrchestrationPlan:
     ``time_band``) are always computed code-side by the model validator.
     """
     data = {key: value for key, value in draft.model_dump().items() if value is not None}
-    if "grouping_facet" in data:
-        data["grouping_facets"] = [data.pop("grouping_facet")]
     return OrchestrationPlan(**data)
 
 
@@ -71,7 +69,7 @@ def test_stub_second_turn_returns_complete_ready_draft() -> None:
     assert draft.component_rationale is not None
     assert set(draft.component_rationale) == set(draft.components)
     assert draft.steering_mode == "moderate"
-    assert draft.grouping_facet == "outcome"
+    assert draft.grouping_facets == ["outcome"]
     assert draft.assumptions == ["Stub planner: deterministic fixture proposal."]
 
 
@@ -87,7 +85,7 @@ def test_stub_landscape_sentinel_yields_landscape_draft() -> None:
     draft = turn.plan_draft
     assert draft.analysis_depth == "landscape"
     assert draft.components == ["characterise"]
-    assert draft.grouping_facet is None
+    assert draft.grouping_facets is None
 
 
 def test_stub_is_deterministic() -> None:
