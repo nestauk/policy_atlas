@@ -133,6 +133,17 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
    loop, ≤3 rounds — not deferred to evals); known risks the replay checks:
    context anchoring (clustering by snippet topic instead of value identity) and
    discovery-stage dilution at full-list scale. Full calibration stays eval work.
+   **Granularity is a named design input** (owner Langfuse observation,
+   2026-07-14): the shipped one-call partition over-fragments — too many
+   too-granular groups. The exhaustive-partition framing is a plausible cause
+   (every value must land somewhere in one response, so singleton-ish groups
+   emerge); open discovery removes that pressure, and the new discovery prompt
+   carries an **explicit numeric granularity target** (a group-count band /
+   member-size expectation — numeric per prompting doctrine, value pinned at plan
+   time, lead-authored). Never fixed by catch-all buckets (`FORBIDDEN_GROUP_LABELS`
+   stands) or code-side forced merges — coarseness is asked for in discovery,
+   honesty stays in assignment. Replay evidence must show granularity against the
+   observed live over-fragmentation, not just id-integrity.
 5. **Facet vocabulary this slice** (decision 3 — **SETTLED: build**, owner
    2026-07-14): `intervention` / `outcome` / `population` (existing value facets,
    now running on the engine) + **claim-theme facet(s) scoped by `context_type`**
@@ -145,10 +156,12 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
    call: no extraction-time canonicalisation) — the content is `claim` prose
    scoped by the closed `context_type` enum, so "what distinct barriers/mechanisms
    were extracted" is claim-theme clustering, not value-string partitioning.
-   Which `context_type`s get theme facets (all seven vs the high-value trio
-   barrier/enabler/mechanism first) is a plan-time call. A short source-named ICF
-   label field stays **rejected** (extraction-time canonicalisation plus a
-   pre-ground-truth fingerprint invalidation).
+   **The high-value trio only this slice** (owner call, 2026-07-14):
+   `barrier_theme` / `enabler_theme` / `mechanism_theme`; the remaining four
+   `context_type`s are a config addition later (same engine, same projection —
+   recorded in deferred.md, not machinery). A short source-named ICF label field
+   stays **rejected** (extraction-time canonicalisation plus a pre-ground-truth
+   fingerprint invalidation).
    (A bare deterministic partition BY the seven-value enum is not a facet — that
    read surface already exists as `icf_context_type_count`; named here so nobody
    ships it as one.) Cross-kind clustering on the shared-reference facets is
@@ -349,10 +362,11 @@ correctness · scope creep toward the Out list.
    (behaviour-preserving, prompts byte-identical); **context payloads built and on
    by default** (bounded, source-content-only, build-time replay pin-or-revert).
    Residual for the gate: what `FACET_VALUE_CAP` becomes.
-3. **First ICF content facet — SETTLED: build (owner, 2026-07-14)** — claim-theme
-   facet(s) scoped by `context_type` on the item-4 engine; a short ICF label field
-   is rejected. Residual for the plan: which `context_type`s get theme facets
-   first; the deep-depth default facet set.
+3. **First ICF content facet — SETTLED in full (owner, 2026-07-14)** — claim-theme
+   facets on the item-4 engine, **high-value trio only**: `barrier_theme` /
+   `enabler_theme` / `mechanism_theme` (remaining four context_types = later
+   config, deferred.md). A short ICF label field is rejected. Residual for the
+   plan: the deep-depth default facet set.
 4. **Per-facet failure isolation** — honest per-facet failure rows (proposed) vs
    all-or-nothing.
 5. **Cross-kind UNION view — SETTLED: build (owner, 2026-07-14)** — the multi-facet
