@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from policy_atlas import events
+from policy_atlas import events, search_live
 from policy_atlas.acquire import AcquireContext, OvertonFixtureBackend
 from policy_atlas.schema import search_coverage_record
 from policy_atlas.search_live import OpenAlexLiveBackend, OvertonLiveBackend
@@ -82,7 +82,7 @@ def test_live_backends_receive_backend_native_wire_params_via_run_search(
     conn: Connection,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("policy_atlas.search_live._sleep", lambda _seconds: None)
+    monkeypatch.setattr(search_live, "_sleep", lambda _seconds: None)
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id, context=_context(uuid.uuid4()).context)
     openalex_fetch = CapturingFetch()
@@ -205,7 +205,7 @@ def test_overton_post_filter_exclusion_count_reaches_event_and_coverage(
     conn: Connection,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("policy_atlas.search_live._sleep", lambda _seconds: None)
+    monkeypatch.setattr(search_live, "_sleep", lambda _seconds: None)
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     calls = 0

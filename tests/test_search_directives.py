@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from policy_atlas.country_filters import ISO_3166_ALPHA2
+from policy_atlas.country_filters import ISO_3166_ALPHA2, expand_tier1, validate_iso_alpha2
 from policy_atlas.plan import Config, Plan, compile
 from policy_atlas.search_loop import (
     ROUND_CAP,
@@ -163,6 +163,30 @@ def test_validate_scope_filters_fail_closed(
 ) -> None:
     with pytest.raises(SearchDirectiveError):
         validate_scope_filters(raw, backend_names=backend_names)
+
+
+# --- validate_iso_alpha2 / expand_tier1: additional fail-closed rows ---
+
+
+@pytest.mark.parametrize(
+    "codes",
+    [
+        # empty list
+        [],
+        # non-string element
+        ["US", 123],
+        # duplicate codes
+        ["US", "US"],
+    ],
+)
+def test_validate_iso_alpha2_fail_closed(codes: list[Any]) -> None:
+    with pytest.raises(SearchDirectiveError):
+        validate_iso_alpha2(codes)
+
+
+def test_expand_tier1_rejects_unknown_label() -> None:
+    with pytest.raises(SearchDirectiveError):
+        expand_tier1("Atlantis")
 
 
 def test_validate_scope_filters_publisher_country_hint_names_uk() -> None:

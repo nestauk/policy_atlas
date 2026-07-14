@@ -16,7 +16,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas import extract_prompt
+from policy_atlas import extract, extract_prompt
 from policy_atlas.extract import (
     ExtractContext,
     ExtractError,
@@ -530,7 +530,7 @@ def test_profile_memo_isolated_between_iof_and_icf(
     ]
 
     with monkeypatch.context() as m:
-        m.setattr("policy_atlas.extract.ICF_PROMPT_VERSION", "extract_icf_vNEXT")
+        m.setattr(extract, "ICF_PROMPT_VERSION", "extract_icf_vNEXT")
         third, _ = _run(
             conn, project_id, scope_id, sel_run, profiles=(IOF_PROFILE_ID, ICF_PROFILE_ID)
         )
@@ -807,7 +807,7 @@ def test_fingerprint_change_extracts_fresh_alongside(
     ).mappings().all()
 
     with monkeypatch.context() as m:
-        m.setattr("policy_atlas.extract.PROMPT_VERSION", "extract_iof_vNEXT")
+        m.setattr(extract, "PROMPT_VERSION", "extract_iof_vNEXT")
         second, _ = _run(conn, project_id, scope_id, sel_run)
 
     assert profile_counts(second)["reused"] == 0
@@ -1167,10 +1167,11 @@ def test_icf_fingerprint_v2_isolated_from_iof(
     )
 
     with monkeypatch.context() as m:
-        m.setattr("policy_atlas.extract.ICF_SCHEMA_VERSION", "icf_v1")
-        m.setattr("policy_atlas.extract.ICF_PROMPT_VERSION", "extract_icf_v1")
+        m.setattr(extract, "ICF_SCHEMA_VERSION", "icf_v1")
+        m.setattr(extract, "ICF_PROMPT_VERSION", "extract_icf_v1")
         m.setattr(
-            "policy_atlas.extract.ICF_FINDING_VETTER_PROMPT_VERSION",
+            extract,
+            "ICF_FINDING_VETTER_PROMPT_VERSION",
             "extract_icf_vetter_v1",
         )
         icf_v1_fingerprint, _ = icf_extraction_fingerprint(

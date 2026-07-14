@@ -22,6 +22,7 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
 import policy_atlas.extract_prompt as extract_prompt
+from policy_atlas import extract as extract_module
 from policy_atlas.extract import (
     ExtractContext,
     extract_scope,
@@ -577,7 +578,7 @@ def test_fingerprint_changes_on_any_single_component(monkeypatch: pytest.MonkeyP
     ]
     for name, value in changes:
         with monkeypatch.context() as m:
-            m.setattr(f"policy_atlas.extract.{name}", value)
+            m.setattr(extract_module, name, value)
             assert extraction_fingerprint("stub")[0] != baseline, name
 
     assert extraction_fingerprint("stub")[0] != extraction_fingerprint("live")[0]
@@ -595,7 +596,7 @@ def test_fingerprint_changes_on_any_single_component(monkeypatch: pytest.MonkeyP
     ]
     for name, value in vetter_changes:
         with monkeypatch.context() as m:
-            m.setattr(f"policy_atlas.extract.{name}", value)
+            m.setattr(extract_module, name, value)
             assert (
                 extraction_fingerprint("stub", finding_vetter_active=True)[0]
                 != vetted_baseline
