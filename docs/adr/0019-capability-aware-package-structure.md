@@ -29,10 +29,15 @@ policy_atlas/
     sourcing/ · screen/ · corpus/ · extract/ · group/ · synthesis/
   core/           schema, db, events, logging, tracing, usage, inference,
                   openai_client, embeddings, prompt_fields, tags, fixtures, windowing
-  data/           (package data — stays at root; orchestrate's stub mode reads it via
-                   the harness default fixture backends, importlib.resources anchors
-                   are top-package)
 ```
+
+(Amended, owner rider at step-6 close: the `data/` directory and the provider fixture
+backends moved OUT of the package — `tests/data/provider_records/` +
+`tests/provider_fixtures.py`. Production resolves search backends by injection; the
+harness default is empty, and the no-key stub run walks the seeded synthetic corpus —
+the shape the suite's full stub e2e pins. This superseded the earlier "data/ stays at
+package root" ruling once the smoke reframing showed the packaged data's only
+production reader was the ad-hoc demo's acquire enrichment.)
 
 Named rulings (owner, 2026-07-14):
 

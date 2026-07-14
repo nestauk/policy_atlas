@@ -31,11 +31,12 @@ printf 'What works to reduce childhood obesity?\n1\napprove\n1\n1\n' \
     uv run python -m policy_atlas.runtime.orchestrate
 ```
 
-- No `OPENAI_API_KEY` ⇒ stub mode: `StubPlannerBackend` + the harness's default fixture
-  search backends reading the packaged `src/policy_atlas/data/` records (why `data/`
-  lives at the package root — the `importlib.resources` anchors are top-package) + the
-  seeded stub corpus. Zero egress. Success = exit 0, `Run status: succeeded`,
-  `Artefact minted: True`.
+- No `OPENAI_API_KEY` ⇒ stub mode: `StubPlannerBackend` + empty search backends (the
+  harness default — acquire adds nothing) + the seeded synthetic stub corpus. Zero
+  egress. Success = exit 0, `Run status: succeeded`, `Artefact minted: True`. The
+  sanitized provider-record fixtures live test-side (`tests/provider_fixtures.py` +
+  `tests/data/provider_records/`, task 023 owner rider) — inject them explicitly if an
+  ad-hoc run should exercise acquire against replayed provider records.
 - **Ad-hoc runs commit rows and do not clean up.** Against a shared test DB this breaks
   migration-roundtrip tests later (downgrade `CheckViolation` on leftover rows — the
   contamination survives sessions; observed twice in 023's build, see deferred.md § per-

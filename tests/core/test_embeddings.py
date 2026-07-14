@@ -33,8 +33,6 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.evidence_base.sourcing.acquire import (
     AcquireContext,
-    OpenAlexFixtureBackend,
-    OvertonFixtureBackend,
     SearchBackend,
     acquire_sources,
 )
@@ -47,6 +45,7 @@ from tests.helpers import (
     seed_scope,
     seed_source,
 )
+from tests.provider_fixtures import OpenAlexFixtureBackend, OvertonFixtureBackend
 
 
 def _insert_chunk(

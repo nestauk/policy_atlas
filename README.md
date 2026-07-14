@@ -26,10 +26,10 @@ src/policy_atlas/
     synthesis/     terminal artefact composition, section loop, grounding judge
   core/            schema, db, events, logging, tracing, usage, model-client
                    plumbing, embeddings
-  data/            package fixture data (sanitized provider records) backing the
-                   zero-egress stub backends
 alembic/           database migrations
-tests/             mirrors the src tree; conftest runs migrations once per session
+tests/             mirrors the src tree; conftest runs migrations once per session;
+                   tests/data/ holds all fixtures (full-text corpus + sanitized
+                   provider records)
 docs/              specs, ADRs, task records, knowledge base, agentic-ops
 ```
 
@@ -53,9 +53,9 @@ uv run python -m policy_atlas.runtime.orchestrate
 ```
 
 With no `OPENAI_API_KEY` in the environment it runs in **stub mode** — deterministic
-backends over the packaged fixture corpus, zero egress — which is also the repo's
-standardised smoke check. With keys configured (`.env`), the same command runs the
-live chain (OpenAI + optional Langfuse tracing).
+stubs over a seeded synthetic corpus, zero egress. With keys configured (`.env`), the
+same command runs the live chain (OpenAI + optional Langfuse tracing). The automated
+equivalent lives in the test suite (`test_full_stub_end_to_end_mints_artefact`).
 
 ## Licence
 

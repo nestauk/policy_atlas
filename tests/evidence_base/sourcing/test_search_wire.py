@@ -13,7 +13,7 @@ from sqlalchemy.engine import Connection
 from policy_atlas.core import events
 from policy_atlas.core.schema import search_coverage_record
 from policy_atlas.evidence_base.sourcing import search_live
-from policy_atlas.evidence_base.sourcing.acquire import AcquireContext, OvertonFixtureBackend
+from policy_atlas.evidence_base.sourcing.acquire import AcquireContext
 from policy_atlas.evidence_base.sourcing.search_live import OpenAlexLiveBackend, OvertonLiveBackend
 from policy_atlas.evidence_base.sourcing.search_loop import (
     SearchDirectiveError,
@@ -23,6 +23,7 @@ from policy_atlas.evidence_base.sourcing.search_loop import (
 )
 from policy_atlas.evidence_base.sourcing.search_prompts import SearchQueriesWire
 from tests.helpers import ScriptedGenerationBackend, seed_project_and_run, seed_scope
+from tests.provider_fixtures import OvertonFixtureBackend
 
 
 @dataclass(frozen=True)

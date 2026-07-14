@@ -42,8 +42,6 @@ from policy_atlas.evidence_base.screen.appraise import AppraiseContext, appraise
 from policy_atlas.evidence_base.screen.classify import ClassifyContext, classify_sources
 from policy_atlas.evidence_base.sourcing.acquire import (
     AcquireContext,
-    OpenAlexFixtureBackend,
-    OvertonFixtureBackend,
     SearchBackend,
     acquire_sources,
 )
@@ -60,6 +58,7 @@ from tests.helpers import (
     seed_screening_result,
     seed_source,
 )
+from tests.provider_fixtures import OpenAlexFixtureBackend, OvertonFixtureBackend
 
 
 def _seed_doc(

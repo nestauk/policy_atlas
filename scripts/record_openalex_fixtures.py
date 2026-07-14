@@ -34,7 +34,7 @@ TIMEOUT_S = 30
 SANITIZER_VERSION = "v2"
 RAW_PATH = Path(__file__).parent / "recordings" / "openalex_raw.json"
 FIXTURE_PATH = (
-    Path(__file__).parent.parent / "src" / "policy_atlas" / "data" / "openalex_works.json"
+    Path(__file__).parent.parent / "tests" / "data" / "provider_records" / "openalex_works.json"
 )
 
 

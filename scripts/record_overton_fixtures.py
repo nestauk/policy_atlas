@@ -35,7 +35,7 @@ TIMEOUT_S = 30
 SANITIZER_VERSION = "v2"
 RAW_PATH = Path(__file__).parent / "recordings" / "overton_raw.json"
 FIXTURE_PATH = (
-    Path(__file__).parent.parent / "src" / "policy_atlas" / "data" / "overton_documents.json"
+    Path(__file__).parent.parent / "tests" / "data" / "provider_records" / "overton_documents.json"
 )
 
 # Free-text fields carrying the document's (or provider-LLM's) words — always fabricated.

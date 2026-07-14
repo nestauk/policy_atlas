@@ -7,9 +7,9 @@ Every test injects a fetch callable — zero real sockets, no sleeps (``_sleep``
 monkeypatched to a recorder), no RNG.
 """
 
-import importlib.resources
 import json
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -669,9 +669,9 @@ def test_openalex_fetches_never_carry_squery_or_min_similarity(
 def test_openalex_live_records_feed_mapper_without_error(monkeypatch: pytest.MonkeyPatch) -> None:
     _sleep_recorder(monkeypatch)
     fixture = json.loads(
-        importlib.resources.files("policy_atlas")
-        .joinpath("data", "openalex_works.json")
-        .read_text()
+        (
+        Path(__file__).resolve().parents[2] / "data" / "provider_records" / "openalex_works.json"
+    ).read_text()
     )
     records = fixture["records"]
     backend = OpenAlexLiveBackend("KEY", fetch=lambda url, params: {"results": records})
@@ -684,9 +684,9 @@ def test_openalex_live_records_feed_mapper_without_error(monkeypatch: pytest.Mon
 def test_overton_live_records_feed_mapper_without_error(monkeypatch: pytest.MonkeyPatch) -> None:
     _sleep_recorder(monkeypatch)
     fixture = json.loads(
-        importlib.resources.files("policy_atlas")
-        .joinpath("data", "overton_documents.json")
-        .read_text()
+        (
+        Path(__file__).resolve().parents[2] / "data" / "provider_records" / "overton_documents.json"
+    ).read_text()
     )
     records = fixture["records"]
     backend = OvertonLiveBackend("KEY", fetch=lambda url, params: {"results": records})

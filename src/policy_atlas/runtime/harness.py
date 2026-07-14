@@ -64,8 +64,6 @@ from policy_atlas.evidence_base.screen.screening_backend import (
 )
 from policy_atlas.evidence_base.sourcing.acquire import (
     AcquireContext,
-    OpenAlexFixtureBackend,
-    OvertonFixtureBackend,
     SearchBackend,
 )
 from policy_atlas.evidence_base.sourcing.ingest_full_text import (
@@ -562,14 +560,19 @@ def build_graph() -> Any:
 
 
 def _default_search_backends(search_backend_scope: str) -> list[SearchBackend]:
-    if search_backend_scope == "both":
-        backends: list[SearchBackend] = [OpenAlexFixtureBackend(), OvertonFixtureBackend()]
-        return backends
-    if search_backend_scope == "academic_only":
-        return [OpenAlexFixtureBackend()]
-    if search_backend_scope == "grey_lit_only":
-        return [OvertonFixtureBackend()]
-    raise ValueError(f"unknown search_backend_scope: {search_backend_scope!r}")
+    """Return the default (empty) search-backend set for a scope.
+
+    The fixture replay backends moved to ``tests/provider_fixtures`` (task 023,
+    owner rider): production search backends arrive by injection; without
+    injection acquire adds nothing and a stub run walks the seeded corpus —
+    the shape the suite's full stub e2e pins.
+
+    Args:
+        search_backend_scope: Plan-declared backend scope (unused — every scope
+            defaults to no backends).
+    """
+    del search_backend_scope
+    return []
 
 
 def run_harness(

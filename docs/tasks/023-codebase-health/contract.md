@@ -138,8 +138,12 @@ full `make verify`, stub full-chain skeleton smoke).
   cleanup) · `ChunkRerankerBackend` (Bedrock seam) · search_live TTL/LRU cache ·
   `leg_directive` (c4-demo hook; deletes with C4 close-out). (Skeleton's earlier "stays"
   ruling is REVERSED — retirement is now WP3 scope, see above.)
-- `src/policy_atlas/data/` stays in the package: orchestrate's stub mode consumes it in
-  production (harness.py:609-614 default fixture backends) — it is not test data.
+- ~~`src/policy_atlas/data/` stays in the package~~ — SUPERSEDED (owner rider at step-6
+  close, 2026-07-14): once the smoke reframing showed the suite's stub e2e runs with
+  empty search backends, the packaged data's only production reader was the ad-hoc
+  demo's acquire enrichment. Rider moved `data/` → `tests/data/provider_records/` and
+  the fixture backends → `tests/provider_fixtures.py`; harness default search backends
+  are now empty. Gates re-run; recorded in verification.md § Post-exit rider.
 - Any prompt **text** change — module renames only; every pinned prompt surface stays
   byte-identical (pin tests are the proof).
 - Schema, migrations, runtime behaviour, exception-hierarchy standardisation, test-dir

@@ -3,7 +3,6 @@
 import json
 import re
 import uuid
-from importlib import resources
 from pathlib import Path
 from typing import Any, cast
 
@@ -29,8 +28,6 @@ from policy_atlas.evidence_base.screen.screen import ScreenContext, screen_sourc
 from policy_atlas.evidence_base.sourcing.acquire import (
     AcquireContext,
     BackendCaps,
-    OpenAlexFixtureBackend,
-    OvertonFixtureBackend,
     SearchBackend,
     _map_openalex_work,
     _map_overton_document,
@@ -50,6 +47,7 @@ from tests.helpers import (
     seed_run,
     seed_scope,
 )
+from tests.provider_fixtures import OpenAlexFixtureBackend, OvertonFixtureBackend
 
 # --- Test doubles / builders ---
 
@@ -869,14 +867,21 @@ def test_harness_acquire_component(conn: Connection) -> None:
     scope_id = seed_scope(conn, pid)
     config = compile(Plan(component="acquire", evidence_scope_id=scope_id))
     run_harness(
-        conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider()
+        conn,
+        config=config,
+        project_id=pid,
+        run_id=rid,
+        provider=StubEchoProvider(),
+        # Fixture pair injected explicitly: harness defaults are empty since the
+        # provider fixtures moved to tests/ (task 023 owner rider).
+        search_backends=[OpenAlexFixtureBackend(), OvertonFixtureBackend()],
     )
 
     n = conn.execute(
         select(sa.func.count()).select_from(project_source_snapshot)
         .where(project_source_snapshot.c.project_id == pid)
     ).scalar_one()
-    assert n == 24  # fixture-pair default backends
+    assert n == 24  # fixture pair
 
     assert read_coverage(conn, rid) is not None
     log = events.read(conn, pid)
@@ -985,7 +990,7 @@ FIXTURE_FILES = ("openalex_works.json", "overton_documents.json")
 
 def load_fixture_file(name: str) -> dict[str, Any]:
     data: dict[str, Any] = json.loads(
-        resources.files("policy_atlas").joinpath("data", name).read_text()
+        (Path(__file__).resolve().parents[2] / "data" / "provider_records" / name).read_text()
     )
     return data
 

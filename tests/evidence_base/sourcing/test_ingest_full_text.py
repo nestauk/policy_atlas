@@ -10,7 +10,6 @@ import socket
 import time
 import uuid
 from collections.abc import Generator
-from importlib import resources
 from pathlib import Path
 from typing import Any, cast
 
@@ -38,8 +37,6 @@ from policy_atlas.evidence_base.screen.screen import ScreenContext, screen_sourc
 from policy_atlas.evidence_base.sourcing import ingest_full_text
 from policy_atlas.evidence_base.sourcing.acquire import (
     AcquireContext,
-    OpenAlexFixtureBackend,
-    OvertonFixtureBackend,
     SearchBackend,
     acquire_sources,
 )
@@ -65,6 +62,7 @@ from tests.helpers import (
     seed_screening_result,
     seed_source,
 )
+from tests.provider_fixtures import OpenAlexFixtureBackend, OvertonFixtureBackend
 
 # Expected outcome distribution over the committed fixture set (the manifest's
 # outcome map is the spec these tests enforce; see contract decision 9 + plan Task 2/3).
@@ -1384,7 +1382,9 @@ def test_url_resolution_order() -> None:
     ]
 
     overton_records = json.loads(
-        resources.files("policy_atlas").joinpath("data", "overton_documents.json").read_text()
+        (
+        Path(__file__).resolve().parents[2] / "data" / "provider_records" / "overton_documents.json"
+    ).read_text()
     )["records"]
     record_zero = overton_records[0]
     assert record_zero["pdf_url"] == "n/a"  # sentinel; dropped, not a candidate

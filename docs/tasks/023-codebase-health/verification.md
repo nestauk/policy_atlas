@@ -179,6 +179,21 @@ re-running both recorder scripts against raw recordings — committed fixtures b
 - deferred.md entries and the smoke knowledge concept land in the Phase H commit alongside
   this file.
 
+## Post-exit rider (owner-directed, 2026-07-14 — review stack: verify alongside the smoke reframing)
+
+After the smoke reframing exposed that the suite's stub e2e injects empty search
+backends, the owner directed moving the provider fixture data out of the package:
+`src/policy_atlas/data/` → `tests/data/provider_records/`; `OpenAlexFixtureBackend`/
+`OvertonFixtureBackend` + loaders → `tests/provider_fixtures.py` (importing
+`BackendCaps`/`_normalize_doi` from acquire); `harness._default_search_backends` → empty
+for every scope (docstring records why); recorder scripts write the tests path; five
+test files repoint imports/anchors; `test_harness_acquire_component` now injects the
+fixture pair explicitly (all assertions preserved). Observable-change note: the ad-hoc
+no-key demo's acquire step now adds nothing (seeded corpus only) — accepted by the owner
+as part of the rider. README/ADR 0019/runbook/contract amended in the same commit.
+Gates re-run post-rider: full `make verify` + grep gates (zero
+`files("policy_atlas")` anchors remain).
+
 ## Review findings
 
 _Added after the review stack (fresh conversation)._
