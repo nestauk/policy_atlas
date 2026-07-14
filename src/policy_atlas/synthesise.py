@@ -2768,6 +2768,22 @@ def _judge_claims(
     usage_totals.add(usage)
     verdicts = response.verdicts
     expected = {claim.claim_id for claim in claims_to_judge}
+    # The all-types span map (022 item 17(i)) shows the judge claim ids it has
+    # no verdict duty for; a live judge may echo verdicts for them. Drop and
+    # count those — coverage of the judged set itself stays exact.
+    span_only_ids = {
+        span["claim_id"]
+        for span in occupied_claim_spans
+        if isinstance(span.get("claim_id"), str)
+    } - expected
+    extra = [verdict for verdict in verdicts if verdict.claim_id in span_only_ids]
+    if extra:
+        log.info(
+            "synthesise.judge_extra_verdicts_dropped",
+            count=len(extra),
+            claim_ids=sorted(verdict.claim_id for verdict in extra)[:10],
+        )
+        verdicts = [verdict for verdict in verdicts if verdict.claim_id not in span_only_ids]
     actual = {verdict.claim_id for verdict in verdicts}
     if expected != actual:
         raise SynthesiseFailure("judge_coverage_invalid")
@@ -3132,6 +3148,37 @@ def _repair_dependency_records(
     }
 
 
+def _wire_claim_data(raw: Any) -> dict[str, Any]:
+    """Project a failing record's claim back onto the strict wire shape.
+
+    Judge-failing claims arrive with ENRICHED citation records (resolved
+    ``cited_chunk_record_id``, ``match_status``, ``spans``, ``text_basis``) —
+    annotation-shaped, not wire-shaped. The repair call re-validates through
+    ``ClaimWire`` (extra=forbid), so strip citations down to the wire fields
+    first; everything else passes through untouched.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    data = {key: value for key, value in raw.items() if key in ClaimWire.model_fields}
+    raw_citations = data.get("citations")
+    if isinstance(raw_citations, list):
+        citations: list[dict[str, Any]] = []
+        for citation in raw_citations:
+            if not isinstance(citation, dict):
+                continue
+            chunk_record_id = citation.get("chunk_record_id") or citation.get(
+                "cited_chunk_record_id"
+            )
+            citations.append(
+                {
+                    "chunk_record_id": str(chunk_record_id or ""),
+                    "quote": str(citation.get("quote") or ""),
+                }
+            )
+        data["citations"] = citations
+    return data
+
+
 def _repair_input_records(
     failing: Sequence[dict[str, Any]],
     *,
@@ -3141,7 +3188,7 @@ def _repair_input_records(
 ) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     for record in failing:
-        claim = ClaimWire.model_validate(record["claim"])
+        claim = ClaimWire.model_validate(_wire_claim_data(record["claim"]))
         raw_span = record.get("span")
         span: tuple[int, int] | None = None
         if (

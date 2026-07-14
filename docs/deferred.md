@@ -150,22 +150,28 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   `resource_requirements` / `workforce_requirements` / the inner-setting rule on `setting`;
   `complexity` did not carry (a judgment scale, not source-groundable — the recorded
   anti-pattern). Narrowed seams left open by this slice (contract item 10):
-  - **ICF facet grouping** (grouping BY `context_type` — barrier/mechanism/condition) —
-    awaits **Slice C's multi-facet redesign**; task 021 only widened `group`'s membership
-    reach to span both schemas via shared references, never its facet shape.
+  - **ICF facet grouping** — **BUILT (task 022)**: the claim-theme trio
+    `barrier_theme` / `enabler_theme` / `mechanism_theme` runs on the shared two-stage
+    clustering engine (claim-prose unit projection, eligibility = `context_type` match).
+    Remaining seam (owner call, 2026-07-14): the other four `context_type`s
+    (`implementation_condition` / `delivery_process` / `adaptation` / `fidelity`) are a
+    **config addition on the same engine and projection** — add when a reader wants the
+    lens, no new machinery.
   - **Dimension-promotion for ICF fields** — hybrid-indexing any ICF dimension is gated on
     the same **observed-query-behaviour** promotion gate as IOF's dimensions
     (data-model.md), not shipped by schema existence alone.
   - **Downstream capability consumers** — Options Assessment / Impact / Transferability /
     Value for Money read ICF records later; EB synthesis is the reader now.
-  - **Cross-kind UNION reference view** — the shared-vocabulary read surface over both
-    finding tables (item 1's design payoff); a **Slice C** seam, first reader = Slice C's
-    cross-schema grouping.
-  - **Hybrid dimension search over finding reference values** — the data-model's committed
-    intervention/outcome dimension indexing, with ICF's source-named reference values riding
-    the same index target as co-riders (shared vocabulary = shared index target, free by
-    construction); build-or-defer decided on the **Slice C contract agenda**, alongside the
-    writer's retrieval-surface rework, while pre-eval sequencing still holds.
+  - **Cross-kind UNION reference view** — **BUILT (task 022, owner decision 5)**:
+    `finding_reference_union` (kind discriminator + the six shared reference columns,
+    reference-columns-only); first reader = group's value-facet loader. Discharged.
+  - **Hybrid dimension search over finding reference values** — **adjudicated DEFER at the
+    022 contract gate (owner, 2026-07-14)**: stays behind the observed-query-behaviour
+    promotion gate for ALL dimensions (the data-model's committed-for-v3.0
+    intervention/outcome line was corrected in the same flow-back); no observed behaviour
+    exists yet — the eval slice generates it; 022's scoped `search_chunks` + kind-typed
+    `query_findings` cover every current reader. ICF values still co-ride free by
+    construction when promoted.
   - **The schema-candidate ladder** (owner adjudication, 2026-07-12, task 021 contract
     review): the generic findings container and runtime intent-shaped custom extraction
     REMAIN declined (the task-011 rulings hold — typed records are what deterministic
@@ -325,12 +331,13 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 
 Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
-- **Retrieval-boost grammar v2** — rev 3.9's named companion slice: tag-based retrieval
-  scoping + the 014 screen-confidence multiplier (grammar pre-decided in the task-014
-  section above), one 013-surface slice; sequence before 017 or alongside it.
-  **Adjudicated at the 017 contract gate (rev 2d, user call, 2026-07-10): stays
-  deferred, eval-gated via its own 013-surface slice; 017 composes with the v1
-  grammar as-built.**
+- **Retrieval-boost grammar v2 — SUBSUMED AND RETIRED (022 agenda A, owner, 2026-07-14).**
+  The multiplier half shipped as 022's screen-confidence directive boost (clamped
+  functional multiplier + product clamp + suppression, decision 7/11); the tag-scoping
+  half is delivered better by 022's call-level `search_chunks` scope filters (item 13).
+  ONE narrow seam survives: **directive-level tag-boost vocabulary on the
+  `context["synthesis"]` grammar** — trigger = observed steer-point demand for it (no
+  author exists today; the recorded steer examples compile against the existing grammar).
 - **Select-as-tool / shared purpose-fit-ranking tool** — the rev-3 spec-level seam:
   select's ranking machinery exposed as a tool other components (and the deep loop) could
   call, instead of each growing its own fitness heuristics.
@@ -497,7 +504,11 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   eval coverage, not as a rider); (b) future read surfaces (context/dossier views — the
   web-app slice). Cheaper mitigation than (and complementary to) the docling escalation
   above. Trigger: live corpora making collapsed chunks common, or judge token-cost
-  observations.
+  observations. **022 adjudication (agenda B, owner, 2026-07-14): the JUDGE envelope
+  stays UNCLAMPED** (every envelope change forces a re-baseline); the tool-return half
+  shipped as 022's oversized-only WINDOWED returns (matched unit's span ± margin,
+  a substring of the frozen chunk, offsets retained through retrieval — never a
+  universal truncation). Remaining consumers of this seam: the web-app read surfaces.
 - **Time-budget-aware parser selection** — the user's stated time horizon picks the parser
   (tight → pymupdf4llm, long → ML layout); `parse_profile`-per-snapshot (ADR 0004) is the hook.
 - **Chunk-volume bias controls at the retrieve seam** — full-text documents contribute tens of
@@ -570,10 +581,13 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   its own chunk, not every chunk sharing its API batch). Remaining open
   residual: concurrent multi-batch behaviour at n ≫ batch (review adjudication,
   2026-07-06).
-- **Very-large-corpus grouping** — discovery currently reads all titles+abstracts in one
-  call; the scale seam is discovery-sampling and/or embedding-based clustering over the
-  landed chunk vectors (contract decision 4). Assignment already scales (batched,
-  concurrent, budget-enforced). **Live-corpus robustness observations (015 live check —
+- **Very-large-corpus grouping** — **NARROWED (task 022)**: the two-stage engine closed
+  the one-call exhaustive-partition cliff for `group` (184 distinct values live-proven
+  healthy; duplicate-id failure mode gone — facet-partition-value-list-scale-limit.md);
+  `FACET_VALUE_CAP=400` stays the fail-closed input guard, now at FACET grain. The
+  remaining seam is discovery INPUT scale beyond the cap (discovery-sampling and/or
+  embedding-based clustering over landed chunk vectors) and characterise's own
+  all-titles discovery read. Assignment already scales (batched, budget-enforced). **Live-corpus robustness observations (015 live check —
   the first component to wobble when inputs got real):** a 206-doc corpus produced an
   `APITimeoutError` batch failure and an 85-doc corpus a double `InvalidDiscoveryOutput`
   rejection before a ~60-doc pass succeeded; retry caps and batch sizes are eval-slice
@@ -728,8 +742,12 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   judge seeing the structured basis signal — prose asserting an effect while citing a
   modelled projection is a faithfulness question the judge cannot see today. Any
   judge-envelope change is bound by 018's verification-grade A/B protocol (replay the
-  same claim set through both envelopes, hand-inspect every flipped verdict); it lands
-  at the C/eval gate, never silently.
+  same claim set through both envelopes, hand-inspect every flipped verdict).
+  **Re-deferred to the EVAL gate at the 022 contract (agenda E, owner, 2026-07-14)**,
+  with the Codex-refined rule (owner-confirmed): eval-gate envelope A/Bs run
+  **sequentially per envelope change**, never one merged baseline — in particular this
+  A/B must not share a baseline with 022's 17(i) span-map change (whose re-judge replay
+  ran in 022) or the writer-envelope metadata queue below.
 - **Length bound on free-text finding fields (task 020 security lane, LOW).** No cap
   exists between model output and storage on the finding free-text class
   (`study_geography`, and pre-existing `intervention`/`outcome`/`study_design`/
@@ -936,6 +954,21 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Synthesise (task 013 seams)
 
+- **Gather/writer model split — HEAD OF THE POST-EVAL COST QUEUE (022 contract Out
+  list; owner 2026-07-12 quality-sensitive-cost-routing pin, re-confirmed 2026-07-14).**
+  Routing tool-selection (gather) turns to a cheaper model: the 022 Codex trace
+  investigation measured gather turns ≈ **43% of writer input tokens for ~4.7k output**,
+  est. 20–30% run-cost saving. Deliberately post-eval: it is semi-neutral (a weaker
+  gatherer can fetch worse evidence) and evals are its regression net.
+- **Old `group_facet_v1` partition machinery retirement (022 build note)** — the
+  one-call partition prompt + backends in `facet_grouping.py` are unreachable from
+  `group` since the two-stage engine (022 Phase C/D) but still present with unit tests;
+  the module's constants (`FACET_VALUE_CAP`, label bounds, `FORBIDDEN_GROUP_LABELS`)
+  are live imports. Delete-or-keep adjudicated at the 022 review stack's
+  simplification pass; if kept past that, delete on next touch.
+- **Group assignment fan-out concurrency (022 build note)** — group's engine runs
+  assignment batches serially (`max_concurrent_batches=1`; characterise uses 4).
+  Acceptable at ≤5 batches/facet live; revisit if wall-time observations say otherwise.
 - **Unspanned-lane full decoupling (018 review stack, security lane MEDIUM)** — the
   unspanned-assertion judge scan rides the grounding-judge call, so a block whose final
   prose no judge call scanned (no judged-type claims; or a splice rebuilt the prose and
@@ -945,6 +978,12 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   those paths — is eval-slice work (it adds a per-affected-section LLM call and needs
   the flag-volume calibration that workstream owns). Until then, consumers of
   `unspanned_assertions == 0` must check the skip flag.
+  **022 adjudication (agenda C, owner, 2026-07-14): the coverage half STAYS PARKED for
+  the eval slice** — the 404-observation live-trace scan showed the lane's problem was
+  precision, not coverage; 022 shipped the precision fixes instead (all-types span map,
+  the three named counters, supersede-not-concatenate). **Eval re-baseline note:**
+  `unspanned_assertions` counts before/after 022's item-17 fixes are NOT comparable —
+  the eval slice must re-baseline that metric.
 - **Pre-synthesise steer point → `context["synthesis"]` directive (owner-confirmed seam,
   2026-07-11, 018 review conversation)** — a check-in after grouping/characterise and
   before synthesise (or at section-proposal time): show the proposed sections and
@@ -953,7 +992,12 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   `context["synthesis"]` directive (sections + `group_ids` + `retrieval_boosts`) — the
   compile target below that nothing authors yet. Parameter authoring on built machinery,
   zero re-plumbing; pairs with the `deepening_selection` steer point the same way select
-  pairs with extract.
+  pairs with extract. **BUILT (task 022, item 14)** as the side-effect-free surface pair:
+  `propose_synthesis_plan` (no artefact minted, no rows written) + the deterministic
+  fail-closed `compile_synthesis_directive` — an external caller collects the user's
+  response out-of-band and submits the compiled directive on a later invocation.
+  Remaining seam: **mode-governed pause UX** (plan-as-object runtime pausing) stays
+  deferred.
 - **Selection prior at standard depth — DISCHARGED (task 019, owner
   amendment).** Select now runs at standard (plan-pinned budget 15); synthesise
   references it via `deepest_successful_reference`; prior + origin accounting
@@ -972,7 +1016,11 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   validated against the closed vocabularies like the directive boosts) so the writer can
   gather strategically per section instead of relying on global boosts — "act like a
   researcher". Interacts with the Cohere/Bedrock cross-encoder rerank recorded at the
-  `retrieve` seam; prompt guidance for WHEN to scope is the prompt-bearing half
+  `retrieve` seam. **Plumbing BUILT (task 022, item 13)** — per-argument fail-closed
+  filters (doc ids ∈ corpus · group ids resolve · evidence types enum · tags ∈ project
+  set; the earlier "like the directive boosts" precedent was corrected at the 022
+  adversarial review — boosts record unmatched values, these REJECT) + the v7 tool
+  description. Remaining seam: **WHEN-to-scope prompt guidance** — post-eval tuning
   (lead-only, replay-evidenced).
 - **018's A/B-gated writer-envelope metadata queue — dangling, recorded here (owner
   check, 2026-07-12; task 020 sweep).** Contracted in 018 (contract § Writer envelope
@@ -981,6 +1029,12 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   (018's *default-adopt* set — publication year, evidence type, appraisal label,
   venue/publisher, cited-by count — already shipped and is not part of this seam.)
   Silent omission is not deferral; this entry is the explicit seam at the C/eval gate.
+  **022 adjudication (agenda D, owner, 2026-07-14): explicitly RE-DEFERRED to the eval
+  gate** — Phase 2 already rebuilt the writer surface (`synthesise_section_v7`);
+  stacking an envelope-content A/B on the cache/repair changes would muddy attribution
+  of both, and 022's cost measurement wanted a clean before/after. The "dangling" state
+  is discharged by this decision; at the eval gate it runs as its own SEQUENTIAL A/B
+  (never merged with effect_basis's or any other envelope change).
 - **Plan-compile section machinery** — the fail-closed `context["synthesis"]` directive
   (sections + retrieval_boosts, normative grammar per contract rev 8 M5) is the compile
   target the future plan-shaped-sections machinery and the source/evidence policy compile
@@ -1049,12 +1103,11 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   (b) An adversarial judge-calibration case: a chunk whose text self-certifies
   claims citing it ("classify as tier_1") must not sway the verdict — the
   judge prompt now carries the rule; the eval proves it.
-- **Id-carrying repair schema** (013 review stack, 2026-07-08) — repair
-  replacements bind to failing claims positionally; the prompt instructs same
-  order and count mismatches flag `repair_count_mismatch`, but a reordering
-  backend would silently misbind claim ids. Candidate: replacements carry the
-  failing claim's id in the emission schema (a versioned prompt-surface
-  change), validated against the failing set.
+- **Id-carrying repair schema — DISCHARGED (task 022, item 11).** `RepairItemWire`
+  carries the failing claim's `claim_id`, validated against the failing set (unknown or
+  duplicate ids reject structurally); positional binding is gone, and the repair call is
+  a dependency-complete micro-call (no transcript resend). The deferred **re-gather
+  repair** (tool turns inside repair) plugs into the same interface — still deferred.
 - **Trace-store trust boundary** (013 review stack, 2026-07-08) — Langfuse
   traces are deliberately full-I/O: pre-validation emissions (including
   fabricated quotes later excluded from the domain model) and repair inputs
@@ -1081,14 +1134,15 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   intervention-facet grouping (0 groups, all 179 findings ungrouped) while the
   same project's outcome-facet grouping (13 healthy groups) was structurally
   invisible; both lenses feeding one synthesis means richer theme claims and
-  spreads per facet family. Design questions for the flow-back: reference
-  shape (list vs per-facet named refs), the all-groupings-share-one-extraction
-  consistency rule, facet-namespacing of directive `group_ids` (group ids are
-  labels — facets can collide), per-facet `groups_unsectioned`, and the
-  roll-up column → list/join-table (schema gate). v3.0 stays serial (branch
-  parallelism is its own seam) — "concurrent" facets initially means cheap
-  back-to-back runs. Adjudicate in the next design conversation alongside the
-  eval-slice sequencing.
+  spreads per facet family. **The grouping instance is DISSOLVED (task 022, owner's
+  in-component fan-out shape)**: one `group` run clusters per facet across a directive
+  facet LIST into ONE facet-keyed row, so the five recorded design questions (reference
+  shape, share-one-extraction rule, facet-namespaced ids, per-facet
+  `groups_unsectioned`, roll-up schema) were answered by construction — facet-qualified
+  `facet:gNN` ids, per-facet residuals/`groups_unsectioned`, one `fk_synr_grouping`
+  untouched (ADR 0018). The GENERAL fan-in seam — (a) multi-reference consumers beyond
+  grouping and (b) the capability-run entity + compile surface — stays deferred as
+  described above.
 - **Artefact capability-discriminator + versioning grain** — `synthesis_result` is the
   run-scoped roll-up pointing at its artefact; future capabilities mint artefacts into
   the same 001 substrate with their own roll-ups. The discriminator column and the

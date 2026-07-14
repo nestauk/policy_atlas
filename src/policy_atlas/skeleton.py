@@ -495,28 +495,40 @@ def _render_extraction(log_entries: list[dict[str, Any]]) -> None:
         log.warning("extraction.missing")
         return
 
-    log.info("extraction.counts", **payload["counts"])
-    log.info("extraction.findings", **payload["findings"])
-    log.info("extraction.basis", **payload["basis"])
-    for doc in payload["docs"]:
-        log.info(
-            "extraction.doc",
-            pss_id=doc["pss_id"],
-            status=doc["status"],
-            basis=doc["basis"],
-            finding_count=doc["finding_count"],
-            reused=doc["reused"],
-            error=doc["error"],
-        )
-    log.info("extraction.flags", flags=payload["flags"])
+    # The 021 per-profile payload shape: counts/provenance/doc statuses live
+    # under per-profile blocks (this renderer is demo-only, read tolerantly).
+    counts = payload.get("counts", {})
+    log.info("extraction.counts", selected=counts.get("selected"))
+    for profile_id, block in (counts.get("profiles") or {}).items():
+        findings = block.get("findings") if isinstance(block, dict) else None
+        if isinstance(findings, dict):
+            log.info("extraction.findings", profile=profile_id, **findings)
+    if isinstance(counts.get("basis"), dict):
+        log.info("extraction.basis", **counts["basis"])
+    for doc in payload.get("docs", []):
+        for profile_id, doc_block in (doc.get("profiles") or {}).items():
+            log.info(
+                "extraction.doc",
+                pss_id=doc.get("pss_id"),
+                profile=profile_id,
+                status=doc_block.get("status"),
+                basis=doc.get("basis"),
+                finding_count=doc_block.get("finding_count"),
+                reused=doc_block.get("reused"),
+                error=doc_block.get("error"),
+            )
+    log.info("extraction.flags", flags=payload.get("flags"))
     # The full provenance map is in the DB row; only the headline fields here.
-    log.info(
-        "extraction.provenance",
-        fingerprint=payload["provenance"]["fingerprint"],
-        model=payload["provenance"]["model"],
-        prompt=payload["provenance"]["prompt"],
-        mode=payload["provenance"]["mode"],
-    )
+    for profile_id, prov in (payload.get("provenance", {}).get("profiles") or {}).items():
+        if isinstance(prov, dict):
+            log.info(
+                "extraction.provenance",
+                profile=profile_id,
+                fingerprint=prov.get("fingerprint"),
+                model=prov.get("model"),
+                prompt=prov.get("prompt"),
+                mode=prov.get("mode"),
+            )
 
 
 def _grouping_payload(
@@ -538,26 +550,41 @@ def _render_grouping(log_entries: list[dict[str, Any]], *, run_id: uuid.UUID | N
         log.warning("grouping.missing")
         return
 
-    log.info("grouping.facet", facet=payload["facet"], facet_source=payload["facet_source"])
-    for group in payload["groups"]:
-        log.info(
-            "grouping.group",
-            label=group["label"],
-            size=group["size"],
-            value_count=group["value_count"],
-            direction_spread=group["direction_spread"],
-        )
-    log.info("grouping.residuals", **payload["residuals"])
-    log.info("grouping.overall_direction_spread", **payload["overall_direction_spread"])
-    log.info("grouping.counts", **payload["counts"])
-    log.info("grouping.flags", flags=payload["flags"])
+    # The 022 multi-facet summary shape: groups/residuals/counts/flags are
+    # facet-keyed (this renderer is demo-only, read tolerantly).
+    log.info(
+        "grouping.facets",
+        facets=payload.get("facets", [payload.get("facet")]),
+        facet_source=payload.get("facet_source"),
+    )
+    groups = payload.get("groups", {})
+    facet_groups = groups if isinstance(groups, dict) else {"": groups}
+    for facet, group_list in facet_groups.items():
+        if not isinstance(group_list, list):
+            continue
+        for group in group_list:
+            if not isinstance(group, dict):
+                continue
+            log.info(
+                "grouping.group",
+                facet=facet or group.get("facet"),
+                group_id=group.get("group_id"),
+                label=group.get("label"),
+                size=group.get("size"),
+                value_count=group.get("value_count"),
+                direction_spread=group.get("direction_spread"),
+            )
+    log.info("grouping.residuals", residuals=payload.get("residuals"))
+    log.info("grouping.counts", counts=payload.get("counts"))
+    log.info("grouping.flags", flags=payload.get("flags"))
     # The full provenance map is in the DB row; only the headline fields here.
+    provenance = payload.get("provenance", {})
     log.info(
         "grouping.provenance",
-        prompt_version=payload["provenance"]["prompt_version"],
-        model=payload["provenance"]["model"],
-        mode=payload["provenance"]["mode"],
-        facet=payload["provenance"]["facet"],
+        prompt_version=provenance.get("prompt_version"),
+        model=provenance.get("model"),
+        mode=provenance.get("mode"),
+        facets=provenance.get("facets"),
     )
 
 

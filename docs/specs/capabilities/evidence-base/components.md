@@ -392,7 +392,21 @@ on what the run produced:
   extraction lacks the ICF profile — a visible coverage fact, not a silently absent tool). A characterisation-only
   run is the landscape degenerate case (pattern/theme/gap/reasoning sections).
   **Groups, where present, are input, not structure** (uncovered groups counted, never
-  silently dropped). Every cited claim goes through the settled `produce-grounded-block`
+  silently dropped) — since task 022 synthesise consumes ALL of one grouping run's facets
+  through its single grouping reference (per-facet residual honesty, per-facet
+  `groups_unsectioned`, failed-facet visibility; group ids facet-qualified `facet:gNN`
+  everywhere they travel, fail-closed on unqualified forms). Task 022's cost/surface set
+  (one writer bump, `synthesise_section_v7`): layered append-only message prefixes
+  (stable system → run-stable block → section block → tool exchanges — provider-neutral
+  cache layout), tool-return dedup (`already_returned` references; citation eligibility
+  spans repeats), oversized-only windowed chunk returns, per-argument fail-closed
+  `search_chunks` scope filters, the screen-confidence retrieval boost (clamped
+  functional multiplier, suppression when selection priced it), repair as a
+  dependency-complete id-carrying micro-call (never a transcript resend), and the
+  **pre-synthesise steer seam**: side-effect-free `propose_synthesis_plan` +
+  deterministic fail-closed directive compile — an out-of-band caller shapes
+  `context["synthesis"]` between runs; no runtime pausing. Every cited claim goes
+  through the settled `produce-grounded-block`
   mechanism (deterministic quote-presence + LLM judge; Unsupported/mis-cited a real state)
   — *not* v2's permissive post-hoc fuzzy matching. Intent shapes emphasis, never
   verification ("topical relevance ≠ support"). The source/evidence policy's citable bar

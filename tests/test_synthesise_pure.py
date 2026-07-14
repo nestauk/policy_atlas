@@ -1494,3 +1494,58 @@ def test_compile_synthesis_directive_rejects_non_mapping_and_bad_group_ids() -> 
         compile_synthesis_directive({"group_ids": "not-a-list"})
     with pytest.raises(SynthesisDirectiveError):
         compile_synthesis_directive({"group_ids": [""]})
+
+
+class _EchoSpanMapJudge(StubGroundingJudgeBackend):
+    """Stub that (like a live judge can) also emits verdicts for span-map-only ids."""
+
+    def judge_block(self, envelope: dict[str, Any]) -> Any:
+        response, usage = super().judge_block(envelope)
+        judged = {claim["claim_id"] for claim in envelope.get("claims", [])}
+        extras = [
+            entry["claim_id"]
+            for entry in envelope.get("span_map", [])
+            if entry.get("claim_id") not in judged
+        ]
+        verdicts = list(response.verdicts)
+        if verdicts:
+            for claim_id in extras:
+                verdicts.append(verdicts[0].model_copy(update={"claim_id": claim_id}))
+        return response.model_copy(update={"verdicts": verdicts}), usage
+
+
+def test_judge_extra_verdicts_for_span_only_ids_are_dropped_not_fatal() -> None:
+    """A live judge echoing verdicts for all-types span-map ids (which carry no
+    verdict duty) must not fail coverage: the extras are dropped and counted,
+    while coverage of the judged set itself stays exact (022 item 17(i))."""
+    substrate = _substrate()
+    reasoning_claim = ClaimDraft(
+        claim_id="s0c0",
+        claim_index=0,
+        claim_type="reasoning",
+        text="As reasoning, the strands point one way.",
+        annotation_type="reasoning",
+        payload={},
+        judge_chunk_ids=set(),
+        span=(0, 40),
+    )
+    pattern_claim = ClaimDraft(
+        claim_id="s0c1",
+        claim_index=1,
+        claim_type="pattern",
+        text="The corpus shows a recurring pattern.",
+        annotation_type="pattern",
+        payload={},
+        judge_chunk_ids=set(),
+        span=(41, 78),
+    )
+    calls, _usage, _unspanned = _judge_claims(
+        claims=[reasoning_claim, pattern_claim],
+        substrate=substrate,
+        grounding_judge_backend=_EchoSpanMapJudge(),
+        section_prose="prose",
+    )
+    assert calls == 1
+    # The judged claim carries its verdict; the pattern claim never gains one.
+    assert reasoning_claim.verdict is not None
+    assert pattern_claim.verdict is None
