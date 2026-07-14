@@ -71,7 +71,10 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
   decide at this gate. Select-at-standard regrade moved OUT to 019 (done); this slice
   keeps the screen-confidence boost gate + the cost-work wall-time band re-measure.
 - Code spine: `group.py` + `facet_values.py` + `facet_grouping.py` (partition
-  machinery, `FACET_VALUE_CAP`, `GROUPING_FACETS`), `schema.py` (`grouping_result` —
+  machinery, `FACET_VALUE_CAP`, `GROUPING_FACETS`, `FacetValueRecord` — the unit
+  projection the engine generalises), `characterise.py` / `grouping.py`
+  (`_discover_themes` + batched assignment — the two-stage shape precedent the
+  engine adopts), `schema.py` (`grouping_result` —
   `facet` column, `ck_grr_facet`, `uq_grr_scope_run`, `fk_synr_grouping`),
   `synthesise.py` (grouping payload read, `group_ids`, `groups_unsectioned`),
   `synthesis_tools.py` (`query_findings` group filter, `search_chunks`, tool returns),
@@ -83,11 +86,12 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
 **In — Phase 1 (multi-facet grouping):**
 
 1. **In-component facet fan-out.** The grouping directive names a facet **list**; one
-   `group` run partitions the (kind-spanning) finding set once-loaded, per facet.
-   One run row; synthesise keeps **one** grouping-run reference (`fk_synr_grouping`
-   untouched). This dissolves the recorded multi-run design questions (reference
-   shape, share-one-extraction rule, capability-run-entity dependency) by
-   construction — record that in the ADR.
+   `group` run clusters the (kind-spanning) finding set once-loaded, **per facet —
+   separate calls per facet, never one call spanning facets** (owner-confirmed,
+   2026-07-14). One run row; synthesise keeps **one** grouping-run reference
+   (`fk_synr_grouping` untouched). This dissolves the recorded multi-run design
+   questions (reference shape, share-one-extraction rule, capability-run-entity
+   dependency) by construction — record that in the ADR.
 2. **Facet moves to group grain** (🛑 schema gate — decision 1): each group carries
    its `facet`; the row-level `facet` column + `ck_grr_facet` are replaced by the
    run's facet list (provenance) + per-facet payload keys. One migration on
@@ -96,40 +100,58 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
    facet-qualified everywhere they travel: directive `group_ids`, `query_findings`
    `group_id` filter, section assignment, `groups_unsectioned`, envelope carriage.
    The id scheme is co-designed with the scale fix (duplicate-proof ids serve both).
-4. **Value-list scale fix** (🛑 design decision 2): bound the per-call value list so
-   the live-proven ~184-value failure passes. Candidate shapes: batched partitioning
-   with cross-batch merge · hierarchical (discover-then-assign, weighing the recorded
-   tail-discovery risk + partition-exactness invariant) · shorter duplicate-proof id
-   scheme. `FACET_VALUE_CAP` semantics (fail-closed, loud) survive whatever lands —
-   the cap may rise, never silently degrade.
+4. **The two-stage clustering engine — the scale fix and the machinery convergence,
+   one decision** (🛑 design decision 2; owner-settled direction, 2026-07-14).
+   `group` adopts the **two-stage open-discovery / validated-assignment shape**
+   (characterise's proven split, the owner's recorded candidate in deferred.md
+   § Group): stage 1 discovers groups openly (labels + descriptions — never an
+   exhaustive id list, which is exactly the one-call capacity cliff that produced
+   duplicate ids 4/4 at ~184 values); stage 2 assigns every unit in small batches,
+   **validated against the deterministically-known unit list** (no fabricated ids,
+   no double assignment, unplaced units land in the counted residual — the
+   exhaustive-assignment honesty everything downstream leans on; discovery stays
+   open, validation binds assignment, per the owner's clustering model). The engine
+   is parameterised by **unit projection**: a value facet's unit = the normalized
+   value string + counterparts (today's `FacetValueRecord`); a claim-theme facet's
+   unit = the claim's prose. Components stay distinct — characterise and group keep
+   their own substrates, gates and consumers; the *engine* is shared or
+   shape-identical (ADR records the boundary). `FACET_VALUE_CAP` survives as the
+   fail-closed input guard; the per-call bound becomes an internal batch size.
+   Whether characterise's implementation is literally refactored onto the shared
+   engine or converged later is a plan-time call (touching characterise is
+   otherwise out of scope — convergence must not smuggle in a characterise rework).
+   Plan-level design choice inside the engine: optional per-unit **context payloads**
+   for value facets (e.g. sample claims/quotes for disambiguation) — plumbing may
+   land; default stays light (values + counterparts); enrichment quality is
+   eval-slice territory.
 5. **Facet vocabulary this slice** (🛑 decision 3): `intervention` / `outcome` /
-   `population` (existing) + **the first ICF facet — whose shape is the decision**
-   (owner probe, 2026-07-14). ICF stores no short open-vocabulary content values
-   (deliberate 021 call: no extraction-time canonicalisation) — the content is
-   `claim` prose scoped by the closed `context_type` enum. So "what distinct
-   barriers/mechanisms were extracted" does NOT fit the value-string partition
-   machinery. Candidates:
-   - **(a) Claim-theme clustering scoped by `context_type`** (e.g. `barrier_theme`):
+   `population` (existing value facets, now running on the engine) + **the first ICF
+   content facet — build-or-defer is the decision** (owner probe, 2026-07-14). ICF
+   stores no short open-vocabulary content values (deliberate 021 call: no
+   extraction-time canonicalisation) — the content is `claim` prose scoped by the
+   closed `context_type` enum, so "what distinct barriers/mechanisms were extracted"
+   is claim-theme clustering, not value-string partitioning:
+   - **(a) Claim-theme facet(s) scoped by `context_type`** (e.g. `barrier_theme`):
      discover themes across the type's claim texts, assign every claim — the lens
      that delivers the promised payoff ("planning delays recur as a barrier across
-     heat-pump programmes" backed by a validated group). New machinery: a claim-text
-     projection (prose, not value strings) and likely the characterise-style
-     two-stage discover/assign split (the owner's recorded candidate, deferred.md
-     § Group), designed against the tail-discovery risk and the partition-exactness
-     invariant. Its scale story is claim count (203 live), distinct from the
-     value-list limit.
-   - **(b) No ICF-content facet this slice** — kind-spanning membership already
-     puts ICF findings in intervention/outcome groups, and `icf_context_type_count`
-     already validates type × intervention counts; claim-theme clustering
-     re-defers explicitly.
+     heat-pump programmes" backed by a validated group). On the item-4 engine this
+     is a second unit projection (claim prose; known list = claim ids; scale story =
+     claim count, 203 live), not new machinery — the marginal cost argues build.
+   - **(b) Explicit re-defer** — kind-spanning membership already puts ICF findings
+     in intervention/outcome groups, and `icf_context_type_count` already validates
+     type × intervention counts.
    - (c) A short source-named ICF label field: **rejected, not open** —
      extraction-time canonicalisation plus a pre-ground-truth fingerprint
      invalidation.
    (A bare deterministic partition BY the seven-value enum is not a facet — that
    read surface already exists as `icf_context_type_count`; named here so nobody
-   ships it as one.) Which facets a given run requests stays
-   orchestrator-discretionary; the deep-depth default facet set is a plan-time
-   constant (named in the plan, not silently compiled).
+   ships it as one.) Cross-kind clustering on the shared-reference facets is
+   **already built** (021 membership bridge) and owner-ratified 2026-07-14: the same
+   document's IOF and ICF rows naming one intervention normalize to one value
+   record with kind-spanning finding ids; ICF rows with null `outcome` land in the
+   outcome facet's counted `no_value` residual, never force-joined. Which facets a
+   given run requests stays orchestrator-discretionary; the deep-depth default
+   facet set is a plan-time constant (named in the plan, not silently compiled).
 6. **Per-facet honesty** (🛑 decision 4): per-facet residuals, per-facet CAP
    accounting, per-facet `groups_unsectioned`; and **per-facet failure isolation** —
    flag-not-drop argues one facet's partition failure lands an honest per-facet
@@ -310,13 +332,15 @@ correctness · scope creep toward the Out list.
 1. **Facet-at-group-grain migration shape** (schema 🛑) — facet list in provenance +
    per-facet payload keys, row-level `facet` column retired; old rows' readability
    posture.
-2. **Value-list scale design** — batched partition + merge vs hierarchical
-   discover/assign vs id-scheme-only (or a combination); what `FACET_VALUE_CAP`
+2. **The two-stage clustering engine** (direction owner-settled 2026-07-14 — this
+   gate ratifies the written shape): open discovery + batch-validated exhaustive
+   assignment, parameterised by unit projection; characterise refactor-now vs
+   converge-later; context-payload plumbing posture; what `FACET_VALUE_CAP`
    becomes.
-3. **First ICF facet shape** — claim-theme clustering scoped by `context_type`
-   (new machinery, the payoff lens) vs explicit re-defer (kind-spanning membership
-   + `icf_context_type_count` already serve the cheap half); a short ICF label
-   field is rejected. Plus the deep-depth default facet set.
+3. **First ICF content facet — build-or-defer** — claim-theme facet(s) scoped by
+   `context_type` on the item-4 engine (the payoff lens; marginal cost argues
+   build) vs explicit re-defer; a short ICF label field is rejected. Plus the
+   deep-depth default facet set.
 4. **Per-facet failure isolation** — honest per-facet failure rows (proposed) vs
    all-or-nothing.
 5. **Cross-kind UNION view** — build (if the loader reads through it) or explicit
