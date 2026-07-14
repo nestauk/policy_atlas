@@ -220,26 +220,45 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
 
 **In — Phase 2 (cost + surface; ONE writer prompt bump, `synthesise_section_v6`):**
 
-9. **Cache-prefix engineering** — the biggest quality-neutral lever (24% hit rate on
-   a strictly-growing transcript). Deterministic append-only prefix layout per
-   prompting.md (stable instructions first, tagged data, task restated last),
-   provider-neutral (suits OpenAI automatic + Bedrock `cachePoint`; no
-   `prompt_cache_key`-class coupling). Measured on the cache-discounted curve.
-10. **Repair-input scoping** — repair calls receive the failing claims + their cited
-    chunks, not the full transcript resend (~21% of run cost today). Interface
-    shaped so the deferred re-gather repair plugs in later without rework.
+9. **Cache-prefix engineering** — a major quality-neutral lever (24% hit rate on
+   the $15.45 run; a later trace showed 51.5% writer hit rate with 12/28 calls
+   still at zero — the win is real but variable, so the item claims the shape,
+   not a superlative; Codex investigation, 2026-07-14). **Layered prefix design**:
+   stable system prompt → stable run substrate/intent → section-varying data
+   (member findings, ledger) → task restated last; exact append-only prefix
+   within each section. Provider-neutral (suits OpenAI automatic + Bedrock
+   `cachePoint`; no `prompt_cache_key`-class coupling). Measured on the
+   cache-discounted curve.
+10. **Repair as a dependency-complete micro-call** (refined per Codex
+    investigation, 2026-07-14: ~29k repair-input tokens per repaired claim
+    today) — a repair call receives each failing claim's id + failure reason,
+    the replacement span plus adjacent prose context, and **the records its
+    claim type actually depends on** (cited chunks for chunk/finding claims;
+    the computed/lookup records for pattern, theme and gap claims — "cited
+    chunks" alone is too narrow), never the full transcript resend (~21% of run
+    cost today). Interface shaped so the deferred re-gather repair plugs in
+    later without rework.
 11. **Id-carrying repair schema** (013 seam) — replacements carry the failing claim's
     id, validated against the failing set; kills the positional-binding fragility.
-    Rides the same prompt bump.
-12. **Tool-return hygiene** (shape owner-settled, 2026-07-14) — chunk dedup across
-    turns (the writer re-reads what it already saw), unconditional; plus
-    **oversized-chunk-only windowed returns**: under `embedding_unit_policy_v1` a
-    normal chunk (≤ unit budget) IS its one unit and returns whole; a collapsed
-    chunk returns the **matched unit's span widened by a margin** instead of the
-    full frozen text (unit offsets anchor the window; quotes still verify — the
-    window is a substring of the frozen chunk; the chunk stays the citation
-    grain). Never a universal truncation. The **judge envelope stays unclamped**
-    (agenda B, settled).
+    Rides the same prompt bump and completes item 10's micro-call shape.
+12. **Tool-return hygiene** (shape owner-settled, 2026-07-14; widened per Codex
+    investigation same day — ~68% of writer input in the measured trace was
+    re-sent content) — **dedup covers every immutable tool record**, not just
+    chunks: full chunk/finding/lookup content returns once per section, repeat
+    reads return `{id, already_returned: true}` references; citation
+    eligibility stays the union of all returned ids; the character budget
+    charges only newly returned content. Plus **oversized-chunk-only windowed
+    returns**: under `embedding_unit_policy_v1` a normal chunk (≤ unit budget)
+    IS its one unit and returns whole; a collapsed chunk returns the **matched
+    unit's span widened by a margin** instead of the full frozen text (unit
+    offsets anchor the window; quotes still verify — the window is a substring
+    of the frozen chunk; the chunk stays the citation grain). Never a universal
+    truncation. Two implementation prerequisites/fixes (Codex, verified):
+    retrieval must **retain the winning unit's offsets** through candidate
+    construction (currently discarded), and the per-turn character budget must
+    **skip-and-continue** past an over-budget result instead of `break`ing and
+    silently dropping every later ranked candidate. The **judge envelope stays
+    unclamped** (agenda B, settled).
 13. **Writer read-tool scoping plumbing** — `search_chunks` gains optional
     fail-closed scope filters (tags · doc ids · facet-group members · evidence
     types), validated against the closed vocabularies like the directive boosts.
@@ -255,23 +274,56 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
     2026-07-14): the pre-decided grammar (linear clamped functional multiplier,
     product clamped [0.1, 10], steerable-never-baked) wired as a directive boost
     over screen confidence. Constants plan-pinned; calibration is eval-slice work.
+    Rider (Codex investigation, 2026-07-14 — verified): `_soft_prior` today
+    multiplies selection × column × tag × appraisal factors with **no final
+    product clamp** — add the grammar's required combined-product clamp
+    [0.1, 10] and record raw factors + executed multiplier in provenance; plus
+    the **no-double-count guard**: suppress confidence execution when a
+    selection reference already prices confidence, suppression recorded.
 16. **Riders:** `lookup` widening to screening rows · the cost-work wall-time band
     re-measure (D1's ~10–20 min band re-measured on the post-phase-2 config, so the
-    rehearsal numbers stay honest).
+    rehearsal numbers stay honest) · **key-findings seed filter** (Codex,
+    2026-07-14: the key-findings call receives the union of every section's
+    gathered chunks, ~2% of input — filter `chunk_content_by_id` to chunks cited
+    by surviving claims; citation eligibility already restricts to those) ·
+    **batched query embeddings** (Codex, 2026-07-14: 57 sequential single-text
+    embed calls ≈ 12 s wall-time — embed a read-batch's uncached queries in one
+    call; retrieval stays deterministic per query vector).
+18. **Prompt-facing DTO slimming** (Codex investigation, 2026-07-14 — NEW):
+    characterisation and grouping summaries serialize full membership UUID
+    lists into every section seed, and the rolling ledger repeats cited_ids,
+    flags and a fixed note per record despite ledger records being non-citable
+    by prompt rule. Split internal vs prompt-facing DTOs: prompt-side
+    themes/groups carry id · label · description · size · spread · residuals —
+    never membership lists; the ordinary ledger slims to claim id/type/text
+    (the evidence-bearing key-findings ledger stays separate). Small now
+    (~1–5%) but grows directly with phase 1's multi-facet fan-out — the two
+    phases compound here. Quality-neutral; replay-checked with the v6 rounds.
 17. **Unspanned-lane precision fixes** (owner-adopted 2026-07-14, from the live
     trace scan — 404 `synthesise:judge` observations, 429 unspanned excerpts:
     ~16% re-judge artifacts, ~24% judge over-reports inside mapped spans, ~59%
     genuine writer-authored unclaimed evidential prose, ~1% span-edge):
-    - **(i) Re-judge span-map completeness** — the post-repair re-judge envelope
-      carries the FULL claim span map (kept + rejudged claims), not just the
-      rejudged subset (`_apply_repair` → `_judge_claims` passes only `rejudged`
-      today), so kept claims' content stops minting false unspanned flags.
-      Envelope-content completeness fix; checked with a re-judge-set replay
-      (verdict-flip inspection on the rejudged claims).
-    - **(ii) Deterministic overlap post-filter** — code-side: a judge-returned
-      unspanned excerpt overlapping a mapped claim span is dropped (by
-      definition not unspanned), counted on accounting as filtered — no judge
-      prompt change needed for cause 2.
+    - **(i) Span-map completeness — ALL valid claims** (widened per Codex
+      corroboration, 2026-07-14): the judge's span map is built only from
+      `JUDGED_TYPES` claims today, so valid pattern/theme/gap spans are
+      invisible to the unspanned lane even on initial calls — and the
+      post-repair re-judge passes only the rejudged subset. Fix: separate
+      `claims_to_judge` (verdict coverage unchanged) from `occupied_claim_spans`
+      (every final valid claim's span, all types, kept + rejudged). This is the
+      slice's ONE judge-envelope change; A/B-bound — re-judge-set replay with
+      verdict-flip inspection.
+    - **(ii) Unspanned observability counters** (recast per Codex challenge,
+      2026-07-14 — verified: `_bind_unspanned` already refuses to bind
+      excerpts inside claim spans, so persisted records are already filtered):
+      instead of a second drop-filter, split the single `unspanned_unbound`
+      counter into distinct `unspanned_overlap_filtered` /
+      duplicate-or-stale / genuinely-unlocated counters so judge over-report
+      is measurable separately from real binding failures.
+    - **(iii) Supersede, never concatenate** (Codex, 2026-07-14: 52/429
+      excerpts are exact initial/re-judge duplicates): when repair changes the
+      prose, the re-judge's unspanned results REPLACE the initial scan's
+      (`unspanned = rejudge_unspanned`), not extend them; a rebuilt prose with
+      no re-judge keeps no stale flags and relies on `unspanned_lane_skipped`.
     - The genuine ~59% (evidential summary sentences, "As an inference…"
       labelled-inference prose, cluster descriptions) is a named input to the
       `synthesise_section_v6` replay work — claim-or-flag is a v6 taste call
@@ -295,7 +347,7 @@ inherit the deferral" is the owner's own instruction):**
   formulation); no judge-input change, no re-baseline triggered.
 - **C. Unspanned-lane coverage half — SETTLED: stays parked for the eval slice**
   (owner, 2026-07-14) — the live trace scan showed the lane's problem is
-  precision, not coverage; the two precision fixes are adopted instead as
+  precision, not coverage; the precision fixes are adopted instead as
   item 17. `unspanned_lane_skipped` honesty flag unchanged.
 - **D. 018's dangling writer-envelope metadata A/B queue** — **SETTLED: explicit
   re-defer to the eval gate** (owner, 2026-07-14). Phase 2 already rebuilds the
@@ -304,10 +356,12 @@ inherit the deferral" is the owner's own instruction):**
   measurement wants a clean before/after. Deferred.md entry re-recorded with this
   adjudication — the "dangling" state is discharged by the explicit decision.
 - **E. `effect_basis` as judge-envelope candidate** — **SETTLED: re-defer to the
-  eval gate, bundled with D** (owner, 2026-07-14). Judge verdicts are a function
-  of the envelope — every envelope change forces a re-baseline — so all
-  judge-envelope candidates bundle into one re-baseline event at the eval gate,
-  where baselines are being cut anyway.
+  eval gate, alongside D** (owner, 2026-07-14). Judge verdicts are a function
+  of the envelope — every envelope change forces a re-baseline. Refinement
+  (Codex, 2026-07-14, owner-confirmed): the eval-gate A/Bs run **sequentially
+  per envelope change**, not as one merged baseline event — merged baselines
+  confound which change moved the verdicts; in particular effect_basis's A/B
+  must not share a baseline with item 17(i)'s span-map change.
 
 **Out:**
 
@@ -322,6 +376,13 @@ inherit the deferral" is the owner's own instruction):**
   index-backed `retrieve` · cross-encoder reranker (pass-through stands).
 - Prompt tuning beyond the one versioned bump; all plan-pinned constant calibrations
   (eval work); the evals themselves.
+- **Gather/writer model split** (routing tool-selection turns to a cheaper model —
+  Codex investigation 2026-07-14: gather turns ≈ 43% of input tokens for ~4.7k
+  output in the measured trace, est. 20–30% saving): stays **deliberately
+  post-eval** per the owner's 2026-07-12 quality-sensitive-cost-routing pin,
+  re-confirmed by the owner 2026-07-14 — it is semi-neutral (a weaker gatherer
+  can fetch worse evidence) and evals are its regression net. The trace evidence
+  goes to deferred.md so it heads the post-eval queue.
 - The 19 ICF cleanup/altitude candidates (deferred to the third-schema slice).
 - Two-profile extraction parallelism (extract wall-clock — eval-slice cost-axis
   input, not this slice's surface).

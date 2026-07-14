@@ -40,8 +40,10 @@ is in progress, not done.
         the caching work (Bedrock constraint).
 15. [ ] Upgrades-never-invalidate held: pre-migration `grouping_result` rows are
         migrated in place per decision 1; existing synthesis references resolve.
-16. [ ] **Unspanned-lane precision fixes hold** (item 17): the re-judge envelope
-        carries the full claim span map (test-asserted); excerpts overlapping
-        mapped spans are deterministically filtered and counted; the eval
-        re-baseline note for `unspanned_assertions` is recorded in deferred.md
-        or the eval handoff.
+16. [ ] **Unspanned-lane precision fixes hold** (item 17): the judge span map is
+        built from ALL valid claims' spans (all types, kept + rejudged;
+        test-asserted) with verdict coverage unchanged; the observability
+        counters split over-report / duplicate-stale / unlocated; a
+        prose-changing repair's re-judge unspanned results supersede the
+        initial scan's; the eval re-baseline note for `unspanned_assertions`
+        is recorded in deferred.md or the eval handoff.
