@@ -1,4 +1,4 @@
-"""Pure unit tests for icf_rules_v1 validation and dedup."""
+"""Pure unit tests for icf_rules_v2 validation and dedup."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def _record(**overrides: object) -> ICFRecord:
 
 
 def test_version_constant() -> None:
-    assert ICF_FIELD_RULES_VERSION == "icf_rules_v1"
+    assert ICF_FIELD_RULES_VERSION == "icf_rules_v2"
 
 
 def test_icf_coercion_and_non_valid_only_coverage() -> None:

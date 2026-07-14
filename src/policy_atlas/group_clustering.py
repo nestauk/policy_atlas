@@ -8,7 +8,8 @@ share one skeleton with per-projection variants: value facets (source-named
 reference values with counterparts and anchor-quote context) and claim-theme
 facets (ICF claim prose with source-authored labels as context).
 
-Discovery never sees or emits unit ids — the exhaustive id list in one call is
+Discovery sees id-keyed unit records but never EMITS unit ids — its output is
+labels + descriptions only; the exhaustive id-partition response format is
 exactly the ~184-value capacity cliff the two-stage shape retires
 (docs/knowledge/facet-partition-value-list-scale-limit.md). Assignment is
 id-keyed per batch and validated in code against the deterministically known
@@ -51,7 +52,7 @@ GROUP_CLUSTERING_MODEL = "gpt-5.4-mini"
 # bucket. The assignment prompt asks for the plain word "ungroupable"; the
 # backend maps it onto this engine-facing label.
 GROUP_RESIDUAL_LABEL = "__ungrouped__"
-_UNGROUPABLE_WORD = "ungroupable"
+UNGROUPABLE_WIRE_WORD = "ungroupable"
 
 ProjectionKind = Literal["value", "claim"]
 
@@ -267,7 +268,7 @@ def build_assignment_messages(
     system = _ASSIGNMENT_SYSTEM_TEMPLATE.format(
         subject=_PROJECTION_SUBJECT[projection],
         unit_intro=_PROJECTION_UNIT_INTRO[projection].format(facet=facet),
-        ungroupable=_UNGROUPABLE_WORD,
+        ungroupable=UNGROUPABLE_WIRE_WORD,
     )
     return [
         {"role": "system", "content": system},
@@ -504,7 +505,7 @@ class _OpenAIGroupFacetBackend:
                     unit_id=assignment.unit_id,
                     label=(
                         GROUP_RESIDUAL_LABEL
-                        if assignment.group_label.strip().casefold() == _UNGROUPABLE_WORD
+                        if assignment.group_label.strip().casefold() == UNGROUPABLE_WIRE_WORD
                         else assignment.group_label
                     ),
                 )

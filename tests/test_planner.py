@@ -16,7 +16,11 @@ from policy_atlas.planner import (
     StubPlannerBackend,
     _degrade_suggestions,
 )
-from policy_atlas.planner_prompt import PlanDraftWire, PlannerTurnWire
+from policy_atlas.planner_prompt import (
+    PLANNER_PROMPT_VERSION,
+    PlanDraftWire,
+    PlannerTurnWire,
+)
 
 
 def _turn(text: str, role: str = "user") -> dict[str, str]:
@@ -35,6 +39,10 @@ def _plan_from_draft(draft: PlanDraftWire) -> OrchestrationPlan:
 
 
 # --- Stub turn shapes -------------------------------------------------------
+
+
+def test_planner_prompt_version_pinned() -> None:
+    assert PLANNER_PROMPT_VERSION == "planner_v5"
 
 
 def test_stub_first_turn_asks_shape_question_with_three_suggestions() -> None:

@@ -142,6 +142,28 @@ def test_assignment_unknown_label_conflict_and_unknown_id_repair_once() -> None:
     assert "assignment had 1 conflicting duplicate ids" in result.rejection_reasons
 
 
+def test_assignment_repair_cap_above_one_grants_further_rounds() -> None:
+    units = [
+        ClusterUnit(unit_id="u1", payload={}),
+        ClusterUnit(unit_id="u2", payload={}),
+    ]
+    labels = [ClusterLabel(label="A", description="Alpha")]
+    backend = _Backend(
+        discovery_outputs=[labels],
+        assignment_outputs=[
+            {"u1": "A", "u2": "missing-label"},  # first attempt: u2 unresolved
+            {"u2": "missing-label"},  # repair round 1: still unresolved
+            {"u2": "A"},  # repair round 2: resolves under cap=2
+        ],
+    )
+
+    result = cluster_units(units, backend=backend, policy=_policy(assignment_repair_cap=2))
+
+    assert result.assignments == {"u1": "A", "u2": "A"}
+    assert result.assignment_repair_calls_used == 2
+    assert result.residual_ids == []
+
+
 def test_residual_policy_places_units_left_unresolved_after_repair() -> None:
     units = [ClusterUnit(unit_id="u1", payload={}), ClusterUnit(unit_id="u2", payload={})]
     backend = _Backend(

@@ -1,7 +1,7 @@
 ---
 type: Invariant
 title: Judge verdicts are a function of the envelope — re-baseline on change, inspect flags before recalibrating
-description: Adding anchor chunk text to the judge envelope moved tier_3 mass to tier_2 and net-raised unsupported; tier distributions are not comparable across envelope versions. High first-contact flag volume from an asymmetric report-when-in-doubt rule is usually the writer, not the judge — hand-inspect before recalibrating.
+description: Adding anchor chunk text to the judge envelope moved tier_3 mass to tier_2 and net-raised unsupported; tier distributions are not comparable across envelope versions. High first-contact flag volume from an asymmetric report-when-in-doubt rule is usually the writer, not the judge — hand-inspect before recalibrating. Envelope A/Bs need an identical-envelope variance baseline applied to every reported metric (022: the noise floor refuted a directional unspanned claim), and any envelope data the model can see it may echo — validators anticipate verdicts for ids never asked about.
 tags: [grounding-judge, envelopes, verdicts, calibration, evaluation]
 timestamp: 2026-07-11
 ---
@@ -29,6 +29,21 @@ pinned projects. Consequences:
    flags / 83 claims at the 018 B smoke) — hand-sampling showed the judge was RIGHT;
    the writer under-anchored. Render such flags quietly on user surfaces and fix the
    generator, not the detector.
+4. **An envelope A/B needs an identical-envelope variance baseline — applied to
+   EVERY metric you report, not just the headline one.** 022's 17(i) replay had
+   blocks whose envelopes were byte-identical under both span maps; those blocks
+   alone produced 14 verdict flips and an 18→0 unspanned swing — a measured noise
+   floor. The build correctly discounted verdict flips against it but published a
+   directional unspanned claim (69→59) the same decomposition refutes: the entire
+   net drop came from identical-input blocks, and the map-changed blocks moved the
+   OTHER way. At n=1 the honest claim shape is "no detectable effect beyond judge
+   variance" (022 review stack, convergent lead + adversarial finding).
+5. **Envelope data the model can see is data it may act on.** Widening the span
+   map put non-judged claim ids in front of the live judge and it emitted verdicts
+   for them — ids it was never asked to judge (`judge_coverage_invalid` live, never
+   in stubs). The prompt's verdict-duty framing does not bind; response validators
+   must anticipate echo of any visible envelope content (drop-and-count, the
+   invented-id posture — `judge_extra_verdicts_dropped`).
 
 # Why
 

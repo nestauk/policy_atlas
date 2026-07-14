@@ -17,11 +17,16 @@ from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.facet_grouping import FACET_VALUE_CAP, LABEL_MAX, VALUE_SURFACE_MAX
 from policy_atlas.facet_values import FacetDirectiveError
 from policy_atlas.group import (
+    CLAIM_SURFACE_MAX,
+    CONTEXT_LABEL_SURFACE_MAX,
     GROUP_PROMPT_VERSION,
+    GROUP_RESIDUAL_LABEL,
     ClaimThemeUnit,
     GroupContext,
     GroupError,
     StubGroupClusteringBackend,
+    _claim_cluster_units,
+    _forbidden_group_label_reason,
     _load_finding_references,
     claim_theme_base_sha256,
     group_call_budget,
@@ -1767,3 +1772,33 @@ def test_invalid_discovered_label_fails_facet_not_component(conn: Connection) ->
 
 def _zero_spread() -> dict[str, int]:
     return {"increase": 0, "decrease": 0, "no_effect": 0, "mixed": 0, "unclear": 0}
+
+
+# --- Review-stack fixes (022 step 7): sentinel labels + bounded claim surfaces
+
+
+def test_forbidden_group_label_rejects_component_sentinels() -> None:
+    assert _forbidden_group_label_reason(0, "Ungroupable") is not None
+    assert _forbidden_group_label_reason(1, GROUP_RESIDUAL_LABEL) is not None
+    assert _forbidden_group_label_reason(2, "Heat pump tariffs") is None
+
+
+def test_claim_cluster_units_bound_untrusted_surfaces() -> None:
+    hostile_label = "x" * (CONTEXT_LABEL_SURFACE_MAX * 4)
+    long_claim = "c" * (CLAIM_SURFACE_MAX + 50)
+    unit = _claim_cluster_units(
+        [
+            ClaimThemeUnit(
+                finding_id="f-1",
+                claim=long_claim,
+                context_label=hostile_label,
+                intervention="heat\x00pumps\nrollout",
+            )
+        ]
+    )[0]
+    payload = unit.payload
+    assert len(payload["claim"]) <= CLAIM_SURFACE_MAX
+    assert payload["claim"] == payload["text"]
+    assert len(payload["context"]["context_label"]) <= CONTEXT_LABEL_SURFACE_MAX
+    # Control characters (incl. newlines) are replaced with spaces, never kept.
+    assert payload["context"]["intervention"] == "heat pumps rollout"

@@ -56,6 +56,7 @@ from policy_atlas.facet_values import (
 )
 from policy_atlas.group_clustering import (
     GROUP_CLUSTERING_PROMPT_VERSION,
+    UNGROUPABLE_WIRE_WORD,
 )
 from policy_atlas.group_clustering import (
     GROUP_RESIDUAL_LABEL as _GROUP_RESIDUAL_LABEL,
@@ -68,12 +69,17 @@ from policy_atlas.schema import (
     implementation_context_finding,
     intervention_outcome_finding,
 )
+from policy_atlas.tags import has_control_character
 from policy_atlas.usage import UsageAccumulator, UsageResult
 
 log = structlog.get_logger()
 
 REJECTION_REASON_CAP = 20
 REJECTION_REASON_MAX = 200
+# Prompt-payload bounds for claim-theme units (mirrors VALUE_SURFACE_MAX on the
+# value path; ICF text fields carry no extraction-time length bound).
+CLAIM_SURFACE_MAX = 1000
+CONTEXT_LABEL_SURFACE_MAX = 160
 GROUP_ASSIGNMENT_BATCH_SIZE = 50
 GROUP_DISCOVERY_RETRY_CAP = 1
 GROUP_ASSIGNMENT_REPAIR_CAP = 1
@@ -395,7 +401,6 @@ def group_findings(
     run_id: uuid.UUID,
     context: GroupContext,
     group_clustering_backend: GroupClusteringBackendFactory | None = None,
-    facet_grouping_backend: GroupClusteringBackendFactory | None = None,
 ) -> dict[str, Any]:
     """Group extracted findings across one or more facets.
 
@@ -405,8 +410,6 @@ def group_findings(
         run_id: Run writing the grouping result.
         context: Scope-level group input with the explicit extraction run.
         group_clustering_backend: Group-side clustering backend factory.
-        facet_grouping_backend: Transitional alias for callers still threading
-            the group backend under the old parameter name.
 
     Returns:
         The grouping summary payload for ``component.completed``.
@@ -418,10 +421,8 @@ def group_findings(
     backend_factory = (
         group_clustering_backend
         if group_clustering_backend is not None
-        else facet_grouping_backend
+        else StubGroupClusteringBackend()
     )
-    if backend_factory is None:
-        backend_factory = StubGroupClusteringBackend()
 
     facets, facet_source = parse_grouping_directive(context.context)
     docs, extraction_profile_counts, extraction_profile_provenance, raw_counts = (
@@ -783,6 +784,11 @@ def _group_policy(*, unit_count: int) -> ClusteringPolicy:
 def _forbidden_group_label_reason(index: int, label: str) -> str | None:
     if label.casefold() in FORBIDDEN_GROUP_LABELS:
         return f"group {index} uses forbidden label: {label}"
+    # The component's own sentinels: a discovered label equal to the assignment
+    # wire word or the engine residual label would collide with the residual
+    # channel (mirrors characterise's UNCLUSTERED guard).
+    if label.casefold() in (UNGROUPABLE_WIRE_WORD, GROUP_RESIDUAL_LABEL.casefold()):
+        return f"group {index} uses reserved label: {label}"
     return None
 
 
@@ -1267,21 +1273,39 @@ def _value_cluster_units(
 def _claim_cluster_units(claims: Sequence[ClaimThemeUnit]) -> list[ClusterUnit]:
     units: list[ClusterUnit] = []
     for claim in claims:
-        context: dict[str, str] = {"intervention": claim.intervention}
+        context: dict[str, str] = {
+            "intervention": _bounded_surface(claim.intervention, VALUE_SURFACE_MAX)
+        }
         if claim.context_label is not None and claim.context_label.strip():
-            context["context_label"] = claim.context_label
+            context["context_label"] = _bounded_surface(
+                claim.context_label, CONTEXT_LABEL_SURFACE_MAX
+            )
+        text = _bounded_surface(claim.claim, CLAIM_SURFACE_MAX)
         units.append(
             ClusterUnit(
                 unit_id=claim.finding_id,
                 payload={
                     "id": claim.finding_id,
-                    "text": claim.claim,
-                    "claim": claim.claim,
+                    "text": text,
+                    "claim": text,
                     "context": context,
                 },
             )
         )
     return units
+
+
+def _bounded_surface(text: str, cap: int) -> str:
+    """Bound untrusted source text before it enters a clustering prompt.
+
+    Strips control characters and truncates to ``cap`` — the claim-theme
+    sibling of the value path's ``VALUE_SURFACE_MAX`` enforcement (source
+    fields carry no length bound at extraction time).
+    """
+    cleaned = "".join(" " if has_control_character(ch) else ch for ch in text)
+    if len(cleaned) > cap:
+        return cleaned[: cap - 1] + "…"
+    return cleaned
 
 
 def _anchor_context(

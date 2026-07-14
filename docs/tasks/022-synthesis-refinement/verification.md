@@ -1,7 +1,8 @@
 # Verification: 022-synthesis-refinement
 
-> **Status: step 6 complete** (2026-07-14). Review stack (steps 7–10) runs in a
-> fresh conversation; § Review findings + § Rubric status land there.
+> **Status: step 7 complete** (2026-07-14). Review stack ran in a fresh
+> conversation and is adjudicated below (§ Review findings, § Rubric status);
+> `make verify` green after fixes. Steps 8–10 (records + PR + merge) follow.
 
 ## Commands run
 
@@ -14,7 +15,9 @@
 | `make verify-fast` (Phase E exit) | pass | after 2 stale-fixture re-pins (below) |
 | `make verify-fast` (F1/F3/F4/F5+G exits) | pass | one per phase boundary |
 | `make verify` (Phase F2 exit — judge-path class) | pass | |
-| `make verify` (step-6 exit) | pass | final run below |
+| `make verify` (step-6 exit) | pass | final build run |
+| `make verify` (step-7 gate, fresh conversation) | pass | 1349 passed · pre-fix baseline re-confirmed |
+| `make verify` (step-7 exit, post review fixes) | pass | 1349 passed · mypy 137 files · ruff · build; `make okf-validate` re-run green after knowledge records (74 concepts) |
 
 ## Phase log + executor provenance (family-flip input)
 
@@ -131,7 +134,7 @@ Substrate: dev-DB extraction run `232d6afb-5db9-40a9-8714-bc9c362930ee`
 | 4: enabler_theme | 32 | 7 | 7 | 3 | 1 | 1 | "1 unknown label" (repaired) |
 | 4: mechanism_theme | 31 | 7 | 7 | 1 | 1 | 0 | — |
 | 4: pooled trio | 109 | 22 | 18 | 2 | 1 | 0 | — |
-| 4: ALL 203 claims (scale probe) | 203 | 41 | 23 | 1 | 1 | 0 | — |
+| 4: ALL 203 claims (scale probe) | 203 | 40 | 23 | 1 | 1 | 0 | — |
 
 - **Scale-limit failure mode closed** (knowledge doc): at 184 values the old
   `group_facet_v1` emitted duplicate ids 4/4 and degraded to all-ungrouped;
@@ -167,7 +170,8 @@ exact corpus) is demonstrably closed.
 
 **2. Multi-facet incl. claim themes + synthesise consumption** — PASS. Same
 run: barrier_theme 46 eligible → 8 groups, enabler_theme 32 → 7 (one honest
-`groups_rejected` flag: a forbidden-label discovery rejection, repaired),
+`groups_rejected` flag: a label-count-bounds discovery rejection — persisted
+reason "group label count 8 outside bounds [0, 7]" — repaired on retry),
 mechanism_theme 31 → 7; per-facet outcome objects all `succeeded`; eligible
 bases + sha256 in per-facet provenance; context payloads enabled. Cost run 3
 (below) synthesised BOTH lens families via one grouping ref (10 blocks;
@@ -206,9 +210,12 @@ the same source as the historical baseline):
 | 3 | v7 | five-facet `d33c5e2e` | 597s | 1,601,060 | 356,608 (22.3%) | 45,532 | $7.95 |
 
 - **Arm (a)** (v6 vs v7, same substrate, Phase-2 isolation): v7 is
-  cost-neutral-to-cheaper (−3.6% $, −3.6% prompt tokens, −9% wall) with the
-  same section/flag profile — quality-neutrality corroborated by the shared
-  substrate and matching block counts (9/9); single-sample caveat noted.
+  cost-neutral-to-cheaper (−3.6% $, −3.6% prompt tokens, −9% wall) with
+  matching block counts (9/9) and near-matching flag profiles (run 2 adds
+  `unsupported_claims_present` + `chunk_claims_rejected` — single-claim
+  differences inside the measured judge noise floor). Quality-neutrality is
+  corroborated at n=1, not proven — "no detectable regression" is the
+  supported claim (review-stack tightening, step 7).
 - **Arm (b)** (final multi-facet v7 vs the $15.45 / 24%-cache historical
   baseline): **$7.95 vs $15.45 (−49%)** while consuming FIVE facet lenses
   (the historical run had one), plus grouping $0.13. Wall 10.0 min — inside
@@ -241,9 +248,18 @@ span map (JUDGED_TYPES spans only), same judge prompt (byte-identical):
   span-map widening shows **no verdict effect beyond single-sample judge
   variance** (verdict coverage itself unchanged by construction —
   test-asserted).
-- The change lands where designed: total unspanned assertions 69 (old map)
-  → 59 (new map) — the widened map filters judge over-reports inside
-  claimed (pattern/theme/gap) territory.
+- **Unspanned effect: indistinguishable from judge noise at n=1** (review-stack
+  correction, step 7 — the original draft claimed the 69→59 total drop showed
+  the filter "landing where designed"; decomposition refutes that read).
+  Splitting the delta by whether the span map actually changed: the five
+  identical-envelope blocks moved 18→0 (pure judge nondeterminism — the same
+  variance baseline the verdict-flip analysis used), while the eleven
+  map-narrowed blocks moved 51→59, i.e. AGAINST the expected direction. The
+  whole net −10 is variance. The honest statement mirrors the verdict result:
+  the widening changes no verdict coverage (test-asserted, by construction)
+  and shows **no measurable unspanned effect beyond single-sample judge
+  variance**; the mechanism's intended precision effect is eval-slice work to
+  demonstrate (multi-sample, variance-baselined).
 - Evidence: `judge_ab_17i.json` (scratchpad; verdict-flip list retained
   locally), Langfuse window 2026-07-14T11:05–11:15Z ($0.18, 16 re-calls).
 
@@ -278,8 +294,11 @@ DATABASE_URL=postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/polic
 
 ## Diff summary
 
-One slice, two phases, 15 commits on `task/022-synthesis-refinement`
-(68 files, ~12.4K insertions / 2.1K deletions vs dev). Phase 1: the shared
+One slice, two phases, 33 design+build commits on
+`task/022-synthesis-refinement` (15 of them build-phase, plus the
+review-stack commit; 70 files, ~12.5K insertions / 2.7K deletions vs dev —
+counts corrected at step 7; the original "15 commits / 68 files" line
+undercounted design-phase commits and one file). Phase 1: the shared
 two-stage clustering engine (`clustering_engine.py`) with characterise
 refactored on behaviour-preserving; ONE migration (facet→group grain with
 persisted-consumer id rewrite + ICF `context_label` column +
@@ -369,9 +388,8 @@ Sanctioned test-surface changes (rubric 5 justifications):
   calibration explicitly eval-slice work.
 
 - Old `facet_grouping.py` prompt machinery (`group_facet_v1` templates +
-  backends) is now unreachable from group but still present with its unit
-  tests — flagged for the review-stage simplification pass (delete or keep
-  decision), not silently removed mid-build.
+  backends) — flagged mid-build for the review-stage simplification pass;
+  RESOLVED there: deleted (see § Review findings).
 - Group assignment fan-out runs serial (engine `max_concurrent_batches`
   defaults to 1 for group; characterise keeps 4) — acceptable at current
   batch counts (≤5 batches/facet live); wall-time rider re-measure will show
@@ -438,3 +456,178 @@ grouping (narrowed to input scale beyond the cap). New seams: gather/writer
 model split (post-eval queue head, trace-evidenced), old `group_facet_v1`
 machinery retirement (simplification-pass decision), group assignment
 concurrency.
+
+## Review findings (step 7, adjudicated — fresh conversation, 2026-07-14)
+
+**Stack composition (Tier 3, review-stack economy pins):** contract-verifier
+(pinned Opus, read-only) · one security lane (`security-auditor`) ·
+heterogeneous pair = adversarial pass + `/code-review medium` (8 finder angles
+with lens-matched pathspecs, 9 one-vote verifiers) · lead live-trace content
+review · simplification pass. **Executor substitution (logged):** Codex
+credits exhausted 2026-07-14 (codex-exhaustion fallback) — the adversarial
+lane ran on deep-reasoner with a read-only adversarial brief instead of
+`/codex:adversarial-review`. Family heterogeneity was therefore NOT achieved
+this stack (all lanes Claude-family); partially mitigated by fresh contexts,
+adversarial framing, and the build being majority Codex-written (family flip
+holds in the code-author direction: Claude lanes reviewed Codex-written
+surfaces). Verify-lane verdicts: 3 CONFIRMED, 2 PLAUSIBLE, 4 REFUTED.
+
+**Convergent finding (lead trace review ∥ adversarial lane, independently) —
+MAJOR, evidential:** the 17(i) unspanned directional claim ("filters judge
+over-reports", 69→59) was refuted by its own artifact once decomposed against
+the identical-envelope variance baseline (identical blocks −18, narrowed
+blocks +8). ADOPTED: § 17(i) rewritten to the variance-honest conclusion
+above. No code change (verdict coverage was always test-asserted unchanged).
+
+**Adopted (code), all with tests, `make verify` green after:**
+
+1. **Assignment repair loop now honors `assignment_repair_cap` > 1**
+   (`clustering_engine.py::_resolve_assignment_batch`) — was structurally
+   single-round while the call-budget math reserved cap rounds (latent; both
+   callers pin cap=1; behaviour at cap≤1 unchanged;
+   `assignment_repair_calls_used` now counts rounds). [code-review finder A,
+   verifier CONFIRMED; adversarial NOTE converged]
+2. **Budget-skip marker in `search_chunks`** — an over-budget chunk now
+   leaves `{id, chunk_record_id, skipped_over_budget: true}` instead of
+   vanishing (the dedup path already left a reference stub; this is its
+   budget sibling). Skip markers are excluded from citation eligibility
+   (`gathered_ids`) and from repair-dependency transcript records; one v7
+   reading-rule clause added (v7 is this slice's unshipped bump — amended,
+   not re-bumped). [finder A+B converged, verifier CONFIRMED]
+3. **Group discovery forbids the component's own sentinels** ("ungroupable",
+   `__ungrouped__`) — a corpus-seeded label could collide with the residual
+   channel (misfiled units or a corpus-triggerable facet failure); mirrors
+   characterise's UNCLUSTERED guard. [security MINOR]
+4. **Claim-theme prompt payloads bounded** (`CLAIM_SURFACE_MAX` 1000 ·
+   `CONTEXT_LABEL_SURFACE_MAX` 160 · control chars → spaces, at prompt
+   assembly in `_claim_cluster_units`) — ICF text fields carry no
+   extraction-time length bound; the value path already enforced
+   `VALUE_SURFACE_MAX`. [security MINOR]
+5. **`SubstrateView.group_by_id` / `grouping_group_ids` /
+   `characterisation_theme_ids` → `cached_property`** — were rebuilt per
+   claim inside the validation loop (frozen dataclass, no mutation; waste
+   was ms-scale — hygiene, not a cost claim). [efficiency finder, CONFIRMED]
+6. **Lookup dedup ids namespaced** (`lookup_record:` prefix) — record ids
+   shared one set with `lookup:<hash>` call keys; id spaces are structurally
+   disjoint today, hardened outright. [finder A PLAUSIBLE; security rec]
+7. **`facet_of_group_id()` helper** owns the `<facet>:gNN` prefix split
+   (three inline copies removed). [reuse + altitude finders converged]
+8. **`ICF_FIELD_RULES_VERSION` → `icf_rules_v2`** — the rule set gained
+   `context_label` handling; the composite fingerprint already moved with
+   `icf_v2`, the component string now moves with its content.
+   [contract-verifier NOTE, adopted]
+9. **`planner_v5` pin test added**; **`group_clustering.py` docstring
+   corrected** (discovery sees unit ids; it never *emits* an id partition —
+   the anti-cliff property, stated accurately). [contract-verifier MINOR ×2]
+10. **verification.md corrections**: 203-probe ceiling 41→40 (artifact says
+    40; clamp pins 40); enabler rejection class wording (bounds violation,
+    not forbidden-label); arm-(a) flag-profile wording tightened to the
+    n=1-honest claim; commit/file counts (below). [contract-verifier +
+    lead trace review]
+
+**Simplification pass (flagged decision resolved — DELETE):** retired
+`group_facet_v1` machinery removed from `facet_grouping.py` (656→~80 lines:
+backends, prompt templates, wire models; constants + TypedDicts that
+`facet_values.py`/`group.py` still consume remain, module docstring
+rewritten); `tests/test_facet_grouping.py` deleted (124 lines exercising
+unreachable code — verified: no live importers); dead `facet_grouping_backend`
+transitional alias parameter dropped from `group_findings` (zero call sites);
+`LOOKUP_ROW_CAP` constant extracted (two duplicated 100-row literals). A
+separate `/simplify` run is discharged as duplicative — the four cleanup
+finder angles (reuse/simplification/efficiency/altitude) ran inside
+`/code-review` and their adopted fixes are above.
+
+**Declined (with reasons):**
+
+- Migration numeric-alias heuristic + label-collision ambiguity + fail-open
+  unmapped ids [finder A; security NOTE; adversarial MINOR] — REFUTED /
+  empirically discharged: duplicate labels cannot exist in one legacy row
+  (`validate_partition` casefold-uniqueness + `merge_repair`); pre-migration
+  snapshot shows all 245 block refs were label-form and the post-migration
+  dev DB has **357/357 qualified refs, 0 fail-open survivors**. One-time
+  migration, already run.
+- Repair scoped to the claim's own cited evidence cannot re-point a
+  wrong-chunk citation [finder B, verifier PLAUSIBLE] — as-designed: the
+  failure mode is the prompted honest-drop/hedge path (claim → null), not
+  fabrication pressure; re-gather repair is the recorded open seam in
+  deferred.md. Noted there that quote_verify's match evidence (discarded by
+  `_wire_claim_data`) is the natural input if that seam is ever built.
+- Repair dependencies resend oversized chunk content un-windowed [security
+  NOTE] — deferred to the eval cost axis (bounded by `REPAIR_ROUND_CAP`;
+  windowing repair deps needs the cited-quote span the wire projection
+  drops — same seam as above; deferred.md note added).
+- Test-double triplication (ScriptedGroupClusteringBackend / engine _Backend
+  / StubGroupClusteringBackend) [reuse finder] — declined: the three doubles
+  serve different layers (component vs engine vs product stub); protocol
+  drift is caught by mypy.
+- Per-turn `json.dumps` of the run-stable block [efficiency finder] —
+  declined: CPU-trivial next to LLM latency; the layout exists for provider
+  prefix caching, not local serialization cost.
+- `_search_scope_filters` reads `retriever._scope` [security rec] — deferred
+  (cosmetic accessor; touches no behaviour).
+- Structural (non-model) failures abort the whole group run rather than the
+  facet [adversarial NOTE] — accepted boundary: fail-loud single-transaction
+  (no partial persistence, no silent absence); "siblings survive" is the
+  model-failure guarantee, as contracted.
+- `$` figures not reconstructable from retained JSONs [adversarial] —
+  accepted limitation, recorded: token columns reconcile exactly; the `$`
+  column is Langfuse trace totals over each run's window — deliberately the
+  same source as the $15.45 historical baseline, so the −49% is
+  like-for-like on source even though the price vector isn't checked in.
+
+**REFUTED lane candidates (recorded for lane calibration):** offsets KeyError
+in `_result_for_chunk` (single unit-construction path validates offsets at
+scope build); `tracing.grouping_score_summary` silent-zero (both producer
+branches guarantee `eligible_base`; monitoring-only); citation-projection
+divergence `_wire_claim_data` vs `_key_findings_ledger` (genuinely different
+pipeline stages — enrichment has exactly one writer); migration label
+collision (above). Cross-file tracer and conventions angles returned zero
+findings (the build's three live-check fixes had already closed the
+stale-reader class).
+
+**Flagged-deviation adjudication (all six confirmed as-built by the
+contract verifier, then ruled):** (a) payload-shape resolution — ADOPTED
+as-is; (b) migrated-flags wrap — ADOPTED as-is (legacy-list tolerance is
+greenfield-acceptable); (c) Phase R executor-mark deviation — ACCEPTED
+(documented, justified by file-set coupling); (d) F5 `boostable` closed
+vocabulary — ADOPTED as-is (corpus-present tiers would add an appraisal read
+for speculative value; revisit only if eval shows steer misuse); (e) old
+machinery retirement — RESOLVED: deleted (above); (f) serial group
+assignment — ACCEPTED as-is (≤5 batches/facet live; seam stays in
+deferred.md with the wall-time re-measure trigger).
+
+**Lane economics:** reasoning-class ≈ 426K subagent tokens (contract-verifier
+137K · security 169K · adversarial 120K — over the ≤250K pin, driven by the
+security lane's 37-tool sweep of a 12.9K-line two-phase slice; noted for the
+next retro rather than silently absorbed) · fast-worker ≈ 750K across 17
+finder/verifier agents vs the ≤500K pin — same cause (per-angle scoping was
+applied; the diff is simply large), same disposition. Unique-catch tally:
+every lane landed at least one adopted or convergent finding (contract:
+ceiling slip + pin gaps; security: both sentinel/bounds MINORs; adversarial:
+the MAJOR + engine attack lines all HOLD; code-review: repair-cap, skip
+marker, cached-property, helper; lead trace: the MAJOR independently +
+wording fixes).
+
+## Rubric status (step 7)
+
+All 22 rubric items verified by the fresh contract-verifier lane — per-item
+table in its report, adjudicated here: items 1–7 and 9–22 SATISFIED (item 2
+re-evidenced this session: `make verify` green before and after review
+fixes); item 8 (this review stack) now DISCHARGED by this section. The three
+findings against verification.md's own accuracy (ceiling 41→40, unspanned
+over-read, count slips) are corrected in place above. Post-fix
+`make verify`: green (see Commands run).
+
+## Knowledge records (step 8 adjudication of the § Review handoff candidates)
+
+Authored: `two-stage-clustering-closes-partition-cliff` (candidates 1+2 fused
++ the stack's sentinel fix as its Watch-out) · `live-only-reachability-
+coverage-class` (candidate: three live-only bugs) · `langfuse-cost-by-time-
+window` (candidate: window-sum $ recovery). Updated:
+`judge-envelope-defines-verdicts` (rules 4+5 — the A/B variance-baseline
+lesson, STRENGTHENED by this stack's 17(i) correction, + the echo lesson) ·
+`facet-partition-value-list-scale-limit` (Status: CLOSED addendum).
+Declined with reasons in `docs/knowledge/log.md` (2026-07-14 entry):
+wire-field few-shot ripple (third confirmation of an existing concept),
+seeded-selection test-helper chain (local, carried by the helper),
+Codex-delegation lessons (→ `docs/agentic-ops/harness.md`).

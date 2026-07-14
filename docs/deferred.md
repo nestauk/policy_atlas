@@ -960,12 +960,11 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   investigation measured gather turns ≈ **43% of writer input tokens for ~4.7k output**,
   est. 20–30% run-cost saving. Deliberately post-eval: it is semi-neutral (a weaker
   gatherer can fetch worse evidence) and evals are its regression net.
-- **Old `group_facet_v1` partition machinery retirement (022 build note)** — the
-  one-call partition prompt + backends in `facet_grouping.py` are unreachable from
-  `group` since the two-stage engine (022 Phase C/D) but still present with unit tests;
-  the module's constants (`FACET_VALUE_CAP`, label bounds, `FORBIDDEN_GROUP_LABELS`)
-  are live imports. Delete-or-keep adjudicated at the 022 review stack's
-  simplification pass; if kept past that, delete on next touch.
+- **Old `group_facet_v1` partition machinery retirement — DISCHARGED (022 review
+  stack, simplification pass)** — deleted: the one-call partition prompt, backends
+  and their test file (`facet_grouping.py` 656→~80 lines; `test_facet_grouping.py`
+  removed). The module keeps only the live-imported constants (`FACET_VALUE_CAP`,
+  label bounds, `FORBIDDEN_GROUP_LABELS`) and the value/partition wire TypedDicts.
 - **Group assignment fan-out concurrency (022 build note)** — group's engine runs
   assignment batches serially (`max_concurrent_batches=1`; characterise uses 4).
   Acceptable at ≤5 batches/facet live; revisit if wall-time observations say otherwise.
@@ -1108,6 +1107,14 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   duplicate ids reject structurally); positional binding is gone, and the repair call is
   a dependency-complete micro-call (no transcript resend). The deferred **re-gather
   repair** (tool turns inside repair) plugs into the same interface — still deferred.
+  Two 022 review-stack riders on that seam: (a) a wrong-chunk citation (quote
+  actually matched a different, uncited chunk) cannot be re-pointed by the
+  micro-call — the prompted honest-drop path covers it today; quote_verify's
+  match evidence (spans/match_status, currently stripped by `_wire_claim_data`'s
+  wire projection) is the natural repair input if re-gather is built. (b) Repair
+  dependency records resend oversized cited chunks un-windowed (the section loop
+  windows them; repair doesn't) — bounded by `REPAIR_ROUND_CAP`, re-measure on
+  the eval cost axis; windowing repair deps needs the same match-evidence spans.
 - **Trace-store trust boundary** (013 review stack, 2026-07-08) — Langfuse
   traces are deliberately full-I/O: pre-validation emissions (including
   fabricated quotes later excluded from the domain model) and repair inputs

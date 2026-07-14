@@ -28,6 +28,16 @@ per-call value list (batched partitioning, hierarchical merge, or a
 shorter/duplicate-proof id scheme) before any facet beyond `intervention`
 lands.
 
+# Status: CLOSED by task 022
+
+The failure mode is demonstrably closed — the root cause was the exhaustive
+id-partition **response format**, not raw model capacity: 022's [two-stage
+clustering engine](two-stage-clustering-closes-partition-cliff.md) partitioned
+this exact corpus (184 values, both profiles) live with zero duplicate-id
+rejections, and `group_facet_v1` itself was deleted at the 022 review stack.
+The rule above stays as the record of WHY one-call exhaustive partitions are
+banned; the constraint now lives structurally in the engine.
+
 # Watch out
 
 - The degradation path is working as designed

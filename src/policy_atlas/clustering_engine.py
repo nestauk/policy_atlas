@@ -700,7 +700,7 @@ def _assign_units(
     assignments: dict[str, str] = {}
     repair_calls_used = 0
     for attempt in first_round:
-        batch_assignments, repaired = _resolve_assignment_batch(
+        batch_assignments, repair_rounds = _resolve_assignment_batch(
             backend=backend,
             attempt=attempt,
             labels=labels,
@@ -710,7 +710,7 @@ def _assign_units(
             rejection_reasons=rejection_reasons,
         )
         assignments.update(batch_assignments)
-        repair_calls_used += 1 if repaired else 0
+        repair_calls_used += repair_rounds
     return assignments, repair_calls_used
 
 
@@ -723,7 +723,7 @@ def _resolve_assignment_batch(
     budget: CallBudget,
     usage_totals: UsageAccumulator,
     rejection_reasons: list[str],
-) -> tuple[dict[str, str], bool]:
+) -> tuple[dict[str, str], int]:
     validation = validate_assignments(
         attempt.batch,
         attempt.assignments or {},
@@ -733,7 +733,7 @@ def _resolve_assignment_batch(
     _record_assignment_rejections(validation, rejection_reasons, policy=policy)
 
     if not validation.residue:
-        return validation.valid, False
+        return validation.valid, 0
 
     log.info(
         f"{policy.log_event_prefix}.assignment_repair",
@@ -747,44 +747,43 @@ def _resolve_assignment_batch(
         first_error_type=attempt.error_type,
         first_error_detail=attempt.error_detail,
     )
-    if policy.assignment_repair_cap <= 0:
-        return _handle_unresolved_after_repair(
-            validation.valid,
-            validation.residue,
-            batch_index=attempt.batch_index,
+    merged = dict(validation.valid)
+    residue = validation.residue
+    repair_rounds = 0
+    for _ in range(policy.assignment_repair_cap):
+        if not residue:
+            break
+        budget.reserve()
+        try:
+            repair_assignments, usage = backend.assign(residue, labels=labels)
+            usage_totals.add(usage)
+        except Exception as exc:
+            error_detail = _truncate_detail(
+                str(exc), max_len=policy.rejection_detail_max_len
+            )
+            raise ClusteringFailure(
+                "assignment repair failed for batch "
+                f"{attempt.batch_index}: {type(exc).__name__}: {error_detail}"
+            ) from exc
+        repair_rounds += 1
+        repair_validation = validate_assignments(
+            residue,
+            repair_assignments,
+            labels=labels,
             policy=policy,
-        ), False
-
-    budget.reserve()
-    try:
-        repair_assignments, usage = backend.assign(validation.residue, labels=labels)
-        usage_totals.add(usage)
-    except Exception as exc:
-        error_detail = _truncate_detail(str(exc), max_len=policy.rejection_detail_max_len)
-        raise ClusteringFailure(
-            "assignment repair failed for batch "
-            f"{attempt.batch_index}: {type(exc).__name__}: {error_detail}"
-        ) from exc
-
-    repair_validation = validate_assignments(
-        validation.residue,
-        repair_assignments,
-        labels=labels,
-        policy=policy,
-    )
-    _record_assignment_rejections(repair_validation, rejection_reasons, policy=policy)
-    if repair_validation.residue:
-        merged = dict(validation.valid)
+        )
+        _record_assignment_rejections(repair_validation, rejection_reasons, policy=policy)
         merged.update(repair_validation.valid)
+        residue = repair_validation.residue
+
+    if residue:
         return _handle_unresolved_after_repair(
             merged,
-            repair_validation.residue,
+            residue,
             batch_index=attempt.batch_index,
             policy=policy,
-        ), True
-    merged = dict(validation.valid)
-    merged.update(repair_validation.valid)
-    return merged, True
+        ), repair_rounds
+    return merged, repair_rounds
 
 
 def _handle_unresolved_after_repair(

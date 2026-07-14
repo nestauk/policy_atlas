@@ -11,7 +11,7 @@ Pure functions only — no I/O, no DB. Three responsibilities:
 * ``iof_rules_v3`` field validation — null-like coercion, numeric parsing,
   bounds/consistency checks, estimate-level coherence and field coverage, then
   the grain gate that builds the stored :class:`IOFRecord`.
-* ``icf_rules_v1`` field validation — null-like coercion, non-valid-only field
+* ``icf_rules_v2`` field validation — null-like coercion, non-valid-only field
   coverage, the ICF grain gate, and claim-keyed within-document dedup.
 * Stratum canonicalisation and claim-keyed within-document dedup.
 
@@ -39,7 +39,7 @@ from policy_atlas.implementation_context_records import ICFRecord, ICFRecordWire
 
 QUOTE_VERIFIER_VERSION = "qv_v1"
 FIELD_RULES_VERSION = "iof_rules_v3"
-ICF_FIELD_RULES_VERSION = "icf_rules_v1"
+ICF_FIELD_RULES_VERSION = "icf_rules_v2"
 
 # Strings that mean "the source does not report this", matched case-insensitively
 # on the stripped value. Closed enums are exempt by construction.
@@ -649,7 +649,7 @@ def validate_record(wire: IOFRecordWire) -> ValidatedRecord:
     )
 
 
-# --- icf_rules_v1 field validation ----------------------------------------
+# --- icf_rules_v2 field validation ----------------------------------------
 
 
 _ICF_FREE_TEXT_FIELDS = (
@@ -668,7 +668,7 @@ _ICF_NULLABLE_ENUM_FIELDS = ("claim_level", "claim_basis", "level")
 
 
 def validate_icf_record(wire: ICFRecordWire) -> ValidatedICFRecord:
-    """Validate one wire record under ``icf_rules_v1``.
+    """Validate one wire record under ``icf_rules_v2``.
 
     Args:
         wire: The tolerant ICF wire record as parsed from the model response.

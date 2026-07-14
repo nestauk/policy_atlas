@@ -2,7 +2,7 @@
 
 The wire models drive structured output and prompt field documentation for the
 ICF profile. Free-text fields are nullable on the wire so null-like strings can
-be coerced by ``icf_rules_v1``; closed enums are strict Literals. Stored models
+be coerced by ``icf_rules_v2``; closed enums are strict Literals. Stored models
 are the final shape after grain validation and field rules.
 """
 

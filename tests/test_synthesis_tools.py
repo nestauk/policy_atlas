@@ -861,14 +861,27 @@ def test_search_chunks_char_budget_charges_only_new_content_and_repeats_stay_cit
         char_budget=len("alpha policy evidence"),
     )
     first = tools["search_chunks"]({"query": "policy"})
-    assert [chunk["chunk_record_id"] for chunk in first["chunks"]] == ["chunk-a"]
+    # chunk-a fits the budget; chunk-b exceeds the remainder and leaves an
+    # honest skip marker (review-stack fix, 022 step 7).
+    assert [chunk["chunk_record_id"] for chunk in first["chunks"]] == [
+        "chunk-a",
+        "chunk-b",
+    ]
     assert first["chunks"][0]["text_basis"] == "full_text"
+    assert first["chunks"][1] == {
+        "id": "chunk-b",
+        "chunk_record_id": "chunk-b",
+        "skipped_over_budget": True,
+    }
     assert first["truncated"] is True
     second = tools["search_chunks"]({"query": "policy"})
     # Contract 022 item 12: repeated records are reference-only and charge no
     # additional content budget while still conferring citation eligibility.
+    # The budget-skipped chunk-b was never returned, so it repeats its skip
+    # marker rather than an already_returned reference.
     assert second["chunks"] == [
-        {"id": "chunk-a", "chunk_record_id": "chunk-a", "already_returned": True}
+        {"id": "chunk-a", "chunk_record_id": "chunk-a", "already_returned": True},
+        {"id": "chunk-b", "chunk_record_id": "chunk-b", "skipped_over_budget": True},
     ]
     assert second["truncated"] is True
     assert gathered_ids([
@@ -992,8 +1005,25 @@ def test_search_chunks_budget_skip_and_continue_returns_later_smaller_candidate(
 
     result = tools["search_chunks"]({"query": "policy"})
 
-    assert [chunk["chunk_record_id"] for chunk in result["chunks"]] == ["chunk-small"]
+    # The over-budget higher-ranked chunk leaves an honest skip marker (no
+    # content, not citable); the later smaller candidate still lands.
+    assert [chunk["chunk_record_id"] for chunk in result["chunks"]] == [
+        "chunk-big",
+        "chunk-small",
+    ]
+    skipped, kept = result["chunks"]
+    assert skipped == {
+        "id": "chunk-big",
+        "chunk_record_id": "chunk-big",
+        "skipped_over_budget": True,
+    }
+    assert "content" in kept
     assert result["truncated"] is True
+    # A skip marker never marks the chunk as returned: it stays out of the
+    # citation-eligible transcript record set.
+    assert gathered_ids(
+        [{"tool": "search_chunks", "arguments": {}, "result": result}]
+    ) == {"chunk_ids": {"chunk-small"}, "finding_ids": set()}
 
 
 def test_windowed_returns_only_for_oversized_chunks_and_use_retained_offsets() -> None:

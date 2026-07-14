@@ -121,6 +121,8 @@ BOOST_COLUMNS = ("origin", "primary_evidence_type", "text_basis")
 # search_chunks query bound (022 rider 16 shares this with the per-turn query
 # embedding batch warm-up, so both sides of the bound stay in one place).
 SEARCH_QUERY_MAX_LENGTH = 1000
+# Shared row cap for windowed lookup/selection returns (one knob, two surfaces).
+LOOKUP_ROW_CAP = 100
 # Bounds shared with the directive grammar (contract rev 8 M5).
 DIRECTIVE_SECTION_TEXT_MAX = 200
 DIRECTIVE_LIST_MAX = 200
@@ -466,6 +468,15 @@ def is_qualified_group_id(value: str) -> bool:
         True when the id has the expected ``<facet>:gNN`` shape.
     """
     return bool(_QUALIFIED_GROUP_ID_RE.fullmatch(value))
+
+
+def facet_of_group_id(group_id: str) -> str:
+    """Return the facet prefix of a facet-qualified group id.
+
+    Owns the prefix-derivation half of the ``<facet>:gNN`` grammar so callers
+    never re-implement the split.
+    """
+    return group_id.split(":", 1)[0]
 
 
 def _bounded_string(value: Any, *, field: str) -> str:
@@ -1670,7 +1681,17 @@ def build_section_tools(
                     continue
                 content_len = len(chunk["content"])
                 if content_len > remaining:
+                    # Honest per-item skip: without a marker the dropped chunk is
+                    # indistinguishable from "never retrieved" (the dedup path
+                    # leaves an already_returned stub; this is its budget sibling).
                     truncated = True
+                    kept.append(
+                        {
+                            "id": chunk_id,
+                            "chunk_record_id": chunk_id,
+                            "skipped_over_budget": True,
+                        }
+                    )
                     continue
                 kept.append(dict(chunk))
                 returned_chunk_ids.add(chunk_id)
@@ -2060,6 +2081,7 @@ def _deduplicate_records(
     *,
     returned_ids: set[str],
     id_keys: Sequence[str],
+    namespace: str = "",
 ) -> list[Any]:
     deduped: list[Any] = []
     for record in records:
@@ -2071,14 +2093,15 @@ def _deduplicate_records(
             deduped.append(dict(record))
             continue
         id_key, record_id = identity
-        if record_id in returned_ids:
+        member_key = f"{namespace}{record_id}"
+        if member_key in returned_ids:
             deduped.append(
                 _already_returned_reference(
                     id_key=id_key, record_id=record_id, record=record
                 )
             )
             continue
-        returned_ids.add(record_id)
+        returned_ids.add(member_key)
         deduped.append(dict(record))
     return deduped
 
@@ -2113,6 +2136,9 @@ def _deduplicate_lookup_result(
         deduped["result"] = _deduplicate_records(
             payload,
             returned_ids=lookup_record_ids,
+            # Record ids share the set with lookup:<hash> call keys — namespace
+            # them so a record id can never collide with another id space.
+            namespace="lookup_record:",
             id_keys=("search_coverage_record_id", "group_id", "theme_id", "pss_id", "id"),
         )
     elif isinstance(payload, dict):
@@ -2259,8 +2285,8 @@ def make_findings_reader(
                     for finding in selected
                     if finding["context_type"] == context_type
                 ]
-            truncated = len(selected) > 100
-            result[result_key] = selected[:100]
+            truncated = len(selected) > LOOKUP_ROW_CAP
+            result[result_key] = selected[:LOOKUP_ROW_CAP]
             result[f"{kind}_truncated"] = truncated
         return result
 
@@ -2356,7 +2382,7 @@ def _absent() -> dict[str, bool]:
 def _selection_summary(row: Any) -> dict[str, Any]:
     selected = row.selected if isinstance(row.selected, list) else []
     bounded_selected: list[dict[str, Any]] = []
-    for item in selected[:100]:
+    for item in selected[:LOOKUP_ROW_CAP]:
         if isinstance(item, dict):
             bounded_selected.append({
                 "pss_id": item.get("pss_id"),
@@ -2369,7 +2395,7 @@ def _selection_summary(row: Any) -> dict[str, Any]:
         "excluded": row.excluded,
         "flags": row.flags,
         "selected": bounded_selected,
-        "selected_truncated": len(selected) > 100,
+        "selected_truncated": len(selected) > LOOKUP_ROW_CAP,
     }
 
 
@@ -2423,7 +2449,7 @@ def _grouping_summary(groups_payload: Any) -> dict[str, Any]:
                 raise ToolValidationError(
                     f"grouping group ids must use expected form {GROUP_ID_EXPECTED_FORM}"
                 )
-            if group_id.split(":", 1)[0] != facet:
+            if facet_of_group_id(group_id) != facet:
                 raise ToolValidationError(
                     "grouping group id facet must match its payload facet; "
                     f"expected form {GROUP_ID_EXPECTED_FORM}"
@@ -2856,7 +2882,13 @@ def gathered_ids(transcript: Sequence[ToolExchange]) -> dict[str, set[str]]:
             chunks = result.get("chunks", [])
             if isinstance(chunks, list):
                 for chunk in chunks:
-                    if isinstance(chunk, dict) and isinstance(chunk.get("chunk_record_id"), str):
+                    if not isinstance(chunk, dict):
+                        continue
+                    # already_returned references stay citation-eligible (their
+                    # content was shown earlier); budget-skip markers never are.
+                    if chunk.get("skipped_over_budget"):
+                        continue
+                    if isinstance(chunk.get("chunk_record_id"), str):
                         chunk_ids.add(cast("str", chunk["chunk_record_id"]))
         elif exchange["tool"] == "query_findings":
             for key in ("findings", "iof_findings", "icf_findings"):

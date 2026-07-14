@@ -16,6 +16,7 @@ from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
+from functools import cached_property
 from typing import Any, cast
 
 import structlog
@@ -96,6 +97,7 @@ from policy_atlas.synthesis_tools import (
     build_retrieval_scope,
     build_section_tools,
     chunk_text_basis_case,
+    facet_of_group_id,
     gathered_ids,
     is_qualified_group_id,
     make_findings_reader,
@@ -439,7 +441,7 @@ class SubstrateView:
     basis_by_snapshot_id: dict[str, BasisText]
     selected_pss_ids: set[str]
 
-    @property
+    @cached_property
     def characterisation_theme_ids(self) -> set[str]:
         """Return real characterisation theme ids for theme validation."""
         if self.characterisation is None:
@@ -456,7 +458,7 @@ class SubstrateView:
                 ids.add(raw_id)
         return ids
 
-    @property
+    @cached_property
     def grouping_group_ids(self) -> set[str]:
         """Return real grouping ids from the persisted grouping payload."""
         if self.grouping is None:
@@ -466,7 +468,7 @@ class SubstrateView:
             ids.add(_required_group_id(group))
         return ids
 
-    @property
+    @cached_property
     def group_by_id(self) -> dict[str, dict[str, Any]]:
         """Return grouping records keyed by real group id."""
         if self.grouping is None:
@@ -784,7 +786,7 @@ def _required_group_id(group: Any) -> str:
         )
     if isinstance(group, dict):
         facet = group.get("facet")
-        if isinstance(facet, str) and group_id.split(":", 1)[0] != facet:
+        if isinstance(facet, str) and facet_of_group_id(group_id) != facet:
             raise SynthesiseFailure(
                 "grouping_group_id_invalid: group id facet must match its "
                 f"payload facet; expected form {GROUP_ID_EXPECTED_FORM}"
@@ -2863,7 +2865,9 @@ def _transcript_records_by_id(
             if not isinstance(raw_records, list):
                 continue
             for raw_record in raw_records:
-                if not isinstance(raw_record, dict) or raw_record.get("already_returned"):
+                if not isinstance(raw_record, dict) or raw_record.get(
+                    "already_returned"
+                ) or raw_record.get("skipped_over_budget"):
                     continue
                 record_id = _record_id_from(raw_record, *id_keys)
                 if record_id is not None:
@@ -3993,7 +3997,7 @@ def _groups_unsectioned_by_facet(
             continue
         facet = group.get("facet")
         if not isinstance(facet, str) or not facet:
-            facet = group_id.split(":", 1)[0]
+            facet = facet_of_group_id(group_id)
         counts[facet] += 1
     return dict(sorted(counts.items()))
 

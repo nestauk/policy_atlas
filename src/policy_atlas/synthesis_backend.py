@@ -618,6 +618,10 @@ How to work:
 - A very long source chunk may be returned as a window: the matched passage
   plus surrounding text, with its character interval marked. The window is
   verbatim source text — quote from what was returned exactly as given.
+- A result of {{"id": ..., "skipped_over_budget": true}} means a matching
+  chunk exists but did not fit this section's read budget: its content was
+  NOT returned and it is not citable. Do not quote or cite it; work from the
+  chunks that were returned.
 - Only the tools listed in "available_tools" exist on this run. Only the claim
   types listed in "available_claim_types" may be emitted; a claim of any other
   type will be rejected.
