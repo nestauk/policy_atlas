@@ -308,6 +308,56 @@ def test_query_findings_group_id_requires_qualified_form_in_tool_loop() -> None:
     assert result["rejected_tool_calls"] == 1
 
 
+def test_run_section_loop_batches_a_turns_uncached_query_embeddings() -> None:
+    """022 rider 16: N distinct search_chunks queries requested in one turn
+    embed in ONE backend call, not N sequential single-text calls."""
+    embedder = FakeEmbedder({"alpha": _vector(1.0), "beta": _vector(0.1)})
+    retriever = ChunkRetriever(
+        _one_chunk_scope(),
+        embedder=embedder,
+        directive=SynthesisDirective(),
+        reranker=PassThroughChunkReranker(),
+    )
+
+    class _TwoQueryTurnBackend:
+        def section_turn(
+            self, seed: dict[str, Any], transcript: list[ToolExchange], *, force_emit: bool
+        ) -> UsageResult[dict[str, Any]]:
+            del seed, force_emit
+            if transcript:
+                return {"tool_calls": [], "claims": SectionProseWire(prose="", claims=[])}, None
+            return {
+                "tool_calls": [
+                    {"tool": "search_chunks", "arguments": {"query": "alpha"}},
+                    {"tool": "search_chunks", "arguments": {"query": "beta"}},
+                    # A repeated query within the same turn must not double-embed.
+                    {"tool": "search_chunks", "arguments": {"query": "alpha"}},
+                ],
+                "claims": None,
+            }, None
+
+    tools = build_section_tools(
+        retriever=retriever,
+        findings_reader=None,
+        lookup_reader=lambda _args: {},
+    )
+    result = run_section_loop(
+        _TwoQueryTurnBackend(), seed={}, tools=tools, retriever=retriever
+    )
+
+    assert len(embedder.calls) == 1
+    assert sorted(embedder.calls[0]) == ["alpha", "beta"]
+    # Retrieval stays correct/deterministic per query vector after batching.
+    exchanges = result["transcript"]
+    alpha_chunks = {
+        chunk["chunk_record_id"]
+        for exchange in exchanges
+        if exchange["arguments"].get("query") == "alpha"
+        for chunk in exchange["result"]["chunks"]
+    }
+    assert "chunk-a" in alpha_chunks
+
+
 def test_query_findings_group_member_map_rejects_legacy_group_ids() -> None:
     assert _group_member_ids(
         [{"group_id": "intervention:g01", "member_finding_ids": ["f1"]}]
@@ -1455,6 +1505,58 @@ def test_lookup_excludes_screened_out_doc_from_tag_reads(conn: Connection) -> No
 
     with pytest.raises(ToolValidationError, match="doc_id is unknown"):
         reader({"kind": "tags_by_doc", "doc_id": str(pss_id)})
+
+
+def test_lookup_screening_by_doc_reaches_screening_rows(conn: Connection) -> None:
+    """022 rider 16: `screening_by_doc` widens `lookup` to screening rows — a
+    doc demoted out of effective relevance (unreachable via the other
+    `_by_doc` kinds, per the test above) is still readable here, honestly
+    across BOTH stages, not just the effective one."""
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    # seed_select_doc seeds a stage-1 relevant row; a stage-2 demotion makes
+    # the doc's EFFECTIVE status not_relevant while its stage-1 history stays
+    # a decided relevant row — exactly the "either stage" gap the widening
+    # closes (deferred.md: 013 lookup vocabulary widening).
+    pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="demoted doc")
+    seed_screening_result(
+        conn, project_id, run_id, scope_id, pss_id, status="not_relevant", screen_stage=2
+    )
+
+    reader = make_lookup_reader(
+        conn,
+        project_id=project_id,
+        scope_id=scope_id,
+        characterisation_run_id=None,
+        selection_run_id=None,
+        extraction_run_id=None,
+        grouping_run_id=None,
+    )
+
+    # The scope-filtered `_by_doc` kinds cannot see this doc at all — its
+    # effective status is not_relevant.
+    with pytest.raises(ToolValidationError, match="doc_id is unknown"):
+        reader({"kind": "tags_by_doc", "doc_id": str(pss_id)})
+
+    result = reader({"kind": "screening_by_doc", "doc_id": str(pss_id)})
+    assert result["kind"] == "screening_by_doc"
+    assert result["result"] == [
+        {
+            "screen_stage": 1,
+            "status": "relevant",
+            "screen_basis": "title_abstract",
+            "screen_decision_confidence": 0.9,
+        },
+        {
+            "screen_stage": 2,
+            "status": "not_relevant",
+            "screen_basis": "title_abstract",
+            "screen_decision_confidence": 0.95,
+        },
+    ]
+
+    with pytest.raises(ToolValidationError, match="doc_id is unknown"):
+        reader({"kind": "screening_by_doc", "doc_id": str(uuid.uuid4())})
 
 
 def test_build_retrieval_scope_exposes_abstract_basis_search_chunks(

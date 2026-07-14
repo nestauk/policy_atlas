@@ -2932,6 +2932,7 @@ class _SeedCapturingBackend:
     def __init__(self, inner: SynthesisBackend) -> None:
         self._inner = inner
         self.seeds_by_section: dict[int, list[dict[str, Any]]] = {}
+        self.key_findings_seeds: list[dict[str, Any]] = []
 
     def propose_sections(
         self, *, intent: str, substrate: dict[str, Any], rejection: list[str] | None = None
@@ -2955,7 +2956,54 @@ class _SeedCapturingBackend:
         return self._inner.repair_section(seed, transcript, failing=failing)
 
     def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
+        self.key_findings_seeds.append(seed)
         return self._inner.write_key_findings(seed)
+
+
+def test_key_findings_seed_carries_only_cited_only_chunk_content(conn: Connection) -> None:
+    """022 rider 16: the key-findings seed's chunk_content_by_id is filtered
+    to chunks cited by surviving claims — not the run's whole gathered union.
+
+    Three chunks are ingested for one doc; the default stub backend's
+    section loop cites at most one chunk claim per section (2 sections: the
+    one directed section + the always-injected conclusions section), so at
+    least one of the three chunks is gathered (returned by search_chunks)
+    but never cited across the whole run."""
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="Rider-16 doc")
+    seed_ingested_full_text(
+        conn,
+        pss_id=pss_id,
+        chunks=[
+            "Rider evidence chunk alpha reports on the policy outcome directly.",
+            "Rider evidence chunk beta reports on a related policy outcome.",
+            "Rider evidence chunk gamma reports on a further policy outcome.",
+        ],
+    )
+    capture = _SeedCapturingBackend(StubSynthesisBackend())
+
+    _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        context={
+            "synthesis": {
+                "sections": [{"title": "Evidence", "focus": "What the evidence shows."}]
+            }
+        },
+        backend=capture,
+    )
+
+    assert len(capture.key_findings_seeds) == 1
+    kf_chunk_content = capture.key_findings_seeds[0]["chunk_content_by_id"]
+
+    # The run gathered all three chunks (each section's search_chunks call
+    # returns every matching chunk), but at most two claims across the run's
+    # two sections can cite a chunk — so filtering must have dropped at
+    # least one gathered-but-uncited chunk from the key-findings seed.
+    assert 0 < len(kf_chunk_content) < 3
 
 
 def test_grouped_section_seed_member_findings_include_icf_records(
@@ -2999,6 +3047,63 @@ def test_grouped_section_seed_member_findings_include_icf_records(
     members = {finding["finding_id"]: finding for finding in seed["member_findings"]}
     assert members[str(icf_finding_id)]["kind"] == "icf"
     assert members[str(icf_finding_id)]["context_type"] == "barrier"
+
+
+def test_section_seed_substrate_carries_no_membership_lists(conn: Connection) -> None:
+    """022 rider 18 (F0 § DTO spec): prompt-facing characterisation themes and
+    grouping groups carry id/label/description/size/spread — never membership
+    UUID lists; residuals carry counts only."""
+    (
+        project_id,
+        run_id,
+        scope_id,
+        extraction_run_id,
+        grouping_run_id,
+        _iof_finding_id,
+        _icf_finding_id,
+    ) = _seed_group_with_iof_and_icf(conn)
+    capture = _SeedCapturingBackend(
+        StubSynthesisBackend(
+            script=[[{"tool_calls": [], "claims": SectionProseWire(prose="", claims=[])}]],
+            proposal=SectionProposalWire(
+                sections=[
+                    SectionWire(
+                        title="Alpha",
+                        focus="Alpha coverage",
+                        group_ids=["intervention:g01"],
+                    )
+                ]
+            ),
+        )
+    )
+
+    _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        extraction_run_id=extraction_run_id,
+        grouping_run_id=grouping_run_id,
+        backend=capture,
+    )
+
+    seed = capture.seeds_by_section[0][0]
+    substrate = seed["substrate"]
+
+    theme = substrate["characterisation"]["themes"][0]
+    assert "member_ids" not in theme
+    assert {"theme_id", "name", "description", "size"} <= set(theme)
+
+    group = substrate["grouping"]["groups"][0]
+    assert "member_finding_ids" not in group
+    assert {"group_id", "facet", "label", "description", "size", "direction_spread"} <= set(
+        group
+    )
+
+    residual = substrate["grouping"]["residuals"]["intervention"]
+    assert residual["ungrouped"] == {"count": 0}
+    assert "finding_ids" not in residual["ungrouped"]
+    assert "member_finding_ids" not in residual["ungrouped"]
 
 
 def test_icf_finding_claim_annotation_resolves_via_row(

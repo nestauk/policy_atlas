@@ -55,6 +55,7 @@ from policy_atlas.schema import (
     source_appraisal_result,
     source_classification_result,
     source_extraction_record,
+    source_screening_result,
     source_snapshot,
     source_tag,
 )
@@ -117,6 +118,9 @@ SCREEN_CONFIDENCE_DEFAULT_LO = 1.0
 SCREEN_CONFIDENCE_DEFAULT_HI = 2.0
 # The closed column set the directive may boost over (select's vocabulary).
 BOOST_COLUMNS = ("origin", "primary_evidence_type", "text_basis")
+# search_chunks query bound (022 rider 16 shares this with the per-turn query
+# embedding batch warm-up, so both sides of the bound stay in one place).
+SEARCH_QUERY_MAX_LENGTH = 1000
 # Bounds shared with the directive grammar (contract rev 8 M5).
 DIRECTIVE_SECTION_TEXT_MAX = 200
 DIRECTIVE_LIST_MAX = 200
@@ -124,6 +128,12 @@ DIRECTIVE_LIST_MAX = 200
 # The closed lookup query vocabulary v1 (plan rev 2). Unknown kind → tool-level
 # validation error, never executed; all queries scoped to project_id + the
 # resolved run references; side-effect-free.
+#
+# ``screening_by_doc`` (022 rider 16) widens the vocabulary to screening rows:
+# unlike the other ``_by_doc`` kinds, its doc_id is NOT required to be
+# screened-in — that is the whole point of the widening (a not_relevant /
+# excluded_retracted doc's own screening history is otherwise unreachable to
+# an in-loop reader).
 LOOKUP_QUERY_KINDS = (
     "appraisal_by_doc",
     "classification_by_doc",
@@ -134,6 +144,7 @@ LOOKUP_QUERY_KINDS = (
     "tags_by_doc",
     "docs_by_tag",
     "tag_aggregate",
+    "screening_by_doc",
 )
 
 # The closed tool set of the section loop.
@@ -1361,6 +1372,37 @@ class ChunkRetriever:
             "unit_count": len(self._scope.units),
         }
 
+    def warm_queries(self, queries: Sequence[str]) -> None:
+        """Batch-embed any of ``queries`` not yet cached, in one backend call.
+
+        A read turn can carry several ``search_chunks`` calls with distinct
+        queries; embedding each lazily inside :meth:`search` costs one
+        backend round-trip per query. This embeds the turn's new, uncached
+        queries together (022 rider 16) — per-query caching and retrieval
+        determinism are unchanged: a query already cached, or embedded here,
+        is never re-embedded, and :meth:`search` still resolves every query
+        to the same vector regardless of whether it was warmed.
+
+        Args:
+            queries: Candidate query strings gathered from one turn's
+                ``search_chunks`` calls. Duplicates and already-cached
+                queries are skipped before the backend call.
+        """
+        uncached: list[str] = []
+        seen: set[str] = set()
+        for query in queries:
+            if query in self._query_vectors or query in seen:
+                continue
+            seen.add(query)
+            uncached.append(query)
+        if not uncached:
+            return
+        vectors = self._embedder.embed_texts(uncached)
+        if len(vectors) != len(uncached):
+            raise RuntimeError("embedding backend returned wrong query vector count")
+        for query, vector in zip(uncached, vectors, strict=True):
+            self._query_vectors[query] = validate_vector(vector)
+
     def _query_vector(self, query: str) -> list[float]:
         vector = self._query_vectors.get(query)
         if vector is None:
@@ -1604,7 +1646,9 @@ def build_section_tools(
                 arguments,
                 allowed={"query", "doc_ids", "group_ids", "evidence_types", "tags"},
             )
-            query = _tool_string(arguments, field="query", max_length=1000, required=True)
+            query = _tool_string(
+                arguments, field="query", max_length=SEARCH_QUERY_MAX_LENGTH, required=True
+            )
             assert query is not None
             filters = _search_scope_filters(
                 arguments,
@@ -2271,6 +2315,40 @@ def _doc_id_for_scope(
     return doc_id
 
 
+def _doc_id_for_project(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    arguments: dict[str, Any],
+) -> uuid.UUID:
+    """Validate a ``doc_id`` argument scoped to the project only.
+
+    Unlike :func:`_doc_id_for_scope`, this does not require the document to be
+    screened-in for the scope: ``screening_by_doc`` reads screening rows
+    themselves, so a not_relevant / excluded_retracted / failed doc must
+    resolve too — that is the read the widening exists for (022 rider 16).
+
+    Args:
+        conn: Open database connection.
+        project_id: Project id scoping the read.
+        arguments: Raw tool arguments carrying ``doc_id``.
+
+    Returns:
+        The validated document id.
+    """
+    raw_doc_id = _tool_string(arguments, field="doc_id", max_length=100, required=True)
+    assert raw_doc_id is not None
+    doc_id = _parse_uuid(raw_doc_id, field="doc_id")
+    exists = conn.execute(
+        sa_select(project_source_snapshot.c.project_source_snapshot_id)
+        .where(project_source_snapshot.c.project_id == project_id)
+        .where(project_source_snapshot.c.project_source_snapshot_id == doc_id)
+    ).first()
+    if exists is None:
+        _tool_fail("doc_id is unknown")
+    return doc_id
+
+
 def _absent() -> dict[str, bool]:
     return {"absent": True}
 
@@ -2460,6 +2538,39 @@ def make_lookup_reader(
                 ]
             return {"kind": kind, "result": result}
 
+        if kind == "screening_by_doc":
+            doc_id = _doc_id_for_project(conn, project_id=project_id, arguments=arguments)
+            rows = conn.execute(
+                sa_select(
+                    source_screening_result.c.screen_stage,
+                    source_screening_result.c.status,
+                    source_screening_result.c.screen_basis,
+                    source_screening_result.c.screen_decision_confidence,
+                )
+                .where(source_screening_result.c.project_id == project_id)
+                .where(source_screening_result.c.evidence_scope_id == scope_id)
+                .where(source_screening_result.c.project_source_snapshot_id == doc_id)
+                # Failed attempts are retry history, never a decision — the
+                # partial unique index (uq_ssr_scope_source_stage) guarantees
+                # at most one non-failed row per stage, so this is honestly
+                # every decided stage for the doc, never a filtered subset of
+                # decisions (only attempt noise is excluded).
+                .where(source_screening_result.c.status != "failed")
+                .order_by(source_screening_result.c.screen_stage)
+            ).fetchall()
+            return {
+                "kind": kind,
+                "result": [
+                    {
+                        "screen_stage": row.screen_stage,
+                        "status": row.status,
+                        "screen_basis": row.screen_basis,
+                        "screen_decision_confidence": row.screen_decision_confidence,
+                    }
+                    for row in rows
+                ],
+            }
+
         if kind == "selection_rationale":
             if selection_run_id is None:
                 _tool_fail("selection_rationale requires selection")
@@ -2581,12 +2692,38 @@ def make_lookup_reader(
     return reader
 
 
+def _turn_search_queries(tool_calls: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Return this turn's well-formed ``search_chunks`` query strings.
+
+    Malformed queries are skipped rather than raised — the actual tool call
+    still runs its own validation and rejects them there; this is only a
+    best-effort embedding warm-up (022 rider 16).
+    """
+    queries: list[str] = []
+    for call in tool_calls:
+        if not isinstance(call, Mapping) or call.get("tool") != "search_chunks":
+            continue
+        arguments = call.get("arguments")
+        if not isinstance(arguments, Mapping):
+            continue
+        query = arguments.get("query")
+        if (
+            isinstance(query, str)
+            and query
+            and len(query) <= SEARCH_QUERY_MAX_LENGTH
+            and not has_control_character(query)
+        ):
+            queries.append(query)
+    return queries
+
+
 def run_section_loop(
     backend: Any,
     *,
     seed: dict[str, Any],
     tools: Mapping[str, Callable[[dict[str, Any]], dict[str, Any]]],
     turn_cap: int = SECTION_TURN_CAP,
+    retriever: ChunkRetriever | None = None,
 ) -> SectionLoopResult:
     """Run one bounded section loop against the closed read-only tool set.
 
@@ -2595,6 +2732,9 @@ def run_section_loop(
         seed: Id-keyed section seed.
         tools: Available substrate tools.
         turn_cap: Maximum generation turns; final turn forces emission.
+        retriever: Optional chunk retriever. When given, a turn's uncached
+            ``search_chunks`` query embeddings are batched into one backend
+            call before the turn's tool calls execute (022 rider 16).
 
     Returns:
         Claims, transcript and accounting counters.
@@ -2645,6 +2785,9 @@ def run_section_loop(
             raise RuntimeError("backend returned tool call on forced emit turn")
         if not tool_calls:
             raise RuntimeError("backend returned no claims or tool calls")
+
+        if retriever is not None:
+            retriever.warm_queries(_turn_search_queries(tool_calls))
 
         executed_this_turn = 0
         for call in tool_calls:

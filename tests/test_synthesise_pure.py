@@ -242,6 +242,9 @@ def test_budget_formula_and_ledger_marker() -> None:
     # (emission + judge/repair/rejudge) — ADR 0015 §8.
     assert generation_budget_max() == 2 + (SECTION_CAP + 1) * (SECTION_TURN_CAP + 3) + 4
 
+    # 022 rider 18 (F0 § DTO spec): the prompt-facing ledger record slims to
+    # claim id/type/text — cited_ids/flags/a repeated non-citable note are
+    # dropped; the rule is already stated once at the prompt level.
     ledger = build_ledger(
         [
             ClaimDraft(
@@ -261,9 +264,6 @@ def test_budget_formula_and_ledger_marker() -> None:
             "claim_id": "s0c0",
             "claim_type": "reasoning",
             "text": "Reasoning.",
-            "cited_ids": ["not-citable-here"],
-            "flags": ["weak"],
-            "ledger_note": "context, never evidence — not citable",
         }
     ]
 

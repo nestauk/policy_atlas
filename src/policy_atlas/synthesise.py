@@ -613,22 +613,27 @@ def generation_budget_max() -> int:
 
 
 def build_ledger(claims: Sequence[ClaimDraft]) -> list[dict[str, Any]]:
-    """Build the rolling prior-section ledger.
+    """Build the rolling prior-section ledger (prompt-facing; slimmed).
+
+    Per-record ``cited_ids``/``flags``/a repeated non-citable note are dropped
+    (022 rider 18 / F0 § DTO spec): the "ledger is context, never evidence,
+    not citable" rule is already stated once at the prompt level
+    (``SECTION_SYSTEM_PROMPT``), so repeating it — and carrying fields the
+    prompt tells the model never to cite — on every record was pure input
+    waste, not information the model needs. The evidence-bearing key-findings
+    ledger (:func:`_key_findings_ledger`) is a separate, unslimmed record type.
 
     Args:
         claims: Persisted claims from prior sections, in write order.
 
     Returns:
-        Claim records marked as context-only and never citable evidence.
+        Slimmed claim records: ``claim_id``, ``claim_type``, ``text`` only.
     """
     return [
         {
             "claim_id": claim.claim_id,
             "claim_type": claim.claim_type,
             "text": claim.text,
-            "cited_ids": list(claim.cited_ids),
-            "flags": list(claim.flags),
-            "ledger_note": "context, never evidence — not citable",
         }
         for claim in claims
     ]
@@ -1549,6 +1554,65 @@ def _grouping_summary(row: Mapping[str, Any] | None) -> dict[str, Any] | None:
     }
 
 
+def _residual_count(residual: Any) -> dict[str, int]:
+    """Slim a raw facet residual bucket down to its member count.
+
+    The raw ``ungrouped``/``no_value`` payloads persisted by ``group`` carry
+    membership (``finding_ids`` / ``member_finding_ids``) alongside the count
+    — prompt-facing residuals carry the count only (022 rider 18).
+    """
+    if not isinstance(residual, dict):
+        return {"count": 0}
+    members = residual.get("finding_ids", residual.get("member_finding_ids", []))
+    return {"count": len(members) if isinstance(members, list) else 0}
+
+
+def _characterisation_summary_prompt(
+    summary: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Prompt-facing characterisation summary: themes without membership ids.
+
+    Internal consumers (``SubstrateView.characterisation``) keep the full
+    ``_characterisation_summary`` records, ``member_ids`` included — this
+    slims only at the seed/prompt boundary (F0 § DTO spec).
+    """
+    if summary is None:
+        return None
+    themes = [
+        {key: value for key, value in theme.items() if key != "member_ids"}
+        for theme in summary.get("themes", [])
+        if isinstance(theme, dict)
+    ]
+    return {**summary, "themes": themes}
+
+
+def _grouping_summary_prompt(summary: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Prompt-facing grouping summary: groups/residuals without membership ids.
+
+    Internal consumers (``SubstrateView.grouping``) keep the full
+    ``_grouping_summary`` records, ``member_finding_ids`` included — this
+    slims only at the seed/prompt boundary (F0 § DTO spec): prompt-side group
+    records carry id/label/description/size/spread, residuals carry counts,
+    never membership UUID lists.
+    """
+    if summary is None:
+        return None
+    groups = [
+        {key: value for key, value in group.items() if key != "member_finding_ids"}
+        for group in summary.get("groups", [])
+        if isinstance(group, dict)
+    ]
+    residuals = {
+        facet: {
+            residual_kind: _residual_count(payload)
+            for residual_kind, payload in facet_residuals.items()
+        }
+        for facet, facet_residuals in summary.get("residuals", {}).items()
+        if isinstance(facet_residuals, dict)
+    }
+    return {**summary, "groups": groups, "residuals": residuals}
+
+
 def _substrate_summaries(refs: ResolvedReferences, corpus: CorpusProfile) -> dict[str, Any]:
     summaries: dict[str, Any] = {
         "corpus": {
@@ -1557,7 +1621,9 @@ def _substrate_summaries(refs: ResolvedReferences, corpus: CorpusProfile) -> dic
             "appraised": corpus.appraised_docs,
         }
     }
-    char_summary = _characterisation_summary(refs.characterisation_row)
+    char_summary = _characterisation_summary_prompt(
+        _characterisation_summary(refs.characterisation_row)
+    )
     if char_summary is not None:
         summaries["characterisation"] = char_summary
     selection_summary = _selection_summary(refs.selection_row)
@@ -1566,7 +1632,7 @@ def _substrate_summaries(refs: ResolvedReferences, corpus: CorpusProfile) -> dic
     extraction_summary = _extraction_summary(refs.extraction_row)
     if extraction_summary is not None:
         summaries["extraction"] = extraction_summary
-    grouping_summary = _grouping_summary(refs.grouping_row)
+    grouping_summary = _grouping_summary_prompt(_grouping_summary(refs.grouping_row))
     if grouping_summary is not None:
         summaries["grouping"] = grouping_summary
     return summaries
@@ -4009,9 +4075,18 @@ def _key_findings_pass(
         "available_tools": [],
         "available_claim_types": sorted(kf_available),
         "ledger": _key_findings_ledger(section_claim_groups),
-        # Run-level chunk-content map (union of every section's transcript
-        # chunks) — the pass's evidence surface, since it runs transcript-free.
-        "chunk_content_by_id": run_chunk_content,
+        # Chunk-content map filtered to chunks cited by surviving claims only
+        # (022 rider 16) — the pass's evidence surface, since it runs
+        # transcript-free. ``citable_chunk_ids`` (below) already IS that set:
+        # citation eligibility for this transcript-free pass already restricts
+        # to chunks surviving claims cited, so no separate computation is
+        # needed. The unfiltered union was ~2% wasted input (every section's
+        # gathered-but-uncited chunks).
+        "chunk_content_by_id": {
+            chunk_id: content
+            for chunk_id, content in run_chunk_content.items()
+            if chunk_id in citable_chunk_ids
+        },
     }
     usage_totals = UsageAccumulator()
     raw_kf, kf_usage = synthesis_backend.write_key_findings(seed)
@@ -4386,6 +4461,7 @@ def synthesise_scope(
                 synthesis_backend,
                 seed=seed,
                 tools=tools,
+                retriever=retriever,
             )
             usage_totals.add_payload(loop_result["usage_totals"])
         except RuntimeError as exc:
