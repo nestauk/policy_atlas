@@ -8,7 +8,7 @@ from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
 
 from policy_atlas import tracing
-from policy_atlas.embeddings import log_usage, resolve_openai_client, usage_metadata
+from policy_atlas.openai_client import resolve_openai_client
 from policy_atlas.prompt_fields import confidence_is_valid, scrub_nul
 from policy_atlas.screen_prompt import (
     SCREEN_FULLTEXT_PROMPT_VERSION,
@@ -21,7 +21,7 @@ from policy_atlas.screen_prompt import (
     build_screen_fulltext_messages,
     build_screen_messages,
 )
-from policy_atlas.usage import UsageResult, token_usage_from_provider
+from policy_atlas.usage import UsageResult, log_usage, token_usage_from_provider, usage_metadata
 
 
 class ScreeningBackend(Protocol):

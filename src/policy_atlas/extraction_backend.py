@@ -9,7 +9,6 @@ import structlog
 from langfuse import Langfuse
 
 from policy_atlas import tracing
-from policy_atlas.embeddings import log_usage, resolve_openai_client, usage_metadata
 from policy_atlas.extract_prompt import (
     EXTRACT_MAX_OUTPUT_TOKENS,
     EXTRACTION_MODEL,
@@ -24,7 +23,8 @@ from policy_atlas.implementation_context_prompt import (
     build_icf_extract_messages,
 )
 from policy_atlas.implementation_context_records import ICFExtractionResponse
-from policy_atlas.usage import UsageResult, token_usage_from_provider
+from policy_atlas.openai_client import resolve_openai_client
+from policy_atlas.usage import UsageResult, log_usage, token_usage_from_provider, usage_metadata
 
 log = structlog.get_logger()
 

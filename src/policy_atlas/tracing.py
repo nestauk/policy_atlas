@@ -24,7 +24,7 @@ from policy_atlas.embeddings import EmbeddingBackend
 from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.grouping import GroupingDoc, Theme, ThemeGroupingBackend
 from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
-from policy_atlas.usage import UsageResult
+from policy_atlas.usage import UsageResult, usage_metadata
 
 _ObservationType = Literal["embedding", "generation", "span"]
 
@@ -280,7 +280,7 @@ class TracedThemeGroupingBackend:
                     "doc_count": len(docs),
                     "min_themes": min_themes,
                     "max_themes": max_themes,
-                    **embeddings.usage_metadata(usage),
+                    **usage_metadata(usage),
                 },
                 model=grouping.DISCOVERY_MODEL,
             )
@@ -311,7 +311,7 @@ class TracedThemeGroupingBackend:
                 metadata={
                     "prompt_version": grouping.PROMPT_VERSION,
                     "batch_size": len(batch),
-                    **embeddings.usage_metadata(usage),
+                    **usage_metadata(usage),
                 },
                 model=grouping.ASSIGNMENT_MODEL,
             )

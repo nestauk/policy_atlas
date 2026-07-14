@@ -38,9 +38,9 @@ from policy_atlas.clustering_engine import (
     ClusterLabel,
     ClusterUnit,
 )
-from policy_atlas.embeddings import log_usage, resolve_openai_client, usage_metadata
 from policy_atlas.facet_grouping import DESCRIPTION_MAX, LABEL_MAX
-from policy_atlas.usage import UsageResult, token_usage_from_provider
+from policy_atlas.openai_client import resolve_openai_client
+from policy_atlas.usage import UsageResult, log_usage, token_usage_from_provider, usage_metadata
 
 GROUP_CLUSTERING_PROMPT_VERSION = "group_cluster_v1"
 

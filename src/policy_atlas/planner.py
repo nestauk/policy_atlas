@@ -19,8 +19,8 @@ from openai.types.chat import ChatCompletionMessageParam
 from openai.types.completion_usage import CompletionUsage
 
 from policy_atlas import tracing
-from policy_atlas.embeddings import log_usage, resolve_openai_client, usage_metadata
 from policy_atlas.extract import _scrub_nul
+from policy_atlas.openai_client import resolve_openai_client
 from policy_atlas.planner_prompt import (
     PLANNER_MAX_OUTPUT_TOKENS,
     PLANNER_PROMPT_VERSION,
@@ -29,6 +29,7 @@ from policy_atlas.planner_prompt import (
     build_planner_messages,
 )
 from policy_atlas.prompt_fields import scrub_nul
+from policy_atlas.usage import log_usage, usage_metadata
 
 log = structlog.get_logger()
 

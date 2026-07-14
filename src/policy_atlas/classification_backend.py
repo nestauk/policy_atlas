@@ -18,14 +18,9 @@ from policy_atlas.classify_prompt import (
     EvidenceType,
     build_classify_messages,
 )
-from policy_atlas.embeddings import (
-    log_usage,
-    openai_kwargs,
-    resolve_openai_client,
-    usage_metadata,
-)
+from policy_atlas.openai_client import openai_kwargs, resolve_openai_client
 from policy_atlas.prompt_fields import confidence_is_valid, scrub_nul
-from policy_atlas.usage import UsageResult, token_usage_from_provider
+from policy_atlas.usage import UsageResult, log_usage, token_usage_from_provider, usage_metadata
 
 
 class ClassificationBackend(Protocol):

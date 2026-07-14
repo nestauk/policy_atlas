@@ -38,14 +38,12 @@ from langfuse import Langfuse
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from policy_atlas import tracing
-from policy_atlas.embeddings import (
-    log_usage,
+from policy_atlas.facet_grouping import FORBIDDEN_GROUP_LABELS
+from policy_atlas.openai_client import (
     require_parsed,
     require_single_tool_call,
     resolve_openai_client,
-    usage_metadata,
 )
-from policy_atlas.facet_grouping import FORBIDDEN_GROUP_LABELS
 from policy_atlas.schema import CONTEXT_TYPES, EFFECT_DIRECTIONS
 from policy_atlas.synthesis_tools import (
     REASONING_CLAIMS_MAX,
@@ -55,7 +53,7 @@ from policy_atlas.synthesis_tools import (
     ToolExchange,
     is_qualified_group_id,
 )
-from policy_atlas.usage import UsageResult, token_usage_from_provider
+from policy_atlas.usage import UsageResult, log_usage, token_usage_from_provider, usage_metadata
 
 log = structlog.get_logger()
 

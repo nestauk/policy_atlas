@@ -24,13 +24,8 @@ from langfuse import Langfuse
 from pydantic import BaseModel, ConfigDict
 
 from policy_atlas import tracing
-from policy_atlas.embeddings import (
-    log_usage,
-    require_parsed,
-    resolve_openai_client,
-    usage_metadata,
-)
-from policy_atlas.usage import UsageResult, token_usage_from_provider
+from policy_atlas.openai_client import require_parsed, resolve_openai_client
+from policy_atlas.usage import UsageResult, log_usage, token_usage_from_provider, usage_metadata
 
 JUDGE_PROMPT_VERSION = "grounding_judge_v2"
 ENVELOPE_VERSION = "synthesis_envelope_v2"

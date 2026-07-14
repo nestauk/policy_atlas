@@ -24,9 +24,9 @@ from policy_atlas.classify_prompt import (
     ClassifyEnvelopePayload,
     ClassifyWire,
 )
-from policy_atlas.embeddings import openai_kwargs
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
+from policy_atlas.openai_client import openai_kwargs
 from policy_atlas.plan import Plan, compile
 from policy_atlas.schema import (
     METHODOLOGICAL_STRUCTURAL,

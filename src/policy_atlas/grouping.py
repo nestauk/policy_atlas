@@ -8,12 +8,11 @@ from typing import Protocol, TypedDict
 
 import structlog
 from openai.types.chat import ChatCompletionMessageParam
-from openai.types.completion_usage import CompletionUsage
 from pydantic import BaseModel, ConfigDict
 
-from policy_atlas.embeddings import resolve_openai_client
+from policy_atlas.openai_client import resolve_openai_client
 from policy_atlas.tags import has_control_character
-from policy_atlas.usage import UsageResult, token_usage_from_provider
+from policy_atlas.usage import UsageResult, log_usage, token_usage_from_provider
 
 log = structlog.get_logger()
 
@@ -223,18 +222,6 @@ def _themes_json(themes: list[Theme]) -> str:
     )
 
 
-def _log_usage(event: str, usage: CompletionUsage | None) -> None:
-    if usage is None:
-        log.info(event, prompt_tokens=None, completion_tokens=None, total_tokens=None)
-        return
-    log.info(
-        event,
-        prompt_tokens=usage.prompt_tokens,
-        completion_tokens=usage.completion_tokens,
-        total_tokens=usage.total_tokens,
-    )
-
-
 class ThemeGroupingBackend(Protocol):
     """The theme grouping seam.
 
@@ -345,7 +332,7 @@ class OpenAIThemeGroupingBackend:
             messages=messages,
             response_format=_ThemeSetModel,
         )
-        _log_usage("grouping.discover.usage", response.usage)
+        log_usage("grouping.discover.usage", response.usage)
         if not response.choices:
             raise RuntimeError("OpenAI discovery response had no choices.")
         parsed = response.choices[0].message.parsed
@@ -391,7 +378,7 @@ class OpenAIThemeGroupingBackend:
             messages=messages,
             response_format=_AssignmentsModel,
         )
-        _log_usage("grouping.assign.usage", response.usage)
+        log_usage("grouping.assign.usage", response.usage)
         if not response.choices:
             raise RuntimeError("OpenAI assignment response had no choices.")
         parsed = response.choices[0].message.parsed

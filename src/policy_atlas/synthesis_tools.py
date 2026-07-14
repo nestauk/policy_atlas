@@ -1225,19 +1225,6 @@ def _tokens(text: str) -> set[str]:
     return {match.group(0).casefold() for match in _TOKEN_RE.finditer(text)}
 
 
-def _cosine(left: Sequence[float], right: Sequence[float]) -> float:
-    numerator = 0.0
-    left_norm = 0.0
-    right_norm = 0.0
-    for left_value, right_value in zip(left, right, strict=True):
-        numerator += left_value * right_value
-        left_norm += left_value * left_value
-        right_norm += right_value * right_value
-    if left_norm == 0.0 or right_norm == 0.0:
-        return 0.0
-    return numerator / (math.sqrt(left_norm) * math.sqrt(right_norm))
-
-
 def _ranked_pool(
     scored: list[tuple[float, dict[str, Any]]],
 ) -> list[tuple[float, dict[str, Any]]]:
@@ -1295,6 +1282,18 @@ class ChunkRetriever:
         self._unit_tokens: list[set[str]] = [
             _tokens(cast("str", unit["text"])) for unit in scope.units
         ]
+        # Unit vectors are equally frozen — precompute their norms once so
+        # search() pays one sumprod per unit, not a norm recomputation per pair
+        # (task 023 WP10c).
+        self._unit_norms: list[float] = [
+            math.sqrt(
+                math.sumprod(
+                    cast("list[float]", unit["vector"]),
+                    cast("list[float]", unit["vector"]),
+                )
+            )
+            for unit in scope.units
+        ]
         self._executed_boosts: dict[str, Any] = {}
         self._unmatched_boosts: dict[str, Any] = {}
         self._soft_prior_factors: dict[str, dict[str, Any]] = {}
@@ -1317,23 +1316,35 @@ class ChunkRetriever:
         """
         query_vector = self._query_vector(query)
         query_tokens = _tokens(query)
+        query_norm = math.sqrt(math.sumprod(query_vector, query_vector))
         unit_pairs = [
-            (unit, unit_tokens)
-            for unit, unit_tokens in zip(
-                self._scope.units, self._unit_tokens, strict=True
+            (unit, unit_tokens, unit_norm)
+            for unit, unit_tokens, unit_norm in zip(
+                self._scope.units, self._unit_tokens, self._unit_norms, strict=True
             )
             if self._unit_matches_filters(unit, filters)
         ]
+        # math.sumprod is C-speed and length-strict like the zip(strict=True) loop
+        # it replaced; extended-precision accumulation can differ from naive
+        # summation in the last ulps (task 023 WP10c — recorded precision class).
         cosine_pool = _ranked_pool([
-            (_cosine(query_vector, cast("list[float]", unit["vector"])), unit)
-            for unit, _unit_tokens in unit_pairs
+            (
+                0.0
+                if query_norm == 0.0 or unit_norm == 0.0
+                else math.sumprod(
+                    query_vector, cast("list[float]", unit["vector"])
+                )
+                / (query_norm * unit_norm),
+                unit,
+            )
+            for unit, _unit_tokens, unit_norm in unit_pairs
         ])
         lexical_pool = _ranked_pool([
             (
                 len(query_tokens & unit_tokens) / max(1, len(query_tokens)),
                 unit,
             )
-            for unit, unit_tokens in unit_pairs
+            for unit, unit_tokens, _unit_norm in unit_pairs
         ])
 
         fused_by_unit: dict[str, tuple[float, dict[str, Any]]] = {}

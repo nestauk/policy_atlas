@@ -6,6 +6,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+import structlog
+from openai.types.completion_usage import CompletionUsage
+
+log = structlog.get_logger()
+
 
 @dataclass(frozen=True)
 class TokenUsage:
@@ -96,7 +101,7 @@ def token_usage_from_provider(usage: Any | None) -> TokenUsage | None:
     )
 
 
-def usage_metadata(usage: TokenUsage | None) -> dict[str, int | None]:
+def _token_usage_metadata(usage: TokenUsage | None) -> dict[str, int | None]:
     """Return Langfuse/log metadata keys for one usage block.
 
     Args:
@@ -118,6 +123,29 @@ def usage_metadata(usage: TokenUsage | None) -> dict[str, int | None]:
         "total_tokens": usage.total,
         "cached_tokens": usage.cached,
     }
+
+
+def usage_metadata(usage: CompletionUsage | TokenUsage | None) -> dict[str, int | None]:
+    """Token usage as log/span metadata; all-``None`` when the API omitted usage.
+
+    Shared by the live chat backends so the usage shape lives in one place.
+
+    Args:
+        usage: The response's usage block, provider-neutral usage, or ``None``.
+    """
+    if isinstance(usage, TokenUsage):
+        return _token_usage_metadata(usage)
+    return _token_usage_metadata(token_usage_from_provider(usage))
+
+
+def log_usage(event: str, usage: CompletionUsage | None) -> None:
+    """Log one model call's token usage (``None``-safe).
+
+    Args:
+        event: The structlog event name.
+        usage: The response's usage block, or ``None``.
+    """
+    log.info(event, **usage_metadata(usage))
 
 
 def _int_or_none(value: Any) -> int | None:

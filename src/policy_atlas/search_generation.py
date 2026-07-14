@@ -14,7 +14,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
 from policy_atlas import tracing
-from policy_atlas.embeddings import log_usage, resolve_openai_client, usage_metadata
+from policy_atlas.openai_client import resolve_openai_client
 from policy_atlas.search_prompts import (
     SEARCH_GEN_MAX_OUTPUT_TOKENS,
     SEARCH_QUERIES_MODEL,
@@ -32,7 +32,7 @@ from policy_atlas.search_prompts import (
     build_reformulate_messages,
     build_suggest_messages,
 )
-from policy_atlas.usage import UsageResult, token_usage_from_provider
+from policy_atlas.usage import UsageResult, log_usage, token_usage_from_provider, usage_metadata
 
 WireT = TypeVar("WireT", bound=BaseModel)
 

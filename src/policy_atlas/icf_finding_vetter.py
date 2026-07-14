@@ -27,14 +27,9 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from policy_atlas import tracing
-from policy_atlas.embeddings import (
-    log_usage,
-    openai_kwargs,
-    resolve_openai_client,
-    usage_metadata,
-)
+from policy_atlas.openai_client import openai_kwargs, resolve_openai_client
 from policy_atlas.prompt_fields import scrub_nul
-from policy_atlas.usage import UsageResult, token_usage_from_provider
+from policy_atlas.usage import UsageResult, log_usage, token_usage_from_provider, usage_metadata
 
 ICF_FINDING_VETTER_PROMPT_VERSION = "extract_icf_vetter_v2"
 ICF_FINDING_VETTER_MODEL = "gpt-5.4-mini"
