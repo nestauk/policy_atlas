@@ -269,7 +269,7 @@ class _UnattendedPlanner:
                 # 018 regrade: select/extract/group are deep-only now.
                 analysis_depth="deep",
                 components=["characterise", "screen_full", "select", "extract", "group"],
-                grouping_facet="outcome",
+                grouping_facets=["outcome"],
                 steering_mode="unattended",
                 assumptions=["Stub: unattended proposal."],
             ),
@@ -365,7 +365,7 @@ def test_planner_declared_steer_point_defaults_reach_the_plan(engine: Engine) ->
                     # 018 regrade: select/extract/group are deep-only now.
                     analysis_depth="deep",
                     components=["characterise", "screen_full", "select", "extract", "group"],
-                    grouping_facet="outcome",
+                    grouping_facets=["outcome"],
                     steering_mode="unattended",
                     steer_point_defaults=[
                         {"steer_point": "deepening_selection", "action": "stop"}

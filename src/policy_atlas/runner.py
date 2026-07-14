@@ -24,9 +24,9 @@ from policy_atlas.acquire import SearchBackend
 from policy_atlas.classification_backend import ClassificationBackend
 from policy_atlas.embeddings import EmbeddingBackend
 from policy_atlas.extraction_backend import ExtractionBackend
-from policy_atlas.facet_grouping import FacetGroupingBackend
 from policy_atlas.finding_vetter import FindingVetterBackend
 from policy_atlas.grounding_judge import GroundingJudgeBackend
+from policy_atlas.group import GroupClusteringBackendFactory
 from policy_atlas.grouping import ThemeGroupingBackend
 from policy_atlas.harness import run_harness
 from policy_atlas.icf_finding_vetter import ICFFindingVetterBackend
@@ -106,7 +106,7 @@ class RunnerBackends:
         finding_vetter: Optional post-extract finding vetter (``None`` = off).
         icf_extraction: Optional ICF extraction backend.
         icf_finding_vetter: Optional ICF post-extract finding vetter.
-        facet_grouping: Optional facet-grouping backend.
+        group_clustering: Optional group clustering backend factory.
         synthesis: Optional synthesis backend.
         grounding_judge: Optional grounding-judge backend.
         search_backends: Optional acquire search backends.
@@ -124,7 +124,7 @@ class RunnerBackends:
     finding_vetter: FindingVetterBackend | None = None
     icf_extraction: Any | None = None
     icf_finding_vetter: ICFFindingVetterBackend | None = None
-    facet_grouping: FacetGroupingBackend | None = None
+    group_clustering: GroupClusteringBackendFactory | None = None
     synthesis: SynthesisBackend | None = None
     grounding_judge: GroundingJudgeBackend | None = None
     search_backends: list[SearchBackend] | None = None
@@ -1094,7 +1094,7 @@ def _run_step_attempt(
                     finding_vetter_backend=backends.finding_vetter,
                     icf_extraction_backend=backends.icf_extraction,
                     icf_finding_vetter_backend=backends.icf_finding_vetter,
-                    facet_grouping_backend=backends.facet_grouping,
+                    group_clustering_backend=backends.group_clustering,
                     synthesis_backend=backends.synthesis,
                     grounding_judge_backend=backends.grounding_judge,
                     search_backends=backends.search_backends,

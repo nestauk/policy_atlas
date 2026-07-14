@@ -17,6 +17,8 @@ this module.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import re
 import uuid
@@ -28,13 +30,19 @@ from sqlalchemy import ColumnElement, case, func
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.embeddings import EMBEDDING_PROFILE, UNIT_POLICY, validate_vector
+from policy_atlas.embeddings import (
+    EMBEDDING_PROFILE,
+    UNIT_CHAR_BUDGET,
+    UNIT_POLICY,
+    validate_vector,
+)
 from policy_atlas.extract import record_ids_by_profile
 from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.schema import (
     CONTEXT_TYPES,
     EFFECT_DIRECTIONS,
+    EVIDENCE_TYPES,
     characterisation_result,
     chunk_embedding,
     extraction_result,
@@ -47,6 +55,7 @@ from policy_atlas.schema import (
     source_appraisal_result,
     source_classification_result,
     source_extraction_record,
+    source_screening_result,
     source_snapshot,
     source_tag,
 )
@@ -100,8 +109,20 @@ SELECTION_PRIOR_BOOST = 2.0
 # REJECTS out-of-range weights; the synthesise directive grammar CLAMPS them.
 BOOST_CLAMP_MIN = 0.1
 BOOST_CLAMP_MAX = 10.0
+# Oversized chunks are returned as the winning embedding unit widened by this
+# many characters on each side. Normal chunks are never windowed.
+OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS = 300
+SCREEN_CONFIDENCE_MIN = 0.5
+SCREEN_CONFIDENCE_MAX = 4.0
+SCREEN_CONFIDENCE_DEFAULT_LO = 1.0
+SCREEN_CONFIDENCE_DEFAULT_HI = 2.0
 # The closed column set the directive may boost over (select's vocabulary).
 BOOST_COLUMNS = ("origin", "primary_evidence_type", "text_basis")
+# search_chunks query bound (022 rider 16 shares this with the per-turn query
+# embedding batch warm-up, so both sides of the bound stay in one place).
+SEARCH_QUERY_MAX_LENGTH = 1000
+# Shared row cap for windowed lookup/selection returns (one knob, two surfaces).
+LOOKUP_ROW_CAP = 100
 # Bounds shared with the directive grammar (contract rev 8 M5).
 DIRECTIVE_SECTION_TEXT_MAX = 200
 DIRECTIVE_LIST_MAX = 200
@@ -109,6 +130,12 @@ DIRECTIVE_LIST_MAX = 200
 # The closed lookup query vocabulary v1 (plan rev 2). Unknown kind → tool-level
 # validation error, never executed; all queries scoped to project_id + the
 # resolved run references; side-effect-free.
+#
+# ``screening_by_doc`` (022 rider 16) widens the vocabulary to screening rows:
+# unlike the other ``_by_doc`` kinds, its doc_id is NOT required to be
+# screened-in — that is the whole point of the widening (a not_relevant /
+# excluded_retracted doc's own screening history is otherwise unreachable to
+# an in-loop reader).
 LOOKUP_QUERY_KINDS = (
     "appraisal_by_doc",
     "classification_by_doc",
@@ -119,6 +146,7 @@ LOOKUP_QUERY_KINDS = (
     "tags_by_doc",
     "docs_by_tag",
     "tag_aggregate",
+    "screening_by_doc",
 )
 
 # The closed tool set of the section loop.
@@ -160,6 +188,8 @@ class ChunkSearchResult(TypedDict):
     appraisal_label: NotRequired[str]
     venue: NotRequired[str]
     cited_by: NotRequired[Any]
+    window_start: NotRequired[int]
+    window_end: NotRequired[int]
 
 
 class FindingRecord(TypedDict):
@@ -254,6 +284,14 @@ class SynthesisDirectiveError(Exception):
 
 
 @dataclass(frozen=True)
+class _ScreenConfidenceBoost:
+    """Validated screen-confidence retrieval multiplier bounds."""
+
+    lo: float = SCREEN_CONFIDENCE_DEFAULT_LO
+    hi: float = SCREEN_CONFIDENCE_DEFAULT_HI
+
+
+@dataclass(frozen=True)
 class SynthesisDirective:
     """Validated ``context["synthesis"]`` directive.
 
@@ -269,6 +307,9 @@ class SynthesisDirective:
     column_boosts: dict[str, dict[str, float]] = field(default_factory=dict)
     tag_boosts: dict[str, float] = field(default_factory=dict)
     appraisal_tier_boosts: dict[str, float] = field(default_factory=dict)
+    screen_confidence: _ScreenConfidenceBoost = field(
+        default_factory=_ScreenConfidenceBoost
+    )
 
     def as_provenance(self) -> dict[str, Any]:
         """Return the executed directive as deterministic JSON-compatible data."""
@@ -278,6 +319,10 @@ class SynthesisDirective:
                 "columns": self.column_boosts,
                 "tags": self.tag_boosts,
                 "appraisal_tier": self.appraisal_tier_boosts,
+                "screen_confidence": {
+                    "lo": self.screen_confidence.lo,
+                    "hi": self.screen_confidence.hi,
+                },
             },
         }
 
@@ -355,11 +400,13 @@ class RetrievalScope:
         docs: Metadata keyed by project_source_snapshot id string.
         units: Embedding-unit records with frozen unit text and vectors.
         chunks: Frozen chunk records keyed by chunk id string.
+        project_tags: All tag values in the scoped project.
     """
 
     docs: dict[str, dict[str, Any]]
     units: list[dict[str, Any]]
     chunks: dict[str, dict[str, Any]]
+    project_tags: set[str] = field(default_factory=set)
 
 
 class ToolValidationError(Exception):
@@ -397,8 +444,10 @@ class SectionLoopResult(TypedDict):
 _DIRECTIVE_KEYS = {"sections", "retrieval_boosts"}
 _SECTION_KEYS_REQUIRED = {"title", "focus"}
 _SECTION_KEYS_WITH_GROUPS = {"title", "focus", "group_ids"}
-_BOOST_KEYS = {"columns", "tags", "appraisal_tier"}
+_BOOST_KEYS = {"columns", "tags", "appraisal_tier", "screen_confidence"}
 _TOKEN_RE = re.compile(r"[0-9A-Za-z]+")
+GROUP_ID_EXPECTED_FORM = "<facet>:gNN"
+_QUALIFIED_GROUP_ID_RE = re.compile(r"^[a-z][a-z0-9_]*:g[0-9]{2,}$")
 
 
 def _directive_fail(message: str) -> None:
@@ -407,6 +456,27 @@ def _directive_fail(message: str) -> None:
 
 def _tool_fail(message: str) -> None:
     raise ToolValidationError(message)
+
+
+def is_qualified_group_id(value: str) -> bool:
+    """Return whether ``value`` uses the facet-qualified group id grammar.
+
+    Args:
+        value: Candidate group id.
+
+    Returns:
+        True when the id has the expected ``<facet>:gNN`` shape.
+    """
+    return bool(_QUALIFIED_GROUP_ID_RE.fullmatch(value))
+
+
+def facet_of_group_id(group_id: str) -> str:
+    """Return the facet prefix of a facet-qualified group id.
+
+    Owns the prefix-derivation half of the ``<facet>:gNN`` grammar so callers
+    never re-implement the split.
+    """
+    return group_id.split(":", 1)[0]
 
 
 def _bounded_string(value: Any, *, field: str) -> str:
@@ -484,6 +554,8 @@ def _validate_findings_tool_arguments(arguments: dict[str, Any]) -> None:
     raw_group_id = arguments.get("group_id")
     if raw_group_id is not None and (not isinstance(raw_group_id, str) or not raw_group_id):
         _tool_fail("group_id must be a non-empty string")
+    if isinstance(raw_group_id, str) and not is_qualified_group_id(raw_group_id):
+        _tool_fail(f"group_id must use expected form {GROUP_ID_EXPECTED_FORM}")
     raw_direction = arguments.get("effect_direction")
     if raw_direction is not None and raw_direction not in EFFECT_DIRECTIONS:
         _tool_fail("effect_direction is invalid")
@@ -513,6 +585,102 @@ def _validate_lookup_tool_arguments(arguments: dict[str, Any]) -> None:
         _tool_fail("by must be type or asserter")
 
 
+def _tool_string_list(arguments: dict[str, Any], *, field: str) -> list[str] | None:
+    raw_value = arguments.get(field)
+    if raw_value is None:
+        return None
+    if (
+        not isinstance(raw_value, list)
+        or not raw_value
+        or len(raw_value) > DIRECTIVE_LIST_MAX
+    ):
+        _tool_fail(f"{field} must be a bounded non-empty list")
+    values: list[str] = []
+    for item in raw_value:
+        if not isinstance(item, str) or not item:
+            _tool_fail(f"{field} must contain non-empty strings")
+        if len(item) > DIRECTIVE_SECTION_TEXT_MAX or has_control_character(item):
+            _tool_fail(f"{field} must contain bounded strings")
+        values.append(item)
+    return values
+
+
+def _search_scope_filters(
+    arguments: dict[str, Any],
+    *,
+    retriever: ChunkRetriever,
+    group_doc_ids_by_group_id: Mapping[str, set[str]] | None,
+) -> _ChunkScopeFilters | None:
+    doc_ids: frozenset[str] | None = None
+    raw_doc_ids = _tool_string_list(arguments, field="doc_ids")
+    if raw_doc_ids is not None:
+        parsed_doc_ids: set[str] = set()
+        for raw_doc_id in raw_doc_ids:
+            try:
+                parsed_doc_ids.add(str(uuid.UUID(raw_doc_id)))
+            except ValueError as exc:
+                raise ToolValidationError("doc_ids must contain UUID strings") from exc
+        unknown_doc_ids = sorted(parsed_doc_ids - set(retriever._scope.docs))
+        if unknown_doc_ids:
+            _tool_fail("doc_ids contains ids outside the scoped corpus")
+        doc_ids = frozenset(parsed_doc_ids)
+
+    group_doc_ids: frozenset[str] | None = None
+    raw_group_ids = _tool_string_list(arguments, field="group_ids")
+    if raw_group_ids is not None:
+        if group_doc_ids_by_group_id is None:
+            _tool_fail("group_ids requires grouping")
+        resolved_group_docs: set[str] = set()
+        assert group_doc_ids_by_group_id is not None
+        for group_id in raw_group_ids:
+            if not is_qualified_group_id(group_id):
+                _tool_fail(f"group_ids must use expected form {GROUP_ID_EXPECTED_FORM}")
+            if group_id not in group_doc_ids_by_group_id:
+                _tool_fail(
+                    f"group_ids contains an unknown group_id; expected form "
+                    f"{GROUP_ID_EXPECTED_FORM} resolving to grouping records"
+                )
+            resolved_group_docs.update(group_doc_ids_by_group_id[group_id])
+        group_doc_ids = frozenset(resolved_group_docs)
+
+    evidence_types: frozenset[str] | None = None
+    raw_evidence_types = _tool_string_list(arguments, field="evidence_types")
+    if raw_evidence_types is not None:
+        unknown_types = sorted(set(raw_evidence_types) - set(EVIDENCE_TYPES))
+        if unknown_types:
+            _tool_fail("evidence_types contains an unknown evidence type")
+        evidence_types = frozenset(raw_evidence_types)
+
+    tags: frozenset[str] | None = None
+    raw_tags = _tool_string_list(arguments, field="tags")
+    if raw_tags is not None:
+        scoped_tags = set(retriever._scope.project_tags)
+        if not scoped_tags:
+            scoped_tags = {
+                tag
+                for doc in retriever._scope.docs.values()
+                for tag in cast("list[str]", doc.get("tags", []))
+            }
+        unknown_tags = sorted(set(raw_tags) - scoped_tags)
+        if unknown_tags:
+            _tool_fail("tags contains an unknown scoped tag")
+        tags = frozenset(raw_tags)
+
+    if (
+        doc_ids is None
+        and group_doc_ids is None
+        and evidence_types is None
+        and tags is None
+    ):
+        return None
+    return _ChunkScopeFilters(
+        doc_ids=doc_ids,
+        group_doc_ids=group_doc_ids,
+        evidence_types=evidence_types,
+        tags=tags,
+    )
+
+
 def _weight_value(value: Any, *, field: str) -> float:
     if isinstance(value, bool) or not isinstance(value, int | float):
         _directive_fail(f"synthesis directive {field} weight must be a number")
@@ -537,6 +705,47 @@ def _string_weight_map(value: Any, *, field: str) -> dict[str, float]:
             _directive_fail(f"synthesis directive {field} keys must be bounded text")
         parsed[raw_key] = _weight_value(raw_weight, field=f"{field}.{raw_key[:32]}")
     return parsed
+
+
+def _screen_confidence_bound(value: Any, *, field: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        _directive_fail(f"synthesis directive {field} must be a number")
+    normalized = float(value)
+    if not math.isfinite(normalized):
+        _directive_fail(f"synthesis directive {field} must be finite")
+    return normalized
+
+
+def _parse_screen_confidence_boost(value: Any) -> _ScreenConfidenceBoost:
+    if not isinstance(value, dict):
+        _directive_fail(
+            "synthesis directive retrieval_boosts.screen_confidence must be an object"
+        )
+    unknown = set(value) - {"lo", "hi"}
+    if unknown:
+        _directive_fail(
+            "synthesis directive retrieval_boosts.screen_confidence has invalid keys"
+        )
+    lo = (
+        _screen_confidence_bound(
+            value["lo"], field="retrieval_boosts.screen_confidence.lo"
+        )
+        if "lo" in value
+        else SCREEN_CONFIDENCE_DEFAULT_LO
+    )
+    hi = (
+        _screen_confidence_bound(
+            value["hi"], field="retrieval_boosts.screen_confidence.hi"
+        )
+        if "hi" in value
+        else SCREEN_CONFIDENCE_DEFAULT_HI
+    )
+    if not SCREEN_CONFIDENCE_MIN <= lo <= hi <= SCREEN_CONFIDENCE_MAX:
+        _directive_fail(
+            "synthesis directive retrieval_boosts.screen_confidence must satisfy "
+            f"{SCREEN_CONFIDENCE_MIN} <= lo <= hi <= {SCREEN_CONFIDENCE_MAX}"
+        )
+    return _ScreenConfidenceBoost(lo=lo, hi=hi)
 
 
 def _parse_sections(
@@ -582,9 +791,16 @@ def _parse_sections(
                     or has_control_character(group_id)
                 ):
                     _directive_fail("synthesis directive group_ids must be bounded text")
+                if not is_qualified_group_id(group_id):
+                    _directive_fail(
+                        "synthesis directive group_ids must use expected form "
+                        f"{GROUP_ID_EXPECTED_FORM}"
+                    )
                 if group_id not in grouping_group_ids:
                     _directive_fail(
-                        f"synthesis directive group_ids[{group_index}] is unknown"
+                        f"synthesis directive group_ids[{group_index}] is unknown; "
+                        f"expected form {GROUP_ID_EXPECTED_FORM} resolving to grouping "
+                        "records"
                     )
                 group_ids.append(group_id)
             section["group_ids"] = group_ids
@@ -594,7 +810,12 @@ def _parse_sections(
 
 def _parse_retrieval_boosts(
     value: Any,
-) -> tuple[dict[str, dict[str, float]], dict[str, float], dict[str, float]]:
+) -> tuple[
+    dict[str, dict[str, float]],
+    dict[str, float],
+    dict[str, float],
+    _ScreenConfidenceBoost,
+]:
     if not isinstance(value, dict):
         _directive_fail("synthesis directive retrieval_boosts must be an object")
     unknown = set(value) - _BOOST_KEYS
@@ -625,7 +846,12 @@ def _parse_retrieval_boosts(
         if "appraisal_tier" in value
         else {}
     )
-    return column_boosts, tag_boosts, appraisal_tier_boosts
+    screen_confidence = (
+        _parse_screen_confidence_boost(value["screen_confidence"])
+        if "screen_confidence" in value
+        else _ScreenConfidenceBoost()
+    )
+    return column_boosts, tag_boosts, appraisal_tier_boosts, screen_confidence
 
 
 def parse_synthesis_directive(
@@ -661,15 +887,20 @@ def parse_synthesis_directive(
     column_boosts: dict[str, dict[str, float]] = {}
     tag_boosts: dict[str, float] = {}
     appraisal_tier_boosts: dict[str, float] = {}
+    screen_confidence = _ScreenConfidenceBoost()
     if "retrieval_boosts" in raw:
-        column_boosts, tag_boosts, appraisal_tier_boosts = _parse_retrieval_boosts(
-            raw["retrieval_boosts"]
-        )
+        (
+            column_boosts,
+            tag_boosts,
+            appraisal_tier_boosts,
+            screen_confidence,
+        ) = _parse_retrieval_boosts(raw["retrieval_boosts"])
     return SynthesisDirective(
         sections=sections,
         column_boosts=column_boosts,
         tag_boosts=tag_boosts,
         appraisal_tier_boosts=appraisal_tier_boosts,
+        screen_confidence=screen_confidence,
     )
 
 
@@ -723,6 +954,8 @@ def _doc_record(row: Any, selected_pss_ids: set[uuid.UUID]) -> dict[str, Any]:
         "appraisal_tier": str(row.quality_score) if row.quality_score is not None else None,
         "tags": [],
         "selected": cast("uuid.UUID", row.pss_id) in selected_pss_ids,
+        "screen_confidence": row.screen_decision_confidence,
+        "screen_stage": row.screen_stage,
     }
     for key in ("year", "publication_year"):
         value = metadata.get(key)
@@ -820,6 +1053,8 @@ def build_retrieval_scope(
             source_snapshot.c.text_basis,
             source_classification_result.c.primary_evidence_type,
             source_appraisal_result.c.quality_score,
+            effective.c.screen_decision_confidence,
+            effective.c.screen_stage,
         )
         .select_from(effective)
         .join(
@@ -907,6 +1142,12 @@ def build_retrieval_scope(
             docs[pss_key]["tags"].append(row.tag)
     for doc in docs.values():
         doc["tags"] = sorted(set(cast("list[str]", doc["tags"])))
+    project_tag_rows = conn.execute(
+        sa_select(source_tag.c.tag)
+        .where(source_tag.c.project_id == project_id)
+        .order_by(source_tag.c.tag)
+    ).fetchall()
+    project_tags = {row.tag for row in project_tag_rows if isinstance(row.tag, str)}
 
     unit_rows = conn.execute(
         sa_select(
@@ -973,9 +1214,11 @@ def build_retrieval_scope(
                 "pss_id": str(row.pss_id),
                 "vector": validate_vector(row.vector),
                 "text": content[start:end],
+                "start": start,
+                "end": end,
             }
         )
-    return RetrievalScope(docs=docs, units=units, chunks=chunks)
+    return RetrievalScope(docs=docs, units=units, chunks=chunks, project_tags=project_tags)
 
 
 def _tokens(text: str) -> set[str]:
@@ -1012,6 +1255,16 @@ def _sorted_json(value: Any) -> Any:
     return value
 
 
+@dataclass(frozen=True)
+class _ChunkScopeFilters:
+    """Validated candidate-pool filters for ``search_chunks``."""
+
+    doc_ids: frozenset[str] | None = None
+    group_doc_ids: frozenset[str] | None = None
+    evidence_types: frozenset[str] | None = None
+    tags: frozenset[str] | None = None
+
+
 class ChunkRetriever:
     """Deterministic staged chunk retriever for one synthesis run.
 
@@ -1029,11 +1282,13 @@ class ChunkRetriever:
         embedder: Any,
         directive: SynthesisDirective,
         reranker: ChunkRerankerBackend,
+        selection_reference_resolved: bool = False,
     ) -> None:
         self._scope = scope
         self._embedder = embedder
         self._directive = directive
         self._reranker = reranker
+        self._selection_reference_resolved = selection_reference_resolved
         self._query_vectors: dict[str, list[float]] = {}
         # Unit text is frozen for the retriever's lifetime — tokenize once,
         # not on every search() call.
@@ -1042,32 +1297,43 @@ class ChunkRetriever:
         ]
         self._executed_boosts: dict[str, Any] = {}
         self._unmatched_boosts: dict[str, Any] = {}
+        self._soft_prior_factors: dict[str, dict[str, Any]] = {}
         self._has_selected_docs = any(
             bool(doc.get("selected")) for doc in self._scope.docs.values()
         )
         self._refresh_boost_matches()
 
-    def search(self, query: str) -> list[ChunkSearchResult]:
+    def search(
+        self, query: str, *, filters: _ChunkScopeFilters | None = None
+    ) -> list[ChunkSearchResult]:
         """Search frozen chunks with hybrid content relevance and soft priors.
 
         Args:
             query: Content query supplied by the section loop.
+            filters: Optional validated scope filters applied before ranking.
 
         Returns:
             Ranked chunk records capped to :data:`SYNTH_CHUNK_TOP_K`.
         """
         query_vector = self._query_vector(query)
         query_tokens = _tokens(query)
+        unit_pairs = [
+            (unit, unit_tokens)
+            for unit, unit_tokens in zip(
+                self._scope.units, self._unit_tokens, strict=True
+            )
+            if self._unit_matches_filters(unit, filters)
+        ]
         cosine_pool = _ranked_pool([
             (_cosine(query_vector, cast("list[float]", unit["vector"])), unit)
-            for unit in self._scope.units
+            for unit, _unit_tokens in unit_pairs
         ])
         lexical_pool = _ranked_pool([
             (
                 len(query_tokens & unit_tokens) / max(1, len(query_tokens)),
                 unit,
             )
-            for unit, unit_tokens in zip(self._scope.units, self._unit_tokens, strict=True)
+            for unit, unit_tokens in unit_pairs
         ])
 
         fused_by_unit: dict[str, tuple[float, dict[str, Any]]] = {}
@@ -1087,10 +1353,12 @@ class ChunkRetriever:
             if current_best is None or fused > current_best[0]:
                 best_by_chunk[chunk_id] = (fused, unit)
 
-        candidates = [
-            self._result_for_chunk(chunk_id, fused * self._soft_prior(chunk_id))
-            for chunk_id, (fused, _unit) in best_by_chunk.items()
-        ]
+        candidates = []
+        for chunk_id, (fused, unit) in best_by_chunk.items():
+            prior = self._soft_prior(chunk_id)
+            candidates.append(
+                self._result_for_chunk(chunk_id, fused * prior, matched_unit=unit)
+            )
         ordered = sorted(
             candidates,
             key=lambda candidate: (-candidate["fused_score"], candidate["chunk_record_id"]),
@@ -1109,9 +1377,42 @@ class ChunkRetriever:
             "selection_prior": SELECTION_PRIOR_BOOST if self._has_selected_docs else None,
             "executed_boosts": _sorted_json(self._executed_boosts),
             "unmatched_boosts": _sorted_json(self._unmatched_boosts),
+            "soft_prior_factors": _sorted_json(self._soft_prior_factors),
+            "confidence_suppressed": self._selection_reference_resolved,
             "doc_count": len(self._scope.docs),
             "unit_count": len(self._scope.units),
         }
+
+    def warm_queries(self, queries: Sequence[str]) -> None:
+        """Batch-embed any of ``queries`` not yet cached, in one backend call.
+
+        A read turn can carry several ``search_chunks`` calls with distinct
+        queries; embedding each lazily inside :meth:`search` costs one
+        backend round-trip per query. This embeds the turn's new, uncached
+        queries together (022 rider 16) — per-query caching and retrieval
+        determinism are unchanged: a query already cached, or embedded here,
+        is never re-embedded, and :meth:`search` still resolves every query
+        to the same vector regardless of whether it was warmed.
+
+        Args:
+            queries: Candidate query strings gathered from one turn's
+                ``search_chunks`` calls. Duplicates and already-cached
+                queries are skipped before the backend call.
+        """
+        uncached: list[str] = []
+        seen: set[str] = set()
+        for query in queries:
+            if query in self._query_vectors or query in seen:
+                continue
+            seen.add(query)
+            uncached.append(query)
+        if not uncached:
+            return
+        vectors = self._embedder.embed_texts(uncached)
+        if len(vectors) != len(uncached):
+            raise RuntimeError("embedding backend returned wrong query vector count")
+        for query, vector in zip(uncached, vectors, strict=True):
+            self._query_vectors[query] = validate_vector(vector)
 
     def _query_vector(self, query: str) -> list[float]:
         vector = self._query_vectors.get(query)
@@ -1123,21 +1424,72 @@ class ChunkRetriever:
             self._query_vectors[query] = vector
         return vector
 
-    def _result_for_chunk(self, chunk_id: str, score: float) -> ChunkSearchResult:
+    def _unit_matches_filters(
+        self, unit: dict[str, Any], filters: _ChunkScopeFilters | None
+    ) -> bool:
+        if filters is None:
+            return True
+        pss_id = str(unit["pss_id"])
+        doc = self._scope.docs[pss_id]
+        if filters.doc_ids is not None and pss_id not in filters.doc_ids:
+            return False
+        if filters.group_doc_ids is not None and pss_id not in filters.group_doc_ids:
+            return False
+        evidence_type = doc.get("primary_evidence_type")
+        if (
+            filters.evidence_types is not None
+            and str(evidence_type) not in filters.evidence_types
+        ):
+            return False
+        if filters.tags is not None:
+            doc_tags = set(cast("list[str]", doc.get("tags", [])))
+            if not doc_tags.intersection(filters.tags):
+                return False
+        return True
+
+    def _result_for_chunk(
+        self, chunk_id: str, score: float, *, matched_unit: dict[str, Any]
+    ) -> ChunkSearchResult:
         chunk = self._scope.chunks[chunk_id]
         pss_id = cast("str", chunk["pss_id"])
         doc = self._scope.docs[pss_id]
+        frozen_content = cast("str", chunk["content"])
+        content = frozen_content
+        window_start: int | None = None
+        window_end: int | None = None
+        if len(frozen_content) > UNIT_CHAR_BUDGET:
+            unit_start = matched_unit.get("start")
+            unit_end = matched_unit.get("end")
+            if (
+                isinstance(unit_start, bool)
+                or isinstance(unit_end, bool)
+                or not isinstance(unit_start, int)
+                or not isinstance(unit_end, int)
+                or unit_start < 0
+                or unit_end < unit_start
+                or unit_end > len(frozen_content)
+            ):
+                raise ValueError("matched retrieval unit offsets are required for windows")
+            window_start = max(0, unit_start - OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS)
+            window_end = min(
+                len(frozen_content),
+                unit_end + OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS,
+            )
+            content = frozen_content[window_start:window_end]
         result: ChunkSearchResult = {
             "chunk_record_id": chunk_id,
             "pss_id": pss_id,
             "document_title": cast("str", doc["title"]),
             "sequence": cast("int", chunk["sequence"]),
-            "content": cast("str", chunk["content"]),
+            "content": content,
             "text_basis": cast("str", chunk["text_basis"]),
             "origin": "selected" if doc.get("selected") else "unselected_screened",
             "appraised": doc.get("appraisal_tier") is not None,
             "fused_score": score,
         }
+        if window_start is not None and window_end is not None:
+            result["window_start"] = window_start
+            result["window_end"] = window_end
         # Owner-adopted default metadata set (ADR 0015 §8 / B-B3), sourced from
         # the doc record, omit-if-absent (no null-noise).
         year = doc.get("year", doc.get("publication_year"))
@@ -1160,22 +1512,54 @@ class ChunkRetriever:
     def _soft_prior(self, chunk_id: str) -> float:
         chunk = self._scope.chunks[chunk_id]
         doc = self._scope.docs[cast("str", chunk["pss_id"])]
-        multiplier = (
-            SELECTION_PRIOR_BOOST
-            if self._has_selected_docs and doc.get("selected")
-            else 1.0
+        selection_factor = (
+            SELECTION_PRIOR_BOOST if self._has_selected_docs and doc.get("selected") else 1.0
         )
+        multiplier = selection_factor
+        column_factors: dict[str, dict[str, float]] = {}
         for column, values in self._directive.column_boosts.items():
             raw_value = doc.get(column)
             if raw_value is not None and str(raw_value) in values:
-                multiplier *= values[str(raw_value)]
+                factor = values[str(raw_value)]
+                column_factors[column] = {str(raw_value): factor}
+                multiplier *= factor
+        tag_factors: dict[str, float] = {}
         for tag in cast("list[str]", doc.get("tags", [])):
             if tag in self._directive.tag_boosts:
-                multiplier *= self._directive.tag_boosts[tag]
+                factor = self._directive.tag_boosts[tag]
+                tag_factors[tag] = factor
+                multiplier *= factor
         tier = doc.get("appraisal_tier")
+        appraisal_factor = 1.0
         if tier is not None and str(tier) in self._directive.appraisal_tier_boosts:
-            multiplier *= self._directive.appraisal_tier_boosts[str(tier)]
-        return multiplier
+            appraisal_factor = self._directive.appraisal_tier_boosts[str(tier)]
+            multiplier *= appraisal_factor
+        confidence_factor = 1.0
+        if not self._selection_reference_resolved:
+            confidence = doc.get("screen_confidence")
+            if (
+                not isinstance(confidence, bool)
+                and isinstance(confidence, int | float)
+                and math.isfinite(float(confidence))
+            ):
+                bounds = self._directive.screen_confidence
+                confidence_factor = bounds.lo + float(confidence) * (bounds.hi - bounds.lo)
+                multiplier *= confidence_factor
+        raw_multiplier = multiplier
+        executed_multiplier = min(
+            BOOST_CLAMP_MAX, max(BOOST_CLAMP_MIN, raw_multiplier)
+        )
+        self._soft_prior_factors[chunk_id] = {
+            "selection": selection_factor,
+            "columns": column_factors,
+            "tags": tag_factors,
+            "appraisal_tier": appraisal_factor,
+            "screen_confidence": confidence_factor,
+            "confidence_suppressed": self._selection_reference_resolved,
+            "raw_multiplier": raw_multiplier,
+            "executed_multiplier": executed_multiplier,
+        }
+        return executed_multiplier
 
     def _refresh_boost_matches(self) -> None:
         executed_columns: dict[str, list[str]] = {}
@@ -1241,6 +1625,7 @@ def build_section_tools(
     retriever: ChunkRetriever | None,
     findings_reader: Callable[[dict[str, Any]], dict[str, Any]] | None,
     lookup_reader: Callable[[dict[str, Any]], dict[str, Any]],
+    group_doc_ids_by_group_id: Mapping[str, set[str]] | None = None,
     char_budget: int = SYNTH_CHUNK_CHAR_BUDGET,
 ) -> dict[str, Callable[[dict[str, Any]], dict[str, Any]]]:
     """Build substrate-available read-only section tools.
@@ -1249,6 +1634,8 @@ def build_section_tools(
         retriever: Chunk retriever, or ``None`` when chunk claims are unavailable.
         findings_reader: Findings reader, or ``None`` without extraction.
         lookup_reader: Universal lookup reader.
+        group_doc_ids_by_group_id: Optional grouping id to document-id map for
+            ``search_chunks`` group filters.
         char_budget: Per-section cumulative chunk text budget.
 
     Returns:
@@ -1258,26 +1645,56 @@ def build_section_tools(
         raise ValueError("char_budget must be non-negative")
     tools: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {}
     used_chars = 0
+    returned_chunk_ids: set[str] = set()
+    returned_finding_ids: set[str] = set()
+    returned_lookup_ids: set[str] = set()
 
     if retriever is not None:
 
         def search_chunks(arguments: dict[str, Any]) -> dict[str, Any]:
             nonlocal used_chars
-            _validate_tool_keys(arguments, allowed={"query"})
-            query = _tool_string(arguments, field="query", max_length=1000, required=True)
+            _validate_tool_keys(
+                arguments,
+                allowed={"query", "doc_ids", "group_ids", "evidence_types", "tags"},
+            )
+            query = _tool_string(
+                arguments, field="query", max_length=SEARCH_QUERY_MAX_LENGTH, required=True
+            )
             assert query is not None
-            if used_chars >= char_budget:
-                return {"chunks": [], "truncated": True}
-            chunks = retriever.search(query)
+            filters = _search_scope_filters(
+                arguments,
+                retriever=retriever,
+                group_doc_ids_by_group_id=group_doc_ids_by_group_id,
+            )
+            chunks = retriever.search(query, filters=filters)
             remaining = char_budget - used_chars
-            kept: list[ChunkSearchResult] = []
+            kept: list[dict[str, Any]] = []
             truncated = False
             for chunk in chunks:
+                chunk_id = chunk["chunk_record_id"]
+                if chunk_id in returned_chunk_ids:
+                    kept.append(
+                        _already_returned_reference(
+                            id_key="chunk_record_id", record_id=chunk_id, record=chunk
+                        )
+                    )
+                    continue
                 content_len = len(chunk["content"])
                 if content_len > remaining:
+                    # Honest per-item skip: without a marker the dropped chunk is
+                    # indistinguishable from "never retrieved" (the dedup path
+                    # leaves an already_returned stub; this is its budget sibling).
                     truncated = True
-                    break
-                kept.append(chunk)
+                    kept.append(
+                        {
+                            "id": chunk_id,
+                            "chunk_record_id": chunk_id,
+                            "skipped_over_budget": True,
+                        }
+                    )
+                    continue
+                kept.append(dict(chunk))
+                returned_chunk_ids.add(chunk_id)
                 used_chars += content_len
                 remaining -= content_len
             if len(kept) < len(chunks):
@@ -1290,13 +1707,27 @@ def build_section_tools(
 
         def query_findings(arguments: dict[str, Any]) -> dict[str, Any]:
             _validate_findings_tool_arguments(arguments)
-            return findings_reader(arguments)
+            result = findings_reader(arguments)
+            deduped = dict(result)
+            for key in ("findings", "iof_findings", "icf_findings"):
+                records = deduped.get(key)
+                if isinstance(records, list):
+                    deduped[key] = _deduplicate_records(
+                        records,
+                        returned_ids=returned_finding_ids,
+                        id_keys=("finding_id", "id"),
+                    )
+            return deduped
 
         tools["query_findings"] = query_findings
 
     def lookup(arguments: dict[str, Any]) -> dict[str, Any]:
         _validate_lookup_tool_arguments(arguments)
-        return lookup_reader(arguments)
+        return _deduplicate_lookup_result(
+            lookup_reader(arguments),
+            arguments=arguments,
+            returned_lookup_ids=returned_lookup_ids,
+        )
 
     tools["lookup"] = lookup
     return tools
@@ -1602,9 +2033,13 @@ def _group_member_ids(grouping_groups: list[dict[str, Any]] | None) -> dict[str,
         return {}
     resolved: dict[str, set[str]] = {}
     for group in grouping_groups:
-        raw_id = group.get("group_id") or group.get("id") or group.get("label")
+        raw_id = group.get("group_id")
         raw_members = group.get("member_finding_ids") or group.get("finding_ids")
-        if isinstance(raw_id, str) and isinstance(raw_members, list):
+        if not isinstance(raw_id, str) or not is_qualified_group_id(raw_id):
+            raise ToolValidationError(
+                f"grouping group ids must use expected form {GROUP_ID_EXPECTED_FORM}"
+            )
+        if isinstance(raw_members, list):
             resolved[raw_id] = {member for member in raw_members if isinstance(member, str)}
     return resolved
 
@@ -1620,6 +2055,109 @@ def _requested_finding_kinds(arguments: dict[str, Any]) -> tuple[str, ...]:
             requested.append(kind)
             seen.add(kind)
     return tuple(kind for kind in FINDING_KINDS if kind in seen)
+
+
+def _record_identifier(
+    record: Mapping[str, Any], id_keys: Sequence[str]
+) -> tuple[str, str] | None:
+    for key in id_keys:
+        value = record.get(key)
+        if isinstance(value, str) and value:
+            return key, value
+    return None
+
+
+def _already_returned_reference(
+    *, id_key: str, record_id: str, record: Mapping[str, Any] | None = None
+) -> dict[str, Any]:
+    reference = {"id": record_id, id_key: record_id, "already_returned": True}
+    if record is not None and isinstance(record.get("kind"), str):
+        reference["kind"] = record["kind"]
+    return reference
+
+
+def _deduplicate_records(
+    records: list[Any],
+    *,
+    returned_ids: set[str],
+    id_keys: Sequence[str],
+    namespace: str = "",
+) -> list[Any]:
+    deduped: list[Any] = []
+    for record in records:
+        if not isinstance(record, dict):
+            deduped.append(record)
+            continue
+        identity = _record_identifier(record, id_keys)
+        if identity is None:
+            deduped.append(dict(record))
+            continue
+        id_key, record_id = identity
+        member_key = f"{namespace}{record_id}"
+        if member_key in returned_ids:
+            deduped.append(
+                _already_returned_reference(
+                    id_key=id_key, record_id=record_id, record=record
+                )
+            )
+            continue
+        returned_ids.add(member_key)
+        deduped.append(dict(record))
+    return deduped
+
+
+def _lookup_call_id(arguments: Mapping[str, Any]) -> str:
+    canonical = json.dumps(arguments, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(canonical.encode()).hexdigest()[:16]
+    return f"lookup:{digest}"
+
+
+def _deduplicate_lookup_result(
+    result: dict[str, Any],
+    *,
+    arguments: Mapping[str, Any],
+    returned_lookup_ids: set[str],
+) -> dict[str, Any]:
+    lookup_id = _lookup_call_id(arguments)
+    if lookup_id in returned_lookup_ids:
+        kind = result.get("kind") if isinstance(result.get("kind"), str) else None
+        reference = _already_returned_reference(
+            id_key="lookup_id", record_id=lookup_id
+        )
+        if kind is not None:
+            reference["kind"] = kind
+        return reference
+    returned_lookup_ids.add(lookup_id)
+
+    deduped = dict(result)
+    payload = deduped.get("result")
+    lookup_record_ids = returned_lookup_ids
+    if isinstance(payload, list):
+        deduped["result"] = _deduplicate_records(
+            payload,
+            returned_ids=lookup_record_ids,
+            # Record ids share the set with lookup:<hash> call keys — namespace
+            # them so a record id can never collide with another id space.
+            namespace="lookup_record:",
+            id_keys=("search_coverage_record_id", "group_id", "theme_id", "pss_id", "id"),
+        )
+    elif isinstance(payload, dict):
+        nested = dict(payload)
+        for key, value in payload.items():
+            if isinstance(value, list):
+                nested[key] = _deduplicate_records(
+                    value,
+                    returned_ids=lookup_record_ids,
+                    id_keys=(
+                        "search_coverage_record_id",
+                        "group_id",
+                        "theme_id",
+                        "pss_id",
+                        "id",
+                    ),
+                )
+        deduped["result"] = nested
+    return deduped
 
 
 def make_findings_reader(
@@ -1704,8 +2242,13 @@ def make_findings_reader(
                 _tool_fail("group_id requires grouping")
             if not isinstance(group_id, str) or not group_id:
                 _tool_fail("group_id must be a string")
+            if not is_qualified_group_id(group_id):
+                _tool_fail(f"group_id must use expected form {GROUP_ID_EXPECTED_FORM}")
             if group_id not in group_members:
-                _tool_fail("unknown group_id")
+                _tool_fail(
+                    f"unknown group_id; expected form {GROUP_ID_EXPECTED_FORM} "
+                    "resolving to grouping records"
+                )
             group_filter = group_members[group_id]
 
         effect_direction = arguments.get("effect_direction")
@@ -1742,8 +2285,8 @@ def make_findings_reader(
                     for finding in selected
                     if finding["context_type"] == context_type
                 ]
-            truncated = len(selected) > 100
-            result[result_key] = selected[:100]
+            truncated = len(selected) > LOOKUP_ROW_CAP
+            result[result_key] = selected[:LOOKUP_ROW_CAP]
             result[f"{kind}_truncated"] = truncated
         return result
 
@@ -1798,6 +2341,40 @@ def _doc_id_for_scope(
     return doc_id
 
 
+def _doc_id_for_project(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    arguments: dict[str, Any],
+) -> uuid.UUID:
+    """Validate a ``doc_id`` argument scoped to the project only.
+
+    Unlike :func:`_doc_id_for_scope`, this does not require the document to be
+    screened-in for the scope: ``screening_by_doc`` reads screening rows
+    themselves, so a not_relevant / excluded_retracted / failed doc must
+    resolve too — that is the read the widening exists for (022 rider 16).
+
+    Args:
+        conn: Open database connection.
+        project_id: Project id scoping the read.
+        arguments: Raw tool arguments carrying ``doc_id``.
+
+    Returns:
+        The validated document id.
+    """
+    raw_doc_id = _tool_string(arguments, field="doc_id", max_length=100, required=True)
+    assert raw_doc_id is not None
+    doc_id = _parse_uuid(raw_doc_id, field="doc_id")
+    exists = conn.execute(
+        sa_select(project_source_snapshot.c.project_source_snapshot_id)
+        .where(project_source_snapshot.c.project_id == project_id)
+        .where(project_source_snapshot.c.project_source_snapshot_id == doc_id)
+    ).first()
+    if exists is None:
+        _tool_fail("doc_id is unknown")
+    return doc_id
+
+
 def _absent() -> dict[str, bool]:
     return {"absent": True}
 
@@ -1805,7 +2382,7 @@ def _absent() -> dict[str, bool]:
 def _selection_summary(row: Any) -> dict[str, Any]:
     selected = row.selected if isinstance(row.selected, list) else []
     bounded_selected: list[dict[str, Any]] = []
-    for item in selected[:100]:
+    for item in selected[:LOOKUP_ROW_CAP]:
         if isinstance(item, dict):
             bounded_selected.append({
                 "pss_id": item.get("pss_id"),
@@ -1818,7 +2395,7 @@ def _selection_summary(row: Any) -> dict[str, Any]:
         "excluded": row.excluded,
         "flags": row.flags,
         "selected": bounded_selected,
-        "selected_truncated": len(selected) > 100,
+        "selected_truncated": len(selected) > LOOKUP_ROW_CAP,
     }
 
 
@@ -1847,30 +2424,56 @@ def _themes_summary(themes_payload: Any) -> dict[str, Any]:
 
 def _grouping_summary(groups_payload: Any) -> dict[str, Any]:
     if not isinstance(groups_payload, dict):
-        return {"groups": [], "residuals": {}}
-    raw_groups = groups_payload.get("groups")
+        return {"groups": [], "residuals": {}, "facets": []}
+    if isinstance(groups_payload.get("groups"), list):
+        raise ToolValidationError(
+            "grouping groups must be facet-keyed with group ids using expected "
+            f"form {GROUP_ID_EXPECTED_FORM}"
+        )
     groups: list[dict[str, Any]] = []
-    if isinstance(raw_groups, list):
-        for item in raw_groups:
+    residuals_by_facet: dict[str, dict[str, Any]] = {}
+    facets: list[str] = []
+    for facet, facet_payload in groups_payload.items():
+        if not isinstance(facet, str) or not isinstance(facet_payload, dict):
+            continue
+        facet_groups = facet_payload.get("groups")
+        if not isinstance(facet_groups, list):
+            continue
+        facets.append(facet)
+        for item in facet_groups:
             if not isinstance(item, dict):
                 continue
-            members = item.get("member_finding_ids", [])
+            group = {**item, "facet": item.get("facet", facet)}
+            group_id = group.get("group_id")
+            if not isinstance(group_id, str) or not is_qualified_group_id(group_id):
+                raise ToolValidationError(
+                    f"grouping group ids must use expected form {GROUP_ID_EXPECTED_FORM}"
+                )
+            if facet_of_group_id(group_id) != facet:
+                raise ToolValidationError(
+                    "grouping group id facet must match its payload facet; "
+                    f"expected form {GROUP_ID_EXPECTED_FORM}"
+                )
+            members = group.get("member_finding_ids", [])
             if not isinstance(members, list):
                 members = []
             groups.append({
-                "group_id": item.get("group_id") or item.get("label"),
-                "label": item.get("label"),
-                "description": item.get("description"),
-                "size": item.get("size", len(members)),
-                "direction_spread": item.get("direction_spread", {}),
+                "group_id": group_id,
+                "facet": group.get("facet", facet),
+                "label": group.get("label"),
+                "description": group.get("description"),
+                "size": group.get("size", len(members)),
+                "direction_spread": group.get("direction_spread", {}),
                 "member_finding_ids": members,
             })
+        facet_residuals = {"ungrouped": facet_payload.get("ungrouped")}
+        if "no_value" in facet_payload:
+            facet_residuals["no_value"] = facet_payload.get("no_value")
+        residuals_by_facet[facet] = facet_residuals
     return {
         "groups": groups,
-        "residuals": {
-            "ungrouped": groups_payload.get("ungrouped"),
-            "no_value": groups_payload.get("no_value"),
-        },
+        "residuals": residuals_by_facet,
+        "facets": facets,
     }
 
 
@@ -1960,6 +2563,39 @@ def make_lookup_reader(
                     for row in rows
                 ]
             return {"kind": kind, "result": result}
+
+        if kind == "screening_by_doc":
+            doc_id = _doc_id_for_project(conn, project_id=project_id, arguments=arguments)
+            rows = conn.execute(
+                sa_select(
+                    source_screening_result.c.screen_stage,
+                    source_screening_result.c.status,
+                    source_screening_result.c.screen_basis,
+                    source_screening_result.c.screen_decision_confidence,
+                )
+                .where(source_screening_result.c.project_id == project_id)
+                .where(source_screening_result.c.evidence_scope_id == scope_id)
+                .where(source_screening_result.c.project_source_snapshot_id == doc_id)
+                # Failed attempts are retry history, never a decision — the
+                # partial unique index (uq_ssr_scope_source_stage) guarantees
+                # at most one non-failed row per stage, so this is honestly
+                # every decided stage for the doc, never a filtered subset of
+                # decisions (only attempt noise is excluded).
+                .where(source_screening_result.c.status != "failed")
+                .order_by(source_screening_result.c.screen_stage)
+            ).fetchall()
+            return {
+                "kind": kind,
+                "result": [
+                    {
+                        "screen_stage": row.screen_stage,
+                        "status": row.status,
+                        "screen_basis": row.screen_basis,
+                        "screen_decision_confidence": row.screen_decision_confidence,
+                    }
+                    for row in rows
+                ],
+            }
 
         if kind == "selection_rationale":
             if selection_run_id is None:
@@ -2082,12 +2718,38 @@ def make_lookup_reader(
     return reader
 
 
+def _turn_search_queries(tool_calls: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Return this turn's well-formed ``search_chunks`` query strings.
+
+    Malformed queries are skipped rather than raised — the actual tool call
+    still runs its own validation and rejects them there; this is only a
+    best-effort embedding warm-up (022 rider 16).
+    """
+    queries: list[str] = []
+    for call in tool_calls:
+        if not isinstance(call, Mapping) or call.get("tool") != "search_chunks":
+            continue
+        arguments = call.get("arguments")
+        if not isinstance(arguments, Mapping):
+            continue
+        query = arguments.get("query")
+        if (
+            isinstance(query, str)
+            and query
+            and len(query) <= SEARCH_QUERY_MAX_LENGTH
+            and not has_control_character(query)
+        ):
+            queries.append(query)
+    return queries
+
+
 def run_section_loop(
     backend: Any,
     *,
     seed: dict[str, Any],
     tools: Mapping[str, Callable[[dict[str, Any]], dict[str, Any]]],
     turn_cap: int = SECTION_TURN_CAP,
+    retriever: ChunkRetriever | None = None,
 ) -> SectionLoopResult:
     """Run one bounded section loop against the closed read-only tool set.
 
@@ -2096,6 +2758,9 @@ def run_section_loop(
         seed: Id-keyed section seed.
         tools: Available substrate tools.
         turn_cap: Maximum generation turns; final turn forces emission.
+        retriever: Optional chunk retriever. When given, a turn's uncached
+            ``search_chunks`` query embeddings are batched into one backend
+            call before the turn's tool calls execute (022 rider 16).
 
     Returns:
         Claims, transcript and accounting counters.
@@ -2146,6 +2811,9 @@ def run_section_loop(
             raise RuntimeError("backend returned tool call on forced emit turn")
         if not tool_calls:
             raise RuntimeError("backend returned no claims or tool calls")
+
+        if retriever is not None:
+            retriever.warm_queries(_turn_search_queries(tool_calls))
 
         executed_this_turn = 0
         for call in tool_calls:
@@ -2214,7 +2882,13 @@ def gathered_ids(transcript: Sequence[ToolExchange]) -> dict[str, set[str]]:
             chunks = result.get("chunks", [])
             if isinstance(chunks, list):
                 for chunk in chunks:
-                    if isinstance(chunk, dict) and isinstance(chunk.get("chunk_record_id"), str):
+                    if not isinstance(chunk, dict):
+                        continue
+                    # already_returned references stay citation-eligible (their
+                    # content was shown earlier); budget-skip markers never are.
+                    if chunk.get("skipped_over_budget"):
+                        continue
+                    if isinstance(chunk.get("chunk_record_id"), str):
                         chunk_ids.add(cast("str", chunk["chunk_record_id"]))
         elif exchange["tool"] == "query_findings":
             for key in ("findings", "iof_findings", "icf_findings"):

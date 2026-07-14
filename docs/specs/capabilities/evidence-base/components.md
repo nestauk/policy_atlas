@@ -265,27 +265,48 @@ see `docs/deferred.md` § Extract / findings layer for the schema-candidate ladd
 ## 8 — group (facet-level theming)
 
 A distinct component between extract and synthesise (not folded into the write-up). Groups the
-extracted findings on the **intent-derived facet** — in v3.0 the facets the schema supports
-(**interventions / outcomes / populations** — the source-named references), *not* v2's fixed
-four. The **second clustering** in the chain (topic-level at characterise; facet-level over
-extracted findings here) — via `cluster` over finding records / dimension values +
-`query-findings`.
+extracted findings **per facet, across a directive facet LIST in one run** (task 022, owner's
+in-component fan-out shape): one `group` execution runs separate clustering passes per
+requested facet — never one call spanning facets — and writes **one** `grouping_result` row
+whose payloads are facet-keyed at **group grain** (each group carries its `facet`; ids are
+facet-qualified `facet:gNN`, collision-safe end-to-end). The v3.0 facet vocabulary:
+**intervention / outcome / population** (value facets over the source-named references) plus
+the **claim-theme facets** **barrier_theme / enabler_theme / mechanism_theme** (ICF claim
+prose scoped by `context_type` — each theme facet's eligible base is exactly the ICF rows of
+its type; IOF and non-matching ICF rows are outside the base, never residual members; the
+remaining four context_types are config, not machinery). The **second clustering** in the
+chain (topic-level at characterise; facet-level here), now on the **shared two-stage
+clustering engine** (ADR 0018): open discovery (labels + descriptions only — never an
+exhaustive id list, the ~184-value capacity cliff the redesign retired) + batch-validated
+exhaustive assignment against the deterministically known unit list, parameterised by unit
+projection; characterise runs on the same engine, behaviour-preserving. Per-facet honesty:
+per-facet residuals, CAP accounting and failure outcomes (`status`/`failure_class` per facet
+— one facet fails closed while siblings survive; component-abort only for corrupt shared
+input or cross-facet invariant violations). Discovery granularity is steered by a
+corpus-relative ceiling (`clamp(ceil(N/5), 3, 40)`, computed per run and injected into the
+prompt) with **no lower target**; per-unit context payloads (bounded anchor quotes for value
+facets; `context_label` + intervention for claim themes) are on by default, gated out of
+discovery above 120 units.
 
 **Kind-spanning membership (task 021, ADR 0017, gate decision 8 — the minimal bridge):** the
 loader reads **both finding tables** via the shared reference columns, so a facet group's
 members can span IOF and ICF records — the cross-schema linkage the shared vocabulary was
-designed for, made real. `group`'s **facet shape is untouched** (single facet per run, current
-grain, current clustering, no new facets); only its *membership reach* widened.
+designed for, made real. (021 widened membership reach only; task 022 then moved facet to
+group grain and added the multi-facet fan-out above.) The value-facet loader reads the
+shared reference columns through the **`finding_reference_union` view**; claim-theme loading
+reads the ICF table directly (its unit needs `context_type` + `claim`, deliberately not
+shared vocabulary).
 `FindingFacetView` tolerates kind-specific fields (`effect_direction` nullable, a `kind` tag
 carried); `direction_spread` is computed over **IOF members only** (ICF members have no
 direction — never zero-filled into the spread); the group payload carries per-kind member
 counts. Closes the hole where, on a deep grouped run, ICF findings would never reach the
 synthesise envelope's `member_findings`.
 
-⏸ **ICF-specific facets** (grouping BY `context_type` — barrier/mechanism/condition) **await
-facet machinery** — Slice C's multi-facet redesign, which inherits kind-spanning membership as
-a requirement and reworks fan-out/grain around it; the membership principle (members join by
-shared reference, regardless of kind) survives that rework.
+**ICF claim-theme facets are BUILT** (task 022 — the high-value trio above; grouping BY the
+`context_type` predicate, never `context_type` itself as a facet: the bare deterministic
+partition by the seven-value enum already exists as `icf_context_type_count`). The membership
+principle (members join by shared reference, regardless of kind) survived the rework as
+designed.
 
 ## 9 — synthesise (run terminus)
 
@@ -371,7 +392,21 @@ on what the run produced:
   extraction lacks the ICF profile — a visible coverage fact, not a silently absent tool). A characterisation-only
   run is the landscape degenerate case (pattern/theme/gap/reasoning sections).
   **Groups, where present, are input, not structure** (uncovered groups counted, never
-  silently dropped). Every cited claim goes through the settled `produce-grounded-block`
+  silently dropped) — since task 022 synthesise consumes ALL of one grouping run's facets
+  through its single grouping reference (per-facet residual honesty, per-facet
+  `groups_unsectioned`, failed-facet visibility; group ids facet-qualified `facet:gNN`
+  everywhere they travel, fail-closed on unqualified forms). Task 022's cost/surface set
+  (one writer bump, `synthesise_section_v7`): layered append-only message prefixes
+  (stable system → run-stable block → section block → tool exchanges — provider-neutral
+  cache layout), tool-return dedup (`already_returned` references; citation eligibility
+  spans repeats), oversized-only windowed chunk returns, per-argument fail-closed
+  `search_chunks` scope filters, the screen-confidence retrieval boost (clamped
+  functional multiplier, suppression when selection priced it), repair as a
+  dependency-complete id-carrying micro-call (never a transcript resend), and the
+  **pre-synthesise steer seam**: side-effect-free `propose_synthesis_plan` +
+  deterministic fail-closed directive compile — an out-of-band caller shapes
+  `context["synthesis"]` between runs; no runtime pausing. Every cited claim goes
+  through the settled `produce-grounded-block`
   mechanism (deterministic quote-presence + LLM judge; Unsupported/mis-cited a real state)
   — *not* v2's permissive post-hoc fuzzy matching. Intent shapes emphasis, never
   verification ("topical relevance ≠ support"). The source/evidence policy's citable bar

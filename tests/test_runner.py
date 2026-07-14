@@ -102,7 +102,7 @@ def _base_plan(**overrides: Any) -> OrchestrationPlan:
             "extract": "Captures intervention-outcome findings",
             "group": "Organises extracted findings by an approved facet",
         },
-        "grouping_facet": "outcome",
+        "grouping_facets": ["outcome"],
         "steering_mode": "moderate",
         "steer_point_defaults": [
             {"steer_point": "deepening_selection", "action": "proceed_flag"}
@@ -424,7 +424,7 @@ def test_landscape_chain_omits_deep_components_and_synthesises_from_characterisa
         plan = _base_plan(
             analysis_depth="landscape",
             components=["characterise"],
-            grouping_facet=None,
+            grouping_facets=None,
         )
 
         outcome = run_plan(
@@ -469,7 +469,7 @@ def test_standard_depth_composes_select_and_synthesises_referencing_it(
             search_effort="standard",
             analysis_depth="standard",
             components=["screen_full", "characterise", "select"],
-            grouping_facet=None,
+            grouping_facets=None,
         )
 
         outcome = run_plan(
@@ -541,7 +541,7 @@ def test_reference_threading_uses_group_then_deepest_available_reference(
         drop_project, drop_scope = _seed_project(engine)
         drop_plan = _base_plan(
             components=["characterise", "select", "extract"],
-            grouping_facet=None,
+            grouping_facets=None,
         )
         drop_outcome = run_plan(
             engine,
@@ -599,7 +599,7 @@ def test_spine_component_retries_once_then_continues(
         plan = _base_plan(
             analysis_depth="landscape",
             components=["characterise"],
-            grouping_facet=None,
+            grouping_facets=None,
         )
 
         outcome = run_plan(
@@ -656,7 +656,7 @@ def test_spine_failure_after_retry_stops_without_downstream_runs(
         plan = _base_plan(
             analysis_depth="landscape",
             components=["characterise"],
-            grouping_facet=None,
+            grouping_facets=None,
         )
 
         outcome = run_plan(
@@ -732,7 +732,7 @@ def test_db_abort_backstop_records_failure_event_and_fails_spine_plan(
         plan = _base_plan(
             analysis_depth="landscape",
             components=["characterise"],
-            grouping_facet=None,
+            grouping_facets=None,
         )
 
         outcome = run_plan(
@@ -892,7 +892,7 @@ def test_backstop_failure_attempt_retries_and_succeeds(
         plan = _base_plan(
             analysis_depth="landscape",
             components=["characterise"],
-            grouping_facet=None,
+            grouping_facets=None,
         )
 
         outcome = run_plan(
@@ -1045,7 +1045,7 @@ def test_directive_application_replaces_only_top_level_delta_keys(
                 "selection": {"old": "removed by top-level replacement"},
             },
         )
-        plan = _base_plan(grouping_facet="population")
+        plan = _base_plan(grouping_facets=["population"])
 
         outcome = run_plan(
             engine,
@@ -1074,6 +1074,6 @@ def test_directive_application_replaces_only_top_level_delta_keys(
         }
         assert context["selection"] == {"budget": 25}
         assert context["extraction"] == {"profiles": list(KNOWN_PROFILE_IDS)}
-        assert context["grouping"] == {"facet": "population"}
+        assert context["grouping"] == {"facets": ["population"]}
     finally:
         _cleanup(engine, project_id)

@@ -487,7 +487,7 @@ def grouping_score_summary(
         return
     if root_span is not None:
         root_span.update(
-            input={"component": "group", "facet": summary["facet"]},
+            input={"component": "group", "facets": summary.get("facets", [])},
             output=summary,
         )
     # Reaching component.completed means the partition validated; a failed
@@ -497,16 +497,36 @@ def grouping_score_summary(
         value=1.0,
         data_type="NUMERIC",
     )
-    findings_total = summary["counts"]["findings_total"]
+    counts = summary.get("counts", {})
+    if isinstance(counts, dict) and "findings_total" in counts:
+        findings_total = int(counts["findings_total"])
+        ungrouped = int(counts.get("ungrouped", 0))
+        no_value = int(counts.get("no_value", 0))
+        group_count = int(counts.get("groups", 0))
+    elif isinstance(counts, dict):
+        finding_counts = [
+            value
+            for value in counts.values()
+            if isinstance(value, dict) and "eligible_base" in value
+        ]
+        findings_total = sum(int(value.get("eligible_base", 0)) for value in finding_counts)
+        ungrouped = sum(int(value.get("ungrouped", 0)) for value in finding_counts)
+        no_value = sum(int(value.get("no_value", 0)) for value in finding_counts)
+        group_count = sum(int(value.get("groups", 0)) for value in finding_counts)
+    else:
+        findings_total = 0
+        ungrouped = 0
+        no_value = 0
+        group_count = 0
     if findings_total > 0:
         client.score_current_trace(
             name="ungrouped_share",
-            value=summary["counts"]["ungrouped"] / findings_total,
+            value=ungrouped / findings_total,
             data_type="NUMERIC",
         )
         client.score_current_trace(
             name="no_value_share",
-            value=summary["counts"]["no_value"] / findings_total,
+            value=no_value / findings_total,
             data_type="NUMERIC",
         )
     else:
@@ -522,7 +542,7 @@ def grouping_score_summary(
         )
     client.score_current_trace(
         name="group_count",
-        value=float(summary["counts"]["groups"]),
+        value=float(group_count),
         data_type="NUMERIC",
     )
 

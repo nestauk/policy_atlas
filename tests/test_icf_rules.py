@@ -1,4 +1,4 @@
-"""Pure unit tests for icf_rules_v1 validation and dedup."""
+"""Pure unit tests for icf_rules_v2 validation and dedup."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def _record(**overrides: object) -> ICFRecord:
 
 
 def test_version_constant() -> None:
-    assert ICF_FIELD_RULES_VERSION == "icf_rules_v1"
+    assert ICF_FIELD_RULES_VERSION == "icf_rules_v2"
 
 
 def test_icf_coercion_and_non_valid_only_coverage() -> None:
@@ -43,6 +43,26 @@ def test_icf_coercion_and_non_valid_only_coverage() -> None:
     assert result.field_coverage["resource_requirements"] == "not_extracted"
     assert "setting" not in result.field_coverage
     assert result.coerced_null_fields == ["population"]
+
+
+@pytest.mark.parametrize("token", ["n/a", "none", ""])
+def test_context_label_null_like_strings_coerce_to_not_extracted(token: str) -> None:
+    result = validate_icf_record(make_icf_wire_record(context_label=token))
+
+    assert result.record is not None
+    assert result.record.context_label is None
+    assert result.field_coverage["context_label"] == "not_extracted"
+    assert result.coerced_null_fields == ["context_label"]
+
+
+def test_context_label_round_trips_to_stored_record() -> None:
+    result = validate_icf_record(
+        make_icf_wire_record(context_label="Caseload pressure")
+    )
+
+    assert result.record is not None
+    assert result.record.context_label == "Caseload pressure"
+    assert "context_label" not in result.field_coverage
 
 
 @pytest.mark.parametrize(
@@ -81,6 +101,25 @@ def test_icf_dedup_metadata_twins_collapse_anchors_merge_first_wins() -> None:
     assert len(deduped) == 1
     assert deduped[0].outcome == "referral uptake"
     assert deduped[0].setting == "primary care"
+    assert [anchor.quote for anchor in deduped[0].anchors] == ["quote one", "quote two"]
+
+
+def test_icf_dedup_context_label_is_not_identity() -> None:
+    r1 = _record(
+        context_label="Caseload pressure",
+        anchors=[IOFAnchorWire(segment_id="s1", quote="quote one")],
+    )
+    r2 = _record(
+        context_label="Staff capacity",
+        anchors=[IOFAnchorWire(segment_id="s2", quote="quote two")],
+    )
+
+    assert icf_claim_key(r1) == icf_claim_key(r2)
+    deduped, collapsed = dedup_icf_records([r1, r2])
+
+    assert collapsed == 1
+    assert len(deduped) == 1
+    assert deduped[0].context_label == "Caseload pressure"
     assert [anchor.quote for anchor in deduped[0].anchors] == ["quote one", "quote two"]
 
 

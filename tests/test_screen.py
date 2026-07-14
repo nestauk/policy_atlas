@@ -56,7 +56,7 @@ from tests.helpers import (
 # --- Schema / structure ---
 
 def test_screen_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 27
+    assert len(metadata.tables) == 28
 
 
 def test_pss_has_composite_unique(conn: Connection) -> None:

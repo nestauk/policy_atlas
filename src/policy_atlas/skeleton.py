@@ -36,11 +36,6 @@ from policy_atlas.extraction_backend import (
     OpenAIExtractionBackend,
     StubExtractionBackend,
 )
-from policy_atlas.facet_grouping import (
-    FacetGroupingBackend,
-    OpenAIFacetGroupingBackend,
-    StubFacetGroupingBackend,
-)
 from policy_atlas.fetch_live import LiveDocumentFetcher
 from policy_atlas.finding_vetter import FindingVetterBackend
 from policy_atlas.fixtures import get_source
@@ -49,6 +44,8 @@ from policy_atlas.grounding_judge import (
     OpenAIGroundingJudgeBackend,
     StubGroundingJudgeBackend,
 )
+from policy_atlas.group import GroupClusteringBackendFactory, StubGroupClusteringBackend
+from policy_atlas.group_clustering import OpenAIGroupClusteringBackendFactory
 from policy_atlas.grouping import (
     OpenAIThemeGroupingBackend,
     StubThemeGroupingBackend,
@@ -144,7 +141,7 @@ def _run_component(
     extraction_backend: ExtractionBackend | None = None,
     finding_vetter_backend: FindingVetterBackend | None = None,
     extraction_run_id: uuid.UUID | None = None,
-    facet_grouping_backend: FacetGroupingBackend | None = None,
+    group_clustering_backend: GroupClusteringBackendFactory | None = None,
     grouping_run_id: uuid.UUID | None = None,
     synthesis_backend: SynthesisBackend | None = None,
     grounding_judge_backend: GroundingJudgeBackend | None = None,
@@ -178,8 +175,8 @@ def _run_component(
             by other components. ``None`` (the default) turns judging off.
         extraction_run_id: Explicit extraction run for ``group``; unused by
             other components.
-        facet_grouping_backend: Facet grouping backend for ``group``; unused
-            by other components.
+        group_clustering_backend: Group clustering backend factory for
+            ``group``; unused by other components.
         grouping_run_id: Explicit grouping run for ``synthesise``; unused by
             other components.
         synthesis_backend: Synthesis backend for ``synthesise``; unused by
@@ -258,7 +255,7 @@ def _run_component(
             ranking_backend=ranking_backend,
             extraction_backend=extraction_backend,
             finding_vetter_backend=finding_vetter_backend,
-            facet_grouping_backend=facet_grouping_backend,
+            group_clustering_backend=group_clustering_backend,
             synthesis_backend=synthesis_backend,
             grounding_judge_backend=grounding_judge_backend,
             search_backends=search_backends,
@@ -498,28 +495,40 @@ def _render_extraction(log_entries: list[dict[str, Any]]) -> None:
         log.warning("extraction.missing")
         return
 
-    log.info("extraction.counts", **payload["counts"])
-    log.info("extraction.findings", **payload["findings"])
-    log.info("extraction.basis", **payload["basis"])
-    for doc in payload["docs"]:
-        log.info(
-            "extraction.doc",
-            pss_id=doc["pss_id"],
-            status=doc["status"],
-            basis=doc["basis"],
-            finding_count=doc["finding_count"],
-            reused=doc["reused"],
-            error=doc["error"],
-        )
-    log.info("extraction.flags", flags=payload["flags"])
+    # The 021 per-profile payload shape: counts/provenance/doc statuses live
+    # under per-profile blocks (this renderer is demo-only, read tolerantly).
+    counts = payload.get("counts", {})
+    log.info("extraction.counts", selected=counts.get("selected"))
+    for profile_id, block in (counts.get("profiles") or {}).items():
+        findings = block.get("findings") if isinstance(block, dict) else None
+        if isinstance(findings, dict):
+            log.info("extraction.findings", profile=profile_id, **findings)
+    if isinstance(counts.get("basis"), dict):
+        log.info("extraction.basis", **counts["basis"])
+    for doc in payload.get("docs", []):
+        for profile_id, doc_block in (doc.get("profiles") or {}).items():
+            log.info(
+                "extraction.doc",
+                pss_id=doc.get("pss_id"),
+                profile=profile_id,
+                status=doc_block.get("status"),
+                basis=doc.get("basis"),
+                finding_count=doc_block.get("finding_count"),
+                reused=doc_block.get("reused"),
+                error=doc_block.get("error"),
+            )
+    log.info("extraction.flags", flags=payload.get("flags"))
     # The full provenance map is in the DB row; only the headline fields here.
-    log.info(
-        "extraction.provenance",
-        fingerprint=payload["provenance"]["fingerprint"],
-        model=payload["provenance"]["model"],
-        prompt=payload["provenance"]["prompt"],
-        mode=payload["provenance"]["mode"],
-    )
+    for profile_id, prov in (payload.get("provenance", {}).get("profiles") or {}).items():
+        if isinstance(prov, dict):
+            log.info(
+                "extraction.provenance",
+                profile=profile_id,
+                fingerprint=prov.get("fingerprint"),
+                model=prov.get("model"),
+                prompt=prov.get("prompt"),
+                mode=prov.get("mode"),
+            )
 
 
 def _grouping_payload(
@@ -541,26 +550,41 @@ def _render_grouping(log_entries: list[dict[str, Any]], *, run_id: uuid.UUID | N
         log.warning("grouping.missing")
         return
 
-    log.info("grouping.facet", facet=payload["facet"], facet_source=payload["facet_source"])
-    for group in payload["groups"]:
-        log.info(
-            "grouping.group",
-            label=group["label"],
-            size=group["size"],
-            value_count=group["value_count"],
-            direction_spread=group["direction_spread"],
-        )
-    log.info("grouping.residuals", **payload["residuals"])
-    log.info("grouping.overall_direction_spread", **payload["overall_direction_spread"])
-    log.info("grouping.counts", **payload["counts"])
-    log.info("grouping.flags", flags=payload["flags"])
+    # The 022 multi-facet summary shape: groups/residuals/counts/flags are
+    # facet-keyed (this renderer is demo-only, read tolerantly).
+    log.info(
+        "grouping.facets",
+        facets=payload.get("facets", [payload.get("facet")]),
+        facet_source=payload.get("facet_source"),
+    )
+    groups = payload.get("groups", {})
+    facet_groups = groups if isinstance(groups, dict) else {"": groups}
+    for facet, group_list in facet_groups.items():
+        if not isinstance(group_list, list):
+            continue
+        for group in group_list:
+            if not isinstance(group, dict):
+                continue
+            log.info(
+                "grouping.group",
+                facet=facet or group.get("facet"),
+                group_id=group.get("group_id"),
+                label=group.get("label"),
+                size=group.get("size"),
+                value_count=group.get("value_count"),
+                direction_spread=group.get("direction_spread"),
+            )
+    log.info("grouping.residuals", residuals=payload.get("residuals"))
+    log.info("grouping.counts", counts=payload.get("counts"))
+    log.info("grouping.flags", flags=payload.get("flags"))
     # The full provenance map is in the DB row; only the headline fields here.
+    provenance = payload.get("provenance", {})
     log.info(
         "grouping.provenance",
-        prompt_version=payload["provenance"]["prompt_version"],
-        model=payload["provenance"]["model"],
-        mode=payload["provenance"]["mode"],
-        facet=payload["provenance"]["facet"],
+        prompt_version=provenance.get("prompt_version"),
+        model=provenance.get("model"),
+        mode=provenance.get("mode"),
+        facets=provenance.get("facets"),
     )
 
 
@@ -616,7 +640,7 @@ def main() -> None:
     classification_backend: ClassificationBackend
     ranking_backend: RankingBackend | None
     extraction_backend: ExtractionBackend
-    facet_grouping_backend: FacetGroupingBackend
+    group_clustering_backend: GroupClusteringBackendFactory
     search_backends: list[SearchBackend] | None
     search_generation_backend: SearchGenerationBackend | None
     selected_document_fetcher = select_document_fetcher(live)
@@ -638,9 +662,9 @@ def main() -> None:
         # Tracing lives inside OpenAIExtractionBackend itself — no wrapper
         # class, unlike the embedding/grouping backends below.
         extraction_backend = OpenAIExtractionBackend(langfuse_client=langfuse_client)
-        # Tracing lives inside OpenAIFacetGroupingBackend itself — no wrapper
-        # class, unlike the embedding/grouping backends below.
-        facet_grouping_backend = OpenAIFacetGroupingBackend(langfuse_client=langfuse_client)
+        group_clustering_backend = OpenAIGroupClusteringBackendFactory(
+            langfuse_client=langfuse_client
+        )
         search_backends = cast(list[SearchBackend], search_live.live_search_backends())
         search_generation_backend = search_generation.OpenAISearchGenerationBackend(
             langfuse_client=langfuse_client
@@ -659,7 +683,7 @@ def main() -> None:
         classification_backend = StubClassificationBackend()
         ranking_backend = None
         extraction_backend = StubExtractionBackend()
-        facet_grouping_backend = StubFacetGroupingBackend()
+        group_clustering_backend = StubGroupClusteringBackend()
         search_backends = None
         search_generation_backend = None
     log.info(
@@ -1087,7 +1111,7 @@ def main() -> None:
         group_run_id = run_component(
             "group",
             extraction_run_id=extract_run_id,
-            facet_grouping_backend=facet_grouping_backend,
+            group_clustering_backend=group_clustering_backend,
         )
 
         # Second group run demonstrating the directive path (the selection-
@@ -1098,7 +1122,7 @@ def main() -> None:
                 evidence_scope.c.evidence_scope_id == scope_id
             )
         ).scalar_one()
-        directed_context = {**scope_context, "grouping": {"facet": "outcome"}}
+        directed_context = {**scope_context, "grouping": {"facets": ["outcome"]}}
         conn.execute(
             evidence_scope.update()
             .where(evidence_scope.c.evidence_scope_id == scope_id)
@@ -1109,7 +1133,7 @@ def main() -> None:
         group_directive_run_id = run_component(
             "group",
             extraction_run_id=extract_run_id,
-            facet_grouping_backend=facet_grouping_backend,
+            group_clustering_backend=group_clustering_backend,
         )
 
         grouping_rows = conn.execute(

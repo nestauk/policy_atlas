@@ -16,7 +16,11 @@ from policy_atlas.planner import (
     StubPlannerBackend,
     _degrade_suggestions,
 )
-from policy_atlas.planner_prompt import PlanDraftWire, PlannerTurnWire
+from policy_atlas.planner_prompt import (
+    PLANNER_PROMPT_VERSION,
+    PlanDraftWire,
+    PlannerTurnWire,
+)
 
 
 def _turn(text: str, role: str = "user") -> dict[str, str]:
@@ -35,6 +39,10 @@ def _plan_from_draft(draft: PlanDraftWire) -> OrchestrationPlan:
 
 
 # --- Stub turn shapes -------------------------------------------------------
+
+
+def test_planner_prompt_version_pinned() -> None:
+    assert PLANNER_PROMPT_VERSION == "planner_v5"
 
 
 def test_stub_first_turn_asks_shape_question_with_three_suggestions() -> None:
@@ -69,7 +77,7 @@ def test_stub_second_turn_returns_complete_ready_draft() -> None:
     assert draft.component_rationale is not None
     assert set(draft.component_rationale) == set(draft.components)
     assert draft.steering_mode == "moderate"
-    assert draft.grouping_facet == "outcome"
+    assert draft.grouping_facets == ["outcome"]
     assert draft.assumptions == ["Stub planner: deterministic fixture proposal."]
 
 
@@ -85,7 +93,7 @@ def test_stub_landscape_sentinel_yields_landscape_draft() -> None:
     draft = turn.plan_draft
     assert draft.analysis_depth == "landscape"
     assert draft.components == ["characterise"]
-    assert draft.grouping_facet is None
+    assert draft.grouping_facets is None
 
 
 def test_stub_is_deterministic() -> None:
@@ -117,7 +125,7 @@ def test_stub_ready_draft_round_trips_into_orchestration_plan() -> None:
     plan = _plan_from_draft(turn.plan_draft)
 
     assert plan.components == ["characterise", "screen_full", "select", "extract", "group"]
-    assert plan.grouping_facet == "outcome"
+    assert plan.grouping_facets == ["outcome"]
     assert plan.time_band
     assert plan.expected_artefact_shape
 
@@ -134,7 +142,7 @@ def test_stub_landscape_draft_round_trips_into_orchestration_plan() -> None:
 
     assert plan.analysis_depth == "landscape"
     assert plan.components == ["characterise"]
-    assert plan.grouping_facet is None
+    assert plan.grouping_facets is None
 
 
 def test_planner_draft_with_select_at_standard_round_trips_into_orchestration_plan() -> None:

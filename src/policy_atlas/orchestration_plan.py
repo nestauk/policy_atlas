@@ -37,7 +37,14 @@ DiscretionaryComponent = Literal[
     "extract",
     "group",
 ]
-GroupingFacet = Literal["intervention", "outcome", "population"]
+GroupingFacet = Literal[
+    "intervention",
+    "outcome",
+    "population",
+    "barrier_theme",
+    "enabler_theme",
+    "mechanism_theme",
+]
 SteeringMode = Literal["frequent", "moderate", "minimal", "unattended"]
 SteerAction = Literal["proceed_flag", "stop"]
 CountryGroupAuthorship = Literal["pinned-table", "planner-proposed", "user-amended"]
@@ -68,6 +75,13 @@ ALL_STEPS: tuple[str, ...] = SPINE + DISCRETIONARY_COMPONENTS
 DEEP_CHAIN_COMPONENTS: frozenset[DiscretionaryComponent] = frozenset(
     ("select", "extract", "group")
 )
+DEEP_GROUPING_FACETS: tuple[GroupingFacet, ...] = (
+    "intervention",
+    "outcome",
+    "barrier_theme",
+    "enabler_theme",
+    "mechanism_theme",
+)
 
 SEARCH_EFFORT_DIRECTIVES: dict[SearchEffort, dict[str, SearchEffort]] = {
     "rapid": {"depth": "rapid"},
@@ -93,6 +107,7 @@ class AnalysisDepthDirective(TypedDict):
     findings_chain: bool
     selection_budget: int | None
     extract_profiles: tuple[ExtractProfile, ...] | None
+    grouping_facets: tuple[GroupingFacet, ...] | None
 
 
 ANALYSIS_DEPTH_TABLE: dict[AnalysisDepth, AnalysisDepthDirective] = {
@@ -103,6 +118,7 @@ ANALYSIS_DEPTH_TABLE: dict[AnalysisDepth, AnalysisDepthDirective] = {
         "findings_chain": False,
         "selection_budget": None,
         "extract_profiles": None,
+        "grouping_facets": None,
     },
     "standard": {
         # 019 select-at-standard regrade: select now runs at standard too, so
@@ -118,6 +134,7 @@ ANALYSIS_DEPTH_TABLE: dict[AnalysisDepth, AnalysisDepthDirective] = {
         # work (pre-eval-slice-plan.md), not decided here.
         "selection_budget": 15,
         "extract_profiles": None,
+        "grouping_facets": None,
     },
     "deep": {
         "screen_full": True,
@@ -126,6 +143,7 @@ ANALYSIS_DEPTH_TABLE: dict[AnalysisDepth, AnalysisDepthDirective] = {
         "findings_chain": True,
         "selection_budget": 25,
         "extract_profiles": ("iof", "icf"),
+        "grouping_facets": DEEP_GROUPING_FACETS,
     },
 }
 
@@ -550,7 +568,7 @@ class OrchestrationPlan(BaseModel):
         components: Discretionary orchestration components only.
         component_rationale: Visible intent-fit rationale keyed by discretionary
             component.
-        grouping_facet: Optional grouping facet, valid only when ``group`` runs.
+        grouping_facets: Optional grouping facets, valid only when ``group`` runs.
         extract_profiles: Optional finding profile short names, valid only
             when ``extract`` runs. ``None`` compiles from depth defaults.
         steering_mode: Steering mode for the later runner.
@@ -572,7 +590,7 @@ class OrchestrationPlan(BaseModel):
     analysis_depth: AnalysisDepth
     components: list[DiscretionaryComponent] = Field(default_factory=list)
     component_rationale: dict[str, str] = Field(default_factory=dict)
-    grouping_facet: GroupingFacet | None = None
+    grouping_facets: list[GroupingFacet] | None = None
     extract_profiles: list[ExtractProfile] | None = None
     steering_mode: SteeringMode
     steer_point_defaults: list[SteerPointDefault] = Field(default_factory=list)
@@ -674,6 +692,31 @@ class OrchestrationPlan(BaseModel):
             raise ValueError("extract_profiles must not contain duplicates")
         return values
 
+    @field_validator("grouping_facets")
+    @classmethod
+    def validate_grouping_facets(
+        cls,
+        values: list[GroupingFacet] | None,
+    ) -> list[GroupingFacet] | None:
+        """Validate optional grouping facet composition.
+
+        Args:
+            values: Candidate grouping facets, or ``None`` for depth defaults.
+
+        Returns:
+            The validated facet list, or ``None``.
+
+        Raises:
+            ValueError: If the list is empty or contains duplicates.
+        """
+        if values is None:
+            return None
+        if not values:
+            raise ValueError("grouping_facets must not be empty")
+        if len(set(values)) != len(values):
+            raise ValueError("grouping_facets must not contain duplicates")
+        return values
+
     @field_validator("component_rationale")
     @classmethod
     def validate_component_rationale(cls, value: dict[str, str]) -> dict[str, str]:
@@ -721,8 +764,8 @@ class OrchestrationPlan(BaseModel):
             raise ValueError("extract requires select in components")
         if "group" in component_set and "extract" not in component_set:
             raise ValueError("group requires extract in components")
-        if self.grouping_facet is not None and "group" not in component_set:
-            raise ValueError("grouping_facet requires group in components")
+        if self.grouping_facets is not None and "group" not in component_set:
+            raise ValueError("grouping_facets requires group in components")
         if self.extract_profiles is not None:
             if "extract" not in component_set:
                 raise ValueError("extract_profiles requires extract in components")
@@ -861,8 +904,13 @@ def _directive_delta(component: str, plan: OrchestrationPlan) -> dict[str, Any]:
                 ]
             }
         }
-    if component == "group" and plan.grouping_facet is not None:
-        return {"grouping": {"facet": plan.grouping_facet}}
+    if component == "group":
+        facets = plan.grouping_facets
+        if facets is None:
+            facets = list(ANALYSIS_DEPTH_TABLE[plan.analysis_depth]["grouping_facets"] or ())
+        if not facets:
+            raise ValueError("group cannot compile without grouping facets")
+        return {"grouping": {"facets": list(facets)}}
     return {}
 
 

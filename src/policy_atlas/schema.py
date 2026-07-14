@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — twenty-seven tables, fifteen alembic migrations.
+"""SQLAlchemy Core table metadata — twenty-seven tables plus one read view.
 
 No deferred columns (no block/artefact summary, no same_content_as, no lineage key).
 """
@@ -782,6 +782,7 @@ implementation_context_finding = Table(
     # One implementation-context claim about a named intervention, grounded in one source.
     Column("context_type", Text, nullable=False),
     Column("claim", Text, nullable=False),
+    Column("context_label", Text, nullable=True),
     # Source-named references — shared meaning with IOF; requiredness is per schema.
     Column("intervention", Text, nullable=False),
     Column("outcome", Text, nullable=True),
@@ -822,6 +823,21 @@ implementation_context_finding = Table(
     ),
     CheckConstraint("jsonb_typeof(grounding) = 'array'", name="ck_icf_grounding_array"),
     Index("ix_icf_record", "extraction_record_id"),
+)
+
+finding_reference_union = Table(
+    "finding_reference_union",
+    metadata,
+    Column("finding_id", UUID(as_uuid=True)),
+    Column("kind", Text),
+    Column("extraction_record_id", UUID(as_uuid=True)),
+    Column("project_id", UUID(as_uuid=True)),
+    Column("intervention", Text),
+    Column("outcome", Text),
+    Column("population", Text),
+    Column("setting", Text),
+    Column("study_geography", Text),
+    Column("study_design", Text),
 )
 
 extraction_result = Table(
@@ -865,8 +881,14 @@ extraction_result = Table(
 
 # --- Group / facet-level theming (task 012) ---
 
-GROUPING_FACETS: tuple[str, ...] = ("intervention", "outcome", "population")
-_GROUPING_FACETS_SQL = ", ".join(f"'{f}'" for f in GROUPING_FACETS)
+GROUPING_FACETS: tuple[str, ...] = (
+    "intervention",
+    "outcome",
+    "population",
+    "barrier_theme",
+    "enabler_theme",
+    "mechanism_theme",
+)
 
 grouping_result = Table(
     "grouping_result",
@@ -876,7 +898,6 @@ grouping_result = Table(
     Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
     Column("run_id", UUID(as_uuid=True), nullable=False),
     Column("extraction_run_id", UUID(as_uuid=True), nullable=False),  # the executed reference
-    Column("facet", Text, nullable=False),
     # Required keys (test-asserted): prompt version, model, mode, facet + source,
     # call/repair counts, value cap, and the inherited extraction base —
     # fingerprint + profile, base-ladder counts, finding-set size + sha256,
@@ -910,7 +931,6 @@ grouping_result = Table(
     ),
     # Run-local roll-up: same-run re-execution is a loud error, retry = new run.
     UniqueConstraint("evidence_scope_id", "run_id", name="uq_grr_scope_run"),
-    CheckConstraint(f"facet IN ({_GROUPING_FACETS_SQL})", name="ck_grr_facet"),
 )
 
 # --- Synthesise model (task 013) ---

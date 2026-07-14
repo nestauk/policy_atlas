@@ -99,6 +99,13 @@ orchestration capability — user, 2026-07-05); the scoping keeps their reviews 
 review — Claude implements → Codex reviews; Codex implements → Claude reviews. Maker ≠ checker
 holds across model families in both directions. (If a Fable safety classifier declines a benign
 security pass, the fallback is this lane itself — the reviewers are already pinned Opus/Codex.)
+Two 022-build delegation lessons (step 8, 2026-07-14): **(a) Codex parallel write jobs on one
+working tree are safe when file sets are disjoint AND each brief carries "never revert files you
+did not change" plus an explicit list of the sibling job's files** (R ∥ C ran clean under this).
+**(b) Codex-authored tests are the dominant defect surface, not its product code** — five 022
+deliveries landed product-clean while every lead fix was a test-authoring bug (stale
+expectations, order-sensitive UUID comparisons, fixtures colliding with stub token rules);
+weight review attention toward delegated test diffs accordingly.
 
 - **High-stakes decisions** (Tier 3+, real design forks): two *independent* takes — e.g. an Opus
   subagent and Codex on the same brief, neither shown the other's answer — then the lead

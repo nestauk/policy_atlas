@@ -18,8 +18,10 @@ from policy_atlas.synthesis_backend import (
     ClaimWire,
     GapPayloadWire,
     PatternPayloadWire,
+    RepairItemWire,
     SectionProposalWire,
     SectionProseWire,
+    SectionRepairWire,
     SectionWire,
     SparsitySignalWire,
     StubSynthesisBackend,
@@ -30,8 +32,10 @@ from policy_atlas.synthesis_tools import (
     REASONING_CLAIMS_MAX,
     SECTION_CAP,
     SECTION_TURN_CAP,
+    SynthesisDirectiveError,
     _doc_record,
     _finding_record,
+    parse_synthesis_directive,
 )
 from policy_atlas.synthesise import (
     CONCLUSIONS_TITLE,
@@ -45,12 +49,14 @@ from policy_atlas.synthesise import (
     SpliceItem,
     SubstrateView,
     _anchor_counts,
+    _bind_unspanned,
     _conclusions_focus,
     _judge_claims,
     _section_claims,
     _validate_sections,
     bind_spans,
     build_ledger,
+    compile_synthesis_directive,
     derive_artefact_title,
     generation_budget_max,
     splice_and_rebind,
@@ -149,7 +155,7 @@ def _substrate() -> SubstrateView:
             "facet": "intervention",
             "groups": [
                 {
-                    "group_id": "group-1",
+                    "group_id": "intervention:g01",
                     "label": "Group 1",
                     "direction_spread": {"increase": 1},
                     "member_finding_ids": ["finding-1", "icf-1"],
@@ -203,7 +209,7 @@ def _rejected_reason(claim: ClaimWire, **kwargs: Any) -> str:
         [claim],
         substrate=_substrate(),
         section_index=0,
-        section_group_ids={"group-1"},
+        section_group_ids={"intervention:g01"},
         citable_finding_ids=citable_finding_ids,
         citable_chunk_ids=citable_chunk_ids,
         spans=kwargs.pop("spans", [(0, 1)]),
@@ -239,6 +245,9 @@ def test_budget_formula_and_ledger_marker() -> None:
     # (emission + judge/repair/rejudge) — ADR 0015 §8.
     assert generation_budget_max() == 2 + (SECTION_CAP + 1) * (SECTION_TURN_CAP + 3) + 4
 
+    # 022 rider 18 (F0 § DTO spec): the prompt-facing ledger record slims to
+    # claim id/type/text — cited_ids/flags/a repeated non-citable note are
+    # dropped; the rule is already stated once at the prompt level.
     ledger = build_ledger(
         [
             ClaimDraft(
@@ -258,9 +267,6 @@ def test_budget_formula_and_ledger_marker() -> None:
             "claim_id": "s0c0",
             "claim_type": "reasoning",
             "text": "Reasoning.",
-            "cited_ids": ["not-citable-here"],
-            "flags": ["weak"],
-            "ledger_note": "context, never evidence — not citable",
         }
     ]
 
@@ -392,7 +398,7 @@ def test_pattern_theme_gap_and_reasoning_validation_edges() -> None:
         reasoning,
         substrate=_substrate(),
         section_index=0,
-        section_group_ids={"group-1"},
+        section_group_ids={"intervention:g01"},
         citable_finding_ids={"finding-1"},
         citable_chunk_ids={"11111111-1111-1111-1111-111111111111"},
         spans=[(index, index + 1) for index in range(len(reasoning))],
@@ -416,7 +422,7 @@ def test_icf_context_type_count_pattern_validation() -> None:
         ],
         substrate=_substrate(),
         section_index=0,
-        section_group_ids={"group-1"},
+        section_group_ids={"intervention:g01"},
         citable_finding_ids=set(),
         citable_chunk_ids=set(),
         spans=[(0, 1)],
@@ -432,7 +438,7 @@ def test_icf_context_type_count_pattern_validation() -> None:
                 pattern=PatternPayloadWire(
                     kind="coverage_count",
                     computed_from="icf_context_type_count",
-                    group_id="group-1",
+                    group_id="intervention:g01",
                     stated={"barrier": 1},
                     base="group ICF members",
                 ),
@@ -440,7 +446,7 @@ def test_icf_context_type_count_pattern_validation() -> None:
         ],
         substrate=_substrate(),
         section_index=0,
-        section_group_ids={"group-1"},
+        section_group_ids={"intervention:g01"},
         citable_finding_ids=set(),
         citable_chunk_ids=set(),
         spans=[(0, 1)],
@@ -479,7 +485,7 @@ def test_icf_context_type_count_pattern_validation() -> None:
         ],
         substrate=unavailable,
         section_index=0,
-        section_group_ids={"group-1"},
+        section_group_ids={"intervention:g01"},
         citable_finding_ids=set(),
         citable_chunk_ids=set(),
         spans=[(0, 1)],
@@ -503,7 +509,7 @@ def test_gap_degradation_and_caveat_payloads() -> None:
         ],
         substrate=substrate,
         section_index=0,
-        section_group_ids={"group-1"},
+        section_group_ids={"intervention:g01"},
         citable_finding_ids={"finding-1"},
         citable_chunk_ids={"11111111-1111-1111-1111-111111111111"},
         spans=[(0, 1)],
@@ -526,7 +532,7 @@ def test_gap_degradation_and_caveat_payloads() -> None:
         ],
         substrate=substrate,
         section_index=0,
-        section_group_ids={"group-1"},
+        section_group_ids={"intervention:g01"},
         citable_finding_ids={"finding-1"},
         citable_chunk_ids={"11111111-1111-1111-1111-111111111111"},
         spans=[(0, 1)],
@@ -549,7 +555,7 @@ def test_reasoning_cap_binds_across_repair() -> None:
         [claim],
         substrate=_substrate(),
         section_index=0,
-        section_group_ids={"group-1"},
+        section_group_ids={"intervention:g01"},
         citable_finding_ids={"finding-1"},
         citable_chunk_ids={"11111111-1111-1111-1111-111111111111"},
         spans=[(0, 1)],
@@ -562,7 +568,7 @@ def test_reasoning_cap_binds_across_repair() -> None:
         [claim],
         substrate=_substrate(),
         section_index=0,
-        section_group_ids={"group-1"},
+        section_group_ids={"intervention:g01"},
         citable_finding_ids={"finding-1"},
         citable_chunk_ids={"11111111-1111-1111-1111-111111111111"},
         spans=[(0, 1)],
@@ -593,7 +599,7 @@ def test_finding_claim_with_empty_grounding_is_weakly_grounded() -> None:
         ],
         substrate=substrate,
         section_index=0,
-        section_group_ids={"group-1"},
+        section_group_ids={"intervention:g01"},
         citable_finding_ids={"finding-1"},
         citable_chunk_ids={"11111111-1111-1111-1111-111111111111"},
         spans=[(0, 1)],
@@ -627,7 +633,7 @@ def test_icf_finding_claim_resolves_anchor_and_carries_kind_only() -> None:
         ],
         substrate=_substrate(),
         section_index=0,
-        section_group_ids={"group-1"},
+        section_group_ids={"intervention:g01"},
         citable_finding_ids={"icf-1"},
         citable_chunk_ids={"11111111-1111-1111-1111-111111111111"},
         spans=[(0, 1)],
@@ -757,6 +763,8 @@ def test_doc_record_default_metadata_present_and_absent() -> None:
         primary_evidence_type="rct",
         text_basis="full_text",
         quality_score=3,
+        screen_decision_confidence=0.9,
+        screen_stage=2,
         metadata={
             "title": "Doc with metadata",
             "year": 2024,
@@ -779,6 +787,8 @@ def test_doc_record_default_metadata_present_and_absent() -> None:
         primary_evidence_type=None,
         text_basis="full_text",
         quality_score=None,
+        screen_decision_confidence=None,
+        screen_stage=1,
         metadata={"title": "Bare doc"},
     )
     bare = _doc_record(absent, set())
@@ -956,6 +966,172 @@ def test_judge_envelope_includes_finding_anchor_chunks_deduped_and_context() -> 
     assert anchored["segmentation_policy"] == "manual_v1"
 
 
+# --- task 022 item 17(i): occupied span map spans ALL valid claim types ---
+
+
+def test_judge_span_map_covers_all_claim_types_verdict_coverage_unchanged() -> None:
+    """The initial judge call's span map spans EVERY valid claim (all types), so
+    a pattern claim's prose is a known occupied span the judge must not flag as
+    unspanned. Verdict coverage stays JUDGED_TYPES only — the envelope's judged
+    claims exclude the pattern claim (item 17(i))."""
+    substrate = _substrate()
+    reasoning_claim = ClaimDraft(
+        claim_id="s0c0",
+        claim_index=0,
+        claim_type="reasoning",
+        text="As reasoning, the strands point one way.",
+        annotation_type="reasoning",
+        payload={},
+        judge_chunk_ids=set(),
+        span=(0, 40),
+    )
+    pattern_claim = ClaimDraft(
+        claim_id="s0c1",
+        claim_index=1,
+        claim_type="pattern",
+        text="The corpus shows a recurring pattern.",
+        annotation_type="pattern",
+        payload={},
+        judge_chunk_ids=set(),
+        span=(41, 78),
+    )
+    judge = _CapturingJudge()
+    calls, _usage, _unspanned = _judge_claims(
+        claims=[reasoning_claim, pattern_claim],
+        substrate=substrate,
+        grounding_judge_backend=judge,
+        section_prose="prose",
+    )
+    assert calls == 1
+    envelope = judge.envelopes[0]
+    span_claim_ids = {entry["claim_id"] for entry in envelope["span_map"]}
+    # Both spans occupy the map — the pattern claim's prose is claimed territory.
+    assert span_claim_ids == {"s0c0", "s0c1"}
+    # Verdict coverage is unchanged: only the reasoning (JUDGED_TYPES) claim is
+    # judged; the pattern claim carries no verdict.
+    judged_ids = {claim["claim_id"] for claim in envelope["claims"]}
+    assert judged_ids == {"s0c0"}
+
+
+def test_judge_rejudge_span_map_spans_kept_plus_rejudged_claims() -> None:
+    """On the re-judge call the span map must span the FULL post-splice claim set
+    (kept + rejudged, all types), not only the rejudged subset — passed through
+    ``occupied_claims`` while verdict coverage stays the rejudged judged claims
+    (item 17(i))."""
+    substrate = _substrate()
+    kept_pattern = ClaimDraft(
+        claim_id="s0c0",
+        claim_index=0,
+        claim_type="pattern",
+        text="A kept pattern claim.",
+        annotation_type="pattern",
+        payload={},
+        judge_chunk_ids=set(),
+        span=(0, 21),
+    )
+    rejudged_reasoning = ClaimDraft(
+        claim_id="s0c1",
+        claim_index=1,
+        claim_type="reasoning",
+        text="Reworded reasoning claim.",
+        annotation_type="reasoning",
+        payload={},
+        judge_chunk_ids=set(),
+        span=(22, 47),
+    )
+    judge = _CapturingJudge()
+    calls, _usage, _unspanned = _judge_claims(
+        claims=[rejudged_reasoning],
+        occupied_claims=[kept_pattern, rejudged_reasoning],
+        substrate=substrate,
+        grounding_judge_backend=judge,
+        section_prose="prose",
+    )
+    assert calls == 1
+    envelope = judge.envelopes[0]
+    span_claim_ids = {entry["claim_id"] for entry in envelope["span_map"]}
+    # The kept claim occupies the rebuilt prose too, even though only the
+    # rejudged claim is judged for a verdict.
+    assert span_claim_ids == {"s0c0", "s0c1"}
+    judged_ids = {claim["claim_id"] for claim in envelope["claims"]}
+    assert judged_ids == {"s0c1"}
+
+
+# --- task 022 item 17(ii): three unspanned counters, first-match precedence ---
+
+
+def _unspanned_record(excerpt: str) -> dict[str, Any]:
+    return {"excerpt": excerpt, "rationale": "r", "judge_io_ref": "io"}
+
+
+def test_unspanned_counter_unlocated() -> None:
+    accounting = _accounting()
+    minted = _bind_unspanned(
+        [_unspanned_record("ABSENT PHRASE")],
+        "Prose that does not contain the excerpt.",
+        accounting=accounting,
+        claim_spans=(),
+    )
+    assert minted == []
+    assert accounting.unspanned_unlocated == 1
+    assert accounting.unspanned_overlap_filtered == 0
+    assert accounting.unspanned_duplicate_stale == 0
+    assert accounting.unspanned_assertions == 0
+
+
+def test_unspanned_counter_overlap_filtered() -> None:
+    prose = "Claimed evidential phrase remains here."
+    minted = _bind_unspanned(
+        [_unspanned_record("evidential phrase")],
+        prose,
+        accounting=(accounting := _accounting()),
+        claim_spans=[(0, 25)],
+    )
+    assert minted == []
+    assert accounting.unspanned_overlap_filtered == 1
+    assert accounting.unspanned_duplicate_stale == 0
+    assert accounting.unspanned_unlocated == 0
+
+
+def test_unspanned_counter_duplicate_stale() -> None:
+    prose = "A repeated line appears once here."
+    excerpt = "repeated line appears once"
+    accounting = _accounting()
+    minted = _bind_unspanned(
+        [_unspanned_record(excerpt), _unspanned_record(excerpt)],
+        prose,
+        accounting=accounting,
+        claim_spans=(),
+    )
+    # The first binds; the exact-duplicate second has no free occurrence left.
+    assert len(minted) == 1
+    assert accounting.unspanned_assertions == 1
+    assert accounting.unspanned_duplicate_stale == 1
+    assert accounting.unspanned_overlap_filtered == 0
+    assert accounting.unspanned_unlocated == 0
+
+
+def test_unspanned_counter_precedence_overlap_beats_duplicate() -> None:
+    """An excerpt qualifying for BOTH overlap and duplicate counts as
+    overlap_filtered (first-match precedence, item 17(ii))."""
+    prose = "foo bar foo bar tail"
+    excerpt = "foo bar"
+    accounting = _accounting()
+    minted = _bind_unspanned(
+        [_unspanned_record(excerpt), _unspanned_record(excerpt)],
+        prose,
+        accounting=accounting,
+        claim_spans=[(8, 15)],
+    )
+    # First binds at the free (0, 7) occurrence; the second's remaining
+    # occurrences overlap a bound excerpt AND a claim span — overlap wins.
+    assert len(minted) == 1
+    assert accounting.unspanned_assertions == 1
+    assert accounting.unspanned_overlap_filtered == 1
+    assert accounting.unspanned_duplicate_stale == 0
+    assert accounting.unspanned_unlocated == 0
+
+
 # --- ADR 0015 §8 / B-B3: conclusions exemption + focus ---
 
 
@@ -1018,17 +1194,18 @@ def _run_section_claims(
     accounting: SectionAccounting,
     *,
     available_claim_types: set[str] | None = None,
-) -> None:
-    _section_claims(
+    synthesis_backend: StubSynthesisBackend | None = None,
+) -> tuple[list[ClaimDraft], str, list[dict[str, Any]], dict[str, int], dict[str, int]]:
+    return _section_claims(
         section_index=0,
         raw_claims=wire,
         seed={},
         transcript=[],
         substrate=_substrate(),
-        section_group_ids={"group-1"},
+        section_group_ids={"intervention:g01"},
         citable_finding_ids=set(),
         citable_chunk_ids={"11111111-1111-1111-1111-111111111111"},
-        synthesis_backend=StubSynthesisBackend(),
+        synthesis_backend=synthesis_backend or StubSynthesisBackend(),
         grounding_judge_backend=StubGroundingJudgeBackend(),
         available_claim_types=available_claim_types or {"gap", "chunk"},
         accounting=accounting,
@@ -1077,6 +1254,98 @@ def test_unspanned_lane_not_skipped_when_judge_scanned() -> None:
     assert accounting.unspanned_lane_skipped is False
 
 
+# --- task 022 item 17(iii): supersede, never concatenate ---
+
+
+def test_supersede_replaces_initial_unspanned_on_prose_changing_repair() -> None:
+    """A prose-changing repair triggers a re-judge; the re-judge's unspanned
+    results REPLACE the initial scan's (item 17(iii)). The initial scan's
+    identical flag is dropped, so it is never counted as a stale duplicate."""
+    prose = (
+        "As reasoning this stubsmuggle holds.\n"
+        "An evidential stubunspanned sentence."
+    )
+    wire = SectionProseWire(
+        prose=prose,
+        claims=[
+            _claim(
+                {
+                    "claim_type": "reasoning",
+                    "text": "As reasoning this stubsmuggle holds.",
+                }
+            )
+        ],
+    )
+    accounting = _accounting()
+    _final, final_prose, minted, call_counts, _usage = _run_section_claims(
+        wire, accounting, available_claim_types={"reasoning"}
+    )
+    # The smuggled reasoning claim fails its verdict, so repair rebuilds the
+    # prose and the reworded (still-judged) claim is re-judged.
+    assert call_counts["repair"] == 1
+    assert call_counts["rejudge"] == 1
+    assert final_prose != prose
+    # Supersede: the re-judge flags the surviving unspanned sentence once and it
+    # binds; the initial scan's identical flag was dropped, NOT re-bound as a
+    # stale duplicate (the concatenation bug this fix retires).
+    assert accounting.unspanned_assertions == 1
+    assert accounting.unspanned_duplicate_stale == 0
+    assert len(minted) == 1
+
+
+def test_supersede_rebuild_without_rejudge_keeps_no_stale_flags() -> None:
+    """A repair that rebuilds the prose but leaves no judged claim to re-judge
+    keeps no stale unspanned flags — the initial scan's flag is dropped and
+    unspanned_lane_skipped carries the honesty (item 17(iii))."""
+    prose = (
+        "As reasoning beta strand holds.\n"
+        "As reasoning this stubsmuggle holds.\n"
+        "An evidential stubunspanned sentence."
+    )
+    wire = SectionProseWire(
+        prose=prose,
+        claims=[
+            _claim(
+                {
+                    "claim_type": "reasoning",
+                    "text": "As reasoning beta strand holds.",
+                }
+            ),
+            _claim(
+                {
+                    "claim_type": "reasoning",
+                    "text": "As reasoning this stubsmuggle holds.",
+                }
+            ),
+        ],
+    )
+    # A deletion repair for the failing second claim: no replacement claim, so
+    # the re-judge set is empty and no re-judge call fires — but the prose is
+    # still rebuilt (the failing claim's segment is spliced out).
+    backend = StubSynthesisBackend(
+        repair=SectionRepairWire(
+            repairs=[
+                RepairItemWire(claim_id="s0c1", replacement_segment="", claim=None)
+            ]
+        )
+    )
+    accounting = _accounting()
+    _final, final_prose, minted, call_counts, _usage = _run_section_claims(
+        wire, accounting, available_claim_types={"reasoning"}, synthesis_backend=backend
+    )
+    assert call_counts["repair"] == 1
+    assert call_counts["rejudge"] == 0
+    assert final_prose != prose
+    # No re-judge scanned the rebuilt prose: the initial flag is dropped (not a
+    # stale mint) and the lane is honestly marked skipped.
+    assert accounting.unspanned_lane_skipped is True
+    assert accounting.unspanned_assertions == 0
+    assert accounting.unspanned_overlap_filtered == 0
+    assert accounting.unspanned_duplicate_stale == 0
+    assert accounting.unspanned_unlocated == 0
+    assert minted == []
+
+
 def test_extraction_profile_ids_fails_closed_on_flat_provenance() -> None:
     """Post-021 amendment: a pre-021 flat roll-up (provenance without a
     profiles map) is a corrupt reference for synthesise, mirroring group's
@@ -1091,3 +1360,192 @@ def test_extraction_profile_ids_fails_closed_on_flat_provenance() -> None:
         _extraction_profile_ids({"extraction_provenance": {"fingerprint": "fp"}})
     with pytest.raises(SynthesiseFailure, match="corrupt_reference"):
         _extraction_profile_ids({"extraction_provenance": "flat"})
+
+
+# --- compile_synthesis_directive (022 F5 steer surface) ---
+
+
+def _steer_response() -> dict[str, Any]:
+    return {
+        "sections": [
+            {
+                "title": "Interventions that worked",
+                "focus": "What the assembled evidence says about interventions.",
+                "group_ids": ["intervention:g02", "intervention:g01"],
+            },
+            {
+                "title": "Barriers to delivery",
+                "focus": "Recurring implementation barriers.",
+            },
+        ],
+        "group_ids": ["intervention:g01", "intervention:g02", "barrier_theme:g01"],
+        "retrieval_boosts": {
+            "appraisal_tier": {"5": 2.0},
+            "screen_confidence": {"lo": 1.0, "hi": 2.5},
+        },
+    }
+
+
+def test_compile_synthesis_directive_shape_and_determinism() -> None:
+    """Compile emits the directive grammar, sorts group_ids, is deterministic."""
+    response = _steer_response()
+    first = compile_synthesis_directive(response)
+    second = compile_synthesis_directive(_steer_response())
+    assert first == second
+    # Top-level group_ids universe is consumed, never emitted.
+    assert set(first) == {"sections", "retrieval_boosts"}
+    # group_ids canonicalised (sorted), section order preserved.
+    assert first["sections"][0]["group_ids"] == ["intervention:g01", "intervention:g02"]
+    assert first["sections"][0]["title"] == "Interventions that worked"
+    assert "group_ids" not in first["sections"][1]
+    assert first["retrieval_boosts"]["appraisal_tier"] == {"5": 2.0}
+    assert first["retrieval_boosts"]["screen_confidence"] == {"lo": 1.0, "hi": 2.5}
+
+
+def test_compile_synthesis_directive_round_trips_through_parser() -> None:
+    """The compiled directive parses through the same validator synthesise uses."""
+    directive = compile_synthesis_directive(_steer_response())
+    parsed = parse_synthesis_directive(
+        {"synthesis": directive},
+        grouping_group_ids={"intervention:g01", "intervention:g02", "barrier_theme:g01"},
+    )
+    assert parsed.sections is not None
+    assert [section["title"] for section in parsed.sections] == [
+        "Interventions that worked",
+        "Barriers to delivery",
+    ]
+    assert parsed.appraisal_tier_boosts == {"5": 2.0}
+    assert parsed.screen_confidence.lo == 1.0
+    assert parsed.screen_confidence.hi == 2.5
+
+
+def test_compile_synthesis_directive_empty_response_is_empty_directive() -> None:
+    """A response with no steer content compiles to an empty (valid) directive."""
+    assert compile_synthesis_directive({}) == {}
+
+
+def test_compile_synthesis_directive_rejects_unqualified_group_id() -> None:
+    """An unqualified section group id fails closed on the grammar's form rule."""
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive(
+            {
+                "sections": [
+                    {"title": "S", "focus": "f", "group_ids": ["g01"]}
+                ],
+                "group_ids": ["g01"],
+            }
+        )
+
+
+def test_compile_synthesis_directive_rejects_unknown_group_id() -> None:
+    """A qualified section group id outside the universe fails closed."""
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive(
+            {
+                "sections": [
+                    {"title": "S", "focus": "f", "group_ids": ["outcome:g09"]}
+                ],
+                "group_ids": ["intervention:g01"],
+            }
+        )
+
+
+def test_compile_synthesis_directive_rejects_out_of_bounds_screen_confidence() -> None:
+    """A screen_confidence bound outside [0.5, 4.0] fails closed."""
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive(
+            {"retrieval_boosts": {"screen_confidence": {"lo": 0.1, "hi": 2.0}}}
+        )
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive(
+            {"retrieval_boosts": {"screen_confidence": {"lo": 3.0, "hi": 1.0}}}
+        )
+
+
+def test_compile_synthesis_directive_rejects_unknown_boost_key() -> None:
+    """An unknown retrieval-boost key fails closed, never silently dropped."""
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive({"retrieval_boosts": {"not_a_boost": {"x": 1.0}}})
+
+
+def test_compile_synthesis_directive_rejects_malformed_sections() -> None:
+    """Non-list sections, non-object sections and unknown response keys fail closed."""
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive({"sections": "not-a-list"})
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive({"sections": ["not-an-object"]})
+    # A section missing 'focus' is rejected by the grammar's key check.
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive({"sections": [{"title": "S"}]})
+    # An unknown extra key on a section is not silently dropped.
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive(
+            {"sections": [{"title": "S", "focus": "f", "weird": 1}]}
+        )
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive({"unknown_top_level": []})
+
+
+def test_compile_synthesis_directive_rejects_non_mapping_and_bad_group_ids() -> None:
+    """Non-object responses and malformed group_ids universes fail closed."""
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive([])  # type: ignore[arg-type]
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive({"group_ids": "not-a-list"})
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive({"group_ids": [""]})
+
+
+class _EchoSpanMapJudge(StubGroundingJudgeBackend):
+    """Stub that (like a live judge can) also emits verdicts for span-map-only ids."""
+
+    def judge_block(self, envelope: dict[str, Any]) -> Any:
+        response, usage = super().judge_block(envelope)
+        judged = {claim["claim_id"] for claim in envelope.get("claims", [])}
+        extras = [
+            entry["claim_id"]
+            for entry in envelope.get("span_map", [])
+            if entry.get("claim_id") not in judged
+        ]
+        verdicts = list(response.verdicts)
+        if verdicts:
+            for claim_id in extras:
+                verdicts.append(verdicts[0].model_copy(update={"claim_id": claim_id}))
+        return response.model_copy(update={"verdicts": verdicts}), usage
+
+
+def test_judge_extra_verdicts_for_span_only_ids_are_dropped_not_fatal() -> None:
+    """A live judge echoing verdicts for all-types span-map ids (which carry no
+    verdict duty) must not fail coverage: the extras are dropped and counted,
+    while coverage of the judged set itself stays exact (022 item 17(i))."""
+    substrate = _substrate()
+    reasoning_claim = ClaimDraft(
+        claim_id="s0c0",
+        claim_index=0,
+        claim_type="reasoning",
+        text="As reasoning, the strands point one way.",
+        annotation_type="reasoning",
+        payload={},
+        judge_chunk_ids=set(),
+        span=(0, 40),
+    )
+    pattern_claim = ClaimDraft(
+        claim_id="s0c1",
+        claim_index=1,
+        claim_type="pattern",
+        text="The corpus shows a recurring pattern.",
+        annotation_type="pattern",
+        payload={},
+        judge_chunk_ids=set(),
+        span=(41, 78),
+    )
+    calls, _usage, _unspanned = _judge_claims(
+        claims=[reasoning_claim, pattern_claim],
+        substrate=substrate,
+        grounding_judge_backend=_EchoSpanMapJudge(),
+        section_prose="prose",
+    )
+    assert calls == 1
+    # The judged claim carries its verdict; the pattern claim never gains one.
+    assert reasoning_claim.verdict is not None
+    assert pattern_claim.verdict is None

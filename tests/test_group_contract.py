@@ -63,6 +63,7 @@ def _grouping_result_values(
     scope_id: uuid.UUID,
     run_id: uuid.UUID,
     extraction_run_id: uuid.UUID,
+    facet: str = "intervention",
     **over: Any,
 ) -> dict[str, Any]:
     """A minimal valid ``grouping_result`` row, overridable per test."""
@@ -72,11 +73,17 @@ def _grouping_result_values(
         "evidence_scope_id": scope_id,
         "run_id": run_id,
         "extraction_run_id": extraction_run_id,
-        "facet": "intervention",
-        "grouping_provenance": {},
-        "groups": {},
-        "counts": {},
-        "flags": [],
+        "grouping_provenance": {"facets": [facet]},
+        "groups": {
+            facet: {
+                "groups": [],
+                "ungrouped": {},
+                "no_value": {},
+                "overall_direction_spread": {},
+            }
+        },
+        "counts": {facet: {}},
+        "flags": {facet: []},
         "created_at": now(),
     }
     values.update(over)
@@ -237,8 +244,8 @@ def _seed_one_doc_extraction(
 
 
 @pytest.mark.parametrize("facet", ["intervention", "outcome", "population"])
-def test_grr_facet_check_accepted(conn: Connection, facet: str) -> None:
-    """Each contracted facet value is accepted by ck_grr_facet."""
+def test_grr_per_facet_payload_key_accepted(conn: Connection, facet: str) -> None:
+    """Sanctioned shape change: facet is now the persisted JSON key, not a row column."""
     project_id, _ = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     seeded = _seed_one_doc_extraction(conn, project_id, scope_id)
@@ -248,24 +255,20 @@ def test_grr_facet_check_accepted(conn: Connection, facet: str) -> None:
         **_grouping_result_values(project_id, scope_id, group_run_id, seeded.run_id, facet=facet)
     ))
 
-    count = conn.execute(
-        select(func.count()).select_from(grouping_result)
+    stored = conn.execute(
+        select(grouping_result.c.groups, grouping_result.c.grouping_provenance)
         .where(grouping_result.c.run_id == group_run_id)
-    ).scalar_one()
-    assert count == 1
+    ).one()
+    assert stored.groups.keys() == {facet}
+    assert stored.grouping_provenance["facets"] == [facet]
 
 
-def test_grr_facet_check_rejected(conn: Connection) -> None:
-    """``facet`` outside the closed vocabulary (mechanism) is rejected."""
-    project_id, _ = seed_project_and_run(conn)
-    scope_id = seed_scope(conn, project_id)
-    seeded = _seed_one_doc_extraction(conn, project_id, scope_id)
-    group_run_id = seed_run(conn, project_id)
-
-    with pytest.raises(IntegrityError, match="ck_grr_facet"), conn.begin_nested():
-        conn.execute(grouping_result.insert().values(**_grouping_result_values(
-            project_id, scope_id, group_run_id, seeded.run_id, facet="mechanism"
-        )))
+def test_grr_row_level_facet_column_and_check_removed() -> None:
+    """Sanctioned shape change: ``facet`` moved to group grain."""
+    assert "facet" not in grouping_result.c
+    assert "ck_grr_facet" not in {
+        constraint.name for constraint in grouping_result.constraints
+    }
 
 
 def test_grr_scope_project_fk_rejected(conn: Connection) -> None:
@@ -427,15 +430,15 @@ def test_mixed_status_docs_group_only_extracted_findings(conn: Connection) -> No
     assert _payload_finding_ids(cast("dict[str, Any]", row["groups"])) == {
         str(finding_id) for finding_id in finding_ids
     }
-    assert summary["counts"]["findings_total"] == len(finding_ids)
-    assert row["counts"]["findings_total"] == len(finding_ids)
+    assert summary["counts"]["intervention"]["findings_total"] == len(finding_ids)
+    assert row["counts"]["intervention"]["findings_total"] == len(finding_ids)
 
 
 # --- 4. Harness-level wiring --------------------------------------------------
 
 
 def test_harness_group_component_success_default_backend(conn: Connection) -> None:
-    """compile + run_harness with NO facet_grouping_backend arg proves the stub default."""
+    """compile + run_harness with no group backend proves the stub default."""
     project_id, _ = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     seeded = _seed_one_doc_extraction(conn, project_id, scope_id)

@@ -2,26 +2,41 @@
 
 from __future__ import annotations
 
-import math
 import uuid
-from concurrent.futures import Future, ThreadPoolExecutor, wait
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import structlog
 from sqlalchemy import exists, func, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas import grouping, tracing
+from policy_atlas import grouping
+from policy_atlas.clustering_engine import (
+    AssignmentAttempt as EngineAssignmentAttempt,
+)
+from policy_atlas.clustering_engine import (
+    AssignmentOutput,
+    CallBudget,
+    ClusteringBackend,
+    ClusteringFailure,
+    ClusteringPolicy,
+    ClusteringResult,
+    ClusterLabel,
+    ClusterUnit,
+    call_budget_for_unit_count,
+    cluster_units,
+)
+from policy_atlas.clustering_engine import (
+    run_first_assignment_round as engine_run_first_assignment_round,
+)
 from policy_atlas.embeddings import EMBEDDING_PROFILE, UNIT_POLICY
 from policy_atlas.grouping import (
     UNCLUSTERED,
     GroupingDoc,
-    InvalidDiscoveryOutput,
     Theme,
     ThemeGroupingBackend,
-    validate_themes,
 )
 from policy_atlas.schema import (
     characterisation_result,
@@ -38,7 +53,7 @@ from policy_atlas.schema import (
 )
 from policy_atlas.screen import effective_screen_rows
 from policy_atlas.tags import insert_source_tags
-from policy_atlas.usage import UsageAccumulator
+from policy_atlas.usage import UsageResult
 
 log = structlog.get_logger()
 
@@ -113,15 +128,6 @@ class _AssignmentAttempt:
     error_detail: str | None = None
 
 
-@dataclass(frozen=True)
-class _AssignmentValidation:
-    valid: dict[str, str]
-    residue: list[GroupingDoc]
-    invented_count: int
-    missing_count: int
-    unknown_theme_count: int
-
-
 @dataclass
 class _CallBudget:
     maximum: int
@@ -134,12 +140,36 @@ class _CallBudget:
         self.count += 1
 
 
-_REJECTION_DETAIL_MAX_LEN = 500
+class _CharacteriseClusteringBackend(ClusteringBackend):
+    def __init__(self, backend: ThemeGroupingBackend, *, intent: str) -> None:
+        self._backend = backend
+        self._intent = intent
 
+    def discover(
+        self,
+        units: list[ClusterUnit],
+        *,
+        min_labels: int,
+        max_labels: int,
+    ) -> UsageResult[list[ClusterLabel]]:
+        docs = [_doc_payload(unit) for unit in units]
+        themes, usage = self._backend.discover(
+            docs,
+            intent=self._intent,
+            min_themes=min_labels,
+            max_themes=max_labels,
+        )
+        return _labels_from_themes(themes), usage
 
-def _truncate_detail(text: str) -> str:
-    """Defensively cap an exception message before it enters logs or provenance."""
-    return text[:_REJECTION_DETAIL_MAX_LEN]
+    def assign(
+        self,
+        batch: list[ClusterUnit],
+        *,
+        labels: list[ClusterLabel],
+    ) -> UsageResult[AssignmentOutput]:
+        docs = [_doc_payload(unit) for unit in batch]
+        assignments, usage = self._backend.assign(docs, themes=_themes_from_labels(labels))
+        return assignments, usage
 
 
 def _share(count: int, base: int) -> float:
@@ -491,107 +521,13 @@ def _theme_bounds(n: int) -> tuple[int, int]:
 
 
 def _call_budget(n: int) -> tuple[int, int, int]:
-    batch_count = math.ceil(n / grouping.BATCH_SIZE)
-    baseline = 1 + batch_count
-    maximum = (
-        1 + grouping.DISCOVERY_RETRY_CAP
-        + batch_count * (1 + grouping.ASSIGNMENT_REPAIR_CAP)
+    plan = call_budget_for_unit_count(
+        n,
+        assignment_batch_size=grouping.BATCH_SIZE,
+        discovery_retry_cap=grouping.DISCOVERY_RETRY_CAP,
+        assignment_repair_cap=grouping.ASSIGNMENT_REPAIR_CAP,
     )
-    return batch_count, baseline, maximum
-
-
-def _discover_themes(
-    *,
-    backend: ThemeGroupingBackend,
-    docs: list[GroupingDoc],
-    intent: str,
-    min_themes: int,
-    max_themes: int,
-    budget: _CallBudget,
-) -> tuple[list[Theme], int, dict[str, int], list[str]]:
-    usage_totals = UsageAccumulator()
-    rejection_details: list[str] = []
-    for attempt in range(grouping.DISCOVERY_RETRY_CAP + 1):
-        budget.reserve()
-        try:
-            raw_themes, usage = backend.discover(
-                docs,
-                intent=intent,
-                min_themes=min_themes,
-                max_themes=max_themes,
-            )
-            usage_totals.add(usage)
-            themes = validate_themes(
-                raw_themes,
-                min_themes=min_themes,
-                max_themes=max_themes,
-            )
-        except InvalidDiscoveryOutput as exc:
-            error_type = type(exc).__name__
-            error_detail = _truncate_detail(str(exc))
-            rejection_details.append(error_detail)
-        except Exception as exc:
-            error_type = type(exc).__name__
-            error_detail = _truncate_detail(str(exc))
-            rejection_details.append(error_detail)
-        else:
-            return themes, attempt, usage_totals.payload(), rejection_details
-        log.warning(
-            "characterise.discovery_invalid",
-            attempt=attempt + 1,
-            retry_cap=grouping.DISCOVERY_RETRY_CAP,
-            error_type=error_type,
-            error=error_detail,
-        )
-    last_detail = rejection_details[-1] if rejection_details else "no detail captured"
-    raise CharacteriseFailure(
-        coverage=budget.coverage,
-        error=(
-            f"discovery failed after {grouping.DISCOVERY_RETRY_CAP + 1} attempts: "
-            f"{last_detail}"
-        ),
-    )
-
-
-def _batches(docs: list[GroupingDoc]) -> list[list[GroupingDoc]]:
-    return [
-        docs[start:start + grouping.BATCH_SIZE]
-        for start in range(0, len(docs), grouping.BATCH_SIZE)
-    ]
-
-
-def _validate_assignments(
-    batch: list[GroupingDoc],
-    assignments: dict[str, str],
-    *,
-    theme_names: set[str],
-) -> _AssignmentValidation:
-    batch_ids = {doc["id"] for doc in batch}
-    valid: dict[str, str] = {}
-    residue_ids: set[str] = set()
-    invented_count = 0
-    unknown_theme_count = 0
-
-    for doc_id, theme in assignments.items():
-        if doc_id not in batch_ids:
-            invented_count += 1
-            continue
-        if theme == UNCLUSTERED or theme in theme_names:
-            valid[doc_id] = theme
-        else:
-            residue_ids.add(doc_id)
-            unknown_theme_count += 1
-
-    missing_ids = batch_ids - set(valid) - residue_ids
-    residue_ids.update(missing_ids)
-    residue = [doc for doc in batch if doc["id"] in residue_ids]
-    return _AssignmentValidation(
-        valid=valid,
-        residue=residue,
-        invented_count=invented_count,
-        missing_count=len(missing_ids),
-        unknown_theme_count=unknown_theme_count,
-    )
+    return plan.batch_count, plan.baseline, plan.maximum
 
 
 def _run_first_assignment_round(
@@ -601,151 +537,111 @@ def _run_first_assignment_round(
     themes: list[Theme],
     budget: _CallBudget,
 ) -> tuple[list[_AssignmentAttempt], dict[str, int]]:
-    for _ in batches:
-        budget.reserve()
-
-    submitted: list[tuple[int, list[GroupingDoc], Future[Any]]] = []
-    usage_totals = UsageAccumulator()
-    with ThreadPoolExecutor(max_workers=grouping.MAX_CONCURRENT_BATCHES) as executor:
-        for batch_index, batch in enumerate(batches, start=1):
-            submitted.append(
-                (
-                    batch_index,
-                    batch,
-                    tracing.submit_with_context(
-                        executor, backend.assign, batch, themes=themes
-                    ),
-                )
-            )
-        wait([future for _, _, future in submitted])
-
-    attempts: list[_AssignmentAttempt] = []
-    for batch_index, batch, future in submitted:
-        try:
-            assignments, usage = future.result()
-            usage_totals.add(usage)
-        except Exception as exc:
-            error_detail = _truncate_detail(str(exc))
-            log.warning(
-                "characterise.assignment_batch_failed",
-                batch_index=batch_index,
-                batch_size=len(batch),
-                error_type=type(exc).__name__,
-                error=error_detail,
-            )
-            attempts.append(
-                _AssignmentAttempt(
-                    batch_index=batch_index,
-                    batch=batch,
-                    assignments=None,
-                    error_type=type(exc).__name__,
-                    error_detail=error_detail,
-                )
-            )
-        else:
-            attempts.append(
-                _AssignmentAttempt(
-                    batch_index=batch_index,
-                    batch=batch,
-                    assignments=assignments,
-                    error_type=None,
-                )
-            )
-    return attempts, usage_totals.payload()
-
-
-def _resolve_assignment_batch(
-    *,
-    backend: ThemeGroupingBackend,
-    attempt: _AssignmentAttempt,
-    themes: list[Theme],
-    theme_names: set[str],
-    budget: _CallBudget,
-) -> tuple[dict[str, str], bool, dict[str, int]]:
-    usage_totals = UsageAccumulator()
-    # A failed first call (assignments None) validates as an empty mapping: the
-    # whole batch becomes missing residue, identical to the hand-built case.
-    validation = _validate_assignments(
-        attempt.batch,
-        attempt.assignments or {},
-        theme_names=theme_names,
+    engine_budget = CallBudget(maximum=budget.maximum, count=budget.count)
+    policy = _characterise_clustering_policy(
+        min_themes=1,
+        max_themes=max(1, len(themes)),
     )
-
-    if not validation.residue:
-        return validation.valid, False, usage_totals.payload()
-
-    log.info(
-        "characterise.assignment_repair",
-        batch_index=attempt.batch_index,
-        residue_count=len(validation.residue),
-        invented_count=validation.invented_count,
-        missing_count=validation.missing_count,
-        unknown_theme_count=validation.unknown_theme_count,
-        first_error_type=attempt.error_type,
-        first_error_detail=attempt.error_detail,
-    )
-    budget.reserve()
     try:
-        repair_assignments, usage = backend.assign(validation.residue, themes=themes)
-        usage_totals.add(usage)
-    except Exception as exc:
-        error_detail = _truncate_detail(str(exc))
-        raise CharacteriseFailure(
-            coverage=budget.coverage,
-            error=(
-                f"assignment repair failed for batch {attempt.batch_index}: "
-                f"{type(exc).__name__}: {error_detail}"
-            ),
-        ) from exc
-
-    repair_validation = _validate_assignments(
-        validation.residue,
-        repair_assignments,
-        theme_names=theme_names,
-    )
-    if repair_validation.residue:
-        raise CharacteriseFailure(
-            coverage=budget.coverage,
-            error=(
-                f"assignment repair left {len(repair_validation.residue)} unresolved "
-                f"docs in batch {attempt.batch_index}"
-            ),
+        attempts, usage = engine_run_first_assignment_round(
+            backend=_CharacteriseClusteringBackend(backend, intent=""),
+            batches=[
+                [ClusterUnit(unit_id=doc["id"], payload=doc) for doc in batch]
+                for batch in batches
+            ],
+            labels=_labels_from_themes(themes),
+            budget=engine_budget,
+            policy=policy,
         )
-    merged = dict(validation.valid)
-    merged.update(repair_validation.valid)
-    return merged, True, usage_totals.payload()
+    except ClusteringFailure as exc:
+        raise CharacteriseFailure(coverage=budget.coverage, error=exc.error) from exc
+    budget.count = engine_budget.count
+    return [_legacy_attempt(attempt) for attempt in attempts], usage
 
 
-def _assign_docs(
+def _cluster_characterise_docs(
     *,
     backend: ThemeGroupingBackend,
     docs: list[GroupingDoc],
-    themes: list[Theme],
-    budget: _CallBudget,
-) -> tuple[dict[str, str], int, dict[str, int]]:
-    theme_names = {theme["name"] for theme in themes}
-    first_round, first_round_usage = _run_first_assignment_round(
-        backend=backend,
-        batches=_batches(docs),
-        themes=themes,
-        budget=budget,
-    )
-    assignments: dict[str, str] = {}
-    repair_calls_used = 0
-    usage_totals = UsageAccumulator()
-    usage_totals.add_payload(first_round_usage)
-    for attempt in first_round:
-        batch_assignments, repaired, repair_usage = _resolve_assignment_batch(
-            backend=backend,
-            attempt=attempt,
-            themes=themes,
-            theme_names=theme_names,
-            budget=budget,
+    intent: str,
+    coverage: dict[str, Any],
+) -> ClusteringResult:
+    min_themes, max_themes = _theme_bounds(len(docs))
+    _, baseline, maximum = _call_budget(len(docs))
+    log.info("characterise.call_budget", baseline=baseline, maximum=maximum)
+    try:
+        return cluster_units(
+            [ClusterUnit(unit_id=doc["id"], payload=doc) for doc in docs],
+            backend=_CharacteriseClusteringBackend(backend, intent=intent),
+            policy=_characterise_clustering_policy(
+                min_themes=min_themes,
+                max_themes=max_themes,
+            ),
         )
-        usage_totals.add_payload(repair_usage)
-        assignments.update(batch_assignments)
-        repair_calls_used += 1 if repaired else 0
-    return assignments, repair_calls_used, usage_totals.payload()
+    except ClusteringFailure as exc:
+        raise CharacteriseFailure(coverage=coverage, error=exc.error) from exc
+
+
+def _characterise_clustering_policy(*, min_themes: int, max_themes: int) -> ClusteringPolicy:
+    return ClusteringPolicy(
+        min_labels=min_themes,
+        max_labels=max_themes,
+        assignment_batch_size=grouping.BATCH_SIZE,
+        discovery_retry_cap=grouping.DISCOVERY_RETRY_CAP,
+        assignment_repair_cap=grouping.ASSIGNMENT_REPAIR_CAP,
+        residual_label=UNCLUSTERED,
+        unresolved_policy="fail",
+        label_max=grouping.THEME_NAME_MAX,
+        description_max=grouping.THEME_DESC_MAX,
+        forbidden_label_reason=_forbidden_theme_reason,
+        label_noun="theme",
+        log_event_prefix="characterise",
+        max_concurrent_batches=grouping.MAX_CONCURRENT_BATCHES,
+    )
+
+
+def _forbidden_theme_reason(index: int, label: str) -> str | None:
+    if label.casefold() == UNCLUSTERED:
+        return f"theme {index} name collides with the {UNCLUSTERED!r} sentinel"
+    return None
+
+
+def _doc_payload(unit: ClusterUnit) -> GroupingDoc:
+    return cast("GroupingDoc", unit.payload)
+
+
+def _labels_from_themes(themes: list[Theme]) -> list[ClusterLabel]:
+    return [
+        ClusterLabel(label=theme["name"], description=theme["description"])
+        for theme in themes
+    ]
+
+
+def _themes_from_labels(labels: list[ClusterLabel]) -> list[Theme]:
+    return [
+        {"name": label.label, "description": label.description}
+        for label in labels
+    ]
+
+
+def _legacy_attempt(attempt: EngineAssignmentAttempt) -> _AssignmentAttempt:
+    return _AssignmentAttempt(
+        batch_index=attempt.batch_index,
+        batch=[_doc_payload(unit) for unit in attempt.batch],
+        assignments=(
+            None
+            if attempt.assignments is None
+            else _assignment_output_to_dict(attempt.assignments)
+        ),
+        error_type=attempt.error_type,
+        error_detail=attempt.error_detail,
+    )
+
+
+def _assignment_output_to_dict(assignments: AssignmentOutput) -> dict[str, str]:
+    if isinstance(assignments, Mapping):
+        return dict(assignments)
+    return {assignment.unit_id: assignment.label for assignment in assignments}
 
 
 def _grouping_provenance(
@@ -882,38 +778,25 @@ def characterise_scope(
     discovery_retries_used = 0
     discovery_rejections: list[str] = []
     repair_calls_used = 0
-    usage_accumulator = UsageAccumulator()
+    usage_totals = {"prompt": 0, "completion": 0, "total": 0, "cached": 0}
 
     if n == 0:
         flags.append("empty_scope")
         themes: list[Theme] = []
         assignments: dict[str, str] = {}
     else:
-        min_themes, max_themes = _theme_bounds(n)
-        _, baseline, maximum = _call_budget(n)
-        log.info("characterise.call_budget", baseline=baseline, maximum=maximum)
-        budget = _CallBudget(maximum=maximum, coverage=coverage)
-        (
-            themes,
-            discovery_retries_used,
-            discovery_usage,
-            discovery_rejections,
-        ) = _discover_themes(
+        clustering = _cluster_characterise_docs(
             backend=theme_grouping_backend,
             docs=docs,
             intent=context.intent,
-            min_themes=min_themes,
-            max_themes=max_themes,
-            budget=budget,
+            coverage=coverage,
         )
-        usage_accumulator.add_payload(discovery_usage)
-        assignments, repair_calls_used, assignment_usage = _assign_docs(
-            backend=theme_grouping_backend,
-            docs=docs,
-            themes=themes,
-            budget=budget,
-        )
-        usage_accumulator.add_payload(assignment_usage)
+        themes = _themes_from_labels(clustering.labels)
+        assignments = clustering.assignments
+        discovery_retries_used = clustering.discovery_retries_used
+        discovery_rejections = clustering.discovery_rejections
+        repair_calls_used = clustering.assignment_repair_calls_used
+        usage_totals = clustering.usage_totals
         if repair_calls_used:
             flags.append("repair_path_taken")
 
@@ -961,5 +844,5 @@ def characterise_scope(
         n=n,
         flags=flags,
         provenance=provenance,
-        usage_totals=usage_accumulator.payload(),
+        usage_totals=usage_totals,
     )

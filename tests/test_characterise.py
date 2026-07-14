@@ -75,6 +75,39 @@ def _seed_doc(
     return pss_id
 
 
+def _seed_fixed_doc(
+    conn: Connection,
+    project_id: uuid.UUID,
+    run_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    *,
+    index: int,
+    title: str,
+    abstract: str,
+    metadata: dict[str, Any],
+) -> uuid.UUID:
+    pss_id = uuid.UUID(int=index)
+    snapshot_id = uuid.UUID(int=1000 + index)
+    conn.execute(source_snapshot.insert().values(
+        source_snapshot_id=snapshot_id,
+        content_hash=f"characterise-fixture-{index}",
+        text_basis="full_text",
+        source_locator=f"fixture-{index}.pdf",
+        metadata={"title": title, "abstract": abstract, **metadata},
+        created_at=now(),
+    ))
+    conn.execute(project_source_snapshot.insert().values(
+        project_source_snapshot_id=pss_id,
+        project_id=project_id,
+        source_snapshot_id=snapshot_id,
+        origin="uploaded",
+        run_id=None,
+        ingested_at=now(),
+    ))
+    seed_screening_result(conn, project_id, run_id, scope_id, pss_id, status="relevant")
+    return pss_id
+
+
 class _RaisingDiscoverBackend:
     """A grouping backend whose discovery stage always fails; assign must never run."""
 
@@ -1630,6 +1663,159 @@ def test_stub_runs_byte_identical(conn: Connection) -> None:
     left = json.dumps(dict(rows[0]._mapping), sort_keys=True)
     right = json.dumps(dict(rows[1]._mapping), sort_keys=True)
     assert left == right
+
+
+def test_characterise_stub_summary_matches_pinned_fixture(conn: Connection) -> None:
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _seed_fixed_doc(
+        conn,
+        pid,
+        rid,
+        scope_id,
+        index=1,
+        title="Housing one",
+        abstract="Stable body. [stub-theme: Housing]",
+        metadata={
+            "year": 2020,
+            "language": "en",
+            "backend": "openalex",
+            "publisher_org": "Acme",
+        },
+    )
+    _seed_fixed_doc(
+        conn,
+        pid,
+        rid,
+        scope_id,
+        index=2,
+        title="Housing two",
+        abstract="Second body. [stub-theme: Housing]",
+        metadata={
+            "year": 2021,
+            "language": "en",
+            "backend": "overton",
+            "publisher_org": "Acme",
+        },
+    )
+    _seed_fixed_doc(
+        conn,
+        pid,
+        rid,
+        scope_id,
+        index=3,
+        title="Health one",
+        abstract="Health body. [stub-theme: Health]",
+        metadata={
+            "year": 2021,
+            "language": "fr",
+            "backend": "openalex",
+            "publisher_org": "Beta",
+        },
+    )
+    _seed_fixed_doc(
+        conn,
+        pid,
+        rid,
+        scope_id,
+        index=4,
+        title="Education one",
+        abstract="Education body. [stub-theme: Education]",
+        metadata={
+            "year": 2022,
+            "language": "en",
+            "backend": "overton",
+            "publisher_org": "Gamma",
+        },
+    )
+    _seed_fixed_doc(
+        conn,
+        pid,
+        rid,
+        scope_id,
+        index=5,
+        title="Zulu stray",
+        abstract="No stub marker here.",
+        metadata={
+            "year": 2022,
+            "language": "en",
+            "backend": "openalex",
+            "publisher_org": "Gamma",
+        },
+    )
+
+    summary = characterise_scope(
+        conn,
+        project_id=pid,
+        run_id=rid,
+        context=CharacteriseContext(scope_id=scope_id, intent="Pinned fixture", context={}),
+        theme_grouping_backend=StubThemeGroupingBackend(),
+    )
+
+    assert summary == {
+        "coverage": {
+            "base": "screened",
+            "base_counts": {
+                "screened_in": 5,
+                "not_relevant": 0,
+                "excluded_retracted": 0,
+                "screen_failed": 0,
+                "unscreened": 0,
+            },
+            "distributions": {
+                "origin": {"uploaded": 5},
+                "text_basis": {"full_text": 5},
+                "full_text_status": {"not_attempted": 5},
+                "full_text_error_reasons": {},
+                "primary_evidence_type": {"unclassified": 5},
+                "quality": {"unappraised": 5},
+                "screen_basis": {"title_abstract": 5},
+                "screen_confidence_bands": {">=0.8": 5},
+                "year": {"2020": 1, "2021": 2, "2022": 2},
+                "language": {"en": 4, "fr": 1},
+                "backend": {"openalex": 3, "overton": 2},
+                "publisher_org": {"Acme": 2, "Beta": 1, "Gamma": 2},
+                "tags": {},
+            },
+            "rates": {
+                "full_text_coverage": 0.0,
+                "unknown_classification_share": 0.0,
+                "failed_embedding_share": 0.0,
+            },
+        },
+        "themes": [
+            {
+                "name": "Housing",
+                "description": "Documents grouped by stub key 'Housing'",
+                "size": 2,
+            },
+            {
+                "name": "Health",
+                "description": "Documents grouped by stub key 'Health'",
+                "size": 1,
+            },
+            {
+                "name": "Education",
+                "description": "Documents grouped by stub key 'Education'",
+                "size": 1,
+            },
+        ],
+        "unclustered": {"count": 1, "share": 0.2},
+        "flags": [],
+        "provenance": {
+            "prompt_version": "characterise_grouping_v1",
+            "discovery_model": "stub",
+            "assignment_model": "stub",
+            "batch_size": 40,
+            "discovery_retry_cap": 1,
+            "assignment_repair_cap": 1,
+            "discovery_retries_used": 0,
+            "discovery_rejections": [],
+            "repair_calls_used": 0,
+            "backend_mode": "stub",
+        },
+        "usage_totals": {"prompt": 0, "completion": 0, "total": 0, "cached": 0},
+    }
 
 
 # --- Review-stack fixes (task 009 step 7) ---

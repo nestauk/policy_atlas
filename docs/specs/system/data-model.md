@@ -174,7 +174,12 @@ historical state.**
   `adaptation` and `fidelity` cover reported modifications and delivered-vs-planned
   observations respectively); source-named prose **`claim`** (one claim per record — ICF has
   no statistics block for content to live in, so the record stays one coherent typed unit:
-  claim + dimensions + anchors); the **shared source-named reference set** (below); nullable
+  claim + dimensions + anchors); nullable Text **`context_label`** (task 022's `icf_v2`
+  rider, owner-approved 2026-07-14: **strictly source-named** — filled only when the source
+  itself provides a short name for the claim's theme, a subheading or a named entry in the
+  source's own table; never extractor-authored summarisation — adherence is a named
+  ICF-vetter flag class, `paraphrased_label`; icf_v1 rows read "not recorded under icf_v1"
+  via `field_coverage` key absence, no backfill); the **shared source-named reference set** (below); nullable
   **`claim_level`** (`study` | `pooled` — the IOF estimate-level logic applied to context
   claims, joining the claim key so a review's pooled barrier and a primary study's own
   observation never double-count); nullable **`claim_basis`** (`studied` | `author_assertion`
@@ -212,11 +217,15 @@ historical state.**
   definition is what makes that reference-mediation real rather than aspirational.
 - **Storage stays parallel tables** (`intervention_outcome_finding` /
   `implementation_context_finding`, disjoint payloads — a single merged table is the
-  generic-container failure mode this data model rejects). A **cross-kind UNION read view**
-  over the shared reference columns is a recorded seam, not built this slice (Slice C, first
-  reader = Slice C's cross-schema grouping).
+  generic-container failure mode this data model rejects). The **cross-kind UNION read
+  view** over the shared reference columns is **built** (task 022, owner decision 5:
+  `finding_reference_union` — finding id · kind discriminator · extraction/project scoping ·
+  the six shared reference columns, reference-columns-only); its first reader is group's
+  value-facet loader. Kind-scoped payloads (ICF `claim`/`context_type`) stay direct table
+  reads — a kind-scoped facet gets a kind-scoped read, honestly.
 - **ICF is its own fingerprint domain** (own extraction profile/call `eb_icf_base_v1`, own
-  `SCHEMA_VERSION` `icf_v1`, hanging off `source_extraction_record` via the same composite FK
+  `SCHEMA_VERSION` `icf_v2` since task 022's `context_label` rider, hanging off
+  `source_extraction_record` via the same composite FK
   as IOF): nothing about ICF's arrival, prompt, or schema version invalidates existing IOF
   memos, and vice versa — **upgrades-never-invalidate** applies per schema, not globally.
   (The one deliberate, bounded exception is IOF's own `setting` rider in Edit 1 above — a
@@ -233,10 +242,13 @@ historical state.**
   that **doesn't mention** an outcome is **coverage**. (Consumed by the gap-provenance rule in
   [provenance-grounding.md](provenance-grounding.md) and the EB
   [provenance.md](../capabilities/evidence-base/provenance.md).)
-- **Hybrid-queryable dimensions**: `intervention` and `outcome` are hybrid-indexed in v3.0
-  (committed). Other dimensions are stored and filterable; hybrid-indexing is gated on the
-  **dimension-promotion gate** (🟡 — driven by observed query behaviour, not declared upfront).
-  Dimension search reuses the `retrieve` adapter with a second index target.
+- **Hybrid-queryable dimensions**: ⏸ **deferred behind the dimension-promotion gate for ALL
+  dimensions, `intervention`/`outcome` included** (owner adjudication at the task-022
+  contract gate, 2026-07-14, superseding the earlier committed-for-v3.0 line): no observed
+  query behaviour exists yet — the eval slice will generate it — and the current readers are
+  covered by scoped `search_chunks` + kind-typed `query_findings`. Dimension search, when
+  promoted, reuses the `retrieve` adapter with a second index target; ICF's source-named
+  values co-ride free by construction.
 - ⏸ **Graph-structured synthesis** is a live seam over the findings graph at *query time*
   (run-local → project-scoped persistent → graph datastore, gated on an entity-resolution-
   quality bar) — **never** an ingestion-time global KG (rejected: re-creates the v2 monolith).

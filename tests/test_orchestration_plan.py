@@ -11,6 +11,7 @@ from policy_atlas.country_filters import ISO_3166_ALPHA2
 from policy_atlas.extract import KNOWN_PROFILE_IDS
 from policy_atlas.orchestration_plan import (
     ANALYSIS_DEPTH_TABLE,
+    DEEP_GROUPING_FACETS,
     EXTRACT_PROFILE_IDS,
     SPINE,
     TIME_BANDS,
@@ -42,7 +43,7 @@ def _payload(**overrides: Any) -> dict[str, Any]:
             "extract": "Captures intervention-outcome findings for deep questions",
             "group": "Organises extracted findings by an approved facet",
         },
-        "grouping_facet": None,
+        "grouping_facets": None,
         "steering_mode": "moderate",
         "steer_point_defaults": [
             {"steer_point": "deepening_selection", "action": "proceed_flag"}
@@ -94,7 +95,7 @@ def _matrix_plans() -> list[OrchestrationPlan]:
                         search_effort=search_effort,
                         analysis_depth=analysis_depth,
                         components=components,
-                        grouping_facet="outcome" if "group" in components else None,
+                        grouping_facets=["outcome"] if "group" in components else None,
                     )
                 )
     return plans
@@ -126,6 +127,22 @@ def test_spine_is_present_in_order_for_valid_plan_matrix() -> None:
         {"analysis_depth": "standard", "components": ["characterise", "select", "group"]},
         {"analysis_depth": "standard", "components": ["select"]},
         {"analysis_depth": "landscape", "components": ["screen_full"]},
+        {"grouping_facets": ["outcome"]},
+        {
+            "analysis_depth": "deep",
+            "components": ["characterise", "select", "extract", "group"],
+            "grouping_facets": [],
+        },
+        {
+            "analysis_depth": "deep",
+            "components": ["characterise", "select", "extract", "group"],
+            "grouping_facets": ["outcome", "outcome"],
+        },
+        {
+            "analysis_depth": "deep",
+            "components": ["characterise", "select", "extract", "group"],
+            "grouping_facets": ["mechanism"],
+        },
         {"extract_profiles": ["iof"]},
         {
             "analysis_depth": "deep",
@@ -309,6 +326,7 @@ def test_depth_rows_pin_findings_chain_defaults() -> None:
         "findings_chain": False,
         "selection_budget": None,
         "extract_profiles": None,
+        "grouping_facets": None,
     }
     assert ANALYSIS_DEPTH_TABLE["deep"] == {
         "screen_full": True,
@@ -317,11 +335,20 @@ def test_depth_rows_pin_findings_chain_defaults() -> None:
         "findings_chain": True,
         "selection_budget": 25,
         "extract_profiles": ("iof", "icf"),
+        "grouping_facets": DEEP_GROUPING_FACETS,
     }
     assert ANALYSIS_DEPTH_TABLE["standard"]["select"] is True
     assert ANALYSIS_DEPTH_TABLE["standard"]["findings_chain"] is False
     assert ANALYSIS_DEPTH_TABLE["standard"]["selection_budget"] == 15
     assert ANALYSIS_DEPTH_TABLE["standard"]["extract_profiles"] is None
+    assert ANALYSIS_DEPTH_TABLE["standard"]["grouping_facets"] is None
+    assert DEEP_GROUPING_FACETS == (
+        "intervention",
+        "outcome",
+        "barrier_theme",
+        "enabler_theme",
+        "mechanism_theme",
+    )
     assert TIME_BANDS[("rapid", "landscape")] == "~10-15 min"
     assert TIME_BANDS[("standard", "landscape")] == "~15-20 min"
     assert TIME_BANDS[("deep", "landscape")] == "~20-25 min"
@@ -345,6 +372,33 @@ def test_deep_extract_default_compiles_both_profiles_iof_first() -> None:
 
     assert extract_step.directive_delta == {
         "extraction": {"profiles": list(KNOWN_PROFILE_IDS)}
+    }
+
+
+def test_deep_group_default_compiles_named_facet_set() -> None:
+    plan = _plan(
+        search_effort="deep",
+        analysis_depth="deep",
+        components=["characterise", "select", "extract", "group"],
+    )
+
+    group_step = next(step for step in compose(plan).steps if step.component == "group")
+
+    assert group_step.directive_delta == {"grouping": {"facets": list(DEEP_GROUPING_FACETS)}}
+
+
+def test_explicit_grouping_facets_compile_to_list_directive() -> None:
+    plan = _plan(
+        search_effort="deep",
+        analysis_depth="deep",
+        components=["characterise", "select", "extract", "group"],
+        grouping_facets=["outcome", "barrier_theme"],
+    )
+
+    group_step = next(step for step in compose(plan).steps if step.component == "group")
+
+    assert group_step.directive_delta == {
+        "grouping": {"facets": ["outcome", "barrier_theme"]}
     }
 
 
@@ -401,7 +455,7 @@ def test_round_trip_payload_composes_to_identical_chain() -> None:
         search_effort="deep",
         analysis_depth="deep",
         components=["screen_full", "characterise", "select", "extract", "group"],
-        grouping_facet="outcome",
+        grouping_facets=["outcome", "barrier_theme"],
         scope_constraints={
             "published_after": "2020-01-01",
             "published_before": "2025-12-31",
@@ -576,7 +630,7 @@ def test_off_diagonal_plans_compose_validly() -> None:
         search_effort="rapid",
         analysis_depth="deep",
         components=["screen_full", "characterise", "select", "extract", "group"],
-        grouping_facet="intervention",
+        grouping_facets=["intervention"],
     )
     horizon_scan = _plan(
         search_effort="deep",
@@ -608,7 +662,7 @@ def test_expected_artefact_shape_and_time_band_are_deterministic() -> None:
         search_effort="deep",
         analysis_depth="deep",
         components=["screen_full", "characterise", "select", "extract", "group"],
-        grouping_facet="population",
+        grouping_facets=["population"],
     )
 
     assert landscape.expected_artefact_shape == "landscape coverage, themes and gaps"

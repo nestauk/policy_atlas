@@ -146,10 +146,16 @@ def test_value_records_use_surface_count_and_counterparts() -> None:
 
 
 def test_parse_grouping_directive_defaults_and_valid_scope_context() -> None:
-    assert parse_grouping_directive({}) == ("intervention", "default")
-    assert parse_grouping_directive({"grouping": {}}) == ("intervention", "default")
+    assert parse_grouping_directive({}) == (["intervention"], "default")
+    assert parse_grouping_directive({"grouping": {}}) == (["intervention"], "default")
     assert parse_grouping_directive({"grouping": {"facet": "outcome"}}) == (
-        "outcome",
+        ["outcome"],
+        "scope_context",
+    )
+    assert parse_grouping_directive(
+        {"grouping": {"facets": ["outcome", "barrier_theme"]}}
+    ) == (
+        ["outcome", "barrier_theme"],
         "scope_context",
     )
 
@@ -159,7 +165,11 @@ def test_parse_grouping_directive_defaults_and_valid_scope_context() -> None:
     [
         {"grouping": "outcome"},
         {"grouping": {"facet": "outcome", "extra": True}},
+        {"grouping": {"facet": "outcome", "facets": ["outcome"]}},
         {"grouping": {"facet": 3}},
+        {"grouping": {"facets": []}},
+        {"grouping": {"facets": ["outcome", "outcome"]}},
+        {"grouping": {"facets": ["outcome", 3]}},
         {"grouping": {"facet": "mechanism"}},
         {"grouping": {"facet": "out\ncome"}},
         {"grouping": {"facet": "x" * (DIRECTIVE_STRING_MAX + 1)}},
@@ -364,14 +374,18 @@ def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() 
 
     payload = build_groups_payload(
         findings,
+        facet="intervention",
         values=values,
         groups=groups,
         ungrouped_value_ids={"v3"},
         no_value_finding_ids=no_value,
     )
+    facet_payload = payload["intervention"]
 
-    assert payload["groups"] == [
+    assert facet_payload["groups"] == [
         {
+            "group_id": "intervention:g01",
+            "facet": "intervention",
             "label": "School breakfast clubs",
             "description": "School provision.",
             "member_values": ["Breakfast clubs"],
@@ -388,6 +402,8 @@ def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() 
             },
         },
         {
+            "group_id": "intervention:g02",
+            "facet": "intervention",
             "label": "Housing-led support",
             "description": "Housing interventions.",
             "member_values": ["Housing First"],
@@ -404,9 +420,10 @@ def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() 
             },
         },
     ]
-    assert payload["ungrouped"] == {
+    assert facet_payload["ungrouped"] == {
         "values": ["Rapid rehousing"],
         "finding_ids": ["f3"],
+        "member_finding_ids": ["f3"],
         "finding_kinds": ["iof"],
         "member_counts": {"iof": 1, "icf": 0},
         "direction_spread": {
@@ -417,8 +434,9 @@ def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() 
             "unclear": 1,
         },
     }
-    assert payload["no_value"] == {
+    assert facet_payload["no_value"] == {
         "finding_ids": ["f5", "f6"],
+        "member_finding_ids": ["f5", "f6"],
         "finding_kinds": ["iof", "iof"],
         "member_counts": {"iof": 2, "icf": 0},
         "direction_spread": {
@@ -433,22 +451,24 @@ def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() 
     assert_grouping_invariants(payload, finding_ids=[finding.finding_id for finding in findings])
 
     duplicated = {
-        **payload,
-        "groups": [
-            {
-                **payload["groups"][0],
-                "member_finding_ids": ["f4", "f4"],
-                "size": 2,
-                "direction_spread": {
-                    "increase": 0,
-                    "decrease": 0,
-                    "no_effect": 0,
-                    "mixed": 0,
-                    "unclear": 2,
+        "intervention": {
+            **facet_payload,
+            "groups": [
+                {
+                    **facet_payload["groups"][0],
+                    "member_finding_ids": ["f4", "f4"],
+                    "size": 2,
+                    "direction_spread": {
+                        "increase": 0,
+                        "decrease": 0,
+                        "no_effect": 0,
+                        "mixed": 0,
+                        "unclear": 2,
+                    },
                 },
-            },
-            payload["groups"][1],
-        ],
+                facet_payload["groups"][1],
+            ],
+        }
     }
     with pytest.raises(InvalidPartitionOutput):
         assert_grouping_invariants(
@@ -456,18 +476,20 @@ def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() 
         )
 
     dropped = {
-        **payload,
-        "no_value": {
-            **payload["no_value"],
-            "finding_ids": ["f5"],
-            "direction_spread": {
-                "increase": 0,
-                "decrease": 0,
-                "no_effect": 1,
-                "mixed": 0,
-                "unclear": 0,
+        "intervention": {
+            **facet_payload,
+            "no_value": {
+                **facet_payload["no_value"],
+                "finding_ids": ["f5"],
+                "direction_spread": {
+                    "increase": 0,
+                    "decrease": 0,
+                    "no_effect": 1,
+                    "mixed": 0,
+                    "unclear": 0,
+                },
             },
-        },
+        }
     }
     with pytest.raises(InvalidPartitionOutput):
         assert_grouping_invariants(
@@ -484,21 +506,25 @@ def test_build_groups_payload_counts_kinds_and_spreads_iof_only() -> None:
     values, no_value = extract_facet_values(findings)
     payload = build_groups_payload(
         findings,
+        facet="intervention",
         values=values,
         groups=[AcceptedGroup("Alpha", "Alpha members.", ("v1",))],
         ungrouped_value_ids=set(),
         no_value_finding_ids=no_value,
     )
+    facet_payload = payload["intervention"]
 
-    group = payload["groups"][0]
+    group = facet_payload["groups"][0]
+    assert group["group_id"] == "intervention:g01"
+    assert group["facet"] == "intervention"
     assert group["member_finding_ids"] == ["iof-1", "icf-1"]
     assert group["member_finding_kinds"] == ["iof", "icf"]
     assert group["member_counts"] == {"iof": 1, "icf": 1}
     assert sum(group["direction_spread"].values()) == 1
-    assert payload["no_value"]["finding_ids"] == ["icf-2"]
-    assert payload["no_value"]["finding_kinds"] == ["icf"]
-    assert payload["no_value"]["member_counts"] == {"iof": 0, "icf": 1}
-    assert payload["no_value"]["direction_spread"] == dict.fromkeys(EFFECT_DIRECTIONS, 0)
+    assert facet_payload["no_value"]["finding_ids"] == ["icf-2"]
+    assert facet_payload["no_value"]["finding_kinds"] == ["icf"]
+    assert facet_payload["no_value"]["member_counts"] == {"iof": 0, "icf": 1}
+    assert facet_payload["no_value"]["direction_spread"] == dict.fromkeys(EFFECT_DIRECTIONS, 0)
     assert_grouping_invariants(payload, finding_ids=[finding.finding_id for finding in findings])
 
 

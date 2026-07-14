@@ -36,13 +36,14 @@ from policy_atlas.embeddings import (
 from policy_atlas.prompt_fields import scrub_nul
 from policy_atlas.usage import UsageResult, token_usage_from_provider
 
-ICF_FINDING_VETTER_PROMPT_VERSION = "extract_icf_vetter_v1"
+ICF_FINDING_VETTER_PROMPT_VERSION = "extract_icf_vetter_v2"
 ICF_FINDING_VETTER_MODEL = "gpt-5.4-mini"
 ICF_FINDING_VETTER_REASONING_EFFORT = "high"
 ICF_FINDING_VETTER_MAX_OUTPUT_TOKENS = 32_768
 
 ICFFlagClass = Literal[
-    "recommendation", "aspiration", "vague_context", "deictic_naming"
+    "recommendation", "aspiration", "vague_context", "deictic_naming",
+    "paraphrased_label"
 ]
 
 
@@ -58,8 +59,8 @@ class ICFVetterVerdictWire(BaseModel):
     flag_class: ICFFlagClass | None = Field(
         description=(
             "The flag class when verdict is 'flagged' ('recommendation', "
-            "'aspiration', 'vague_context', 'deictic_naming'); null when verdict "
-            "is 'sound'."
+            "'aspiration', 'vague_context', 'deictic_naming', "
+            "'paraphrased_label'); null when verdict is 'sound'."
         )
     )
     reason: str = Field(
@@ -144,6 +145,13 @@ Flag a finding ONLY when it clearly matches a flag class:
 - "deictic_naming": the intervention or claim only makes sense inside the
   document ("this Plan", "our programme") — a reader seeing the finding
   alone cannot tell what it names.
+- "paraphrased_label": the finding carries a context_label the document did
+  not author — the label is not groundable in the finding's quotes as a name
+  the source itself uses (a subheading, a named entry in the source's own
+  table or list). context_label must be the source's own short name for the
+  claim's theme, copied exactly; an extractor-written summary or title is
+  flagged. A null or absent context_label is never flagged under this class,
+  and this class judges ONLY the label — never the claim itself.
 
 Rules:
 - Judge against the quotes: the quote is what the document actually said.
@@ -172,8 +180,8 @@ def build_icf_judge_messages(
     Args:
         findings: The id-keyed findings for one document's dedup survivors —
             each entry carries ``index``, ``context_type``, ``claim``,
-            ``intervention``, ``claim_level``, ``claim_basis`` and the anchor
-            ``quotes`` list.
+            ``context_label``, ``intervention``, ``claim_level``,
+            ``claim_basis`` and the anchor ``quotes`` list.
 
     Returns:
         Chat messages ready for a schema-constrained completion.

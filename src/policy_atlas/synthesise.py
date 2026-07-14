@@ -16,6 +16,7 @@ from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
+from functools import cached_property
 from typing import Any, cast
 
 import structlog
@@ -23,6 +24,7 @@ from sqlalchemy import case as sa_case
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.appraise import SCORE_LABELS
 from policy_atlas.extract import record_ids_by_profile
 from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.grounding import content_hash
@@ -36,6 +38,7 @@ from policy_atlas.grounding_judge import (
 from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.quote_verify import BasisText, QuoteMatcher, build_basis
 from policy_atlas.schema import (
+    EVIDENCE_TYPES,
     addressable_unit,
     annotation,
     artefact,
@@ -75,9 +78,12 @@ from policy_atlas.synthesis_backend import (
 )
 from policy_atlas.synthesis_tools import (
     ARTEFACT_TITLE_MAX,
+    GROUP_ID_EXPECTED_FORM,
     REASONING_CLAIMS_MAX,
     REPAIR_ROUND_CAP,
     RETRIEVAL_UNIT_CAP,
+    SCREEN_CONFIDENCE_MAX,
+    SCREEN_CONFIDENCE_MIN,
     SECTION_CAP,
     SECTION_TURN_CAP,
     SYNTH_CHUNK_CHAR_BUDGET,
@@ -91,7 +97,9 @@ from policy_atlas.synthesis_tools import (
     build_retrieval_scope,
     build_section_tools,
     chunk_text_basis_case,
+    facet_of_group_id,
     gathered_ids,
+    is_qualified_group_id,
     make_findings_reader,
     make_lookup_reader,
     parse_synthesis_directive,
@@ -433,7 +441,7 @@ class SubstrateView:
     basis_by_snapshot_id: dict[str, BasisText]
     selected_pss_ids: set[str]
 
-    @property
+    @cached_property
     def characterisation_theme_ids(self) -> set[str]:
         """Return real characterisation theme ids for theme validation."""
         if self.characterisation is None:
@@ -450,36 +458,24 @@ class SubstrateView:
                 ids.add(raw_id)
         return ids
 
-    @property
+    @cached_property
     def grouping_group_ids(self) -> set[str]:
         """Return real grouping ids from the persisted grouping payload."""
         if self.grouping is None:
             return set()
-        raw_groups = self.grouping.get("groups", [])
-        if not isinstance(raw_groups, list):
-            return set()
         ids: set[str] = set()
-        for group in raw_groups:
-            group_id = _group_id(group)
-            if group_id is not None:
-                ids.add(group_id)
+        for group in _grouping_records(self.grouping):
+            ids.add(_required_group_id(group))
         return ids
 
-    @property
+    @cached_property
     def group_by_id(self) -> dict[str, dict[str, Any]]:
         """Return grouping records keyed by real group id."""
         if self.grouping is None:
             return {}
-        raw_groups = self.grouping.get("groups", [])
-        if not isinstance(raw_groups, list):
-            return {}
         result: dict[str, dict[str, Any]] = {}
-        for group in raw_groups:
-            if not isinstance(group, dict):
-                continue
-            group_id = _group_id(group)
-            if group_id is not None:
-                result[group_id] = group
+        for group in _grouping_records(self.grouping):
+            result[_required_group_id(group)] = group
         return result
 
     @property
@@ -574,10 +570,15 @@ class SectionAccounting:
     gap_claims_degraded: int = 0
     # Span-anchored counters (ADR 0015): claims whose text never bound into the
     # prose (exhausted); judge-flagged unspanned assertions bound into the prose;
-    # unspanned excerpts the judge returned that did not bind.
+    # unspanned excerpts the judge returned that did not bind, split by reason
+    # (item 17(ii), first-match precedence): the excerpt overlapped a final
+    # claim span, was an exact duplicate of an already-bound excerpt / a stale
+    # pre-splice result, or was not locatable in the final prose.
     span_bind_failures: int = 0
     unspanned_assertions: int = 0
-    unspanned_unbound: int = 0
+    unspanned_overlap_filtered: int = 0
+    unspanned_duplicate_stale: int = 0
+    unspanned_unlocated: int = 0
     # Tool calls the section loop refused to execute (unknown tool, invalid
     # arguments, per-turn read-batch overflow) — counted so protocol drift is
     # visible next to the successful tool_call_count.
@@ -618,22 +619,27 @@ def generation_budget_max() -> int:
 
 
 def build_ledger(claims: Sequence[ClaimDraft]) -> list[dict[str, Any]]:
-    """Build the rolling prior-section ledger.
+    """Build the rolling prior-section ledger (prompt-facing; slimmed).
+
+    Per-record ``cited_ids``/``flags``/a repeated non-citable note are dropped
+    (022 rider 18 / F0 § DTO spec): the "ledger is context, never evidence,
+    not citable" rule is already stated once at the prompt level
+    (``SECTION_SYSTEM_PROMPT``), so repeating it — and carrying fields the
+    prompt tells the model never to cite — on every record was pure input
+    waste, not information the model needs. The evidence-bearing key-findings
+    ledger (:func:`_key_findings_ledger`) is a separate, unslimmed record type.
 
     Args:
         claims: Persisted claims from prior sections, in write order.
 
     Returns:
-        Claim records marked as context-only and never citable evidence.
+        Slimmed claim records: ``claim_id``, ``claim_type``, ``text`` only.
     """
     return [
         {
             "claim_id": claim.claim_id,
             "claim_type": claim.claim_type,
             "text": claim.text,
-            "cited_ids": list(claim.cited_ids),
-            "flags": list(claim.flags),
-            "ledger_note": "context, never evidence — not citable",
         }
         for claim in claims
     ]
@@ -766,11 +772,64 @@ def _json_sha256(value: Any) -> str:
 def _group_id(group: Any) -> str | None:
     if not isinstance(group, dict):
         return None
-    for key in ("group_id", "id", "label"):
-        value = group.get(key)
-        if isinstance(value, str) and value:
-            return value
-    return None
+    value = group.get("group_id")
+    if not isinstance(value, str) or not value:
+        return None
+    return value if is_qualified_group_id(value) else None
+
+
+def _required_group_id(group: Any) -> str:
+    group_id = _group_id(group)
+    if group_id is None:
+        raise SynthesiseFailure(
+            f"grouping_group_id_invalid: expected form {GROUP_ID_EXPECTED_FORM}"
+        )
+    if isinstance(group, dict):
+        facet = group.get("facet")
+        if isinstance(facet, str) and facet_of_group_id(group_id) != facet:
+            raise SynthesiseFailure(
+                "grouping_group_id_invalid: group id facet must match its "
+                f"payload facet; expected form {GROUP_ID_EXPECTED_FORM}"
+            )
+    return group_id
+
+
+def _grouping_records(payload: Any) -> list[dict[str, Any]]:
+    """Return grouping records from a flattened summary or facet-keyed payload."""
+    if not isinstance(payload, dict):
+        return []
+    raw_groups = payload.get("groups")
+    if isinstance(raw_groups, list):
+        return [group for group in raw_groups if isinstance(group, dict)]
+
+    groups: list[dict[str, Any]] = []
+    for facet, facet_payload in payload.items():
+        if not isinstance(facet, str) or not isinstance(facet_payload, dict):
+            continue
+        raw_facet_groups = facet_payload.get("groups")
+        if not isinstance(raw_facet_groups, list):
+            continue
+        for group in raw_facet_groups:
+            if not isinstance(group, dict):
+                continue
+            if "facet" in group:
+                groups.append(group)
+            else:
+                groups.append({**group, "facet": facet})
+    return groups
+
+
+def _grouping_facet_payloads(payload: Any) -> list[tuple[str, dict[str, Any]]]:
+    """Return ``(facet, payload)`` pairs from the persisted grouping JSON."""
+    if not isinstance(payload, dict):
+        return []
+    pairs: list[tuple[str, dict[str, Any]]] = []
+    for facet, facet_payload in payload.items():
+        if not isinstance(facet, str) or not isinstance(facet_payload, dict):
+            continue
+        if isinstance(facet_payload.get("groups"), list):
+            pairs.append((facet, facet_payload))
+    return pairs
 
 
 def _selected_pss_ids(selection_row: Mapping[str, Any] | None) -> set[str]:
@@ -1453,18 +1512,18 @@ def _grouping_summary(row: Mapping[str, Any] | None) -> dict[str, Any] | None:
     if row is None:
         return None
     payload = row.get("groups")
-    raw_groups = payload.get("groups", []) if isinstance(payload, dict) else []
+    facet_payloads = _grouping_facet_payloads(payload)
     groups: list[dict[str, Any]] = []
-    if isinstance(raw_groups, list):
-        for item in raw_groups:
-            if not isinstance(item, dict):
-                continue
+    for facet, facet_payload in facet_payloads:
+        for item in _grouping_records({facet: facet_payload}):
+            group_id = _required_group_id(item)
             members = item.get("member_finding_ids", [])
             if not isinstance(members, list):
                 members = []
             groups.append(
                 {
-                    "group_id": _group_id(item),
+                    "group_id": group_id,
+                    "facet": item.get("facet", facet),
                     "label": item.get("label"),
                     "description": item.get("description"),
                     "size": item.get("size", len(members)),
@@ -1472,13 +1531,92 @@ def _grouping_summary(row: Mapping[str, Any] | None) -> dict[str, Any] | None:
                     "member_finding_ids": sorted(str(member) for member in members),
                 }
             )
-    residuals: dict[str, Any] = {}
-    if isinstance(payload, dict):
-        residuals = {
-            "ungrouped": payload.get("ungrouped", {}),
-            "no_value": payload.get("no_value", {}),
+    residuals: dict[str, dict[str, Any]] = {}
+    for facet, facet_payload in facet_payloads:
+        facet_residuals = {"ungrouped": facet_payload.get("ungrouped", {})}
+        if "no_value" in facet_payload:
+            facet_residuals["no_value"] = facet_payload.get("no_value", {})
+        residuals[facet] = facet_residuals
+    facets = [facet for facet, _ in facet_payloads]
+    raw_counts = row.get("counts")
+    facet_counts = {
+        facet: raw_counts.get(facet, {})
+        for facet in facets
+        if isinstance(raw_counts, dict) and isinstance(raw_counts.get(facet), dict)
+    }
+    raw_flags = row.get("flags")
+    facet_status = {
+        facet: raw_flags.get(facet, {})
+        for facet in facets
+        if isinstance(raw_flags, dict) and isinstance(raw_flags.get(facet), dict)
+    }
+    return {
+        "facet": facets[0] if len(facets) == 1 else None,
+        "facets": facets,
+        "groups": groups,
+        "residuals": residuals,
+        "counts": facet_counts,
+        "facet_status": facet_status,
+    }
+
+
+def _residual_count(residual: Any) -> dict[str, int]:
+    """Slim a raw facet residual bucket down to its member count.
+
+    The raw ``ungrouped``/``no_value`` payloads persisted by ``group`` carry
+    membership (``finding_ids`` / ``member_finding_ids``) alongside the count
+    — prompt-facing residuals carry the count only (022 rider 18).
+    """
+    if not isinstance(residual, dict):
+        return {"count": 0}
+    members = residual.get("finding_ids", residual.get("member_finding_ids", []))
+    return {"count": len(members) if isinstance(members, list) else 0}
+
+
+def _characterisation_summary_prompt(
+    summary: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Prompt-facing characterisation summary: themes without membership ids.
+
+    Internal consumers (``SubstrateView.characterisation``) keep the full
+    ``_characterisation_summary`` records, ``member_ids`` included — this
+    slims only at the seed/prompt boundary (F0 § DTO spec).
+    """
+    if summary is None:
+        return None
+    themes = [
+        {key: value for key, value in theme.items() if key != "member_ids"}
+        for theme in summary.get("themes", [])
+        if isinstance(theme, dict)
+    ]
+    return {**summary, "themes": themes}
+
+
+def _grouping_summary_prompt(summary: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Prompt-facing grouping summary: groups/residuals without membership ids.
+
+    Internal consumers (``SubstrateView.grouping``) keep the full
+    ``_grouping_summary`` records, ``member_finding_ids`` included — this
+    slims only at the seed/prompt boundary (F0 § DTO spec): prompt-side group
+    records carry id/label/description/size/spread, residuals carry counts,
+    never membership UUID lists.
+    """
+    if summary is None:
+        return None
+    groups = [
+        {key: value for key, value in group.items() if key != "member_finding_ids"}
+        for group in summary.get("groups", [])
+        if isinstance(group, dict)
+    ]
+    residuals = {
+        facet: {
+            residual_kind: _residual_count(payload)
+            for residual_kind, payload in facet_residuals.items()
         }
-    return {"facet": row.get("facet"), "groups": groups, "residuals": residuals}
+        for facet, facet_residuals in summary.get("residuals", {}).items()
+        if isinstance(facet_residuals, dict)
+    }
+    return {**summary, "groups": groups, "residuals": residuals}
 
 
 def _substrate_summaries(refs: ResolvedReferences, corpus: CorpusProfile) -> dict[str, Any]:
@@ -1489,7 +1627,9 @@ def _substrate_summaries(refs: ResolvedReferences, corpus: CorpusProfile) -> dic
             "appraised": corpus.appraised_docs,
         }
     }
-    char_summary = _characterisation_summary(refs.characterisation_row)
+    char_summary = _characterisation_summary_prompt(
+        _characterisation_summary(refs.characterisation_row)
+    )
     if char_summary is not None:
         summaries["characterisation"] = char_summary
     selection_summary = _selection_summary(refs.selection_row)
@@ -1498,7 +1638,7 @@ def _substrate_summaries(refs: ResolvedReferences, corpus: CorpusProfile) -> dic
     extraction_summary = _extraction_summary(refs.extraction_row)
     if extraction_summary is not None:
         summaries["extraction"] = extraction_summary
-    grouping_summary = _grouping_summary(refs.grouping_row)
+    grouping_summary = _grouping_summary_prompt(_grouping_summary(refs.grouping_row))
     if grouping_summary is not None:
         summaries["grouping"] = grouping_summary
     return summaries
@@ -1532,6 +1672,35 @@ def _substrate_view(
         basis_by_snapshot_id=basis_by_snapshot_id,
         selected_pss_ids=selected_pss_ids,
     )
+
+
+def _group_doc_ids_by_group_id(
+    grouping_summary: dict[str, Any] | None,
+    all_findings: Mapping[str, FindingInfo],
+) -> dict[str, set[str]]:
+    if grouping_summary is None:
+        return {}
+    resolved: dict[str, set[str]] = {}
+    raw_groups = grouping_summary.get("groups", [])
+    if not isinstance(raw_groups, list):
+        return resolved
+    for group in raw_groups:
+        if not isinstance(group, dict):
+            continue
+        group_id = group.get("group_id")
+        if not isinstance(group_id, str):
+            continue
+        docs: set[str] = set()
+        members = group.get("member_finding_ids", [])
+        if isinstance(members, list):
+            for member_id in members:
+                if not isinstance(member_id, str):
+                    continue
+                finding = all_findings.get(member_id)
+                if finding is not None:
+                    docs.add(finding.pss_id)
+        resolved[group_id] = docs
+    return resolved
 
 
 def _validate_sections(
@@ -1599,8 +1768,9 @@ def _validate_sections(
             if unknown:
                 reasons.append(
                     f"sections[{index}].group_ids_unknown: {unknown[:5]} are "
-                    "not supplied facet group ids — copy ids exactly from the "
-                    "grouping records, or omit group_ids"
+                    "not supplied qualified facet group ids — use expected form "
+                    f"{GROUP_ID_EXPECTED_FORM}, copy ids exactly from the grouping "
+                    "records, or omit group_ids"
                 )
         parsed.append(SectionSpec(title=title, focus=focus, group_ids=group_ids))
     return parsed, reasons, normalisations
@@ -1615,6 +1785,197 @@ def _sections_from_directive(sections: list[dict[str, Any]]) -> list[SectionSpec
         )
         for section in sections
     ]
+
+
+# --- The pre-synthesise steer surface (022 item 14 / F5, § Steer schemas) ---
+#
+# Two side-effect-free callables an out-of-band caller uses to steer synthesise
+# without a runtime pause (deferred seam): ``propose_synthesis_plan`` reads the
+# resolved substrate and returns the proposal + the boostable vocabulary; the
+# caller collects the user's response out-of-band and ``compile_synthesis_
+# directive`` turns it into the existing fail-closed ``context["synthesis"]``
+# directive grammar, which a later ``synthesise_scope`` invocation consumes
+# verbatim. Neither mints an artefact nor writes any row.
+
+_STEER_RESPONSE_KEYS = {"sections", "group_ids", "retrieval_boosts"}
+
+
+def propose_synthesis_plan(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    context: SynthesiseContext,
+    synthesis_backend: SynthesisBackend,
+) -> dict[str, Any]:
+    """Propose a synthesis plan for a scope without minting anything (022 F5).
+
+    A read-only, side-effect-free entry point for the pre-synthesise steer
+    point (contract item 14). Unlike ``synthesise_scope``'s own proposal path —
+    which mints the artefact *before* proposing sections — this resolves the
+    same upstream substrate references, calls the backend's ``propose_sections``
+    seam and reads the persisted grouping payload, minting no artefact and
+    writing no row (no ``runs``-table contact beyond the reference reads
+    ``_resolve_references`` performs). The out-of-band caller renders the result,
+    collects the user's response and later submits it (via
+    :func:`compile_synthesis_directive`) on a fresh ``synthesise_scope`` call.
+
+    Args:
+        conn: Open read connection; used only for reference/substrate reads.
+        project_id: Owning project.
+        context: Scope and optional upstream references, exactly as
+            ``synthesise_scope`` resolves them (scope id, intent, the four run
+            references). The steer surface reuses this bundle so its inputs
+            never drift from the run's.
+        synthesis_backend: The proposal backend (stub or live) — the same seam
+            ``synthesise_scope`` calls.
+
+    Returns:
+        The § Steer schemas payload: ``proposed_sections`` (raw backend
+        proposal, ``title``/``focus``/sorted ``group_ids``), ``available_groups``
+        (``group_id``/``facet``/``label``/``size``, sorted by id) read from the
+        grouping payload, and ``boostable`` (the directive-boost vocabulary:
+        appraisal-tier values, evidence-type values, and the
+        ``screen_confidence`` lo/hi bound ranges).
+
+    Raises:
+        SynthesiseFailure: If a named reference row is missing or references
+            conflict (the same fail-closed resolution ``synthesise_scope`` uses).
+    """
+    refs = _resolve_references(conn, project_id=project_id, context=context)
+    corpus = _load_corpus_profile(conn, project_id=project_id, scope_id=context.scope_id)
+    summaries = _substrate_summaries(refs, corpus)
+
+    proposal, _usage = synthesis_backend.propose_sections(
+        intent=context.intent, substrate=summaries
+    )
+    proposed_sections = [
+        {
+            "title": section.title,
+            "focus": section.focus,
+            "group_ids": sorted(section.group_ids),
+        }
+        for section in proposal.sections
+    ]
+
+    grouping_summary = _grouping_summary(refs.grouping_row)
+    available_groups: list[dict[str, Any]] = []
+    if grouping_summary is not None:
+        for group in grouping_summary["groups"]:
+            available_groups.append(
+                {
+                    "group_id": group["group_id"],
+                    "facet": group["facet"],
+                    "label": group["label"],
+                    "size": group["size"],
+                }
+            )
+        available_groups.sort(key=lambda entry: cast("str", entry["group_id"]))
+
+    boostable = {
+        # The boost VOCABULARY (advisory), not corpus-present values: an
+        # appraisal_tier / evidence_type boost that matches nothing is recorded
+        # in unmatched_boosts, never fatal. Appraisal tiers are the 1..5 quality
+        # scores (stringified as the directive stores them); evidence types are
+        # the closed classification enum.
+        "appraisal_tiers": [str(score) for score in sorted(SCORE_LABELS)],
+        "evidence_types": sorted(EVIDENCE_TYPES),
+        "screen_confidence": {
+            "lo_bounds": [SCREEN_CONFIDENCE_MIN, SCREEN_CONFIDENCE_MAX],
+            "hi_bounds": [SCREEN_CONFIDENCE_MIN, SCREEN_CONFIDENCE_MAX],
+        },
+    }
+
+    return {
+        "proposed_sections": proposed_sections,
+        "available_groups": available_groups,
+        "boostable": boostable,
+    }
+
+
+def compile_synthesis_directive(response: Mapping[str, Any]) -> dict[str, Any]:
+    """Compile a steer response into the ``context["synthesis"]`` directive (022 F5).
+
+    Deterministic, fail-closed and pure: it maps the out-of-band user response
+    ``{"sections": [...], "group_ids": [...], "retrieval_boosts": {...}}`` to the
+    *existing* directive grammar ``{"sections": [...], "retrieval_boosts": {...}}``
+    and validates the result with the same rules ``parse_synthesis_directive``
+    applies — the single source of validation truth, so qualified group-id form,
+    screen-confidence bounds, boost enums and section rules cannot drift. The
+    top-level ``group_ids`` is the available group-id universe (echoed from
+    :func:`propose_synthesis_plan`'s ``available_groups``): each section's
+    ``group_ids`` must resolve within it or the compile fails closed. Invalid
+    input raises :class:`SynthesisDirectiveError` in the directive-error style;
+    nothing is silently dropped. The same input always yields an equal directive
+    (``group_ids`` lists are sorted, the one place the grammar leaves ordering
+    free; section order — which is meaningful — is preserved).
+
+    Args:
+        response: The out-of-band user response object.
+
+    Returns:
+        The compiled ``context["synthesis"]`` directive value (assign it under
+        the ``"synthesis"`` key of an evidence scope's context).
+
+    Raises:
+        SynthesisDirectiveError: If the response is structurally malformed or the
+            compiled directive fails ``parse_synthesis_directive``'s rules.
+    """
+    if not isinstance(response, Mapping):
+        raise SynthesisDirectiveError("synthesis steer response must be an object")
+    unknown = set(response) - _STEER_RESPONSE_KEYS
+    if unknown:
+        raise SynthesisDirectiveError(
+            f"synthesis steer response has invalid keys: {sorted(unknown)}"
+        )
+
+    grouping_group_ids: set[str] | None = None
+    if "group_ids" in response:
+        raw_universe = response["group_ids"]
+        if not isinstance(raw_universe, list):
+            raise SynthesisDirectiveError(
+                "synthesis steer response group_ids must be a list"
+            )
+        universe: set[str] = set()
+        for value in raw_universe:
+            if not isinstance(value, str) or not value:
+                raise SynthesisDirectiveError(
+                    "synthesis steer response group_ids must contain non-empty strings"
+                )
+            universe.add(value)
+        grouping_group_ids = universe
+
+    directive: dict[str, Any] = {}
+    if "sections" in response:
+        raw_sections = response["sections"]
+        if not isinstance(raw_sections, list):
+            raise SynthesisDirectiveError(
+                "synthesis steer response sections must be a list"
+            )
+        sections: list[dict[str, Any]] = []
+        for index, raw_section in enumerate(raw_sections):
+            if not isinstance(raw_section, Mapping):
+                raise SynthesisDirectiveError(
+                    f"synthesis steer response sections[{index}] must be an object"
+                )
+            # Copy verbatim so unknown keys reach parse_synthesis_directive and
+            # fail closed (never silently dropped); only group_ids is
+            # canonicalised (sorted) — the one ordering-free list.
+            section = dict(raw_section)
+            if "group_ids" in section and isinstance(section["group_ids"], list):
+                section["group_ids"] = sorted(section["group_ids"], key=str)
+            sections.append(section)
+        directive["sections"] = sections
+    if "retrieval_boosts" in response:
+        # Verbatim so unknown/invalid boost keys, bounds and enums fail closed
+        # in the single validation path below.
+        directive["retrieval_boosts"] = response["retrieval_boosts"]
+
+    # The single validation authority: identical rules to synthesise_scope's
+    # own directive parse. Raises SynthesisDirectiveError on any violation.
+    parse_synthesis_directive(
+        {"synthesis": directive}, grouping_group_ids=grouping_group_ids
+    )
+    return directive
 
 
 def _walk_path(root: Any, path: Sequence[str]) -> Any:
@@ -2337,14 +2698,25 @@ def _judge_claims(
     section_prose: str,
     intent: str = "",
     section_focus: str = "",
+    occupied_claims: Sequence[ClaimDraft] | None = None,
 ) -> tuple[int, dict[str, int], list[dict[str, Any]]]:
-    judged = [claim for claim in claims if claim.claim_type in JUDGED_TYPES]
-    if not judged:
+    # Verdict coverage is JUDGED_TYPES only (unchanged): finding/chunk take the
+    # full lane, reasoning is strict-routed; pattern/theme/gap are validated
+    # deterministically and never judged.
+    claims_to_judge = [claim for claim in claims if claim.claim_type in JUDGED_TYPES]
+    if not claims_to_judge:
         return 0, UsageAccumulator().payload(), []
+    # The occupied-span map (item 17(i)) spans EVERY final valid claim, ALL
+    # claim types — a pattern/theme/gap claim's prose is legitimately claimed,
+    # so the judge must not flag it as unspanned. It is kept separate from the
+    # judged set so verdict coverage is unaffected. It defaults to the judged
+    # input's own claims (the initial call passes all valid drafts); the
+    # re-judge passes the full post-splice claim set (kept + rejudged)
+    # explicitly.
+    span_source = claims if occupied_claims is None else occupied_claims
     envelope_claims: list[dict[str, Any]] = []
-    span_map: list[dict[str, Any]] = []
     chunk_ids: set[str] = set()
-    for claim in judged:
+    for claim in claims_to_judge:
         chunk_ids.update(claim.judge_chunk_ids)
         record = {
             "claim_id": claim.claim_id,
@@ -2355,16 +2727,17 @@ def _judge_claims(
         if claim.claim_type == "finding":
             record["cited_finding_ids"] = claim.payload.get("cited_finding_ids", [])
         envelope_claims.append(record)
-        if claim.span is not None:
-            span_map.append(
-                {"claim_id": claim.claim_id, "start": claim.span[0], "end": claim.span[1]}
-            )
+    occupied_claim_spans: list[dict[str, Any]] = [
+        {"claim_id": claim.claim_id, "start": claim.span[0], "end": claim.span[1]}
+        for claim in span_source
+        if claim.span is not None
+    ]
     # Envelope chunks, sourced from the substrate's stored chunk data
     # (SubstrateView), de-duped by id. In addition to the chunk claims' cited
     # chunks, each FINDING claim's verified anchors point into chunk records —
     # the judge must see that anchored text, not just the anchor quote
     # (ADR 0015 §8 / B-B3).
-    for claim in judged:
+    for claim in claims_to_judge:
         if claim.claim_type != "finding":
             continue
         for anchor in claim.payload.get("anchors", []):
@@ -2388,7 +2761,7 @@ def _judge_claims(
         claims=envelope_claims,
         chunks=chunks,
         section_prose=section_prose,
-        span_map=span_map,
+        span_map=occupied_claim_spans,
         intent=intent,
         section_focus=section_focus,
     )
@@ -2396,7 +2769,23 @@ def _judge_claims(
     usage_totals = UsageAccumulator()
     usage_totals.add(usage)
     verdicts = response.verdicts
-    expected = {claim.claim_id for claim in judged}
+    expected = {claim.claim_id for claim in claims_to_judge}
+    # The all-types span map (022 item 17(i)) shows the judge claim ids it has
+    # no verdict duty for; a live judge may echo verdicts for them. Drop and
+    # count those — coverage of the judged set itself stays exact.
+    span_only_ids = {
+        span["claim_id"]
+        for span in occupied_claim_spans
+        if isinstance(span.get("claim_id"), str)
+    } - expected
+    extra = [verdict for verdict in verdicts if verdict.claim_id in span_only_ids]
+    if extra:
+        log.info(
+            "synthesise.judge_extra_verdicts_dropped",
+            count=len(extra),
+            claim_ids=sorted(verdict.claim_id for verdict in extra)[:10],
+        )
+        verdicts = [verdict for verdict in verdicts if verdict.claim_id not in span_only_ids]
     actual = {verdict.claim_id for verdict in verdicts}
     if expected != actual:
         raise SynthesiseFailure("judge_coverage_invalid")
@@ -2404,7 +2793,7 @@ def _judge_claims(
     judge_io_ref = _json_sha256(
         {"envelope": envelope, "verdicts": response.model_dump(mode="json")}
     )
-    for claim in judged:
+    for claim in claims_to_judge:
         verdict = by_id[claim.claim_id]
         claim.verdict = verdict.verdict
         claim.weakly_grounded = claim.weakly_grounded or verdict.weakly_grounded
@@ -2425,6 +2814,406 @@ def _span_segment(prose: str, span: tuple[int, int] | None) -> str | None:
     if span is None:
         return None
     return prose[span[0] : span[1]]
+
+
+def _paragraph_context(
+    prose: str, span: tuple[int, int] | None
+) -> dict[str, Any] | None:
+    if span is None:
+        return None
+    start, end = span
+    paragraph_start = prose.rfind("\n\n", 0, start)
+    paragraph_start = 0 if paragraph_start == -1 else paragraph_start + 2
+    paragraph_end = prose.find("\n\n", end)
+    paragraph_end = len(prose) if paragraph_end == -1 else paragraph_end
+    return {
+        "start": paragraph_start,
+        "end": paragraph_end,
+        "text": prose[paragraph_start:paragraph_end],
+    }
+
+
+def _replacement_span(
+    prose: str, span: tuple[int, int] | None
+) -> dict[str, Any] | None:
+    if span is None:
+        return None
+    return {"start": span[0], "end": span[1], "text": _span_segment(prose, span)}
+
+
+def _record_id_from(record: Mapping[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = record.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def _transcript_records_by_id(
+    transcript: Sequence[ToolExchange],
+    *,
+    tool: str,
+    result_keys: Sequence[str],
+    id_keys: Sequence[str],
+) -> dict[str, dict[str, Any]]:
+    records: dict[str, dict[str, Any]] = {}
+    for exchange in transcript:
+        if exchange["tool"] != tool:
+            continue
+        for result_key in result_keys:
+            raw_records = exchange["result"].get(result_key)
+            if not isinstance(raw_records, list):
+                continue
+            for raw_record in raw_records:
+                if not isinstance(raw_record, dict) or raw_record.get(
+                    "already_returned"
+                ) or raw_record.get("skipped_over_budget"):
+                    continue
+                record_id = _record_id_from(raw_record, *id_keys)
+                if record_id is not None:
+                    records[record_id] = dict(raw_record)
+    return records
+
+
+def _chunk_dependency_from_info(chunk: ChunkInfo) -> dict[str, Any]:
+    return {
+        "chunk_record_id": chunk.chunk_id,
+        "pss_id": chunk.pss_id,
+        "source_snapshot_id": chunk.source_snapshot_id,
+        "sequence": chunk.sequence,
+        "content": chunk.content,
+        "segmentation_policy": chunk.segmentation_policy,
+        "text_basis": chunk.text_basis,
+        "origin": chunk.origin,
+        "appraised": chunk.appraised,
+    }
+
+
+def _chunk_dependencies(
+    chunk_ids: Iterable[str],
+    *,
+    transcript: Sequence[ToolExchange],
+    substrate: SubstrateView,
+) -> dict[str, dict[str, Any]]:
+    transcript_chunks = _transcript_records_by_id(
+        transcript,
+        tool="search_chunks",
+        result_keys=("chunks",),
+        id_keys=("chunk_record_id", "id"),
+    )
+    records: dict[str, dict[str, Any]] = {}
+    for chunk_id in sorted(set(chunk_ids)):
+        chunk = substrate.chunk_by_id.get(chunk_id)
+        if chunk is not None:
+            records[chunk_id] = _chunk_dependency_from_info(chunk)
+            continue
+        transcript_record = transcript_chunks.get(chunk_id)
+        if transcript_record is not None:
+            records[chunk_id] = transcript_record
+    return records
+
+
+def _finding_dependency_from_info(finding: FindingInfo) -> dict[str, Any]:
+    record = dict(finding.record)
+    record["source_snapshot_id"] = finding.source_snapshot_id
+    record["grounding"] = list(finding.grounding)
+    return record
+
+
+def _finding_dependencies(
+    finding_ids: Iterable[str],
+    *,
+    transcript: Sequence[ToolExchange],
+    substrate: SubstrateView,
+) -> dict[str, dict[str, Any]]:
+    transcript_findings = _transcript_records_by_id(
+        transcript,
+        tool="query_findings",
+        result_keys=("findings", "iof_findings", "icf_findings"),
+        id_keys=("finding_id", "id"),
+    )
+    all_findings = substrate.all_finding_by_id
+    records: dict[str, dict[str, Any]] = {}
+    for finding_id in sorted(set(finding_ids)):
+        finding = all_findings.get(finding_id)
+        if finding is not None:
+            records[finding_id] = _finding_dependency_from_info(finding)
+            continue
+        transcript_record = transcript_findings.get(finding_id)
+        if transcript_record is not None:
+            records[finding_id] = transcript_record
+    return records
+
+
+def _finding_anchor_chunk_ids(
+    finding_ids: Iterable[str], substrate: SubstrateView
+) -> set[str]:
+    chunk_ids: set[str] = set()
+    all_findings = substrate.all_finding_by_id
+    for finding_id in finding_ids:
+        finding = all_findings.get(finding_id)
+        if finding is None:
+            continue
+        basis = substrate.basis_by_snapshot_id.get(finding.source_snapshot_id)
+        if basis is None:
+            continue
+        matcher = QuoteMatcher(basis)
+        for grounding in finding.grounding:
+            quote = grounding.get("quote")
+            if not isinstance(quote, str) or not quote:
+                continue
+            match = matcher.find(quote)
+            for span in match.spans:
+                if span.chunk_id is not None:
+                    chunk_ids.add(span.chunk_id)
+    return chunk_ids
+
+
+def _coverage_record_dependency(record: CoverageRecord) -> dict[str, Any]:
+    return {
+        "search_coverage_record_id": record.record_id,
+        "backends": record.backends,
+        "adequacy_verdict": record.adequacy_verdict,
+        "verdict_origin": record.verdict_origin,
+    }
+
+
+def _characterisation_themes_by_id(substrate: SubstrateView) -> dict[str, dict[str, Any]]:
+    if substrate.characterisation is None:
+        return {}
+    themes = substrate.characterisation.get("themes", [])
+    if not isinstance(themes, list):
+        return {}
+    records: dict[str, dict[str, Any]] = {}
+    for theme in themes:
+        if not isinstance(theme, dict):
+            continue
+        theme_id = _record_id_from(theme, "theme_id", "id", "name")
+        if theme_id is not None:
+            records[theme_id] = dict(theme)
+    return records
+
+
+def _computed_key(name: str, *, path: Sequence[str] = (), group_id: str | None = None) -> str:
+    if group_id is not None:
+        return f"{name}:{group_id}"
+    if path:
+        return f"{name}:/{'/'.join(path)}"
+    return name
+
+
+def _pattern_dependencies(
+    claim: ClaimWire,
+    *,
+    substrate: SubstrateView,
+) -> dict[str, dict[str, Any]]:
+    pattern = claim.pattern
+    if pattern is None:
+        return {}
+    records: dict[str, dict[str, Any]] = {}
+    if pattern.computed_from == "characterisation_coverage":
+        coverage = (
+            substrate.characterisation.get("coverage", {})
+            if substrate.characterisation
+            else {}
+        )
+        records[
+            _computed_key("characterisation_coverage", path=pattern.path)
+        ] = {
+            "computed_from": pattern.computed_from,
+            "path": list(pattern.path),
+            "value": _walk_path(coverage, pattern.path),
+        }
+    elif pattern.computed_from == "group_direction_spread":
+        group = substrate.group_by_id.get(pattern.group_id or "")
+        if group is not None:
+            records[
+                _computed_key(
+                    "group_direction_spread", group_id=pattern.group_id
+                )
+            ] = {
+                "computed_from": pattern.computed_from,
+                "group_id": pattern.group_id,
+                "direction_spread": group.get("direction_spread", {}),
+            }
+    elif pattern.computed_from == "extraction_direction_spread":
+        records["extraction_direction_spread"] = {
+            "computed_from": pattern.computed_from,
+            "direction_spread": substrate.extraction_direction_spread,
+        }
+    elif pattern.computed_from == "icf_context_type_count":
+        if pattern.group_id is not None:
+            group = substrate.group_by_id.get(pattern.group_id)
+            members = group.get("member_finding_ids", []) if group is not None else []
+            if not isinstance(members, list):
+                members = []
+            counts = _icf_context_type_counts(
+                substrate.icf_finding_by_id.get(member)
+                for member in members
+                if isinstance(member, str)
+            )
+        else:
+            counts = _icf_context_type_counts(substrate.icf_finding_by_id.values())
+        records[
+            _computed_key("icf_context_type_count", group_id=pattern.group_id)
+        ] = {
+            "computed_from": pattern.computed_from,
+            "group_id": pattern.group_id,
+            "counts": counts,
+        }
+    return records
+
+
+def _theme_dependencies(claim: ClaimWire, substrate: SubstrateView) -> dict[str, Any]:
+    theme = claim.theme
+    if theme is None:
+        return {}
+    if theme.source == "characterisation":
+        themes = _characterisation_themes_by_id(substrate)
+        return {
+            "themes": {
+                theme_id: themes[theme_id]
+                for theme_id in sorted(set(theme.referenced_ids))
+                if theme_id in themes
+            }
+        }
+    groups = substrate.group_by_id
+    return {
+        "groups": {
+            group_id: groups[group_id]
+            for group_id in sorted(set(theme.referenced_ids))
+            if group_id in groups
+        }
+    }
+
+
+def _gap_dependencies(claim: ClaimWire, substrate: SubstrateView) -> dict[str, Any]:
+    gap = claim.gap
+    if gap is None:
+        return {}
+    dependencies: dict[str, Any] = {}
+    if gap.coverage_record_id is not None:
+        record = substrate.coverage_records.get(gap.coverage_record_id)
+        if record is not None:
+            dependencies["coverage_records"] = {
+                gap.coverage_record_id: _coverage_record_dependency(record)
+            }
+    if gap.sparsity is not None:
+        coverage = (
+            substrate.characterisation.get("coverage", {})
+            if substrate.characterisation
+            else {}
+        )
+        dependencies["computed"] = {
+            _computed_key("characterisation_coverage", path=gap.sparsity.path): {
+                "computed_from": "characterisation_coverage",
+                "path": list(gap.sparsity.path),
+                "value": _walk_path(coverage, gap.sparsity.path),
+            }
+        }
+    return dependencies
+
+
+def _repair_dependency_records(
+    claim: ClaimWire,
+    *,
+    transcript: Sequence[ToolExchange],
+    substrate: SubstrateView,
+) -> dict[str, Any]:
+    dependencies: dict[str, Any] = {}
+    if claim.claim_type == "chunk":
+        dependencies["chunks"] = _chunk_dependencies(
+            (citation.chunk_record_id for citation in claim.citations),
+            transcript=transcript,
+            substrate=substrate,
+        )
+    elif claim.claim_type == "finding":
+        dependencies["findings"] = _finding_dependencies(
+            claim.cited_finding_ids, transcript=transcript, substrate=substrate
+        )
+        anchor_chunk_ids = _finding_anchor_chunk_ids(claim.cited_finding_ids, substrate)
+        dependencies["chunks"] = _chunk_dependencies(
+            anchor_chunk_ids, transcript=transcript, substrate=substrate
+        )
+    elif claim.claim_type == "pattern":
+        dependencies["computed"] = _pattern_dependencies(claim, substrate=substrate)
+        if claim.pattern is not None and claim.pattern.group_id is not None:
+            group = substrate.group_by_id.get(claim.pattern.group_id)
+            if group is not None:
+                dependencies["groups"] = {claim.pattern.group_id: group}
+    elif claim.claim_type == "theme":
+        dependencies.update(_theme_dependencies(claim, substrate))
+    elif claim.claim_type == "gap":
+        dependencies.update(_gap_dependencies(claim, substrate))
+    return {
+        key: value
+        for key, value in sorted(dependencies.items())
+        if value not in ({}, [], None)
+    }
+
+
+def _wire_claim_data(raw: Any) -> dict[str, Any]:
+    """Project a failing record's claim back onto the strict wire shape.
+
+    Judge-failing claims arrive with ENRICHED citation records (resolved
+    ``cited_chunk_record_id``, ``match_status``, ``spans``, ``text_basis``) —
+    annotation-shaped, not wire-shaped. The repair call re-validates through
+    ``ClaimWire`` (extra=forbid), so strip citations down to the wire fields
+    first; everything else passes through untouched.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    data = {key: value for key, value in raw.items() if key in ClaimWire.model_fields}
+    raw_citations = data.get("citations")
+    if isinstance(raw_citations, list):
+        citations: list[dict[str, Any]] = []
+        for citation in raw_citations:
+            if not isinstance(citation, dict):
+                continue
+            chunk_record_id = citation.get("chunk_record_id") or citation.get(
+                "cited_chunk_record_id"
+            )
+            citations.append(
+                {
+                    "chunk_record_id": str(chunk_record_id or ""),
+                    "quote": str(citation.get("quote") or ""),
+                }
+            )
+        data["citations"] = citations
+    return data
+
+
+def _repair_input_records(
+    failing: Sequence[dict[str, Any]],
+    *,
+    prose: str,
+    transcript: Sequence[ToolExchange],
+    substrate: SubstrateView,
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for record in failing:
+        claim = ClaimWire.model_validate(_wire_claim_data(record["claim"]))
+        raw_span = record.get("span")
+        span: tuple[int, int] | None = None
+        if (
+            isinstance(raw_span, list)
+            and len(raw_span) == 2
+            and all(isinstance(item, int) for item in raw_span)
+        ):
+            span = (raw_span[0], raw_span[1])
+        records.append(
+            {
+                "claim_id": str(record["claim_id"]),
+                "claim": claim.model_dump(mode="json"),
+                "failure_reason": str(record.get("rationale") or record.get("reason") or ""),
+                "replacement_span": _replacement_span(prose, span),
+                "paragraph_context": _paragraph_context(prose, span),
+                "dependencies": _repair_dependency_records(
+                    claim, transcript=transcript, substrate=substrate
+                ),
+            }
+        )
+    return records
 
 
 def _failing_records(
@@ -2531,6 +3320,62 @@ def _finalize_no_repair(
     return [by_index[index] for index in sorted(by_index)]
 
 
+def _repair_id_mismatch(
+    repairs: Sequence[RepairItemWire], failing: Sequence[dict[str, Any]]
+) -> bool:
+    failing_ids = {str(record["claim_id"]) for record in failing}
+    repair_ids = [repair.claim_id for repair in repairs]
+    known_repair_ids = {claim_id for claim_id in repair_ids if claim_id in failing_ids}
+    return (
+        len(repair_ids) != len(failing_ids)
+        or len(set(repair_ids)) != len(repair_ids)
+        or known_repair_ids != failing_ids
+    )
+
+
+def _classify_unbound(
+    excerpt: str,
+    prose: str,
+    *,
+    claim_spans: Sequence[tuple[int, int]],
+    accounting: SectionAccounting,
+) -> None:
+    """Classify an unspanned excerpt that failed to bind into one of three
+    observability counters, by fixed first-match precedence (item 17(ii)).
+
+    An excerpt can qualify for more than one bucket; the order is fixed so the
+    counts stay disjoint and comparable across runs:
+
+    1. ``unspanned_overlap_filtered`` — present in the prose but a locatable
+       occurrence overlaps a final claim span (the judge over-reported inside
+       claimed prose). Checked first, so an overlap-and-duplicate excerpt
+       counts here.
+    2. ``unspanned_duplicate_stale`` — present in the prose but every
+       occurrence is already taken by an earlier-bound excerpt (an exact
+       duplicate of an already-bound assertion, or a stale pre-splice result).
+    3. ``unspanned_unlocated`` — not locatable in the final prose at all.
+
+    ``claim_spans`` are the final claim spans only (never the bound-excerpt
+    spans), so overlap classification measures judge over-report specifically.
+    Prose is never modified (ADR 0015 §5); this lane only counts.
+    """
+    occurrences: list[tuple[int, int]] = []
+    if excerpt:
+        search = 0
+        while True:
+            index = prose.find(excerpt, search)
+            if index == -1:
+                break
+            occurrences.append((index, index + len(excerpt)))
+            search = index + 1
+    if any(_spans_overlap(occ, claim_spans) for occ in occurrences):
+        accounting.unspanned_overlap_filtered += 1
+    elif occurrences:
+        accounting.unspanned_duplicate_stale += 1
+    else:
+        accounting.unspanned_unlocated += 1
+
+
 def _bind_unspanned(
     records: Sequence[dict[str, Any]],
     prose: str,
@@ -2540,23 +3385,25 @@ def _bind_unspanned(
 ) -> list[dict[str, Any]]:
     """Bind judge-returned unspanned excerpts into the final prose (flag-not-drop).
 
-    Bound excerpts become addressable-unit + annotation mint records; unbound
-    excerpts are counted (``unspanned_unbound``) and logged. Prose is never
-    modified by this lane (ADR 0015 §5). ``claim_spans`` are blocked: an
-    excerpt may not bind inside claimed prose — the lane flags text OUTSIDE
-    claim spans by definition, so a claim-overlapping excerpt counts as
-    unbound rather than double-covering claimed text.
+    Bound excerpts become addressable-unit + annotation mint records; excerpts
+    that fail to bind are classified into the three unspanned counters
+    (:func:`_classify_unbound`) and logged. Prose is never modified by this
+    lane (ADR 0015 §5). ``claim_spans`` are blocked: an excerpt may not bind
+    inside claimed prose — the lane flags text OUTSIDE claim spans by
+    definition, so a claim-overlapping excerpt is filtered out rather than
+    double-covering claimed text.
     """
+    claim_span_list: list[tuple[int, int]] = list(claim_spans)
     blocked: list[tuple[int, int]] = list(claim_spans)
     minted: list[dict[str, Any]] = []
     for record in records:
-        span = _bind_into(prose, str(record["excerpt"]), blocked)
+        excerpt = str(record["excerpt"])
+        span = _bind_into(prose, excerpt, blocked)
         if span is None:
-            accounting.unspanned_unbound += 1
-            log.info(
-                "synthesise.unspanned_unbound",
-                excerpt=str(record["excerpt"])[:120],
+            _classify_unbound(
+                excerpt, prose, claim_spans=claim_span_list, accounting=accounting
             )
+            log.info("synthesise.unspanned_unbound", excerpt=excerpt[:120])
             continue
         accounting.unspanned_assertions += 1
         blocked.append(span)
@@ -2593,14 +3440,33 @@ def _apply_and_rebuild(
     Returns the final claims, the rebuilt prose, the rejudge call count, the
     rejudge usage payload, and the rejudge unspanned records.
     """
-    # Positional repair mapping (repairs[:len(failing)] aligned to failing order).
+    # Id-keyed repair mapping: the repair wire may arrive in any order, and
+    # unknown ids are rejected structurally rather than rebound positionally.
     repair_by_index: dict[int, RepairItemWire] = {}
     failing_by_index: dict[int, dict[str, Any]] = {}
-    for offset, record in enumerate(failing):
+    failing_by_id: dict[str, dict[str, Any]] = {}
+    for record in failing:
         idx = int(record["claim_index"])
         failing_by_index[idx] = record
-        if offset < len(repairs):
-            repair_by_index[idx] = repairs[offset]
+        failing_by_id[str(record["claim_id"])] = record
+    for repair in repairs:
+        repair_record = failing_by_id.get(repair.claim_id)
+        if repair_record is None:
+            accounting.claims_rejected_structural += 1
+            log.info(
+                "synthesise.repair_unknown_claim_id",
+                claim_id=repair.claim_id,
+            )
+            continue
+        idx = int(repair_record["claim_index"])
+        if idx in repair_by_index:
+            accounting.claims_rejected_structural += 1
+            log.info(
+                "synthesise.repair_duplicate_claim_id",
+                claim_id=repair.claim_id,
+            )
+            continue
+        repair_by_index[idx] = repair
     failing_indices = set(failing_by_index)
 
     draft_by_index = {draft.claim_index: draft for draft in initial.drafts}
@@ -2621,16 +3487,16 @@ def _apply_and_rebuild(
     replace_claim_by_index: dict[int, ClaimWire] = {}
     kept_draft_indices: set[int] = set()
     for idx, span in positioned:
-        repair = repair_by_index.get(idx)
-        if idx in failing_indices and repair is not None:
-            if repair.claim is None:
+        indexed_repair = repair_by_index.get(idx)
+        if idx in failing_indices and indexed_repair is not None:
+            if indexed_repair.claim is None:
                 # Segment rewritten to carry no claim, or deleted (empty
                 # segment): the original claim is excluded (exhausted repair).
                 items.append(
                     SpliceItem(
                         key=idx,
                         span=span,
-                        replacement=repair.replacement_segment,
+                        replacement=indexed_repair.replacement_segment,
                         claim_text=None,
                     )
                 )
@@ -2640,11 +3506,11 @@ def _apply_and_rebuild(
                     SpliceItem(
                         key=idx,
                         span=span,
-                        replacement=repair.replacement_segment,
-                        claim_text=repair.claim.text,
+                        replacement=indexed_repair.replacement_segment,
+                        claim_text=indexed_repair.claim.text,
                     )
                 )
-                replace_claim_by_index[idx] = repair.claim
+                replace_claim_by_index[idx] = indexed_repair.claim
         elif idx in failing_indices:
             # Failing but no repair item (count mismatch): keep an unsupported
             # draft verbatim; drop a structural rejection (residual prose stays,
@@ -2728,18 +3594,18 @@ def _apply_and_rebuild(
         record = failing_by_index[idx]
         if record.get("span") is not None:
             continue  # a spanned failure, handled by the splice above
-        repair = repair_by_index.get(idx)
-        if repair is None or repair.claim is None:
+        indexed_repair = repair_by_index.get(idx)
+        if indexed_repair is None or indexed_repair.claim is None:
             accounting.span_bind_failures += 1
             continue
-        rebind = _bind_into(new_prose, repair.claim.text, blocked_spans)
+        rebind = _bind_into(new_prose, indexed_repair.claim.text, blocked_spans)
         if rebind is None:
             accounting.span_bind_failures += 1
             continue
-        if repair.claim.claim_type == "reasoning":
+        if indexed_repair.claim.claim_type == "reasoning":
             reasoning_count += 1
         result = _validate_claim(
-            repair.claim,
+            indexed_repair.claim,
             claim_id=str(record["claim_id"]),
             claim_index=idx,
             substrate=substrate,
@@ -2757,21 +3623,27 @@ def _apply_and_rebuild(
         rebound_drafts.append(result)
 
     rejudged = replacement_drafts + rebound_drafts
-    rejudge_calls, rejudge_usage, rejudge_unspanned = _judge_claims(
-        claims=rejudged,
-        substrate=substrate,
-        grounding_judge_backend=grounding_judge_backend,
-        section_prose=new_prose,
-        intent=intent,
-        section_focus=section_focus,
-    )
 
+    # The final claim set is assembled BEFORE the re-judge: its span map must
+    # span EVERY final valid claim (kept + rejudged, all types), not only the
+    # rejudged subset, so the unspanned lane sees the whole claimed surface of
+    # the rebuilt prose (item 17(i)).
     final_by_index: dict[int, ClaimDraft] = {
         idx: draft_by_index[idx] for idx in kept_draft_indices
     }
     for draft in rejudged:
         final_by_index[draft.claim_index] = draft
     final = [final_by_index[idx] for idx in sorted(final_by_index)]
+
+    rejudge_calls, rejudge_usage, rejudge_unspanned = _judge_claims(
+        claims=rejudged,
+        occupied_claims=final,
+        substrate=substrate,
+        grounding_judge_backend=grounding_judge_backend,
+        section_prose=new_prose,
+        intent=intent,
+        section_focus=section_focus,
+    )
     return final, new_prose, rejudge_calls, rejudge_usage, rejudge_unspanned
 
 
@@ -2817,9 +3689,16 @@ def _section_claims(
     call_counts["judge"] += judge_calls
     usage_totals.add_payload(judge_usage)
     failing = _failing_records(initial.rejected, initial.drafts, prose=prose)
+    repair_input = _repair_input_records(
+        failing,
+        prose=prose,
+        transcript=transcript,
+        substrate=substrate,
+    )
 
     final: list[ClaimDraft]
     final_prose = prose
+    rejudge_unspanned: list[dict[str, Any]] = []
     if not failing:
         final = _finalize_no_repair(initial=initial, accounting=accounting)
     else:
@@ -2828,7 +3707,7 @@ def _section_claims(
         repair_wire: SectionRepairWire | None
         try:
             repair_wire, repair_usage = synthesis_backend.repair_section(
-                seed, transcript, failing=failing
+                seed, transcript, failing=repair_input
             )
             usage_totals.add(repair_usage)
         except MalformedEmissionError:
@@ -2841,7 +3720,7 @@ def _section_claims(
         if repair_wire is None:
             final = _finalize_no_repair(initial=initial, accounting=accounting)
         else:
-            if len(repair_wire.repairs) != len(failing):
+            if _repair_id_mismatch(repair_wire.repairs, failing):
                 accounting.repair_count_mismatch = True
             (
                 final,
@@ -2866,7 +3745,6 @@ def _section_claims(
             )
             call_counts["rejudge"] += rejudge_calls
             usage_totals.add_payload(rejudge_usage)
-            unspanned = unspanned + rejudge_unspanned
 
     for claim in final:
         if "gap_degraded" in claim.flags:
@@ -2882,6 +3760,16 @@ def _section_claims(
     )
     if final_prose.strip() and scanning_calls == 0:
         accounting.unspanned_lane_skipped = True
+    # Supersede, never concatenate (item 17(iii)): when the repair splice
+    # rebuilt the prose, the initial scan's unspanned excerpts were located in
+    # prose that no longer exists, so the re-judge's results (scanned against
+    # the rebuilt prose) REPLACE them — never extend. A rebuild with no
+    # re-judge (rejudged carried no judged claim → rejudge_unspanned == [])
+    # therefore keeps no stale flags; unspanned_lane_skipped carries the
+    # honesty. When the prose is unchanged (no repair, or a repair that kept
+    # every segment verbatim), the initial scan stands.
+    if final_prose != prose:
+        unspanned = rejudge_unspanned
     minted_unspanned = _bind_unspanned(
         unspanned,
         final_prose,
@@ -3093,6 +3981,27 @@ def _computed_spread(section: SectionSpec, substrate: SubstrateView) -> dict[str
     return None
 
 
+def _groups_unsectioned_by_facet(
+    substrate: SubstrateView, assigned_groups: set[str]
+) -> dict[str, int]:
+    if substrate.grouping is None:
+        return {}
+    counts: Counter[str] = Counter()
+    raw_facets = substrate.grouping.get("facets", [])
+    if isinstance(raw_facets, list):
+        for facet in raw_facets:
+            if isinstance(facet, str):
+                counts.setdefault(facet, 0)
+    for group_id, group in substrate.group_by_id.items():
+        if group_id in assigned_groups:
+            continue
+        facet = group.get("facet")
+        if not isinstance(facet, str) or not facet:
+            facet = facet_of_group_id(group_id)
+        counts[facet] += 1
+    return dict(sorted(counts.items()))
+
+
 def _gathered_hash(ids: dict[str, set[str]]) -> str:
     return _json_sha256({key: sorted(value) for key, value in sorted(ids.items())})
 
@@ -3198,7 +4107,9 @@ def _blocks_rollup(
         "gap_claims_degraded": accounting.gap_claims_degraded,
         "span_bind_failures": accounting.span_bind_failures,
         "unspanned_assertions": accounting.unspanned_assertions,
-        "unspanned_unbound": accounting.unspanned_unbound,
+        "unspanned_overlap_filtered": accounting.unspanned_overlap_filtered,
+        "unspanned_duplicate_stale": accounting.unspanned_duplicate_stale,
+        "unspanned_unlocated": accounting.unspanned_unlocated,
         "repair_taken": accounting.repair_taken,
         "repair_count_mismatch": accounting.repair_count_mismatch,
         "repair_unparseable": accounting.repair_unparseable,
@@ -3215,12 +4126,15 @@ def _rollup_counts(
     sections_total: int,
     substrate: SubstrateView,
     groups_unsectioned: int | None,
+    groups_unsectioned_by_facet: Mapping[str, int] | None,
     chunk_claims_rejected: int,
     claims_rejected_structural: int,
     gap_claims_degraded: int,
     span_bind_failures: int,
     unspanned_assertions: int,
-    unspanned_unbound: int,
+    unspanned_overlap_filtered: int,
+    unspanned_duplicate_stale: int,
+    unspanned_unlocated: int,
     tool_calls_total: int,
 ) -> dict[str, Any]:
     verdict_counts: Counter[str] = Counter()
@@ -3252,7 +4166,9 @@ def _rollup_counts(
         "gap_claims_degraded": gap_claims_degraded,
         "span_bind_failures": span_bind_failures,
         "unspanned_assertions": unspanned_assertions,
-        "unspanned_unbound": unspanned_unbound,
+        "unspanned_overlap_filtered": unspanned_overlap_filtered,
+        "unspanned_duplicate_stale": unspanned_duplicate_stale,
+        "unspanned_unlocated": unspanned_unlocated,
         "tool_calls_total": tool_calls_total,
         "findings_cited_distinct": len(finding_ids),
     }
@@ -3263,6 +4179,7 @@ def _rollup_counts(
     if substrate.grouping is not None:
         counts["groups_total"] = len(substrate.grouping_group_ids)
         counts["groups_unsectioned"] = groups_unsectioned or 0
+        counts["groups_unsectioned_by_facet"] = dict(groups_unsectioned_by_facet or {})
     return counts
 
 
@@ -3399,11 +4316,23 @@ def _key_findings_pass(
     }
     seed = {
         "intent": intent,
+        "substrate": {},
+        "corpus": {},
+        "available_tools": [],
         "available_claim_types": sorted(kf_available),
         "ledger": _key_findings_ledger(section_claim_groups),
-        # Run-level chunk-content map (union of every section's transcript
-        # chunks) — the pass's evidence surface, since it runs transcript-free.
-        "chunk_content_by_id": run_chunk_content,
+        # Chunk-content map filtered to chunks cited by surviving claims only
+        # (022 rider 16) — the pass's evidence surface, since it runs
+        # transcript-free. ``citable_chunk_ids`` (below) already IS that set:
+        # citation eligibility for this transcript-free pass already restricts
+        # to chunks surviving claims cited, so no separate computation is
+        # needed. The unfiltered union was ~2% wasted input (every section's
+        # gathered-but-uncited chunks).
+        "chunk_content_by_id": {
+            chunk_id: content
+            for chunk_id, content in run_chunk_content.items()
+            if chunk_id in citable_chunk_ids
+        },
     }
     usage_totals = UsageAccumulator()
     raw_kf, kf_usage = synthesis_backend.write_key_findings(seed)
@@ -3571,6 +4500,7 @@ def synthesise_scope(
             embedder=embedding_backend,
             directive=directive,
             reranker=reranker,
+            selection_reference_resolved=refs.selection_run_id is not None,
         )
 
     selected_pss_ids_str = {str(item) for item in selected_pss_ids}
@@ -3583,6 +4513,10 @@ def synthesise_scope(
     )
     finding_by_id, icf_finding_by_id, icf_profile_available, finding_bases = _load_findings(
         conn, project_id=project_id, extraction_row=refs.extraction_row
+    )
+    group_doc_ids_by_group_id = _group_doc_ids_by_group_id(
+        grouping_summary,
+        {**finding_by_id, **icf_finding_by_id},
     )
     basis_by_snapshot = {**chunk_bases, **finding_bases}
     coverage_records = _load_coverage_records(
@@ -3601,6 +4535,10 @@ def synthesise_scope(
         selected_pss_ids=selected_pss_ids_str,
     )
     summaries = _substrate_summaries(refs, corpus)
+    section_substrate = {
+        key: value for key, value in summaries.items() if key != "corpus"
+    }
+    corpus_summary = summaries.get("corpus", {})
 
     created_at = datetime.now(UTC)
     artefact_id = uuid.uuid4()
@@ -3683,7 +4621,8 @@ def synthesise_scope(
     ]
 
     assigned_groups = {group_id for section in sections for group_id in section.group_ids}
-    groups_unsectioned = len(substrate.grouping_group_ids - assigned_groups)
+    groups_unsectioned_by_facet = _groups_unsectioned_by_facet(substrate, assigned_groups)
+    groups_unsectioned = sum(groups_unsectioned_by_facet.values())
 
     findings_reader = (
         make_findings_reader(
@@ -3721,7 +4660,9 @@ def synthesise_scope(
     total_gap_degraded = 0
     total_span_bind_failures = 0
     total_unspanned_assertions = 0
-    total_unspanned_unbound = 0
+    total_unspanned_overlap_filtered = 0
+    total_unspanned_duplicate_stale = 0
+    total_unspanned_unlocated = 0
     total_tool_calls = 0
     turn_cap_hit_any = False
     repair_path_taken = False
@@ -3739,7 +4680,8 @@ def synthesise_scope(
             "intent": context.intent,
             "section": section.as_seed(),
             "section_index": section_index,
-            "substrate": summaries,
+            "substrate": section_substrate,
+            "corpus": corpus_summary if isinstance(corpus_summary, dict) else {},
             "available_tools": [
                 tool
                 for tool in ("search_chunks", "query_findings", "lookup")
@@ -3758,12 +4700,14 @@ def synthesise_scope(
             retriever=retriever,
             findings_reader=findings_reader,
             lookup_reader=lookup_reader,
+            group_doc_ids_by_group_id=group_doc_ids_by_group_id,
         )
         try:
             loop_result = run_section_loop(
                 synthesis_backend,
                 seed=seed,
                 tools=tools,
+                retriever=retriever,
             )
             usage_totals.add_payload(loop_result["usage_totals"])
         except RuntimeError as exc:
@@ -3836,7 +4780,9 @@ def synthesise_scope(
         total_gap_degraded += accounting.gap_claims_degraded
         total_span_bind_failures += accounting.span_bind_failures
         total_unspanned_assertions += accounting.unspanned_assertions
-        total_unspanned_unbound += accounting.unspanned_unbound
+        total_unspanned_overlap_filtered += accounting.unspanned_overlap_filtered
+        total_unspanned_duplicate_stale += accounting.unspanned_duplicate_stale
+        total_unspanned_unlocated += accounting.unspanned_unlocated
         total_tool_calls += accounting.tool_call_count
         turn_cap_hit_any = turn_cap_hit_any or accounting.turn_cap_hit
         repair_path_taken = repair_path_taken or accounting.repair_taken
@@ -3909,7 +4855,9 @@ def synthesise_scope(
         total_gap_degraded += kf_accounting.gap_claims_degraded
         total_span_bind_failures += kf_accounting.span_bind_failures
         total_unspanned_assertions += kf_accounting.unspanned_assertions
-        total_unspanned_unbound += kf_accounting.unspanned_unbound
+        total_unspanned_overlap_filtered += kf_accounting.unspanned_overlap_filtered
+        total_unspanned_duplicate_stale += kf_accounting.unspanned_duplicate_stale
+        total_unspanned_unlocated += kf_accounting.unspanned_unlocated
         repair_path_taken = repair_path_taken or kf_accounting.repair_taken
         repair_count_mismatch_any = (
             repair_count_mismatch_any or kf_accounting.repair_count_mismatch
@@ -3938,6 +4886,8 @@ def synthesise_scope(
         else None,
         "executed_retrieval_boosts": retrieval_provenance.get("executed_boosts", {}),
         "unmatched_boosts": retrieval_provenance.get("unmatched_boosts", {}),
+        "soft_prior_factors": retrieval_provenance.get("soft_prior_factors", {}),
+        "confidence_suppressed": retrieval_provenance.get("confidence_suppressed", False),
         "reranker": retrieval_provenance.get("reranker", getattr(reranker, "mode", "none")),
     }
     provenance = {
@@ -3968,6 +4918,7 @@ def synthesise_scope(
             "source": section_source,
             "sections": [section.as_seed() for section in sections],
             "groups_unsectioned": groups_unsectioned,
+            "groups_unsectioned_by_facet": groups_unsectioned_by_facet,
             # Deterministic proposal normalisations (visible, never silent):
             # overlong title/focus truncation; group_ids stripped when no
             # grouping is referenced (the rev 8 M5 clamp-over-reject posture).
@@ -3991,12 +4942,15 @@ def synthesise_scope(
         sections_total=len(sections),
         substrate=substrate,
         groups_unsectioned=groups_unsectioned,
+        groups_unsectioned_by_facet=groups_unsectioned_by_facet,
         chunk_claims_rejected=total_chunk_rejections,
         claims_rejected_structural=total_structural_rejections,
         gap_claims_degraded=total_gap_degraded,
         span_bind_failures=total_span_bind_failures,
         unspanned_assertions=total_unspanned_assertions,
-        unspanned_unbound=total_unspanned_unbound,
+        unspanned_overlap_filtered=total_unspanned_overlap_filtered,
+        unspanned_duplicate_stale=total_unspanned_duplicate_stale,
+        unspanned_unlocated=total_unspanned_unlocated,
         tool_calls_total=total_tool_calls,
     )
     # Conditional-required key-findings marker (ADR 0015 §8): present iff a

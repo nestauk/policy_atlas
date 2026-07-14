@@ -11,7 +11,7 @@ from collections import Counter
 from typing import Any
 
 import pytest
-from sqlalchemy import event, func, select
+from sqlalchemy import event, func, select, update
 from sqlalchemy.engine import Connection
 
 from policy_atlas.embeddings import StubEmbeddingBackend
@@ -35,7 +35,9 @@ from policy_atlas.schema import (
     implementation_context_finding,
     intervention_outcome_finding,
     project_source_snapshot,
+    runs,
     search_coverage_record,
+    selection_result,
     source_extraction_record,
     synthesis_result,
 )
@@ -44,6 +46,7 @@ from policy_atlas.synthesis_backend import (
     ChunkCitationWire,
     ClaimWire,
     GapPayloadWire,
+    PatternPayloadWire,
     RepairItemWire,
     SectionProposalWire,
     SectionProseWire,
@@ -52,12 +55,32 @@ from policy_atlas.synthesis_backend import (
     SectionWire,
     StubSynthesisBackend,
     SynthesisBackend,
+    ThemePayloadWire,
 )
 from policy_atlas.synthesis_tools import ToolExchange
 from policy_atlas.synthesise import (
+    ChunkInfo,
+    ClaimDraft,
+    ClaimValidationBatch,
+    CorpusProfile,
+    CoverageRecord,
+    FindingInfo,
+    RejectedClaim,
+    SectionAccounting,
+    SubstrateView,
     SynthesiseContext,
     SynthesiseFailure,
+    _apply_and_rebuild,
+    _grouping_summary,
+    _groups_unsectioned_by_facet,
     _load_findings,
+    _repair_dependency_records,
+    _repair_id_mismatch,
+    _rollup_counts,
+    _validate_sections,
+    _validate_theme_claim,
+    compile_synthesis_directive,
+    propose_synthesis_plan,
     synthesise_scope,
 )
 from policy_atlas.usage import UsageResult
@@ -75,6 +98,13 @@ from tests.helpers import (
     seed_source,
 )
 from tests.synthesis_wire import empty_key_findings, prose_section
+from tests.test_group import (
+    _group_row,
+    seed_extraction,
+)
+from tests.test_group import (
+    _run_group as _run_group_component,
+)
 
 
 def _count(conn: Connection, table: Any, project_id: uuid.UUID) -> int:
@@ -117,6 +147,644 @@ def _count(conn: Connection, table: Any, project_id: uuid.UUID) -> int:
     else:
         raise AssertionError(f"unsupported table for scoped count: {table}")
     return int(conn.execute(stmt).scalar_one())
+
+
+def _empty_substrate(grouping: dict[str, Any] | None) -> SubstrateView:
+    return SubstrateView(
+        characterisation=None,
+        selection=None,
+        extraction=None,
+        grouping=grouping,
+        corpus=CorpusProfile(
+            screened_docs=0,
+            ingested_docs=0,
+            appraised_docs=0,
+            appraised_ingested_docs=0,
+            appraised_pss_ids=set(),
+        ),
+        coverage_records={},
+        chunk_by_id={},
+        chunks_by_pss_id={},
+        finding_by_id={},
+        icf_finding_by_id={},
+        icf_profile_available=False,
+        basis_by_snapshot_id={},
+        selected_pss_ids=set(),
+    )
+
+
+def _repair_dependency_substrate() -> SubstrateView:
+    chunk = ChunkInfo(
+        chunk_id="chunk-1",
+        pss_id="pss-1",
+        source_snapshot_id="snapshot-1",
+        sequence=1,
+        content="Alpha quote appears in the full chunk content.",
+        segmentation_policy="manual_v1",
+        text_basis="full_text",
+        origin="selected",
+        appraised=True,
+    )
+    finding = FindingInfo(
+        kind="iof",
+        finding_id="finding-1",
+        pss_id="pss-1",
+        source_snapshot_id="snapshot-1",
+        record={
+            "kind": "iof",
+            "finding_id": "finding-1",
+            "intervention": "Alpha",
+            "outcome": "Outcome",
+            "effect_direction": "increase",
+        },
+        grounding=[{"quote": "Alpha quote"}],
+        effect_direction="increase",
+    )
+    return SubstrateView(
+        characterisation={
+            "coverage": {"signals": {"thin": 2}},
+            "themes": [{"theme_id": "theme-1", "name": "Access"}],
+        },
+        selection=None,
+        extraction={"counts": {"findings": {"total": 1}}},
+        grouping={
+            "facets": ["intervention"],
+            "groups": [
+                {
+                    "group_id": "intervention:g01",
+                    "facet": "intervention",
+                    "label": "Alpha",
+                    "description": "Alpha services.",
+                    "member_finding_ids": ["finding-1"],
+                    "direction_spread": {"increase": 1},
+                    "size": 1,
+                }
+            ],
+        },
+        corpus=CorpusProfile(
+            screened_docs=1,
+            ingested_docs=1,
+            appraised_docs=1,
+            appraised_ingested_docs=1,
+            appraised_pss_ids={"pss-1"},
+        ),
+        coverage_records={
+            "coverage-1": CoverageRecord(
+                record_id="coverage-1",
+                backends=[{"backend": "fixture"}],
+                adequacy_verdict="adequate",
+                verdict_origin="tool",
+            )
+        },
+        chunk_by_id={"chunk-1": chunk},
+        chunks_by_pss_id={"pss-1": [chunk]},
+        finding_by_id={"finding-1": finding},
+        icf_finding_by_id={},
+        icf_profile_available=False,
+        basis_by_snapshot_id={
+            "snapshot-1": build_basis([("chunk-1", chunk.content)]),
+        },
+        selected_pss_ids={"pss-1"},
+    )
+
+
+def test_repair_dependency_records_select_per_claim_type() -> None:
+    substrate = _repair_dependency_substrate()
+    transcript: list[ToolExchange] = [
+        {
+            "tool": "search_chunks",
+            "arguments": {"query": "alpha"},
+            "result": {
+                "chunks": [
+                    {
+                        "chunk_record_id": "chunk-1",
+                        "already_returned": True,
+                    }
+                ]
+            },
+        }
+    ]
+
+    chunk_deps = _repair_dependency_records(
+        ClaimWire(
+            claim_type="chunk",
+            text="Chunk claim.",
+            citations=[ChunkCitationWire(chunk_record_id="chunk-1", quote="missing")],
+        ),
+        transcript=transcript,
+        substrate=substrate,
+    )
+    assert chunk_deps == {
+        "chunks": {
+            "chunk-1": {
+                "chunk_record_id": "chunk-1",
+                "pss_id": "pss-1",
+                "source_snapshot_id": "snapshot-1",
+                "sequence": 1,
+                "content": "Alpha quote appears in the full chunk content.",
+                "segmentation_policy": "manual_v1",
+                "text_basis": "full_text",
+                "origin": "selected",
+                "appraised": True,
+            }
+        }
+    }
+
+    finding_deps = _repair_dependency_records(
+        ClaimWire(
+            claim_type="finding",
+            text="Finding claim.",
+            cited_finding_ids=["finding-1"],
+        ),
+        transcript=transcript,
+        substrate=substrate,
+    )
+    assert finding_deps["findings"]["finding-1"]["intervention"] == "Alpha"
+    assert finding_deps["chunks"]["chunk-1"]["content"].startswith("Alpha quote")
+
+    pattern_deps = _repair_dependency_records(
+        ClaimWire(
+            claim_type="pattern",
+            text="Pattern claim.",
+            pattern=PatternPayloadWire(
+                kind="direction_spread",
+                computed_from="group_direction_spread",
+                group_id="intervention:g01",
+                stated={"increase": 1},
+                base="extracted",
+            ),
+        ),
+        transcript=transcript,
+        substrate=substrate,
+    )
+    assert pattern_deps["computed"]["group_direction_spread:intervention:g01"] == {
+        "computed_from": "group_direction_spread",
+        "group_id": "intervention:g01",
+        "direction_spread": {"increase": 1},
+    }
+    assert pattern_deps["groups"]["intervention:g01"]["label"] == "Alpha"
+    assert "chunks" not in pattern_deps
+
+    theme_deps = _repair_dependency_records(
+        ClaimWire(
+            claim_type="theme",
+            text="Theme claim.",
+            theme=ThemePayloadWire(
+                source="grouping",
+                referenced_ids=["intervention:g01"],
+                base="extracted",
+            ),
+        ),
+        transcript=transcript,
+        substrate=substrate,
+    )
+    assert theme_deps == {
+        "groups": {
+            "intervention:g01": substrate.group_by_id["intervention:g01"],
+        }
+    }
+
+    gap_deps = _repair_dependency_records(
+        ClaimWire(
+            claim_type="gap",
+            text="Gap claim.",
+            gap=GapPayloadWire(
+                grade="corpus_absence",
+                coverage_base="screened",
+                coverage_record_id="coverage-1",
+            ),
+        ),
+        transcript=transcript,
+        substrate=substrate,
+    )
+    assert gap_deps["coverage_records"]["coverage-1"]["adequacy_verdict"] == "adequate"
+    assert "chunks" not in gap_deps
+
+
+def test_repair_application_binds_known_ids_regardless_of_order() -> None:
+    substrate = _empty_substrate(grouping=None)
+    prose = "First unsupported. Second unsupported."
+    first_claim = ClaimWire(
+        claim_type="gap",
+        text="First unsupported.",
+        gap=GapPayloadWire(grade="inferred", coverage_base="screened"),
+    )
+    second_claim = ClaimWire(
+        claim_type="gap",
+        text="Second unsupported.",
+        gap=GapPayloadWire(grade="inferred", coverage_base="screened"),
+    )
+    initial = ClaimValidationBatch(
+        drafts=[],
+        rejected=[
+            RejectedClaim(
+                claim_id="s0c0",
+                claim_index=0,
+                claim=first_claim,
+                reason="gap_invalid",
+                span=(0, 18),
+            ),
+            RejectedClaim(
+                claim_id="s0c1",
+                claim_index=1,
+                claim=second_claim,
+                reason="gap_invalid",
+                span=(19, 38),
+            ),
+        ],
+    )
+    failing = [
+        {
+            "claim_id": "s0c0",
+            "claim_index": 0,
+            "claim": first_claim.model_dump(mode="json"),
+            "rationale": "gap_invalid",
+            "span": [0, 18],
+        },
+        {
+            "claim_id": "s0c1",
+            "claim_index": 1,
+            "claim": second_claim.model_dump(mode="json"),
+            "rationale": "gap_invalid",
+            "span": [19, 38],
+        },
+    ]
+    repairs = [
+        RepairItemWire(
+            claim_id="s0c1",
+            replacement_segment="Second repaired.",
+            claim=ClaimWire(
+                claim_type="gap",
+                text="Second repaired.",
+                gap=GapPayloadWire(grade="inferred", coverage_base="screened"),
+            ),
+        ),
+        RepairItemWire(
+            claim_id="s0c0",
+            replacement_segment="First repaired.",
+            claim=ClaimWire(
+                claim_type="gap",
+                text="First repaired.",
+                gap=GapPayloadWire(grade="inferred", coverage_base="screened"),
+            ),
+        ),
+    ]
+    accounting = SectionAccounting(
+        tool_call_counts={},
+        tool_call_count=0,
+        gathered_id_hash="",
+        turns_used=0,
+        turn_cap_hit=False,
+    )
+
+    final, final_prose, rejudge_calls, _usage, _unspanned = _apply_and_rebuild(
+        prose=prose,
+        initial=initial,
+        failing=failing,
+        repairs=repairs,
+        substrate=substrate,
+        section_group_ids=set(),
+        citable_finding_ids=set(),
+        citable_chunk_ids=set(),
+        available_claim_types={"gap"},
+        grounding_judge_backend=StubGroundingJudgeBackend(),
+        accounting=accounting,
+    )
+
+    assert [claim.text for claim in final] == ["First repaired.", "Second repaired."]
+    assert final_prose == "First repaired. Second repaired."
+    assert rejudge_calls == 0
+    assert accounting.claims_rejected_structural == 0
+    assert _repair_id_mismatch(repairs, failing) is False
+
+
+def test_repair_application_rejects_unknown_ids_and_marks_missing() -> None:
+    substrate = _empty_substrate(grouping=None)
+    claim = ClaimWire(
+        claim_type="gap",
+        text="Unsupported.",
+        gap=GapPayloadWire(grade="inferred", coverage_base="screened"),
+    )
+    initial = ClaimValidationBatch(
+        drafts=[],
+        rejected=[
+            RejectedClaim(
+                claim_id="s0c0",
+                claim_index=0,
+                claim=claim,
+                reason="gap_invalid",
+                span=(0, 12),
+            )
+        ],
+    )
+    failing = [
+        {
+            "claim_id": "s0c0",
+            "claim_index": 0,
+            "claim": claim.model_dump(mode="json"),
+            "rationale": "gap_invalid",
+            "span": [0, 12],
+        }
+    ]
+    repairs = [
+        RepairItemWire(
+            claim_id="unknown",
+            replacement_segment="Repaired.",
+            claim=ClaimWire(
+                claim_type="gap",
+                text="Repaired.",
+                gap=GapPayloadWire(grade="inferred", coverage_base="screened"),
+            ),
+        )
+    ]
+    accounting = SectionAccounting(
+        tool_call_counts={},
+        tool_call_count=0,
+        gathered_id_hash="",
+        turns_used=0,
+        turn_cap_hit=False,
+    )
+
+    final, final_prose, _rejudge_calls, _usage, _unspanned = _apply_and_rebuild(
+        prose="Unsupported.",
+        initial=initial,
+        failing=failing,
+        repairs=repairs,
+        substrate=substrate,
+        section_group_ids=set(),
+        citable_finding_ids=set(),
+        citable_chunk_ids=set(),
+        available_claim_types={"gap"},
+        grounding_judge_backend=StubGroundingJudgeBackend(),
+        accounting=accounting,
+    )
+
+    assert final == []
+    assert final_prose == "Unsupported."
+    assert accounting.claims_rejected_structural == 2
+    assert _repair_id_mismatch(repairs, failing) is True
+
+
+def _single_facet_grouping_row() -> dict[str, Any]:
+    return {
+        "groups": {
+            "intervention": {
+                "groups": [
+                    {
+                        "group_id": "intervention:g01",
+                        "facet": "intervention",
+                        "label": "Alpha",
+                        "description": "Alpha services.",
+                        "member_values": ["Alpha"],
+                        "member_finding_ids": ["f1"],
+                        "size": 1,
+                        "direction_spread": {"increase": 1},
+                    }
+                ],
+                "ungrouped": {"member_finding_ids": []},
+                "no_value": {"member_finding_ids": []},
+            }
+        },
+        "counts": {"intervention": {"groups": 1, "ungrouped": 0, "no_value": 0}},
+        "flags": {"intervention": {"status": "succeeded"}},
+    }
+
+
+def _multi_facet_grouping_row() -> dict[str, Any]:
+    return {
+        "groups": {
+            "intervention": {
+                "groups": [
+                    {
+                        "group_id": "intervention:g01",
+                        "facet": "intervention",
+                        "label": "Alpha",
+                        "description": "Alpha services.",
+                        "member_values": ["Alpha"],
+                        "member_finding_ids": ["f1"],
+                        "size": 1,
+                        "direction_spread": {"increase": 1},
+                    }
+                ],
+                "ungrouped": {"member_finding_ids": []},
+                "no_value": {"member_finding_ids": ["f3"]},
+            },
+            "barrier_theme": {
+                "groups": [
+                    {
+                        "group_id": "barrier_theme:g01",
+                        "facet": "barrier_theme",
+                        "label": "Planning delays",
+                        "description": "Planning delays slow delivery.",
+                        "member_finding_ids": ["f2"],
+                        "size": 1,
+                        "direction_spread": None,
+                    }
+                ],
+                "ungrouped": {"member_finding_ids": []},
+            },
+        },
+        "counts": {
+            "intervention": {"groups": 1, "ungrouped": 0, "no_value": 1},
+            "barrier_theme": {"groups": 1, "ungrouped": 0},
+        },
+        "flags": {
+            "intervention": {"status": "succeeded"},
+            "barrier_theme": {"status": "succeeded"},
+        },
+    }
+
+
+def test_migrated_single_facet_grouping_row_consumed_by_qualified_read_paths() -> None:
+    summary = _grouping_summary(_single_facet_grouping_row())
+    assert summary is not None
+    substrate = _empty_substrate(summary)
+
+    assert summary["facets"] == ["intervention"]
+    assert summary["groups"][0]["group_id"] == "intervention:g01"
+    assert "no_value" in summary["residuals"]["intervention"]
+    assert substrate.grouping_group_ids == {"intervention:g01"}
+    assert set(substrate.group_by_id) == {"intervention:g01"}
+
+    sections, reasons, normalisations = _validate_sections(
+        SectionProposalWire(
+            sections=[
+                SectionWire(
+                    title="Alpha services",
+                    focus="Alpha intervention evidence.",
+                    group_ids=["intervention:g01"],
+                )
+            ]
+        ),
+        grouping_group_ids=substrate.grouping_group_ids,
+    )
+    assert [section.group_ids for section in sections] == [["intervention:g01"]]
+    assert reasons == []
+    assert normalisations == []
+
+    unsectioned_by_facet = _groups_unsectioned_by_facet(
+        substrate, assigned_groups={"intervention:g01"}
+    )
+    assert unsectioned_by_facet == {"intervention": 0}
+    counts = _rollup_counts(
+        all_claims=[],
+        section_blocks=[],
+        sections_total=1,
+        substrate=substrate,
+        groups_unsectioned=sum(unsectioned_by_facet.values()),
+        groups_unsectioned_by_facet=unsectioned_by_facet,
+        chunk_claims_rejected=0,
+        claims_rejected_structural=0,
+        gap_claims_degraded=0,
+        span_bind_failures=0,
+        unspanned_assertions=0,
+        unspanned_overlap_filtered=0,
+        unspanned_duplicate_stale=0,
+        unspanned_unlocated=0,
+        tool_calls_total=0,
+    )
+    assert counts["groups_total"] == 1
+    assert counts["groups_unsectioned"] == 0
+    assert counts["groups_unsectioned_by_facet"] == {"intervention": 0}
+
+    draft = _validate_theme_claim(
+        ClaimWire(
+            claim_type="theme",
+            text="The intervention grouping identifies Alpha services.",
+            theme=ThemePayloadWire(
+                source="grouping",
+                referenced_ids=["intervention:g01"],
+                base="extracted",
+            ),
+        ),
+        claim_id="c1",
+        claim_index=0,
+        substrate=substrate,
+    )
+    assert isinstance(draft, ClaimDraft)
+
+
+def test_multi_facet_grouping_row_consumed_with_per_facet_honesty() -> None:
+    summary = _grouping_summary(_multi_facet_grouping_row())
+    assert summary is not None
+    substrate = _empty_substrate(summary)
+
+    assert substrate.grouping_group_ids == {"intervention:g01", "barrier_theme:g01"}
+    assert summary["facet"] is None
+    assert summary["facets"] == ["intervention", "barrier_theme"]
+    assert "no_value" in summary["residuals"]["intervention"]
+    assert "no_value" not in summary["residuals"]["barrier_theme"]
+
+    unsectioned_by_facet = _groups_unsectioned_by_facet(
+        substrate, assigned_groups={"intervention:g01"}
+    )
+    assert unsectioned_by_facet == {"barrier_theme": 1, "intervention": 0}
+    counts = _rollup_counts(
+        all_claims=[],
+        section_blocks=[],
+        sections_total=1,
+        substrate=substrate,
+        groups_unsectioned=sum(unsectioned_by_facet.values()),
+        groups_unsectioned_by_facet=unsectioned_by_facet,
+        chunk_claims_rejected=0,
+        claims_rejected_structural=0,
+        gap_claims_degraded=0,
+        span_bind_failures=0,
+        unspanned_assertions=0,
+        unspanned_overlap_filtered=0,
+        unspanned_duplicate_stale=0,
+        unspanned_unlocated=0,
+        tool_calls_total=0,
+    )
+    assert counts["groups_total"] == 2
+    assert counts["groups_unsectioned"] == 1
+    assert counts["groups_unsectioned_by_facet"] == {
+        "barrier_theme": 1,
+        "intervention": 0,
+    }
+
+    draft = _validate_theme_claim(
+        ClaimWire(
+            claim_type="theme",
+            text="The barrier grouping identifies planning delays.",
+            theme=ThemePayloadWire(
+                source="grouping",
+                referenced_ids=["barrier_theme:g01"],
+                base="extracted",
+            ),
+        ),
+        claim_id="c2",
+        claim_index=0,
+        substrate=substrate,
+    )
+    assert isinstance(draft, ClaimDraft)
+
+    rejected = _validate_theme_claim(
+        ClaimWire(
+            claim_type="theme",
+            text="The grouping identifies an unknown theme.",
+            theme=ThemePayloadWire(
+                source="grouping",
+                referenced_ids=["outcome:g01"],
+                base="extracted",
+            ),
+        ),
+        claim_id="c3",
+        claim_index=1,
+        substrate=substrate,
+    )
+    assert isinstance(rejected, RejectedClaim)
+    assert rejected.reason == "theme_unknown_id"
+
+
+def test_section_validation_rejects_unqualified_group_ids_with_expected_form() -> None:
+    summary = _grouping_summary(_single_facet_grouping_row())
+    assert summary is not None
+    substrate = _empty_substrate(summary)
+
+    _sections, reasons, _normalisations = _validate_sections(
+        SectionProposalWire(
+            sections=[
+                SectionWire(
+                    title="Legacy group",
+                    focus="Legacy id should not resolve.",
+                    group_ids=["g01"],
+                )
+            ]
+        ),
+        grouping_group_ids=substrate.grouping_group_ids,
+    )
+
+    assert len(reasons) == 1
+    assert "group_ids_unknown" in reasons[0]
+    assert "<facet>:gNN" in reasons[0]
+
+
+def test_failed_facet_stays_visible_while_sibling_groups_resolve() -> None:
+    row = _multi_facet_grouping_row()
+    row["groups"]["outcome"] = {
+        "groups": [],
+        "ungrouped": {"member_finding_ids": []},
+        "no_value": {"member_finding_ids": []},
+    }
+    row["counts"]["outcome"] = {"groups": 0, "ungrouped": 0, "no_value": 0}
+    row["flags"]["outcome"] = {
+        "status": "failed",
+        "failure_class": "backend_error",
+        "groups_rejected": False,
+        "value_cap_exceeded": False,
+    }
+
+    summary = _grouping_summary(row)
+    assert summary is not None
+    substrate = _empty_substrate(summary)
+
+    assert summary["facets"] == ["intervention", "barrier_theme", "outcome"]
+    assert summary["facet_status"]["outcome"]["status"] == "failed"
+    assert substrate.grouping_group_ids == {"intervention:g01", "barrier_theme:g01"}
+    assert _groups_unsectioned_by_facet(
+        substrate, assigned_groups={"intervention:g01", "barrier_theme:g01"}
+    ) == {"barrier_theme": 0, "intervention": 0, "outcome": 0}
 
 
 def _project_annotations(conn: Connection, project_id: uuid.UUID) -> list[Any]:
@@ -207,11 +875,10 @@ def test_transitive_resolution_from_grouping_reference(conn: Connection) -> None
             evidence_scope_id=scope_id,
             run_id=grouping_run_id,
             extraction_run_id=extraction_run_id,
-            facet="intervention",
-            grouping_provenance={},
-            groups={"groups": [], "ungrouped": {}, "no_value": {}},
-            counts={},
-            flags={},
+            grouping_provenance={"facets": ["intervention"]},
+            groups={"intervention": {"groups": [], "ungrouped": {}, "no_value": {}}},
+            counts={"intervention": {}},
+            flags={"intervention": []},
             created_at=now(),
         )
     )
@@ -920,25 +1587,27 @@ def test_groups_unsectioned_counted(conn: Connection) -> None:
             evidence_scope_id=scope_id,
             run_id=grouping_run_id,
             extraction_run_id=extraction_run_id,
-            facet="intervention",
-            grouping_provenance={},
+            grouping_provenance={"facets": ["intervention"]},
             groups={
-                "groups": [
-                    {
-                        "group_id": "g1",
-                        "label": "L",
-                        "description": "D",
-                        "member_values": [],
-                        "member_finding_ids": [],
-                        "size": 0,
-                        "direction_spread": {},
-                    }
-                ],
-                "ungrouped": {},
-                "no_value": {},
+                "intervention": {
+                    "groups": [
+                        {
+                            "group_id": "intervention:g01",
+                            "facet": "intervention",
+                            "label": "L",
+                            "description": "D",
+                            "member_values": [],
+                            "member_finding_ids": [],
+                            "size": 0,
+                            "direction_spread": {},
+                        }
+                    ],
+                    "ungrouped": {},
+                    "no_value": {},
+                }
             },
-            counts={},
-            flags={},
+            counts={"intervention": {}},
+            flags={"intervention": []},
             created_at=now(),
         )
     )
@@ -963,6 +1632,82 @@ def test_groups_unsectioned_counted(conn: Connection) -> None:
     ).one()
     assert row.counts["groups_unsectioned"] == 1
     assert row.flags.get("groups_unsectioned") is True
+
+
+def test_fresh_single_facet_group_shape_is_consumed_by_synthesise(
+    conn: Connection,
+) -> None:
+    project_id, synthesis_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    seeded = seed_extraction(
+        conn,
+        project_id,
+        scope_id,
+        docs=[
+            (
+                uuid.uuid4(),
+                [
+                    {"intervention": "Alpha coaching", "outcome": "Attendance"},
+                    {"intervention": "Alpha counselling", "outcome": "Retention"},
+                ],
+            )
+        ],
+    )
+    # seed_extraction's selection row carries a bare test provenance; synthesise
+    # resolves selection -> characterisation, so complete the chain here.
+    characterisation_run_id = seed_run(conn, project_id)
+    seed_characterisation(
+        conn, project_id, scope_id, characterisation_run_id, themes={"theme-a": []}
+    )
+    conn.execute(
+        update(selection_result)
+        .where(selection_result.c.run_id == seeded.selection_run_id)
+        .values(
+            selection_provenance={
+                "strategy": "test",
+                "characterisation_run_id": str(characterisation_run_id),
+            }
+        )
+    )
+    _summary, grouping_run_id = _run_group_component(
+        conn, project_id, scope_id, seeded.run_id
+    )
+    grouping_row = _group_row(conn, project_id, grouping_run_id)
+    facet_payload = grouping_row["groups"]["intervention"]
+    group_id = facet_payload["groups"][0]["group_id"]
+
+    assert group_id == "intervention:g01"
+    assert grouping_row["counts"]["intervention"]["groups"] == 1
+
+    backend = StubSynthesisBackend(
+        proposal=SectionProposalWire(
+            sections=[
+                SectionWire(
+                    title="Alpha services",
+                    focus="Evidence on Alpha service findings.",
+                    group_ids=[group_id],
+                )
+            ]
+        )
+    )
+    _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=synthesis_run_id,
+        scope_id=scope_id,
+        extraction_run_id=seeded.run_id,
+        grouping_run_id=grouping_run_id,
+        backend=backend,
+    )
+
+    row = conn.execute(
+        select(synthesis_result).where(synthesis_result.c.project_id == project_id)
+    ).one()
+    section_blocks = [b for b in row.blocks if b.get("title") == "Alpha services"]
+    assert len(section_blocks) == 1
+    assert section_blocks[0]["group_ids"] == [group_id]
+    assert row.counts["groups_total"] == 1
+    assert row.counts["groups_unsectioned"] == 0
 
 
 def test_block_content_is_authored_prose_and_units_are_span_anchored(
@@ -1067,10 +1812,12 @@ class _SpanBindBackend:
     def repair_section(
         self, seed: dict[str, Any], transcript: list[ToolExchange], *, failing: list[dict[str, Any]]
     ) -> UsageResult[SectionRepairWire]:
-        del seed, transcript, failing
+        del seed, transcript
+        claim_id = str(failing[0]["claim_id"])
         return SectionRepairWire(
             repairs=[
                 RepairItemWire(
+                    claim_id=claim_id,
                     replacement_segment="",
                     claim=ClaimWire(claim_type="reasoning", text=self._repair_text),
                 )
@@ -1206,9 +1953,13 @@ def test_unspanned_assertion_bound_minted_unbound_counted(conn: Connection) -> N
 
     # Two blocks now carry stub claims (the proposed section + the code-injected
     # conclusions section, ADR 0015 §8); the judge flags the same bound + unbound
-    # excerpt on each, so the run-level counts are two of each.
+    # excerpt on each, so the run-level counts are two of each. The unbound
+    # excerpt is absent from the prose, so it lands in unspanned_unlocated
+    # (item 17(ii)).
     assert summary["counts"]["unspanned_assertions"] == 2
-    assert summary["counts"]["unspanned_unbound"] == 2
+    assert summary["counts"]["unspanned_unlocated"] == 2
+    assert summary["counts"]["unspanned_overlap_filtered"] == 0
+    assert summary["counts"]["unspanned_duplicate_stale"] == 0
     assert summary["flags"].get("unspanned_assertions_present") is True
 
     block_ids = select(block.c.block_id).where(
@@ -1828,25 +2579,27 @@ def _seed_group_with_findings(
             evidence_scope_id=scope_id,
             run_id=grouping_run_id,
             extraction_run_id=extraction_run_id,
-            facet="intervention",
-            grouping_provenance={},
+            grouping_provenance={"facets": ["intervention"]},
             groups={
-                "groups": [
-                    {
-                        "group_id": "g1",
-                        "label": "alpha",
-                        "description": "D",
-                        "member_values": [],
-                        "member_finding_ids": [str(fid) for fid in finding_ids],
-                        "size": len(finding_ids),
-                        "direction_spread": dict(direction_spread),
-                    }
-                ],
-                "ungrouped": {},
-                "no_value": {},
+                "intervention": {
+                    "groups": [
+                        {
+                            "group_id": "intervention:g01",
+                            "facet": "intervention",
+                            "label": "alpha",
+                            "description": "D",
+                            "member_values": [],
+                            "member_finding_ids": [str(fid) for fid in finding_ids],
+                            "size": len(finding_ids),
+                            "direction_spread": dict(direction_spread),
+                        }
+                    ],
+                    "ungrouped": {},
+                    "no_value": {},
+                }
             },
-            counts={},
-            flags={},
+            counts={"intervention": {}},
+            flags={"intervention": []},
             created_at=now(),
         )
     )
@@ -2019,27 +2772,29 @@ def _seed_group_with_iof_and_icf(
             evidence_scope_id=scope_id,
             run_id=grouping_run_id,
             extraction_run_id=extraction_run_id,
-            facet="intervention",
-            grouping_provenance={},
+            grouping_provenance={"facets": ["intervention"]},
             groups={
-                "groups": [
-                    {
-                        "group_id": "g1",
-                        "label": "alpha",
-                        "description": "D",
-                        "member_values": ["Alpha service"],
-                        "member_finding_ids": [str(iof_finding_id), str(icf_finding_id)],
-                        "member_finding_kinds": ["iof", "icf"],
-                        "member_counts": {"iof": 1, "icf": 1},
-                        "size": 2,
-                        "direction_spread": {"increase": 1},
-                    }
-                ],
-                "ungrouped": {},
-                "no_value": {},
+                "intervention": {
+                    "groups": [
+                        {
+                            "group_id": "intervention:g01",
+                            "facet": "intervention",
+                            "label": "alpha",
+                            "description": "D",
+                            "member_values": ["Alpha service"],
+                            "member_finding_ids": [str(iof_finding_id), str(icf_finding_id)],
+                            "member_finding_kinds": ["iof", "icf"],
+                            "member_counts": {"iof": 1, "icf": 1},
+                            "size": 2,
+                            "direction_spread": {"increase": 1},
+                        }
+                    ],
+                    "ungrouped": {},
+                    "no_value": {},
+                }
             },
-            counts={},
-            flags={},
+            counts={"intervention": {}},
+            flags={"intervention": []},
             created_at=now(),
         )
     )
@@ -2130,7 +2885,11 @@ def test_annotation_payload_excludes_finding_metadata_row_join_resolves(
     backend = _FindingClaimBackend(
         proposal=SectionProposalWire(
             sections=[
-                SectionWire(title="Coaching", focus="What coaching does", group_ids=["g1"])
+                SectionWire(
+                    title="Coaching",
+                    focus="What coaching does",
+                    group_ids=["intervention:g01"],
+                )
             ]
         ),
         finding_id=str(finding_id),
@@ -2176,6 +2935,7 @@ class _SeedCapturingBackend:
     def __init__(self, inner: SynthesisBackend) -> None:
         self._inner = inner
         self.seeds_by_section: dict[int, list[dict[str, Any]]] = {}
+        self.key_findings_seeds: list[dict[str, Any]] = []
 
     def propose_sections(
         self, *, intent: str, substrate: dict[str, Any], rejection: list[str] | None = None
@@ -2199,7 +2959,54 @@ class _SeedCapturingBackend:
         return self._inner.repair_section(seed, transcript, failing=failing)
 
     def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
+        self.key_findings_seeds.append(seed)
         return self._inner.write_key_findings(seed)
+
+
+def test_key_findings_seed_carries_only_cited_only_chunk_content(conn: Connection) -> None:
+    """022 rider 16: the key-findings seed's chunk_content_by_id is filtered
+    to chunks cited by surviving claims — not the run's whole gathered union.
+
+    Three chunks are ingested for one doc; the default stub backend's
+    section loop cites at most one chunk claim per section (2 sections: the
+    one directed section + the always-injected conclusions section), so at
+    least one of the three chunks is gathered (returned by search_chunks)
+    but never cited across the whole run."""
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="Rider-16 doc")
+    seed_ingested_full_text(
+        conn,
+        pss_id=pss_id,
+        chunks=[
+            "Rider evidence chunk alpha reports on the policy outcome directly.",
+            "Rider evidence chunk beta reports on a related policy outcome.",
+            "Rider evidence chunk gamma reports on a further policy outcome.",
+        ],
+    )
+    capture = _SeedCapturingBackend(StubSynthesisBackend())
+
+    _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        context={
+            "synthesis": {
+                "sections": [{"title": "Evidence", "focus": "What the evidence shows."}]
+            }
+        },
+        backend=capture,
+    )
+
+    assert len(capture.key_findings_seeds) == 1
+    kf_chunk_content = capture.key_findings_seeds[0]["chunk_content_by_id"]
+
+    # The run gathered all three chunks (each section's search_chunks call
+    # returns every matching chunk), but at most two claims across the run's
+    # two sections can cite a chunk — so filtering must have dropped at
+    # least one gathered-but-uncited chunk from the key-findings seed.
+    assert 0 < len(kf_chunk_content) < 3
 
 
 def test_grouped_section_seed_member_findings_include_icf_records(
@@ -2218,7 +3025,13 @@ def test_grouped_section_seed_member_findings_include_icf_records(
         StubSynthesisBackend(
             script=[[{"tool_calls": [], "claims": SectionProseWire(prose="", claims=[])}]],
             proposal=SectionProposalWire(
-                sections=[SectionWire(title="Alpha", focus="Alpha coverage", group_ids=["g1"])]
+                sections=[
+                    SectionWire(
+                        title="Alpha",
+                        focus="Alpha coverage",
+                        group_ids=["intervention:g01"],
+                    )
+                ]
             ),
         )
     )
@@ -2239,6 +3052,63 @@ def test_grouped_section_seed_member_findings_include_icf_records(
     assert members[str(icf_finding_id)]["context_type"] == "barrier"
 
 
+def test_section_seed_substrate_carries_no_membership_lists(conn: Connection) -> None:
+    """022 rider 18 (F0 § DTO spec): prompt-facing characterisation themes and
+    grouping groups carry id/label/description/size/spread — never membership
+    UUID lists; residuals carry counts only."""
+    (
+        project_id,
+        run_id,
+        scope_id,
+        extraction_run_id,
+        grouping_run_id,
+        _iof_finding_id,
+        _icf_finding_id,
+    ) = _seed_group_with_iof_and_icf(conn)
+    capture = _SeedCapturingBackend(
+        StubSynthesisBackend(
+            script=[[{"tool_calls": [], "claims": SectionProseWire(prose="", claims=[])}]],
+            proposal=SectionProposalWire(
+                sections=[
+                    SectionWire(
+                        title="Alpha",
+                        focus="Alpha coverage",
+                        group_ids=["intervention:g01"],
+                    )
+                ]
+            ),
+        )
+    )
+
+    _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        extraction_run_id=extraction_run_id,
+        grouping_run_id=grouping_run_id,
+        backend=capture,
+    )
+
+    seed = capture.seeds_by_section[0][0]
+    substrate = seed["substrate"]
+
+    theme = substrate["characterisation"]["themes"][0]
+    assert "member_ids" not in theme
+    assert {"theme_id", "name", "description", "size"} <= set(theme)
+
+    group = substrate["grouping"]["groups"][0]
+    assert "member_finding_ids" not in group
+    assert {"group_id", "facet", "label", "description", "size", "direction_spread"} <= set(
+        group
+    )
+
+    residual = substrate["grouping"]["residuals"]["intervention"]
+    assert residual["ungrouped"] == {"count": 0}
+    assert "finding_ids" not in residual["ungrouped"]
+    assert "member_finding_ids" not in residual["ungrouped"]
+
+
 def test_icf_finding_claim_annotation_resolves_via_row(
     conn: Connection,
 ) -> None:
@@ -2253,7 +3123,13 @@ def test_icf_finding_claim_annotation_resolves_via_row(
     ) = _seed_group_with_iof_and_icf(conn)
     backend = _FindingClaimBackend(
         proposal=SectionProposalWire(
-            sections=[SectionWire(title="Alpha", focus="Alpha coverage", group_ids=["g1"])]
+            sections=[
+                SectionWire(
+                    title="Alpha",
+                    focus="Alpha coverage",
+                    group_ids=["intervention:g01"],
+                )
+            ]
         ),
         finding_id=str(icf_finding_id),
     )
@@ -2318,7 +3194,13 @@ def test_mixed_and_unclear_findings_survive_synthesise_section_seed(
         StubSynthesisBackend(
             script=[[{"tool_calls": [], "claims": SectionProseWire(prose="", claims=[])}]],
             proposal=SectionProposalWire(
-                sections=[SectionWire(title="Alpha", focus="Alpha coverage", group_ids=["g1"])]
+                sections=[
+                    SectionWire(
+                        title="Alpha",
+                        focus="Alpha coverage",
+                        group_ids=["intervention:g01"],
+                    )
+                ]
             ),
         )
     )
@@ -2340,3 +3222,152 @@ def test_mixed_and_unclear_findings_survive_synthesise_section_seed(
     assert member_directions[str(mixed_id)] == "mixed"
     assert member_directions[str(unclear_id)] == "unclear"
     assert seed["computed_spread"] == {"mixed": 1, "unclear": 1}
+
+
+# --- propose_synthesis_plan (022 F5 steer surface) ---
+
+
+def _runs_count(conn: Connection, project_id: uuid.UUID) -> int:
+    return int(
+        conn.execute(
+            select(func.count()).select_from(runs).where(runs.c.project_id == project_id)
+        ).scalar_one()
+    )
+
+
+def test_propose_synthesis_plan_is_side_effect_free(conn: Connection) -> None:
+    """propose_synthesis_plan mints no artefact and writes no row (contract item 14)."""
+    project_id, _run_id, scope_id, extraction_run_id, grouping_run_id, _finding_ids = (
+        _seed_group_with_findings(conn, [{"intervention": "Alpha service"}])
+    )
+
+    before = {
+        "artefact": _count(conn, artefact, project_id),
+        "synthesis_result": _count(conn, synthesis_result, project_id),
+        "block": _count(conn, block, project_id),
+        "annotation": _count(conn, annotation, project_id),
+        "addressable_unit": _count(conn, addressable_unit, project_id),
+        "citation": _count(conn, citation, project_id),
+        "runs": _runs_count(conn, project_id),
+    }
+
+    proposal = propose_synthesis_plan(
+        conn,
+        project_id=project_id,
+        context=SynthesiseContext(
+            scope_id=scope_id,
+            intent="What works to cut fuel poverty",
+            context={},
+            extraction_run_id=extraction_run_id,
+            grouping_run_id=grouping_run_id,
+        ),
+        synthesis_backend=StubSynthesisBackend(),
+    )
+
+    after = {
+        "artefact": _count(conn, artefact, project_id),
+        "synthesis_result": _count(conn, synthesis_result, project_id),
+        "block": _count(conn, block, project_id),
+        "annotation": _count(conn, annotation, project_id),
+        "addressable_unit": _count(conn, addressable_unit, project_id),
+        "citation": _count(conn, citation, project_id),
+        "runs": _runs_count(conn, project_id),
+    }
+    assert before == after
+    # A plan was still produced from the read-only substrate.
+    assert proposal["proposed_sections"]
+
+
+def test_propose_synthesis_plan_output_schema(conn: Connection) -> None:
+    """The proposal payload matches the § Steer schemas shape exactly."""
+    project_id, _run_id, scope_id, extraction_run_id, grouping_run_id, finding_ids = (
+        _seed_group_with_findings(conn, [{"intervention": "Alpha service"}])
+    )
+
+    proposal = propose_synthesis_plan(
+        conn,
+        project_id=project_id,
+        context=SynthesiseContext(
+            scope_id=scope_id,
+            intent="What works to cut fuel poverty",
+            context={},
+            extraction_run_id=extraction_run_id,
+            grouping_run_id=grouping_run_id,
+        ),
+        synthesis_backend=StubSynthesisBackend(),
+    )
+
+    assert set(proposal) == {"proposed_sections", "available_groups", "boostable"}
+    for section in proposal["proposed_sections"]:
+        assert set(section) == {"title", "focus", "group_ids"}
+    # available_groups reads the persisted grouping payload.
+    assert proposal["available_groups"] == [
+        {
+            "group_id": "intervention:g01",
+            "facet": "intervention",
+            "label": "alpha",
+            "size": len(finding_ids),
+        }
+    ]
+    boostable = proposal["boostable"]
+    assert set(boostable) == {"appraisal_tiers", "evidence_types", "screen_confidence"}
+    assert boostable["appraisal_tiers"] == ["1", "2", "3", "4", "5"]
+    assert "Systematic Review and Meta-Analysis" in boostable["evidence_types"]
+    assert boostable["screen_confidence"] == {
+        "lo_bounds": [0.5, 4.0],
+        "hi_bounds": [0.5, 4.0],
+    }
+
+
+def test_propose_then_compile_directive_round_trips_into_a_run(conn: Connection) -> None:
+    """A proposal → compiled directive drives a synthesise run's sections + boosts."""
+    project_id, run_id, scope_id, extraction_run_id, grouping_run_id, _finding_ids = (
+        _seed_group_with_findings(conn, [{"intervention": "Alpha service"}])
+    )
+    plan_context = SynthesiseContext(
+        scope_id=scope_id,
+        intent="What works to cut fuel poverty",
+        context={},
+        extraction_run_id=extraction_run_id,
+        grouping_run_id=grouping_run_id,
+    )
+    proposal = propose_synthesis_plan(
+        conn,
+        project_id=project_id,
+        context=plan_context,
+        synthesis_backend=StubSynthesisBackend(),
+    )
+    available_ids = [group["group_id"] for group in proposal["available_groups"]]
+
+    directive = compile_synthesis_directive(
+        {
+            "sections": [
+                {
+                    "title": "Interventions in the corpus",
+                    "focus": "What the assembled evidence reports on interventions.",
+                    "group_ids": available_ids,
+                }
+            ],
+            "group_ids": available_ids,
+            "retrieval_boosts": {"screen_confidence": {"lo": 1.0, "hi": 3.0}},
+        }
+    )
+
+    _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        extraction_run_id=extraction_run_id,
+        grouping_run_id=grouping_run_id,
+        context={"synthesis": directive},
+    )
+
+    row = conn.execute(
+        select(synthesis_result).where(synthesis_result.c.project_id == project_id)
+    ).one()
+    assert row.synthesis_provenance["section_set"]["source"] == "scope_context"
+    block_titles = {block_row["title"] for block_row in row.blocks}
+    assert "Interventions in the corpus" in block_titles
+    boosts = row.synthesis_provenance["directive"]["retrieval_boosts"]
+    assert boosts["screen_confidence"] == {"lo": 1.0, "hi": 3.0}
