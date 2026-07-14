@@ -4,8 +4,11 @@ Slice C of the owner-adjudicated pre-eval sequencing (2026-07-12): the last
 schema/composition slice before the eval slice. Shipped as **one slice, two phases**
 (owner call, 2026-07-14 — the adjudicated shape stands; no split).
 
-> **Status:** drafted. Contract approved (before planning): _pending_ ·
-> Plan approved (before implementation): _pending_ · ADR: expected (multi-facet design).
+> **Status:** approved. Contract approved (before planning): **2026-07-14 · owner**
+> (all gate decisions settled in the design conversation; Codex cost investigation
+> folded in owner-confirmed; contract-stage adversarial review adjudicated — 15/15
+> findings folded) · Plan approved (before implementation): _pending_ ·
+> ADR: expected (multi-facet clustering-engine design).
 
 ## Goal
 

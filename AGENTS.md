@@ -22,8 +22,10 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `022-synthesis-refinement` (design step 1 —
-contract being drafted; Tier 3). This is Slice C of the
+Implementation — task `022-synthesis-refinement` (contract APPROVED
+2026-07-14 · owner — all gate decisions settled, Codex cost
+investigation folded in, contract-stage adversarial review
+adjudicated 15/15; design step 3 — plan being drafted; Tier 3). This is Slice C of the
 owner-adjudicated pre-eval sequencing (2026-07-12), shipped as
 ONE slice with two phases (owner call, 2026-07-14): **Phase 1 —
 multi-facet grouping** in the owner's in-component shape (facet
