@@ -1,5 +1,9 @@
 # Knowledge update log
 
+## 2026-07-14 (task 023 build, step 6)
+* **Creation**: Added [orchestrate-stub-smoke](orchestrate-stub-smoke.md) — the standardised zero-egress full-chain check after skeleton's retirement; no-key stub mode, scripted console, and the commits-rows caveat (run after the suite, reset the test DB). Authored in-build per the approved 023 plan (Phase H); remaining 023 knowledge candidates land at step 8 from verification.md § Review handoff.
+* **Update**: [reasoning-model-output-cap](reasoning-model-output-cap.md) — living-doc sweep: `extract_prompt.py` citation repointed to `evidence_base/extract/iof_prompt.py` (023 regroup).
+
 ## 2026-07-14 (task 022 step 8)
 * **Creation**: Added [two-stage-clustering-closes-partition-cliff](two-stage-clustering-closes-partition-cliff.md) — the ~184-value duplicate-id cliff was the exhaustive-partition response format, not model capacity (0/9 arms fabricated ids); same framing change removed over-fragmentation; component sentinels forbidden in discovery (022 replays + review stack).
 * **Creation**: Added [live-only-reachability-coverage-class](live-only-reachability-coverage-class.md) — three live-only bugs behind a green 1300-test suite: judge echo, enriched-record strict re-validation, tracing-enabled-only branch (022 live checks).

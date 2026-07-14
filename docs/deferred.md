@@ -1364,3 +1364,45 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   kwargs through every call site. `exc_info` renderers (`dict_tracebacks` for JSON,
   `format_exc_info` for console) were added to the processor chain so
   `exc_info=True` now carries type/traceback.
+
+## Codebase health (task 023 seams)
+
+- **4× ThreadPoolExecutor fan-out consolidation** — extract/screen(×2)/classify each
+  hand-roll the submit→wait→collect→retry shape; one `fan_out_with_retry` would save ~60
+  lines but the per-site diffs are subtle (error taxonomy, budget hooks). Excluded from
+  023's behaviour-preserving scope by contract; take it when one of the four next changes
+  for a product reason.
+- **Search-as-shared-tool layer** (owner ruling, 2026-07-14) — the spec classes search as
+  a universal core tool, but no incoming capability searches; they read the EB corpus.
+  Extract a `tools/`-style search layer only when a web-search capability or a new data
+  source lands. Until then search lives in `evidence_base/sourcing/`.
+- **Five-facet group fan-out** (023 optimisation lane #1, high impact on deep runs) — the
+  5 facet pipelines in `group` are verified order-independent, but claim-theme facets read
+  via a shared non-thread-safe Connection. Safe shape: hoist per-facet conn reads before a
+  pure-worker ThreadPoolExecutor region (mirror extract's fan-out). Candidate to ride the
+  eval slice if deep-run wall-time hurts throughput; stacks with the 4-wide assignment
+  fan-out 023 shipped (WP10a).
+- **Embeddings batch-slice parallelism** (023 optimisation lane #4, low) — slices are
+  independent but share the conn; not smallest-diff to do safely. Note, don't rush.
+- **Test consolidations 3–5** (023 lane 4) — IOF record-factory twin beside
+  `make_icf_wire_record` (~80–100 lines), shared fake-Langfuse (~50), `capturing_fetch`
+  factory in test_search_live (~60). Separable; take with the next test-heavy slice.
+- **`synthesis_prompts_v6` deletion** — KEEP ruling holds only through the eval slice
+  (frozen cost baseline); delete in the first post-eval cleanup.
+- **`grounding.produce_grounded_block` leg** — production-caller-less after 023's echo cut
+  (`content_hash` is the live part of `grounding.py`; the leg survives in tests only).
+  Split/retire the dead leg when `grounding.py` next changes; not cut in 023 (scope guard:
+  not on the adjudicated list).
+- **`run_harness(provider=…)` kwarg** — zero component readers post-echo; removal ripples
+  into every caller. Retire alongside the inference-seam decisions at Bedrock, when the
+  routing seam is touched anyway.
+- **`core/tracing.py` EB-domain score renderers** — tracing imports
+  `evidence_base.corpus.theme_grouping` + finding PROFILE_IDs for its `*_score_summary`
+  functions; a core→capability edge the regroup made visible. Relocate renderers into
+  their phase modules (or invert via injection) in a slice that touches tracing.
+- **Per-lane test-DB partition — RECURRENCE (023)** — the 018 entry above fired twice in
+  023's build: parallel lane done-checks and the orchestrate smoke both left committed
+  rows that break migration-roundtrip downgrades across sessions. 023's mitigations:
+  serial gate re-runs + dropdb/createdb resets + the smoke recipe
+  (`docs/knowledge/orchestrate-stub-smoke.md`). If parallel lanes stay routine, promote
+  this to per-lane disposable DATABASE_URLs.
