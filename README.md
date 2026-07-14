@@ -1,25 +1,15 @@
-# 🌐 Policy Atlas
+# Policy Atlas v3.0
 
-We're harnessing AI to improve policy design, helping users search, synthesise, and
-simulate policy interventions.
+An evidence-led policy-analysis workspace: capabilities run bounded, inspectable
+pipelines over an acquired evidence corpus and produce grounded artefacts - evidence
+syntheses whose significant claims carry citations, verbatim quotes and appraisal. 
+The v3.0 backend ships one capability,
+the **Evidence Base**: plan → acquire → screen → classify → appraise → ingest →
+(characterise · select · extract · group, plan-selected) → synthesise.
 
-Find more information [on the website](https://www.nesta.org.uk/project/policy-atlas-harnessing-ai-to-improve-policy-design/).
-
-⚠️ This is heavy work-in-progress ⚠️
-
-## Overview
-
-This repo holds the **Policy Atlas v3.0 backend** — an evidence-led policy-analysis
-workspace where capabilities run bounded, inspectable pipelines over an acquired
-evidence corpus and produce grounded artefacts: every significant claim carries its
-citations, verbatim quotes and appraisal.
-
-The first capability, the **Evidence Base**, runs end-to-end:
-
-> plan → acquire → screen → classify → appraise → ingest →
-> (characterise · select · extract · group) → synthesise
-
-Further capabilities (options assessment, value for money, …) will land beside it.
+Product intent and system contracts live in [`docs/specs/`](docs/specs/index.md);
+architectural decisions in [`docs/adr/`](docs/adr/); per-task contracts and evidence
+in [`docs/tasks/`](docs/tasks/).
 
 ## Layout
 
@@ -37,36 +27,31 @@ src/policy_atlas/
   core/            schema, db, events, logging, tracing, usage, model-client
                    plumbing, embeddings
 alembic/           database migrations
-tests/             mirrors the src tree; tests/data/ holds all fixtures
+tests/             mirrors the src tree; conftest runs migrations once per session;
+                   tests/data/ holds all fixtures (full-text corpus + sanitized
+                   provider records)
 docs/              specs, ADRs, task records, knowledge base, agentic-ops
 ```
 
-## Getting started
+## Setup
 
 Requires Python ≥ 3.12, [uv](https://docs.astral.sh/uv/), and Docker (Postgres).
 
 ```sh
 docker compose up -d      # Postgres (dev + test databases)
 make setup                # uv sync + test DB provisioning
-make verify               # okf-validate · tests · mypy · ruff · build (the gate)
+make verify               # okf-validate · tests · mypy · ruff · build
+make verify-fast          # inner-loop variant (skips the slow ingest suite)
 ```
 
-Run the orchestrator CLI:
+## Running
+
+The orchestrator CLI is the product entry point:
 
 ```sh
 uv run python -m policy_atlas.runtime.orchestrate
 ```
 
-With no `OPENAI_API_KEY` set it runs in **stub mode** — deterministic, zero egress.
-With keys configured (`.env`), the same command runs the live chain.
+## Licence
 
-## Documentation
-
-Product intent and system contracts live in [`docs/specs/`](docs/specs/index.md),
-architectural decisions in [`docs/adr/`](docs/adr/), and per-task contracts and
-evidence in [`docs/tasks/`](docs/tasks/).
-
-## License
-
-This project is licensed under the GNU Affero General Public License v3.0 — see the
-[LICENSE](LICENSE) file for details.
+AGPL-3.0-only (see [LICENSE](LICENSE)).
