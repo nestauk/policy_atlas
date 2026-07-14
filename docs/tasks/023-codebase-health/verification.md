@@ -11,7 +11,7 @@ Evidence for the pre-eval codebase-health slice. Public-safe. Filled at step 6;
 | Full `make verify` at phase gates | pass | baseline (1349 pre-slice) · post-C (1328) · post-D (1328) · post-E (1328) · exit (1328). Count drops C→ onwards are deleted dead-path tests, itemised per phase below. |
 | `make verify-fast` at A/B/F gates | pass | F's first run was red — see § Incidents. |
 | Prompt pin tests | pass, **unmodified** | every pinned surface byte-identical through the vetter merge + renames + moves: `extract_iof_v7`, `extract_icf_v2` (+ both vetter prompts `extract_finding_vetter_v3`/`extract_icf_vetter_v2`), `planner_v5`, screen/classify surfaces, `synthesise_section_v7`/frozen v6, `synthesise_sections_v2`. Named pin tests listed in the C2 lane report (task notes). |
-| Contract grep gates | pass (all zero) | every retired flat path (`policy_atlas.grouping`, `.plan`, `.extraction_records`, `.extract_prompt`, `.implementation_context_*`, `.icf_finding_vetter`, `.ingest\b`, `.facet_grouping`, `.skeleton`, `policy-atlas-skeleton`, `.synthesis_prompts_v6` old path) → 0 hits outside historical docs; catch-all flat-import scan → 0. |
+| Contract grep gates | pass (all zero) | every retired flat path (`policy_atlas.grouping`, `.plan`, `.extraction_records`, `.extract_prompt`, `.implementation_context_*`, `.icf_finding_vetter`, `.ingest\b`, `.facet_grouping`, `.skeleton`, `policy-atlas-skeleton`, `.synthesis_prompts_v6` old path) → 0 live module-path/import hits (the word "skeleton" survives as prose describing the retirement in ADR 0019 and the smoke runbook — descriptions, not paths in use); catch-all flat-import scan → 0. |
 | `uv lock` audit (WP9) | pass | **0 version-line changes, 0 package add/removes**; 14 requires-dist metadata lines = the approved declarations themselves. Contract's lock pin held in intent (resolved versions identical) — flagged deviation, not a stop. |
 
 ## End-to-end command
@@ -64,8 +64,11 @@ behaviour-preserving except the three contract-named WP10 optimisations.
   tests); vetter plumbing merged into one `finding_vetter.py` (−1 module, prompts
   byte-identical); echo chain cut (harness/plan/state fields; 7 test sites repointed —
   `block.written` event type retired with it, event-log canon 6→5, a named consequence of
-  the approved cut; `test_echo_requires_source_snapshot_id` deleted as it would duplicate
-  existing per-component tests); characterise dead wrapper; acquire legacy path
+  the approved cut; `test_echo_requires_source_snapshot_id` deleted as dead-path — it
+  asserted `Plan(component="echo")` raises without `source_snapshot_id`, and both the echo
+  component and the `source_snapshot_id` field were removed with the cut [rationale
+  corrected by the review stack: the original "duplicates per-component tests" framing was
+  wrong — surviving tests assert payload presence, a different contract]); characterise dead wrapper; acquire legacy path
   (`executed_calls` now required; tests build real `ExecutedCall`s via a new
   `tests/helpers.executed_calls_for`); 24/25 anchored small items (item 20 `_scrub_nul`
   delegation declined — function live, edit cosmetic; `parse_structured()` reached 10 call
@@ -196,8 +199,105 @@ Gates re-run post-rider: full `make verify` + grep gates (zero
 
 ## Review findings
 
-_Added after the review stack (fresh conversation)._
+Stack run 2026-07-14 in a fresh conversation (this file's author-of-record for this
+section is the review-phase lead, not the build chat). Lanes: contract-verifier (pinned
+Opus, read-only) · security-auditor · adversarial pass on **deep-reasoner** (Codex
+exhausted — recorded fallback; family heterogeneity NOT achieved, both heavyweight lanes
+Claude-family) · `/code-review` medium (8 lens-scoped finder angles, fast-workers).
+Self-verify gate before lanes: full `make verify` green (1328 passed, mypy `Success: no
+issues found in 155 source files`, ruff clean, wheel+sdist). The 154→155 mypy delta vs
+the step-6 record is the post-exit rider's `tests/provider_fixtures.py` — explained,
+benign. Live-trace lane n/a (no live runs, contract pin).
+
+**Adopted (fixed in-stack, gate re-run after):**
+1. **Migration comment edit disclosed** (contract-verifier MINOR + conventions finder —
+   convergent across two lanes): `alembic/versions/0f4e2d8c9b1a_extract_schema_v2.py:26`
+   had its comment cross-reference repointed `extract_prompt→iof_prompt` — comment-only,
+   zero DDL change, but it crosses the contract's "alembic/versions content is never
+   edited" absolute and was not in the build's flagged-deviations list. Adjudication:
+   **kept** (reverting would leave the comment pointing at a deleted module; the edit is
+   doc-truth, exactly this slice's business) and recorded here as the named exception
+   under rubric item 4 — owner ratifies at PR review.
+2. **Stale egress docstrings in `runtime/harness.py`** (security lane LOW + adversarial
+   NOTE): module docstring still claimed the retired `block.written` event; `run_harness`'s
+   `search_backends` arg doc still described the pre-rider fixture-backend default ("the
+   default remains both backends") — the code is *stricter* than the doc claimed. Both
+   rewritten to the as-built behaviour.
+3. **Dead `if executed_calls is not None:` guard in `acquire.py:542`** (`/code-review`
+   cross-file angle): the legacy-path cut made `executed_calls` required (non-Optional),
+   leaving the wrapper dead — and worse, it would silently skip unknown-backend validation
+   if the type contract were ever violated. Guard removed; validation now unconditional.
+4. **Two verification.md corrections** (contract-verifier NOTE + adversarial NOTE),
+   applied above in place: the `test_echo_requires_source_snapshot_id` deletion rationale
+   (dead-path, not duplicate) and the skeleton grep-gate phrasing (prose mentions in
+   living docs vs module paths).
+
+**Flagged deviations — all seven confirmed/ratified** (adopt as-is, no contract
+escalation): Phase A direct-call fail-closed tests (lead re-traced: wire-level typing
+upstream intercepts malformed input, so direct calls are the only way to exercise
+`validate_iso_alpha2`'s defense-in-depth branches; coverage present and asserts the exact
+error type) · B1 `usage_metadata` rename/widen (adversarial: emitted metadata identical,
+handles both usage forms) · C4 `parse_structured` 10-site reach + planner signature
+(adversarial: error strings byte-identical via `label="planner"`) · C3 repoints +
+`block.written` retirement (adversarial: zero live emitters/consumers; canon-5 test
+exists) · E path-anchor fixes (all path-anchor class) · WP9 requires-dist-only lock delta
+(lead-verified: 0 resolved-version changes) · `_scrub_nul` decline (live at
+`extract.py:663` + `planner.py:125`). Plus one the stack surfaced: **WP10a used a local
+literal `4` with parity comment instead of importing `MAX_CONCURRENT_BATCHES`**
+(deliberate — avoids a `group→corpus` import edge; residual risk is silent drift if the
+corpus constant changes; ratified).
+
+**Declined (recorded reasons):**
+- `core/tracing.py` flat-counts branch deletion + `_embedding_rate_limit_jitter_s` inline
+  (adversarial enumeration challenges): both matched to adjudicated review-findings line
+  items ("tracing.py:501 dead branch", "embeddings jitter wrapper"); the tracing branch
+  independently verified unreachable (group counts are facet-keyed; no top-level
+  `findings_total`).
+- `core/tracing.py` EB-domain imports (altitude + adversarial): pre-existing coupling,
+  disclosed in § Review handoff, deferred.md entry exists; no module-level cycle (verified
+  — the DAG check legitimately passes at module granularity).
+- `parents[4]` anchor fragility (altitude + security INFO): contract-adopted decision;
+  the suite exercises the anchor, so a wrong depth fails `make verify` loudly.
+- `scripts/_fixture_sanitizer.py` helper docstrings (conventions): underscore-private
+  module with a module docstring; helpers are one-liners below the public-surface bar.
+- Recorder-script retry-loop removal (removed-behavior finder): adjudicated cut ("curl
+  retry in script"); dev-time, operator-run.
+- Extraction-backend double message-build (simplification finder): identical on dev —
+  pre-existing, out of diff scope.
+- test_harness.py:31 comment mentioning `block.written` (adversarial): accurate
+  historical note explaining the repoint, not a live claim.
+
+**Deferred (new entries riding this PR):** two security-lane INFO items routed to the
+Bedrock whole-repo pass — consider `<N+1` ceilings on the untrusted-input parsers
+(`lxml`, `trafilatura`), and `FixtureFetcher`'s `assert`-based basename-traversal guard
+→ `ValueError` (vanishes under `python -O`; dev/test-only surface).
+
+**Convergence notes:** the migration comment edit was found independently by two lanes
+(high confidence); the WP10 optimisations were verified correct by two independent lanes
+(efficiency finder + adversarial F-pass: deterministic submit-order merge, empty-rows
+guard, zero-norm guard + frozen vector set). Unique-to-one-lane catches justifying their
+lanes: the harness egress docstring (security), the dead `executed_calls` guard
+(`/code-review` cross-file), the deletion-rationale inaccuracy (adversarial). The
+security lane additionally verified all load-bearing controls intact through the regroup
+(pinned-IP SSRF transport, 015 query sanitizers, credential-excluding cache key,
+pytest-socket denial, fail-closed country validation). Fake-done check on the stack's own
+fixes: doc rewrites + one dead-guard removal — no test touched, no error swallowed; gate
+re-run green below.
+
+**Post-fix gate:** full `make verify` green after the three fixes (1328 passed, mypy
+clean, ruff clean, wheel+sdist built).
 
 ## Rubric status
 
-_Added after the review stack._
+| # | Item | Status |
+|---|---|---|
+| 1 | All nine WPs + WP10 landed or deferred with sign-off | **HOLDS** (contract-verifier: WP1–WP10 all present as-built; exclusions in deferred.md) |
+| 2 | `make verify` green · stub smoke under new layout · grep gates zero | **HOLDS** (gate green pre- and post-stack; `test_full_stub_end_to_end_mints_artefact` asserts minting, not just exit-0; all gates 0 live hits) |
+| 3 | No unapproved gated change; deps = WP9 set; lock unchanged in resolution | **HOLDS** (pyproject diff = exactly WP9 + approved script removal + pyright prune; uv.lock 0 version changes) |
+| 4 | No generated files hand-edited | **HOLDS with one named exception** — the comment-only cross-reference fix in migration 0f4e2d8c9b1a (finding 1 above; DDL untouched; owner ratifies at PR review) |
+| 5 | No tests deleted/weakened without justification; pins unmodified | **HOLDS** (pins byte-identical; all 27 directive tests survive; every deleted test traced to deleted code; consolidated doubles preserve raise-on-unexpected guards) |
+| 6 | Behaviour preservation; deletions match line items; keeps untouched | **HOLDS** (adversarial: no smuggled behaviour change; both enumeration challenges matched to line items; v6 lane/ChunkReranker/search cache/leg_directive untouched; skeleton fully retired) |
+| 7 | Verification evidence recorded incl. routing note | **HOLDS** (this file; codex-exhaustion routing note in § Review handoff and above) |
+| 8 | Known gaps + deferred seams listed | **HOLDS** (all contract-named seams in deferred.md + two new security-lane items this stack) |
+| 9 | Docs truth vs as-built tree | **HOLDS** (README/AGENTS.md/readiness.md verified by two lanes; two stale harness docstrings found and fixed in-stack) |
+| 10 | Tier-3 stack ran, adjudicated in fresh conversation | **HOLDS** (this section; heterogeneity caveat recorded — both heavyweight lanes Claude-family per the Codex-exhaustion fallback) |

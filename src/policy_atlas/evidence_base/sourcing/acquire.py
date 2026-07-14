@@ -539,16 +539,15 @@ def acquire_sources(
     if len(set(names)) != len(names):
         raise ValueError(f"duplicate backend names: {names}")
     backend_by_name = {backend.name: backend for backend in backends}
-    if executed_calls is not None:
-        unknown_call_backends = [
-            call.backend_name
-            for call in executed_calls
-            if call.backend_name not in backend_by_name
-        ]
-        if unknown_call_backends:
-            raise ValueError(
-                f"executed call references unknown backend(s): {unknown_call_backends}"
-            )
+    unknown_call_backends = [
+        call.backend_name
+        for call in executed_calls
+        if call.backend_name not in backend_by_name
+    ]
+    if unknown_call_backends:
+        raise ValueError(
+            f"executed call references unknown backend(s): {unknown_call_backends}"
+        )
 
     # Preload the project's existing identity keys — dedup is then in-memory,
     # and also catches duplicates within this call's own result stream.

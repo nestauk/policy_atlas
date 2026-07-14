@@ -2,7 +2,7 @@
 
 The StateGraph dispatches components by name from the compiled Config.
 In-process this slice; durable checkpointer is a deferred seam.
-Block-boundary commit is modelled as one event (component.completed + block.written).
+Component completion is modelled as one event (component.completed).
 """
 
 import functools
@@ -609,8 +609,8 @@ def run_harness(
             kept required pending a live grounding/provider-backed seam
             (task 023 C3: retired the echo node, its sole reader).
         search_backends: Backends for the acquire component, searched in list
-            order; when omitted, the compiled ``search_backend_scope`` selects
-            the fixture backend set. The default remains both backends.
+            order; when omitted, the default is empty — search backends arrive
+            only by injection (task 023 rider), and acquire adds nothing.
         search_generation_backend: Generation backend for search fan-out;
             defaults to ``StubSearchGenerationBackend()`` — no default egress.
         document_fetcher: Fetcher for the ingest_full_text component; defaults

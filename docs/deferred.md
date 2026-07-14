@@ -1406,6 +1406,13 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   serial gate re-runs + dropdb/createdb resets + the smoke recipe
   (`docs/knowledge/orchestrate-stub-smoke.md`). If parallel lanes stay routine, promote
   this to per-lane disposable DATABASE_URLs.
+- **Bedrock security-pass riders (023 review stack, security lane)** — two diff-scoped
+  observations routed to the deferred whole-repo security pass: (1) the untrusted-input
+  parsers `lxml` and `trafilatura` have floors but no ceilings — consider the `<N+1`
+  treatment the product-egress SDK already gets, since a lock regen crossing a major on
+  an HTML parser is a silent behaviour change on hostile input; (2) `FixtureFetcher`'s
+  manifest-basename traversal guard is an `assert` (vanishes under `python -O`) —
+  dev/test-only surface today, should become a `ValueError`.
 - **Monorepo hoist: `backend/` (owner layout intent, 2026-07-14)** — when the frontend
   is pulled into this repo it lands at `front-end/`, the CDK at `infra/` (the reason
   023's shared-layer package is `core/`, not `infra/` — ADR 0019). At that point the
