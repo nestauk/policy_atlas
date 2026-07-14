@@ -137,13 +137,19 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
    2026-07-14): the shipped one-call partition over-fragments — too many
    too-granular groups. The exhaustive-partition framing is a plausible cause
    (every value must land somewhere in one response, so singleton-ish groups
-   emerge); open discovery removes that pressure, and the new discovery prompt
-   carries an **explicit numeric granularity target** (a group-count band /
-   member-size expectation — numeric per prompting doctrine, value pinned at plan
-   time, lead-authored). Never fixed by catch-all buckets (`FORBIDDEN_GROUP_LABELS`
-   stands) or code-side forced merges — coarseness is asked for in discovery,
-   honesty stays in assignment. Replay evidence must show granularity against the
-   observed live over-fragmentation, not just id-integrity.
+   emerge); open discovery removes that pressure. Steering (owner-shaped,
+   2026-07-14 — corpus sizes vary too much for an absolute target): a
+   **corpus-relative numeric ceiling, never an absolute target** — a bound
+   expressed as a function of unit count (ratio pinned at plan time), computed
+   per run in code and injected into the discovery prompt as that run's number;
+   **no lower target** (a corpus with three genuine themes gets three groups);
+   direction carried by qualitative guidance ("a group is a recurring pattern
+   across sources, not a restatement of one value"). Never fixed by catch-all
+   buckets (`FORBIDDEN_GROUP_LABELS` stands) or code-side forced merges —
+   coarseness is asked for in discovery, honesty stays in assignment. Replay
+   evidence must show granularity behaviour across **differently-sized pinned
+   inputs** against the observed live over-fragmentation, not just id-integrity;
+   ratio calibration is eval work.
 5. **Facet vocabulary this slice** (decision 3 — **SETTLED: build**, owner
    2026-07-14): `intervention` / `outcome` / `population` (existing value facets,
    now running on the engine) + **claim-theme facet(s) scoped by `context_type`**
