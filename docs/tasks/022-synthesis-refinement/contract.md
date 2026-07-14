@@ -33,7 +33,8 @@ facet at group grain — one `grouping_result` migration) on the **two-stage
 clustering engine** (open discovery + batch-validated assignment — the value-list
 scale fix; characterise refactored onto it, behaviour-preserving), facet-qualified
 group ids through directive / `query_findings` / envelope, the **ICF claim-theme
-facet(s)**, the **cross-kind UNION read view** as the loader's read surface; and the
+facets** (barrier/enabler/mechanism), the **cross-kind UNION read view** as the
+loader's read surface, the bounded **ICF `context_label` rider** (`icf_v2`); and the
 phase-2 cost/surface set under **one** writer prompt-version bump
 (`synthesise_section_v6`) with replay evidence and a before/after cost measurement on
 the cache-discounted curve. Spec flow-back (components §8/§9, data-model) +
@@ -165,9 +166,26 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
    **The high-value trio only this slice** (owner call, 2026-07-14):
    `barrier_theme` / `enabler_theme` / `mechanism_theme`; the remaining four
    `context_type`s are a config addition later (same engine, same projection —
-   recorded in deferred.md, not machinery). A short source-named ICF label field
-   stays **rejected** (extraction-time canonicalisation plus a pre-ground-truth
-   fingerprint invalidation).
+   recorded in deferred.md, not machinery).
+   **ICF `context_label` rider (owner, 2026-07-14 — reopens and supersedes the
+   earlier rejection; the 021 setting-rider shape):** one nullable Text column on
+   `implementation_context_finding`, **strictly source-named** — filled only when
+   the source itself provides a short name for the claim's theme (a subheading, a
+   named barrier in the source's own table); null otherwise, **never
+   extractor-authored summarisation** (authorship stays with the source — the
+   line that distinguishes it from the rejected free-label shape; adherence is a
+   named ICF-vetter flag class). `icf_v1 → icf_v2` fingerprint bump (ICF's own
+   domain — IOF memos untouched), one prompt-rule block in `extract_icf_v2`,
+   `field_coverage` per the nullable-field pattern; v1 rows read "not recorded
+   under icf_v1" — no backfill. **Nothing else rides the bump.** Reasoning
+   corrections recorded for the ADR: cross-source naming variance was never the
+   objection (value clustering absorbs it — same as intervention/outcome);
+   clustering-noise dissolves with claim prose riding as unit context; and
+   pre-ground-truth is the CHEAP fingerprint moment (the pre-eval sequencing
+   criterion itself) — the eval slice authors ICF ground truth next, so the field
+   gets ground-truthed alongside the rest, which is exactly why it lands now or
+   never cheaply. Readers: grouping unit context now; the finding explorer at the
+   web-app slice (the data-model presentation-grain note).
    (A bare deterministic partition BY the seven-value enum is not a facet — that
    read surface already exists as `icf_context_type_count`; named here so nobody
    ships it as one.) Cross-kind clustering on the shared-reference facets is
@@ -271,8 +289,9 @@ inherit the deferral" is the owner's own instruction):**
 
 ## Constraints & approval gates
 
-- **Schema** 🛑: the `grouping_result` migration (decision 1) — the slice's one
-  schema gate. No other table changes expected; a second one is a stop condition.
+- **Schema** 🛑: two approved migrations — the `grouping_result` migration
+  (decision 1) and the ICF `context_label` rider column (owner-approved
+  2026-07-14, `icf_v2`). Any further table change is a stop condition.
 - **Prompt-bearing surfaces are lead-only** (AGENTS.md): `synthesise_section_v6`,
   the group prompt surfaces (discovery + assignment — supersede `group_facet_v1`),
   the claim-theme facet prompts, the planner-prompt sweep (coupled-readers rule —
@@ -298,9 +317,11 @@ rates) are public-safe.
 
 OpenAI under approved controls (Bedrock post-eval). Prompt-bearing changes (all
 lead-authored): `synthesise_section_v6` (cache layout · repair schema · scoping tool
-description), group partition prompt vNext (facet fan-out · id scheme · batching),
-planner prompt sweep for group-semantics vocabulary. Judge prompt/envelope changes
-only via decisions B/E under the A/B protocol.
+description), the group discovery + assignment prompts (superseding
+`group_facet_v1`), the claim-theme facet prompts, `extract_icf_v2` (the
+`context_label` rule block — nothing else changes in that prompt), the ICF-vetter
+label flag class, planner prompt sweep for group-semantics vocabulary. Judge
+prompt/envelope changes only via decisions B/E under the A/B protocol.
 
 ## Disciplines binding this slice
 
@@ -371,7 +392,9 @@ correctness · scope creep toward the Out list.
 3. **First ICF content facet — SETTLED in full (owner, 2026-07-14)** — claim-theme
    facets on the item-4 engine, **high-value trio only**: `barrier_theme` /
    `enabler_theme` / `mechanism_theme` (remaining four context_types = later
-   config, deferred.md). A short ICF label field is rejected. Residual for the
+   config, deferred.md). **Plus the `context_label` rider** (owner, same day,
+   reopening the earlier rejection): nullable, strictly source-named, `icf_v2`
+   bump, nothing else rides — the 021 setting-rider precedent. Residual for the
    plan: the deep-depth default facet set.
 4. **Per-facet failure isolation** — honest per-facet failure rows (proposed) vs
    all-or-nothing.
