@@ -355,6 +355,7 @@ def direction_spread(directions: Iterable[str]) -> dict[str, int]:
 def build_groups_payload(
     findings: Sequence[FindingFacetView],
     *,
+    facet: str,
     values: Sequence[FacetValue],
     groups: Sequence[AcceptedGroup],
     ungrouped_value_ids: Collection[str],
@@ -364,6 +365,7 @@ def build_groups_payload(
 
     Args:
         findings: Finding projections for the referenced extraction run.
+        facet: Grouping facet that owns this payload bucket.
         values: Extracted distinct facet values.
         groups: Accepted grouped value ids.
         ungrouped_value_ids: Explicit or repair-missing residual value ids.
@@ -412,7 +414,10 @@ def build_groups_payload(
         )
 
     group_payloads: list[dict[str, Any]] = []
-    for group, member_set in zip(groups, group_member_sets, strict=True):
+    for index, (group, member_set) in enumerate(
+        zip(groups, group_member_sets, strict=True),
+        start=1,
+    ):
         member_values = [value.surface for value in values if value.value_id in member_set]
         member_finding_ids = [
             finding_id
@@ -427,6 +432,8 @@ def build_groups_payload(
         )
         group_payloads.append(
             {
+                "group_id": f"{facet}:g{index:02d}",
+                "facet": facet,
                 "label": group.label,
                 "description": group.description,
                 "member_values": member_values,
@@ -449,37 +456,39 @@ def build_groups_payload(
     ]
 
     return {
-        "groups": group_payloads,
-        "ungrouped": {
-            "values": ungrouped_values,
-            "finding_ids": ungrouped_finding_ids,
-            "finding_kinds": [
-                finding_kind_by_id[finding_id] for finding_id in ungrouped_finding_ids
-            ],
-            "member_counts": _member_counts(ungrouped_finding_ids, finding_kind_by_id),
-            "direction_spread": _spread_for_finding_ids(
-                ungrouped_finding_ids,
-                finding_direction_by_id,
-                finding_kind_by_id,
+        facet: {
+            "groups": group_payloads,
+            "ungrouped": {
+                "values": ungrouped_values,
+                "finding_ids": ungrouped_finding_ids,
+                "finding_kinds": [
+                    finding_kind_by_id[finding_id] for finding_id in ungrouped_finding_ids
+                ],
+                "member_counts": _member_counts(ungrouped_finding_ids, finding_kind_by_id),
+                "direction_spread": _spread_for_finding_ids(
+                    ungrouped_finding_ids,
+                    finding_direction_by_id,
+                    finding_kind_by_id,
+                ),
+            },
+            "no_value": {
+                "finding_ids": list(no_value_finding_ids),
+                "finding_kinds": [
+                    finding_kind_by_id[finding_id] for finding_id in no_value_finding_ids
+                ],
+                "member_counts": _member_counts(no_value_finding_ids, finding_kind_by_id),
+                "direction_spread": _spread_for_finding_ids(
+                    no_value_finding_ids,
+                    finding_direction_by_id,
+                    finding_kind_by_id,
+                ),
+            },
+            "overall_direction_spread": direction_spread(
+                finding.effect_direction
+                for finding in findings
+                if finding.kind == "iof" and finding.effect_direction is not None
             ),
-        },
-        "no_value": {
-            "finding_ids": list(no_value_finding_ids),
-            "finding_kinds": [
-                finding_kind_by_id[finding_id] for finding_id in no_value_finding_ids
-            ],
-            "member_counts": _member_counts(no_value_finding_ids, finding_kind_by_id),
-            "direction_spread": _spread_for_finding_ids(
-                no_value_finding_ids,
-                finding_direction_by_id,
-                finding_kind_by_id,
-            ),
-        },
-        "overall_direction_spread": direction_spread(
-            finding.effect_direction
-            for finding in findings
-            if finding.kind == "iof" and finding.effect_direction is not None
-        ),
+        }
     }
 
 
@@ -495,12 +504,36 @@ def assert_grouping_invariants(
     Raises:
         InvalidPartitionOutput: If coverage, size or spread invariants fail.
     """
+    if not isinstance(payload, dict):
+        raise InvalidPartitionOutput("grouping payload must be an object")
+    if not payload:
+        raise InvalidPartitionOutput("grouping payload must contain at least one facet")
+    for facet, facet_payload in payload.items():
+        if not isinstance(facet, str) or not facet:
+            raise InvalidPartitionOutput("grouping facet key must be a non-empty string")
+        if not isinstance(facet_payload, dict):
+            raise InvalidPartitionOutput(f"facet {facet} payload must be an object")
+        _assert_facet_grouping_invariants(
+            facet_payload,
+            finding_ids=finding_ids,
+            facet=facet,
+        )
+
+
+def _assert_facet_grouping_invariants(
+    payload: dict[str, Any], *, finding_ids: Collection[str], facet: str
+) -> None:
     expected = Counter(finding_ids)
     actual: Counter[str] = Counter()
     size_total = 0
 
     groups = cast(list[dict[str, Any]], payload["groups"])
     for index, group in enumerate(groups):
+        if group.get("facet") != facet:
+            raise InvalidPartitionOutput(f"group {index} facet does not match payload key")
+        expected_group_id = f"{facet}:g{index + 1:02d}"
+        if group.get("group_id") != expected_group_id:
+            raise InvalidPartitionOutput(f"group {index} group_id is not deterministic")
         size = cast(int, group["size"])
         if size == 0:
             raise InvalidPartitionOutput(f"group {index} has size 0")

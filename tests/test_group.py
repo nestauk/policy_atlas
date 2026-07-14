@@ -286,16 +286,25 @@ def _group_count(conn: Connection, project_id: uuid.UUID) -> int:
 
 
 def _payload_finding_ids(payload: dict[str, Any]) -> set[str]:
-    groups = cast("list[dict[str, Any]]", payload["groups"])
-    ungrouped = cast("dict[str, Any]", payload["ungrouped"])
-    no_value = cast("dict[str, Any]", payload["no_value"])
-    return {
-        finding_id
-        for group in groups
-        for finding_id in cast("list[str]", group["member_finding_ids"])
-    } | set(cast("list[str]", ungrouped["finding_ids"])) | set(
-        cast("list[str]", no_value["finding_ids"])
-    )
+    finding_ids: set[str] = set()
+    for facet_payload in payload.values():
+        if not isinstance(facet_payload, dict):
+            continue
+        groups = cast("list[dict[str, Any]]", facet_payload["groups"])
+        ungrouped = cast("dict[str, Any]", facet_payload["ungrouped"])
+        no_value = cast("dict[str, Any]", facet_payload["no_value"])
+        finding_ids |= {
+            finding_id
+            for group in groups
+            for finding_id in cast("list[str]", group["member_finding_ids"])
+        } | set(cast("list[str]", ungrouped["finding_ids"])) | set(
+            cast("list[str]", no_value["finding_ids"])
+        )
+    return finding_ids
+
+
+def _facet_payload(payload: dict[str, Any], facet: str = "intervention") -> dict[str, Any]:
+    return cast("dict[str, Any]", payload[facet])
 
 
 def _spread_total(spread: dict[str, int]) -> int:
@@ -363,8 +372,8 @@ def test_happy_path_writes_rollup_summary_and_provenance(conn: Connection) -> No
         "provenance",
         "usage_totals",
     }
-    assert row["facet"] == "intervention"
-    assert row["flags"] == ["ungrouped_values"]
+    assert row["groups"].keys() == {"intervention"}
+    assert row["flags"] == {"intervention": ["ungrouped_values"]}
     assert summary["facet"] == "intervention"
     assert summary["facet_source"] == "default"
     assert summary["extraction_run_id"] == str(seeded.run_id)
@@ -389,7 +398,10 @@ def test_happy_path_writes_rollup_summary_and_provenance(conn: Connection) -> No
     assert sum(summary["counts"][key] for key in ("grouped", "ungrouped", "no_value")) == 6
 
     row_payload = cast("dict[str, Any]", row["groups"])
-    row_overall = cast("dict[str, int]", row_payload["overall_direction_spread"])
+    row_overall = cast(
+        "dict[str, int]",
+        _facet_payload(row_payload)["overall_direction_spread"],
+    )
     assert row_overall == summary["overall_direction_spread"]
     assert sum(row_overall.values()) == 6
 
@@ -399,6 +411,7 @@ def test_happy_path_writes_rollup_summary_and_provenance(conn: Connection) -> No
         "model",
         "mode",
         "facet",
+        "facets",
         "facet_source",
         "value_cap",
         "call_count",
@@ -413,6 +426,7 @@ def test_happy_path_writes_rollup_summary_and_provenance(conn: Connection) -> No
     assert provenance["model"] == "stub"
     assert provenance["mode"] == "stub"
     assert provenance["facet"] == "intervention"
+    assert provenance["facets"] == ["intervention"]
     assert provenance["facet_source"] == "default"
     assert provenance["value_cap"] == FACET_VALUE_CAP
     assert provenance["call_count"] == 1
@@ -437,7 +451,7 @@ def test_happy_path_writes_rollup_summary_and_provenance(conn: Connection) -> No
         "sha256": hashlib.sha256("\n".join(finding_id_strings).encode("utf-8")).hexdigest(),
     }
     assert base["facet_coverage"] == {"values_with_findings": 6, "no_value_count": 0}
-    assert row["counts"] == summary["counts"]
+    assert row["counts"] == {"intervention": summary["counts"]}
 
 
 def test_memo_reused_docs_are_included(conn: Connection) -> None:
@@ -461,7 +475,7 @@ def test_memo_reused_docs_are_included(conn: Connection) -> None:
     assert _payload_finding_ids(cast("dict[str, Any]", row["groups"])) == {
         str(finding_id) for finding_id in seeded.finding_ids
     }
-    assert cast("dict[str, int]", row["counts"])["findings_total"] == 2
+    assert cast("dict[str, int]", row["counts"]["intervention"])["findings_total"] == 2
 
 
 def test_foreign_run_findings_never_enter(conn: Connection) -> None:
@@ -541,23 +555,25 @@ def test_zero_findings_writes_empty_rollup_without_backend_call(conn: Connection
     assert backend.partition_calls == 0
     assert backend.repair_calls == 0
     assert summary["flags"] == ["empty_findings"]
-    assert row["flags"] == ["empty_findings"]
+    assert row["flags"] == {"intervention": ["empty_findings"]}
     assert row["groups"] == {
-        "groups": [],
-        "ungrouped": {
-            "values": [],
-            "finding_ids": [],
-            "finding_kinds": [],
-            "member_counts": {"iof": 0, "icf": 0},
-            "direction_spread": _zero_spread(),
-        },
-        "no_value": {
-            "finding_ids": [],
-            "finding_kinds": [],
-            "member_counts": {"iof": 0, "icf": 0},
-            "direction_spread": _zero_spread(),
-        },
-        "overall_direction_spread": _zero_spread(),
+        "intervention": {
+            "groups": [],
+            "ungrouped": {
+                "values": [],
+                "finding_ids": [],
+                "finding_kinds": [],
+                "member_counts": {"iof": 0, "icf": 0},
+                "direction_spread": _zero_spread(),
+            },
+            "no_value": {
+                "finding_ids": [],
+                "finding_kinds": [],
+                "member_counts": {"iof": 0, "icf": 0},
+                "direction_spread": _zero_spread(),
+            },
+            "overall_direction_spread": _zero_spread(),
+        }
     }
     assert summary["counts"] == {
         "findings_total": 0,
@@ -616,7 +632,7 @@ def test_all_null_population_goes_to_no_value_without_backend_call(conn: Connect
     assert summary["counts"]["no_value"] == 2
     assert summary["counts"]["groups"] == 0
     assert summary["residuals"]["no_value"]["finding_count"] == 2
-    assert row["facet"] == "population"
+    assert row["groups"].keys() == {"population"}
     assert _payload_finding_ids(cast("dict[str, Any]", row["groups"])) == {
         str(finding_id) for finding_id in seeded.finding_ids
     }
@@ -664,9 +680,14 @@ def test_mixed_unclear_directions_are_first_class_in_spreads(conn: Connection) -
     assert residual["direction_spread"]["unclear"] == 1
     assert _spread_total(residual["direction_spread"]) == residual["finding_count"]
     payload = cast("dict[str, Any]", row["groups"])
-    stored_group = cast("list[dict[str, Any]]", payload["groups"])[0]
+    stored_group = cast("list[dict[str, Any]]", _facet_payload(payload)["groups"])[0]
     assert cast("dict[str, int]", stored_group["direction_spread"])["mixed"] == 1
-    assert cast("dict[str, int]", payload["ungrouped"]["direction_spread"])["unclear"] == 1
+    assert (
+        cast("dict[str, int]", _facet_payload(payload)["ungrouped"]["direction_spread"])[
+            "unclear"
+        ]
+        == 1
+    )
 
 
 def test_group_membership_spans_iof_and_icf_with_iof_only_spread(
@@ -846,13 +867,21 @@ def test_group_membership_spans_iof_and_icf_with_iof_only_spread(
 
     assert summary["counts"]["findings_total"] == 2
     payload = cast("dict[str, Any]", _group_row(conn, project_id, group_run_id)["groups"])
-    group = payload["groups"][0]
+    group = _facet_payload(payload)["groups"][0]
     assert group["member_finding_ids"] == [str(iof_finding_id), str(icf_finding_id)]
     assert group["member_finding_kinds"] == ["iof", "icf"]
     assert group["member_counts"] == {"iof": 1, "icf": 1}
     assert group["direction_spread"]["increase"] == 1
     assert sum(group["direction_spread"].values()) == 1
-    assert sum(cast("dict[str, int]", payload["overall_direction_spread"]).values()) == 1
+    assert (
+        sum(
+            cast(
+                "dict[str, int]",
+                _facet_payload(payload)["overall_direction_spread"],
+            ).values()
+        )
+        == 1
+    )
     provenance = cast(
         "dict[str, Any]", _group_row(conn, project_id, group_run_id)["grouping_provenance"]
     )
@@ -952,7 +981,7 @@ def test_determinism_over_same_extraction_run(conn: Connection) -> None:
     first = _group_row(conn, project_id, first_run_id)
     second = _group_row(conn, project_id, second_run_id)
 
-    for key in ("facet", "groups", "counts", "flags", "grouping_provenance"):
+    for key in ("groups", "counts", "flags", "grouping_provenance"):
         assert first[key] == second[key]
     assert first["run_id"] != second["run_id"]
 
@@ -1001,7 +1030,8 @@ def test_directive_default_scope_context_and_malformed_fail_closed(conn: Connect
     default_row = _group_row(conn, project_id, default_run_id)
     assert default_summary["facet"] == "intervention"
     assert default_summary["facet_source"] == "default"
-    assert default_row["facet"] == "intervention"
+    assert default_row["groups"].keys() == {"intervention"}
+    assert default_row["grouping_provenance"]["facets"] == ["intervention"]
     assert default_row["grouping_provenance"]["facet_source"] == "default"
 
     outcome_summary, outcome_run_id = _run_group(
@@ -1014,7 +1044,8 @@ def test_directive_default_scope_context_and_malformed_fail_closed(conn: Connect
     outcome_row = _group_row(conn, project_id, outcome_run_id)
     assert outcome_summary["facet"] == "outcome"
     assert outcome_summary["facet_source"] == "scope_context"
-    assert outcome_row["facet"] == "outcome"
+    assert outcome_row["groups"].keys() == {"outcome"}
+    assert outcome_row["grouping_provenance"]["facets"] == ["outcome"]
     assert outcome_row["grouping_provenance"]["facet"] == "outcome"
     assert outcome_row["grouping_provenance"]["facet_source"] == "scope_context"
 

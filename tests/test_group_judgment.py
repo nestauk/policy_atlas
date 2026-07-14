@@ -242,21 +242,30 @@ def _value_ids(records: list[FacetValueRecord]) -> list[str]:
 
 
 def _payload_finding_ids(payload: dict[str, Any]) -> set[str]:
-    groups = cast("list[dict[str, Any]]", payload["groups"])
-    ungrouped = cast("dict[str, Any]", payload["ungrouped"])
-    no_value = cast("dict[str, Any]", payload["no_value"])
-    return {
-        finding_id
-        for group in groups
-        for finding_id in cast("list[str]", group["member_finding_ids"])
-    } | set(cast("list[str]", ungrouped["finding_ids"])) | set(
-        cast("list[str]", no_value["finding_ids"])
-    )
+    finding_ids: set[str] = set()
+    for facet_payload in payload.values():
+        if not isinstance(facet_payload, dict):
+            continue
+        groups = cast("list[dict[str, Any]]", facet_payload["groups"])
+        ungrouped = cast("dict[str, Any]", facet_payload["ungrouped"])
+        no_value = cast("dict[str, Any]", facet_payload["no_value"])
+        finding_ids |= {
+            finding_id
+            for group in groups
+            for finding_id in cast("list[str]", group["member_finding_ids"])
+        } | set(cast("list[str]", ungrouped["finding_ids"])) | set(
+            cast("list[str]", no_value["finding_ids"])
+        )
+    return finding_ids
+
+
+def _facet_payload(payload: dict[str, Any], facet: str = "intervention") -> dict[str, Any]:
+    return cast("dict[str, Any]", payload[facet])
 
 
 def _assert_stored_labels_validate(row: dict[str, Any]) -> None:
     payload = cast("dict[str, Any]", row["groups"])
-    stored_groups = cast("list[dict[str, Any]]", payload["groups"])
+    stored_groups = cast("list[dict[str, Any]]", _facet_payload(payload)["groups"])
     if not stored_groups:
         return
     result: PartitionResult = {
@@ -299,7 +308,7 @@ def _assert_repaired_from_invalid_first_response(
     assert _value_ids(backend.repair_payloads[0]) == ["v1", "v2", "v3"]
     assert backend.repair_accepted_groups == [[]]
     assert "repair_path_taken" in summary["flags"]
-    assert "repair_path_taken" in row["flags"]
+    assert "repair_path_taken" in row["flags"]["intervention"]
     assert [group["label"] for group in summary["groups"]] == ["Service references"]
     assert _payload_finding_ids(cast("dict[str, Any]", row["groups"])) == {
         str(finding_id) for finding_id in seeded.finding_ids
@@ -341,8 +350,8 @@ def _assert_bad_group_repaired_at_group_grain(
     assert [group["label"] for group in summary["groups"]] == ["Repaired group"]
     assert summary["counts"]["grouped"] == 1
     assert summary["counts"]["ungrouped"] == 2
-    assert "repair_path_taken" in row["flags"]
-    assert "groups_rejected" in row["flags"]
+    assert "repair_path_taken" in row["flags"]["intervention"]
+    assert "groups_rejected" in row["flags"]["intervention"]
     provenance = cast("dict[str, Any]", row["grouping_provenance"])
     assert len(provenance["rejection_reasons"]) == 1
     assert provenance["rejection_reasons"][0].startswith("partition: ")
@@ -401,7 +410,7 @@ def test_injection_value_is_data_only_and_grouping_completes(conn: Connection) -
     assert all(INTENT_CANARY not in content for content in _contents(messages))
 
     payload = cast("dict[str, Any]", row["groups"])
-    stored_groups = cast("list[dict[str, Any]]", payload["groups"])
+    stored_groups = cast("list[dict[str, Any]]", _facet_payload(payload)["groups"])
     member_values = [
         value
         for group in stored_groups
@@ -643,7 +652,7 @@ def test_misbehaving_duplicate_casefolded_label_keeps_first_group(
     assert backend.repair_calls == 1
     assert _value_ids(backend.repair_payloads[0]) == ["v2"]
     assert [group["label"] for group in summary["groups"]] == ["Alpha", "Beta"]
-    assert "groups_rejected" in row["flags"]
+    assert "groups_rejected" in row["flags"]["intervention"]
     provenance = cast("dict[str, Any]", row["grouping_provenance"])
     assert provenance["rejection_reasons"] == ["partition: duplicate group label: alpha"]
     assert _payload_finding_ids(cast("dict[str, Any]", row["groups"])) == {
@@ -677,17 +686,17 @@ def test_invalid_repair_is_discarded_to_ungrouped_residual(conn: Connection) -> 
     # Group-grain: only the forbidden group's member re-enters the repair.
     assert _value_ids(backend.repair_payloads[0]) == ["v1"]
     assert summary["groups"] == []
-    assert cast("list[dict[str, Any]]", payload["groups"]) == []
+    assert cast("list[dict[str, Any]]", _facet_payload(payload)["groups"]) == []
     assert summary["counts"]["grouped"] == 0
     assert summary["counts"]["ungrouped"] == 3
     assert summary["residuals"]["ungrouped"]["value_count"] == 3
-    assert set(cast("dict[str, Any]", payload["ungrouped"])["values"]) == {
+    assert set(cast("dict[str, Any]", _facet_payload(payload)["ungrouped"])["values"]) == {
         "Alpha service",
         "Beta service",
         "Gamma service",
     }
     assert _payload_finding_ids(payload) == {str(finding_id) for finding_id in seeded.finding_ids}
-    assert "repair_path_taken" in row["flags"]
+    assert "repair_path_taken" in row["flags"]["intervention"]
 
 
 def test_backend_raise_on_repair_propagates_without_grouping_row(conn: Connection) -> None:

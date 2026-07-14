@@ -232,16 +232,18 @@ def test_adjustment_writes_new_plan_version_and_changes_not_yet_run_group_direct
                 .where(orchestration_plan.c.project_id == project_id)
                 .order_by(orchestration_plan.c.version)
             ).all()
-            facet = conn.execute(
-                select(grouping_result.c.facet).where(grouping_result.c.project_id == project_id)
-            ).scalar_one()
+            facets = conn.execute(
+                select(grouping_result.c.grouping_provenance).where(
+                    grouping_result.c.project_id == project_id
+                )
+            ).scalar_one()["facets"]
 
         assert [(row.version, row.status, row.created_by) for row in rows] == [
             (1, "superseded", "planner"),
             (2, "approved", "user"),
         ]
         assert rows[1].payload["grouping_facet"] == "population"
-        assert facet == "population"
+        assert facets == ["population"]
     finally:
         _cleanup_project(engine, project_id)
 

@@ -184,15 +184,22 @@ def group_findings(
 
     payload = _build_valid_payload(
         views,
+        facet=facet,
         values=values,
         groups=final_groups,
         ungrouped_value_ids=ungrouped_value_ids,
         no_value_finding_ids=no_value_finding_ids,
         finding_ids=finding_ids,
     )
-    counts = _build_counts(payload, findings_total=len(views), distinct_values=len(values))
+    counts = _build_counts(
+        payload,
+        facet=facet,
+        findings_total=len(views),
+        distinct_values=len(values),
+    )
 
-    ungrouped = cast("dict[str, Any]", payload["ungrouped"])
+    facet_payload = _facet_payload(payload, facet)
+    ungrouped = cast("dict[str, Any]", facet_payload["ungrouped"])
     if cast("list[str]", ungrouped["values"]):
         flags.append("ungrouped_values")
     if repair_count:
@@ -233,11 +240,10 @@ def group_findings(
             evidence_scope_id=context.scope_id,
             run_id=run_id,
             extraction_run_id=context.extraction_run_id,
-            facet=facet,
             grouping_provenance=provenance,
             groups=payload,
-            counts=counts,
-            flags=flags,
+            counts={facet: counts},
+            flags={facet: flags},
             created_at=datetime.now(UTC),
         )
     )
@@ -532,6 +538,7 @@ def _proposed_groups(groups: Sequence[AcceptedGroup]) -> list[ProposedGroup]:
 def _build_valid_payload(
     views: Sequence[FindingFacetView],
     *,
+    facet: str,
     values: Sequence[FacetValue],
     groups: Sequence[AcceptedGroup],
     ungrouped_value_ids: Collection[str],
@@ -541,6 +548,7 @@ def _build_valid_payload(
     try:
         payload = build_groups_payload(
             views,
+            facet=facet,
             values=values,
             groups=groups,
             ungrouped_value_ids=ungrouped_value_ids,
@@ -553,11 +561,12 @@ def _build_valid_payload(
 
 
 def _build_counts(
-    payload: dict[str, Any], *, findings_total: int, distinct_values: int
+    payload: dict[str, Any], *, facet: str, findings_total: int, distinct_values: int
 ) -> dict[str, int]:
-    groups = cast("list[dict[str, Any]]", payload["groups"])
-    ungrouped = cast("dict[str, Any]", payload["ungrouped"])
-    no_value = cast("dict[str, Any]", payload["no_value"])
+    facet_payload = _facet_payload(payload, facet)
+    groups = cast("list[dict[str, Any]]", facet_payload["groups"])
+    ungrouped = cast("dict[str, Any]", facet_payload["ungrouped"])
+    no_value = cast("dict[str, Any]", facet_payload["no_value"])
     return {
         "findings_total": findings_total,
         "grouped": sum(cast("int", group["size"]) for group in groups),
@@ -591,6 +600,7 @@ def _build_provenance(
         "model": model,
         "mode": mode,
         "facet": facet,
+        "facets": [facet],
         "facet_source": facet_source,
         "value_cap": FACET_VALUE_CAP,
         "call_count": call_count,
@@ -664,9 +674,10 @@ def _build_summary(
     provenance: dict[str, Any],
     usage_totals: dict[str, int],
 ) -> dict[str, Any]:
-    groups = cast("list[dict[str, Any]]", payload["groups"])
-    ungrouped = cast("dict[str, Any]", payload["ungrouped"])
-    no_value = cast("dict[str, Any]", payload["no_value"])
+    facet_payload = _facet_payload(payload, facet)
+    groups = cast("list[dict[str, Any]]", facet_payload["groups"])
+    ungrouped = cast("dict[str, Any]", facet_payload["ungrouped"])
+    no_value = cast("dict[str, Any]", facet_payload["no_value"])
     return {
         "facet": facet,
         "facet_source": facet_source,
@@ -691,7 +702,7 @@ def _build_summary(
             },
         },
         "overall_direction_spread": cast(
-            "dict[str, int]", payload["overall_direction_spread"]
+            "dict[str, int]", facet_payload["overall_direction_spread"]
         ),
         "counts": counts,
         "extraction_run_id": str(extraction_run_id),
@@ -699,3 +710,10 @@ def _build_summary(
         "provenance": provenance,
         "usage_totals": usage_totals,
     }
+
+
+def _facet_payload(payload: dict[str, Any], facet: str) -> dict[str, Any]:
+    value = payload.get(facet)
+    if not isinstance(value, dict):
+        raise GroupError(f"grouping invariant violated: missing facet payload {facet}")
+    return value

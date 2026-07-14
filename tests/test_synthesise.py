@@ -11,7 +11,7 @@ from collections import Counter
 from typing import Any
 
 import pytest
-from sqlalchemy import event, func, select
+from sqlalchemy import event, func, select, update
 from sqlalchemy.engine import Connection
 
 from policy_atlas.embeddings import StubEmbeddingBackend
@@ -36,6 +36,7 @@ from policy_atlas.schema import (
     intervention_outcome_finding,
     project_source_snapshot,
     search_coverage_record,
+    selection_result,
     source_extraction_record,
     synthesis_result,
 )
@@ -75,6 +76,13 @@ from tests.helpers import (
     seed_source,
 )
 from tests.synthesis_wire import empty_key_findings, prose_section
+from tests.test_group import (
+    _group_row,
+    seed_extraction,
+)
+from tests.test_group import (
+    _run_group as _run_group_component,
+)
 
 
 def _count(conn: Connection, table: Any, project_id: uuid.UUID) -> int:
@@ -207,11 +215,10 @@ def test_transitive_resolution_from_grouping_reference(conn: Connection) -> None
             evidence_scope_id=scope_id,
             run_id=grouping_run_id,
             extraction_run_id=extraction_run_id,
-            facet="intervention",
-            grouping_provenance={},
-            groups={"groups": [], "ungrouped": {}, "no_value": {}},
-            counts={},
-            flags={},
+            grouping_provenance={"facets": ["intervention"]},
+            groups={"intervention": {"groups": [], "ungrouped": {}, "no_value": {}}},
+            counts={"intervention": {}},
+            flags={"intervention": []},
             created_at=now(),
         )
     )
@@ -920,25 +927,27 @@ def test_groups_unsectioned_counted(conn: Connection) -> None:
             evidence_scope_id=scope_id,
             run_id=grouping_run_id,
             extraction_run_id=extraction_run_id,
-            facet="intervention",
-            grouping_provenance={},
+            grouping_provenance={"facets": ["intervention"]},
             groups={
-                "groups": [
-                    {
-                        "group_id": "g1",
-                        "label": "L",
-                        "description": "D",
-                        "member_values": [],
-                        "member_finding_ids": [],
-                        "size": 0,
-                        "direction_spread": {},
-                    }
-                ],
-                "ungrouped": {},
-                "no_value": {},
+                "intervention": {
+                    "groups": [
+                        {
+                            "group_id": "intervention:g01",
+                            "facet": "intervention",
+                            "label": "L",
+                            "description": "D",
+                            "member_values": [],
+                            "member_finding_ids": [],
+                            "size": 0,
+                            "direction_spread": {},
+                        }
+                    ],
+                    "ungrouped": {},
+                    "no_value": {},
+                }
             },
-            counts={},
-            flags={},
+            counts={"intervention": {}},
+            flags={"intervention": []},
             created_at=now(),
         )
     )
@@ -963,6 +972,82 @@ def test_groups_unsectioned_counted(conn: Connection) -> None:
     ).one()
     assert row.counts["groups_unsectioned"] == 1
     assert row.flags.get("groups_unsectioned") is True
+
+
+def test_fresh_single_facet_group_shape_is_consumed_by_synthesise(
+    conn: Connection,
+) -> None:
+    project_id, synthesis_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    seeded = seed_extraction(
+        conn,
+        project_id,
+        scope_id,
+        docs=[
+            (
+                uuid.uuid4(),
+                [
+                    {"intervention": "Alpha coaching", "outcome": "Attendance"},
+                    {"intervention": "Alpha counselling", "outcome": "Retention"},
+                ],
+            )
+        ],
+    )
+    # seed_extraction's selection row carries a bare test provenance; synthesise
+    # resolves selection -> characterisation, so complete the chain here.
+    characterisation_run_id = seed_run(conn, project_id)
+    seed_characterisation(
+        conn, project_id, scope_id, characterisation_run_id, themes={"theme-a": []}
+    )
+    conn.execute(
+        update(selection_result)
+        .where(selection_result.c.run_id == seeded.selection_run_id)
+        .values(
+            selection_provenance={
+                "strategy": "test",
+                "characterisation_run_id": str(characterisation_run_id),
+            }
+        )
+    )
+    _summary, grouping_run_id = _run_group_component(
+        conn, project_id, scope_id, seeded.run_id
+    )
+    grouping_row = _group_row(conn, project_id, grouping_run_id)
+    facet_payload = grouping_row["groups"]["intervention"]
+    group_id = facet_payload["groups"][0]["group_id"]
+
+    assert group_id == "intervention:g01"
+    assert grouping_row["counts"]["intervention"]["groups"] == 1
+
+    backend = StubSynthesisBackend(
+        proposal=SectionProposalWire(
+            sections=[
+                SectionWire(
+                    title="Alpha services",
+                    focus="Evidence on Alpha service findings.",
+                    group_ids=[group_id],
+                )
+            ]
+        )
+    )
+    _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=synthesis_run_id,
+        scope_id=scope_id,
+        extraction_run_id=seeded.run_id,
+        grouping_run_id=grouping_run_id,
+        backend=backend,
+    )
+
+    row = conn.execute(
+        select(synthesis_result).where(synthesis_result.c.project_id == project_id)
+    ).one()
+    section_blocks = [b for b in row.blocks if b.get("title") == "Alpha services"]
+    assert len(section_blocks) == 1
+    assert section_blocks[0]["group_ids"] == [group_id]
+    assert row.counts["groups_total"] == 1
+    assert row.counts["groups_unsectioned"] == 0
 
 
 def test_block_content_is_authored_prose_and_units_are_span_anchored(
@@ -1828,25 +1913,27 @@ def _seed_group_with_findings(
             evidence_scope_id=scope_id,
             run_id=grouping_run_id,
             extraction_run_id=extraction_run_id,
-            facet="intervention",
-            grouping_provenance={},
+            grouping_provenance={"facets": ["intervention"]},
             groups={
-                "groups": [
-                    {
-                        "group_id": "g1",
-                        "label": "alpha",
-                        "description": "D",
-                        "member_values": [],
-                        "member_finding_ids": [str(fid) for fid in finding_ids],
-                        "size": len(finding_ids),
-                        "direction_spread": dict(direction_spread),
-                    }
-                ],
-                "ungrouped": {},
-                "no_value": {},
+                "intervention": {
+                    "groups": [
+                        {
+                            "group_id": "intervention:g01",
+                            "facet": "intervention",
+                            "label": "alpha",
+                            "description": "D",
+                            "member_values": [],
+                            "member_finding_ids": [str(fid) for fid in finding_ids],
+                            "size": len(finding_ids),
+                            "direction_spread": dict(direction_spread),
+                        }
+                    ],
+                    "ungrouped": {},
+                    "no_value": {},
+                }
             },
-            counts={},
-            flags={},
+            counts={"intervention": {}},
+            flags={"intervention": []},
             created_at=now(),
         )
     )
@@ -2019,27 +2106,29 @@ def _seed_group_with_iof_and_icf(
             evidence_scope_id=scope_id,
             run_id=grouping_run_id,
             extraction_run_id=extraction_run_id,
-            facet="intervention",
-            grouping_provenance={},
+            grouping_provenance={"facets": ["intervention"]},
             groups={
-                "groups": [
-                    {
-                        "group_id": "g1",
-                        "label": "alpha",
-                        "description": "D",
-                        "member_values": ["Alpha service"],
-                        "member_finding_ids": [str(iof_finding_id), str(icf_finding_id)],
-                        "member_finding_kinds": ["iof", "icf"],
-                        "member_counts": {"iof": 1, "icf": 1},
-                        "size": 2,
-                        "direction_spread": {"increase": 1},
-                    }
-                ],
-                "ungrouped": {},
-                "no_value": {},
+                "intervention": {
+                    "groups": [
+                        {
+                            "group_id": "intervention:g01",
+                            "facet": "intervention",
+                            "label": "alpha",
+                            "description": "D",
+                            "member_values": ["Alpha service"],
+                            "member_finding_ids": [str(iof_finding_id), str(icf_finding_id)],
+                            "member_finding_kinds": ["iof", "icf"],
+                            "member_counts": {"iof": 1, "icf": 1},
+                            "size": 2,
+                            "direction_spread": {"increase": 1},
+                        }
+                    ],
+                    "ungrouped": {},
+                    "no_value": {},
+                }
             },
-            counts={},
-            flags={},
+            counts={"intervention": {}},
+            flags={"intervention": []},
             created_at=now(),
         )
     )
@@ -2130,7 +2219,11 @@ def test_annotation_payload_excludes_finding_metadata_row_join_resolves(
     backend = _FindingClaimBackend(
         proposal=SectionProposalWire(
             sections=[
-                SectionWire(title="Coaching", focus="What coaching does", group_ids=["g1"])
+                SectionWire(
+                    title="Coaching",
+                    focus="What coaching does",
+                    group_ids=["intervention:g01"],
+                )
             ]
         ),
         finding_id=str(finding_id),
@@ -2218,7 +2311,13 @@ def test_grouped_section_seed_member_findings_include_icf_records(
         StubSynthesisBackend(
             script=[[{"tool_calls": [], "claims": SectionProseWire(prose="", claims=[])}]],
             proposal=SectionProposalWire(
-                sections=[SectionWire(title="Alpha", focus="Alpha coverage", group_ids=["g1"])]
+                sections=[
+                    SectionWire(
+                        title="Alpha",
+                        focus="Alpha coverage",
+                        group_ids=["intervention:g01"],
+                    )
+                ]
             ),
         )
     )
@@ -2253,7 +2352,13 @@ def test_icf_finding_claim_annotation_resolves_via_row(
     ) = _seed_group_with_iof_and_icf(conn)
     backend = _FindingClaimBackend(
         proposal=SectionProposalWire(
-            sections=[SectionWire(title="Alpha", focus="Alpha coverage", group_ids=["g1"])]
+            sections=[
+                SectionWire(
+                    title="Alpha",
+                    focus="Alpha coverage",
+                    group_ids=["intervention:g01"],
+                )
+            ]
         ),
         finding_id=str(icf_finding_id),
     )
@@ -2318,7 +2423,13 @@ def test_mixed_and_unclear_findings_survive_synthesise_section_seed(
         StubSynthesisBackend(
             script=[[{"tool_calls": [], "claims": SectionProseWire(prose="", claims=[])}]],
             proposal=SectionProposalWire(
-                sections=[SectionWire(title="Alpha", focus="Alpha coverage", group_ids=["g1"])]
+                sections=[
+                    SectionWire(
+                        title="Alpha",
+                        focus="Alpha coverage",
+                        group_ids=["intervention:g01"],
+                    )
+                ]
             ),
         )
     )

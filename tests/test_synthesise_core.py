@@ -565,11 +565,10 @@ def test_how_resolved_records_explicit_extraction_not_transitive(conn: Connectio
             evidence_scope_id=scope_id,
             run_id=grouping_run_id,
             extraction_run_id=extraction_run_id,
-            facet="intervention",
-            grouping_provenance={},
-            groups={"groups": [], "ungrouped": {}, "no_value": {}},
-            counts={},
-            flags={},
+            grouping_provenance={"facets": ["intervention"]},
+            groups={"intervention": {"groups": [], "ungrouped": {}, "no_value": {}}},
+            counts={"intervention": {}},
+            flags={"intervention": []},
             created_at=now(),
         )
     )

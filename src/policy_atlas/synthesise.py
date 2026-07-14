@@ -455,11 +455,8 @@ class SubstrateView:
         """Return real grouping ids from the persisted grouping payload."""
         if self.grouping is None:
             return set()
-        raw_groups = self.grouping.get("groups", [])
-        if not isinstance(raw_groups, list):
-            return set()
         ids: set[str] = set()
-        for group in raw_groups:
+        for group in _grouping_records(self.grouping):
             group_id = _group_id(group)
             if group_id is not None:
                 ids.add(group_id)
@@ -470,13 +467,8 @@ class SubstrateView:
         """Return grouping records keyed by real group id."""
         if self.grouping is None:
             return {}
-        raw_groups = self.grouping.get("groups", [])
-        if not isinstance(raw_groups, list):
-            return {}
         result: dict[str, dict[str, Any]] = {}
-        for group in raw_groups:
-            if not isinstance(group, dict):
-                continue
+        for group in _grouping_records(self.grouping):
             group_id = _group_id(group)
             if group_id is not None:
                 result[group_id] = group
@@ -771,6 +763,44 @@ def _group_id(group: Any) -> str | None:
         if isinstance(value, str) and value:
             return value
     return None
+
+
+def _grouping_records(payload: Any) -> list[dict[str, Any]]:
+    """Return grouping records from a flattened summary or facet-keyed payload."""
+    if not isinstance(payload, dict):
+        return []
+    raw_groups = payload.get("groups")
+    if isinstance(raw_groups, list):
+        return [group for group in raw_groups if isinstance(group, dict)]
+
+    groups: list[dict[str, Any]] = []
+    for facet, facet_payload in payload.items():
+        if not isinstance(facet, str) or not isinstance(facet_payload, dict):
+            continue
+        raw_facet_groups = facet_payload.get("groups")
+        if not isinstance(raw_facet_groups, list):
+            continue
+        for group in raw_facet_groups:
+            if not isinstance(group, dict):
+                continue
+            if "facet" in group:
+                groups.append(group)
+            else:
+                groups.append({**group, "facet": facet})
+    return groups
+
+
+def _grouping_facet_payloads(payload: Any) -> list[tuple[str, dict[str, Any]]]:
+    """Return ``(facet, payload)`` pairs from the persisted grouping JSON."""
+    if not isinstance(payload, dict):
+        return []
+    pairs: list[tuple[str, dict[str, Any]]] = []
+    for facet, facet_payload in payload.items():
+        if not isinstance(facet, str) or not isinstance(facet_payload, dict):
+            continue
+        if isinstance(facet_payload.get("groups"), list):
+            pairs.append((facet, facet_payload))
+    return pairs
 
 
 def _selected_pss_ids(selection_row: Mapping[str, Any] | None) -> set[str]:
@@ -1453,18 +1483,17 @@ def _grouping_summary(row: Mapping[str, Any] | None) -> dict[str, Any] | None:
     if row is None:
         return None
     payload = row.get("groups")
-    raw_groups = payload.get("groups", []) if isinstance(payload, dict) else []
+    facet_payloads = _grouping_facet_payloads(payload)
     groups: list[dict[str, Any]] = []
-    if isinstance(raw_groups, list):
-        for item in raw_groups:
-            if not isinstance(item, dict):
-                continue
+    for facet, facet_payload in facet_payloads:
+        for item in _grouping_records({facet: facet_payload}):
             members = item.get("member_finding_ids", [])
             if not isinstance(members, list):
                 members = []
             groups.append(
                 {
                     "group_id": _group_id(item),
+                    "facet": item.get("facet", facet),
                     "label": item.get("label"),
                     "description": item.get("description"),
                     "size": item.get("size", len(members)),
@@ -1472,13 +1501,20 @@ def _grouping_summary(row: Mapping[str, Any] | None) -> dict[str, Any] | None:
                     "member_finding_ids": sorted(str(member) for member in members),
                 }
             )
-    residuals: dict[str, Any] = {}
-    if isinstance(payload, dict):
-        residuals = {
-            "ungrouped": payload.get("ungrouped", {}),
-            "no_value": payload.get("no_value", {}),
+    residuals = {
+        facet: {
+            "ungrouped": facet_payload.get("ungrouped", {}),
+            "no_value": facet_payload.get("no_value", {}),
         }
-    return {"facet": row.get("facet"), "groups": groups, "residuals": residuals}
+        for facet, facet_payload in facet_payloads
+    }
+    facets = [facet for facet, _ in facet_payloads]
+    return {
+        "facet": facets[0] if len(facets) == 1 else None,
+        "facets": facets,
+        "groups": groups,
+        "residuals": residuals,
+    }
 
 
 def _substrate_summaries(refs: ResolvedReferences, corpus: CorpusProfile) -> dict[str, Any]:
