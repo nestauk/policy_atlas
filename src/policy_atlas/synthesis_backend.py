@@ -1378,13 +1378,22 @@ class OpenAISynthesisBackend:
         self,
         api_key: str | None = None,
         langfuse_client: Langfuse | None = None,
+        prompt_variant: str = "v7",
     ) -> None:
         """Create a live synthesis backend.
 
         Args:
             api_key: Optional OpenAI API key.
             langfuse_client: Optional Langfuse client for generation spans.
+            prompt_variant: ``"v7"`` (the live surface) or ``"v6"`` — the
+                frozen legacy prompt/layout kept runnable for the task-022
+                cost protocol's baseline arm (never a product default).
+
+        Raises:
+            ValueError: If ``prompt_variant`` is unknown.
         """
+        if prompt_variant not in ("v7", "v6"):
+            raise ValueError(f"unknown prompt_variant: {prompt_variant!r}")
         self._client = resolve_openai_client(
             api_key,
             backend_name="OpenAISynthesisBackend",
@@ -1392,8 +1401,35 @@ class OpenAISynthesisBackend:
             max_retries=2,
         )
         self._langfuse_client = langfuse_client
+        self._prompt_variant = prompt_variant
         self._turn_count = 0
         self._lock = Lock()
+
+    def _section_messages(
+        self,
+        seed: dict[str, Any],
+        transcript: list[ToolExchange],
+        *,
+        force_emit: bool,
+    ) -> list[dict[str, Any]]:
+        if self._prompt_variant == "v6":
+            from policy_atlas.synthesis_prompts_v6 import build_v6_section_messages
+
+            return build_v6_section_messages(
+                seed,
+                transcript,
+                force_emit=force_emit,
+                final_turn_message=SECTION_FINAL_TURN_MESSAGE,
+            )
+        return build_section_messages(seed, transcript, force_emit=force_emit)
+
+    @property
+    def _section_prompt_version(self) -> str:
+        if self._prompt_variant == "v6":
+            from policy_atlas.synthesis_prompts_v6 import V6_SECTION_PROMPT_VERSION
+
+            return V6_SECTION_PROMPT_VERSION
+        return SECTION_PROMPT_VERSION
 
     def _next_turn_index(self) -> int:
         with self._lock:
@@ -1579,7 +1615,7 @@ class OpenAISynthesisBackend:
         Raises:
             RuntimeError: If the provider response violates the one-tool-call protocol.
         """
-        messages = build_section_messages(seed, transcript, force_emit=force_emit)
+        messages = self._section_messages(seed, transcript, force_emit=force_emit)
         turn_index = self._next_turn_index() if self._langfuse_client is not None else 0
 
         def _update(span: Any, result: UsageResult[SectionTurn]) -> None:
@@ -1589,7 +1625,7 @@ class OpenAISynthesisBackend:
                 output=_turn_output(turn),
                 model=SYNTHESIS_MODEL,
                 metadata={
-                    "prompt_version": SECTION_PROMPT_VERSION,
+                    "prompt_version": self._section_prompt_version,
                     "force_emit": force_emit,
                     "transcript_length": len(transcript),
                     **usage_metadata(usage),
