@@ -1,4 +1,4 @@
-"""The ``extract_icf_v1`` prompt — the ICF profile's extraction call (task 021).
+"""The ``extract_icf_v2`` prompt — the ICF profile's extraction call.
 
 The second findings-layer prompt, parallel to ``extract_prompt``'s IOF surface:
 implementation-context findings (mechanisms, barriers, enablers, conditions,
@@ -31,7 +31,7 @@ from policy_atlas.implementation_context_records import (
     render_field_docs,
 )
 
-ICF_PROMPT_VERSION = "extract_icf_v1"
+ICF_PROMPT_VERSION = "extract_icf_v2"
 
 # The contracted model floor (same rule as IOF: a step-up is a recorded
 # option, never a silent switch).
@@ -51,7 +51,8 @@ ICF_EXAMPLE_SEGMENT_TEXT = (
     "schedule. Two districts adapted the programme by shifting follow-up "
     "visits to telephone calls, keeping the initial home visit in person. "
     "Families reported that continuity with a single named nurse was the main "
-    "reason they stayed engaged with the programme."
+    "reason they stayed engaged with the programme. The evaluation's barrier "
+    "summary table lists this first barrier under the name 'Caseload pressure'."
 )
 
 ICF_EXAMPLE_RESPONSE = ICFExtractionResponse(
@@ -63,6 +64,7 @@ ICF_EXAMPLE_RESPONSE = ICFExtractionResponse(
                 "delivering the structured home-visiting programme's planned "
                 "visit schedule."
             ),
+            context_label="Caseload pressure",
             intervention="structured home-visiting programme",
             outcome=None,
             population=None,
@@ -91,6 +93,7 @@ ICF_EXAMPLE_RESPONSE = ICFExtractionResponse(
                 "shifting follow-up visits to telephone calls while keeping the "
                 "initial home visit in person."
             ),
+            context_label=None,
             intervention="structured home-visiting programme",
             outcome=None,
             population=None,
@@ -120,6 +123,7 @@ ICF_EXAMPLE_RESPONSE = ICFExtractionResponse(
                 "families stayed engaged with the structured home-visiting "
                 "programme."
             ),
+            context_label=None,
             intervention="structured home-visiting programme",
             outcome="engagement with the programme",
             population="families",
@@ -253,6 +257,12 @@ Dimensions — the source side only, exactly as the source states it:
 - All reference fields (intervention, outcome, population, setting,
   study_geography, study_design) are source-named: this document's own
   words, never a standardised or canonical term.
+- context_label is filled ONLY when the document itself provides a short
+  name for the claim's theme — a subheading, or a named barrier, enabler or
+  mechanism in the document's own table or list — copied exactly as the
+  document names it. When the document provides no such name, context_label
+  is null. Never write your own summary, title or paraphrase of the claim
+  into it: a label the document did not author is worse than no label.
 
 An empty findings list is a legal, expected answer: many documents (an
 effects-only trial report, statistics-focused reviews, commentary with no

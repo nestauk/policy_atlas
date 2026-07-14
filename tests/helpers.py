@@ -38,6 +38,7 @@ def make_icf_wire_record(**overrides: Any) -> "ICFRecordWire":
     values: dict[str, Any] = {
         "context_type": "barrier",
         "claim": "Training gaps slowed delivery of the programme.",
+        "context_label": None,
         "intervention": "home visiting",
         "outcome": None,
         "population": "families with young children",

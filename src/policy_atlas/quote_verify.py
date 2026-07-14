@@ -654,6 +654,7 @@ def validate_record(wire: IOFRecordWire) -> ValidatedRecord:
 
 _ICF_FREE_TEXT_FIELDS = (
     "claim",
+    "context_label",
     "intervention",
     "outcome",
     "population",
@@ -720,6 +721,7 @@ def validate_icf_record(wire: ICFRecordWire) -> ValidatedICFRecord:
     record = ICFRecord(
         context_type=wire.context_type,
         claim=claim.strip(),
+        context_label=text_values["context_label"],
         intervention=intervention.strip(),
         outcome=text_values["outcome"],
         population=text_values["population"],

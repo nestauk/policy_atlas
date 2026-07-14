@@ -23,10 +23,26 @@ from policy_atlas.extract import (
     _judge_payload_entry,
     extract_scope,
     extraction_fingerprint,
+    icf_extraction_fingerprint,
 )
 from policy_atlas.extraction_backend import StubExtractionBackend
-from policy_atlas.extraction_records import IOFAnchor, IOFRecord, IOFStatistics, IOFStratum
-from policy_atlas.icf_finding_vetter import ICFFindingVetterResponse, ICFVetterVerdictWire
+from policy_atlas.extraction_records import (
+    SCHEMA_VERSION as IOF_SCHEMA_VERSION,
+)
+from policy_atlas.extraction_records import (
+    IOFAnchor,
+    IOFRecord,
+    IOFStatistics,
+    IOFStratum,
+)
+from policy_atlas.finding_vetter import FINDING_VETTER_PROMPT_VERSION
+from policy_atlas.icf_finding_vetter import (
+    ICFFindingVetterResponse,
+    ICFFlagClass,
+    ICFVetterVerdictWire,
+)
+from policy_atlas.implementation_context_prompt import ICF_PROMPT_VERSION
+from policy_atlas.implementation_context_records import SCHEMA_VERSION as ICF_SCHEMA_VERSION
 from policy_atlas.schema import (
     chunk,
     extraction_result,
@@ -55,6 +71,7 @@ from .helpers import (
     seed_project_and_run,
     seed_run,
     seed_scope,
+    seed_source,
 )
 
 # --- Local seeding helpers (reused/extended by the later contract suite) ---
@@ -565,7 +582,8 @@ def test_unknown_and_duplicate_profile_ids_fail_closed(conn: Connection) -> None
 class _FlaggingICFVetter:
     mode = "stub"
 
-    def __init__(self) -> None:
+    def __init__(self, flag_class: ICFFlagClass = "recommendation") -> None:
+        self.flag_class = flag_class
         self.payloads: list[dict[str, Any]] = []
 
     def judge(self, payload: dict[str, Any]) -> UsageResult[ICFFindingVetterResponse]:
@@ -574,7 +592,7 @@ class _FlaggingICFVetter:
             ICFVetterVerdictWire(
                 finding_index=int(finding["index"]),
                 verdict="flagged",
-                flag_class="recommendation",
+                flag_class=self.flag_class,
                 reason="Recommendation-shaped implementation claim.",
             )
             for finding in payload["findings"]
@@ -656,6 +674,69 @@ def test_icf_vetter_excludes_icf_without_affecting_iof(conn: Connection) -> None
         .where(implementation_context_finding.c.project_id == project_id)
     ).scalar_one() == 0
     assert icf_vetter.payloads[0]["findings"][0]["context_type"] == "barrier"
+
+
+def test_icf_vetter_paraphrased_label_excludes_and_accounts(
+    conn: Connection,
+) -> None:
+    """A paraphrased-label flag uses the same flag-not-drop semantics as IOF."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    cid = uuid.uuid4()
+    pss_id, _ = _seed_full_text_doc(
+        conn,
+        project_id,
+        sel_run,
+        scope_id,
+        title="ICF label vetter doc",
+        chunk_content="Training gaps slowed structured tutoring delivery.",
+        chunk_id=cid,
+        stub_icf=[
+            _icf_record(
+                claim="Training gaps slowed structured tutoring delivery.",
+                context_label="Staff capability barrier",
+                intervention="structured tutoring",
+                quote="Training gaps slowed structured tutoring delivery",
+                segment_id=str(cid),
+            )
+        ],
+    )
+    _seed_selection(
+        conn,
+        project_id,
+        sel_run,
+        scope_id,
+        [{"pss_id": str(pss_id), "text_basis": "full_text"}],
+    )
+    icf_vetter = _FlaggingICFVetter(flag_class="paraphrased_label")
+    run_id = seed_run(conn, project_id)
+
+    summary = extract_scope(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        context=ExtractContext(
+            scope_id=scope_id,
+            intent="unused",
+            context={},
+            selection_run_id=sel_run,
+        ),
+        extraction_backend=StubExtractionBackend(),
+        icf_finding_vetter_backend=icf_vetter,
+        profiles=(ICF_PROFILE_ID,),
+    )
+
+    assert profile_counts(summary, ICF_PROFILE_ID)["no_findings"] == 1
+    assert profile_findings(summary, ICF_PROFILE_ID)["total"] == 0
+    assert profile_doc(summary, profile_id=ICF_PROFILE_ID)["vetted_out"] == 1
+    vetted_out = profile_vetted_out(summary, ICF_PROFILE_ID)
+    assert vetted_out["total"] == 1
+    assert vetted_out["by_class"] == {"paraphrased_label": 1}
+    assert vetted_out["records"][0]["flag_class"] == "paraphrased_label"
+    assert conn.execute(
+        select(func.count()).select_from(implementation_context_finding)
+        .where(implementation_context_finding.c.project_id == project_id)
+    ).scalar_one() == 0
 
 
 def test_memo_reuse(conn: Connection) -> None:
@@ -1057,6 +1138,240 @@ def test_extraction_fingerprint_components_v3() -> None:
     assert components["schema"] == "iof_v3"
     assert components["field_rules"] == "iof_rules_v3"
     assert components["prompt"] == extract_prompt.PROMPT_VERSION
+
+
+def test_icf_fingerprint_v2_isolated_from_iof(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The ICF rider bumps only the ICF fingerprint component block."""
+    iof_fingerprint, iof_components = extraction_fingerprint(
+        "stub", finding_vetter_active=True
+    )
+    icf_fingerprint, icf_components = icf_extraction_fingerprint(
+        "stub", finding_vetter_active=True
+    )
+
+    assert icf_components["schema"] == ICF_SCHEMA_VERSION == "icf_v2"
+    assert icf_components["prompt"] == ICF_PROMPT_VERSION == "extract_icf_v2"
+    assert isinstance(icf_components["finding_vetter"], dict)
+    assert (
+        icf_components["finding_vetter"]["prompt"]
+        == "extract_icf_vetter_v2"
+    )
+    assert iof_components["schema"] == IOF_SCHEMA_VERSION
+    assert iof_components["prompt"] == extract_prompt.PROMPT_VERSION
+    assert isinstance(iof_components["finding_vetter"], dict)
+    assert (
+        iof_components["finding_vetter"]["prompt"]
+        == FINDING_VETTER_PROMPT_VERSION
+    )
+
+    with monkeypatch.context() as m:
+        m.setattr("policy_atlas.extract.ICF_SCHEMA_VERSION", "icf_v1")
+        m.setattr("policy_atlas.extract.ICF_PROMPT_VERSION", "extract_icf_v1")
+        m.setattr(
+            "policy_atlas.extract.ICF_FINDING_VETTER_PROMPT_VERSION",
+            "extract_icf_vetter_v1",
+        )
+        icf_v1_fingerprint, _ = icf_extraction_fingerprint(
+            "stub", finding_vetter_active=True
+        )
+        iof_after_fingerprint, iof_after_components = extraction_fingerprint(
+            "stub", finding_vetter_active=True
+        )
+
+    assert icf_fingerprint != icf_v1_fingerprint
+    assert iof_after_fingerprint == iof_fingerprint
+    assert iof_after_components == iof_components
+
+
+def test_pre_existing_icf_v1_row_reader_keeps_context_label_coverage_absent(
+    conn: Connection,
+) -> None:
+    """An icf_v1 row remains readable; no context_label coverage key is backfilled."""
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    snap_id, pss_id = seed_source(conn, project_id, meta={"title": "ICF v1 doc"})
+    _seed_selection(
+        conn,
+        project_id,
+        run_id,
+        scope_id,
+        [{"pss_id": str(pss_id), "text_basis": "full_text"}],
+    )
+    extraction_record_id = uuid.uuid4()
+    finding_id = uuid.uuid4()
+    conn.execute(
+        source_extraction_record.insert().values(
+            extraction_record_id=extraction_record_id,
+            project_id=project_id,
+            source_snapshot_id=snap_id,
+            project_source_snapshot_id=pss_id,
+            extraction_fingerprint="fp-icf-v1-row",
+            status="extracted",
+            basis="full_text",
+            error=None,
+            finding_count=1,
+            run_id=run_id,
+            created_at=now(),
+        )
+    )
+    conn.execute(
+        implementation_context_finding.insert().values(
+            finding_id=finding_id,
+            project_id=project_id,
+            extraction_record_id=extraction_record_id,
+            context_type="barrier",
+            claim="Training gaps slowed delivery.",
+            intervention="home visiting",
+            outcome=None,
+            population=None,
+            setting=None,
+            study_geography=None,
+            study_design=None,
+            claim_level="study",
+            claim_basis="studied",
+            level="provider",
+            resource_requirements=None,
+            workforce_requirements="staff training",
+            field_coverage={"outcome": "not_extracted"},
+            grounding=[],
+            created_at=now(),
+        )
+    )
+    conn.execute(
+        extraction_result.insert().values(
+            extraction_result_id=uuid.uuid4(),
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            run_id=run_id,
+            selection_run_id=run_id,
+            extraction_provenance={
+                "profiles": {
+                    ICF_PROFILE_ID: {
+                        "fingerprint": "fp-icf-v1-row",
+                        "schema": "icf_v1",
+                        "prompt": "extract_icf_v1",
+                        "finding_vetter": {
+                            "prompt": "extract_icf_vetter_v1",
+                        },
+                    }
+                },
+                "pass_count": 1,
+            },
+            docs=[
+                {
+                    "pss_id": str(pss_id),
+                    "basis": "full_text",
+                    "profiles": {
+                        ICF_PROFILE_ID: {
+                            "status": "extracted",
+                            "finding_count": 1,
+                            "reused": False,
+                            "error": None,
+                            "extraction_record_id": str(extraction_record_id),
+                        }
+                    },
+                }
+            ],
+            counts={},
+            flags=[],
+            created_at=now(),
+        )
+    )
+
+    reader = make_findings_reader(
+        conn,
+        project_id=project_id,
+        extraction_run_id=run_id,
+        evidence_scope_id=scope_id,
+        grouping_groups=None,
+    )
+    findings = reader({"kinds": ["icf"]})["icf_findings"]
+
+    assert len(findings) == 1
+    assert findings[0]["finding_id"] == str(finding_id)
+    assert findings[0]["field_coverage"] == {"outcome": "not_extracted"}
+    assert "context_label" not in findings[0]["field_coverage"]
+
+
+def test_stub_icf_extract_writes_context_label_and_defaults_missing_to_null(
+    conn: Connection,
+) -> None:
+    """Stub-backed ICF extraction stores emitted labels and NULL for omitted keys."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    content = (
+        "The barrier table named Caseload pressure and said caseloads slowed "
+        "home visiting. Training gaps slowed home visiting delivery."
+    )
+    cid = uuid.uuid4()
+    missing_label_record = _icf_record(
+        claim="Training gaps slowed home visiting delivery.",
+        intervention="home visiting",
+        quote="Training gaps slowed home visiting delivery",
+        segment_id=str(cid),
+    )
+    missing_label_record.pop("context_label")
+    pss_id, _ = _seed_full_text_doc(
+        conn,
+        project_id,
+        sel_run,
+        scope_id,
+        title="ICF context label doc",
+        chunk_content=content,
+        chunk_id=cid,
+        stub_icf=[
+            _icf_record(
+                claim="Caseloads slowed home visiting.",
+                context_label="Caseload pressure",
+                intervention="home visiting",
+                quote=(
+                    "The barrier table named Caseload pressure and said "
+                    "caseloads slowed home visiting"
+                ),
+                segment_id=str(cid),
+            ),
+            missing_label_record,
+        ],
+    )
+    _seed_selection(
+        conn,
+        project_id,
+        sel_run,
+        scope_id,
+        [{"pss_id": str(pss_id), "text_basis": "full_text"}],
+    )
+
+    summary, _ = _run(
+        conn, project_id, scope_id, sel_run, profiles=(ICF_PROFILE_ID,)
+    )
+
+    assert profile_findings(summary, ICF_PROFILE_ID)["total"] == 2
+    rows = conn.execute(
+        select(
+            implementation_context_finding.c.claim,
+            implementation_context_finding.c.context_label,
+            implementation_context_finding.c.field_coverage,
+        )
+        .where(implementation_context_finding.c.project_id == project_id)
+        .order_by(implementation_context_finding.c.claim)
+    ).fetchall()
+    assert {
+        row.claim: row.context_label
+        for row in rows
+    } == {
+        "Caseloads slowed home visiting.": "Caseload pressure",
+        "Training gaps slowed home visiting delivery.": None,
+    }
+    coverage_by_claim = {row.claim: row.field_coverage for row in rows}
+    assert "context_label" not in coverage_by_claim["Caseloads slowed home visiting."]
+    assert (
+        coverage_by_claim["Training gaps slowed home visiting delivery."][
+            "context_label"
+        ]
+        == "not_extracted"
+    )
 
 
 def test_judge_payload_entry_key_set_excludes_effect_basis_and_study_geography() -> None:

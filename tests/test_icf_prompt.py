@@ -16,6 +16,7 @@ from typing import Any, cast
 import pytest
 from openai.types.chat import ChatCompletionMessageParam
 
+from policy_atlas.extract import _icf_judge_payload_entry
 from policy_atlas.extract_prompt import envelope_json
 from policy_atlas.extraction_records import ExtractionWindowPayload
 from policy_atlas.icf_finding_vetter import (
@@ -39,7 +40,8 @@ from policy_atlas.implementation_context_prompt import (
     build_icf_extract_messages,
 )
 from policy_atlas.implementation_context_records import ICFRecordWire
-from policy_atlas.quote_verify import QuoteMatcher, build_basis
+from policy_atlas.quote_verify import QuoteMatcher, build_basis, validate_icf_record
+from tests.helpers import make_icf_wire_record
 
 
 def _contents(messages: list[ChatCompletionMessageParam]) -> list[str]:
@@ -48,8 +50,8 @@ def _contents(messages: list[ChatCompletionMessageParam]) -> list[str]:
 
 
 def test_version_constants() -> None:
-    assert ICF_PROMPT_VERSION == "extract_icf_v1"
-    assert ICF_FINDING_VETTER_PROMPT_VERSION == "extract_icf_vetter_v1"
+    assert ICF_PROMPT_VERSION == "extract_icf_v2"
+    assert ICF_FINDING_VETTER_PROMPT_VERSION == "extract_icf_vetter_v2"
     # Gate decision 1: vetter knobs mirror the IOF vetter.
     assert ICF_FINDING_VETTER_MODEL == "gpt-5.4-mini"
 
@@ -173,7 +175,13 @@ def test_vetter_flag_class_coherence() -> None:
 
 
 def test_vetter_prompt_carries_the_icf_flag_classes() -> None:
-    for flag_class in ("recommendation", "aspiration", "vague_context", "deictic_naming"):
+    for flag_class in (
+        "recommendation",
+        "aspiration",
+        "vague_context",
+        "deictic_naming",
+        "paraphrased_label",
+    ):
         assert f'"{flag_class}"' in ICF_FINDING_VETTER_SYSTEM_PROMPT
     # The judged findings are fenced as data in the user message.
     messages = build_icf_judge_messages([{"index": 0, "claim": "c", "quotes": ["q"]}])
@@ -195,6 +203,26 @@ def test_vetter_coverage_validation() -> None:
         validate_icf_verdict_coverage(findings, verdicts[:1])
     with pytest.raises(RuntimeError, match="exactly once"):
         validate_icf_verdict_coverage(findings, verdicts + verdicts[:1])
+
+
+def test_icf_judge_payload_entry_carries_context_label() -> None:
+    result = validate_icf_record(
+        make_icf_wire_record(context_label="Caseload pressure")
+    )
+    assert result.record is not None
+
+    entry = _icf_judge_payload_entry(4, result.record)
+
+    assert entry == {
+        "index": 4,
+        "context_type": "barrier",
+        "claim": "Training gaps slowed delivery of the programme.",
+        "context_label": "Caseload pressure",
+        "intervention": "home visiting",
+        "claim_level": "study",
+        "claim_basis": "studied",
+        "quotes": ["Training gaps slowed delivery of the programme."],
+    }
 
 
 def test_stub_vetter_all_sound() -> None:

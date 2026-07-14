@@ -89,6 +89,7 @@ def _icf_values(**overrides: Any) -> dict[str, Any]:
     values: dict[str, Any] = {
         "context_type": "barrier",
         "claim": "Training gaps slowed delivery.",
+        "context_label": None,
         "intervention": "home visiting",
         "outcome": "referral uptake",
         "population": "families",
@@ -166,3 +167,27 @@ def test_reference_null_like_coercion_uses_shared_rules(token: str) -> None:
     assert icf.field_coverage["population"] == "not_extracted"
     assert iof.coerced_null_fields == ["population"]
     assert icf.coerced_null_fields == ["population"]
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    [
+        "context_label",
+        "outcome",
+        "population",
+        "setting",
+        "study_geography",
+        "study_design",
+        "resource_requirements",
+        "workforce_requirements",
+    ],
+)
+def test_icf_nullable_free_text_fields_use_not_extracted_rules(
+    field_name: str,
+) -> None:
+    result = validate_icf_record(make_icf_wire_record(**{field_name: "n/a"}))
+
+    assert result.record is not None
+    assert getattr(result.record, field_name) is None
+    assert result.field_coverage[field_name] == "not_extracted"
+    assert result.coerced_null_fields == [field_name]

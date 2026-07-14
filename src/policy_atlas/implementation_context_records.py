@@ -22,8 +22,11 @@ from policy_atlas.finding_references import (
 from policy_atlas.schema import CLAIM_BASES, CLAIM_LEVELS, CONTEXT_LEVELS, CONTEXT_TYPES
 
 # Fingerprint components for the independent ICF extraction profile.
+# icf_v2 (task 022): the strictly source-named `context_label` rider — nothing
+# else rides the bump; icf_v1 rows read "not recorded under icf_v1" via
+# field_coverage key absence, no backfill.
 PROFILE_ID = "eb_icf_base_v1"
-SCHEMA_VERSION = "icf_v1"
+SCHEMA_VERSION = "icf_v2"
 
 ContextType = Literal[
     "mechanism",
@@ -68,6 +71,16 @@ class ICFRecordWire(BaseModel):
             "The implementation-context finding as one self-contained sentence, "
             "stated the way the source states it — a report of what happened or "
             "what the source asserts, never a recommendation, aspiration or target."
+        )
+    )
+    context_label: str | None = Field(
+        description=(
+            "The source's OWN short name for this claim's theme, copied exactly — "
+            "a subheading, a named barrier or mechanism in the source's own table "
+            "or list (e.g. 'Caseload pressure', 'Staff turnover') — or null. "
+            "Filled ONLY when the source itself provides such a short name for "
+            "the claim; null otherwise. Never your own summary, title or "
+            "paraphrase of the claim: authorship stays with the source."
         )
     )
     intervention: str | None = Field(
@@ -173,6 +186,7 @@ class ICFRecord(BaseModel):
 
     context_type: ContextType
     claim: str = Field(min_length=1)
+    context_label: str | None
     intervention: str = Field(min_length=1)
     outcome: str | None
     population: str | None

@@ -23,7 +23,7 @@ from tests.helpers import make_icf_wire_record
 
 def test_version_constants() -> None:
     assert PROFILE_ID == "eb_icf_base_v1"
-    assert SCHEMA_VERSION == "icf_v1"
+    assert SCHEMA_VERSION == "icf_v2"
 
 
 def test_literal_vocabularies_match_schema_checks() -> None:
@@ -37,6 +37,7 @@ def test_wire_to_stored_round_trip() -> None:
     wire = make_icf_wire_record(
         context_type="mechanism",
         claim="The visits built trust, which helped families take up referrals.",
+        context_label="Trusted relationships",
         outcome="referral uptake",
         claim_level="pooled",
         claim_basis="studied",
@@ -47,6 +48,7 @@ def test_wire_to_stored_round_trip() -> None:
 
     assert result.record is not None
     assert result.record.context_type == "mechanism"
+    assert result.record.context_label == "Trusted relationships"
     assert result.record.claim_level == "pooled"
     assert result.record.claim_basis == "studied"
     assert result.record.outcome == "referral uptake"

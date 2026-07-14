@@ -46,6 +46,21 @@ def _with_iof_defaults(raw_findings: Any) -> Any:
     return defaulted
 
 
+def _with_icf_defaults(raw_findings: Any) -> Any:
+    """Default legacy ICF stub sentinel records to the current wire shape."""
+    if not isinstance(raw_findings, list):
+        return raw_findings
+    defaulted: list[Any] = []
+    for record in raw_findings:
+        if isinstance(record, dict):
+            updated = dict(record)
+            updated.setdefault("context_label", None)
+            defaulted.append(updated)
+            continue
+        defaulted.append(record)
+    return defaulted
+
+
 class ExtractionBackend(Protocol):
     """The extraction seam.
 
@@ -327,7 +342,11 @@ class StubICFExtractionBackend:
             windows = payload.metadata["_stub_icf_windows"]
             return (
                 ICFExtractionResponse.model_validate(
-                    {"findings": windows.get(str(payload.window_index), [])}
+                    {
+                        "findings": _with_icf_defaults(
+                            windows.get(str(payload.window_index), [])
+                        )
+                    }
                 ),
                 None,
             )
@@ -336,7 +355,11 @@ class StubICFExtractionBackend:
             if payload.window_index == 0:
                 return (
                     ICFExtractionResponse.model_validate(
-                        {"findings": payload.metadata["_stub_icf"]}
+                        {
+                            "findings": _with_icf_defaults(
+                                payload.metadata["_stub_icf"]
+                            )
+                        }
                     ),
                     None,
                 )
