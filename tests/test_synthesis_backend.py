@@ -24,6 +24,8 @@ from policy_atlas.synthesis_backend import (
     SectionTurn,
     StubSynthesisBackend,
     _salvage_section,
+    build_section_messages,
+    build_section_repair_messages,
 )
 from policy_atlas.synthesis_tools import ToolExchange, run_section_loop
 
@@ -43,6 +45,7 @@ def _seed(
             "focus": "Evidence on housing outcomes.",
             "group_ids": ["g1"],
         },
+        "corpus": {"screened": 2, "ingested": 1, "appraised": 1},
         "available_tools": available_tools or ["search_chunks", "query_findings", "lookup"],
         "available_claim_types": available_claim_types
         or ["chunk", "finding", "pattern", "theme", "gap", "reasoning"],
@@ -53,6 +56,16 @@ def _seed(
         },
         "computed_spread": {"increase": 2, "mixed": 1},
     }
+
+
+def _message_json(content: str) -> Any:
+    return json.loads(content.split(":\n", 1)[1])
+
+
+def _repair_message_json(content: str) -> Any:
+    start = content.index("{")
+    end = content.index("\n\nRewrite ONLY", start)
+    return json.loads(content[start:end])
 
 
 def _search_exchange(content: str = "Alpha evidence content for citation.") -> ToolExchange:
@@ -80,6 +93,84 @@ def _finding_exchange() -> ToolExchange:
             "icf_findings": [{"finding_id": "finding-3"}],
         },
     }
+
+
+def test_section_messages_split_run_and_section_seed_deterministically() -> None:
+    transcript = [_search_exchange("Transcript-only content.")]
+    first = build_section_messages(_seed(), transcript, force_emit=True)
+    second = build_section_messages(_seed(), transcript, force_emit=True)
+
+    assert first == second
+    assert [message["role"] for message in first] == [
+        "system",
+        "user",
+        "user",
+        "assistant",
+        "tool",
+        "user",
+    ]
+    run_payload = _message_json(first[1]["content"])
+    section_payload = _message_json(first[2]["content"])
+    assert set(run_payload) == {
+        "intent",
+        "substrate",
+        "corpus",
+        "available_tools",
+        "available_claim_types",
+    }
+    assert run_payload["corpus"] == {"screened": 2, "ingested": 1, "appraised": 1}
+    assert "corpus" not in run_payload["substrate"]
+    assert set(section_payload) == {
+        "section",
+        "member_findings",
+        "computed_spread",
+        "ledger",
+    }
+    assert section_payload["section"]["title"] == "Housing outcomes"
+    assert "section_index" not in section_payload
+    assert first[-1]["content"].startswith("This is your final turn")
+
+
+def test_repair_messages_are_micro_call_without_transcript_and_with_dependencies() -> None:
+    seed = _seed()
+    transcript = [_search_exchange("Transcript-only source text should not be resent.")]
+    repair_input = [
+        {
+            "claim_id": "s0c0",
+            "claim": {
+                "claim_type": "chunk",
+                "text": "Too strong.",
+                "citations": [{"chunk_record_id": "chunk-1", "quote": "wrong"}],
+            },
+            "failure_reason": "quote_not_found",
+            "replacement_span": {"start": 0, "end": 11, "text": "Too strong."},
+            "paragraph_context": {"start": 0, "end": 11, "text": "Too strong."},
+            "dependencies": {
+                "chunks": {
+                    "chunk-1": {
+                        "chunk_record_id": "chunk-1",
+                        "content": "Dependency source text.",
+                    }
+                }
+            },
+        }
+    ]
+
+    loop_messages = build_section_messages(seed, transcript, force_emit=False)
+    repair_messages = build_section_repair_messages(seed, failing=repair_input)
+
+    assert len(repair_messages) == 3
+    assert [message["role"] for message in repair_messages] == ["system", "user", "user"]
+    assert repair_messages[1] == loop_messages[1]
+    assert all(message["role"] not in {"assistant", "tool"} for message in repair_messages)
+    serialized = json.dumps(repair_messages, ensure_ascii=False)
+    assert "Transcript-only source text should not be resent." not in serialized
+    payload = _repair_message_json(repair_messages[2]["content"])
+    failing = payload["failing_claims"][0]
+    assert failing["claim_id"] == "s0c0"
+    assert failing["dependencies"]["chunks"]["chunk-1"]["content"] == (
+        "Dependency source text."
+    )
 
 
 def test_stub_proposal_default_shape_and_group_assignment() -> None:
@@ -301,10 +392,23 @@ def test_stub_repair_rewords_down_and_repairs_or_keeps_fabricated_quote() -> Non
     transcript = [_search_exchange("Repairable source text that is safely quotable.")]
     failing = [
         {
-            "claim_type": "chunk",
-            "text": "Too strong.",
-            "citations": [{"chunk_record_id": "chunk-1", "quote": "wrong"}],
-            "rationale": "Quote not found.",
+            "claim_id": "s0c0",
+            # F2 re-pin: repair inputs now carry the original claim plus
+            # dependency records instead of relying on transcript position.
+            "claim": {
+                "claim_type": "chunk",
+                "text": "Too strong.",
+                "citations": [{"chunk_record_id": "chunk-1", "quote": "wrong"}],
+            },
+            "failure_reason": "Quote not found.",
+            "dependencies": {
+                "chunks": {
+                    "chunk-1": {
+                        "chunk_record_id": "chunk-1",
+                        "content": transcript[0]["result"]["chunks"][0]["content"],
+                    }
+                }
+            },
         }
     ]
 
@@ -321,15 +425,27 @@ def test_stub_repair_rewords_down_and_repairs_or_keeps_fabricated_quote() -> Non
 
     fabricated = [
         {
-            "claim_type": "chunk",
-            "text": "Too strong.",
-            "citations": [
-                {
-                    "chunk_record_id": "chunk-1",
-                    "quote": "This fabricated quote is absent.",
+            "claim_id": "s0c0",
+            # F2 re-pin: repair inputs are id-keyed and dependency-complete.
+            "claim": {
+                "claim_type": "chunk",
+                "text": "Too strong.",
+                "citations": [
+                    {
+                        "chunk_record_id": "chunk-1",
+                        "quote": "This fabricated quote is absent.",
+                    }
+                ],
+            },
+            "failure_reason": "Quote not found.",
+            "dependencies": {
+                "chunks": {
+                    "chunk-1": {
+                        "chunk_record_id": "chunk-1",
+                        "content": transcript[0]["result"]["chunks"][0]["content"],
+                    }
                 }
-            ],
-            "rationale": "Quote not found.",
+            },
         }
     ]
     unrepaired, unrepaired_usage = backend.repair_section(
@@ -458,6 +574,7 @@ def test_custom_stub_payloads_are_returned() -> None:
     repair = SectionRepairWire(
         repairs=[
             RepairItemWire(
+                claim_id="s0c0",
                 replacement_segment="Custom repair.",
                 claim=ClaimWire(
                     claim_type="gap",

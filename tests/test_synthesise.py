@@ -45,6 +45,7 @@ from policy_atlas.synthesis_backend import (
     ChunkCitationWire,
     ClaimWire,
     GapPayloadWire,
+    PatternPayloadWire,
     RepairItemWire,
     SectionProposalWire,
     SectionProseWire,
@@ -57,15 +58,23 @@ from policy_atlas.synthesis_backend import (
 )
 from policy_atlas.synthesis_tools import ToolExchange
 from policy_atlas.synthesise import (
+    ChunkInfo,
     ClaimDraft,
+    ClaimValidationBatch,
     CorpusProfile,
+    CoverageRecord,
+    FindingInfo,
     RejectedClaim,
+    SectionAccounting,
     SubstrateView,
     SynthesiseContext,
     SynthesiseFailure,
+    _apply_and_rebuild,
     _grouping_summary,
     _groups_unsectioned_by_facet,
     _load_findings,
+    _repair_dependency_records,
+    _repair_id_mismatch,
     _rollup_counts,
     _validate_sections,
     _validate_theme_claim,
@@ -159,6 +168,358 @@ def _empty_substrate(grouping: dict[str, Any] | None) -> SubstrateView:
         basis_by_snapshot_id={},
         selected_pss_ids=set(),
     )
+
+
+def _repair_dependency_substrate() -> SubstrateView:
+    chunk = ChunkInfo(
+        chunk_id="chunk-1",
+        pss_id="pss-1",
+        source_snapshot_id="snapshot-1",
+        sequence=1,
+        content="Alpha quote appears in the full chunk content.",
+        segmentation_policy="manual_v1",
+        text_basis="full_text",
+        origin="selected",
+        appraised=True,
+    )
+    finding = FindingInfo(
+        kind="iof",
+        finding_id="finding-1",
+        pss_id="pss-1",
+        source_snapshot_id="snapshot-1",
+        record={
+            "kind": "iof",
+            "finding_id": "finding-1",
+            "intervention": "Alpha",
+            "outcome": "Outcome",
+            "effect_direction": "increase",
+        },
+        grounding=[{"quote": "Alpha quote"}],
+        effect_direction="increase",
+    )
+    return SubstrateView(
+        characterisation={
+            "coverage": {"signals": {"thin": 2}},
+            "themes": [{"theme_id": "theme-1", "name": "Access"}],
+        },
+        selection=None,
+        extraction={"counts": {"findings": {"total": 1}}},
+        grouping={
+            "facets": ["intervention"],
+            "groups": [
+                {
+                    "group_id": "intervention:g01",
+                    "facet": "intervention",
+                    "label": "Alpha",
+                    "description": "Alpha services.",
+                    "member_finding_ids": ["finding-1"],
+                    "direction_spread": {"increase": 1},
+                    "size": 1,
+                }
+            ],
+        },
+        corpus=CorpusProfile(
+            screened_docs=1,
+            ingested_docs=1,
+            appraised_docs=1,
+            appraised_ingested_docs=1,
+            appraised_pss_ids={"pss-1"},
+        ),
+        coverage_records={
+            "coverage-1": CoverageRecord(
+                record_id="coverage-1",
+                backends=[{"backend": "fixture"}],
+                adequacy_verdict="adequate",
+                verdict_origin="tool",
+            )
+        },
+        chunk_by_id={"chunk-1": chunk},
+        chunks_by_pss_id={"pss-1": [chunk]},
+        finding_by_id={"finding-1": finding},
+        icf_finding_by_id={},
+        icf_profile_available=False,
+        basis_by_snapshot_id={
+            "snapshot-1": build_basis([("chunk-1", chunk.content)]),
+        },
+        selected_pss_ids={"pss-1"},
+    )
+
+
+def test_repair_dependency_records_select_per_claim_type() -> None:
+    substrate = _repair_dependency_substrate()
+    transcript: list[ToolExchange] = [
+        {
+            "tool": "search_chunks",
+            "arguments": {"query": "alpha"},
+            "result": {
+                "chunks": [
+                    {
+                        "chunk_record_id": "chunk-1",
+                        "already_returned": True,
+                    }
+                ]
+            },
+        }
+    ]
+
+    chunk_deps = _repair_dependency_records(
+        ClaimWire(
+            claim_type="chunk",
+            text="Chunk claim.",
+            citations=[ChunkCitationWire(chunk_record_id="chunk-1", quote="missing")],
+        ),
+        transcript=transcript,
+        substrate=substrate,
+    )
+    assert chunk_deps == {
+        "chunks": {
+            "chunk-1": {
+                "chunk_record_id": "chunk-1",
+                "pss_id": "pss-1",
+                "source_snapshot_id": "snapshot-1",
+                "sequence": 1,
+                "content": "Alpha quote appears in the full chunk content.",
+                "segmentation_policy": "manual_v1",
+                "text_basis": "full_text",
+                "origin": "selected",
+                "appraised": True,
+            }
+        }
+    }
+
+    finding_deps = _repair_dependency_records(
+        ClaimWire(
+            claim_type="finding",
+            text="Finding claim.",
+            cited_finding_ids=["finding-1"],
+        ),
+        transcript=transcript,
+        substrate=substrate,
+    )
+    assert finding_deps["findings"]["finding-1"]["intervention"] == "Alpha"
+    assert finding_deps["chunks"]["chunk-1"]["content"].startswith("Alpha quote")
+
+    pattern_deps = _repair_dependency_records(
+        ClaimWire(
+            claim_type="pattern",
+            text="Pattern claim.",
+            pattern=PatternPayloadWire(
+                kind="direction_spread",
+                computed_from="group_direction_spread",
+                group_id="intervention:g01",
+                stated={"increase": 1},
+                base="extracted",
+            ),
+        ),
+        transcript=transcript,
+        substrate=substrate,
+    )
+    assert pattern_deps["computed"]["group_direction_spread:intervention:g01"] == {
+        "computed_from": "group_direction_spread",
+        "group_id": "intervention:g01",
+        "direction_spread": {"increase": 1},
+    }
+    assert pattern_deps["groups"]["intervention:g01"]["label"] == "Alpha"
+    assert "chunks" not in pattern_deps
+
+    theme_deps = _repair_dependency_records(
+        ClaimWire(
+            claim_type="theme",
+            text="Theme claim.",
+            theme=ThemePayloadWire(
+                source="grouping",
+                referenced_ids=["intervention:g01"],
+                base="extracted",
+            ),
+        ),
+        transcript=transcript,
+        substrate=substrate,
+    )
+    assert theme_deps == {
+        "groups": {
+            "intervention:g01": substrate.group_by_id["intervention:g01"],
+        }
+    }
+
+    gap_deps = _repair_dependency_records(
+        ClaimWire(
+            claim_type="gap",
+            text="Gap claim.",
+            gap=GapPayloadWire(
+                grade="corpus_absence",
+                coverage_base="screened",
+                coverage_record_id="coverage-1",
+            ),
+        ),
+        transcript=transcript,
+        substrate=substrate,
+    )
+    assert gap_deps["coverage_records"]["coverage-1"]["adequacy_verdict"] == "adequate"
+    assert "chunks" not in gap_deps
+
+
+def test_repair_application_binds_known_ids_regardless_of_order() -> None:
+    substrate = _empty_substrate(grouping=None)
+    prose = "First unsupported. Second unsupported."
+    first_claim = ClaimWire(
+        claim_type="gap",
+        text="First unsupported.",
+        gap=GapPayloadWire(grade="inferred", coverage_base="screened"),
+    )
+    second_claim = ClaimWire(
+        claim_type="gap",
+        text="Second unsupported.",
+        gap=GapPayloadWire(grade="inferred", coverage_base="screened"),
+    )
+    initial = ClaimValidationBatch(
+        drafts=[],
+        rejected=[
+            RejectedClaim(
+                claim_id="s0c0",
+                claim_index=0,
+                claim=first_claim,
+                reason="gap_invalid",
+                span=(0, 18),
+            ),
+            RejectedClaim(
+                claim_id="s0c1",
+                claim_index=1,
+                claim=second_claim,
+                reason="gap_invalid",
+                span=(19, 38),
+            ),
+        ],
+    )
+    failing = [
+        {
+            "claim_id": "s0c0",
+            "claim_index": 0,
+            "claim": first_claim.model_dump(mode="json"),
+            "rationale": "gap_invalid",
+            "span": [0, 18],
+        },
+        {
+            "claim_id": "s0c1",
+            "claim_index": 1,
+            "claim": second_claim.model_dump(mode="json"),
+            "rationale": "gap_invalid",
+            "span": [19, 38],
+        },
+    ]
+    repairs = [
+        RepairItemWire(
+            claim_id="s0c1",
+            replacement_segment="Second repaired.",
+            claim=ClaimWire(
+                claim_type="gap",
+                text="Second repaired.",
+                gap=GapPayloadWire(grade="inferred", coverage_base="screened"),
+            ),
+        ),
+        RepairItemWire(
+            claim_id="s0c0",
+            replacement_segment="First repaired.",
+            claim=ClaimWire(
+                claim_type="gap",
+                text="First repaired.",
+                gap=GapPayloadWire(grade="inferred", coverage_base="screened"),
+            ),
+        ),
+    ]
+    accounting = SectionAccounting(
+        tool_call_counts={},
+        tool_call_count=0,
+        gathered_id_hash="",
+        turns_used=0,
+        turn_cap_hit=False,
+    )
+
+    final, final_prose, rejudge_calls, _usage, _unspanned = _apply_and_rebuild(
+        prose=prose,
+        initial=initial,
+        failing=failing,
+        repairs=repairs,
+        substrate=substrate,
+        section_group_ids=set(),
+        citable_finding_ids=set(),
+        citable_chunk_ids=set(),
+        available_claim_types={"gap"},
+        grounding_judge_backend=StubGroundingJudgeBackend(),
+        accounting=accounting,
+    )
+
+    assert [claim.text for claim in final] == ["First repaired.", "Second repaired."]
+    assert final_prose == "First repaired. Second repaired."
+    assert rejudge_calls == 0
+    assert accounting.claims_rejected_structural == 0
+    assert _repair_id_mismatch(repairs, failing) is False
+
+
+def test_repair_application_rejects_unknown_ids_and_marks_missing() -> None:
+    substrate = _empty_substrate(grouping=None)
+    claim = ClaimWire(
+        claim_type="gap",
+        text="Unsupported.",
+        gap=GapPayloadWire(grade="inferred", coverage_base="screened"),
+    )
+    initial = ClaimValidationBatch(
+        drafts=[],
+        rejected=[
+            RejectedClaim(
+                claim_id="s0c0",
+                claim_index=0,
+                claim=claim,
+                reason="gap_invalid",
+                span=(0, 12),
+            )
+        ],
+    )
+    failing = [
+        {
+            "claim_id": "s0c0",
+            "claim_index": 0,
+            "claim": claim.model_dump(mode="json"),
+            "rationale": "gap_invalid",
+            "span": [0, 12],
+        }
+    ]
+    repairs = [
+        RepairItemWire(
+            claim_id="unknown",
+            replacement_segment="Repaired.",
+            claim=ClaimWire(
+                claim_type="gap",
+                text="Repaired.",
+                gap=GapPayloadWire(grade="inferred", coverage_base="screened"),
+            ),
+        )
+    ]
+    accounting = SectionAccounting(
+        tool_call_counts={},
+        tool_call_count=0,
+        gathered_id_hash="",
+        turns_used=0,
+        turn_cap_hit=False,
+    )
+
+    final, final_prose, _rejudge_calls, _usage, _unspanned = _apply_and_rebuild(
+        prose="Unsupported.",
+        initial=initial,
+        failing=failing,
+        repairs=repairs,
+        substrate=substrate,
+        section_group_ids=set(),
+        citable_finding_ids=set(),
+        citable_chunk_ids=set(),
+        available_claim_types={"gap"},
+        grounding_judge_backend=StubGroundingJudgeBackend(),
+        accounting=accounting,
+    )
+
+    assert final == []
+    assert final_prose == "Unsupported."
+    assert accounting.claims_rejected_structural == 2
+    assert _repair_id_mismatch(repairs, failing) is True
 
 
 def _single_facet_grouping_row() -> dict[str, Any]:
@@ -1444,10 +1805,12 @@ class _SpanBindBackend:
     def repair_section(
         self, seed: dict[str, Any], transcript: list[ToolExchange], *, failing: list[dict[str, Any]]
     ) -> UsageResult[SectionRepairWire]:
-        del seed, transcript, failing
+        del seed, transcript
+        claim_id = str(failing[0]["claim_id"])
         return SectionRepairWire(
             repairs=[
                 RepairItemWire(
+                    claim_id=claim_id,
                     replacement_segment="",
                     claim=ClaimWire(claim_type="reasoning", text=self._repair_text),
                 )

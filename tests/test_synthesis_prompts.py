@@ -42,7 +42,7 @@ from policy_atlas.synthesis_tools import (
 
 def test_prompt_versions_are_distinct_constants() -> None:
     assert SECTIONS_PROMPT_VERSION == "synthesise_sections_v2"
-    assert SECTION_PROMPT_VERSION == "synthesise_section_v6"
+    assert SECTION_PROMPT_VERSION == "synthesise_section_v7"
     assert JUDGE_PROMPT_VERSION == "grounding_judge_v2"
     assert ENVELOPE_VERSION == "synthesis_envelope_v2"
 
@@ -173,9 +173,11 @@ def test_section_messages_rebuild_transcript_deterministically() -> None:
     a = build_section_messages(seed, transcript, force_emit=False)
     b = build_section_messages(seed, transcript, force_emit=False)
     assert a == b
-    assert a[2]["role"] == "assistant"
-    assert a[3]["role"] == "tool"
-    assert json.loads(a[2]["tool_calls"][0]["function"]["arguments"]) == {
+    assert a[1]["role"] == "user"
+    assert a[2]["role"] == "user"
+    assert a[3]["role"] == "assistant"
+    assert a[4]["role"] == "tool"
+    assert json.loads(a[3]["tool_calls"][0]["function"]["arguments"]) == {
         "query": "housing"
     }
     forced = build_section_messages(seed, transcript, force_emit=True)
@@ -186,17 +188,25 @@ def test_section_messages_rebuild_transcript_deterministically() -> None:
 def test_section_repair_is_loop_free_and_reword_down() -> None:
     messages = build_section_repair_messages(
         {"intent": "x"},
-        [],
-        failing=[{"claim_id": "c1", "rationale": "overstates magnitude"}],
+        failing=[
+            {
+                "claim_id": "c1",
+                "failure_reason": "overstates magnitude",
+                "replacement_span": None,
+                "paragraph_context": None,
+                "dependencies": {},
+            }
+        ],
     )
+    assert [message["role"] for message in messages] == ["system", "user", "user"]
     repair = messages[-1]["content"]
     assert "you cannot make tool calls" in repair
     assert "Reword each claim DOWN" in " ".join(repair.split())
     assert "overstates magnitude" in repair
-    # Prose-splice repair (ADR 0015 §4): rewrite the failing claims' segments,
-    # in the same order, via emit_repairs.
+    # F2 re-pin: prose-splice repair is id-bound, not position-bound.
     assert "replacement_segment" in repair
-    assert "in the same order as" in repair
+    assert "claim_id" in repair
+    assert "in the same order as" not in repair
     assert "emit_repairs" in repair
 
 

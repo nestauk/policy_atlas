@@ -2520,6 +2520,373 @@ def _span_segment(prose: str, span: tuple[int, int] | None) -> str | None:
     return prose[span[0] : span[1]]
 
 
+def _paragraph_context(
+    prose: str, span: tuple[int, int] | None
+) -> dict[str, Any] | None:
+    if span is None:
+        return None
+    start, end = span
+    paragraph_start = prose.rfind("\n\n", 0, start)
+    paragraph_start = 0 if paragraph_start == -1 else paragraph_start + 2
+    paragraph_end = prose.find("\n\n", end)
+    paragraph_end = len(prose) if paragraph_end == -1 else paragraph_end
+    return {
+        "start": paragraph_start,
+        "end": paragraph_end,
+        "text": prose[paragraph_start:paragraph_end],
+    }
+
+
+def _replacement_span(
+    prose: str, span: tuple[int, int] | None
+) -> dict[str, Any] | None:
+    if span is None:
+        return None
+    return {"start": span[0], "end": span[1], "text": _span_segment(prose, span)}
+
+
+def _record_id_from(record: Mapping[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = record.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def _transcript_records_by_id(
+    transcript: Sequence[ToolExchange],
+    *,
+    tool: str,
+    result_keys: Sequence[str],
+    id_keys: Sequence[str],
+) -> dict[str, dict[str, Any]]:
+    records: dict[str, dict[str, Any]] = {}
+    for exchange in transcript:
+        if exchange["tool"] != tool:
+            continue
+        for result_key in result_keys:
+            raw_records = exchange["result"].get(result_key)
+            if not isinstance(raw_records, list):
+                continue
+            for raw_record in raw_records:
+                if not isinstance(raw_record, dict) or raw_record.get("already_returned"):
+                    continue
+                record_id = _record_id_from(raw_record, *id_keys)
+                if record_id is not None:
+                    records[record_id] = dict(raw_record)
+    return records
+
+
+def _chunk_dependency_from_info(chunk: ChunkInfo) -> dict[str, Any]:
+    return {
+        "chunk_record_id": chunk.chunk_id,
+        "pss_id": chunk.pss_id,
+        "source_snapshot_id": chunk.source_snapshot_id,
+        "sequence": chunk.sequence,
+        "content": chunk.content,
+        "segmentation_policy": chunk.segmentation_policy,
+        "text_basis": chunk.text_basis,
+        "origin": chunk.origin,
+        "appraised": chunk.appraised,
+    }
+
+
+def _chunk_dependencies(
+    chunk_ids: Iterable[str],
+    *,
+    transcript: Sequence[ToolExchange],
+    substrate: SubstrateView,
+) -> dict[str, dict[str, Any]]:
+    transcript_chunks = _transcript_records_by_id(
+        transcript,
+        tool="search_chunks",
+        result_keys=("chunks",),
+        id_keys=("chunk_record_id", "id"),
+    )
+    records: dict[str, dict[str, Any]] = {}
+    for chunk_id in sorted(set(chunk_ids)):
+        chunk = substrate.chunk_by_id.get(chunk_id)
+        if chunk is not None:
+            records[chunk_id] = _chunk_dependency_from_info(chunk)
+            continue
+        transcript_record = transcript_chunks.get(chunk_id)
+        if transcript_record is not None:
+            records[chunk_id] = transcript_record
+    return records
+
+
+def _finding_dependency_from_info(finding: FindingInfo) -> dict[str, Any]:
+    record = dict(finding.record)
+    record["source_snapshot_id"] = finding.source_snapshot_id
+    record["grounding"] = list(finding.grounding)
+    return record
+
+
+def _finding_dependencies(
+    finding_ids: Iterable[str],
+    *,
+    transcript: Sequence[ToolExchange],
+    substrate: SubstrateView,
+) -> dict[str, dict[str, Any]]:
+    transcript_findings = _transcript_records_by_id(
+        transcript,
+        tool="query_findings",
+        result_keys=("findings", "iof_findings", "icf_findings"),
+        id_keys=("finding_id", "id"),
+    )
+    all_findings = substrate.all_finding_by_id
+    records: dict[str, dict[str, Any]] = {}
+    for finding_id in sorted(set(finding_ids)):
+        finding = all_findings.get(finding_id)
+        if finding is not None:
+            records[finding_id] = _finding_dependency_from_info(finding)
+            continue
+        transcript_record = transcript_findings.get(finding_id)
+        if transcript_record is not None:
+            records[finding_id] = transcript_record
+    return records
+
+
+def _finding_anchor_chunk_ids(
+    finding_ids: Iterable[str], substrate: SubstrateView
+) -> set[str]:
+    chunk_ids: set[str] = set()
+    all_findings = substrate.all_finding_by_id
+    for finding_id in finding_ids:
+        finding = all_findings.get(finding_id)
+        if finding is None:
+            continue
+        basis = substrate.basis_by_snapshot_id.get(finding.source_snapshot_id)
+        if basis is None:
+            continue
+        matcher = QuoteMatcher(basis)
+        for grounding in finding.grounding:
+            quote = grounding.get("quote")
+            if not isinstance(quote, str) or not quote:
+                continue
+            match = matcher.find(quote)
+            for span in match.spans:
+                if span.chunk_id is not None:
+                    chunk_ids.add(span.chunk_id)
+    return chunk_ids
+
+
+def _coverage_record_dependency(record: CoverageRecord) -> dict[str, Any]:
+    return {
+        "search_coverage_record_id": record.record_id,
+        "backends": record.backends,
+        "adequacy_verdict": record.adequacy_verdict,
+        "verdict_origin": record.verdict_origin,
+    }
+
+
+def _characterisation_themes_by_id(substrate: SubstrateView) -> dict[str, dict[str, Any]]:
+    if substrate.characterisation is None:
+        return {}
+    themes = substrate.characterisation.get("themes", [])
+    if not isinstance(themes, list):
+        return {}
+    records: dict[str, dict[str, Any]] = {}
+    for theme in themes:
+        if not isinstance(theme, dict):
+            continue
+        theme_id = _record_id_from(theme, "theme_id", "id", "name")
+        if theme_id is not None:
+            records[theme_id] = dict(theme)
+    return records
+
+
+def _computed_key(name: str, *, path: Sequence[str] = (), group_id: str | None = None) -> str:
+    if group_id is not None:
+        return f"{name}:{group_id}"
+    if path:
+        return f"{name}:/{'/'.join(path)}"
+    return name
+
+
+def _pattern_dependencies(
+    claim: ClaimWire,
+    *,
+    substrate: SubstrateView,
+) -> dict[str, dict[str, Any]]:
+    pattern = claim.pattern
+    if pattern is None:
+        return {}
+    records: dict[str, dict[str, Any]] = {}
+    if pattern.computed_from == "characterisation_coverage":
+        coverage = (
+            substrate.characterisation.get("coverage", {})
+            if substrate.characterisation
+            else {}
+        )
+        records[
+            _computed_key("characterisation_coverage", path=pattern.path)
+        ] = {
+            "computed_from": pattern.computed_from,
+            "path": list(pattern.path),
+            "value": _walk_path(coverage, pattern.path),
+        }
+    elif pattern.computed_from == "group_direction_spread":
+        group = substrate.group_by_id.get(pattern.group_id or "")
+        if group is not None:
+            records[
+                _computed_key(
+                    "group_direction_spread", group_id=pattern.group_id
+                )
+            ] = {
+                "computed_from": pattern.computed_from,
+                "group_id": pattern.group_id,
+                "direction_spread": group.get("direction_spread", {}),
+            }
+    elif pattern.computed_from == "extraction_direction_spread":
+        records["extraction_direction_spread"] = {
+            "computed_from": pattern.computed_from,
+            "direction_spread": substrate.extraction_direction_spread,
+        }
+    elif pattern.computed_from == "icf_context_type_count":
+        if pattern.group_id is not None:
+            group = substrate.group_by_id.get(pattern.group_id)
+            members = group.get("member_finding_ids", []) if group is not None else []
+            if not isinstance(members, list):
+                members = []
+            counts = _icf_context_type_counts(
+                substrate.icf_finding_by_id.get(member)
+                for member in members
+                if isinstance(member, str)
+            )
+        else:
+            counts = _icf_context_type_counts(substrate.icf_finding_by_id.values())
+        records[
+            _computed_key("icf_context_type_count", group_id=pattern.group_id)
+        ] = {
+            "computed_from": pattern.computed_from,
+            "group_id": pattern.group_id,
+            "counts": counts,
+        }
+    return records
+
+
+def _theme_dependencies(claim: ClaimWire, substrate: SubstrateView) -> dict[str, Any]:
+    theme = claim.theme
+    if theme is None:
+        return {}
+    if theme.source == "characterisation":
+        themes = _characterisation_themes_by_id(substrate)
+        return {
+            "themes": {
+                theme_id: themes[theme_id]
+                for theme_id in sorted(set(theme.referenced_ids))
+                if theme_id in themes
+            }
+        }
+    groups = substrate.group_by_id
+    return {
+        "groups": {
+            group_id: groups[group_id]
+            for group_id in sorted(set(theme.referenced_ids))
+            if group_id in groups
+        }
+    }
+
+
+def _gap_dependencies(claim: ClaimWire, substrate: SubstrateView) -> dict[str, Any]:
+    gap = claim.gap
+    if gap is None:
+        return {}
+    dependencies: dict[str, Any] = {}
+    if gap.coverage_record_id is not None:
+        record = substrate.coverage_records.get(gap.coverage_record_id)
+        if record is not None:
+            dependencies["coverage_records"] = {
+                gap.coverage_record_id: _coverage_record_dependency(record)
+            }
+    if gap.sparsity is not None:
+        coverage = (
+            substrate.characterisation.get("coverage", {})
+            if substrate.characterisation
+            else {}
+        )
+        dependencies["computed"] = {
+            _computed_key("characterisation_coverage", path=gap.sparsity.path): {
+                "computed_from": "characterisation_coverage",
+                "path": list(gap.sparsity.path),
+                "value": _walk_path(coverage, gap.sparsity.path),
+            }
+        }
+    return dependencies
+
+
+def _repair_dependency_records(
+    claim: ClaimWire,
+    *,
+    transcript: Sequence[ToolExchange],
+    substrate: SubstrateView,
+) -> dict[str, Any]:
+    dependencies: dict[str, Any] = {}
+    if claim.claim_type == "chunk":
+        dependencies["chunks"] = _chunk_dependencies(
+            (citation.chunk_record_id for citation in claim.citations),
+            transcript=transcript,
+            substrate=substrate,
+        )
+    elif claim.claim_type == "finding":
+        dependencies["findings"] = _finding_dependencies(
+            claim.cited_finding_ids, transcript=transcript, substrate=substrate
+        )
+        anchor_chunk_ids = _finding_anchor_chunk_ids(claim.cited_finding_ids, substrate)
+        dependencies["chunks"] = _chunk_dependencies(
+            anchor_chunk_ids, transcript=transcript, substrate=substrate
+        )
+    elif claim.claim_type == "pattern":
+        dependencies["computed"] = _pattern_dependencies(claim, substrate=substrate)
+        if claim.pattern is not None and claim.pattern.group_id is not None:
+            group = substrate.group_by_id.get(claim.pattern.group_id)
+            if group is not None:
+                dependencies["groups"] = {claim.pattern.group_id: group}
+    elif claim.claim_type == "theme":
+        dependencies.update(_theme_dependencies(claim, substrate))
+    elif claim.claim_type == "gap":
+        dependencies.update(_gap_dependencies(claim, substrate))
+    return {
+        key: value
+        for key, value in sorted(dependencies.items())
+        if value not in ({}, [], None)
+    }
+
+
+def _repair_input_records(
+    failing: Sequence[dict[str, Any]],
+    *,
+    prose: str,
+    transcript: Sequence[ToolExchange],
+    substrate: SubstrateView,
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for record in failing:
+        claim = ClaimWire.model_validate(record["claim"])
+        raw_span = record.get("span")
+        span: tuple[int, int] | None = None
+        if (
+            isinstance(raw_span, list)
+            and len(raw_span) == 2
+            and all(isinstance(item, int) for item in raw_span)
+        ):
+            span = (raw_span[0], raw_span[1])
+        records.append(
+            {
+                "claim_id": str(record["claim_id"]),
+                "claim": claim.model_dump(mode="json"),
+                "failure_reason": str(record.get("rationale") or record.get("reason") or ""),
+                "replacement_span": _replacement_span(prose, span),
+                "paragraph_context": _paragraph_context(prose, span),
+                "dependencies": _repair_dependency_records(
+                    claim, transcript=transcript, substrate=substrate
+                ),
+            }
+        )
+    return records
+
+
 def _failing_records(
     rejected: Sequence[RejectedClaim],
     drafts: Sequence[ClaimDraft],
@@ -2624,6 +2991,19 @@ def _finalize_no_repair(
     return [by_index[index] for index in sorted(by_index)]
 
 
+def _repair_id_mismatch(
+    repairs: Sequence[RepairItemWire], failing: Sequence[dict[str, Any]]
+) -> bool:
+    failing_ids = {str(record["claim_id"]) for record in failing}
+    repair_ids = [repair.claim_id for repair in repairs]
+    known_repair_ids = {claim_id for claim_id in repair_ids if claim_id in failing_ids}
+    return (
+        len(repair_ids) != len(failing_ids)
+        or len(set(repair_ids)) != len(repair_ids)
+        or known_repair_ids != failing_ids
+    )
+
+
 def _bind_unspanned(
     records: Sequence[dict[str, Any]],
     prose: str,
@@ -2686,14 +3066,33 @@ def _apply_and_rebuild(
     Returns the final claims, the rebuilt prose, the rejudge call count, the
     rejudge usage payload, and the rejudge unspanned records.
     """
-    # Positional repair mapping (repairs[:len(failing)] aligned to failing order).
+    # Id-keyed repair mapping: the repair wire may arrive in any order, and
+    # unknown ids are rejected structurally rather than rebound positionally.
     repair_by_index: dict[int, RepairItemWire] = {}
     failing_by_index: dict[int, dict[str, Any]] = {}
-    for offset, record in enumerate(failing):
+    failing_by_id: dict[str, dict[str, Any]] = {}
+    for record in failing:
         idx = int(record["claim_index"])
         failing_by_index[idx] = record
-        if offset < len(repairs):
-            repair_by_index[idx] = repairs[offset]
+        failing_by_id[str(record["claim_id"])] = record
+    for repair in repairs:
+        repair_record = failing_by_id.get(repair.claim_id)
+        if repair_record is None:
+            accounting.claims_rejected_structural += 1
+            log.info(
+                "synthesise.repair_unknown_claim_id",
+                claim_id=repair.claim_id,
+            )
+            continue
+        idx = int(repair_record["claim_index"])
+        if idx in repair_by_index:
+            accounting.claims_rejected_structural += 1
+            log.info(
+                "synthesise.repair_duplicate_claim_id",
+                claim_id=repair.claim_id,
+            )
+            continue
+        repair_by_index[idx] = repair
     failing_indices = set(failing_by_index)
 
     draft_by_index = {draft.claim_index: draft for draft in initial.drafts}
@@ -2714,16 +3113,16 @@ def _apply_and_rebuild(
     replace_claim_by_index: dict[int, ClaimWire] = {}
     kept_draft_indices: set[int] = set()
     for idx, span in positioned:
-        repair = repair_by_index.get(idx)
-        if idx in failing_indices and repair is not None:
-            if repair.claim is None:
+        indexed_repair = repair_by_index.get(idx)
+        if idx in failing_indices and indexed_repair is not None:
+            if indexed_repair.claim is None:
                 # Segment rewritten to carry no claim, or deleted (empty
                 # segment): the original claim is excluded (exhausted repair).
                 items.append(
                     SpliceItem(
                         key=idx,
                         span=span,
-                        replacement=repair.replacement_segment,
+                        replacement=indexed_repair.replacement_segment,
                         claim_text=None,
                     )
                 )
@@ -2733,11 +3132,11 @@ def _apply_and_rebuild(
                     SpliceItem(
                         key=idx,
                         span=span,
-                        replacement=repair.replacement_segment,
-                        claim_text=repair.claim.text,
+                        replacement=indexed_repair.replacement_segment,
+                        claim_text=indexed_repair.claim.text,
                     )
                 )
-                replace_claim_by_index[idx] = repair.claim
+                replace_claim_by_index[idx] = indexed_repair.claim
         elif idx in failing_indices:
             # Failing but no repair item (count mismatch): keep an unsupported
             # draft verbatim; drop a structural rejection (residual prose stays,
@@ -2821,18 +3220,18 @@ def _apply_and_rebuild(
         record = failing_by_index[idx]
         if record.get("span") is not None:
             continue  # a spanned failure, handled by the splice above
-        repair = repair_by_index.get(idx)
-        if repair is None or repair.claim is None:
+        indexed_repair = repair_by_index.get(idx)
+        if indexed_repair is None or indexed_repair.claim is None:
             accounting.span_bind_failures += 1
             continue
-        rebind = _bind_into(new_prose, repair.claim.text, blocked_spans)
+        rebind = _bind_into(new_prose, indexed_repair.claim.text, blocked_spans)
         if rebind is None:
             accounting.span_bind_failures += 1
             continue
-        if repair.claim.claim_type == "reasoning":
+        if indexed_repair.claim.claim_type == "reasoning":
             reasoning_count += 1
         result = _validate_claim(
-            repair.claim,
+            indexed_repair.claim,
             claim_id=str(record["claim_id"]),
             claim_index=idx,
             substrate=substrate,
@@ -2910,6 +3309,12 @@ def _section_claims(
     call_counts["judge"] += judge_calls
     usage_totals.add_payload(judge_usage)
     failing = _failing_records(initial.rejected, initial.drafts, prose=prose)
+    repair_input = _repair_input_records(
+        failing,
+        prose=prose,
+        transcript=transcript,
+        substrate=substrate,
+    )
 
     final: list[ClaimDraft]
     final_prose = prose
@@ -2921,7 +3326,7 @@ def _section_claims(
         repair_wire: SectionRepairWire | None
         try:
             repair_wire, repair_usage = synthesis_backend.repair_section(
-                seed, transcript, failing=failing
+                seed, transcript, failing=repair_input
             )
             usage_totals.add(repair_usage)
         except MalformedEmissionError:
@@ -2934,7 +3339,7 @@ def _section_claims(
         if repair_wire is None:
             final = _finalize_no_repair(initial=initial, accounting=accounting)
         else:
-            if len(repair_wire.repairs) != len(failing):
+            if _repair_id_mismatch(repair_wire.repairs, failing):
                 accounting.repair_count_mismatch = True
             (
                 final,
@@ -3515,6 +3920,9 @@ def _key_findings_pass(
     }
     seed = {
         "intent": intent,
+        "substrate": {},
+        "corpus": {},
+        "available_tools": [],
         "available_claim_types": sorted(kf_available),
         "ledger": _key_findings_ledger(section_claim_groups),
         # Run-level chunk-content map (union of every section's transcript
@@ -3722,6 +4130,10 @@ def synthesise_scope(
         selected_pss_ids=selected_pss_ids_str,
     )
     summaries = _substrate_summaries(refs, corpus)
+    section_substrate = {
+        key: value for key, value in summaries.items() if key != "corpus"
+    }
+    corpus_summary = summaries.get("corpus", {})
 
     created_at = datetime.now(UTC)
     artefact_id = uuid.uuid4()
@@ -3861,7 +4273,8 @@ def synthesise_scope(
             "intent": context.intent,
             "section": section.as_seed(),
             "section_index": section_index,
-            "substrate": summaries,
+            "substrate": section_substrate,
+            "corpus": corpus_summary if isinstance(corpus_summary, dict) else {},
             "available_tools": [
                 tool
                 for tool in ("search_chunks", "query_findings", "lookup")

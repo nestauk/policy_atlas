@@ -44,11 +44,15 @@ def repair_wire(*, claims: list[ClaimWire]) -> SectionRepairWire:
     """Build a ``SectionRepairWire`` from reworded replacement claims.
 
     Each replacement claim's text is spliced verbatim as its prose segment (an
-    exact substring), positionally mapped to the failing claims.
+    exact substring), id-mapped to the failing claims.
     """
     return SectionRepairWire(
         repairs=[
-            RepairItemWire(replacement_segment=claim.text, claim=claim)
-            for claim in claims
+            RepairItemWire(
+                claim_id=f"s0c{index}",
+                replacement_segment=claim.text,
+                claim=claim,
+            )
+            for index, claim in enumerate(claims)
         ]
     )
