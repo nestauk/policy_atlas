@@ -23,6 +23,7 @@ from sqlalchemy import case as sa_case
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.appraise import SCORE_LABELS
 from policy_atlas.extract import record_ids_by_profile
 from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.grounding import content_hash
@@ -36,6 +37,7 @@ from policy_atlas.grounding_judge import (
 from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.quote_verify import BasisText, QuoteMatcher, build_basis
 from policy_atlas.schema import (
+    EVIDENCE_TYPES,
     addressable_unit,
     annotation,
     artefact,
@@ -79,6 +81,8 @@ from policy_atlas.synthesis_tools import (
     REASONING_CLAIMS_MAX,
     REPAIR_ROUND_CAP,
     RETRIEVAL_UNIT_CAP,
+    SCREEN_CONFIDENCE_MAX,
+    SCREEN_CONFIDENCE_MIN,
     SECTION_CAP,
     SECTION_TURN_CAP,
     SYNTH_CHUNK_CHAR_BUDGET,
@@ -1779,6 +1783,197 @@ def _sections_from_directive(sections: list[dict[str, Any]]) -> list[SectionSpec
         )
         for section in sections
     ]
+
+
+# --- The pre-synthesise steer surface (022 item 14 / F5, § Steer schemas) ---
+#
+# Two side-effect-free callables an out-of-band caller uses to steer synthesise
+# without a runtime pause (deferred seam): ``propose_synthesis_plan`` reads the
+# resolved substrate and returns the proposal + the boostable vocabulary; the
+# caller collects the user's response out-of-band and ``compile_synthesis_
+# directive`` turns it into the existing fail-closed ``context["synthesis"]``
+# directive grammar, which a later ``synthesise_scope`` invocation consumes
+# verbatim. Neither mints an artefact nor writes any row.
+
+_STEER_RESPONSE_KEYS = {"sections", "group_ids", "retrieval_boosts"}
+
+
+def propose_synthesis_plan(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    context: SynthesiseContext,
+    synthesis_backend: SynthesisBackend,
+) -> dict[str, Any]:
+    """Propose a synthesis plan for a scope without minting anything (022 F5).
+
+    A read-only, side-effect-free entry point for the pre-synthesise steer
+    point (contract item 14). Unlike ``synthesise_scope``'s own proposal path —
+    which mints the artefact *before* proposing sections — this resolves the
+    same upstream substrate references, calls the backend's ``propose_sections``
+    seam and reads the persisted grouping payload, minting no artefact and
+    writing no row (no ``runs``-table contact beyond the reference reads
+    ``_resolve_references`` performs). The out-of-band caller renders the result,
+    collects the user's response and later submits it (via
+    :func:`compile_synthesis_directive`) on a fresh ``synthesise_scope`` call.
+
+    Args:
+        conn: Open read connection; used only for reference/substrate reads.
+        project_id: Owning project.
+        context: Scope and optional upstream references, exactly as
+            ``synthesise_scope`` resolves them (scope id, intent, the four run
+            references). The steer surface reuses this bundle so its inputs
+            never drift from the run's.
+        synthesis_backend: The proposal backend (stub or live) — the same seam
+            ``synthesise_scope`` calls.
+
+    Returns:
+        The § Steer schemas payload: ``proposed_sections`` (raw backend
+        proposal, ``title``/``focus``/sorted ``group_ids``), ``available_groups``
+        (``group_id``/``facet``/``label``/``size``, sorted by id) read from the
+        grouping payload, and ``boostable`` (the directive-boost vocabulary:
+        appraisal-tier values, evidence-type values, and the
+        ``screen_confidence`` lo/hi bound ranges).
+
+    Raises:
+        SynthesiseFailure: If a named reference row is missing or references
+            conflict (the same fail-closed resolution ``synthesise_scope`` uses).
+    """
+    refs = _resolve_references(conn, project_id=project_id, context=context)
+    corpus = _load_corpus_profile(conn, project_id=project_id, scope_id=context.scope_id)
+    summaries = _substrate_summaries(refs, corpus)
+
+    proposal, _usage = synthesis_backend.propose_sections(
+        intent=context.intent, substrate=summaries
+    )
+    proposed_sections = [
+        {
+            "title": section.title,
+            "focus": section.focus,
+            "group_ids": sorted(section.group_ids),
+        }
+        for section in proposal.sections
+    ]
+
+    grouping_summary = _grouping_summary(refs.grouping_row)
+    available_groups: list[dict[str, Any]] = []
+    if grouping_summary is not None:
+        for group in grouping_summary["groups"]:
+            available_groups.append(
+                {
+                    "group_id": group["group_id"],
+                    "facet": group["facet"],
+                    "label": group["label"],
+                    "size": group["size"],
+                }
+            )
+        available_groups.sort(key=lambda entry: cast("str", entry["group_id"]))
+
+    boostable = {
+        # The boost VOCABULARY (advisory), not corpus-present values: an
+        # appraisal_tier / evidence_type boost that matches nothing is recorded
+        # in unmatched_boosts, never fatal. Appraisal tiers are the 1..5 quality
+        # scores (stringified as the directive stores them); evidence types are
+        # the closed classification enum.
+        "appraisal_tiers": [str(score) for score in sorted(SCORE_LABELS)],
+        "evidence_types": sorted(EVIDENCE_TYPES),
+        "screen_confidence": {
+            "lo_bounds": [SCREEN_CONFIDENCE_MIN, SCREEN_CONFIDENCE_MAX],
+            "hi_bounds": [SCREEN_CONFIDENCE_MIN, SCREEN_CONFIDENCE_MAX],
+        },
+    }
+
+    return {
+        "proposed_sections": proposed_sections,
+        "available_groups": available_groups,
+        "boostable": boostable,
+    }
+
+
+def compile_synthesis_directive(response: Mapping[str, Any]) -> dict[str, Any]:
+    """Compile a steer response into the ``context["synthesis"]`` directive (022 F5).
+
+    Deterministic, fail-closed and pure: it maps the out-of-band user response
+    ``{"sections": [...], "group_ids": [...], "retrieval_boosts": {...}}`` to the
+    *existing* directive grammar ``{"sections": [...], "retrieval_boosts": {...}}``
+    and validates the result with the same rules ``parse_synthesis_directive``
+    applies — the single source of validation truth, so qualified group-id form,
+    screen-confidence bounds, boost enums and section rules cannot drift. The
+    top-level ``group_ids`` is the available group-id universe (echoed from
+    :func:`propose_synthesis_plan`'s ``available_groups``): each section's
+    ``group_ids`` must resolve within it or the compile fails closed. Invalid
+    input raises :class:`SynthesisDirectiveError` in the directive-error style;
+    nothing is silently dropped. The same input always yields an equal directive
+    (``group_ids`` lists are sorted, the one place the grammar leaves ordering
+    free; section order — which is meaningful — is preserved).
+
+    Args:
+        response: The out-of-band user response object.
+
+    Returns:
+        The compiled ``context["synthesis"]`` directive value (assign it under
+        the ``"synthesis"`` key of an evidence scope's context).
+
+    Raises:
+        SynthesisDirectiveError: If the response is structurally malformed or the
+            compiled directive fails ``parse_synthesis_directive``'s rules.
+    """
+    if not isinstance(response, Mapping):
+        raise SynthesisDirectiveError("synthesis steer response must be an object")
+    unknown = set(response) - _STEER_RESPONSE_KEYS
+    if unknown:
+        raise SynthesisDirectiveError(
+            f"synthesis steer response has invalid keys: {sorted(unknown)}"
+        )
+
+    grouping_group_ids: set[str] | None = None
+    if "group_ids" in response:
+        raw_universe = response["group_ids"]
+        if not isinstance(raw_universe, list):
+            raise SynthesisDirectiveError(
+                "synthesis steer response group_ids must be a list"
+            )
+        universe: set[str] = set()
+        for value in raw_universe:
+            if not isinstance(value, str) or not value:
+                raise SynthesisDirectiveError(
+                    "synthesis steer response group_ids must contain non-empty strings"
+                )
+            universe.add(value)
+        grouping_group_ids = universe
+
+    directive: dict[str, Any] = {}
+    if "sections" in response:
+        raw_sections = response["sections"]
+        if not isinstance(raw_sections, list):
+            raise SynthesisDirectiveError(
+                "synthesis steer response sections must be a list"
+            )
+        sections: list[dict[str, Any]] = []
+        for index, raw_section in enumerate(raw_sections):
+            if not isinstance(raw_section, Mapping):
+                raise SynthesisDirectiveError(
+                    f"synthesis steer response sections[{index}] must be an object"
+                )
+            # Copy verbatim so unknown keys reach parse_synthesis_directive and
+            # fail closed (never silently dropped); only group_ids is
+            # canonicalised (sorted) — the one ordering-free list.
+            section = dict(raw_section)
+            if "group_ids" in section and isinstance(section["group_ids"], list):
+                section["group_ids"] = sorted(section["group_ids"], key=str)
+            sections.append(section)
+        directive["sections"] = sections
+    if "retrieval_boosts" in response:
+        # Verbatim so unknown/invalid boost keys, bounds and enums fail closed
+        # in the single validation path below.
+        directive["retrieval_boosts"] = response["retrieval_boosts"]
+
+    # The single validation authority: identical rules to synthesise_scope's
+    # own directive parse. Raises SynthesisDirectiveError on any violation.
+    parse_synthesis_directive(
+        {"synthesis": directive}, grouping_group_ids=grouping_group_ids
+    )
+    return directive
 
 
 def _walk_path(root: Any, path: Sequence[str]) -> Any:

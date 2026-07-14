@@ -32,8 +32,10 @@ from policy_atlas.synthesis_tools import (
     REASONING_CLAIMS_MAX,
     SECTION_CAP,
     SECTION_TURN_CAP,
+    SynthesisDirectiveError,
     _doc_record,
     _finding_record,
+    parse_synthesis_directive,
 )
 from policy_atlas.synthesise import (
     CONCLUSIONS_TITLE,
@@ -54,6 +56,7 @@ from policy_atlas.synthesise import (
     _validate_sections,
     bind_spans,
     build_ledger,
+    compile_synthesis_directive,
     derive_artefact_title,
     generation_budget_max,
     splice_and_rebind,
@@ -1357,3 +1360,137 @@ def test_extraction_profile_ids_fails_closed_on_flat_provenance() -> None:
         _extraction_profile_ids({"extraction_provenance": {"fingerprint": "fp"}})
     with pytest.raises(SynthesiseFailure, match="corrupt_reference"):
         _extraction_profile_ids({"extraction_provenance": "flat"})
+
+
+# --- compile_synthesis_directive (022 F5 steer surface) ---
+
+
+def _steer_response() -> dict[str, Any]:
+    return {
+        "sections": [
+            {
+                "title": "Interventions that worked",
+                "focus": "What the assembled evidence says about interventions.",
+                "group_ids": ["intervention:g02", "intervention:g01"],
+            },
+            {
+                "title": "Barriers to delivery",
+                "focus": "Recurring implementation barriers.",
+            },
+        ],
+        "group_ids": ["intervention:g01", "intervention:g02", "barrier_theme:g01"],
+        "retrieval_boosts": {
+            "appraisal_tier": {"5": 2.0},
+            "screen_confidence": {"lo": 1.0, "hi": 2.5},
+        },
+    }
+
+
+def test_compile_synthesis_directive_shape_and_determinism() -> None:
+    """Compile emits the directive grammar, sorts group_ids, is deterministic."""
+    response = _steer_response()
+    first = compile_synthesis_directive(response)
+    second = compile_synthesis_directive(_steer_response())
+    assert first == second
+    # Top-level group_ids universe is consumed, never emitted.
+    assert set(first) == {"sections", "retrieval_boosts"}
+    # group_ids canonicalised (sorted), section order preserved.
+    assert first["sections"][0]["group_ids"] == ["intervention:g01", "intervention:g02"]
+    assert first["sections"][0]["title"] == "Interventions that worked"
+    assert "group_ids" not in first["sections"][1]
+    assert first["retrieval_boosts"]["appraisal_tier"] == {"5": 2.0}
+    assert first["retrieval_boosts"]["screen_confidence"] == {"lo": 1.0, "hi": 2.5}
+
+
+def test_compile_synthesis_directive_round_trips_through_parser() -> None:
+    """The compiled directive parses through the same validator synthesise uses."""
+    directive = compile_synthesis_directive(_steer_response())
+    parsed = parse_synthesis_directive(
+        {"synthesis": directive},
+        grouping_group_ids={"intervention:g01", "intervention:g02", "barrier_theme:g01"},
+    )
+    assert parsed.sections is not None
+    assert [section["title"] for section in parsed.sections] == [
+        "Interventions that worked",
+        "Barriers to delivery",
+    ]
+    assert parsed.appraisal_tier_boosts == {"5": 2.0}
+    assert parsed.screen_confidence.lo == 1.0
+    assert parsed.screen_confidence.hi == 2.5
+
+
+def test_compile_synthesis_directive_empty_response_is_empty_directive() -> None:
+    """A response with no steer content compiles to an empty (valid) directive."""
+    assert compile_synthesis_directive({}) == {}
+
+
+def test_compile_synthesis_directive_rejects_unqualified_group_id() -> None:
+    """An unqualified section group id fails closed on the grammar's form rule."""
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive(
+            {
+                "sections": [
+                    {"title": "S", "focus": "f", "group_ids": ["g01"]}
+                ],
+                "group_ids": ["g01"],
+            }
+        )
+
+
+def test_compile_synthesis_directive_rejects_unknown_group_id() -> None:
+    """A qualified section group id outside the universe fails closed."""
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive(
+            {
+                "sections": [
+                    {"title": "S", "focus": "f", "group_ids": ["outcome:g09"]}
+                ],
+                "group_ids": ["intervention:g01"],
+            }
+        )
+
+
+def test_compile_synthesis_directive_rejects_out_of_bounds_screen_confidence() -> None:
+    """A screen_confidence bound outside [0.5, 4.0] fails closed."""
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive(
+            {"retrieval_boosts": {"screen_confidence": {"lo": 0.1, "hi": 2.0}}}
+        )
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive(
+            {"retrieval_boosts": {"screen_confidence": {"lo": 3.0, "hi": 1.0}}}
+        )
+
+
+def test_compile_synthesis_directive_rejects_unknown_boost_key() -> None:
+    """An unknown retrieval-boost key fails closed, never silently dropped."""
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive({"retrieval_boosts": {"not_a_boost": {"x": 1.0}}})
+
+
+def test_compile_synthesis_directive_rejects_malformed_sections() -> None:
+    """Non-list sections, non-object sections and unknown response keys fail closed."""
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive({"sections": "not-a-list"})
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive({"sections": ["not-an-object"]})
+    # A section missing 'focus' is rejected by the grammar's key check.
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive({"sections": [{"title": "S"}]})
+    # An unknown extra key on a section is not silently dropped.
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive(
+            {"sections": [{"title": "S", "focus": "f", "weird": 1}]}
+        )
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive({"unknown_top_level": []})
+
+
+def test_compile_synthesis_directive_rejects_non_mapping_and_bad_group_ids() -> None:
+    """Non-object responses and malformed group_ids universes fail closed."""
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive([])  # type: ignore[arg-type]
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive({"group_ids": "not-a-list"})
+    with pytest.raises(SynthesisDirectiveError):
+        compile_synthesis_directive({"group_ids": [""]})

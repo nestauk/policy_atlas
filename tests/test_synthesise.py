@@ -35,6 +35,7 @@ from policy_atlas.schema import (
     implementation_context_finding,
     intervention_outcome_finding,
     project_source_snapshot,
+    runs,
     search_coverage_record,
     selection_result,
     source_extraction_record,
@@ -78,6 +79,8 @@ from policy_atlas.synthesise import (
     _rollup_counts,
     _validate_sections,
     _validate_theme_claim,
+    compile_synthesis_directive,
+    propose_synthesis_plan,
     synthesise_scope,
 )
 from policy_atlas.usage import UsageResult
@@ -3219,3 +3222,152 @@ def test_mixed_and_unclear_findings_survive_synthesise_section_seed(
     assert member_directions[str(mixed_id)] == "mixed"
     assert member_directions[str(unclear_id)] == "unclear"
     assert seed["computed_spread"] == {"mixed": 1, "unclear": 1}
+
+
+# --- propose_synthesis_plan (022 F5 steer surface) ---
+
+
+def _runs_count(conn: Connection, project_id: uuid.UUID) -> int:
+    return int(
+        conn.execute(
+            select(func.count()).select_from(runs).where(runs.c.project_id == project_id)
+        ).scalar_one()
+    )
+
+
+def test_propose_synthesis_plan_is_side_effect_free(conn: Connection) -> None:
+    """propose_synthesis_plan mints no artefact and writes no row (contract item 14)."""
+    project_id, _run_id, scope_id, extraction_run_id, grouping_run_id, _finding_ids = (
+        _seed_group_with_findings(conn, [{"intervention": "Alpha service"}])
+    )
+
+    before = {
+        "artefact": _count(conn, artefact, project_id),
+        "synthesis_result": _count(conn, synthesis_result, project_id),
+        "block": _count(conn, block, project_id),
+        "annotation": _count(conn, annotation, project_id),
+        "addressable_unit": _count(conn, addressable_unit, project_id),
+        "citation": _count(conn, citation, project_id),
+        "runs": _runs_count(conn, project_id),
+    }
+
+    proposal = propose_synthesis_plan(
+        conn,
+        project_id=project_id,
+        context=SynthesiseContext(
+            scope_id=scope_id,
+            intent="What works to cut fuel poverty",
+            context={},
+            extraction_run_id=extraction_run_id,
+            grouping_run_id=grouping_run_id,
+        ),
+        synthesis_backend=StubSynthesisBackend(),
+    )
+
+    after = {
+        "artefact": _count(conn, artefact, project_id),
+        "synthesis_result": _count(conn, synthesis_result, project_id),
+        "block": _count(conn, block, project_id),
+        "annotation": _count(conn, annotation, project_id),
+        "addressable_unit": _count(conn, addressable_unit, project_id),
+        "citation": _count(conn, citation, project_id),
+        "runs": _runs_count(conn, project_id),
+    }
+    assert before == after
+    # A plan was still produced from the read-only substrate.
+    assert proposal["proposed_sections"]
+
+
+def test_propose_synthesis_plan_output_schema(conn: Connection) -> None:
+    """The proposal payload matches the § Steer schemas shape exactly."""
+    project_id, _run_id, scope_id, extraction_run_id, grouping_run_id, finding_ids = (
+        _seed_group_with_findings(conn, [{"intervention": "Alpha service"}])
+    )
+
+    proposal = propose_synthesis_plan(
+        conn,
+        project_id=project_id,
+        context=SynthesiseContext(
+            scope_id=scope_id,
+            intent="What works to cut fuel poverty",
+            context={},
+            extraction_run_id=extraction_run_id,
+            grouping_run_id=grouping_run_id,
+        ),
+        synthesis_backend=StubSynthesisBackend(),
+    )
+
+    assert set(proposal) == {"proposed_sections", "available_groups", "boostable"}
+    for section in proposal["proposed_sections"]:
+        assert set(section) == {"title", "focus", "group_ids"}
+    # available_groups reads the persisted grouping payload.
+    assert proposal["available_groups"] == [
+        {
+            "group_id": "intervention:g01",
+            "facet": "intervention",
+            "label": "alpha",
+            "size": len(finding_ids),
+        }
+    ]
+    boostable = proposal["boostable"]
+    assert set(boostable) == {"appraisal_tiers", "evidence_types", "screen_confidence"}
+    assert boostable["appraisal_tiers"] == ["1", "2", "3", "4", "5"]
+    assert "Systematic Review and Meta-Analysis" in boostable["evidence_types"]
+    assert boostable["screen_confidence"] == {
+        "lo_bounds": [0.5, 4.0],
+        "hi_bounds": [0.5, 4.0],
+    }
+
+
+def test_propose_then_compile_directive_round_trips_into_a_run(conn: Connection) -> None:
+    """A proposal → compiled directive drives a synthesise run's sections + boosts."""
+    project_id, run_id, scope_id, extraction_run_id, grouping_run_id, _finding_ids = (
+        _seed_group_with_findings(conn, [{"intervention": "Alpha service"}])
+    )
+    plan_context = SynthesiseContext(
+        scope_id=scope_id,
+        intent="What works to cut fuel poverty",
+        context={},
+        extraction_run_id=extraction_run_id,
+        grouping_run_id=grouping_run_id,
+    )
+    proposal = propose_synthesis_plan(
+        conn,
+        project_id=project_id,
+        context=plan_context,
+        synthesis_backend=StubSynthesisBackend(),
+    )
+    available_ids = [group["group_id"] for group in proposal["available_groups"]]
+
+    directive = compile_synthesis_directive(
+        {
+            "sections": [
+                {
+                    "title": "Interventions in the corpus",
+                    "focus": "What the assembled evidence reports on interventions.",
+                    "group_ids": available_ids,
+                }
+            ],
+            "group_ids": available_ids,
+            "retrieval_boosts": {"screen_confidence": {"lo": 1.0, "hi": 3.0}},
+        }
+    )
+
+    _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        extraction_run_id=extraction_run_id,
+        grouping_run_id=grouping_run_id,
+        context={"synthesis": directive},
+    )
+
+    row = conn.execute(
+        select(synthesis_result).where(synthesis_result.c.project_id == project_id)
+    ).one()
+    assert row.synthesis_provenance["section_set"]["source"] == "scope_context"
+    block_titles = {block_row["title"] for block_row in row.blocks}
+    assert "Interventions in the corpus" in block_titles
+    boosts = row.synthesis_provenance["directive"]["retrieval_boosts"]
+    assert boosts["screen_confidence"] == {"lo": 1.0, "hi": 3.0}
