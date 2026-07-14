@@ -2,6 +2,7 @@
 
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, cast
 
@@ -30,6 +31,92 @@ _UNSET: Any = object()
 
 def now() -> datetime:
     return datetime.now(UTC)
+
+
+# --- Fake OpenAI ``chat.completions.parse`` client double (task 023 WP8) ---
+#
+# Every ``OpenAI*Backend.<verb>`` seam that calls ``self._client.chat.completions.parse(...)``
+# and reads ``response.choices[0].message.parsed`` shares this shape. Backends whose live path
+# calls ``.completions.create`` with tool-call messages (e.g. ``OpenAISynthesisBackend``'s
+# section-turn loop) are a genuinely different shape — those stay local to their test module.
+
+
+@dataclass
+class FakeParsedMessage:
+    parsed: Any
+
+
+@dataclass
+class FakeChoice:
+    message: FakeParsedMessage
+
+
+@dataclass
+class FakeParseResponse:
+    choices: list[FakeChoice]
+    usage: Any = None
+
+
+class FakeParseCompletions:
+    """Test double for ``client.chat.completions``, recording every ``parse()`` call's kwargs."""
+
+    def __init__(self, response: FakeParseResponse) -> None:
+        self._response = response
+        self.calls: list[dict[str, Any]] = []
+
+    def parse(self, **kwargs: Any) -> FakeParseResponse:
+        self.calls.append(kwargs)
+        return self._response
+
+
+class FakeParseChat:
+    def __init__(self, response: FakeParseResponse) -> None:
+        self.completions = FakeParseCompletions(response)
+
+
+class FakeOpenAIParseClient:
+    """Test double for an OpenAI client exposing only ``chat.completions.parse``.
+
+    Build via ``fake_parse_client``, not directly.
+    """
+
+    def __init__(self, response: FakeParseResponse) -> None:
+        self.chat = FakeParseChat(response)
+
+
+def fake_parse_client(
+    *,
+    parsed: Any = _UNSET,
+    usage: Any = None,
+    choices: list[FakeChoice] | None = None,
+) -> FakeOpenAIParseClient:
+    """Build a fake OpenAI client double for a ``chat.completions.parse`` backend seam.
+
+    The common case passes ``parsed``: it becomes the sole choice's
+    ``message.parsed`` (identity-preserved — ``result is parsed`` holds for
+    backends that return the parsed object verbatim). Pass ``choices``
+    directly instead — even ``[]`` — to control the choices list exactly,
+    e.g. to exercise a backend's no-choices error path. Exactly one of
+    ``parsed``/``choices`` should be given.
+
+    Every ``parse()`` call's kwargs are recorded on
+    ``client.chat.completions.calls``, in order, for assertions like
+    ``kwargs["model"] == ...``.
+
+    Args:
+        parsed: The parsed payload for the sole response choice.
+        usage: The fake response's ``usage`` attribute; most backends under
+            test don't read it, so it defaults to ``None``.
+        choices: An explicit choices list, bypassing ``parsed``.
+
+    Returns:
+        A fake client to assign onto a backend's ``_client`` attribute.
+    """
+    if choices is None:
+        if parsed is _UNSET:
+            raise ValueError("fake_parse_client requires parsed= or choices=")
+        choices = [FakeChoice(message=FakeParsedMessage(parsed))]
+    return FakeOpenAIParseClient(FakeParseResponse(choices=choices, usage=usage))
 
 
 def executed_calls_for(

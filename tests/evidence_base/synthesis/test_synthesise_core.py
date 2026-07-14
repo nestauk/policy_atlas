@@ -60,7 +60,7 @@ from tests.helpers import (
     seed_scope,
     seed_select_doc,
 )
-from tests.synthesis_wire import empty_key_findings, prose_section, repair_wire
+from tests.synthesis_wire import ScriptedSynthesisBackend, prose_section, repair_wire
 
 
 def _count(conn: Connection, table: Any, project_id: uuid.UUID) -> int:
@@ -192,25 +192,21 @@ def _seed_envelope_chunk(
     return chunk_id
 
 
-class _SearchAndCiteBackend:
-    mode = "stub"
+class _SearchAndCiteBackend(ScriptedSynthesisBackend):
     quote = "abstract-only subsidy evidence"
 
     def __init__(self) -> None:
+        super().__init__(
+            proposal=SectionProposalWire(
+                sections=[
+                    SectionWire(
+                        title="Abstract-basis evidence",
+                        focus="Evidence visible from abstract-basis chunks.",
+                    )
+                ]
+            )
+        )
         self.seen_chunks: list[dict[str, Any]] = []
-
-    def propose_sections(
-        self, *, intent: str, substrate: dict[str, Any], rejection: list[str] | None = None
-    ) -> UsageResult[SectionProposalWire]:
-        del intent, substrate, rejection
-        return SectionProposalWire(
-            sections=[
-                SectionWire(
-                    title="Abstract-basis evidence",
-                    focus="Evidence visible from abstract-basis chunks.",
-                )
-            ]
-        ), None
 
     def section_turn(
         self, seed: dict[str, Any], transcript: list[Any], *, force_emit: bool
@@ -252,9 +248,6 @@ class _SearchAndCiteBackend:
     ) -> UsageResult[SectionRepairWire]:
         del seed, transcript, failing
         return repair_wire(claims=[]), None
-
-    def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
-        return empty_key_findings(seed)
 
 
 class _CapturingJudgeBackend:

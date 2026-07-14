@@ -104,7 +104,7 @@ from tests.helpers import (
     seed_select_doc,
     seed_source,
 )
-from tests.synthesis_wire import empty_key_findings, prose_section
+from tests.synthesis_wire import ScriptedSynthesisBackend, prose_section
 
 
 def _count(conn: Connection, table: Any, project_id: uuid.UUID) -> int:
@@ -1085,27 +1085,12 @@ def test_selection_provenance_without_characterisation_ref_fails(conn: Connectio
     assert _count(conn, artefact, project_id) == 0
 
 
-class _BoundarySpanBackend:
+class _BoundarySpanBackend(ScriptedSynthesisBackend):
     """Local backend: turn 1 searches chunks, turn 2 cites a boundary-spanning quote.
 
     Ids are only known once ``search_chunks`` executes at run time, so the
     citation is built from the transcript rather than scripted in advance.
     """
-
-    mode = "stub"
-
-    def __init__(self, proposal: SectionProposalWire) -> None:
-        self._proposal = proposal
-
-    def propose_sections(
-        self,
-        *,
-        intent: str,
-        substrate: dict[str, Any],
-        rejection: list[str] | None = None,
-    ) -> UsageResult[SectionProposalWire]:
-        del intent, substrate, rejection
-        return self._proposal, None
 
     def section_turn(
         self,
@@ -1143,18 +1128,6 @@ class _BoundarySpanBackend:
                 ]
             ),
         }, None
-
-    def repair_section(
-        self,
-        seed: dict[str, Any],
-        transcript: list[ToolExchange],
-        *,
-        failing: list[dict[str, Any]],
-    ) -> UsageResult[SectionRepairWire]:
-        raise AssertionError("repair_section should not be called for a verified quote")
-
-    def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
-        return empty_key_findings(seed)
 
 
 def test_boundary_spanning_quote_writes_row_per_chunk(conn: Connection) -> None:
@@ -1344,25 +1317,16 @@ def test_delete_project_data_after_synthesise(conn: Connection) -> None:
     assert _count(conn, artefact, project_id) == 0
 
 
-class _GapCorpusAbsenceBackend:
+class _GapCorpusAbsenceBackend(ScriptedSynthesisBackend):
     """Local backend: immediately emits one corpus_absence gap claim."""
 
-    mode = "stub"
-
     def __init__(self, coverage_record_id: str) -> None:
+        super().__init__(
+            proposal=SectionProposalWire(
+                sections=[SectionWire(title="Corpus coverage", focus="What the search covered")]
+            )
+        )
         self._coverage_record_id = coverage_record_id
-
-    def propose_sections(
-        self,
-        *,
-        intent: str,
-        substrate: dict[str, Any],
-        rejection: list[str] | None = None,
-    ) -> UsageResult[SectionProposalWire]:
-        del intent, substrate, rejection
-        return SectionProposalWire(
-            sections=[SectionWire(title="Corpus coverage", focus="What the search covered")]
-        ), None
 
     def section_turn(
         self,
@@ -1388,18 +1352,6 @@ class _GapCorpusAbsenceBackend:
                 ]
             ),
         }, None
-
-    def repair_section(
-        self,
-        seed: dict[str, Any],
-        transcript: list[ToolExchange],
-        *,
-        failing: list[dict[str, Any]],
-    ) -> UsageResult[SectionRepairWire]:
-        raise AssertionError("repair_section should not be called")
-
-    def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
-        return empty_key_findings(seed)
 
 
 def test_gap_corpus_caveat_and_degradation(conn: Connection) -> None:
@@ -1769,24 +1721,20 @@ def test_block_content_is_authored_prose_and_units_are_span_anchored(
 # --- ADR 0015: span-bind repair lane + unspanned-assertion plumbing ---
 
 
-class _SpanBindBackend:
+class _SpanBindBackend(ScriptedSynthesisBackend):
     """Emits a single reasoning claim whose text is NOT a substring of the
     prose (a span-bind failure), then repairs it with a rewritten claim text
     that is/ isn't present in the (unchanged) prose."""
 
-    mode = "stub"
     _PROSE = "Alpha reasoning sentence. Beta reasoning sentence."
 
     def __init__(self, *, repair_text: str) -> None:
+        super().__init__(
+            proposal=SectionProposalWire(
+                sections=[SectionWire(title="Span bind evidence", focus="What binds")]
+            )
+        )
         self._repair_text = repair_text
-
-    def propose_sections(
-        self, *, intent: str, substrate: dict[str, Any], rejection: list[str] | None = None
-    ) -> UsageResult[SectionProposalWire]:
-        del intent, substrate, rejection
-        return SectionProposalWire(
-            sections=[SectionWire(title="Span bind evidence", focus="What binds")]
-        ), None
 
     def section_turn(
         self, seed: dict[str, Any], transcript: list[ToolExchange], *, force_emit: bool
@@ -1823,9 +1771,6 @@ class _SpanBindBackend:
                 )
             ]
         ), None
-
-    def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
-        return empty_key_findings(seed)
 
 
 def test_span_not_found_repairs_and_rebinds_into_unchanged_prose(conn: Connection) -> None:
@@ -2110,22 +2055,17 @@ def test_key_findings_absence_path_mints_no_block(conn: Connection) -> None:
     assert any(entry["role"] == "conclusions" for entry in row.blocks)
 
 
-class _UncitedKeyFindingsBackend:
+class _UncitedKeyFindingsBackend(ScriptedSynthesisBackend):
     """Section 0 cites its own gathered chunk; the key-findings pass cites a
     chunk id no section cited — structurally uncitable, rejected + counted."""
 
-    mode = "stub"
-
     def __init__(self) -> None:
+        super().__init__(
+            proposal=SectionProposalWire(
+                sections=[SectionWire(title="Uncited-union evidence", focus="What is gathered")]
+            )
+        )
         self.section0_chunk_id: str | None = None
-
-    def propose_sections(
-        self, *, intent: str, substrate: dict[str, Any], rejection: list[str] | None = None
-    ) -> UsageResult[SectionProposalWire]:
-        del intent, substrate, rejection
-        return SectionProposalWire(
-            sections=[SectionWire(title="Uncited-union evidence", focus="What is gathered")]
-        ), None
 
     def section_turn(
         self, seed: dict[str, Any], transcript: list[ToolExchange], *, force_emit: bool
@@ -2809,21 +2749,13 @@ def _seed_group_with_iof_and_icf(
     )
 
 
-class _FindingClaimBackend:
+class _FindingClaimBackend(ScriptedSynthesisBackend):
     """Section 0 emits one finding claim citing a known finding id on its
     first turn, with no tool calls; every other section/pass emits nothing."""
 
-    mode = "stub"
-
     def __init__(self, *, proposal: SectionProposalWire, finding_id: str) -> None:
-        self._proposal = proposal
+        super().__init__(proposal=proposal)
         self._finding_id = finding_id
-
-    def propose_sections(
-        self, *, intent: str, substrate: dict[str, Any], rejection: list[str] | None = None
-    ) -> UsageResult[SectionProposalWire]:
-        del intent, substrate, rejection
-        return self._proposal, None
 
     def section_turn(
         self, seed: dict[str, Any], transcript: list[ToolExchange], *, force_emit: bool
@@ -2843,14 +2775,6 @@ class _FindingClaimBackend:
                 ]
             ),
         }, None
-
-    def repair_section(
-        self, seed: dict[str, Any], transcript: list[ToolExchange], *, failing: list[dict[str, Any]]
-    ) -> UsageResult[SectionRepairWire]:
-        raise AssertionError("repair_section should not be called for an accepted claim")
-
-    def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
-        return empty_key_findings(seed)
 
 
 def test_annotation_payload_excludes_finding_metadata_row_join_resolves(

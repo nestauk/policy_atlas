@@ -21,6 +21,7 @@ from policy_atlas.runtime.planner_prompt import (
     PlanDraftWire,
     PlannerTurnWire,
 )
+from tests.helpers import fake_parse_client
 
 
 def _turn(text: str, role: str = "user") -> dict[str, str]:
@@ -270,42 +271,6 @@ def test_openai_planner_backend_requires_api_key(monkeypatch: pytest.MonkeyPatch
         OpenAIPlannerBackend()
 
 
-class _FakeParsedMessage:
-    def __init__(self, parsed: PlannerTurnWire) -> None:
-        self.parsed = parsed
-
-
-class _FakeChoice:
-    def __init__(self, parsed: PlannerTurnWire) -> None:
-        self.message = _FakeParsedMessage(parsed)
-
-
-class _FakeResponse:
-    usage = None
-
-    def __init__(self, parsed: PlannerTurnWire) -> None:
-        self.choices = [_FakeChoice(parsed)]
-
-
-class _FakeCompletions:
-    def __init__(self, parsed: PlannerTurnWire) -> None:
-        self._parsed = parsed
-
-    def parse(self, **kwargs: Any) -> _FakeResponse:
-        del kwargs
-        return _FakeResponse(self._parsed)
-
-
-class _FakeChat:
-    def __init__(self, parsed: PlannerTurnWire) -> None:
-        self.completions = _FakeCompletions(parsed)
-
-
-class _FakeOpenAIClient:
-    def __init__(self, parsed: PlannerTurnWire) -> None:
-        self.chat = _FakeChat(parsed)
-
-
 class _FakeSpan:
     def update(self, **payload: Any) -> None:
         del payload
@@ -348,7 +313,7 @@ def test_openai_planner_turn_sets_langfuse_session() -> None:
     )
     backend: OpenAIPlannerBackend = object.__new__(OpenAIPlannerBackend)
     fake_langfuse = _FakeLangfuse()
-    cast("Any", backend)._client = _FakeOpenAIClient(parsed)
+    cast("Any", backend)._client = fake_parse_client(parsed=parsed)
     cast("Any", backend)._langfuse_client = fake_langfuse
 
     backend.plan_turn([_turn("Q?")], None, session_id=session_id)

@@ -7,7 +7,6 @@ every backend here is ``mode == "stub"`` so the suite stays egress-free.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
 from threading import Barrier, BrokenBarrierError, Lock
 from typing import Any, cast
 
@@ -37,6 +36,7 @@ from policy_atlas.evidence_base.extract.finding_vetter import (
     validate_verdict_coverage,
 )
 from tests.helpers import (
+    fake_parse_client,
     profile_counts,
     profile_doc,
     profile_docs,
@@ -730,42 +730,6 @@ def test_fingerprint_sensitive_to_junk_judge_presence() -> None:
 # --- 5. Fake-client kwargs passthrough (OpenAI backend) -----------------------
 
 
-@dataclass
-class _FakeParsedMessage:
-    parsed: Any
-
-
-@dataclass
-class _FakeChoice:
-    message: _FakeParsedMessage
-
-
-@dataclass
-class _FakeResponse:
-    choices: list[_FakeChoice]
-    usage: None = None
-
-
-class _FakeCompletions:
-    def __init__(self, parsed: Any) -> None:
-        self._parsed = parsed
-        self.calls: list[dict[str, Any]] = []
-
-    def parse(self, **kwargs: Any) -> _FakeResponse:
-        self.calls.append(kwargs)
-        return _FakeResponse(choices=[_FakeChoice(message=_FakeParsedMessage(self._parsed))])
-
-
-class _FakeChat:
-    def __init__(self, parsed: Any) -> None:
-        self.completions = _FakeCompletions(parsed)
-
-
-class _FakeOpenAIClient:
-    def __init__(self, parsed: Any) -> None:
-        self.chat = _FakeChat(parsed)
-
-
 def test_openai_junk_judge_backend_passes_model_and_reasoning_effort() -> None:
     response = FindingVetterResponse(
         verdicts=[
@@ -773,7 +737,7 @@ def test_openai_junk_judge_backend_passes_model_and_reasoning_effort() -> None:
         ]
     )
     backend: OpenAIFindingVetterBackend = object.__new__(OpenAIFindingVetterBackend)
-    fake_client = _FakeOpenAIClient(response)
+    fake_client = fake_parse_client(parsed=response)
     cast("Any", backend)._client = fake_client
     cast("Any", backend)._langfuse_client = None
 

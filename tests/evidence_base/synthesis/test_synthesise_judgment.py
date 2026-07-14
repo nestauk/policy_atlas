@@ -39,7 +39,6 @@ from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     ClaimWire,
     GapPayloadWire,
     SectionProposalWire,
-    SectionProseWire,
     SectionRepairWire,
     SectionTurn,
     SectionWire,
@@ -71,7 +70,7 @@ from tests.helpers import (
     seed_screening_result,
     seed_select_doc,
 )
-from tests.synthesis_wire import empty_key_findings, prose_section, repair_wire
+from tests.synthesis_wire import ScriptedSynthesisBackend, prose_section
 
 
 def _count(conn: Connection, table: Any, project_id: uuid.UUID) -> int:
@@ -153,16 +152,17 @@ def _run_synthesise(
 # --- Test 1: caps bind ---
 
 
-class _CapCountingBackend:
+class _CapCountingBackend(ScriptedSynthesisBackend):
     """Loops forever on a lookup call until force_emit, then emits one gap claim.
 
     Wraps its own ``section_turn`` to count backend invocations, so the caps-bind
     test can assert the loop makes exactly ``SECTION_TURN_CAP`` backend calls.
+    Drives ``run_section_loop`` directly (not the full ``synthesise_scope``
+    path), so it never needs ``propose_sections``/``write_key_findings``.
     """
 
-    mode = "stub"
-
     def __init__(self) -> None:
+        super().__init__()
         self.calls = 0
 
     def section_turn(
@@ -271,26 +271,25 @@ def test_unknown_and_injection_shaped_tool_names_never_execute() -> None:
 # --- Test 3: sibling repair guard (a passing quote is never reworded) ---
 
 
-class _SiblingRepairBackend:
+class _SiblingRepairBackend(ScriptedSynthesisBackend):
     """search once, then emit two chunk claims citing the same chunk — one
     verbatim (passing), one fabricated (failing). Repair returns the failing
     claim unchanged, so the guard must keep the passing sibling byte-identical."""
 
-    mode = "stub"
     _VERBATIM = "reduced rough sleeping by a third"
     _FABRICATED = "This quote is fabricated entirely and appears nowhere."
 
-    def propose_sections(
-        self, *, intent: str, substrate: dict[str, Any], rejection: list[str] | None = None
-    ) -> UsageResult[SectionProposalWire]:
-        return SectionProposalWire(
-            sections=[
-                SectionWire(
-                    title="Evidence on rough sleeping",
-                    focus="What the corpus states about rough sleeping outcomes.",
-                )
-            ]
-        ), None
+    def __init__(self) -> None:
+        super().__init__(
+            proposal=SectionProposalWire(
+                sections=[
+                    SectionWire(
+                        title="Evidence on rough sleeping",
+                        focus="What the corpus states about rough sleeping outcomes.",
+                    )
+                ]
+            )
+        )
 
     def section_turn(
         self, seed: dict[str, Any], transcript: list[Any], *, force_emit: bool
@@ -331,15 +330,7 @@ class _SiblingRepairBackend:
         self, seed: dict[str, Any], transcript: list[Any], *, failing: list[dict[str, Any]]
     ) -> UsageResult[SectionRepairWire]:
         # Return the failing claim unchanged — the fabricated quote stays fabricated.
-        claims: list[ClaimWire] = []
-        for record in failing:
-            raw = record.get("claim", record)
-            claim_data = {k: v for k, v in raw.items() if k in ClaimWire.model_fields}
-            claims.append(ClaimWire.model_validate(claim_data))
-        return repair_wire(claims=claims), None
-
-    def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
-        return empty_key_findings(seed)
+        return self._repair_unchanged(failing), None
 
 
 def test_sibling_repair_guard(conn: Connection) -> None:
@@ -557,26 +548,23 @@ def test_demoted_doc_unreachable_in_retrieval_scope(conn: Connection) -> None:
 # --- Test 7: ledger / cross-section citation is rejected ---
 
 
-class _CrossSectionBackend:
+class _CrossSectionBackend(ScriptedSynthesisBackend):
     """Section 0 searches then emits a valid chunk claim; section 1 emits a
     chunk claim citing section 0's chunk id — which is not in section 1's own
     tool results, so it must be structurally uncitable (co-emission is per-section)."""
 
-    mode = "stub"
     _QUOTE = "Cross-section evidence appears verbatim here."
 
     def __init__(self) -> None:
+        super().__init__(
+            proposal=SectionProposalWire(
+                sections=[
+                    SectionWire(title="First section evidence", focus="Section zero evidence."),
+                    SectionWire(title="Second section evidence", focus="Section one evidence."),
+                ]
+            )
+        )
         self.section0_chunk_id: str | None = None
-
-    def propose_sections(
-        self, *, intent: str, substrate: dict[str, Any], rejection: list[str] | None = None
-    ) -> UsageResult[SectionProposalWire]:
-        return SectionProposalWire(
-            sections=[
-                SectionWire(title="First section evidence", focus="Section zero evidence."),
-                SectionWire(title="Second section evidence", focus="Section one evidence."),
-            ]
-        ), None
 
     def section_turn(
         self, seed: dict[str, Any], transcript: list[Any], *, force_emit: bool
@@ -632,15 +620,7 @@ class _CrossSectionBackend:
     def repair_section(
         self, seed: dict[str, Any], transcript: list[Any], *, failing: list[dict[str, Any]]
     ) -> UsageResult[SectionRepairWire]:
-        claims: list[ClaimWire] = []
-        for record in failing:
-            raw = record.get("claim", record)
-            claim_data = {k: v for k, v in raw.items() if k in ClaimWire.model_fields}
-            claims.append(ClaimWire.model_validate(claim_data))
-        return repair_wire(claims=claims), None
-
-    def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
-        return empty_key_findings(seed)
+        return self._repair_unchanged(failing), None
 
 
 def test_ledger_cross_section_citation_rejected(conn: Connection) -> None:

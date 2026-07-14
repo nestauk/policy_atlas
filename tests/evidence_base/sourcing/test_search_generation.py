@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, cast
 
 import pytest
@@ -14,47 +13,13 @@ from policy_atlas.evidence_base.sourcing.search_prompts import (
     QueriesPayload,
     SearchQueriesWire,
 )
+from tests.helpers import FakeOpenAIParseClient, fake_parse_client
 
 
-@dataclass
-class _FakeParsedMessage:
-    parsed: Any
-
-
-@dataclass
-class _FakeChoice:
-    message: _FakeParsedMessage
-
-
-@dataclass
-class _FakeResponse:
-    choices: list[_FakeChoice]
-    usage: None = None
-
-
-class _FakeCompletions:
-    def __init__(self, response: _FakeResponse) -> None:
-        self._response = response
-        self.calls: list[dict[str, Any]] = []
-
-    def parse(self, **kwargs: Any) -> _FakeResponse:
-        self.calls.append(kwargs)
-        return self._response
-
-
-class _FakeChat:
-    def __init__(self, response: _FakeResponse) -> None:
-        self.completions = _FakeCompletions(response)
-
-
-class _FakeOpenAIClient:
-    def __init__(self, response: _FakeResponse) -> None:
-        self.chat = _FakeChat(response)
-
-
-def _backend(response: _FakeResponse) -> tuple[OpenAISearchGenerationBackend, _FakeOpenAIClient]:
+def _backend(
+    fake_client: FakeOpenAIParseClient,
+) -> tuple[OpenAISearchGenerationBackend, FakeOpenAIParseClient]:
     backend: OpenAISearchGenerationBackend = object.__new__(OpenAISearchGenerationBackend)
-    fake_client = _FakeOpenAIClient(response)
     cast("Any", backend)._client = fake_client
     cast("Any", backend)._langfuse_client = None
     return backend, fake_client
@@ -66,8 +31,7 @@ def test_generate_queries_passes_model_and_returns_parsed_wire() -> None:
         queries=["policy evaluation", "randomized trial"],
         overton_paraphrases=["Evidence about policy evaluation"],
     )
-    response = _FakeResponse(choices=[_FakeChoice(message=_FakeParsedMessage(wire))])
-    backend, fake_client = _backend(response)
+    backend, fake_client = _backend(fake_parse_client(parsed=wire))
 
     result, usage = backend.generate_queries(QueriesPayload(intent="policy evaluation"))
 
@@ -80,8 +44,7 @@ def test_generate_queries_passes_model_and_returns_parsed_wire() -> None:
 
 
 def test_generate_queries_raises_on_no_choices() -> None:
-    response = _FakeResponse(choices=[])
-    backend, _fake_client = _backend(response)
+    backend, _fake_client = _backend(fake_parse_client(choices=[]))
 
     with pytest.raises(RuntimeError, match="had no choices"):
         backend.generate_queries(QueriesPayload(intent="policy evaluation"))

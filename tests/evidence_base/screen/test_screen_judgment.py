@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import threading
 import uuid
-from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 import pytest
@@ -41,6 +40,7 @@ from policy_atlas.evidence_base.screen.screen_prompt import (
 )
 from policy_atlas.evidence_base.screen.screening_backend import OpenAIScreeningBackend
 from tests.helpers import (
+    fake_parse_client,
     seed_ingested_full_text,
     seed_project_and_run,
     seed_run,
@@ -808,40 +808,6 @@ def test_stage2_prompt_structural_injection_inertness() -> None:
     assert json.loads(segments_json)[0]["content"].endswith(INJECTION)
 
 
-@dataclass
-class _FakeParsedMessage:
-    parsed: ScreenRepWire | None
-
-
-@dataclass
-class _FakeChoice:
-    message: _FakeParsedMessage
-
-
-@dataclass
-class _FakeResponse:
-    choices: list[_FakeChoice]
-    usage: None = None
-
-
-class _FakeCompletions:
-    def __init__(self, parsed: ScreenRepWire) -> None:
-        self._parsed = parsed
-
-    def parse(self, **_kwargs: Any) -> _FakeResponse:
-        return _FakeResponse(choices=[_FakeChoice(message=_FakeParsedMessage(self._parsed))])
-
-
-class _FakeChat:
-    def __init__(self, parsed: ScreenRepWire) -> None:
-        self.completions = _FakeCompletions(parsed)
-
-
-class _FakeOpenAIClient:
-    def __init__(self, parsed: ScreenRepWire) -> None:
-        self.chat = _FakeChat(parsed)
-
-
 def test_screen_wire_model_validation_and_backend_confidence_rejection() -> None:
     with pytest.raises(ValidationError):
         ScreenRepWire.model_validate(
@@ -849,8 +815,8 @@ def test_screen_wire_model_validation_and_backend_confidence_rejection() -> None
         )
 
     backend: OpenAIScreeningBackend = object.__new__(OpenAIScreeningBackend)
-    cast("Any", backend)._client = _FakeOpenAIClient(
-        ScreenRepWire(decision="relevant", confidence=1.5, reason="too high")
+    cast("Any", backend)._client = fake_parse_client(
+        parsed=ScreenRepWire(decision="relevant", confidence=1.5, reason="too high")
     )
     cast("Any", backend)._langfuse_client = None
 

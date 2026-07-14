@@ -1,7 +1,6 @@
 """Tests for the classify component — schema, backend seam, round-trips, harness integration."""
 
 import uuid
-from dataclasses import dataclass
 from typing import Any, cast
 
 import pytest
@@ -38,6 +37,7 @@ from policy_atlas.evidence_base.screen.classify_prompt import (
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.run_spec import Plan, compile
 from tests.helpers import (
+    fake_parse_client,
     now,
     seed_project_and_run,
     seed_run,
@@ -639,42 +639,6 @@ def test_delete_project_data_removes_classification(conn: Connection) -> None:
 # --- Model constant + reasoning-effort seam (018 A1) ---
 
 
-@dataclass
-class _FakeParsedMessage:
-    parsed: Any
-
-
-@dataclass
-class _FakeChoice:
-    message: _FakeParsedMessage
-
-
-@dataclass
-class _FakeResponse:
-    choices: list[_FakeChoice]
-    usage: None = None
-
-
-class _FakeCompletions:
-    def __init__(self, parsed: Any) -> None:
-        self._parsed = parsed
-        self.calls: list[dict[str, Any]] = []
-
-    def parse(self, **kwargs: Any) -> _FakeResponse:
-        self.calls.append(kwargs)
-        return _FakeResponse(choices=[_FakeChoice(message=_FakeParsedMessage(self._parsed))])
-
-
-class _FakeChat:
-    def __init__(self, parsed: Any) -> None:
-        self.completions = _FakeCompletions(parsed)
-
-
-class _FakeOpenAIClient:
-    def __init__(self, parsed: Any) -> None:
-        self.chat = _FakeChat(parsed)
-
-
 def test_classify_backend_passes_model_and_reasoning_effort() -> None:
     wire = ClassifyWire(
         primary_evidence_type="RCTs and Quasi-Experimental Studies",
@@ -683,7 +647,7 @@ def test_classify_backend_passes_model_and_reasoning_effort() -> None:
         reason="Randomized trial.",
     )
     backend: OpenAIClassificationBackend = object.__new__(OpenAIClassificationBackend)
-    fake_client = _FakeOpenAIClient(wire)
+    fake_client = fake_parse_client(parsed=wire)
     cast("Any", backend)._client = fake_client
     cast("Any", backend)._langfuse_client = None
 
