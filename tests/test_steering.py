@@ -205,7 +205,7 @@ def test_adjustment_writes_new_plan_version_and_changes_not_yet_run_group_direct
             plan=plan,
         )
         io = ScriptedIO(
-            [Adjust(directive_deltas={"group": {"grouping": {"facet": "population"}}})]
+            [Adjust(directive_deltas={"group": {"grouping": {"facets": ["population"]}}})]
         )
 
         outcome = run_plan(
@@ -242,7 +242,7 @@ def test_adjustment_writes_new_plan_version_and_changes_not_yet_run_group_direct
             (1, "superseded", "planner"),
             (2, "approved", "user"),
         ]
-        assert rows[1].payload["grouping_facet"] == "population"
+        assert rows[1].payload["grouping_facets"] == ["population"]
         assert facets == ["population"]
     finally:
         _cleanup_project(engine, project_id)

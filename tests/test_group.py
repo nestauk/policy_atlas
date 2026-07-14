@@ -12,19 +12,22 @@ from sqlalchemy import func, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
+from policy_atlas.clustering_engine import ClusterLabel, ClusterUnit
 from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
-from policy_atlas.facet_grouping import (
-    FACET_VALUE_CAP,
-    LABEL_MAX,
-    PROMPT_VERSION,
-    VALUE_SURFACE_MAX,
-    FacetValueRecord,
-    PartitionResult,
-    ProposedGroup,
-    StubFacetGroupingBackend,
-)
+from policy_atlas.facet_grouping import FACET_VALUE_CAP, LABEL_MAX, VALUE_SURFACE_MAX
 from policy_atlas.facet_values import FacetDirectiveError
-from policy_atlas.group import GroupContext, GroupError, group_findings
+from policy_atlas.group import (
+    GROUP_PROMPT_VERSION,
+    ClaimThemeUnit,
+    GroupContext,
+    GroupError,
+    StubGroupClusteringBackend,
+    _load_finding_references,
+    claim_theme_base_sha256,
+    group_call_budget,
+    group_findings,
+    group_max_labels,
+)
 from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.schema import (
     extraction_result,
@@ -49,37 +52,72 @@ class SeededExtraction:
     finding_ids: list[uuid.UUID]
 
 
-class CountingFacetGroupingBackend:
+@dataclass(frozen=True)
+class SeededMixedExtraction:
+    run_id: uuid.UUID
+    selection_run_id: uuid.UUID
+    iof_record_id: uuid.UUID
+    icf_record_id: uuid.UUID
+    iof_finding_ids: list[uuid.UUID]
+    icf_finding_ids: list[uuid.UUID]
+
+
+class ScriptedGroupClusteringBackend:
     mode = "stub"
+    model = "scripted"
 
     def __init__(
         self,
         *,
-        partition_result: PartitionResult | None = None,
-        repair_result: PartitionResult | None = None,
+        labels: list[ClusterLabel] | None = None,
+        assignments: dict[str, str] | None = None,
+        fail_discovery: bool = False,
+        fail_assignment: bool = False,
     ) -> None:
-        self.partition_calls = 0
-        self.repair_calls = 0
-        self.partition_result = partition_result or {"groups": [], "ungroupable": []}
-        self.repair_result = repair_result or {"groups": [], "ungroupable": []}
+        self.discovery_calls = 0
+        self.assignment_calls = 0
+        self.labels = labels if labels is not None else []
+        self.assignments = assignments if assignments is not None else {}
+        self.fail_discovery = fail_discovery
+        self.fail_assignment = fail_assignment
 
-    def partition(
-        self, values: list[FacetValueRecord], *, facet: str
-    ) -> UsageResult[PartitionResult]:
-        del values, facet
-        self.partition_calls += 1
-        return self.partition_result, None
-
-    def repair(
+    def for_facet(
         self,
-        missing_values: list[FacetValueRecord],
         *,
         facet: str,
-        accepted_groups: list[ProposedGroup],
-    ) -> UsageResult[PartitionResult]:
-        del missing_values, facet, accepted_groups
-        self.repair_calls += 1
-        return self.repair_result, None
+        projection: str,
+        include_context_in_discovery: bool,
+    ) -> ScriptedGroupClusteringBackend:
+        del facet, projection, include_context_in_discovery
+        return self
+
+    def discover(
+        self,
+        units: list[ClusterUnit],
+        *,
+        min_labels: int,
+        max_labels: int,
+    ) -> UsageResult[list[ClusterLabel]]:
+        del units, min_labels, max_labels
+        self.discovery_calls += 1
+        if self.fail_discovery:
+            raise RuntimeError("backend_error: scripted discovery failure")
+        return self.labels, None
+
+    def assign(
+        self,
+        batch: list[ClusterUnit],
+        *,
+        labels: list[ClusterLabel],
+    ) -> UsageResult[dict[str, str]]:
+        del labels
+        self.assignment_calls += 1
+        if self.fail_assignment:
+            raise RuntimeError("backend_error: scripted assignment failure")
+        return {
+            unit.unit_id: self.assignments.get(unit.unit_id, "__ungrouped__")
+            for unit in batch
+        }, None
 
 
 def seed_extraction(
@@ -213,6 +251,147 @@ def seed_extraction(
     )
 
 
+def seed_mixed_extraction(
+    conn: Connection,
+    project_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    *,
+    iof_findings: list[dict[str, Any]],
+    icf_findings: list[dict[str, Any]],
+    extraction_run_id: uuid.UUID | None = None,
+) -> SeededMixedExtraction:
+    extraction_run_id = extraction_run_id or seed_run(conn, project_id)
+    selection_run_id = seed_run(conn, project_id)
+    snap_id, pss_id = seed_source(conn, project_id)
+    iof_record_id = uuid.uuid4()
+    icf_record_id = uuid.uuid4()
+    iof_finding_ids: list[uuid.UUID] = []
+    icf_finding_ids: list[uuid.UUID] = []
+
+    conn.execute(
+        selection_result.insert().values(
+            selection_result_id=uuid.uuid4(),
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            run_id=selection_run_id,
+            strategy="coverage_stratified_v1",
+            budget=1,
+            selection_provenance={"strategy": "test"},
+            selected=[{"pss_id": str(pss_id), "text_basis": "full_text"}],
+            excluded={},
+            flags=[],
+            created_at=now(),
+        )
+    )
+    for record_id, profile_id, findings in (
+        (iof_record_id, IOF_PROFILE_ID, iof_findings),
+        (icf_record_id, ICF_PROFILE_ID, icf_findings),
+    ):
+        conn.execute(
+            source_extraction_record.insert().values(
+                extraction_record_id=record_id,
+                project_id=project_id,
+                source_snapshot_id=snap_id,
+                project_source_snapshot_id=pss_id,
+                extraction_fingerprint=f"fp-{profile_id}-{extraction_run_id}",
+                status="extracted" if findings else "no_findings",
+                basis="full_text",
+                error=None,
+                finding_count=len(findings),
+                run_id=extraction_run_id,
+                created_at=now(),
+            )
+        )
+    for finding in iof_findings:
+        values = _finding_values(project_id, iof_record_id, **finding)
+        iof_finding_ids.append(cast("uuid.UUID", values["finding_id"]))
+        conn.execute(intervention_outcome_finding.insert().values(**values))
+    for finding in icf_findings:
+        values = _icf_values(project_id, icf_record_id, **finding)
+        icf_finding_ids.append(cast("uuid.UUID", values["finding_id"]))
+        conn.execute(implementation_context_finding.insert().values(**values))
+
+    profile_counts = {
+        IOF_PROFILE_ID: _profile_counts(iof_findings),
+        ICF_PROFILE_ID: _profile_counts(icf_findings),
+    }
+    conn.execute(
+        extraction_result.insert().values(
+            extraction_result_id=uuid.uuid4(),
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            run_id=extraction_run_id,
+            selection_run_id=selection_run_id,
+            extraction_provenance={
+                "profiles": {
+                    IOF_PROFILE_ID: {"fingerprint": "rollup-iof", "profile": IOF_PROFILE_ID},
+                    ICF_PROFILE_ID: {"fingerprint": "rollup-icf", "profile": ICF_PROFILE_ID},
+                }
+            },
+            docs=[
+                {
+                    "pss_id": str(pss_id),
+                    "basis": "full_text",
+                    "order": 0,
+                    "profiles": {
+                        IOF_PROFILE_ID: {
+                            "status": "extracted" if iof_findings else "no_findings",
+                            "finding_count": len(iof_findings),
+                            "reused": False,
+                            "error": None,
+                            "extraction_record_id": str(iof_record_id),
+                        },
+                        ICF_PROFILE_ID: {
+                            "status": "extracted" if icf_findings else "no_findings",
+                            "finding_count": len(icf_findings),
+                            "reused": False,
+                            "error": None,
+                            "extraction_record_id": str(icf_record_id),
+                        },
+                    },
+                }
+            ],
+            counts={
+                "selected": 1,
+                "basis": {
+                    "full_text": 1,
+                    "abstract_only": 0,
+                    "shares": {"full_text": 1.0, "abstract_only": 0.0},
+                },
+                "profiles": profile_counts,
+            },
+            flags=[],
+            created_at=now(),
+        )
+    )
+    return SeededMixedExtraction(
+        run_id=extraction_run_id,
+        selection_run_id=selection_run_id,
+        iof_record_id=iof_record_id,
+        icf_record_id=icf_record_id,
+        iof_finding_ids=iof_finding_ids,
+        icf_finding_ids=icf_finding_ids,
+    )
+
+
+def _profile_counts(findings: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "selected": 1,
+        "extracted": 1 if findings else 0,
+        "no_findings": 0 if findings else 1,
+        "failed": 0,
+        "fresh": 1,
+        "reused": 0,
+        "findings": {
+            "total": len(findings),
+            "quote_unverified": 0,
+            "dedup_collapsed": 0,
+            "invalid_dropped": 0,
+        },
+        "field_coverage": {},
+    }
+
+
 def _finding_values(
     project_id: uuid.UUID,
     extraction_record_id: uuid.UUID,
@@ -242,6 +421,37 @@ def _finding_values(
     return values
 
 
+def _icf_values(
+    project_id: uuid.UUID,
+    extraction_record_id: uuid.UUID,
+    **overrides: Any,
+) -> dict[str, Any]:
+    values: dict[str, Any] = {
+        "finding_id": uuid.uuid4(),
+        "project_id": project_id,
+        "extraction_record_id": extraction_record_id,
+        "context_type": "barrier",
+        "claim": "Implementation staffing gaps slowed delivery.",
+        "context_label": None,
+        "intervention": "Alpha service",
+        "outcome": "Attendance",
+        "population": "Adults",
+        "setting": None,
+        "study_geography": None,
+        "study_design": None,
+        "claim_level": "study",
+        "claim_basis": "studied",
+        "level": "provider",
+        "resource_requirements": None,
+        "workforce_requirements": None,
+        "field_coverage": {},
+        "grounding": [],
+        "created_at": now(),
+    }
+    values.update(overrides)
+    return values
+
+
 def _run_group(
     conn: Connection,
     project_id: uuid.UUID,
@@ -250,7 +460,7 @@ def _run_group(
     *,
     run_id: uuid.UUID | None = None,
     context: dict[str, Any] | None = None,
-    backend: StubFacetGroupingBackend | CountingFacetGroupingBackend | None = None,
+    backend: StubGroupClusteringBackend | ScriptedGroupClusteringBackend | None = None,
 ) -> tuple[dict[str, Any], uuid.UUID]:
     run_id = run_id or seed_run(conn, project_id)
     summary = group_findings(
@@ -263,7 +473,7 @@ def _run_group(
             context=context or {},
             extraction_run_id=extraction_run_id,
         ),
-        facet_grouping_backend=backend or StubFacetGroupingBackend(),
+        group_clustering_backend=backend or StubGroupClusteringBackend(),
     )
     return summary, run_id
 
@@ -292,13 +502,13 @@ def _payload_finding_ids(payload: dict[str, Any]) -> set[str]:
             continue
         groups = cast("list[dict[str, Any]]", facet_payload["groups"])
         ungrouped = cast("dict[str, Any]", facet_payload["ungrouped"])
-        no_value = cast("dict[str, Any]", facet_payload["no_value"])
+        no_value = cast("dict[str, Any]", facet_payload.get("no_value", {}))
         finding_ids |= {
             finding_id
             for group in groups
             for finding_id in cast("list[str]", group["member_finding_ids"])
         } | set(cast("list[str]", ungrouped["finding_ids"])) | set(
-            cast("list[str]", no_value["finding_ids"])
+            cast("list[str]", no_value.get("finding_ids", []))
         )
     return finding_ids
 
@@ -362,10 +572,10 @@ def test_happy_path_writes_rollup_summary_and_provenance(conn: Connection) -> No
 
     assert summary.keys() == {
         "facet",
+        "facets",
         "facet_source",
         "groups",
         "residuals",
-        "overall_direction_spread",
         "counts",
         "extraction_run_id",
         "flags",
@@ -373,12 +583,24 @@ def test_happy_path_writes_rollup_summary_and_provenance(conn: Connection) -> No
         "usage_totals",
     }
     assert row["groups"].keys() == {"intervention"}
-    assert row["flags"] == {"intervention": ["ungrouped_values"]}
+    assert row["flags"] == {
+        "intervention": {
+            "status": "succeeded",
+            "failure_class": None,
+            "groups_rejected": False,
+            "value_cap_exceeded": False,
+        }
+    }
     assert summary["facet"] == "intervention"
+    assert summary["facets"] == ["intervention"]
     assert summary["facet_source"] == "default"
     assert summary["extraction_run_id"] == str(seeded.run_id)
-    assert summary["flags"] == ["ungrouped_values"]
-    assert summary["counts"] == {
+    assert summary["flags"] == row["flags"]
+    counts = summary["counts"]["intervention"]
+    groups = summary["groups"]["intervention"]
+    residuals = summary["residuals"]["intervention"]
+    assert counts == {
+        "eligible_base": 6,
         "findings_total": 6,
         "grouped": 5,
         "ungrouped": 1,
@@ -386,27 +608,27 @@ def test_happy_path_writes_rollup_summary_and_provenance(conn: Connection) -> No
         "distinct_values": 6,
         "groups": 3,
     }
-    assert [group["label"] for group in summary["groups"]] == ["alpha", "beta", "gamma"]
-    assert [group["size"] for group in summary["groups"]] == [2, 2, 1]
-    assert [group["value_count"] for group in summary["groups"]] == [2, 2, 1]
-    assert summary["residuals"]["ungrouped"]["value_count"] == 1
-    assert summary["residuals"]["ungrouped"]["finding_count"] == 1
-    assert summary["residuals"]["no_value"]["finding_count"] == 0
+    assert [group["label"] for group in groups] == ["alpha", "beta", "gamma"]
+    assert [group["size"] for group in groups] == [2, 2, 1]
+    assert [group["value_count"] for group in groups] == [2, 2, 1]
+    assert residuals["ungrouped"]["value_count"] == 1
+    assert residuals["ungrouped"]["finding_count"] == 1
+    assert residuals["no_value"]["finding_count"] == 0
     assert _payload_finding_ids(cast("dict[str, Any]", row["groups"])) == {
         str(finding_id) for finding_id in seeded.finding_ids
     }
-    assert sum(summary["counts"][key] for key in ("grouped", "ungrouped", "no_value")) == 6
+    assert sum(counts[key] for key in ("grouped", "ungrouped", "no_value")) == 6
 
     row_payload = cast("dict[str, Any]", row["groups"])
     row_overall = cast(
         "dict[str, int]",
         _facet_payload(row_payload)["overall_direction_spread"],
     )
-    assert row_overall == summary["overall_direction_spread"]
+    assert row_overall == residuals["overall_direction_spread"]
     assert sum(row_overall.values()) == 6
 
     provenance = cast("dict[str, Any]", row["grouping_provenance"])
-    assert provenance.keys() == {
+    assert set(provenance) == {
         "prompt_version",
         "model",
         "mode",
@@ -419,21 +641,26 @@ def test_happy_path_writes_rollup_summary_and_provenance(conn: Connection) -> No
         "rejection_reasons",
         "distinct_value_count",
         "extraction_run_id",
+        "facet_runs",
         "extraction_base",
     }
     assert provenance["rejection_reasons"] == []
-    assert provenance["prompt_version"] == PROMPT_VERSION
+    assert provenance["prompt_version"] == GROUP_PROMPT_VERSION
     assert provenance["model"] == "stub"
     assert provenance["mode"] == "stub"
     assert provenance["facet"] == "intervention"
     assert provenance["facets"] == ["intervention"]
     assert provenance["facet_source"] == "default"
     assert provenance["value_cap"] == FACET_VALUE_CAP
-    assert provenance["call_count"] == 1
+    # Two-stage happy path: one discovery + one assignment call.
+    assert provenance["call_count"] == 2
     assert provenance["repair_count"] == 0
     assert provenance["distinct_value_count"] == 6
+    assert provenance["facet_runs"]["intervention"]["eligible_base_size"] == 6
+    assert provenance["facet_runs"]["intervention"]["call_budget"] == 4
+    assert provenance["facet_runs"]["intervention"]["calls_used"] == 2
     base = cast("dict[str, Any]", provenance["extraction_base"])
-    assert base.keys() == {"profiles", "finding_set", "facet_coverage"}
+    assert base.keys() == {"profiles", "finding_set"}
     assert base["profiles"].keys() == {IOF_PROFILE_ID}
     iof_base = cast("dict[str, Any]", base["profiles"][IOF_PROFILE_ID])
     assert iof_base.keys() == {"extraction_fingerprint", "counts"}
@@ -450,8 +677,7 @@ def test_happy_path_writes_rollup_summary_and_provenance(conn: Connection) -> No
         "size": 6,
         "sha256": hashlib.sha256("\n".join(finding_id_strings).encode("utf-8")).hexdigest(),
     }
-    assert base["facet_coverage"] == {"values_with_findings": 6, "no_value_count": 0}
-    assert row["counts"] == {"intervention": summary["counts"]}
+    assert row["counts"] == {"intervention": counts}
 
 
 def test_memo_reused_docs_are_included(conn: Connection) -> None:
@@ -545,29 +771,37 @@ def test_zero_findings_writes_empty_rollup_without_backend_call(conn: Connection
     project_id, _ = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     seeded = seed_extraction(conn, project_id, scope_id, docs=[])
-    backend = CountingFacetGroupingBackend()
+    backend = StubGroupClusteringBackend()
 
     summary, group_run_id = _run_group(
         conn, project_id, scope_id, seeded.run_id, backend=backend
     )
     row = _group_row(conn, project_id, group_run_id)
 
-    assert backend.partition_calls == 0
-    assert backend.repair_calls == 0
-    assert summary["flags"] == ["empty_findings"]
-    assert row["flags"] == {"intervention": ["empty_findings"]}
+    assert backend.calls == []
+    assert summary["flags"] == {
+        "intervention": {
+            "status": "succeeded",
+            "failure_class": None,
+            "groups_rejected": False,
+            "value_cap_exceeded": False,
+        }
+    }
+    assert row["flags"] == summary["flags"]
     assert row["groups"] == {
         "intervention": {
             "groups": [],
             "ungrouped": {
                 "values": [],
                 "finding_ids": [],
+                "member_finding_ids": [],
                 "finding_kinds": [],
                 "member_counts": {"iof": 0, "icf": 0},
                 "direction_spread": _zero_spread(),
             },
             "no_value": {
                 "finding_ids": [],
+                "member_finding_ids": [],
                 "finding_kinds": [],
                 "member_counts": {"iof": 0, "icf": 0},
                 "direction_spread": _zero_spread(),
@@ -575,7 +809,8 @@ def test_zero_findings_writes_empty_rollup_without_backend_call(conn: Connection
             "overall_direction_spread": _zero_spread(),
         }
     }
-    assert summary["counts"] == {
+    assert summary["counts"]["intervention"] == {
+        "eligible_base": 0,
         "findings_total": 0,
         "grouped": 0,
         "ungrouped": 0,
@@ -612,26 +847,25 @@ def test_all_null_population_goes_to_no_value_without_backend_call(conn: Connect
             )
         ],
     )
-    backend = CountingFacetGroupingBackend()
+    backend = StubGroupClusteringBackend()
 
     summary, group_run_id = _run_group(
         conn,
         project_id,
         scope_id,
         seeded.run_id,
-        context={"grouping": {"facet": "population"}},
+        context={"grouping": {"facets": ["population"]}},
         backend=backend,
     )
     row = _group_row(conn, project_id, group_run_id)
 
-    assert backend.partition_calls == 0
-    assert backend.repair_calls == 0
+    assert backend.calls == []
     assert summary["facet"] == "population"
     assert summary["facet_source"] == "scope_context"
-    assert summary["flags"] == ["all_no_value"]
-    assert summary["counts"]["no_value"] == 2
-    assert summary["counts"]["groups"] == 0
-    assert summary["residuals"]["no_value"]["finding_count"] == 2
+    assert summary["flags"]["population"]["status"] == "succeeded"
+    assert summary["counts"]["population"]["no_value"] == 2
+    assert summary["counts"]["population"]["groups"] == 0
+    assert summary["residuals"]["population"]["no_value"]["finding_count"] == 2
     assert row["groups"].keys() == {"population"}
     assert _payload_finding_ids(cast("dict[str, Any]", row["groups"])) == {
         str(finding_id) for finding_id in seeded.finding_ids
@@ -671,8 +905,10 @@ def test_mixed_unclear_directions_are_first_class_in_spreads(conn: Connection) -
 
     summary, group_run_id = _run_group(conn, project_id, scope_id, seeded.run_id)
     row = _group_row(conn, project_id, group_run_id)
-    group = next(group for group in summary["groups"] if group["label"] == "alpha")
-    residual = summary["residuals"]["ungrouped"]
+    group = next(
+        group for group in summary["groups"]["intervention"] if group["label"] == "alpha"
+    )
+    residual = summary["residuals"]["intervention"]["ungrouped"]
 
     assert group["direction_spread"]["mixed"] == 1
     assert group["direction_spread"]["increase"] == 1
@@ -851,24 +1087,15 @@ def test_group_membership_spans_iof_and_icf_with_iof_only_spread(
         project_id,
         scope_id,
         extraction_run_id,
-        backend=CountingFacetGroupingBackend(
-            partition_result={
-                "groups": [
-                    {
-                        "label": "Alpha",
-                        "description": "Alpha implementation and effects.",
-                        "member_ids": ["v1"],
-                    }
-                ],
-                "ungroupable": [],
-            }
-        ),
+        backend=StubGroupClusteringBackend(),
     )
 
-    assert summary["counts"]["findings_total"] == 2
+    assert summary["counts"]["intervention"]["findings_total"] == 2
     payload = cast("dict[str, Any]", _group_row(conn, project_id, group_run_id)["groups"])
     group = _facet_payload(payload)["groups"][0]
-    assert group["member_finding_ids"] == [str(iof_finding_id), str(icf_finding_id)]
+    assert sorted(group["member_finding_ids"]) == sorted(
+        [str(iof_finding_id), str(icf_finding_id)]
+    )
     assert group["member_finding_kinds"] == ["iof", "icf"]
     assert group["member_counts"] == {"iof": 1, "icf": 1}
     assert group["direction_spread"]["increase"] == 1
@@ -890,6 +1117,356 @@ def test_group_membership_spans_iof_and_icf_with_iof_only_spread(
     assert base["profiles"][IOF_PROFILE_ID]["extraction_fingerprint"] == "rollup-iof"
     assert base["profiles"][ICF_PROFILE_ID]["extraction_fingerprint"] == "rollup-icf"
     assert base["profiles"][ICF_PROFILE_ID]["counts"]["findings_total"] == 1
+
+
+def test_value_reference_loader_matches_old_two_table_projection(
+    conn: Connection,
+) -> None:
+    project_id, _ = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    seeded = seed_mixed_extraction(
+        conn,
+        project_id,
+        scope_id,
+        iof_findings=[
+            {
+                "finding_id": uuid.UUID(int=21),
+                "intervention": "Alpha service",
+                "outcome": "Attendance",
+                "population": "Adults",
+            }
+        ],
+        icf_findings=[
+            {
+                "finding_id": uuid.UUID(int=22),
+                "context_type": "barrier",
+                "claim": "Staffing slowed Alpha service.",
+                "intervention": "Alpha service",
+                "outcome": "Attendance",
+                "population": "Adults",
+            }
+        ],
+    )
+
+    loaded = _load_finding_references(
+        conn,
+        project_id=project_id,
+        extraction_record_ids_by_kind={
+            "iof": [seeded.iof_record_id],
+            "icf": [seeded.icf_record_id],
+        },
+    )
+
+    projected = [
+        {
+            "finding_id": str(row["finding_id"]),
+            "kind": row["kind"],
+            "intervention": row["intervention"],
+            "outcome": row["outcome"],
+            "population": row["population"],
+        }
+        for row in loaded
+    ]
+    assert sorted(projected, key=lambda item: item["finding_id"]) == [
+        {
+            "finding_id": str(uuid.UUID(int=21)),
+            "kind": "iof",
+            "intervention": "Alpha service",
+            "outcome": "Attendance",
+            "population": "Adults",
+        },
+        {
+            "finding_id": str(uuid.UUID(int=22)),
+            "kind": "icf",
+            "intervention": "Alpha service",
+            "outcome": "Attendance",
+            "population": "Adults",
+        },
+    ]
+
+
+def test_multi_facet_value_and_claim_theme_run_writes_one_row(
+    conn: Connection,
+) -> None:
+    project_id, _ = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    seeded = seed_mixed_extraction(
+        conn,
+        project_id,
+        scope_id,
+        iof_findings=[
+            {"intervention": "Alpha service", "outcome": "Attendance"},
+            {"intervention": "Beta service", "outcome": "Retention"},
+        ],
+        icf_findings=[
+            {
+                "finding_id": uuid.UUID(int=31),
+                "context_type": "barrier",
+                "claim": "Staff shortages slowed Alpha service delivery.",
+                "context_label": "Staff shortages",
+                "intervention": "Alpha service",
+            },
+            {
+                "finding_id": uuid.UUID(int=32),
+                "context_type": "barrier",
+                "claim": "Training gaps delayed Beta service delivery.",
+                "context_label": "Training",
+                "intervention": "Beta service",
+            },
+        ],
+    )
+
+    summary, group_run_id = _run_group(
+        conn,
+        project_id,
+        scope_id,
+        seeded.run_id,
+        context={"grouping": {"facets": ["intervention", "barrier_theme"]}},
+    )
+    row = _group_row(conn, project_id, group_run_id)
+
+    assert _group_count(conn, project_id) == 1
+    assert summary["facets"] == ["intervention", "barrier_theme"]
+    assert row["groups"].keys() == {"intervention", "barrier_theme"}
+    assert row["counts"]["intervention"]["eligible_base"] == 4
+    assert row["counts"]["barrier_theme"] == {
+        "eligible_base": 2,
+        "grouped": 2,
+        "ungrouped": 0,
+        "groups": 2,
+    }
+    assert row["flags"]["intervention"]["status"] == "succeeded"
+    assert row["flags"]["barrier_theme"]["status"] == "succeeded"
+    claim_payload = row["groups"]["barrier_theme"]
+    assert "no_value" not in claim_payload
+    assert claim_payload["groups"][0]["group_id"] == "barrier_theme:g01"
+    assert claim_payload["groups"][0]["direction_spread"] is None
+    assert row["grouping_provenance"]["facets"] == ["intervention", "barrier_theme"]
+    assert row["grouping_provenance"]["facet_runs"]["barrier_theme"][
+        "eligible_base_size"
+    ] == 2
+
+
+def test_claim_theme_eligibility_excludes_iof_and_nonmatching_icf_and_hashes_base(
+    conn: Connection,
+) -> None:
+    project_id, _ = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    barrier_id = uuid.UUID(int=41)
+    enabler_id = uuid.UUID(int=42)
+    seeded = seed_mixed_extraction(
+        conn,
+        project_id,
+        scope_id,
+        iof_findings=[{"intervention": "Alpha service", "outcome": "Attendance"}],
+        icf_findings=[
+            {
+                "finding_id": barrier_id,
+                "context_type": "barrier",
+                "claim": "Procurement delays slowed Alpha service.",
+                "context_label": "Procurement",
+                "intervention": "Alpha service",
+            },
+            {
+                "finding_id": enabler_id,
+                "context_type": "enabler",
+                "claim": "Senior sponsorship helped Alpha service.",
+                "context_label": "Sponsorship",
+                "intervention": "Alpha service",
+            },
+        ],
+    )
+
+    _summary, group_run_id = _run_group(
+        conn,
+        project_id,
+        scope_id,
+        seeded.run_id,
+        context={"grouping": {"facets": ["barrier_theme"]}},
+    )
+    row = _group_row(conn, project_id, group_run_id)
+
+    payload_ids = _payload_finding_ids(cast("dict[str, Any]", row["groups"]))
+    assert payload_ids == {str(barrier_id)}
+    assert str(enabler_id) not in payload_ids
+    assert not ({str(finding_id) for finding_id in seeded.iof_finding_ids} & payload_ids)
+    expected_hash = claim_theme_base_sha256(
+        [
+            ClaimThemeUnit(
+                finding_id=str(barrier_id),
+                claim="Procurement delays slowed Alpha service.",
+                context_label="Procurement",
+                intervention="Alpha service",
+            )
+        ]
+    )
+    facet_provenance = row["grouping_provenance"]["facet_runs"]["barrier_theme"]
+    assert facet_provenance["eligible_base_size"] == 1
+    assert facet_provenance["eligible_base_sha256"] == expected_hash
+
+
+def test_per_facet_backend_failure_isolates_to_failed_facet(conn: Connection) -> None:
+    project_id, _ = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    seeded = seed_extraction(
+        conn,
+        project_id,
+        scope_id,
+        docs=[
+            (
+                uuid.uuid4(),
+                [
+                    {"intervention": "Alpha service", "outcome": "Attendance"},
+                    {"intervention": "Beta service", "outcome": "Retention"},
+                ],
+            )
+        ],
+    )
+
+    _summary, group_run_id = _run_group(
+        conn,
+        project_id,
+        scope_id,
+        seeded.run_id,
+        context={"grouping": {"facets": ["intervention", "outcome"]}},
+        backend=StubGroupClusteringBackend(fail_facets={"outcome"}),
+    )
+    row = _group_row(conn, project_id, group_run_id)
+
+    assert row["flags"]["intervention"]["status"] == "succeeded"
+    assert row["flags"]["outcome"] == {
+        "status": "failed",
+        "failure_class": "backend_error",
+        "groups_rejected": True,
+        "value_cap_exceeded": False,
+    }
+    assert row["counts"]["outcome"]["grouped"] == 0
+    assert row["counts"]["outcome"]["ungrouped"] == 2
+    assert row["grouping_provenance"]["facet_runs"]["outcome"]["rejection_reasons"]
+
+
+def test_zero_discovered_groups_is_legal_all_residual_path(conn: Connection) -> None:
+    project_id, _ = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    seeded = seed_extraction(
+        conn,
+        project_id,
+        scope_id,
+        docs=[
+            (
+                uuid.uuid4(),
+                [
+                    {"intervention": "Alpha service", "outcome": "Attendance"},
+                    {"intervention": "Beta service", "outcome": "Retention"},
+                ],
+            )
+        ],
+    )
+
+    _summary, group_run_id = _run_group(
+        conn,
+        project_id,
+        scope_id,
+        seeded.run_id,
+        backend=StubGroupClusteringBackend(zero_label_facets={"intervention"}),
+    )
+    row = _group_row(conn, project_id, group_run_id)
+
+    assert row["flags"]["intervention"]["status"] == "succeeded"
+    assert row["counts"]["intervention"]["groups"] == 0
+    assert row["counts"]["intervention"]["grouped"] == 0
+    assert row["counts"]["intervention"]["ungrouped"] == 2
+    assert row["groups"]["intervention"]["groups"] == []
+
+
+def test_group_ceiling_and_call_budget_formula() -> None:
+    assert group_max_labels(0) == 3
+    assert group_max_labels(1) == 3
+    assert group_max_labels(15) == 3
+    assert group_max_labels(16) == 4
+    assert group_max_labels(1_000) == 40
+    assert group_call_budget(0) == 2
+    assert group_call_budget(1) == 4
+    assert group_call_budget(50) == 4
+    assert group_call_budget(51) == 6
+
+
+def test_value_context_payloads_are_deterministic_and_discovery_gated(
+    conn: Connection,
+) -> None:
+    project_id, _ = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    long_quote = "q" * 300
+    seeded = seed_extraction(
+        conn,
+        project_id,
+        scope_id,
+        docs=[
+            (
+                uuid.uuid4(),
+                [
+                    {
+                        "finding_id": uuid.UUID(int=3),
+                        "intervention": "Alpha service",
+                        "outcome": "Attendance",
+                        "grounding": [{"quote": "third"}],
+                    },
+                    {
+                        "finding_id": uuid.UUID(int=1),
+                        "intervention": "Alpha service",
+                        "outcome": "Retention",
+                        "grounding": [{"quote": long_quote}],
+                    },
+                    {
+                        "finding_id": uuid.UUID(int=2),
+                        "intervention": "Alpha service",
+                        "outcome": "Wellbeing",
+                        "grounding": [{"quote": "second"}],
+                    },
+                ],
+            )
+        ],
+    )
+    backend = StubGroupClusteringBackend()
+
+    _run_group(conn, project_id, scope_id, seeded.run_id, backend=backend)
+
+    discover_call = next(call for call in backend.calls if call.stage == "discover")
+    assign_call = next(call for call in backend.calls if call.stage == "assign")
+    expected_anchors = [
+        {"finding_id": str(uuid.UUID(int=1)), "quote": long_quote[:240]},
+        {"finding_id": str(uuid.UUID(int=2)), "quote": "second"},
+    ]
+    assert discover_call.payloads[0]["context"]["anchors"] == expected_anchors
+    assert assign_call.payloads[0]["context"]["anchors"] == expected_anchors
+
+    large_scope_id = seed_scope(conn, project_id)
+    large_seeded = seed_extraction(
+        conn,
+        project_id,
+        large_scope_id,
+        docs=[
+            (
+                uuid.uuid4(),
+                [
+                    {
+                        "intervention": f"Distinct {index:03d}",
+                        "outcome": "Attendance",
+                        "grounding": [{"quote": f"quote {index}"}],
+                    }
+                    for index in range(121)
+                ],
+            )
+        ],
+    )
+    large_backend = StubGroupClusteringBackend()
+
+    _run_group(conn, project_id, large_scope_id, large_seeded.run_id, backend=large_backend)
+
+    large_discover = next(call for call in large_backend.calls if call.stage == "discover")
+    large_assign = next(call for call in large_backend.calls if call.stage == "assign")
+    assert large_discover.payloads[0]["context"] == {}
+    assert large_assign.payloads[0]["context"]["anchors"]
 
 
 def test_mixed_unclear_findings_never_dropped_by_group(conn: Connection) -> None:
@@ -934,7 +1511,9 @@ def test_mixed_unclear_findings_never_dropped_by_group(conn: Connection) -> None
     assert membership == {str(finding_id) for finding_id in seeded.finding_ids}
 
 
-def test_backend_failure_raises_without_rollup_row(conn: Connection) -> None:
+def test_backend_failure_persists_failed_facet_with_full_residual(
+    conn: Connection,
+) -> None:
     project_id, _ = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     seeded = seed_extraction(
@@ -944,17 +1523,24 @@ def test_backend_failure_raises_without_rollup_row(conn: Connection) -> None:
         docs=[(uuid.uuid4(), [{"intervention": "Alpha one", "outcome": "Outcome"}])],
     )
 
-    with pytest.raises(GroupError) as excinfo:
-        _run_group(
-            conn,
-            project_id,
-            scope_id,
-            seeded.run_id,
-            backend=StubFacetGroupingBackend(fail=True),
-        )
-    assert str(excinfo.value) == "facet grouping backend failed: RuntimeError"
-    assert "Stub facet grouping failure sentinel" not in str(excinfo.value)
-    assert _group_count(conn, project_id) == 0
+    _summary, group_run_id = _run_group(
+        conn,
+        project_id,
+        scope_id,
+        seeded.run_id,
+        backend=StubGroupClusteringBackend(fail_facets={"intervention"}),
+    )
+    row = _group_row(conn, project_id, group_run_id)
+
+    assert row["flags"]["intervention"] == {
+        "status": "failed",
+        "failure_class": "backend_error",
+        "groups_rejected": True,
+        "value_cap_exceeded": False,
+    }
+    payload = cast("dict[str, Any]", row["groups"])
+    assert _facet_payload(payload)["groups"] == []
+    assert _payload_finding_ids(payload) == {str(finding_id) for finding_id in seeded.finding_ids}
 
 
 def test_determinism_over_same_extraction_run(conn: Connection) -> None:
@@ -1039,7 +1625,7 @@ def test_directive_default_scope_context_and_malformed_fail_closed(conn: Connect
         project_id,
         scope_id,
         seeded.run_id,
-        context={"grouping": {"facet": "outcome"}},
+        context={"grouping": {"facets": ["outcome"]}},
     )
     outcome_row = _group_row(conn, project_id, outcome_run_id)
     assert outcome_summary["facet"] == "outcome"
@@ -1053,8 +1639,9 @@ def test_directive_default_scope_context_and_malformed_fail_closed(conn: Connect
     for malformed in (
         {"grouping": {"facet": "bogus"}},
         {"grouping": {"facet": "intervention", "unknown": True}},
+        {"grouping": {"facets": ["intervention", "intervention"]}},
     ):
-        backend = CountingFacetGroupingBackend()
+        backend = StubGroupClusteringBackend()
         with pytest.raises(FacetDirectiveError):
             _run_group(
                 conn,
@@ -1064,8 +1651,7 @@ def test_directive_default_scope_context_and_malformed_fail_closed(conn: Connect
                 context=malformed,
                 backend=backend,
             )
-        assert backend.partition_calls == 0
-        assert backend.repair_calls == 0
+        assert backend.calls == []
         assert _group_count(conn, project_id) == existing_group_count
 
 
@@ -1089,16 +1675,19 @@ def test_value_cap_fails_before_backend_call(conn: Connection) -> None:
             )
         ],
     )
-    backend = CountingFacetGroupingBackend()
+    backend = StubGroupClusteringBackend()
 
-    with pytest.raises(GroupError) as excinfo:
-        _run_group(conn, project_id, scope_id, seeded.run_id, backend=backend)
-    assert "value_cap_exceeded" in str(excinfo.value)
-    assert str(FACET_VALUE_CAP) in str(excinfo.value)
-    assert "deferred large-corpus seam" in str(excinfo.value)
-    assert backend.partition_calls == 0
-    assert backend.repair_calls == 0
-    assert _group_count(conn, project_id) == 0
+    _summary, group_run_id = _run_group(
+        conn, project_id, scope_id, seeded.run_id, backend=backend
+    )
+    row = _group_row(conn, project_id, group_run_id)
+
+    assert backend.calls == []
+    assert row["flags"]["intervention"]["status"] == "failed"
+    assert row["flags"]["intervention"]["failure_class"] == "cap_exceeded"
+    assert row["flags"]["intervention"]["value_cap_exceeded"] is True
+    assert row["counts"]["intervention"]["eligible_base"] == FACET_VALUE_CAP + 1
+    assert row["counts"]["intervention"]["ungrouped"] == FACET_VALUE_CAP + 1
 
 
 def test_value_surface_too_long_fails_before_backend_call(conn: Connection) -> None:
@@ -1120,23 +1709,22 @@ def test_value_surface_too_long_fails_before_backend_call(conn: Connection) -> N
             )
         ],
     )
-    backend = CountingFacetGroupingBackend()
+    backend = StubGroupClusteringBackend()
 
-    with pytest.raises(GroupError) as excinfo:
-        _run_group(conn, project_id, scope_id, seeded.run_id, backend=backend)
-    assert "value_surface_too_long" in str(excinfo.value)
-    assert str(VALUE_SURFACE_MAX) in str(excinfo.value)
-    assert backend.partition_calls == 0
-    assert backend.repair_calls == 0
-    assert _group_count(conn, project_id) == 0
+    _summary, group_run_id = _run_group(
+        conn, project_id, scope_id, seeded.run_id, backend=backend
+    )
+    row = _group_row(conn, project_id, group_run_id)
+
+    assert backend.calls == []
+    assert row["flags"]["intervention"]["status"] == "failed"
+    assert row["flags"]["intervention"]["failure_class"] == "validation_failed"
+    reasons = row["grouping_provenance"]["facet_runs"]["intervention"]["rejection_reasons"]
+    assert any("value_surface_too_long" in reason for reason in reasons)
 
 
-def test_one_bad_label_never_zeroes_the_run(conn: Connection) -> None:
-    """The 013 live regression: an over-long label lost the whole partition.
-
-    Group-grain rejection keeps the healthy group, routes the bad group's
-    member to the repair, and persists the rejection reason + flag.
-    """
+def test_invalid_discovered_label_fails_facet_not_component(conn: Connection) -> None:
+    """Phase C repin: discovery label validation is facet-local."""
     project_id, _ = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     seeded = seed_extraction(
@@ -1154,20 +1742,8 @@ def test_one_bad_label_never_zeroes_the_run(conn: Connection) -> None:
             )
         ],
     )
-    backend = CountingFacetGroupingBackend(
-        partition_result={
-            "groups": [
-                {"label": "x" * (LABEL_MAX + 1), "description": "Fine.", "member_ids": ["v1"]},
-                {"label": "Kept group", "description": "Fine.", "member_ids": ["v2", "v3"]},
-            ],
-            "ungroupable": [],
-        },
-        repair_result={
-            "groups": [
-                {"label": "Repaired group", "description": "Fine.", "member_ids": ["v1"]}
-            ],
-            "ungroupable": [],
-        },
+    backend = ScriptedGroupClusteringBackend(
+        labels=[ClusterLabel(label="x" * (LABEL_MAX + 1), description="Fine.")]
     )
 
     summary, group_run_id = _run_group(
@@ -1175,14 +1751,18 @@ def test_one_bad_label_never_zeroes_the_run(conn: Connection) -> None:
     )
     row = _group_row(conn, project_id, group_run_id)
 
-    assert backend.partition_calls == 1
-    assert backend.repair_calls == 1
-    assert summary["counts"]["groups"] == 2
-    assert summary["counts"]["ungrouped"] == 0
-    assert "groups_rejected" in summary["flags"]
-    assert "repair_path_taken" in summary["flags"]
-    reasons = cast("dict[str, Any]", row["grouping_provenance"])["rejection_reasons"]
-    assert reasons == [f"partition: group 0 label exceeds {LABEL_MAX} chars"]
+    assert backend.discovery_calls == 2
+    assert backend.assignment_calls == 0
+    assert summary["counts"]["intervention"]["groups"] == 0
+    assert summary["counts"]["intervention"]["ungrouped"] == 3
+    assert summary["flags"]["intervention"] == {
+        "status": "failed",
+        "failure_class": "discovery_exhausted",
+        "groups_rejected": True,
+        "value_cap_exceeded": False,
+    }
+    reasons = row["grouping_provenance"]["facet_runs"]["intervention"]["rejection_reasons"]
+    assert reasons and f"exceeds {LABEL_MAX} chars" in reasons[0]
 
 
 def _zero_spread() -> dict[str, int]:

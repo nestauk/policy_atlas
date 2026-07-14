@@ -36,11 +36,6 @@ from policy_atlas.extraction_backend import (
     OpenAIExtractionBackend,
     StubExtractionBackend,
 )
-from policy_atlas.facet_grouping import (
-    FacetGroupingBackend,
-    OpenAIFacetGroupingBackend,
-    StubFacetGroupingBackend,
-)
 from policy_atlas.fetch_live import LiveDocumentFetcher
 from policy_atlas.finding_vetter import FindingVetterBackend
 from policy_atlas.fixtures import get_source
@@ -49,6 +44,7 @@ from policy_atlas.grounding_judge import (
     OpenAIGroundingJudgeBackend,
     StubGroundingJudgeBackend,
 )
+from policy_atlas.group import GroupClusteringBackendFactory, StubGroupClusteringBackend
 from policy_atlas.grouping import (
     OpenAIThemeGroupingBackend,
     StubThemeGroupingBackend,
@@ -144,7 +140,7 @@ def _run_component(
     extraction_backend: ExtractionBackend | None = None,
     finding_vetter_backend: FindingVetterBackend | None = None,
     extraction_run_id: uuid.UUID | None = None,
-    facet_grouping_backend: FacetGroupingBackend | None = None,
+    group_clustering_backend: GroupClusteringBackendFactory | None = None,
     grouping_run_id: uuid.UUID | None = None,
     synthesis_backend: SynthesisBackend | None = None,
     grounding_judge_backend: GroundingJudgeBackend | None = None,
@@ -178,8 +174,8 @@ def _run_component(
             by other components. ``None`` (the default) turns judging off.
         extraction_run_id: Explicit extraction run for ``group``; unused by
             other components.
-        facet_grouping_backend: Facet grouping backend for ``group``; unused
-            by other components.
+        group_clustering_backend: Group clustering backend factory for
+            ``group``; unused by other components.
         grouping_run_id: Explicit grouping run for ``synthesise``; unused by
             other components.
         synthesis_backend: Synthesis backend for ``synthesise``; unused by
@@ -258,7 +254,7 @@ def _run_component(
             ranking_backend=ranking_backend,
             extraction_backend=extraction_backend,
             finding_vetter_backend=finding_vetter_backend,
-            facet_grouping_backend=facet_grouping_backend,
+            group_clustering_backend=group_clustering_backend,
             synthesis_backend=synthesis_backend,
             grounding_judge_backend=grounding_judge_backend,
             search_backends=search_backends,
@@ -616,7 +612,7 @@ def main() -> None:
     classification_backend: ClassificationBackend
     ranking_backend: RankingBackend | None
     extraction_backend: ExtractionBackend
-    facet_grouping_backend: FacetGroupingBackend
+    group_clustering_backend: GroupClusteringBackendFactory
     search_backends: list[SearchBackend] | None
     search_generation_backend: SearchGenerationBackend | None
     selected_document_fetcher = select_document_fetcher(live)
@@ -638,9 +634,7 @@ def main() -> None:
         # Tracing lives inside OpenAIExtractionBackend itself — no wrapper
         # class, unlike the embedding/grouping backends below.
         extraction_backend = OpenAIExtractionBackend(langfuse_client=langfuse_client)
-        # Tracing lives inside OpenAIFacetGroupingBackend itself — no wrapper
-        # class, unlike the embedding/grouping backends below.
-        facet_grouping_backend = OpenAIFacetGroupingBackend(langfuse_client=langfuse_client)
+        group_clustering_backend = StubGroupClusteringBackend()
         search_backends = cast(list[SearchBackend], search_live.live_search_backends())
         search_generation_backend = search_generation.OpenAISearchGenerationBackend(
             langfuse_client=langfuse_client
@@ -659,7 +653,7 @@ def main() -> None:
         classification_backend = StubClassificationBackend()
         ranking_backend = None
         extraction_backend = StubExtractionBackend()
-        facet_grouping_backend = StubFacetGroupingBackend()
+        group_clustering_backend = StubGroupClusteringBackend()
         search_backends = None
         search_generation_backend = None
     log.info(
@@ -1087,7 +1081,7 @@ def main() -> None:
         group_run_id = run_component(
             "group",
             extraction_run_id=extract_run_id,
-            facet_grouping_backend=facet_grouping_backend,
+            group_clustering_backend=group_clustering_backend,
         )
 
         # Second group run demonstrating the directive path (the selection-
@@ -1098,7 +1092,7 @@ def main() -> None:
                 evidence_scope.c.evidence_scope_id == scope_id
             )
         ).scalar_one()
-        directed_context = {**scope_context, "grouping": {"facet": "outcome"}}
+        directed_context = {**scope_context, "grouping": {"facets": ["outcome"]}}
         conn.execute(
             evidence_scope.update()
             .where(evidence_scope.c.evidence_scope_id == scope_id)
@@ -1109,7 +1103,7 @@ def main() -> None:
         group_directive_run_id = run_component(
             "group",
             extraction_run_id=extract_run_id,
-            facet_grouping_backend=facet_grouping_backend,
+            group_clustering_backend=group_clustering_backend,
         )
 
         grouping_rows = conn.execute(

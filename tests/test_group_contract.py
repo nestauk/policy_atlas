@@ -430,7 +430,7 @@ def test_mixed_status_docs_group_only_extracted_findings(conn: Connection) -> No
     assert _payload_finding_ids(cast("dict[str, Any]", row["groups"])) == {
         str(finding_id) for finding_id in finding_ids
     }
-    assert summary["counts"]["findings_total"] == len(finding_ids)
+    assert summary["counts"]["intervention"]["findings_total"] == len(finding_ids)
     assert row["counts"]["intervention"]["findings_total"] == len(finding_ids)
 
 
@@ -438,7 +438,7 @@ def test_mixed_status_docs_group_only_extracted_findings(conn: Connection) -> No
 
 
 def test_harness_group_component_success_default_backend(conn: Connection) -> None:
-    """compile + run_harness with NO facet_grouping_backend arg proves the stub default."""
+    """compile + run_harness with no group backend proves the stub default."""
     project_id, _ = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     seeded = _seed_one_doc_extraction(conn, project_id, scope_id)

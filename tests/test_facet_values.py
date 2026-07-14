@@ -146,10 +146,16 @@ def test_value_records_use_surface_count_and_counterparts() -> None:
 
 
 def test_parse_grouping_directive_defaults_and_valid_scope_context() -> None:
-    assert parse_grouping_directive({}) == ("intervention", "default")
-    assert parse_grouping_directive({"grouping": {}}) == ("intervention", "default")
+    assert parse_grouping_directive({}) == (["intervention"], "default")
+    assert parse_grouping_directive({"grouping": {}}) == (["intervention"], "default")
     assert parse_grouping_directive({"grouping": {"facet": "outcome"}}) == (
-        "outcome",
+        ["outcome"],
+        "scope_context",
+    )
+    assert parse_grouping_directive(
+        {"grouping": {"facets": ["outcome", "barrier_theme"]}}
+    ) == (
+        ["outcome", "barrier_theme"],
         "scope_context",
     )
 
@@ -159,7 +165,11 @@ def test_parse_grouping_directive_defaults_and_valid_scope_context() -> None:
     [
         {"grouping": "outcome"},
         {"grouping": {"facet": "outcome", "extra": True}},
+        {"grouping": {"facet": "outcome", "facets": ["outcome"]}},
         {"grouping": {"facet": 3}},
+        {"grouping": {"facets": []}},
+        {"grouping": {"facets": ["outcome", "outcome"]}},
+        {"grouping": {"facets": ["outcome", 3]}},
         {"grouping": {"facet": "mechanism"}},
         {"grouping": {"facet": "out\ncome"}},
         {"grouping": {"facet": "x" * (DIRECTIVE_STRING_MAX + 1)}},
@@ -413,6 +423,7 @@ def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() 
     assert facet_payload["ungrouped"] == {
         "values": ["Rapid rehousing"],
         "finding_ids": ["f3"],
+        "member_finding_ids": ["f3"],
         "finding_kinds": ["iof"],
         "member_counts": {"iof": 1, "icf": 0},
         "direction_spread": {
@@ -425,6 +436,7 @@ def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() 
     }
     assert facet_payload["no_value"] == {
         "finding_ids": ["f5", "f6"],
+        "member_finding_ids": ["f5", "f6"],
         "finding_kinds": ["iof", "iof"],
         "member_counts": {"iof": 2, "icf": 0},
         "direction_spread": {

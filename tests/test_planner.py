@@ -31,6 +31,8 @@ def _plan_from_draft(draft: PlanDraftWire) -> OrchestrationPlan:
     ``time_band``) are always computed code-side by the model validator.
     """
     data = {key: value for key, value in draft.model_dump().items() if value is not None}
+    if "grouping_facet" in data:
+        data["grouping_facets"] = [data.pop("grouping_facet")]
     return OrchestrationPlan(**data)
 
 
@@ -117,7 +119,7 @@ def test_stub_ready_draft_round_trips_into_orchestration_plan() -> None:
     plan = _plan_from_draft(turn.plan_draft)
 
     assert plan.components == ["characterise", "screen_full", "select", "extract", "group"]
-    assert plan.grouping_facet == "outcome"
+    assert plan.grouping_facets == ["outcome"]
     assert plan.time_band
     assert plan.expected_artefact_shape
 
@@ -134,7 +136,7 @@ def test_stub_landscape_draft_round_trips_into_orchestration_plan() -> None:
 
     assert plan.analysis_depth == "landscape"
     assert plan.components == ["characterise"]
-    assert plan.grouping_facet is None
+    assert plan.grouping_facets is None
 
 
 def test_planner_draft_with_select_at_standard_round_trips_into_orchestration_plan() -> None:

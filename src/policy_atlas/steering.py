@@ -611,7 +611,7 @@ def _clip_components_to_depth(payload: dict[str, Any], *, analysis_depth: Analys
         component for component in payload.get("components", []) if component in enabled
     ]
     if "group" not in payload["components"]:
-        payload["grouping_facet"] = None
+        payload["grouping_facets"] = None
 
 
 def _validate_directive_delta(
@@ -681,8 +681,8 @@ def _apply_component_delta_to_payload(
     elif component == "extract":
         _apply_extract_delta(payload, delta["extraction"])
     elif component == "group":
-        facet, _ = parse_grouping_directive({"grouping": delta["grouping"]})
-        payload["grouping_facet"] = facet
+        facets, _ = parse_grouping_directive({"grouping": delta["grouping"]})
+        payload["grouping_facets"] = facets
 
 
 def _apply_acquire_delta(payload: dict[str, Any], search: Any) -> None:

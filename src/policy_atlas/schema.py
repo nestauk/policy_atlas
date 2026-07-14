@@ -881,7 +881,14 @@ extraction_result = Table(
 
 # --- Group / facet-level theming (task 012) ---
 
-GROUPING_FACETS: tuple[str, ...] = ("intervention", "outcome", "population")
+GROUPING_FACETS: tuple[str, ...] = (
+    "intervention",
+    "outcome",
+    "population",
+    "barrier_theme",
+    "enabler_theme",
+    "mechanism_theme",
+)
 
 grouping_result = Table(
     "grouping_result",

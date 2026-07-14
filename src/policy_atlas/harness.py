@@ -38,11 +38,15 @@ from policy_atlas.extraction_backend import (
     StubExtractionBackend,
     StubICFExtractionBackend,
 )
-from policy_atlas.facet_grouping import FacetGroupingBackend, StubFacetGroupingBackend
 from policy_atlas.finding_vetter import FindingVetterBackend
 from policy_atlas.grounding import GroundingError, produce_grounded_block
 from policy_atlas.grounding_judge import GroundingJudgeBackend, StubGroundingJudgeBackend
-from policy_atlas.group import GroupContext, group_findings
+from policy_atlas.group import (
+    GroupClusteringBackendFactory,
+    GroupContext,
+    StubGroupClusteringBackend,
+    group_findings,
+)
 from policy_atlas.grouping import StubThemeGroupingBackend, ThemeGroupingBackend
 from policy_atlas.icf_finding_vetter import ICFFindingVetterBackend
 from policy_atlas.inference import InferenceProvider
@@ -87,7 +91,7 @@ class HarnessState(TypedDict):
     finding_vetter_backend: FindingVetterBackend | None
     icf_extraction_backend: Any
     icf_finding_vetter_backend: ICFFindingVetterBackend | None
-    facet_grouping_backend: FacetGroupingBackend
+    group_clustering_backend: GroupClusteringBackendFactory
     synthesis_backend: SynthesisBackend
     grounding_judge_backend: GroundingJudgeBackend
     block_ids: dict[str, Any]
@@ -333,7 +337,7 @@ def _run_group(state: HarnessState) -> HarnessState:
         GroupContext, extraction_run_id=config.extraction_run_id
     )
     sources_fn = functools.partial(
-        group_findings, facet_grouping_backend=state["facet_grouping_backend"]
+        group_findings, group_clustering_backend=state["group_clustering_backend"]
     )
     return _run_scope_component(state, context_cls, sources_fn)
 
@@ -630,7 +634,7 @@ def run_harness(
     finding_vetter_backend: FindingVetterBackend | None = None,
     icf_extraction_backend: Any | None = None,
     icf_finding_vetter_backend: ICFFindingVetterBackend | None = None,
-    facet_grouping_backend: FacetGroupingBackend | None = None,
+    group_clustering_backend: GroupClusteringBackendFactory | None = None,
     synthesis_backend: SynthesisBackend | None = None,
     grounding_judge_backend: GroundingJudgeBackend | None = None,
 ) -> dict[str, Any]:
@@ -680,9 +684,9 @@ def run_harness(
             defaults to ``StubICFExtractionBackend()`` — no default egress.
         icf_finding_vetter_backend: Post-extract ICF finding vetter. ``None``
             means judging is off for ICF.
-        facet_grouping_backend: Facet grouping backend for the group component;
-            defaults to ``StubFacetGroupingBackend()`` — no default egress,
-            approved gated change 2, task 012.
+        group_clustering_backend: Group clustering backend factory for the
+            group component; defaults to ``StubGroupClusteringBackend()`` —
+            no default egress.
         synthesis_backend: Synthesis backend for the synthesise component;
             defaults to ``StubSynthesisBackend()`` — no default egress.
         grounding_judge_backend: Grounding judge backend for the synthesise component;
@@ -758,10 +762,10 @@ def run_harness(
             else StubICFExtractionBackend()
         ),
         "icf_finding_vetter_backend": icf_finding_vetter_backend,
-        "facet_grouping_backend": (
-            facet_grouping_backend
-            if facet_grouping_backend is not None
-            else StubFacetGroupingBackend()
+        "group_clustering_backend": (
+            group_clustering_backend
+            if group_clustering_backend is not None
+            else StubGroupClusteringBackend()
         ),
         "synthesis_backend": (
             synthesis_backend if synthesis_backend is not None else StubSynthesisBackend()
