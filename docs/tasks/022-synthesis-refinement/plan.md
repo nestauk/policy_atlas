@@ -1,6 +1,8 @@
 # Plan: 022-synthesis-refinement
 
-> **Status:** DRAFTED rev 2 — pending owner approval (🛑).
+> **Status:** APPROVED — 2026-07-14 · owner, all eleven gate decisions approved as
+> recommended + the v6→v7 retarget ratified (the post-approval contract/rubric
+> correction of the stale writer-version premise).
 > Plan-stage adversarial review adjudicated 2026-07-14 (codex session 019f5e72,
 > 12 findings: 5 blocker · 7 material — ALL adopted: writer bump retargeted
 > v6→**v7** (v6 shipped in 021; contract + rubric corrected) · § Payload shapes +
