@@ -10,13 +10,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from policy_atlas.synthesis_backend import (
+from policy_atlas.core.usage import UsageResult
+from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     ClaimWire,
     RepairItemWire,
     SectionProseWire,
     SectionRepairWire,
 )
-from policy_atlas.usage import UsageResult
 
 
 def empty_key_findings(_seed: dict[str, Any]) -> UsageResult[SectionProseWire]:

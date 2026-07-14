@@ -8,18 +8,18 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 from sqlalchemy import delete, select, update
 from sqlalchemy.engine import Connection
 
-from policy_atlas.search_loop import CallVerb, ExecutedCall, QueryOrigin
-from policy_atlas.search_prompts import (
+from policy_atlas.core.usage import UsageResult
+from policy_atlas.evidence_base.sourcing.search_loop import CallVerb, ExecutedCall, QueryOrigin
+from policy_atlas.evidence_base.sourcing.search_prompts import (
     QueriesPayload,
     ReformulatePayload,
     SearchQueriesWire,
     SearchSuggestWire,
     SuggestPayload,
 )
-from policy_atlas.usage import UsageResult
 
 if TYPE_CHECKING:
-    from policy_atlas.icf_records import ICFRecordWire
+    from policy_atlas.evidence_base.extract.icf_records import ICFRecordWire
 
 EVIDENCE_TYPE = "RCTs and Quasi-Experimental Studies"
 IOF_PROFILE_ID = "eb_iof_base_v1"
@@ -82,8 +82,8 @@ def executed_calls_for(
 
 def make_icf_wire_record(**overrides: Any) -> "ICFRecordWire":
     """Build an ICF wire record with sane defaults; override per test."""
-    from policy_atlas.icf_records import ICFRecordWire
-    from policy_atlas.iof_records import IOFAnchorWire
+    from policy_atlas.evidence_base.extract.icf_records import ICFRecordWire
+    from policy_atlas.evidence_base.extract.iof_records import IOFAnchorWire
 
     values: dict[str, Any] = {
         "context_type": "barrier",
@@ -171,7 +171,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         conn: Open database connection.
         project_id: Project whose rows to remove.
     """
-    from policy_atlas.schema import (
+    from policy_atlas.core.schema import (
         addressable_unit,
         annotation,
         artefact,
@@ -197,10 +197,10 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         source_tag,
         synthesis_result,
     )
-    from policy_atlas.schema import (
+    from policy_atlas.core.schema import (
         chunk as chunk_table,
     )
-    from policy_atlas.schema import (
+    from policy_atlas.core.schema import (
         citation as citation_table,
     )
 
@@ -324,10 +324,10 @@ def seed_ingested_full_text(
 
     Returns the full-text snapshot id.
     """
-    from policy_atlas.embeddings import EMBEDDING_PROFILE, UNIT_POLICY, StubEmbeddingBackend
-    from policy_atlas.grounding import content_hash
-    from policy_atlas.schema import chunk as chunk_table
-    from policy_atlas.schema import chunk_embedding, project_source_snapshot, source_snapshot
+    from policy_atlas.core.embeddings import EMBEDDING_PROFILE, UNIT_POLICY, StubEmbeddingBackend
+    from policy_atlas.core.schema import chunk as chunk_table
+    from policy_atlas.core.schema import chunk_embedding, project_source_snapshot, source_snapshot
+    from policy_atlas.evidence_base.sourcing.grounding import content_hash
 
     full_snapshot_id = uuid.uuid4()
     conn.execute(
@@ -380,7 +380,7 @@ def seed_source(
     conn: Connection, project_id: uuid.UUID, meta: dict[str, Any] | None = None
 ) -> tuple[uuid.UUID, uuid.UUID]:
     """Insert source_snapshot + project_source_snapshot; return (source_snapshot_id, pss_id)."""
-    from policy_atlas.schema import project_source_snapshot, source_snapshot
+    from policy_atlas.core.schema import project_source_snapshot, source_snapshot
 
     snap_id = uuid.uuid4()
     pss_id = uuid.uuid4()
@@ -407,7 +407,7 @@ def seed_scope(
     conn: Connection, project_id: uuid.UUID, context: dict[str, Any] | None = None
 ) -> uuid.UUID:
     """Insert a evidence_scope; return scope_id."""
-    from policy_atlas.schema import evidence_scope
+    from policy_atlas.core.schema import evidence_scope
 
     scope_id = uuid.uuid4()
     conn.execute(evidence_scope.insert().values(
@@ -436,7 +436,7 @@ def seed_screening_result(
     ``screen_stage`` defaults to 1; pass 2 to seed a stage-2 row (e.g. a
     demotion or confirmation) atop a doc's stage-1 row.
     """
-    from policy_atlas.schema import source_screening_result
+    from policy_atlas.core.schema import source_screening_result
 
     if status == "failed":
         basis = None
@@ -460,7 +460,7 @@ def seed_screening_result(
 
 def seed_project_and_run(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:
     """Insert a project + running run; return (project_id, run_id)."""
-    from policy_atlas.schema import project
+    from policy_atlas.core.schema import project
 
     pid = uuid.uuid4()
     conn.execute(project.insert().values(project_id=pid, created_at=now()))
@@ -469,7 +469,7 @@ def seed_project_and_run(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:
 
 def seed_run(conn: Connection, project_id: uuid.UUID) -> uuid.UUID:
     """Insert an additional running run for an existing project; return run_id."""
-    from policy_atlas.schema import runs
+    from policy_atlas.core.schema import runs
 
     rid = uuid.uuid4()
     conn.execute(
@@ -495,7 +495,7 @@ def seed_select_doc(
     text_basis: str = "full_text",
 ) -> uuid.UUID:
     """Insert a screened-relevant source ready for select, with optional classification."""
-    from policy_atlas.schema import (
+    from policy_atlas.core.schema import (
         project_source_snapshot,
         source_appraisal_result,
         source_classification_result,
@@ -552,7 +552,7 @@ def seed_characterisation(
     unclustered: list[uuid.UUID] | None = None,
 ) -> None:
     """Insert a characterisation_result row with the given theme membership."""
-    from policy_atlas.schema import characterisation_result
+    from policy_atlas.core.schema import characterisation_result
 
     conn.execute(characterisation_result.insert().values(
         characterisation_id=uuid.uuid4(),
@@ -587,8 +587,8 @@ def run_select(
     backend: Any = None,
 ) -> tuple[dict[str, Any], Any, uuid.UUID]:
     """Seed a fresh run and execute select_scope; return (summary, persisted row, run_id)."""
-    from policy_atlas.schema import selection_result
-    from policy_atlas.select import SelectContext, select_scope
+    from policy_atlas.core.schema import selection_result
+    from policy_atlas.evidence_base.corpus.select import SelectContext, select_scope
 
     run_id = seed_run(conn, project_id)
     summary = select_scope(
