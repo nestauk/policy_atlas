@@ -29,9 +29,11 @@ the id-carrying repair schema, and the screen-confidence boost gate.
 ## Deliverable
 
 One PR to `dev` landing: the multi-facet `group` component (fan-out within one run,
-facet at group grain — one `grouping_result` migration), facet-qualified group ids
-through directive / `query_findings` / envelope, the per-call value-list scale fix
-(live-proven mandatory — see Read first), the ICF `context_type` facet; and the
+facet at group grain — one `grouping_result` migration) on the **two-stage
+clustering engine** (open discovery + batch-validated assignment — the value-list
+scale fix; characterise refactored onto it, behaviour-preserving), facet-qualified
+group ids through directive / `query_findings` / envelope, the **ICF claim-theme
+facet(s)**, the **cross-kind UNION read view** as the loader's read surface; and the
 phase-2 cost/surface set under **one** writer prompt-version bump
 (`synthesise_section_v6`) with replay evidence and a before/after cost measurement on
 the cache-discounted curve. Spec flow-back (components §8/§9, data-model) +
@@ -117,32 +119,36 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
    their own substrates, gates and consumers; the *engine* is shared or
    shape-identical (ADR records the boundary). `FACET_VALUE_CAP` survives as the
    fail-closed input guard; the per-call bound becomes an internal batch size.
-   Whether characterise's implementation is literally refactored onto the shared
-   engine or converged later is a plan-time call (touching characterise is
-   otherwise out of scope — convergence must not smuggle in a characterise rework).
-   Plan-level design choice inside the engine: optional per-unit **context payloads**
-   for value facets (e.g. sample claims/quotes for disambiguation) — plumbing may
-   land; default stays light (values + counterparts); enrichment quality is
-   eval-slice territory.
-5. **Facet vocabulary this slice** (🛑 decision 3): `intervention` / `outcome` /
-   `population` (existing value facets, now running on the engine) + **the first ICF
-   content facet — build-or-defer is the decision** (owner probe, 2026-07-14). ICF
-   stores no short open-vocabulary content values (deliberate 021 call: no
-   extraction-time canonicalisation) — the content is `claim` prose scoped by the
-   closed `context_type` enum, so "what distinct barriers/mechanisms were extracted"
-   is claim-theme clustering, not value-string partitioning:
-   - **(a) Claim-theme facet(s) scoped by `context_type`** (e.g. `barrier_theme`):
-     discover themes across the type's claim texts, assign every claim — the lens
-     that delivers the promised payoff ("planning delays recur as a barrier across
-     heat-pump programmes" backed by a validated group). On the item-4 engine this
-     is a second unit projection (claim prose; known list = claim ids; scale story =
-     claim count, 203 live), not new machinery — the marginal cost argues build.
-   - **(b) Explicit re-defer** — kind-spanning membership already puts ICF findings
-     in intervention/outcome groups, and `icf_context_type_count` already validates
-     type × intervention counts.
-   - (c) A short source-named ICF label field: **rejected, not open** —
-     extraction-time canonicalisation plus a pre-ground-truth fingerprint
-     invalidation.
+   **Characterise refactors onto the shared engine in this slice** (owner call,
+   2026-07-14) — behaviour-preserving only: characterise's prompt surfaces stay
+   byte-identical (no version bumps there), its outputs/records unchanged,
+   regression-covered; the refactor is code-level convergence, never a
+   characterise redesign. **Per-unit context payloads are built and ON by
+   default** (owner call, 2026-07-14), generalising the existing counterpart
+   mechanism (a value facet's units already carry up to `COUNTERPART_CAP` paired
+   reference surfaces): bounded char-capped source snippets per unit, id-keyed
+   data records under the standing data/instructions separation, **source content
+   only — never intent** (the facet-relative recomputability pin holds).
+   Enrichment is pin-or-revert on build-time replay evidence (the refine-replay
+   loop, ≤3 rounds — not deferred to evals); known risks the replay checks:
+   context anchoring (clustering by snippet topic instead of value identity) and
+   discovery-stage dilution at full-list scale. Full calibration stays eval work.
+5. **Facet vocabulary this slice** (decision 3 — **SETTLED: build**, owner
+   2026-07-14): `intervention` / `outcome` / `population` (existing value facets,
+   now running on the engine) + **claim-theme facet(s) scoped by `context_type`**
+   (e.g. `barrier_theme`): discover themes across the type's claim texts, assign
+   every claim — the lens that delivers the promised payoff ("planning delays
+   recur as a barrier across heat-pump programmes" backed by a validated group).
+   On the item-4 engine this is a second unit projection (claim prose; known
+   list = claim ids; scale story = claim count, 203 live), not new machinery.
+   Context: ICF stores no short open-vocabulary content values (deliberate 021
+   call: no extraction-time canonicalisation) — the content is `claim` prose
+   scoped by the closed `context_type` enum, so "what distinct barriers/mechanisms
+   were extracted" is claim-theme clustering, not value-string partitioning.
+   Which `context_type`s get theme facets (all seven vs the high-value trio
+   barrier/enabler/mechanism first) is a plan-time call. A short source-named ICF
+   label field stays **rejected** (extraction-time canonicalisation plus a
+   pre-ground-truth fingerprint invalidation).
    (A bare deterministic partition BY the seven-value enum is not a facet — that
    read surface already exists as `icf_context_type_count`; named here so nobody
    ships it as one.) Cross-kind clustering on the shared-reference facets is
@@ -157,10 +163,12 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
    flag-not-drop argues one facet's partition failure lands an honest per-facet
    failure row (rejection reasons persisted, the 013 lesson) while sibling facets
    survive, not all-or-nothing. The gate confirms this shape.
-7. **Cross-kind UNION read view — build-or-defer** (🛑 decision 5): the recorded seam
-   whose named first reader is this slice's cross-schema grouping. Build only if the
-   multi-facet loader actually reads through it; otherwise re-defer explicitly with
-   the honest reason (the loader already reads both tables directly).
+7. **Cross-kind UNION read view** (decision 5 — **SETTLED: build**, owner
+   2026-07-14): the recorded seam whose named first reader is this slice's
+   cross-schema grouping. The multi-facet loader reads through it (retiring the
+   direct two-table read), making it the one shared-reference read surface over
+   both finding tables — the improved reader for anything downstream that queries
+   across kinds.
 8. **Hybrid dimension search over finding reference values — build-or-defer**
    (🛑 decision 6): the data-model's committed intervention/outcome dimension
    indexing (ICF's source-named values co-ride free by construction), recorded for
@@ -247,9 +255,12 @@ inherit the deferral" is the owner's own instruction):**
 - **Schema** 🛑: the `grouping_result` migration (decision 1) — the slice's one
   schema gate. No other table changes expected; a second one is a stop condition.
 - **Prompt-bearing surfaces are lead-only** (AGENTS.md): `synthesise_section_v6`,
-  the group partition prompt bump, the planner-prompt sweep (coupled-readers rule —
+  the group prompt surfaces (discovery + assignment — supersede `group_facet_v1`),
+  the claim-theme facet prompts, the planner-prompt sweep (coupled-readers rule —
   multi-facet changes group semantics the planner describes), steer-point compile
   text. Every change bumps its version string; replay-evidenced.
+  **Characterise's prompt surfaces are byte-identical this slice** — the engine
+  refactor is code-level; a characterise prompt change is a stop condition.
 - **Egress unchanged**: existing approved OpenAI routes only; no new backends.
 - **No OpenAI-specific coupling** in the cache work (Bedrock constraint).
 - Upgrades-never-invalidate: the group prompt bump changes future grouping runs
@@ -332,19 +343,21 @@ correctness · scope creep toward the Out list.
 1. **Facet-at-group-grain migration shape** (schema 🛑) — facet list in provenance +
    per-facet payload keys, row-level `facet` column retired; old rows' readability
    posture.
-2. **The two-stage clustering engine** (direction owner-settled 2026-07-14 — this
-   gate ratifies the written shape): open discovery + batch-validated exhaustive
-   assignment, parameterised by unit projection; characterise refactor-now vs
-   converge-later; context-payload plumbing posture; what `FACET_VALUE_CAP`
-   becomes.
-3. **First ICF content facet — build-or-defer** — claim-theme facet(s) scoped by
-   `context_type` on the item-4 engine (the payoff lens; marginal cost argues
-   build) vs explicit re-defer; a short ICF label field is rejected. Plus the
-   deep-depth default facet set.
+2. **The two-stage clustering engine — SETTLED in full (owner, 2026-07-14)**: open
+   discovery + batch-validated exhaustive assignment, parameterised by unit
+   projection; **characterise refactors onto the engine this slice**
+   (behaviour-preserving, prompts byte-identical); **context payloads built and on
+   by default** (bounded, source-content-only, build-time replay pin-or-revert).
+   Residual for the gate: what `FACET_VALUE_CAP` becomes.
+3. **First ICF content facet — SETTLED: build (owner, 2026-07-14)** — claim-theme
+   facet(s) scoped by `context_type` on the item-4 engine; a short ICF label field
+   is rejected. Residual for the plan: which `context_type`s get theme facets
+   first; the deep-depth default facet set.
 4. **Per-facet failure isolation** — honest per-facet failure rows (proposed) vs
    all-or-nothing.
-5. **Cross-kind UNION view** — build (if the loader reads through it) or explicit
-   re-defer.
+5. **Cross-kind UNION view — SETTLED: build (owner, 2026-07-14)** — the multi-facet
+   loader reads through it; the shared-reference read surface over both finding
+   tables.
 6. **Hybrid dimension search** — build or defer, decided against item 13's scoped
    `search_chunks` alternative.
 7. **Screen-confidence boost** — gate the pre-decided grammar in; constants
