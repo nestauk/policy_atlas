@@ -58,16 +58,6 @@ _FOLD_MAP = {
     " ": " ",  # no-break space
 }
 
-# The statistics numeric fields, in canonical order (the "all 9").
-_FLOAT_FIELDS = (
-    "effect_size",
-    "ci_lower",
-    "ci_upper",
-    "standard_error",
-    "p_value",
-    "i_squared",
-    "tau2",
-)
 _INT_FIELDS = ("n", "k")
 _NUMERIC_STAT_FIELDS = (
     "effect_size",

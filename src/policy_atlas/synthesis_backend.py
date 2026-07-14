@@ -1523,6 +1523,20 @@ class OpenAISynthesisBackend:
             tool_choice=tool_choice,
         )
         log_usage("synthesis.section_turn.usage", response.usage)
+
+        def _emit_turn(arguments: str) -> UsageResult[SectionTurn]:
+            section, malformed = _salvage_section(arguments)
+            turn: SectionTurn = {"tool_calls": [], "claims": section}
+            if malformed:
+                turn["malformed_claims"] = malformed
+            return turn, token_usage_from_provider(response.usage)
+
+        def _read_turn(name: str, arguments: str) -> UsageResult[SectionTurn]:
+            return {
+                "tool_calls": [{"tool": name, "arguments": _json_object_or_empty(arguments)}],
+                "claims": None,
+            }, token_usage_from_provider(response.usage)
+
         if force_emit:
             function = require_single_tool_call(
                 response, label="synthesis section turn"
@@ -1534,15 +1548,8 @@ class OpenAISynthesisBackend:
             if not isinstance(arguments, str):
                 arguments = "{}"
             if name == "emit_section":
-                section, malformed = _salvage_section(arguments)
-                turn: SectionTurn = {"tool_calls": [], "claims": section}
-                if malformed:
-                    turn["malformed_claims"] = malformed
-                return turn, token_usage_from_provider(response.usage)
-            return {
-                "tool_calls": [{"tool": name, "arguments": _json_object_or_empty(arguments)}],
-                "claims": None,
-            }, token_usage_from_provider(response.usage)
+                return _emit_turn(arguments)
+            return _read_turn(name, arguments)
 
         if not response.choices:
             raise RuntimeError("OpenAI synthesis section turn response had no choices.")
@@ -1559,15 +1566,8 @@ class OpenAISynthesisBackend:
             if not isinstance(arguments, str):
                 arguments = "{}"
             if name == "emit_section":
-                section, malformed = _salvage_section(arguments)
-                turn = {"tool_calls": [], "claims": section}
-                if malformed:
-                    turn["malformed_claims"] = malformed
-                return turn, token_usage_from_provider(response.usage)
-            return {
-                "tool_calls": [{"tool": name, "arguments": _json_object_or_empty(arguments)}],
-                "claims": None,
-            }, token_usage_from_provider(response.usage)
+                return _emit_turn(arguments)
+            return _read_turn(name, arguments)
 
         read_calls: list[ToolCallRequest] = []
         emit_arguments: str | None = None
@@ -1586,11 +1586,7 @@ class OpenAISynthesisBackend:
             # Every parallel call was emit_section — honour the emission rather
             # than returning an empty turn the loop would treat as a protocol
             # violation.
-            section, malformed = _salvage_section(emit_arguments)
-            emit_turn: SectionTurn = {"tool_calls": [], "claims": section}
-            if malformed:
-                emit_turn["malformed_claims"] = malformed
-            return emit_turn, token_usage_from_provider(response.usage)
+            return _emit_turn(emit_arguments)
         if emit_arguments is not None:
             log.warning(
                 "synthesis.emit_with_reads_deferred", read_tool_count=len(read_calls)

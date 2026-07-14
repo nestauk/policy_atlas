@@ -51,18 +51,16 @@ from policy_atlas.finding_vetter import (
     FINDING_VETTER_MODEL,
     FINDING_VETTER_PROMPT_VERSION,
     FINDING_VETTER_REASONING_EFFORT,
-    FindingVetterBackend,
-    VetterVerdictWire,
-    validate_verdict_coverage,
-)
-from policy_atlas.icf_finding_vetter import (
     ICF_FINDING_VETTER_MAX_OUTPUT_TOKENS,
     ICF_FINDING_VETTER_MODEL,
     ICF_FINDING_VETTER_PROMPT_VERSION,
     ICF_FINDING_VETTER_REASONING_EFFORT,
+    FindingVetterBackend,
     ICFFindingVetterBackend,
     ICFVetterVerdictWire,
+    VetterVerdictWire,
     validate_icf_verdict_coverage,
+    validate_verdict_coverage,
 )
 from policy_atlas.implementation_context_prompt import (
     ICF_EXTRACT_MAX_OUTPUT_TOKENS,
@@ -79,6 +77,7 @@ from policy_atlas.implementation_context_records import (
     ICFRecord,
     ICFRecordWire,
 )
+from policy_atlas.openai_client import CallBudget
 from policy_atlas.quote_verify import (
     FIELD_RULES_VERSION,
     ICF_FIELD_RULES_VERSION,
@@ -181,6 +180,13 @@ class ExtractContext:
     selection_run_id: uuid.UUID
 
 
+def _digest(components: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """Canonical sha256 digest of a fingerprint component map, paired back with it."""
+    canonical = json.dumps(components, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return digest, components
+
+
 def extraction_fingerprint(
     mode: str, *, finding_vetter_active: bool = False
 ) -> tuple[str, dict[str, Any]]:
@@ -231,9 +237,7 @@ def extraction_fingerprint(
             else None
         ),
     }
-    canonical = json.dumps(components, sort_keys=True, separators=(",", ":"))
-    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    return digest, components
+    return _digest(components)
 
 
 def icf_extraction_fingerprint(
@@ -275,23 +279,10 @@ def icf_extraction_fingerprint(
             else None
         ),
     }
-    canonical = json.dumps(components, sort_keys=True, separators=(",", ":"))
-    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    return digest, components
+    return _digest(components)
 
 
-@dataclass
-class _ExtractCallBudget:
-    """Pre-run call ceiling; every call (initial or retry) reserves one slot."""
-
-    maximum: int
-    used: int = 0
-
-    def reserve(self) -> bool:
-        if self.used >= self.maximum:
-            return False
-        self.used += 1
-        return True
+_ExtractCallBudget = CallBudget
 
 
 @dataclass

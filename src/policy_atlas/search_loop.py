@@ -29,6 +29,7 @@ from policy_atlas.country_filters import (
     SearchDirectiveError as _SearchDirectiveError,
 )
 from policy_atlas.embeddings import EmbeddingBackend
+from policy_atlas.prompt_fields import metadata_dict
 from policy_atlas.schema import (
     event_log,
     project_source_snapshot,
@@ -97,11 +98,6 @@ class DepthConstants(TypedDict):
     wall_clock_s: int
     round_cap: int
     http_budget: dict[str, int]
-    # Derived structural ceiling, not a runtime-enforced budget: the fixed
-    # arm caps (one generate per rapid run; one reformulate + one suggest per
-    # deep round × round_cap) cannot exceed it. If arms ever become dynamic,
-    # enforce this at the generation call sites (015 review adjudication).
-    generation_call_cap: int
     # Deep-round-loop arm selection (017, contract rev 2.9): which of the
     # four deep-round arms run at this depth. Not applicable to "rapid" —
     # rapid's single round_cap never reaches the deep-round loop — so its
@@ -115,7 +111,6 @@ DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
         "wall_clock_s": RAPID_WALL_CLOCK_S,
         "round_cap": 1,
         "http_budget": {"openalex": 20, "overton": 5},
-        "generation_call_cap": 1,
         "arms": frozenset(),
     },
     "standard": {
@@ -123,7 +118,6 @@ DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
         "wall_clock_s": STANDARD_WALL_CLOCK_S,
         "round_cap": 2,
         "http_budget": {"openalex": 30, "overton": 8},
-        "generation_call_cap": 4,
         "arms": frozenset({"reformulate", "diversity"}),
     },
     "deep": {
@@ -131,7 +125,6 @@ DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
         "wall_clock_s": DEEP_WALL_CLOCK_S,
         "round_cap": ROUND_CAP,
         "http_budget": {"openalex": 50, "overton": 15},
-        "generation_call_cap": 8,
         "arms": frozenset({"reformulate", "snowball", "suggest", "diversity"}),
     },
 }
@@ -287,12 +280,10 @@ class StopDecision:
     Attributes:
         stop: Whether the loop should stop after this evaluation.
         stop_condition: Raw stop condition before any deep-thin overlay.
-        overlay_applied: Whether an overlay has already been applied.
     """
 
     stop: bool
     stop_condition: str | None
-    overlay_applied: bool
 
 
 # Unified filter-directive validator/raiser family.
@@ -374,22 +365,6 @@ def _single_str_value(
     if not isinstance(value, str) or not value.strip() or value != value.strip():
         raise error(f"{key} must be a non-empty string")
     return value
-
-
-def _single_int_value(
-    key: str,
-    value: Any,
-    min_value: int,
-    max_value: int,
-    *,
-    error: type[Exception] = ValueError,
-) -> int:
-    if not isinstance(value, list) or len(value) != 1:
-        raise error(f"{key} must be a single-item list")
-    item = int(value[0])
-    if item < min_value or item > max_value:
-        raise error(f"{key} contains an out-of-range value")
-    return item
 
 
 def _enum_values(
@@ -548,7 +523,11 @@ def overton_wire_params(filters: dict[str, Any] | None) -> dict[str, str]:
         elif key == "published_before":
             params["published_before"] = str(value)
         elif key == "sdgs":
-            sdg = _single_int_value(key, value, 1, 17)
+            if not isinstance(value, list) or len(value) != 1:
+                raise ValueError(f"{key} must be a single-item list")
+            sdg = int(value[0])
+            if sdg < 1 or sdg > 17:
+                raise ValueError(f"{key} contains an out-of-range value")
             params["sdgcategories"] = OVERTON_SDG_LABELS[sdg]
         elif key == "publisher_type":
             params["source_type"] = _single_enum_value(key, value, OVERTON_PUBLISHER_TYPES)
@@ -910,15 +889,15 @@ def evaluate_deep_stop(
         Stop decision with the raw stop condition, if any.
     """
     if confident_relevant >= TARGET_CONFIDENT_RELEVANT:
-        return StopDecision(True, "target_reached", False)
+        return StopDecision(True, "target_reached")
     if round_index >= 2 and (
         docs_screened_this_round == 0
         or new_confident_relevant / docs_screened_this_round < SHORT_CIRCUIT_RATE
     ):
-        return StopDecision(True, "short_circuit", False)
+        return StopDecision(True, "short_circuit")
     if wall_clock_breached or round_index >= round_cap:
-        return StopDecision(True, "budget_exhausted", False)
-    return StopDecision(False, None, False)
+        return StopDecision(True, "budget_exhausted")
+    return StopDecision(False, None)
 
 
 def finalise_deep_stop(
@@ -973,10 +952,6 @@ def finalise_deep_stop(
     return final_value
 
 
-def _metadata(raw: Any) -> dict[str, Any]:
-    return dict(raw) if isinstance(raw, dict) else {}
-
-
 def _text_or_none(raw: Any) -> str | None:
     return raw if isinstance(raw, str) and raw else None
 
@@ -1028,7 +1003,7 @@ def _prior_deep_usage(
         .where(event_log.c.payload.op("->>")("depth") == depth)
     ).fetchall()
     for row in rows:
-        payload = _metadata(row.payload)
+        payload = metadata_dict(row.payload)
         backend = payload.get("backend")
         if not isinstance(backend, str) or backend not in http_calls:
             continue
@@ -1085,7 +1060,7 @@ def _screened_records(
     return [
         _ScreenedRecord(
             pss_id=cast(uuid.UUID, row.project_source_snapshot_id),
-            metadata=_metadata(row.metadata),
+            metadata=metadata_dict(row.metadata),
             confidence=float(row.screen_decision_confidence),
         )
         for row in conn.execute(query)

@@ -18,9 +18,9 @@ from policy_atlas.classify_prompt import (
     EvidenceType,
     build_classify_messages,
 )
-from policy_atlas.openai_client import openai_kwargs, resolve_openai_client
+from policy_atlas.openai_client import openai_kwargs, parse_structured, resolve_openai_client
 from policy_atlas.prompt_fields import confidence_is_valid, scrub_nul
-from policy_atlas.usage import UsageResult, log_usage, token_usage_from_provider, usage_metadata
+from policy_atlas.usage import UsageResult, usage_metadata
 
 
 class ClassificationBackend(Protocol):
@@ -92,20 +92,16 @@ class OpenAIClassificationBackend:
         self,
         messages: list[ChatCompletionMessageParam],
     ) -> UsageResult[ClassifyWire]:
-        response = self._client.chat.completions.parse(
-            **openai_kwargs(CLASSIFY_MODEL, reasoning_effort=CLASSIFY_REASONING_EFFORT),
+        parsed, usage = parse_structured(
+            self._client,
             messages=messages,
             response_format=ClassifyWire,
+            usage_event="classification.classify.usage",
+            label="classification",
             max_completion_tokens=CLASSIFY_MAX_OUTPUT_TOKENS,
+            **openai_kwargs(CLASSIFY_MODEL, reasoning_effort=CLASSIFY_REASONING_EFFORT),
         )
-        log_usage("classification.classify.usage", response.usage)
-        if not response.choices:
-            raise RuntimeError("OpenAI classification response had no choices.")
-        parsed = response.choices[0].message.parsed
-        if parsed is None:
-            raise RuntimeError("OpenAI classification response was not parsed.")
-        parsed_model: ClassifyWire = parsed
-        return _scrub_classification(parsed_model), token_usage_from_provider(response.usage)
+        return _scrub_classification(parsed), usage
 
     def classify(self, payload: ClassifyEnvelopePayload) -> UsageResult[ClassifyWire]:
         """Classify one document envelope through structured OpenAI output.

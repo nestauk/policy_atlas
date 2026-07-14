@@ -502,29 +502,6 @@ TIER1_GROUPS: dict[str, tuple[str, ...]] = {
     ),
 }
 
-GROUP_PROVENANCE: dict[str, str] = {
-    "OECD members": "OECD sovereign members, lead-verified against oecd.org on 2026-07-12.",
-    "G7": "G7 sovereign members, lead-verified on 2026-07-12.",
-    "G20": (
-        "G20 sovereign members only, lead-verified on 2026-07-12; EU/AU "
-        "institutional members deliberately not expanded."
-    ),
-    "EU27": (
-        "European Union 27 sovereign member states, lead-verified against "
-        "europa.eu on 2026-07-12."
-    ),
-    "EEA": (
-        "European Economic Area = EU27 plus IS, LI, NO, lead-verified against "
-        "europa.eu on 2026-07-12."
-    ),
-    "Europe": "UN M49 region Europe, lead-derived on 2026-07-12.",
-    "North America": (
-        "UN M49 Northern America plus Caribbean plus Central America, "
-        "lead-derived on 2026-07-12."
-    ),
-    "Oceania": "UN M49 region Oceania, lead-derived on 2026-07-12.",
-}
-
 OVERTON_COUNTRY_HINTS: dict[str, str] = {
     "GB": "UK",
     "UK": "UK",

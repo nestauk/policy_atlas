@@ -12,7 +12,7 @@ import uuid
 from collections.abc import Generator
 from importlib import resources
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import sqlalchemy as sa
@@ -26,6 +26,7 @@ from policy_atlas.acquire import (
     AcquireContext,
     OpenAlexFixtureBackend,
     OvertonFixtureBackend,
+    SearchBackend,
     acquire_sources,
 )
 from policy_atlas.appraise import AppraiseContext, appraise_sources
@@ -55,6 +56,7 @@ from policy_atlas.schema import (
 from policy_atlas.screen import ScreenContext, screen_sources
 from tests.helpers import (
     delete_project_data,
+    executed_calls_for,
     now,
     seed_project_and_run,
     seed_run,
@@ -94,9 +96,11 @@ def seed_corpus(conn: Connection) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     ctx = AcquireContext(scope_id=scope_id, intent="test", context={})
+    backends = [OpenAlexFixtureBackend(), OvertonFixtureBackend()]
     acquire_sources(
         conn, project_id=project_id, run_id=run_id, context=ctx,
-        backends=[OpenAlexFixtureBackend(), OvertonFixtureBackend()],
+        backends=cast("list[SearchBackend]", backends),
+        executed_calls=executed_calls_for(backends, ctx.intent),
     )
     screen_sources(
         conn, project_id=project_id, run_id=run_id,

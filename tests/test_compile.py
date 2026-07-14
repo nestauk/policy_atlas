@@ -9,34 +9,29 @@ from policy_atlas.plan import Config, Plan, compile
 
 
 def test_valid_plan_compiles() -> None:
-    snapshot_id = uuid.uuid4()
-    plan = Plan(component="echo", source_snapshot_id=snapshot_id)
+    scope_id = uuid.uuid4()
+    plan = Plan(component="acquire", evidence_scope_id=scope_id)
     config = compile(plan)
     assert isinstance(config, Config)
-    assert config.component == "echo"
-    assert config.source_snapshot_id == snapshot_id
+    assert config.component == "acquire"
+    assert config.evidence_scope_id == scope_id
 
 
 def test_invalid_component_raises_at_plan_construction() -> None:
     with pytest.raises(ValidationError):
-        Plan(component="nonexistent", source_snapshot_id=uuid.uuid4())
+        Plan(component="nonexistent", evidence_scope_id=uuid.uuid4())
 
 
 def test_invalid_plan_never_reaches_harness() -> None:
     """ValidationError is raised at Plan construction — harness is never invoked."""
     with pytest.raises(ValidationError):
-        Plan(component="real-model", source_snapshot_id=uuid.uuid4())
+        Plan(component="real-model", evidence_scope_id=uuid.uuid4())
 
 
 def test_invalid_config_direct_construction_raises() -> None:
     """Config cannot be hand-built with bad values and sneak into the harness."""
     with pytest.raises(ValidationError):
-        Config(component="bad-component", source_snapshot_id=uuid.uuid4())
-
-
-def test_echo_requires_source_snapshot_id() -> None:
-    with pytest.raises(ValidationError):
-        Plan(component="echo")
+        Config(component="bad-component", evidence_scope_id=uuid.uuid4())
 
 
 def test_acquire_requires_evidence_scope_id() -> None:

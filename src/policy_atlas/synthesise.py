@@ -80,7 +80,6 @@ from policy_atlas.synthesis_tools import (
     ARTEFACT_TITLE_MAX,
     GROUP_ID_EXPECTED_FORM,
     REASONING_CLAIMS_MAX,
-    REPAIR_ROUND_CAP,
     RETRIEVAL_UNIT_CAP,
     SCREEN_CONFIDENCE_MAX,
     SCREEN_CONFIDENCE_MIN,
@@ -1642,36 +1641,6 @@ def _substrate_summaries(refs: ResolvedReferences, corpus: CorpusProfile) -> dic
     if grouping_summary is not None:
         summaries["grouping"] = grouping_summary
     return summaries
-
-
-def _substrate_view(
-    *,
-    refs: ResolvedReferences,
-    corpus: CorpusProfile,
-    coverage_records: dict[str, CoverageRecord],
-    chunk_by_id: dict[str, ChunkInfo],
-    chunks_by_pss_id: dict[str, list[ChunkInfo]],
-    finding_by_id: dict[str, FindingInfo],
-    icf_finding_by_id: dict[str, FindingInfo],
-    icf_profile_available: bool,
-    basis_by_snapshot_id: dict[str, BasisText],
-    selected_pss_ids: set[str],
-) -> SubstrateView:
-    return SubstrateView(
-        characterisation=_characterisation_summary(refs.characterisation_row),
-        selection=_selection_summary(refs.selection_row),
-        extraction=_extraction_summary(refs.extraction_row),
-        grouping=_grouping_summary(refs.grouping_row),
-        corpus=corpus,
-        coverage_records=coverage_records,
-        chunk_by_id=chunk_by_id,
-        chunks_by_pss_id=chunks_by_pss_id,
-        finding_by_id=finding_by_id,
-        icf_finding_by_id=icf_finding_by_id,
-        icf_profile_available=icf_profile_available,
-        basis_by_snapshot_id=basis_by_snapshot_id,
-        selected_pss_ids=selected_pss_ids,
-    )
 
 
 def _group_doc_ids_by_group_id(
@@ -4522,8 +4491,11 @@ def synthesise_scope(
     coverage_records = _load_coverage_records(
         conn, project_id=project_id, scope_id=context.scope_id
     )
-    substrate = _substrate_view(
-        refs=refs,
+    substrate = SubstrateView(
+        characterisation=_characterisation_summary(refs.characterisation_row),
+        selection=_selection_summary(refs.selection_row),
+        extraction=_extraction_summary(refs.extraction_row),
+        grouping=_grouping_summary(refs.grouping_row),
         corpus=corpus,
         coverage_records=coverage_records,
         chunk_by_id=chunk_by_id,
@@ -4930,7 +4902,7 @@ def synthesise_scope(
             "SYNTH_CHUNK_TOP_K": SYNTH_CHUNK_TOP_K,
             "SYNTH_CHUNK_CHAR_BUDGET": SYNTH_CHUNK_CHAR_BUDGET,
             "RETRIEVAL_UNIT_CAP": RETRIEVAL_UNIT_CAP,
-            "REPAIR_ROUND_CAP": REPAIR_ROUND_CAP,
+            "REPAIR_ROUND_CAP": 1,  # never enforced beyond a single repair pass
         },
         "sections": section_provenance,
         "inherited_chain_base": _inherited_chain_base(refs),

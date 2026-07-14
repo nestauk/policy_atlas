@@ -18,6 +18,7 @@ from policy_atlas.finding_references import (
     POPULATION_DESC,
     STUDY_DESIGN_DESC,
     STUDY_GEOGRAPHY_DESC,
+    render_field_sections,
 )
 from policy_atlas.schema import CLAIM_BASES, CLAIM_LEVELS, CONTEXT_LEVELS, CONTEXT_TYPES
 
@@ -208,14 +209,9 @@ def render_field_docs() -> str:
         A field-by-field reference block generated from the wire model field
         descriptions.
     """
-    sections: list[tuple[str, type[BaseModel]]] = [
-        ("Finding fields", ICFRecordWire),
-        ("anchors entry fields", IOFAnchorWire),
-    ]
-    lines: list[str] = []
-    for heading, model in sections:
-        lines.append(f"{heading}:")
-        for name, model_field in model.model_fields.items():
-            lines.append(f"- {name}: {model_field.description}")
-        lines.append("")
-    return "\n".join(lines).rstrip()
+    return render_field_sections(
+        [
+            ("Finding fields", ICFRecordWire),
+            ("anchors entry fields", IOFAnchorWire),
+        ]
+    )

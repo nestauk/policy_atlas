@@ -35,8 +35,8 @@ from policy_atlas.extraction_records import (
     IOFStatistics,
     IOFStratum,
 )
-from policy_atlas.finding_vetter import FINDING_VETTER_PROMPT_VERSION
-from policy_atlas.icf_finding_vetter import (
+from policy_atlas.finding_vetter import (
+    FINDING_VETTER_PROMPT_VERSION,
     ICFFindingVetterResponse,
     ICFFlagClass,
     ICFVetterVerdictWire,

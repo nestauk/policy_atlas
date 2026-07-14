@@ -13,9 +13,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas import tracing
 from policy_atlas.grouping import GroupingDoc, records_json
-from policy_atlas.openai_client import resolve_openai_client
+from policy_atlas.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.tags import has_control_character
-from policy_atlas.usage import UsageResult, log_usage, token_usage_from_provider, usage_metadata
+from policy_atlas.usage import UsageResult, usage_metadata
 
 log = structlog.get_logger()
 
@@ -239,18 +239,14 @@ class OpenAIRankingBackend:
                 ),
             },
         ]
-        response = self._client.chat.completions.parse(
-            model=RERANK_MODEL,
+        parsed, usage = parse_structured(
+            self._client,
             messages=messages,
             response_format=_RankedDocsModel,
+            usage_event="ranking.rank.usage",
+            label="ranking",
+            model=RERANK_MODEL,
         )
-        log_usage("ranking.rank.usage", response.usage)
-        if not response.choices:
-            raise RuntimeError("OpenAI ranking response had no choices.")
-        parsed = response.choices[0].message.parsed
-        if parsed is None:
-            raise RuntimeError("OpenAI ranking response was not parsed.")
-        parsed_model: _RankedDocsModel = parsed
         return (
             [
                 {
@@ -258,9 +254,9 @@ class OpenAIRankingBackend:
                     "score": ranked_doc.score,
                     "reason": ranked_doc.reason,
                 }
-                for ranked_doc in parsed_model.scores
+                for ranked_doc in parsed.scores
             ],
-            token_usage_from_provider(response.usage),
+            usage,
         )
 
     def rank(

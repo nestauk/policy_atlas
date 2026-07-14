@@ -19,37 +19,21 @@ import httpx
 import structlog
 
 from policy_atlas.acquire import BackendCaps
-from policy_atlas.search_loop import (
-    OA_STATUS_VALUES,
-    OPENALEX_TYPES,
-    OVERTON_PUBLISHER_TYPES,
-    OVERTON_REGION_GROUPS,
-    OVERTON_SDG_LABELS,
-    openalex_wire_params,
-    overton_wire_params,
-)
 
 log = structlog.get_logger()
 
 __all__ = (
     "HTTP_TIMEOUT_S",
     "OA_SELECT",
-    "OA_STATUS_VALUES",
     "OPENALEX_HOST",
-    "OPENALEX_TYPES",
     "OVERTON_HOST",
     "OVERTON_MIN_INTERVAL_S",
-    "OVERTON_PUBLISHER_TYPES",
-    "OVERTON_REGION_GROUPS",
-    "OVERTON_SDG_LABELS",
     "OpenAlexLiveBackend",
     "OvertonLiveBackend",
     "RETRY_BACKOFF_S",
     "SearchTransportError",
     "USER_AGENT",
     "live_search_backends",
-    "openalex_wire_params",
-    "overton_wire_params",
     "sanitize_openalex_query",
     "sanitize_title_query",
 )

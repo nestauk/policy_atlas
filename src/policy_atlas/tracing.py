@@ -358,6 +358,22 @@ def component_span(
             yield run_span
 
 
+def _trace_root(root_span: Any, *, input: dict[str, Any], output: Any) -> None:
+    """Update the root span with trace input/output, when one exists.
+
+    Shared preamble for every ``*_score_summary`` function below; callers
+    check ``client is None`` themselves first, since that check also gates
+    whether the rest of the function's scoring calls run.
+
+    Args:
+        root_span: The ``run:{component}:{run_id}`` root span, or ``None``.
+        input: Trace input payload.
+        output: Trace output payload (the component summary).
+    """
+    if root_span is not None:
+        root_span.update(input=input, output=output)
+
+
 def score_summary(
     client: Langfuse | None,
     summary: dict[str, Any],
@@ -380,11 +396,7 @@ def score_summary(
     """
     if client is None:
         return
-    if root_span is not None:
-        root_span.update(
-            input={"component": "characterise", "intent": intent},
-            output=summary,
-        )
+    _trace_root(root_span, input={"component": "characterise", "intent": intent}, output=summary)
     client.score_current_trace(
         name="unclustered_share",
         value=float(summary["unclustered"]["share"]),
@@ -416,11 +428,11 @@ def extraction_score_summary(
     """
     if client is None:
         return
-    if root_span is not None:
-        root_span.update(
-            input={"component": "extract", "selection_run_id": summary["selection_run_id"]},
-            output=summary,
-        )
+    _trace_root(
+        root_span,
+        input={"component": "extract", "selection_run_id": summary["selection_run_id"]},
+        output=summary,
+    )
     counts = summary["counts"]
     profiles = counts["profiles"]
     iof_counts = profiles.get(IOF_PROFILE_ID, {})
@@ -485,11 +497,11 @@ def grouping_score_summary(
     """
     if client is None:
         return
-    if root_span is not None:
-        root_span.update(
-            input={"component": "group", "facets": summary.get("facets", [])},
-            output=summary,
-        )
+    _trace_root(
+        root_span,
+        input={"component": "group", "facets": summary.get("facets", [])},
+        output=summary,
+    )
     # Reaching component.completed means the partition validated; a failed
     # partition raises before this point, so 0.0 is unreachable here.
     client.score_current_trace(
@@ -498,12 +510,7 @@ def grouping_score_summary(
         data_type="NUMERIC",
     )
     counts = summary.get("counts", {})
-    if isinstance(counts, dict) and "findings_total" in counts:
-        findings_total = int(counts["findings_total"])
-        ungrouped = int(counts.get("ungrouped", 0))
-        no_value = int(counts.get("no_value", 0))
-        group_count = int(counts.get("groups", 0))
-    elif isinstance(counts, dict):
+    if isinstance(counts, dict):
         finding_counts = [
             value
             for value in counts.values()
@@ -566,11 +573,11 @@ def synthesis_score_summary(
     """
     if client is None:
         return
-    if root_span is not None:
-        root_span.update(
-            input={"component": "synthesise", "artefact_id": summary["artefact_id"]},
-            output=summary,
-        )
+    _trace_root(
+        root_span,
+        input={"component": "synthesise", "artefact_id": summary["artefact_id"]},
+        output=summary,
+    )
     counts = summary["counts"]
     claims_total = sum(counts["claims_total"].values())
     unsupported = counts["claims_by_verdict_lane"].get("unsupported_mis_cited", 0)
@@ -652,11 +659,7 @@ def screening_score_summary(
     """
     if client is None:
         return
-    if root_span is not None:
-        root_span.update(
-            input={"component": "screen"},
-            output=summary,
-        )
+    _trace_root(root_span, input={"component": "screen"}, output=summary)
     client.score_current_trace(
         name="screen_failure_count",
         value=float(summary.get("failed", 0)),
@@ -711,11 +714,7 @@ def classification_score_summary(
     """
     if client is None:
         return
-    if root_span is not None:
-        root_span.update(
-            input={"component": "classify"},
-            output=summary,
-        )
+    _trace_root(root_span, input={"component": "classify"}, output=summary)
     client.score_current_trace(
         name="classify_failure_count",
         value=float(summary.get("failed", 0)),

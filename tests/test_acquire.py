@@ -5,7 +5,7 @@ import re
 import uuid
 from importlib import resources
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import sqlalchemy as sa
@@ -19,6 +19,7 @@ from policy_atlas.acquire import (
     BackendCaps,
     OpenAlexFixtureBackend,
     OvertonFixtureBackend,
+    SearchBackend,
     _map_openalex_work,
     _map_overton_document,
     _normalize_doi,
@@ -42,6 +43,7 @@ from policy_atlas.schema import (
 from policy_atlas.screen import ScreenContext, screen_sources
 from tests.helpers import (
     delete_project_data,
+    executed_calls_for,
     now,
     oa_record,
     seed_project_and_run,
@@ -137,15 +139,18 @@ def acquire(
     scope_id: uuid.UUID,
     backends: list[Any] | None = None,
 ) -> dict[str, Any]:
+    context = make_context(scope_id)
+    resolved_backends = (
+        backends if backends is not None
+        else [OpenAlexFixtureBackend(), OvertonFixtureBackend()]
+    )
     return acquire_sources(
         conn,
         project_id=project_id,
         run_id=run_id,
-        context=make_context(scope_id),
-        backends=(
-            backends if backends is not None
-            else [OpenAlexFixtureBackend(), OvertonFixtureBackend()]
-        ),
+        context=context,
+        backends=cast("list[SearchBackend]", resolved_backends),
+        executed_calls=executed_calls_for(resolved_backends, context.intent),
     )
 
 
@@ -821,12 +826,15 @@ def test_coverage_wall_clock_exceeded_when_breached_and_no_error(conn: Connectio
     backend error reports 'wall_clock_exceeded', not 'completed' or 'error'."""
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
+    context = make_context(scope_id)
+    backends = [OpenAlexFixtureBackend(), OvertonFixtureBackend()]
     counts = acquire_sources(
         conn,
         project_id=pid,
         run_id=rid,
-        context=make_context(scope_id),
-        backends=[OpenAlexFixtureBackend(), OvertonFixtureBackend()],
+        context=context,
+        backends=cast("list[SearchBackend]", backends),
+        executed_calls=executed_calls_for(backends, context.intent),
         wall_clock_breached=True,
     )
     assert counts["adequacy_verdict"] == "adequate"
@@ -839,13 +847,15 @@ def test_coverage_error_wins_over_wall_clock_breached(conn: Connection) -> None:
     """A backend error always reports 'error', even if the wall clock also breached."""
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
+    context = make_context(scope_id)
     boom = FakeBackend(exc=RuntimeError("backend exploded"))
     counts = acquire_sources(
         conn,
         project_id=pid,
         run_id=rid,
-        context=make_context(scope_id),
+        context=context,
         backends=[boom],
+        executed_calls=executed_calls_for([boom], context.intent),
         wall_clock_breached=True,
     )
     assert counts["stop_condition"] == "error"

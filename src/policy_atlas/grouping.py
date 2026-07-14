@@ -10,9 +10,9 @@ import structlog
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, ConfigDict
 
-from policy_atlas.openai_client import resolve_openai_client
+from policy_atlas.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.tags import has_control_character
-from policy_atlas.usage import UsageResult, log_usage, token_usage_from_provider
+from policy_atlas.usage import UsageResult
 
 log = structlog.get_logger()
 
@@ -327,23 +327,20 @@ class OpenAIThemeGroupingBackend:
                 ),
             },
         ]
-        response = self._client.chat.completions.parse(
-            model=DISCOVERY_MODEL,
+        parsed, usage = parse_structured(
+            self._client,
             messages=messages,
             response_format=_ThemeSetModel,
+            usage_event="grouping.discover.usage",
+            label="discovery",
+            model=DISCOVERY_MODEL,
         )
-        log_usage("grouping.discover.usage", response.usage)
-        if not response.choices:
-            raise RuntimeError("OpenAI discovery response had no choices.")
-        parsed = response.choices[0].message.parsed
-        if parsed is None:
-            raise RuntimeError("OpenAI discovery response was not parsed.")
         return (
             [
                 {"name": theme.name, "description": theme.description}
                 for theme in parsed.themes
             ],
-            token_usage_from_provider(response.usage),
+            usage,
         )
 
     def assign(
@@ -373,17 +370,14 @@ class OpenAIThemeGroupingBackend:
                 ),
             },
         ]
-        response = self._client.chat.completions.parse(
-            model=ASSIGNMENT_MODEL,
+        parsed, usage = parse_structured(
+            self._client,
             messages=messages,
             response_format=_AssignmentsModel,
+            usage_event="grouping.assign.usage",
+            label="assignment",
+            model=ASSIGNMENT_MODEL,
         )
-        log_usage("grouping.assign.usage", response.usage)
-        if not response.choices:
-            raise RuntimeError("OpenAI assignment response had no choices.")
-        parsed = response.choices[0].message.parsed
-        if parsed is None:
-            raise RuntimeError("OpenAI assignment response was not parsed.")
 
         assignments: dict[str, str] = {}
         conflicted_doc_ids: set[str] = set()
@@ -409,7 +403,7 @@ class OpenAIThemeGroupingBackend:
                 conflict_count=conflict_count,
                 duplicate_same_theme_count=duplicate_same_theme_count,
             )
-        return assignments, token_usage_from_provider(response.usage)
+        return assignments, usage
 
 
 def _stub_marker(abstract: str | None) -> str | None:

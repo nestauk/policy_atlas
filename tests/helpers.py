@@ -1,12 +1,14 @@
 """Shared test helpers — not fixtures, plain functions."""
 
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.engine import Connection
 
+from policy_atlas.search_loop import CallVerb, ExecutedCall, QueryOrigin
 from policy_atlas.search_prompts import (
     QueriesPayload,
     ReformulatePayload,
@@ -28,6 +30,54 @@ _UNSET: Any = object()
 
 def now() -> datetime:
     return datetime.now(UTC)
+
+
+def executed_calls_for(
+    backends: "Sequence[Any]",
+    query: str,
+    *,
+    verb: "CallVerb" = "search",
+    query_origin: "QueryOrigin" = "verbatim",
+) -> list[ExecutedCall]:
+    """Build one ``ExecutedCall`` per backend via a direct ``backend.search(query)`` call.
+
+    Mirrors the removed ``acquire.py`` legacy none-fabrication path (task 023 C3
+    cut): production always supplies ``executed_calls`` to ``acquire_sources``
+    now, so tests that exercised the old omitted-``executed_calls`` branch
+    build their own executed-call stream here, upstream of ``acquire_sources``.
+
+    Args:
+        backends: Backend instances to call ``search`` on, in order.
+        query: Query text passed to each backend's ``search``.
+        verb: Recorded call verb; defaults to ``"search"``.
+        query_origin: Recorded query origin; defaults to ``"verbatim"``.
+
+    Returns:
+        One ``ExecutedCall`` per backend, ``status="error"`` if ``search`` raised.
+    """
+    calls: list[ExecutedCall] = []
+    for backend in backends:
+        status: Literal["ok", "error"]
+        error: str | None
+        try:
+            records = backend.search(query)
+            status, error = "ok", None
+        except Exception as exc:
+            records = []
+            status, error = "error", str(exc)
+        calls.append(
+            ExecutedCall(
+                backend_name=backend.name,
+                verb=verb,
+                query=query,
+                query_origin=query_origin,
+                wire_params={},
+                records=records,
+                status=status,
+                error=error,
+            )
+        )
+    return calls
 
 
 def make_icf_wire_record(**overrides: Any) -> "ICFRecordWire":

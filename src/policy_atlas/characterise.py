@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -14,11 +13,7 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas import grouping
 from policy_atlas.clustering_engine import (
-    AssignmentAttempt as EngineAssignmentAttempt,
-)
-from policy_atlas.clustering_engine import (
     AssignmentOutput,
-    CallBudget,
     ClusteringBackend,
     ClusteringFailure,
     ClusteringPolicy,
@@ -27,9 +22,6 @@ from policy_atlas.clustering_engine import (
     ClusterUnit,
     call_budget_for_unit_count,
     cluster_units,
-)
-from policy_atlas.clustering_engine import (
-    run_first_assignment_round as engine_run_first_assignment_round,
 )
 from policy_atlas.embeddings import EMBEDDING_PROFILE, UNIT_POLICY
 from policy_atlas.grouping import (
@@ -117,27 +109,6 @@ class ScreenedSource:
     primary_evidence_type: str | None
     quality_score: int | None
     rubric_version: str | None
-
-
-@dataclass(frozen=True)
-class _AssignmentAttempt:
-    batch_index: int
-    batch: list[GroupingDoc]
-    assignments: dict[str, str] | None
-    error_type: str | None
-    error_detail: str | None = None
-
-
-@dataclass
-class _CallBudget:
-    maximum: int
-    coverage: dict[str, Any]
-    count: int = 0
-
-    def reserve(self) -> None:
-        if self.count >= self.maximum:
-            raise CharacteriseFailure(coverage=self.coverage, error="call budget exceeded")
-        self.count += 1
 
 
 class _CharacteriseClusteringBackend(ClusteringBackend):
@@ -530,35 +501,6 @@ def _call_budget(n: int) -> tuple[int, int, int]:
     return plan.batch_count, plan.baseline, plan.maximum
 
 
-def _run_first_assignment_round(
-    *,
-    backend: ThemeGroupingBackend,
-    batches: list[list[GroupingDoc]],
-    themes: list[Theme],
-    budget: _CallBudget,
-) -> tuple[list[_AssignmentAttempt], dict[str, int]]:
-    engine_budget = CallBudget(maximum=budget.maximum, count=budget.count)
-    policy = _characterise_clustering_policy(
-        min_themes=1,
-        max_themes=max(1, len(themes)),
-    )
-    try:
-        attempts, usage = engine_run_first_assignment_round(
-            backend=_CharacteriseClusteringBackend(backend, intent=""),
-            batches=[
-                [ClusterUnit(unit_id=doc["id"], payload=doc) for doc in batch]
-                for batch in batches
-            ],
-            labels=_labels_from_themes(themes),
-            budget=engine_budget,
-            policy=policy,
-        )
-    except ClusteringFailure as exc:
-        raise CharacteriseFailure(coverage=budget.coverage, error=exc.error) from exc
-    budget.count = engine_budget.count
-    return [_legacy_attempt(attempt) for attempt in attempts], usage
-
-
 def _cluster_characterise_docs(
     *,
     backend: ThemeGroupingBackend,
@@ -622,26 +564,6 @@ def _themes_from_labels(labels: list[ClusterLabel]) -> list[Theme]:
         {"name": label.label, "description": label.description}
         for label in labels
     ]
-
-
-def _legacy_attempt(attempt: EngineAssignmentAttempt) -> _AssignmentAttempt:
-    return _AssignmentAttempt(
-        batch_index=attempt.batch_index,
-        batch=[_doc_payload(unit) for unit in attempt.batch],
-        assignments=(
-            None
-            if attempt.assignments is None
-            else _assignment_output_to_dict(attempt.assignments)
-        ),
-        error_type=attempt.error_type,
-        error_detail=attempt.error_detail,
-    )
-
-
-def _assignment_output_to_dict(assignments: AssignmentOutput) -> dict[str, str]:
-    if isinstance(assignments, Mapping):
-        return dict(assignments)
-    return {assignment.unit_id: assignment.label for assignment in assignments}
 
 
 def _grouping_provenance(

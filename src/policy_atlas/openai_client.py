@@ -10,9 +10,32 @@ guards used after a ``parse`` or ``create`` call.
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from typing import Any
 
 from openai import OpenAI
+from pydantic import BaseModel
+
+from policy_atlas.usage import UsageResult, log_usage, token_usage_from_provider
+
+
+@dataclass
+class CallBudget:
+    """Pre-run call ceiling; every call (initial or retry) reserves one slot.
+
+    Shared bool-reserve call-budget counter for backend seams (extract,
+    screen, select); the raise-on-exceed variant used by the clustering
+    engine and characterise stays separate (different failure posture).
+    """
+
+    maximum: int
+    used: int = 0
+
+    def reserve(self) -> bool:
+        if self.used >= self.maximum:
+            return False
+        self.used += 1
+        return True
 
 
 def resolve_openai_client(
@@ -72,6 +95,48 @@ def require_parsed(response: Any, *, label: str) -> Any:
     if parsed is None:
         raise RuntimeError(f"OpenAI {label} response was not parsed.")
     return parsed
+
+
+def parse_structured[T: BaseModel](
+    client: Any,
+    *,
+    messages: list[Any],
+    response_format: type[T],
+    usage_event: str,
+    label: str,
+    **parse_kwargs: Any,
+) -> UsageResult[T]:
+    """Run one ``chat.completions.parse`` call and apply the shared guards.
+
+    Shared by every live backend that calls structured-output parsing: the
+    request, usage logging, and the no-choices/unparsed-response raises are
+    identical across call sites; only the model, extra request kwargs,
+    response schema, and error label vary.
+
+    Args:
+        client: The OpenAI client.
+        messages: Chat messages for the call.
+        response_format: The pydantic wire type to parse into.
+        usage_event: structlog event name for usage logging.
+        label: Human-readable call label used in guard error messages.
+        **parse_kwargs: Additional keyword arguments forwarded to
+            ``chat.completions.parse`` (``model``, ``max_completion_tokens``,
+            ``reasoning_effort``, ...).
+
+    Returns:
+        The parsed structured output plus provider-neutral token usage.
+
+    Raises:
+        RuntimeError: If the response has no choices or was not parsed.
+    """
+    response = client.chat.completions.parse(
+        messages=messages,
+        response_format=response_format,
+        **parse_kwargs,
+    )
+    log_usage(usage_event, response.usage)
+    parsed: T = require_parsed(response, label=label)
+    return parsed, token_usage_from_provider(response.usage)
 
 
 def require_single_tool_call(response: Any, *, label: str) -> Any:

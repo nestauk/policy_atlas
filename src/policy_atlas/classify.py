@@ -19,7 +19,7 @@ from policy_atlas.classify_prompt import (
     ClassifyWire,
     provider_priors,
 )
-from policy_atlas.prompt_fields import clamp_reason
+from policy_atlas.prompt_fields import clamp_reason, metadata_dict
 from policy_atlas.schema import (
     EVIDENCE_TYPES,
     METHODOLOGICAL_STRUCTURAL,
@@ -54,10 +54,6 @@ class _ClassifyDoc:
     source_snapshot_id: uuid.UUID
     metadata: dict[str, Any]
     payload: ClassifyEnvelopePayload
-
-
-def _metadata(raw: Any) -> dict[str, Any]:
-    return dict(raw) if isinstance(raw, dict) else {}
 
 
 def _text_or_empty(value: Any) -> str:
@@ -149,7 +145,7 @@ def _load_relevant_docs(
 
     docs: list[_ClassifyDoc] = []
     for pss_id, source_snapshot_id, raw_metadata in rows:
-        metadata = _metadata(raw_metadata)
+        metadata = metadata_dict(raw_metadata)
         docs.append(
             _ClassifyDoc(
                 pss_id=pss_id,

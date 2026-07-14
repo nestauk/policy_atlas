@@ -19,7 +19,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from policy_atlas.extract import _icf_judge_payload_entry
 from policy_atlas.extract_prompt import envelope_json
 from policy_atlas.extraction_records import ExtractionWindowPayload
-from policy_atlas.icf_finding_vetter import (
+from policy_atlas.finding_vetter import (
     ICF_FINDING_VETTER_MODEL,
     ICF_FINDING_VETTER_PROMPT_VERSION,
     ICF_FINDING_VETTER_SYSTEM_PROMPT,

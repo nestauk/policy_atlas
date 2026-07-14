@@ -21,6 +21,7 @@ from policy_atlas.finding_references import (
     POPULATION_DESC,
     STUDY_DESIGN_DESC,
     STUDY_GEOGRAPHY_DESC,
+    render_field_sections,
 )
 from policy_atlas.schema import (
     CAUSALITY_BY_DESIGN,
@@ -361,16 +362,11 @@ def render_field_docs() -> str:
         descriptions — the single source of truth for what the model is asked
         to fill.
     """
-    sections: list[tuple[str, type[BaseModel]]] = [
-        ("Finding fields", IOFRecordWire),
-        ("statistics object fields", IOFStatisticsWire),
-        ("stratum_qualifiers entry fields", IOFStratumWire),
-        ("anchors entry fields", IOFAnchorWire),
-    ]
-    lines: list[str] = []
-    for heading, model in sections:
-        lines.append(f"{heading}:")
-        for name, model_field in model.model_fields.items():
-            lines.append(f"- {name}: {model_field.description}")
-        lines.append("")
-    return "\n".join(lines).rstrip()
+    return render_field_sections(
+        [
+            ("Finding fields", IOFRecordWire),
+            ("statistics object fields", IOFStatisticsWire),
+            ("stratum_qualifiers entry fields", IOFStratumWire),
+            ("anchors entry fields", IOFAnchorWire),
+        ]
+    )

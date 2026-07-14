@@ -1,5 +1,7 @@
-"""Extraction backend seam for the extract_iof IOF extraction call (see
-``extract_prompt.PROMPT_VERSION`` for the live prompt version)."""
+"""Extraction backend seam for both the extract_iof IOF and ICF extraction
+calls (see ``extract_prompt.PROMPT_VERSION`` and
+``implementation_context_prompt.ICF_PROMPT_VERSION`` for the live prompt
+versions)."""
 
 from __future__ import annotations
 
@@ -23,8 +25,8 @@ from policy_atlas.implementation_context_prompt import (
     build_icf_extract_messages,
 )
 from policy_atlas.implementation_context_records import ICFExtractionResponse
-from policy_atlas.openai_client import resolve_openai_client
-from policy_atlas.usage import UsageResult, log_usage, token_usage_from_provider, usage_metadata
+from policy_atlas.openai_client import parse_structured, resolve_openai_client
+from policy_atlas.usage import UsageResult, usage_metadata
 
 log = structlog.get_logger()
 
@@ -119,20 +121,15 @@ class OpenAIExtractionBackend:
         payload: ExtractionWindowPayload,
     ) -> UsageResult[ExtractionResponse]:
         messages = build_extract_messages(payload)
-        response = self._client.chat.completions.parse(
-            model=EXTRACTION_MODEL,
+        return parse_structured(
+            self._client,
             messages=messages,
             response_format=ExtractionResponse,
+            usage_event="extraction.extract.usage",
+            label="extraction",
+            model=EXTRACTION_MODEL,
             max_completion_tokens=EXTRACT_MAX_OUTPUT_TOKENS,
         )
-        log_usage("extraction.extract.usage", response.usage)
-        if not response.choices:
-            raise RuntimeError("OpenAI extraction response had no choices.")
-        parsed = response.choices[0].message.parsed
-        if parsed is None:
-            raise RuntimeError("OpenAI extraction response was not parsed.")
-        parsed_model: ExtractionResponse = parsed
-        return parsed_model, token_usage_from_provider(response.usage)
 
     def extract(self, payload: ExtractionWindowPayload) -> UsageResult[ExtractionResponse]:
         """Extract findings through structured OpenAI output.
@@ -207,20 +204,15 @@ class OpenAIICFExtractionBackend:
         payload: ExtractionWindowPayload,
     ) -> UsageResult[ICFExtractionResponse]:
         messages = build_icf_extract_messages(payload)
-        response = self._client.chat.completions.parse(
-            model=ICF_EXTRACTION_MODEL,
+        return parse_structured(
+            self._client,
             messages=messages,
             response_format=ICFExtractionResponse,
+            usage_event="extraction.extract_icf.usage",
+            label="ICF extraction",
+            model=ICF_EXTRACTION_MODEL,
             max_completion_tokens=ICF_EXTRACT_MAX_OUTPUT_TOKENS,
         )
-        log_usage("extraction.extract_icf.usage", response.usage)
-        if not response.choices:
-            raise RuntimeError("OpenAI ICF extraction response had no choices.")
-        parsed = response.choices[0].message.parsed
-        if parsed is None:
-            raise RuntimeError("OpenAI ICF extraction response was not parsed.")
-        parsed_model: ICFExtractionResponse = parsed
-        return parsed_model, token_usage_from_provider(response.usage)
 
     def extract(
         self, payload: ExtractionWindowPayload

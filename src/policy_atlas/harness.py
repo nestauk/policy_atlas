@@ -38,8 +38,7 @@ from policy_atlas.extraction_backend import (
     StubExtractionBackend,
     StubICFExtractionBackend,
 )
-from policy_atlas.finding_vetter import FindingVetterBackend
-from policy_atlas.grounding import GroundingError, produce_grounded_block
+from policy_atlas.finding_vetter import FindingVetterBackend, ICFFindingVetterBackend
 from policy_atlas.grounding_judge import GroundingJudgeBackend, StubGroundingJudgeBackend
 from policy_atlas.group import (
     GroupClusteringBackendFactory,
@@ -48,7 +47,6 @@ from policy_atlas.group import (
     group_findings,
 )
 from policy_atlas.grouping import StubThemeGroupingBackend, ThemeGroupingBackend
-from policy_atlas.icf_finding_vetter import ICFFindingVetterBackend
 from policy_atlas.inference import InferenceProvider
 from policy_atlas.ingest_full_text import (
     DocumentFetcher,
@@ -58,7 +56,7 @@ from policy_atlas.ingest_full_text import (
 )
 from policy_atlas.plan import Config
 from policy_atlas.ranking import RankingBackend
-from policy_atlas.schema import artefact, evidence_scope, runs
+from policy_atlas.schema import evidence_scope, runs
 from policy_atlas.screen import ScreenContext, screen_sources
 from policy_atlas.screening_backend import ScreeningBackend, StubScreeningBackend
 from policy_atlas.search_generation import SearchGenerationBackend, StubSearchGenerationBackend
@@ -77,7 +75,6 @@ class HarnessState(TypedDict):
     conn: Connection
     project_id: uuid.UUID
     run_id: uuid.UUID
-    artefact_id: uuid.UUID | None  # set by _run_echo only; None for scope components
     provider: InferenceProvider
     search_backends: list[SearchBackend]
     search_generation_backend: SearchGenerationBackend
@@ -96,72 +93,6 @@ class HarnessState(TypedDict):
     grounding_judge_backend: GroundingJudgeBackend
     block_ids: dict[str, Any]
     error: str | None
-
-
-def _run_echo(state: HarnessState) -> HarnessState:
-    conn = state["conn"]
-    project_id = state["project_id"]
-    run_id = state["run_id"]
-    config = state["config"]
-
-    events.append(
-        conn,
-        project_id=project_id,
-        run_id=run_id,
-        event_type="component.started",
-        payload={"component": config.component},
-    )
-    log.info("component.started", component=config.component)
-
-    artefact_id = uuid.uuid4()
-    conn.execute(
-        artefact.insert().values(
-            artefact_id=artefact_id,
-            project_id=project_id,
-            title="Walking-skeleton output",
-            created_at=datetime.now(UTC),
-        )
-    )
-
-    if config.source_snapshot_id is None:
-        raise RuntimeError("echo component requires source_snapshot_id")
-    try:
-        ids = produce_grounded_block(
-            conn,
-            artefact_id=artefact_id,
-            source_snapshot_id=config.source_snapshot_id,
-            provider=state["provider"],
-        )
-    except GroundingError as exc:
-        log.warning("grounding.failed", error=str(exc))
-        fail_payload: dict[str, Any] = {"component": config.component, "error": str(exc)}
-        if exc.block_id is not None:
-            fail_payload["block_id"] = str(exc.block_id)
-        events.append(
-            conn,
-            project_id=project_id,
-            run_id=run_id,
-            event_type="component.failed",
-            payload=fail_payload,
-        )
-        return {**state, "artefact_id": artefact_id, "error": str(exc)}
-
-    events.append(
-        conn,
-        project_id=project_id,
-        run_id=run_id,
-        event_type="component.completed",
-        payload={"component": config.component},
-    )
-    events.append(
-        conn,
-        project_id=project_id,
-        run_id=run_id,
-        event_type="block.written",
-        payload={"block_id": str(ids["block_id"])},
-    )
-    log.info("block.written", block_id=str(ids["block_id"]))
-    return {**state, "artefact_id": artefact_id, "block_ids": ids}
 
 
 def _run_scope_component(
@@ -558,7 +489,6 @@ def build_graph() -> Any:
     """
     g: StateGraph[HarnessState] = StateGraph(HarnessState)
     g.add_node("dispatch", lambda s: s)           # entry — routes by component name
-    g.add_node("echo", _run_echo)
     g.add_node("acquire", _run_acquire)
     g.add_node("screen", _run_screen)
     g.add_node("classify", _run_classify)
@@ -576,7 +506,6 @@ def build_graph() -> Any:
         "dispatch",
         _dispatch,
         {
-            "echo": "echo",
             "acquire": "acquire",
             "screen": "screen",
             "classify": "classify",
@@ -589,7 +518,6 @@ def build_graph() -> Any:
             "synthesise": "synthesise",
         },
     )
-    g.add_edge("echo", "finish")
     g.add_edge("acquire", "finish")
     g.add_edge("screen", "finish")
     g.add_edge("classify", "finish")
@@ -645,7 +573,9 @@ def run_harness(
         config: Compiled execution spec naming the component and source.
         project_id: Owning project; must match the run's stored project.
         run_id: Pre-created run row to execute.
-        provider: Inference provider used by the grounding leg.
+        provider: Inference provider; unused by every current component node,
+            kept required pending a live grounding/provider-backed seam
+            (task 023 C3: retired the echo node, its sole reader).
         search_backends: Backends for the acquire component, searched in list
             order; when omitted, the compiled ``search_backend_scope`` selects
             the fixture backend set. The default remains both backends.
@@ -693,8 +623,7 @@ def run_harness(
             defaults to ``StubGroundingJudgeBackend()`` — no default egress.
 
     Returns:
-        Persisted IDs; ``artefact_id`` is None for non-echo components that do
-        not write artefacts.
+        Persisted IDs written by the executed component, if any.
 
     Raises:
         ValueError: If ``run_id`` is unknown or belongs to another project.
@@ -716,7 +645,6 @@ def run_harness(
         "conn": conn,
         "project_id": project_id,
         "run_id": run_id,
-        "artefact_id": None,
         "provider": provider,
         "search_backends": (
             search_backends
@@ -783,13 +711,10 @@ def run_harness(
     # instead of hand-threading project_id/run_id through each log call. This is
     # the innermost boundary that sees exactly one component execution: each
     # run_harness call dispatches to exactly one node (routed by config.component),
-    # and it's the direct caller of node-level log events (e.g. component.started,
-    # grounding.failed) that today never carry project_id/run_id.
+    # and it's the direct caller of node-level log events (e.g. component.started)
+    # that today never carry project_id/run_id.
     with structlog.contextvars.bound_contextvars(
         project_id=str(project_id), run_id=str(run_id), component=config.component,
     ):
         final: HarnessState = graph.invoke(initial)
-    return {
-        "artefact_id": final.get("artefact_id"),
-        **final.get("block_ids", {}),
-    }
+    return dict(final.get("block_ids", {}))

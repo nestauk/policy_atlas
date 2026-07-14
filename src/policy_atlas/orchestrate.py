@@ -35,12 +35,14 @@ from policy_atlas.db import get_engine
 from policy_atlas.embeddings import EmbeddingBackend, OpenAIEmbeddingBackend
 from policy_atlas.extraction_backend import OpenAIExtractionBackend, OpenAIICFExtractionBackend
 from policy_atlas.fetch_live import LiveDocumentFetcher
-from policy_atlas.finding_vetter import OpenAIFindingVetterBackend
+from policy_atlas.finding_vetter import (
+    OpenAIFindingVetterBackend,
+    OpenAIICFFindingVetterBackend,
+)
 from policy_atlas.fixtures import get_source
 from policy_atlas.grounding_judge import OpenAIGroundingJudgeBackend
 from policy_atlas.group_clustering import OpenAIGroupClusteringBackendFactory
 from policy_atlas.grouping import OpenAIThemeGroupingBackend, ThemeGroupingBackend
-from policy_atlas.icf_finding_vetter import OpenAIICFFindingVetterBackend
 from policy_atlas.ingest import ingest_upload
 from policy_atlas.logging import configure_logging
 from policy_atlas.orchestration_plan import CountryGroupAuthorship, OrchestrationPlan

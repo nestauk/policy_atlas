@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import sqlalchemy as sa
@@ -16,13 +16,13 @@ from policy_atlas.acquire import (
     AcquireContext,
     OpenAlexFixtureBackend,
     OvertonFixtureBackend,
+    SearchBackend,
     acquire_sources,
 )
 from policy_atlas.appraise import AppraiseContext, appraise_sources
 from policy_atlas.characterise import (
     CharacteriseContext,
     CharacteriseFailure,
-    _CallBudget,
     characterise_scope,
 )
 from policy_atlas.classify import ClassifyContext, classify_sources
@@ -51,6 +51,7 @@ from policy_atlas.schema import (
 from policy_atlas.usage import UsageResult
 from tests.helpers import (
     delete_project_data,
+    executed_calls_for,
     now,
     seed_project_and_run,
     seed_run,
@@ -317,10 +318,13 @@ def test_coverage_tag_distribution_keeps_asserters_separate(conn: Connection) ->
 def test_acquire_materialises_provider_tags_by_provenance_class(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
+    context = AcquireContext(scope_id=scope_id, intent="Housing", context={})
+    backends = [OpenAlexFixtureBackend(), OvertonFixtureBackend()]
     counts = acquire_sources(
         conn, project_id=pid, run_id=rid,
-        context=AcquireContext(scope_id=scope_id, intent="Housing", context={}),
-        backends=[OpenAlexFixtureBackend(), OvertonFixtureBackend()],
+        context=context,
+        backends=cast("list[SearchBackend]", backends),
+        executed_calls=executed_calls_for(backends, context.intent),
     )
     assert counts["acquired"] > 0
 
@@ -350,10 +354,13 @@ def test_acquire_materialises_provider_tags_by_provenance_class(conn: Connection
 def test_overton_mixed_topic_shapes_both_materialise(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
+    context = AcquireContext(scope_id=scope_id, intent="Housing", context={})
+    backends = [OvertonFixtureBackend()]
     acquire_sources(
         conn, project_id=pid, run_id=rid,
-        context=AcquireContext(scope_id=scope_id, intent="Housing", context={}),
-        backends=[OvertonFixtureBackend()],
+        context=context,
+        backends=cast("list[SearchBackend]", backends),
+        executed_calls=executed_calls_for(backends, context.intent),
     )
     tags = {
         row.tag
@@ -385,10 +392,13 @@ def test_ingest_upload_materialises_no_provider_tags(conn: Connection) -> None:
 def test_provider_fields_retained_unchanged_on_snapshot(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
+    context = AcquireContext(scope_id=scope_id, intent="Housing", context={})
+    backends = [OpenAlexFixtureBackend()]
     acquire_sources(
         conn, project_id=pid, run_id=rid,
-        context=AcquireContext(scope_id=scope_id, intent="Housing", context={}),
-        backends=[OpenAlexFixtureBackend()],
+        context=context,
+        backends=cast("list[SearchBackend]", backends),
+        executed_calls=executed_calls_for(backends, context.intent),
     )
     row = conn.execute(
         select(source_snapshot.c.metadata)
@@ -1412,11 +1422,6 @@ def test_judgment_call_budget_maximum_and_guard(conn: Connection) -> None:
     )
 
     assert backend.total_calls == 4
-    budget = _CallBudget(maximum=2, coverage={})
-    budget.reserve()
-    budget.reserve()
-    with pytest.raises(CharacteriseFailure):
-        budget.reserve()
 
 
 def test_judgment_injection_shaped_abstract_flows_as_data(conn: Connection) -> None:

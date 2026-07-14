@@ -11,7 +11,6 @@ from typing import Literal
 from pydantic import BaseModel, model_validator
 
 COMPONENT_REGISTRY: dict[str, dict[str, list[str]]] = {
-    "echo":     {"requires": ["source_snapshot_id"]},
     "acquire":  {"requires": ["evidence_scope_id"]},
     "screen":   {"requires": ["evidence_scope_id"]},
     "classify": {"requires": ["evidence_scope_id"]},
@@ -31,7 +30,6 @@ VALID_COMPONENTS = set(COMPONENT_REGISTRY.keys())
 class _ValidatedRunSpec(BaseModel):
     component: str
     search_backend_scope: Literal["academic_only", "grey_lit_only", "both"] = "both"
-    source_snapshot_id: uuid.UUID | None = None
     evidence_scope_id: uuid.UUID | None = None
     # select stratifies over an explicitly referenced characterisation — compile
     # fails closed without it; required-by-registry for select only.
@@ -69,7 +67,6 @@ def compile(plan: Plan) -> Config:  # noqa: A001
     return Config(
         component=plan.component,
         search_backend_scope=plan.search_backend_scope,
-        source_snapshot_id=plan.source_snapshot_id,
         evidence_scope_id=plan.evidence_scope_id,
         characterisation_run_id=plan.characterisation_run_id,
         selection_run_id=plan.selection_run_id,

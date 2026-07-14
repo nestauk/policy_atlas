@@ -15,7 +15,8 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.sql.selectable import Subquery
 
 from policy_atlas import events, tracing
-from policy_atlas.prompt_fields import clamp_reason
+from policy_atlas.openai_client import CallBudget
+from policy_atlas.prompt_fields import clamp_reason, metadata_dict
 from policy_atlas.schema import (
     DIRECTIVE_STRING_MAX,
     chunk,
@@ -73,16 +74,7 @@ class ScreenDirectiveError(Exception):
     """Malformed screening directive; screen fails closed."""
 
 
-@dataclass
-class _CallBudget:
-    maximum: int
-    used: int = 0
-
-    def reserve(self) -> bool:
-        if self.used >= self.maximum:
-            return False
-        self.used += 1
-        return True
+_CallBudget = CallBudget
 
 
 @dataclass(frozen=True)
@@ -157,10 +149,6 @@ def effective_screen_rows() -> Subquery:
         .where(ranked.c._screen_rank == 1)
         .subquery("effective_screen_rows")
     )
-
-
-def _metadata(raw: Any) -> dict[str, Any]:
-    return dict(raw) if isinstance(raw, dict) else {}
 
 
 def _text_value(metadata: dict[str, Any], key: str) -> str:
@@ -379,7 +367,7 @@ def _load_stage1_docs(
 
     docs: list[_Stage1Doc] = []
     for row in rows:
-        metadata = _metadata(row.metadata)
+        metadata = metadata_dict(row.metadata)
         basis = _screen_basis(metadata)
         docs.append(
             _Stage1Doc(
@@ -791,7 +779,7 @@ def _load_stage2_docs(
                 cast("uuid.UUID", row.project_source_snapshot_id),
                 envelope_snapshot_id,
                 chunk_snapshot_id,
-                _metadata(row.metadata),
+                metadata_dict(row.metadata),
             )
         )
 

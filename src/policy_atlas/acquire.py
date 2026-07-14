@@ -177,26 +177,6 @@ class ExecutedSearchCall(Protocol):
         ...
 
 
-@dataclass(frozen=True)
-class _LegacySearchCall:
-    """Synthetic ``ExecutedSearchCall`` for the legacy one-call-per-backend path.
-
-    ``acquire_sources`` builds one of these per backend when ``executed_calls``
-    is omitted, wrapping the single ``backend.search(context.intent)`` result
-    so the rest of the function only has to know one (executed-calls) shape.
-    """
-
-    backend_name: str
-    verb: str
-    query: str
-    query_origin: str
-    wire_params: dict[str, str]
-    records: list[dict[str, Any]]
-    status: str
-    error: str | None
-    post_filter_excluded: int | None = None
-
-
 def _limit_fixture_records(
     records: list[dict[str, Any]], max_results: int | None
 ) -> list[dict[str, Any]]:
@@ -628,18 +608,17 @@ def acquire_sources(
     context: AcquireContext,
     backends: list[SearchBackend],
     embedder: EmbeddingBackend | None = None,
-    executed_calls: Sequence[ExecutedSearchCall] | None = None,
+    executed_calls: Sequence[ExecutedSearchCall],
     depth: str = "rapid",
     scope_wire_params: dict[str, Any] | None = None,
     wall_clock_breached: bool = False,
 ) -> dict[str, Any]:
     """Acquire metadata-only sources for an evidence scope over the given backends.
 
-    With ``executed_calls`` omitted, the legacy path makes one
-    ``backend.search(context.intent)`` call per backend, in list order. With
-    ``executed_calls`` supplied, this function performs no search egress; it
-    consumes those call records in order and reuses the existing mapping,
-    deduplication, event, coverage, tag, and embedding machinery.
+    Performs no search egress itself; it consumes the pre-executed
+    ``executed_calls`` call stream from the search strategy layer, in order,
+    and reuses the existing mapping, deduplication, event, coverage, tag, and
+    embedding machinery.
 
     Args:
         conn: Open database connection; all writes occur within its transaction.
@@ -649,9 +628,8 @@ def acquire_sources(
         backends: Configured backends, searched in list order (dedup outcomes
             are deterministic because the order is fixed).
         embedder: Optional embedding backend. Defaults to the deterministic stub.
-        executed_calls: Optional pre-executed call stream from the search
-            strategy layer. When supplied, no backend ``search`` method is
-            called here.
+        executed_calls: Pre-executed call stream from the search strategy
+            layer; no backend ``search`` method is called here.
         depth: Search-depth directive recorded in events and coverage.
         scope_wire_params: Per-backend executed wire params or variant payloads
             recorded on the coverage record.
@@ -854,34 +832,6 @@ def acquire_sources(
                 seen_record_ids.add(record_id)
             if doi:
                 seen_dois.add(doi)
-
-    if executed_calls is None:
-        # Legacy path: make the one search call per backend ourselves, then
-        # wrap each outcome as the equivalent executed-call shape so the loop
-        # below is the only place that turns calls into rows/events/counts.
-        legacy_calls: list[ExecutedSearchCall] = []
-        for backend in backends:
-            try:
-                results = backend.search(context.intent)
-                status, error = "ok", None
-            except Exception as exc:
-                # Per-backend error isolation: this part of the search space
-                # wasn't searched, but the other backends and the run continue.
-                results = []
-                status, error = "error", str(exc)
-            legacy_calls.append(
-                _LegacySearchCall(
-                    backend_name=backend.name,
-                    verb="search",
-                    query=context.intent,
-                    query_origin="verbatim",
-                    wire_params={},
-                    records=results,
-                    status=status,
-                    error=error,
-                )
-            )
-        executed_calls = legacy_calls
 
     for call in executed_calls:
         backend = backend_by_name[call.backend_name]

@@ -17,6 +17,7 @@ from sqlalchemy.engine import Connection
 from policy_atlas import tracing
 from policy_atlas.characterise import ScreenedSource, screened_sources
 from policy_atlas.grouping import UNCLUSTERED, GroupingDoc
+from policy_atlas.openai_client import CallBudget
 from policy_atlas.ranking import (
     MAX_CONCURRENT_RERANK_BATCHES,
     PROMPT_VERSION,
@@ -249,16 +250,7 @@ class _RerankStats:
     title_only_count: int
 
 
-@dataclass
-class _RerankCallBudget:
-    maximum: int
-    used: int = 0
-
-    def reserve(self) -> bool:
-        if self.used >= self.maximum:
-            return False
-        self.used += 1
-        return True
+_RerankCallBudget = CallBudget
 
 
 def _fail(message: str) -> None:

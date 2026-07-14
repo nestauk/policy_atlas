@@ -9,13 +9,21 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 from policy_atlas import tracing
-from policy_atlas.characterise import _CallBudget, _run_first_assignment_round
 from policy_atlas.classify import _ClassifyDoc, _run_classification_calls
 from policy_atlas.classify_prompt import ClassifyEnvelopePayload, ClassifyWire
+from policy_atlas.clustering_engine import (
+    CallBudget,
+    ClusteringPolicy,
+    ClusterLabel,
+    ClusterUnit,
+)
+from policy_atlas.clustering_engine import (
+    run_first_assignment_round as engine_run_first_assignment_round,
+)
 from policy_atlas.extract import _Doc, _iof_profile, _run_windows
 from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.extraction_records import ExtractionWindowPayload
-from policy_atlas.grouping import GroupingDoc, Theme
+from policy_atlas.grouping import GroupingDoc
 from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.ranking import RankedDoc
 from policy_atlas.screen import _run_stage1_reps, _run_stage2_reps, _Stage1Doc
@@ -247,45 +255,57 @@ def test_classify_fanout_propagates_context() -> None:
     assert backend.seen == ["classify-context"]
 
 
-class _ContextGroupingBackend:
+class _ContextClusteringBackend:
+    """A ``ClusteringBackend``-shaped stand-in that records ambient contextvars
+    seen inside ``assign``, invoked deep inside ``run_first_assignment_round``'s
+    per-batch fan-out (mirrors the other ``_Context*Backend`` doubles below)."""
+
     mode = "stub"
 
     def __init__(self) -> None:
         self.seen: list[str] = []
 
     def discover(
-        self,
-        docs: list[GroupingDoc],
-        *,
-        intent: str,
-        min_themes: int,
-        max_themes: int,
-    ) -> UsageResult[list[Theme]]:
-        del docs, intent, min_themes, max_themes
+        self, units: list[ClusterUnit], *, min_labels: int, max_labels: int
+    ) -> UsageResult[list[ClusterLabel]]:
+        del units, min_labels, max_labels
         return [], None
 
     def assign(
-        self, batch: list[GroupingDoc], *, themes: list[Theme]
+        self, batch: list[ClusterUnit], *, labels: list[ClusterLabel]
     ) -> UsageResult[dict[str, str]]:
         self.seen.append(_WORKER_CONTEXT.get())
-        return {doc["id"]: themes[0]["name"] for doc in batch}, None
+        return {unit.unit_id: labels[0].label for unit in batch}, None
 
 
 def test_characterise_assignment_fanout_propagates_context() -> None:
-    backend = _ContextGroupingBackend()
-    batches: list[list[GroupingDoc]] = [
-        [{"id": "a", "title": "A", "abstract": None}],
-        [{"id": "b", "title": "B", "abstract": None}],
+    backend = _ContextClusteringBackend()
+    batches: list[list[ClusterUnit]] = [
+        [ClusterUnit(unit_id="a", payload={"id": "a", "title": "A", "abstract": None})],
+        [ClusterUnit(unit_id="b", payload={"id": "b", "title": "B", "abstract": None})],
     ]
-    themes: list[Theme] = [{"name": "Theme", "description": "A theme."}]
+    labels: list[ClusterLabel] = [ClusterLabel(label="Theme", description="A theme.")]
+    policy = ClusteringPolicy(
+        min_labels=1,
+        max_labels=1,
+        assignment_batch_size=50,
+        discovery_retry_cap=1,
+        assignment_repair_cap=1,
+        residual_label="unclustered",
+        unresolved_policy="fail",
+        label_max=20,
+        description_max=40,
+        max_concurrent_batches=2,
+    )
 
     token = _WORKER_CONTEXT.set("characterise-context")
     try:
-        _run_first_assignment_round(
+        engine_run_first_assignment_round(
             backend=backend,
             batches=batches,
-            themes=themes,
-            budget=_CallBudget(maximum=2, coverage={}),
+            labels=labels,
+            budget=CallBudget(maximum=2),
+            policy=policy,
         )
     finally:
         _WORKER_CONTEXT.reset(token)

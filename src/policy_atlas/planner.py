@@ -16,11 +16,10 @@ from typing import Any, Protocol
 import structlog
 from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
-from openai.types.completion_usage import CompletionUsage
 
 from policy_atlas import tracing
 from policy_atlas.extract import _scrub_nul
-from policy_atlas.openai_client import resolve_openai_client
+from policy_atlas.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.planner_prompt import (
     PLANNER_MAX_OUTPUT_TOKENS,
     PLANNER_PROMPT_VERSION,
@@ -29,7 +28,7 @@ from policy_atlas.planner_prompt import (
     build_planner_messages,
 )
 from policy_atlas.prompt_fields import scrub_nul
-from policy_atlas.usage import log_usage, usage_metadata
+from policy_atlas.usage import UsageResult, usage_metadata
 
 log = structlog.get_logger()
 
@@ -49,11 +48,6 @@ class PlannerBackend(Protocol):
     and code-side validation failures raise so the caller can apply retry
     policy.
     """
-
-    @property
-    def mode(self) -> str:
-        """``"live"`` or ``"stub"``; read-only so wrappers can proxy it."""
-        ...
 
     def plan_turn(
         self,
@@ -146,8 +140,6 @@ class OpenAIPlannerBackend:
         RuntimeError: If no OpenAI API key is provided or configured.
     """
 
-    mode = "live"
-
     def __init__(
         self,
         api_key: str | None = None,
@@ -164,21 +156,17 @@ class OpenAIPlannerBackend:
     def _parse_once(
         self,
         messages: list[ChatCompletionMessageParam],
-    ) -> tuple[PlannerTurnWire, CompletionUsage | None]:
-        response = self._client.chat.completions.parse(
-            model=PLANNER_MODEL,
+    ) -> UsageResult[PlannerTurnWire]:
+        parsed, usage = parse_structured(
+            self._client,
             messages=messages,
             response_format=PlannerTurnWire,
+            usage_event="planner.turn.usage",
+            label="planner",
+            model=PLANNER_MODEL,
             max_completion_tokens=PLANNER_MAX_OUTPUT_TOKENS,
         )
-        log_usage("planner.turn.usage", response.usage)
-        if not response.choices:
-            raise RuntimeError("OpenAI planner response had no choices.")
-        parsed = response.choices[0].message.parsed
-        if parsed is None:
-            raise RuntimeError("OpenAI planner response was not parsed.")
-        parsed_model: PlannerTurnWire = parsed
-        return _scrub_turn(parsed_model), response.usage
+        return _scrub_turn(parsed), usage
 
     def plan_turn(
         self,
@@ -208,7 +196,7 @@ class OpenAIPlannerBackend:
 
         def _update(
             span: Any,
-            result: tuple[PlannerTurnWire, CompletionUsage | None],
+            result: UsageResult[PlannerTurnWire],
         ) -> None:
             turn, usage = result
             span.update(
@@ -251,8 +239,6 @@ _STUB_COMPONENT_RATIONALE: dict[str, str] = {
 
 class StubPlannerBackend:
     """Deterministic zero-egress planner backend for tests and the CLI."""
-
-    mode = "stub"
 
     def plan_turn(
         self,

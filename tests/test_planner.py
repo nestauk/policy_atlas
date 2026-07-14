@@ -108,7 +108,7 @@ def test_stub_is_deterministic() -> None:
 
 def test_stub_satisfies_protocol() -> None:
     backend: PlannerBackend = StubPlannerBackend()
-    assert backend.mode == "stub"
+    assert isinstance(backend, StubPlannerBackend)
 
 
 # --- Stub draft round-trips into a valid OrchestrationPlan -----------------
@@ -260,7 +260,7 @@ def test_degrade_no_question_forces_suggestions_none() -> None:
 def test_openai_planner_backend_satisfies_protocol(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     backend: PlannerBackend = OpenAIPlannerBackend(api_key="sk-test")
-    assert backend.mode == "live"
+    assert isinstance(backend, OpenAIPlannerBackend)
 
 
 def test_openai_planner_backend_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:

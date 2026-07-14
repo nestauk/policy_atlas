@@ -14,7 +14,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
 from policy_atlas import tracing
-from policy_atlas.openai_client import resolve_openai_client
+from policy_atlas.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.search_prompts import (
     SEARCH_GEN_MAX_OUTPUT_TOKENS,
     SEARCH_QUERIES_MODEL,
@@ -32,7 +32,7 @@ from policy_atlas.search_prompts import (
     build_reformulate_messages,
     build_suggest_messages,
 )
-from policy_atlas.usage import UsageResult, log_usage, token_usage_from_provider, usage_metadata
+from policy_atlas.usage import UsageResult, usage_metadata
 
 WireT = TypeVar("WireT", bound=BaseModel)
 
@@ -125,19 +125,15 @@ class OpenAISearchGenerationBackend:
         usage_event: str,
         label: str,
     ) -> UsageResult[WireT]:
-        response = self._client.chat.completions.parse(
-            model=model,
+        return parse_structured(
+            self._client,
             messages=messages,
             response_format=response_format,
+            usage_event=usage_event,
+            label=label,
+            model=model,
             max_completion_tokens=SEARCH_GEN_MAX_OUTPUT_TOKENS,
         )
-        log_usage(usage_event, response.usage)
-        if not response.choices:
-            raise RuntimeError(f"OpenAI {label} response had no choices.")
-        parsed = response.choices[0].message.parsed
-        if parsed is None:
-            raise RuntimeError(f"OpenAI {label} response was not parsed.")
-        return parsed, token_usage_from_provider(response.usage)
 
     def _call_wire(
         self,

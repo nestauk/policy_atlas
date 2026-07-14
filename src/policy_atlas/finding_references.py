@@ -6,6 +6,29 @@ stored-model and column requiredness remain per schema. ``outcome`` and
 differ, and setting shares the inner-setting rule with schema-specific wording.
 """
 
+from pydantic import BaseModel
+
+
+def render_field_sections(sections: list[tuple[str, type[BaseModel]]]) -> str:
+    """Render a prompt field reference from a list of wire model sections.
+
+    Args:
+        sections: ``(heading, model)`` pairs, in the order they should render.
+
+    Returns:
+        A field-by-field reference block generated from each model's field
+        descriptions — the single source of truth for what the model is asked
+        to fill.
+    """
+    lines: list[str] = []
+    for heading, model in sections:
+        lines.append(f"{heading}:")
+        for name, model_field in model.model_fields.items():
+            lines.append(f"- {name}: {model_field.description}")
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
 INTERVENTION_DESC = (
     "The intervention exactly as this document names it (source-named, never "
     "a standardised term). Control or comparison arms are not interventions."

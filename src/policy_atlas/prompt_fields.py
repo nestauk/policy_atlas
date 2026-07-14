@@ -13,10 +13,21 @@ confidence range) so the two seams cannot silently diverge.
 from __future__ import annotations
 
 import unicodedata
+from typing import Any
 
 # Reason strings on both wire models (screen reps, classify) — the
 # select-rerank bound (contract decision 3, rev 1.2).
 REASON_MAX = 240
+
+
+def metadata_dict(raw: Any) -> dict[str, Any]:
+    """Coerce a stored envelope metadata column to a plain dict.
+
+    Shared by every reader of the acquired-envelope ``metadata``/``payload``
+    column (screen, classify, search_loop): non-dict storage (``None`` or a
+    malformed row) degrades to empty rather than raising.
+    """
+    return dict(raw) if isinstance(raw, dict) else {}
 
 
 def sanitize_prompt_field(value: str, *, max_chars: int) -> str:

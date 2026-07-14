@@ -57,6 +57,7 @@ from policy_atlas.facet_values import (
 from policy_atlas.group_clustering import (
     GROUP_CLUSTERING_PROMPT_VERSION,
     UNGROUPABLE_WIRE_WORD,
+    ProjectionKind,
 )
 from policy_atlas.group_clustering import (
     GROUP_RESIDUAL_LABEL as _GROUP_RESIDUAL_LABEL,
@@ -87,7 +88,6 @@ GROUP_CONTEXT_DISCOVERY_UNIT_LIMIT = 120
 GROUP_RESIDUAL_LABEL = _GROUP_RESIDUAL_LABEL
 GROUP_PROMPT_VERSION: str = GROUP_CLUSTERING_PROMPT_VERSION
 
-ProjectionKind = Literal["value", "claim"]
 FailureClass = Literal[
     "cap_exceeded",
     "backend_error",

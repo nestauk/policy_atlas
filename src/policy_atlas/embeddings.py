@@ -208,11 +208,7 @@ def _embedding_rate_limit_delay_s(attempt: int) -> float:
         EMBEDDING_RATE_LIMIT_BACKOFF_BASE_S * (2**attempt),
         EMBEDDING_RATE_LIMIT_BACKOFF_CAP_S,
     ))
-    return float(base_s + _embedding_rate_limit_jitter_s(base_s))
-
-
-def _embedding_rate_limit_jitter_s(base_s: float) -> float:
-    return float(random.uniform(0.0, base_s))
+    return float(base_s + random.uniform(0.0, base_s))
 
 
 def _rightmost_boundary(boundaries: list[int], *, min_end: int, limit: int) -> int | None:

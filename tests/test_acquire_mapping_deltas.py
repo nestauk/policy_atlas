@@ -5,7 +5,7 @@ builders, seed helpers, the ``conn`` DB fixture).
 """
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
@@ -14,6 +14,7 @@ from policy_atlas import events
 from policy_atlas.acquire import (
     REFERENCED_WORKS_RETAIN_CAP,
     AcquireContext,
+    SearchBackend,
     _map_openalex_work,
     _map_overton_document,
     acquire_sources,
@@ -24,7 +25,7 @@ from policy_atlas.schema import (
     source_snapshot,
     source_tag,
 )
-from tests.helpers import oa_record, seed_project_and_run, seed_scope
+from tests.helpers import executed_calls_for, oa_record, seed_project_and_run, seed_scope
 from tests.test_acquire import FakeBackend, assert_invariant, ov_record
 
 # --- _map_openalex_work: decision-20 retain-key deltas ---
@@ -68,12 +69,15 @@ def test_map_openalex_title_source_none_absent_from_persisted_metadata(
     """title_source=None follows the None-omission pattern (decision 20)."""
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
+    context = AcquireContext(scope_id=scope_id, intent="Test intent", context={})
+    backends = [FakeBackend(records=[oa_record()])]
     acquire_sources(
         conn,
         project_id=pid,
         run_id=rid,
-        context=AcquireContext(scope_id=scope_id, intent="Test intent", context={}),
-        backends=[FakeBackend(records=[oa_record()])],
+        context=context,
+        backends=cast("list[SearchBackend]", backends),
+        executed_calls=executed_calls_for(backends, context.intent),
     )
     (meta,) = conn.execute(
         select(source_snapshot.c.metadata)
@@ -131,16 +135,17 @@ def test_overton_source_tags_and_series_materialise_as_expected_tag_rows(
     record["overton_policy_document_series"] = "Working paper"
     record["llm_document_theme"] = "Affordable housing"
 
+    context = AcquireContext(scope_id=scope_id, intent="Test intent", context={})
+    backends = [
+        FakeBackend(name="overton", trust_class="grey_literature_aggregator", records=[record])
+    ]
     counts = acquire_sources(
         conn,
         project_id=pid,
         run_id=rid,
-        context=AcquireContext(scope_id=scope_id, intent="Test intent", context={}),
-        backends=[
-            FakeBackend(
-                name="overton", trust_class="grey_literature_aggregator", records=[record]
-            )
-        ],
+        context=context,
+        backends=cast("list[SearchBackend]", backends),
+        executed_calls=executed_calls_for(backends, context.intent),
     )
     assert counts["acquired"] == 1
 
@@ -168,12 +173,15 @@ def test_openalex_keywords_never_produce_tag_rows(conn: Connection) -> None:
     record = oa_record()
     record["keywords"] = [{"display_name": "Stock (firearms)"}, {"display_name": "Housing"}]
 
+    context = AcquireContext(scope_id=scope_id, intent="Test intent", context={})
+    backends = [FakeBackend(records=[record])]
     counts = acquire_sources(
         conn,
         project_id=pid,
         run_id=rid,
-        context=AcquireContext(scope_id=scope_id, intent="Test intent", context={}),
-        backends=[FakeBackend(records=[record])],
+        context=context,
+        backends=cast("list[SearchBackend]", backends),
+        executed_calls=executed_calls_for(backends, context.intent),
     )
     assert counts["acquired"] == 1
 

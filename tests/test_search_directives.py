@@ -305,7 +305,7 @@ def test_deep_stop_target_reached() -> None:
         docs_screened_this_round=100,
         wall_clock_breached=False,
     )
-    assert decision == StopDecision(True, "target_reached", False)
+    assert decision == StopDecision(True, "target_reached")
 
 
 def test_deep_stop_target_reached_above_target() -> None:
@@ -328,7 +328,7 @@ def test_deep_stop_short_circuit_low_rate_round_2() -> None:
         docs_screened_this_round=1000,  # 1/1000 < 1/50
         wall_clock_breached=False,
     )
-    assert decision == StopDecision(True, "short_circuit", False)
+    assert decision == StopDecision(True, "short_circuit")
 
 
 def test_deep_stop_short_circuit_zero_docs_round_2() -> None:
@@ -339,7 +339,7 @@ def test_deep_stop_short_circuit_zero_docs_round_2() -> None:
         docs_screened_this_round=0,
         wall_clock_breached=False,
     )
-    assert decision == StopDecision(True, "short_circuit", False)
+    assert decision == StopDecision(True, "short_circuit")
 
 
 def test_deep_stop_round_1_never_short_circuits() -> None:
@@ -351,7 +351,7 @@ def test_deep_stop_round_1_never_short_circuits() -> None:
         docs_screened_this_round=1000,
         wall_clock_breached=False,
     )
-    assert decision == StopDecision(False, None, False)
+    assert decision == StopDecision(False, None)
 
 
 def test_deep_stop_budget_on_round_cap() -> None:
@@ -362,7 +362,7 @@ def test_deep_stop_budget_on_round_cap() -> None:
         docs_screened_this_round=10,  # healthy rate, no short-circuit
         wall_clock_breached=False,
     )
-    assert decision == StopDecision(True, "budget_exhausted", False)
+    assert decision == StopDecision(True, "budget_exhausted")
 
 
 def test_deep_stop_budget_on_wall_clock_breach() -> None:
@@ -373,7 +373,7 @@ def test_deep_stop_budget_on_wall_clock_breach() -> None:
         docs_screened_this_round=10,
         wall_clock_breached=True,
     )
-    assert decision == StopDecision(True, "budget_exhausted", False)
+    assert decision == StopDecision(True, "budget_exhausted")
 
 
 def test_deep_stop_no_stop_otherwise() -> None:
@@ -384,7 +384,7 @@ def test_deep_stop_no_stop_otherwise() -> None:
         docs_screened_this_round=10,
         wall_clock_breached=False,
     )
-    assert decision == StopDecision(False, None, False)
+    assert decision == StopDecision(False, None)
 
 
 def test_deep_stop_custom_round_cap() -> None:
@@ -396,4 +396,4 @@ def test_deep_stop_custom_round_cap() -> None:
         wall_clock_breached=False,
         round_cap=2,
     )
-    assert decision == StopDecision(True, "budget_exhausted", False)
+    assert decision == StopDecision(True, "budget_exhausted")

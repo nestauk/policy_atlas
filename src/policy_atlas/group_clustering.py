@@ -39,8 +39,8 @@ from policy_atlas.clustering_engine import (
     ClusterUnit,
 )
 from policy_atlas.facet_grouping import DESCRIPTION_MAX, LABEL_MAX
-from policy_atlas.openai_client import resolve_openai_client
-from policy_atlas.usage import UsageResult, log_usage, token_usage_from_provider, usage_metadata
+from policy_atlas.openai_client import parse_structured, resolve_openai_client
+from policy_atlas.usage import UsageResult, usage_metadata
 
 GROUP_CLUSTERING_PROMPT_VERSION = "group_cluster_v1"
 
@@ -363,18 +363,14 @@ class _OpenAIGroupFacetBackend:
         usage_event: str,
         stage: str,
     ) -> UsageResult[BaseModel]:
-        response = self._client.chat.completions.parse(
-            model=GROUP_CLUSTERING_MODEL,
+        return parse_structured(
+            self._client,
             messages=messages,
             response_format=response_format,
+            usage_event=usage_event,
+            label=f"group clustering {stage}",
+            model=GROUP_CLUSTERING_MODEL,
         )
-        log_usage(usage_event, response.usage)
-        if not response.choices:
-            raise RuntimeError(f"OpenAI group clustering {stage} response had no choices.")
-        parsed = response.choices[0].message.parsed
-        if parsed is None:
-            raise RuntimeError(f"OpenAI group clustering {stage} response was not parsed.")
-        return parsed, token_usage_from_provider(response.usage)
 
     def _call(
         self,

@@ -1,5 +1,6 @@
 """Tests for the embeddings module — schema, unit derivation, embed pass, stubs."""
 
+import random
 import uuid
 from types import SimpleNamespace
 from typing import Any, cast
@@ -15,6 +16,7 @@ from policy_atlas.acquire import (
     AcquireContext,
     OpenAlexFixtureBackend,
     OvertonFixtureBackend,
+    SearchBackend,
     acquire_sources,
 )
 from policy_atlas.embeddings import (
@@ -39,6 +41,7 @@ from policy_atlas.schema import (
 )
 from tests.helpers import (
     delete_project_data,
+    executed_calls_for,
     now,
     seed_project_and_run,
     seed_scope,
@@ -374,12 +377,15 @@ def test_eager_uniform_upload_and_acquire_embed_every_chunk(conn: Connection) ->
         text_basis="full_text",
         embedder=StubEmbeddingBackend(),
     )
+    context = AcquireContext(scope_id=scope_id, intent="Housing", context={})
+    backends = [OpenAlexFixtureBackend(), OvertonFixtureBackend()]
     acquire_sources(
         conn,
         project_id=pid,
         run_id=rid,
-        context=AcquireContext(scope_id=scope_id, intent="Housing", context={}),
-        backends=[OpenAlexFixtureBackend(), OvertonFixtureBackend()],
+        context=context,
+        backends=cast("list[SearchBackend]", backends),
+        executed_calls=executed_calls_for(backends, context.intent),
         embedder=StubEmbeddingBackend(),
     )
 
@@ -458,7 +464,7 @@ def test_openai_embedding_backend_rate_limit_backoff_then_success(
     sleeps: list[float] = []
     monkeypatch.setattr(embeddings_module, "RateLimitError", _FakeRateLimitError)
     monkeypatch.setattr(embeddings_module, "_sleep", sleeps.append)
-    monkeypatch.setattr(embeddings_module, "_embedding_rate_limit_jitter_s", lambda _base: 0.0)
+    monkeypatch.setattr(random, "uniform", lambda _lo, _hi: 0.0)
     response = _embedding_response([0.25] * EMBEDDING_DIMENSIONS)
     backend: OpenAIEmbeddingBackend = object.__new__(OpenAIEmbeddingBackend)
     fake_client = _FakeEmbeddingClient([_FakeRateLimitError("429"), response])
@@ -477,7 +483,7 @@ def test_openai_embedding_backend_rate_limit_exhaustion_fails_loudly(
     sleeps: list[float] = []
     monkeypatch.setattr(embeddings_module, "RateLimitError", _FakeRateLimitError)
     monkeypatch.setattr(embeddings_module, "_sleep", sleeps.append)
-    monkeypatch.setattr(embeddings_module, "_embedding_rate_limit_jitter_s", lambda _base: 0.0)
+    monkeypatch.setattr(random, "uniform", lambda _lo, _hi: 0.0)
     backend: OpenAIEmbeddingBackend = object.__new__(OpenAIEmbeddingBackend)
     fake_client = _FakeEmbeddingClient([_FakeRateLimitError("429") for _ in range(4)])
     cast("Any", backend)._client = fake_client

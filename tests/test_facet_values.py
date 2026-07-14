@@ -4,13 +4,6 @@ from typing import Any
 
 import pytest
 
-from policy_atlas.facet_grouping import (
-    DESCRIPTION_MAX,
-    FORBIDDEN_GROUP_LABELS,
-    LABEL_MAX,
-    PartitionResult,
-    ProposedGroup,
-)
 from policy_atlas.facet_values import (
     COUNTERPART_CAP,
     AcceptedGroup,
@@ -21,11 +14,8 @@ from policy_atlas.facet_values import (
     build_groups_payload,
     direction_spread,
     extract_facet_values,
-    merge_repair,
     normalize_value,
     parse_grouping_directive,
-    validate_partition,
-    value_records,
 )
 from policy_atlas.schema import DIRECTIVE_STRING_MAX, EFFECT_DIRECTIONS
 
@@ -127,24 +117,6 @@ def test_counterparts_are_deduped_ranked_and_capped() -> None:
     assert len(values[0].counterparts) == COUNTERPART_CAP
 
 
-def test_value_records_use_surface_count_and_counterparts() -> None:
-    values, _ = extract_facet_values(
-        [
-            finding("f1", "Housing First", "rough sleeping"),
-            finding("f2", "housing first", "rough sleeping"),
-        ]
-    )
-
-    assert value_records(values) == [
-        {
-            "id": "v1",
-            "value": "Housing First",
-            "finding_count": 2,
-            "counterparts": ["rough sleeping"],
-        }
-    ]
-
-
 def test_parse_grouping_directive_defaults_and_valid_scope_context() -> None:
     assert parse_grouping_directive({}) == (["intervention"], "default")
     assert parse_grouping_directive({"grouping": {}}) == (["intervention"], "default")
@@ -180,181 +152,6 @@ def test_parse_grouping_directive_rejects_malformed_directives(
 ) -> None:
     with pytest.raises(FacetDirectiveError):
         parse_grouping_directive(context)
-
-
-def test_validate_partition_accepts_strips_and_returns_missing_ids() -> None:
-    validated = validate_partition(
-        {
-            "groups": [
-                {
-                    "label": " Housing-led support ",
-                    "description": " Housing interventions. ",
-                    "member_ids": ["v1", "v2"],
-                }
-            ],
-            "ungroupable": ["v3"],
-        },
-        value_ids={"v1", "v2", "v3", "v4"},
-    )
-
-    assert validated.groups == (
-        AcceptedGroup(
-            label="Housing-led support",
-            description="Housing interventions.",
-            member_ids=("v1", "v2"),
-        ),
-    )
-    assert validated.ungroupable_ids == ("v3",)
-    assert validated.missing_ids == frozenset({"v4"})
-
-
-@pytest.mark.parametrize(
-    "result",
-    [
-        {
-            "groups": [{"label": "A", "description": "B", "member_ids": ["v9"]}],
-            "ungroupable": [],
-        },
-        {
-            "groups": [
-                {"label": "A", "description": "B", "member_ids": ["v1"]},
-                {"label": "C", "description": "D", "member_ids": ["v1"]},
-            ],
-            "ungroupable": [],
-        },
-        {
-            "groups": [{"label": "A", "description": "B", "member_ids": ["v1", "v2"]}],
-            "ungroupable": ["v2"],
-        },
-        {
-            "groups": [{"label": "A", "description": "B", "member_ids": ["v1", "v1"]}],
-            "ungroupable": [],
-        },
-        {
-            "groups": [{"label": "A", "description": "B", "member_ids": ["v1"]}],
-            "ungroupable": ["v1"],
-        },
-    ],
-)
-def test_validate_partition_rejects_invalid_output(result: PartitionResult) -> None:
-    with pytest.raises(InvalidPartitionOutput):
-        validate_partition(result, value_ids={"v1", "v2", "v3"})
-
-
-@pytest.mark.parametrize(
-    "group",
-    [
-        {"label": "A", "description": "B", "member_ids": []},
-        {"label": "  ", "description": "B", "member_ids": ["v1"]},
-        {"label": "A", "description": "  ", "member_ids": ["v1"]},
-        {"label": "x" * (LABEL_MAX + 1), "description": "B", "member_ids": ["v1"]},
-        {"label": "A", "description": "x" * (DESCRIPTION_MAX + 1), "member_ids": ["v1"]},
-        {"label": "Bad\nLabel", "description": "B", "member_ids": ["v1"]},
-    ],
-)
-def test_validate_partition_rejects_violating_group_only(group: ProposedGroup) -> None:
-    # Group-grain rejection: the violating group never lands, its members
-    # flow to missing_ids for the repair, the healthy sibling survives —
-    # never the whole-response loss that zeroed the 013 live grouping.
-    sibling: ProposedGroup = {
-        "label": "Healthy sibling",
-        "description": "Fine.",
-        "member_ids": ["v2"],
-    }
-    validated = validate_partition(
-        {"groups": [group, sibling], "ungroupable": []},
-        value_ids={"v1", "v2", "v3"},
-    )
-    assert [g.label for g in validated.groups] == ["Healthy sibling"]
-    assert set(group["member_ids"]) <= validated.missing_ids
-    assert len(validated.rejected_reasons) == 1
-
-
-def test_validate_partition_rejects_second_duplicate_label_group_only() -> None:
-    validated = validate_partition(
-        {
-            "groups": [
-                {"label": "A", "description": "B", "member_ids": ["v1"]},
-                {"label": "a", "description": "C", "member_ids": ["v2"]},
-            ],
-            "ungroupable": [],
-        },
-        value_ids={"v1", "v2"},
-    )
-    assert [g.label for g in validated.groups] == ["A"]
-    assert validated.missing_ids == frozenset({"v2"})
-    assert validated.rejected_reasons == ("duplicate group label: a",)
-
-
-def test_validate_partition_rejected_group_ids_keep_integrity_checks() -> None:
-    # A text-rejected group's ids still count for id integrity: assigning
-    # one of them again elsewhere is whole-response corruption.
-    with pytest.raises(InvalidPartitionOutput):
-        validate_partition(
-            {
-                "groups": [
-                    {"label": "x" * (LABEL_MAX + 1), "description": "B", "member_ids": ["v1"]},
-                    {"label": "A", "description": "B", "member_ids": ["v1"]},
-                ],
-                "ungroupable": [],
-            },
-            value_ids={"v1"},
-        )
-
-
-def test_validate_partition_one_long_label_keeps_other_groups() -> None:
-    # The 013 live shape: 16 coherent groups, one label over the cap —
-    # previously the whole partition was lost, twice, landing 0 groups.
-    long_label = (
-        "Healthy food financial incentive programs "
-        "(Health/Philly Food Bucks, Green Carts, SNAP use)"
-    )
-    assert len(long_label) > LABEL_MAX
-    groups: list[ProposedGroup] = [
-        {"label": f"Group {i}", "description": "Fine.", "member_ids": [f"v{i}"]}
-        for i in range(15)
-    ]
-    groups.append({"label": long_label, "description": "Fine.", "member_ids": ["v15", "v16"]})
-    validated = validate_partition(
-        {"groups": groups, "ungroupable": []},
-        value_ids={f"v{i}" for i in range(17)},
-    )
-    assert len(validated.groups) == 15
-    assert validated.missing_ids == frozenset({"v15", "v16"})
-    assert validated.rejected_reasons == (
-        f"group 15 label exceeds {LABEL_MAX} chars",
-    )
-
-
-@pytest.mark.parametrize("label", sorted(FORBIDDEN_GROUP_LABELS) + ["General", "OTHER"])
-def test_validate_partition_rejects_forbidden_label_group(label: str) -> None:
-    validated = validate_partition(
-        {
-            "groups": [{"label": label, "description": "B", "member_ids": ["v1"]}],
-            "ungroupable": [],
-        },
-        value_ids={"v1"},
-    )
-    assert validated.groups == ()
-    assert validated.missing_ids == frozenset({"v1"})
-    assert validated.rejected_reasons and "forbidden label" in validated.rejected_reasons[0]
-
-
-def test_merge_repair_merges_casefold_label_matches_and_appends_new_groups() -> None:
-    accepted = [
-        AcceptedGroup("Housing First", "Original description.", ("v1",)),
-        AcceptedGroup("School meals", "Meals.", ("v2",)),
-    ]
-    repair = [
-        AcceptedGroup("housing first", "Replacement ignored.", ("v3",)),
-        AcceptedGroup("Rapid rehousing", "Rapid.", ("v4",)),
-    ]
-
-    assert merge_repair(accepted, repair) == [
-        AcceptedGroup("Housing First", "Original description.", ("v1", "v3")),
-        AcceptedGroup("School meals", "Meals.", ("v2",)),
-        AcceptedGroup("Rapid rehousing", "Rapid.", ("v4",)),
-    ]
 
 
 def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() -> None:

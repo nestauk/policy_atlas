@@ -24,12 +24,11 @@ from policy_atlas.acquire import SearchBackend
 from policy_atlas.classification_backend import ClassificationBackend
 from policy_atlas.embeddings import EmbeddingBackend
 from policy_atlas.extraction_backend import ExtractionBackend
-from policy_atlas.finding_vetter import FindingVetterBackend
+from policy_atlas.finding_vetter import FindingVetterBackend, ICFFindingVetterBackend
 from policy_atlas.grounding_judge import GroundingJudgeBackend
 from policy_atlas.group import GroupClusteringBackendFactory
 from policy_atlas.grouping import ThemeGroupingBackend
 from policy_atlas.harness import run_harness
-from policy_atlas.icf_finding_vetter import ICFFindingVetterBackend
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.ingest_full_text import DocumentFetcher
 from policy_atlas.orchestration_plan import (
@@ -147,22 +146,6 @@ class CheckInIO(Protocol):
             component: Orchestration step name.
             payload: Deterministic outcome payload containing status and
                 headline counts.
-        """
-        ...
-
-
-class OrchestratorIO(CheckInIO, Protocol):
-    """Full runner-to-orchestrator IO seam with blocking steering pauses."""
-
-    def pause(self, point: dict[str, Any], render: str) -> SteeringResponse:
-        """Request a steering response at a deterministic pause point.
-
-        Args:
-            point: Boundary payload with kind, boundary and component fields.
-            render: Deterministic human-readable check-in text.
-
-        Returns:
-            The steering response to apply.
         """
         ...
 
@@ -1346,21 +1329,34 @@ def _apply_directive(
     )
 
 
+def _find_component_payload(
+    log_entries: list[dict[str, Any]],
+    registry_component: str,
+    *,
+    event_type: str,
+    run_id: uuid.UUID,
+) -> dict[str, Any] | None:
+    """Last-matching payload for one run/component/event_type triple, or ``None``."""
+    return next(
+        (
+            entry["payload"]
+            for entry in reversed(log_entries)
+            if entry["event_type"] == event_type
+            and entry["run_id"] == run_id
+            and entry["payload"].get("component") == registry_component
+        ),
+        None,
+    )
+
+
 def _headline_counts(
     log_entries: list[dict[str, Any]],
     registry_component: str,
     *,
     run_id: uuid.UUID,
 ) -> dict[str, Any]:
-    payload = next(
-        (
-            entry["payload"]
-            for entry in reversed(log_entries)
-            if entry["event_type"] == "component.completed"
-            and entry["run_id"] == run_id
-            and entry["payload"].get("component") == registry_component
-        ),
-        None,
+    payload = _find_component_payload(
+        log_entries, registry_component, event_type="component.completed", run_id=run_id
     )
     if payload is None:
         return {}
@@ -1383,15 +1379,8 @@ def _usage_totals(
     ``None`` when no completed payload carries usage — a failed attempt spent
     tokens the summary never recorded, so absent stays absent, never zero.
     """
-    payload = next(
-        (
-            entry["payload"]
-            for entry in reversed(log_entries)
-            if entry["event_type"] == "component.completed"
-            and entry["run_id"] == run_id
-            and entry["payload"].get("component") == registry_component
-        ),
-        None,
+    payload = _find_component_payload(
+        log_entries, registry_component, event_type="component.completed", run_id=run_id
     )
     usage = payload.get("usage_totals") if isinstance(payload, dict) else None
     if not isinstance(usage, dict):
@@ -1412,15 +1401,8 @@ def _failure_error(
     *,
     run_id: uuid.UUID,
 ) -> str | None:
-    payload = next(
-        (
-            entry["payload"]
-            for entry in reversed(log_entries)
-            if entry["event_type"] == "component.failed"
-            and entry["run_id"] == run_id
-            and entry["payload"].get("component") == registry_component
-        ),
-        None,
+    payload = _find_component_payload(
+        log_entries, registry_component, event_type="component.failed", run_id=run_id
     )
     if payload is None:
         return None

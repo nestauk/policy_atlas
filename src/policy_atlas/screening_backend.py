@@ -8,7 +8,7 @@ from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
 
 from policy_atlas import tracing
-from policy_atlas.openai_client import resolve_openai_client
+from policy_atlas.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.prompt_fields import confidence_is_valid, scrub_nul
 from policy_atlas.screen_prompt import (
     SCREEN_FULLTEXT_PROMPT_VERSION,
@@ -21,7 +21,7 @@ from policy_atlas.screen_prompt import (
     build_screen_fulltext_messages,
     build_screen_messages,
 )
-from policy_atlas.usage import UsageResult, log_usage, token_usage_from_provider, usage_metadata
+from policy_atlas.usage import UsageResult, usage_metadata
 
 
 class ScreeningBackend(Protocol):
@@ -112,20 +112,16 @@ class OpenAIScreeningBackend:
         messages: list[ChatCompletionMessageParam],
         usage_event: str,
     ) -> UsageResult[ScreenRepWire]:
-        response = self._client.chat.completions.parse(
-            model=SCREEN_MODEL,
+        parsed, usage = parse_structured(
+            self._client,
             messages=messages,
             response_format=ScreenRepWire,
+            usage_event=usage_event,
+            label="screening",
+            model=SCREEN_MODEL,
             max_completion_tokens=SCREEN_MAX_OUTPUT_TOKENS,
         )
-        log_usage(usage_event, response.usage)
-        if not response.choices:
-            raise RuntimeError("OpenAI screening response had no choices.")
-        parsed = response.choices[0].message.parsed
-        if parsed is None:
-            raise RuntimeError("OpenAI screening response was not parsed.")
-        parsed_model: ScreenRepWire = parsed
-        return _scrub_rep(parsed_model), token_usage_from_provider(response.usage)
+        return _scrub_rep(parsed), usage
 
     def screen_envelope(
         self,

@@ -81,7 +81,6 @@ SECTION_TURN_CAP = 6
 # count as rejected, so a degenerate 30-call turn cannot blow the per-turn
 # retrieval/transcript envelope (turn_cap bounds turns, not work per turn).
 READ_CALLS_PER_TURN_CAP = 6
-REPAIR_ROUND_CAP = 1
 SYNTH_CHUNK_TOP_K = 8
 SYNTH_CHUNK_CHAR_BUDGET = 24_000
 # Fail-closed in-memory retrieval ceiling over the screened corpus's embedding

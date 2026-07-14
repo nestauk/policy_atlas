@@ -298,13 +298,6 @@ def _coverage_rows(conn: Connection, project_id: uuid.UUID) -> list[Any]:
     )
 
 
-def _coverage_for_run(conn: Connection, run_id: uuid.UUID) -> Any:
-    return conn.execute(
-        select(search_coverage_record)
-        .where(search_coverage_record.c.acquired_by_run_id == run_id)
-    ).one()
-
-
 def _screening_count(conn: Connection, project_id: uuid.UUID) -> int:
     return int(
         conn.execute(

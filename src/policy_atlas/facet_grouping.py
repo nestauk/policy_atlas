@@ -1,16 +1,14 @@
-"""Shared facet-grouping bounds and wire shapes (task 012, narrowed in 022).
+"""Shared facet-grouping bounds (task 012, narrowed in 022).
 
 The ``group_facet_v1`` one-call partition prompt and its backends were retired
 by 022's two-stage clustering engine (``group_clustering.py`` supersedes them;
 the machinery was deleted by 022's review-stack simplification pass). What
 remains here is the substrate the engine's group caller still shares: the
-scale/length bounds, the forbidden-label set, and the value/partition wire
-TypedDicts consumed by ``facet_values.py`` and ``group.py``.
+scale/length bounds and the forbidden-label set consumed by ``facet_values.py``
+and ``group.py``.
 """
 
 from __future__ import annotations
-
-from typing import TypedDict
 
 # Scale guard — fail closed (contract rev 1.3): above the cap the component
 # fails structurally before any call; the large-corpus algorithm is a recorded
@@ -25,7 +23,7 @@ FACET_VALUE_CAP = 400
 VALUE_SURFACE_MAX = 500
 
 # Label/description bounds (deterministic output-checking beyond prompt rules —
-# the 009 validate_themes precedent; enforced in facet_values.validate_partition).
+# the 009 validate_themes precedent; enforced in group.py's clustering caller).
 LABEL_MAX = 80
 DESCRIPTION_MAX = 500
 
@@ -36,27 +34,3 @@ FORBIDDEN_GROUP_LABELS = frozenset(
     {"general", "miscellaneous", "other", "misc", "general theme",
      "uncategorised", "uncategorized"}
 )
-
-
-class FacetValueRecord(TypedDict):
-    """One distinct facet value admitted into the partition prompt as data."""
-
-    id: str
-    value: str
-    finding_count: int
-    counterparts: list[str]
-
-
-class ProposedGroup(TypedDict):
-    """One group as returned by a backend (raw, pre-validation)."""
-
-    label: str
-    description: str
-    member_ids: list[str]
-
-
-class PartitionResult(TypedDict):
-    """Raw structurally parsed partition output; callers own semantic validation."""
-
-    groups: list[ProposedGroup]
-    ungroupable: list[str]

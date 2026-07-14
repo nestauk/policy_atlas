@@ -9,13 +9,12 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas import events
-from policy_atlas.fixtures import get_source
 from policy_atlas.grounding_judge import StubGroundingJudgeBackend
+from policy_atlas.grouping import StubThemeGroupingBackend
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
-from policy_atlas.ingest import ingest_upload
 from policy_atlas.plan import Plan, compile
-from policy_atlas.schema import annotation, artefact, block, project, runs
+from policy_atlas.schema import artefact, project, runs
 from policy_atlas.synthesis_backend import StubSynthesisBackend
 from tests.helpers import (
     delete_project_data,
@@ -25,30 +24,20 @@ from tests.helpers import (
     seed_run,
     seed_scope,
 )
+from tests.test_characterise import _RaisingDiscoverBackend, _seed_doc
 
-_CHUNKS = list(get_source("syn-001").chunks)
-
-
-class _FabricatedProvider:
-    def complete(self, prompt: str) -> str:  # noqa: ARG002
-        return "fabricated text not in source"
-
-
-def _seed_snapshot(conn: Connection, project_id: uuid.UUID) -> uuid.UUID:
-    return ingest_upload(
-        conn,
-        project_id=project_id,
-        chunks=_CHUNKS,
-        source_locator="syn-001",
-        metadata={"synthetic": True},
-        text_basis="full_text",
-    )
+# NOTE: these tests exercise generic harness dispatch/lifecycle machinery.
+# echo (the walking-skeleton component) was retired in task 023 C3 — its
+# grounding-chain-specific behaviour (block.written, quote-verification
+# annotations) has no surviving equivalent component, so these repoint onto
+# acquire (plain lifecycle) and characterise (a real failure path with a
+# structured partial-progress payload, mirroring the old block_id check).
 
 
 def test_run_lifecycle_succeeded(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
-    snapshot_id = _seed_snapshot(conn, pid)
-    config = compile(Plan(component="echo", source_snapshot_id=snapshot_id))
+    scope_id = seed_scope(conn, pid)
+    config = compile(Plan(component="acquire", evidence_scope_id=scope_id))
 
     # Emit run.started + plan.compiled (skeleton does this; simulate here)
     events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
@@ -62,15 +51,24 @@ def test_run_lifecycle_succeeded(conn: Connection) -> None:
     assert row.ended_at is not None
 
 
-def test_run_lifecycle_failed_on_grounding_error(conn: Connection) -> None:
-    pid, rid = seed_project_and_run(conn)
-    snapshot_id = _seed_snapshot(conn, pid)
-    config = compile(Plan(component="echo", source_snapshot_id=snapshot_id))
+def test_run_lifecycle_failed_on_component_error(conn: Connection) -> None:
+    pid, rid_screen = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _seed_doc(conn, pid, rid_screen, scope_id, title="Report", abstract="Body. [stub-theme: X]")
+
+    rid = uuid.uuid4()
+    conn.execute(runs.insert().values(
+        run_id=rid, project_id=pid, status="running", started_at=now()
+    ))
+    config = compile(Plan(component="characterise", evidence_scope_id=scope_id))
 
     events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
     events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
 
-    run_harness(conn, config=config, project_id=pid, run_id=rid, provider=_FabricatedProvider())
+    run_harness(
+        conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider(),
+        theme_grouping_backend=_RaisingDiscoverBackend(),
+    )
 
     row = conn.execute(select(runs).where(runs.c.run_id == rid)).one()
     assert row.status == "failed"
@@ -83,35 +81,51 @@ def test_run_lifecycle_failed_on_grounding_error(conn: Connection) -> None:
 def test_run_harness_binds_project_run_component_contextvars(conn: Connection) -> None:
     """run_harness binds project_id/run_id/component once via
     structlog.contextvars.bound_contextvars around the component body, so
-    log calls made deep inside a component execution (here, the provider
-    invoked by the echo component's grounding leg) inherit them without any
+    log calls made deep inside a component execution (here, the theme
+    grouping backend invoked by characterise) inherit them without any
     kwarg being hand-threaded down to that call site.
     """
-    pid, rid = seed_project_and_run(conn)
-    snapshot_id = _seed_snapshot(conn, pid)
-    config = compile(Plan(component="echo", source_snapshot_id=snapshot_id))
+    pid, rid_screen = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _seed_doc(conn, pid, rid_screen, scope_id, title="Report", abstract="Body. [stub-theme: X]")
+
+    rid = uuid.uuid4()
+    conn.execute(runs.insert().values(
+        run_id=rid, project_id=pid, status="running", started_at=now()
+    ))
+    config = compile(Plan(component="characterise", evidence_scope_id=scope_id))
 
     events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
     events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
 
     seen_contextvars: dict[str, Any] = {}
 
-    class _ContextSpyingProvider:
-        def complete(self, prompt: str) -> str:  # noqa: ARG002
+    class _ContextSpyingThemeGroupingBackend:
+        mode = "stub"
+
+        def discover(
+            self, docs: list[Any], *, intent: str, min_themes: int, max_themes: int
+        ) -> Any:
             seen_contextvars.update(structlog.contextvars.get_contextvars())
-            return "fabricated text not in source"
+            return StubThemeGroupingBackend().discover(
+                docs, intent=intent, min_themes=min_themes, max_themes=max_themes
+            )
+
+        def assign(self, batch: list[Any], *, themes: list[Any]) -> Any:
+            return StubThemeGroupingBackend().assign(batch, themes=themes)
 
     # Outside the harness call, no ambient project_id/run_id/component context.
     assert structlog.contextvars.get_contextvars() == {}
 
     run_harness(
-        conn, config=config, project_id=pid, run_id=rid, provider=_ContextSpyingProvider()
+        conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider(),
+        theme_grouping_backend=_ContextSpyingThemeGroupingBackend(),
     )
 
     assert seen_contextvars == {
         "project_id": str(pid),
         "run_id": str(rid),
-        "component": "echo",
+        "component": "characterise",
     }
     # bound_contextvars unwinds after the call — no leakage across executions.
     assert structlog.contextvars.get_contextvars() == {}
@@ -149,10 +163,9 @@ def test_configure_logging_json_chain_renders_exc_info(
 
 def test_run_project_mismatch_raises_before_write(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
-    snapshot_id = _seed_snapshot(conn, pid)
     other_pid = uuid.uuid4()
     conn.execute(project.insert().values(project_id=other_pid, created_at=now()))
-    config = compile(Plan(component="echo", source_snapshot_id=snapshot_id))
+    config = compile(Plan(component="acquire", evidence_scope_id=uuid.uuid4()))
 
     with pytest.raises(ValueError, match="belongs to project"):
         run_harness(
@@ -160,29 +173,48 @@ def test_run_project_mismatch_raises_before_write(conn: Connection) -> None:
         )
 
 
-def test_failed_grounding_emits_component_failed_with_block_id(conn: Connection) -> None:
-    pid, rid = seed_project_and_run(conn)
-    snapshot_id = _seed_snapshot(conn, pid)
-    config = compile(Plan(component="echo", source_snapshot_id=snapshot_id))
+def test_failed_characterise_emits_component_failed_with_coverage(conn: Connection) -> None:
+    """component.failed must carry more than a boilerplate error string: a
+    genuine mid-pipeline failure persists partial-progress detail (here,
+    characterise's ``coverage`` — the equivalent of the old echo/grounding
+    chain's ``block_id`` on a failed grounding attempt)."""
+    pid, rid_screen = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _seed_doc(conn, pid, rid_screen, scope_id, title="Report", abstract="Body. [stub-theme: X]")
+
+    rid = uuid.uuid4()
+    conn.execute(runs.insert().values(
+        run_id=rid, project_id=pid, status="running", started_at=now()
+    ))
+    config = compile(Plan(component="characterise", evidence_scope_id=scope_id))
 
     events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
     events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
 
-    run_harness(conn, config=config, project_id=pid, run_id=rid, provider=_FabricatedProvider())
+    run_harness(
+        conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider(),
+        theme_grouping_backend=_RaisingDiscoverBackend(),
+    )
 
     event_log = events.read(conn, pid)
     types = [e["event_type"] for e in event_log]
     assert "component.failed" in types
     cf = next(e for e in event_log if e["event_type"] == "component.failed")
-    assert "block_id" in cf["payload"], (
-        "persisted block_id must appear in component.failed audit event"
+    assert "coverage" in cf["payload"], (
+        "persisted coverage must appear in component.failed audit event"
     )
 
 
-def test_event_log_six_types_in_order(conn: Connection) -> None:
-    pid, rid = seed_project_and_run(conn)
-    snapshot_id = _seed_snapshot(conn, pid)
-    config = compile(Plan(component="echo", source_snapshot_id=snapshot_id))
+def test_event_log_five_types_in_order(conn: Connection) -> None:
+    pid, rid_screen = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _seed_doc(conn, pid, rid_screen, scope_id, title="Report", abstract="Body. [stub-theme: X]")
+
+    rid = uuid.uuid4()
+    conn.execute(runs.insert().values(
+        run_id=rid, project_id=pid, status="running", started_at=now()
+    ))
+    config = compile(Plan(component="characterise", evidence_scope_id=scope_id))
 
     events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
     events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
@@ -195,7 +227,6 @@ def test_event_log_six_types_in_order(conn: Connection) -> None:
         "plan.compiled",
         "component.started",
         "component.completed",
-        "block.written",
         "run.completed",
     ]
     # Sequences are contiguous and ordered
@@ -325,52 +356,55 @@ def test_synthesise_harness_same_run_reexecution_is_loud(conn: Connection) -> No
     assert artefacts_after == artefacts_before
 
 
-def test_fail_annotation_survives_commit(engine: Engine) -> None:
-    """Flag-don't-drop must hold across a real COMMIT, not only inside a rolled-back txn.
+def test_failure_evidence_survives_commit(engine: Engine) -> None:
+    """Failure evidence must hold across a real COMMIT, not only inside a rolled-back txn.
 
     Every other failure-path test reads back on the same connection the conftest fixture
-    rolls back, so none of them prove the fail annotation *persists*. A future refactor that
-    re-raised GroundingError past skeleton's `engine.begin()` would roll the annotation back,
-    and the whole suite would still pass. This test commits, reopens a fresh connection, and
-    asserts the failure evidence is durably there.
+    rolls back, so none of them prove the failure evidence *persists*. A future refactor
+    that let a component exception escape past skeleton's `engine.begin()` would roll
+    the failed run status and event log back, and the whole suite would still pass. This
+    test commits, reopens a fresh connection, and asserts the failure evidence is durably
+    there.
+
+    (Task 023 C3: the echo/grounding chain's own commit-durability guarantee — the
+    quote-verification ``annotation`` row on a failed grounding attempt — has no
+    surviving equivalent now echo is retired; this repoints onto characterise's
+    structured failure path, whose durable evidence is the failed run status plus
+    the ``component.failed``/``run.failed`` event pair.)
     """
     pid = uuid.uuid4()
+    rid_screen = uuid.uuid4()
     rid = uuid.uuid4()
     try:
         with engine.begin() as conn:
             conn.execute(project.insert().values(project_id=pid, created_at=now()))
             conn.execute(runs.insert().values(
+                run_id=rid_screen, project_id=pid, status="running", started_at=now()
+            ))
+            scope_id = seed_scope(conn, pid)
+            _seed_doc(
+                conn, pid, rid_screen, scope_id, title="Report", abstract="Body. [stub-theme: X]"
+            )
+            conn.execute(runs.insert().values(
                 run_id=rid, project_id=pid, status="running", started_at=now()
             ))
-            snapshot_id = _seed_snapshot(conn, pid)
-            config = compile(Plan(component="echo", source_snapshot_id=snapshot_id))
+            config = compile(Plan(component="characterise", evidence_scope_id=scope_id))
             events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
             events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
             run_harness(
-                conn, config=config, project_id=pid, run_id=rid, provider=_FabricatedProvider()
+                conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider(),
+                theme_grouping_backend=_RaisingDiscoverBackend(),
             )
-        # transaction has committed on block exit (harness swallows GroundingError → no rollback)
+        # transaction committed on block exit (harness swallows CharacteriseFailure, no rollback)
 
         with engine.connect() as conn:
             run_row = conn.execute(select(runs).where(runs.c.run_id == rid)).one()
             assert run_row.status == "failed"
 
-            ann = conn.execute(
-                select(annotation).where(
-                    annotation.c.block_id.in_(
-                        select(block.c.block_id).where(
-                            block.c.artefact_id.in_(
-                                select(artefact.c.artefact_id).where(
-                                    artefact.c.project_id == pid
-                                )
-                            )
-                        )
-                    )
-                )
-            ).one()
-            assert ann.payload["verification_result"] == "fail"
-
-            assert events.read(conn, pid)[-1]["event_type"] == "run.failed"
+            log = events.read(conn, pid)
+            assert log[-1]["event_type"] == "run.failed"
+            failed = next(e for e in log if e["event_type"] == "component.failed")
+            assert "coverage" in failed["payload"]
     finally:
         with engine.begin() as conn:
             delete_project_data(conn, pid)
