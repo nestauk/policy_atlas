@@ -257,10 +257,13 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
 **Agenda — owner-reopened rulings, decided at this gate (🛑 decisions A–E; "don't
 inherit the deferral" is the owner's own instruction):**
 
-- **A. Grammar-v2 boundary vs writer tag-scoping** — does item 13 subsume
-  retrieval-boost grammar v2's tag-scoping half (leaving only the confidence
-  multiplier, now item 15), retiring the separate grammar-v2 slice — or does grammar
-  v2 stay its own eval-gated slice?
+- **A. Grammar-v2 boundary — SETTLED: subsumed and retired (owner, 2026-07-14).**
+  The multiplier half is discharged by decision 7 (built); the tag-scoping half is
+  delivered better by item 13's call-level writer scoping. One narrow seam stays in
+  deferred.md: directive-level tag-boost vocabulary on the `context["synthesis"]`
+  grammar, trigger = observed steer-point demand for it (no author exists today —
+  the recorded steer examples compile against the existing grammar). The
+  grammar-v2 deferred entry is discharged with this adjudication.
 - **B. Judge-envelope char clamp** — keep the judge envelope unclamped (013 call) or
   clamp it too. Any judge-envelope change binds to 018's verification-grade A/B
   protocol (replay the same claim set through both envelopes, hand-inspect flips).
