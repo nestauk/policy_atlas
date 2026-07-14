@@ -32,6 +32,7 @@ from policy_atlas.synthesis_tools import (
     SynthesisDirectiveError,
     ToolExchange,
     ToolValidationError,
+    _group_member_ids,
     build_retrieval_scope,
     build_section_tools,
     gathered_ids,
@@ -204,19 +205,36 @@ def test_parse_synthesis_directive_rejects_bad_sections() -> None:
         parse_synthesis_directive(
             {
                 "synthesis": {
-                    "sections": [{"title": "Housing", "focus": "x", "group_ids": ["g1"]}]
+                    "sections": [
+                        {
+                            "title": "Housing",
+                            "focus": "x",
+                            "group_ids": ["intervention:g01"],
+                        }
+                    ]
                 }
             },
             grouping_group_ids=None,
+        )
+    with pytest.raises(SynthesisDirectiveError, match="<facet>:gNN"):
+        parse_synthesis_directive(
+            {
+                "synthesis": {
+                    "sections": [{"title": "Housing", "focus": "x", "group_ids": ["g1"]}]
+                }
+            },
+            grouping_group_ids={"intervention:g01"},
         )
     with pytest.raises(SynthesisDirectiveError, match="unknown"):
         parse_synthesis_directive(
             {
                 "synthesis": {
-                    "sections": [{"title": "Housing", "focus": "x", "group_ids": ["g2"]}]
+                    "sections": [
+                        {"title": "Housing", "focus": "x", "group_ids": ["outcome:g02"]}
+                    ]
                 }
             },
-            grouping_group_ids={"g1"},
+            grouping_group_ids={"intervention:g01"},
         )
 
 
@@ -228,7 +246,7 @@ def test_parse_synthesis_directive_valid_sections_and_boosts_clamp() -> None:
                     {
                         "title": "Rough sleeping",
                         "focus": "interventions",
-                        "group_ids": ["g1"],
+                        "group_ids": ["intervention:g01"],
                     }
                 ],
                 "retrieval_boosts": {
@@ -238,14 +256,58 @@ def test_parse_synthesis_directive_valid_sections_and_boosts_clamp() -> None:
                 },
             }
         },
-        grouping_group_ids={"g1"},
+        grouping_group_ids={"intervention:g01"},
     )
     assert directive.sections == [
-        {"title": "Rough sleeping", "focus": "interventions", "group_ids": ["g1"]}
+        {
+            "title": "Rough sleeping",
+            "focus": "interventions",
+            "group_ids": ["intervention:g01"],
+        }
     ]
     assert directive.column_boosts == {"origin": {"uploaded": BOOST_CLAMP_MAX}}
     assert directive.tag_boosts == {"housing": BOOST_CLAMP_MIN}
     assert directive.appraisal_tier_boosts == {"5": 2.0}
+
+
+def test_query_findings_group_id_requires_qualified_form_in_tool_loop() -> None:
+    class Backend:
+        def section_turn(
+            self, seed: dict[str, Any], transcript: list[ToolExchange], *, force_emit: bool
+        ) -> UsageResult[dict[str, Any]]:
+            del seed, force_emit
+            if transcript:
+                return {"tool_calls": [], "claims": SectionProseWire(prose="", claims=[])}, None
+            return {
+                "tool_calls": [
+                    {"tool": "query_findings", "arguments": {"group_id": "g01"}}
+                ],
+                "claims": None,
+            }, None
+
+    result = run_section_loop(
+        Backend(),
+        seed={},
+        tools=build_section_tools(
+            retriever=None,
+            findings_reader=lambda _args: {"iof_findings": []},
+            lookup_reader=lambda _args: {},
+        ),
+    )
+
+    assert result["transcript"][0]["result"] == {
+        "error": "group_id must use expected form <facet>:gNN"
+    }
+    assert result["rejected_tool_calls"] == 1
+
+
+def test_query_findings_group_member_map_rejects_legacy_group_ids() -> None:
+    assert _group_member_ids(
+        [{"group_id": "intervention:g01", "member_finding_ids": ["f1"]}]
+    ) == {"intervention:g01": {"f1"}}
+
+    with pytest.raises(ToolValidationError, match="<facet>:gNN"):
+        _group_member_ids([{"label": "Legacy label", "member_finding_ids": ["f1"]}])
 
 
 def test_parse_synthesis_directive_rejects_bad_boosts() -> None:
@@ -1693,6 +1755,55 @@ def test_make_findings_reader_kind_filter_mismatch_fails_closed(conn: Connection
         reader({"context_type": "barrier"})
     with pytest.raises(ToolValidationError, match="context_type requires icf"):
         reader({"kinds": ["iof", "icf"], "context_type": "barrier"})
+
+
+def test_make_findings_reader_group_filter_requires_resolved_qualified_ids(
+    conn: Connection,
+) -> None:
+    from policy_atlas.synthesis_tools import make_findings_reader
+
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    snap_id, pss_id = seed_source(conn, project_id)
+    iof_ids, _icf_ids = _seed_profiled_reader_findings(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        pss_id=pss_id,
+        snap_id=snap_id,
+        iof_count=2,
+        icf_count=0,
+    )
+    reader = make_findings_reader(
+        conn,
+        project_id=project_id,
+        extraction_run_id=run_id,
+        evidence_scope_id=scope_id,
+        grouping_groups=[
+            {
+                "group_id": "intervention:g01",
+                "member_finding_ids": [str(iof_ids[0])],
+            }
+        ],
+    )
+
+    result = reader({"kinds": ["iof"], "group_id": "intervention:g01"})
+    assert [finding["finding_id"] for finding in result["iof_findings"]] == [
+        str(iof_ids[0])
+    ]
+    with pytest.raises(ToolValidationError, match="<facet>:gNN"):
+        reader({"kinds": ["iof"], "group_id": "g01"})
+    with pytest.raises(ToolValidationError, match="unknown group_id"):
+        reader({"kinds": ["iof"], "group_id": "intervention:g99"})
+    with pytest.raises(ToolValidationError, match="<facet>:gNN"):
+        make_findings_reader(
+            conn,
+            project_id=project_id,
+            extraction_run_id=run_id,
+            evidence_scope_id=scope_id,
+            grouping_groups=[{"label": "Legacy", "member_finding_ids": [str(iof_ids[0])]}],
+        )
 
 
 def test_make_findings_reader_iof_only_run_reports_icf_not_extracted(

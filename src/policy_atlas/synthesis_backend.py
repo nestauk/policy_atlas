@@ -52,6 +52,7 @@ from policy_atlas.synthesis_tools import (
     MalformedEmissionError,
     ToolCallRequest,
     ToolExchange,
+    is_qualified_group_id,
 )
 from policy_atlas.usage import UsageResult, token_usage_from_provider
 
@@ -335,8 +336,11 @@ QUERY_FINDINGS_TOOL_SCHEMA: dict[str, Any] = {
                 "group_id": {
                     "type": "string",
                     "description": (
-                        "Restrict to a grouping group's member findings (members may "
-                        "span both kinds)."
+                        "Restrict to one facet group's member findings (members may "
+                        "span both kinds). Must be a facet-qualified id copied "
+                        "exactly from the grouping records, e.g. "
+                        "'intervention:g03' or 'barrier_theme:g01' — bare labels "
+                        "or unqualified ids are rejected."
                     ),
                 },
                 "effect_direction": {
@@ -1125,8 +1129,8 @@ def _group_ids_from_substrate(substrate: dict[str, Any]) -> list[str]:
         return []
     group_ids: list[str] = []
     for group in groups:
-        group_id = _record_id(group, "group_id", "id")
-        if group_id is not None:
+        group_id = _record_id(group, "group_id")
+        if group_id is not None and is_qualified_group_id(group_id):
             group_ids.append(group_id)
     return group_ids
 
@@ -1212,8 +1216,8 @@ def _first_theme_reference(
         groups = grouping.get("groups", [])
         if isinstance(groups, list):
             for group in groups:
-                group_id = _record_id(group, "group_id", "id")
-                if group_id is not None:
+                group_id = _record_id(group, "group_id")
+                if group_id is not None and is_qualified_group_id(group_id):
                     return "grouping", group_id
     return None
 

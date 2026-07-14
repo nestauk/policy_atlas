@@ -86,14 +86,22 @@ def test_stub_proposal_default_shape_and_group_assignment() -> None:
     backend = StubSynthesisBackend()
     proposal, usage = backend.propose_sections(
         intent="Housing\u0007 support for families",
-        substrate={"grouping": {"groups": [{"group_id": "g1"}, {"id": "g2"}]}},
+        substrate={
+            "grouping": {
+                "groups": [
+                    {"group_id": "intervention:g01"},
+                    # Unqualified/legacy ids are never carried into proposals.
+                    {"id": "g2"},
+                ]
+            }
+        },
     )
 
     assert usage is None
     assert isinstance(proposal, SectionProposalWire)
     assert len(proposal.sections) == 2
     assert proposal.sections[0].title == "Evidence on: Housing support for families"
-    assert proposal.sections[0].group_ids == ["g1", "g2"]
+    assert proposal.sections[0].group_ids == ["intervention:g01"]
     assert proposal.sections[1].title == "Coverage and gaps in the assembled evidence"
 
 

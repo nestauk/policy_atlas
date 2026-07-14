@@ -53,12 +53,22 @@ from policy_atlas.synthesis_backend import (
     SectionWire,
     StubSynthesisBackend,
     SynthesisBackend,
+    ThemePayloadWire,
 )
 from policy_atlas.synthesis_tools import ToolExchange
 from policy_atlas.synthesise import (
+    ClaimDraft,
+    CorpusProfile,
+    RejectedClaim,
+    SubstrateView,
     SynthesiseContext,
     SynthesiseFailure,
+    _grouping_summary,
+    _groups_unsectioned_by_facet,
     _load_findings,
+    _rollup_counts,
+    _validate_sections,
+    _validate_theme_claim,
     synthesise_scope,
 )
 from policy_atlas.usage import UsageResult
@@ -125,6 +135,288 @@ def _count(conn: Connection, table: Any, project_id: uuid.UUID) -> int:
     else:
         raise AssertionError(f"unsupported table for scoped count: {table}")
     return int(conn.execute(stmt).scalar_one())
+
+
+def _empty_substrate(grouping: dict[str, Any] | None) -> SubstrateView:
+    return SubstrateView(
+        characterisation=None,
+        selection=None,
+        extraction=None,
+        grouping=grouping,
+        corpus=CorpusProfile(
+            screened_docs=0,
+            ingested_docs=0,
+            appraised_docs=0,
+            appraised_ingested_docs=0,
+            appraised_pss_ids=set(),
+        ),
+        coverage_records={},
+        chunk_by_id={},
+        chunks_by_pss_id={},
+        finding_by_id={},
+        icf_finding_by_id={},
+        icf_profile_available=False,
+        basis_by_snapshot_id={},
+        selected_pss_ids=set(),
+    )
+
+
+def _single_facet_grouping_row() -> dict[str, Any]:
+    return {
+        "groups": {
+            "intervention": {
+                "groups": [
+                    {
+                        "group_id": "intervention:g01",
+                        "facet": "intervention",
+                        "label": "Alpha",
+                        "description": "Alpha services.",
+                        "member_values": ["Alpha"],
+                        "member_finding_ids": ["f1"],
+                        "size": 1,
+                        "direction_spread": {"increase": 1},
+                    }
+                ],
+                "ungrouped": {"member_finding_ids": []},
+                "no_value": {"member_finding_ids": []},
+            }
+        },
+        "counts": {"intervention": {"groups": 1, "ungrouped": 0, "no_value": 0}},
+        "flags": {"intervention": {"status": "succeeded"}},
+    }
+
+
+def _multi_facet_grouping_row() -> dict[str, Any]:
+    return {
+        "groups": {
+            "intervention": {
+                "groups": [
+                    {
+                        "group_id": "intervention:g01",
+                        "facet": "intervention",
+                        "label": "Alpha",
+                        "description": "Alpha services.",
+                        "member_values": ["Alpha"],
+                        "member_finding_ids": ["f1"],
+                        "size": 1,
+                        "direction_spread": {"increase": 1},
+                    }
+                ],
+                "ungrouped": {"member_finding_ids": []},
+                "no_value": {"member_finding_ids": ["f3"]},
+            },
+            "barrier_theme": {
+                "groups": [
+                    {
+                        "group_id": "barrier_theme:g01",
+                        "facet": "barrier_theme",
+                        "label": "Planning delays",
+                        "description": "Planning delays slow delivery.",
+                        "member_finding_ids": ["f2"],
+                        "size": 1,
+                        "direction_spread": None,
+                    }
+                ],
+                "ungrouped": {"member_finding_ids": []},
+            },
+        },
+        "counts": {
+            "intervention": {"groups": 1, "ungrouped": 0, "no_value": 1},
+            "barrier_theme": {"groups": 1, "ungrouped": 0},
+        },
+        "flags": {
+            "intervention": {"status": "succeeded"},
+            "barrier_theme": {"status": "succeeded"},
+        },
+    }
+
+
+def test_migrated_single_facet_grouping_row_consumed_by_qualified_read_paths() -> None:
+    summary = _grouping_summary(_single_facet_grouping_row())
+    assert summary is not None
+    substrate = _empty_substrate(summary)
+
+    assert summary["facets"] == ["intervention"]
+    assert summary["groups"][0]["group_id"] == "intervention:g01"
+    assert "no_value" in summary["residuals"]["intervention"]
+    assert substrate.grouping_group_ids == {"intervention:g01"}
+    assert set(substrate.group_by_id) == {"intervention:g01"}
+
+    sections, reasons, normalisations = _validate_sections(
+        SectionProposalWire(
+            sections=[
+                SectionWire(
+                    title="Alpha services",
+                    focus="Alpha intervention evidence.",
+                    group_ids=["intervention:g01"],
+                )
+            ]
+        ),
+        grouping_group_ids=substrate.grouping_group_ids,
+    )
+    assert [section.group_ids for section in sections] == [["intervention:g01"]]
+    assert reasons == []
+    assert normalisations == []
+
+    unsectioned_by_facet = _groups_unsectioned_by_facet(
+        substrate, assigned_groups={"intervention:g01"}
+    )
+    assert unsectioned_by_facet == {"intervention": 0}
+    counts = _rollup_counts(
+        all_claims=[],
+        section_blocks=[],
+        sections_total=1,
+        substrate=substrate,
+        groups_unsectioned=sum(unsectioned_by_facet.values()),
+        groups_unsectioned_by_facet=unsectioned_by_facet,
+        chunk_claims_rejected=0,
+        claims_rejected_structural=0,
+        gap_claims_degraded=0,
+        span_bind_failures=0,
+        unspanned_assertions=0,
+        unspanned_unbound=0,
+        tool_calls_total=0,
+    )
+    assert counts["groups_total"] == 1
+    assert counts["groups_unsectioned"] == 0
+    assert counts["groups_unsectioned_by_facet"] == {"intervention": 0}
+
+    draft = _validate_theme_claim(
+        ClaimWire(
+            claim_type="theme",
+            text="The intervention grouping identifies Alpha services.",
+            theme=ThemePayloadWire(
+                source="grouping",
+                referenced_ids=["intervention:g01"],
+                base="extracted",
+            ),
+        ),
+        claim_id="c1",
+        claim_index=0,
+        substrate=substrate,
+    )
+    assert isinstance(draft, ClaimDraft)
+
+
+def test_multi_facet_grouping_row_consumed_with_per_facet_honesty() -> None:
+    summary = _grouping_summary(_multi_facet_grouping_row())
+    assert summary is not None
+    substrate = _empty_substrate(summary)
+
+    assert substrate.grouping_group_ids == {"intervention:g01", "barrier_theme:g01"}
+    assert summary["facet"] is None
+    assert summary["facets"] == ["intervention", "barrier_theme"]
+    assert "no_value" in summary["residuals"]["intervention"]
+    assert "no_value" not in summary["residuals"]["barrier_theme"]
+
+    unsectioned_by_facet = _groups_unsectioned_by_facet(
+        substrate, assigned_groups={"intervention:g01"}
+    )
+    assert unsectioned_by_facet == {"barrier_theme": 1, "intervention": 0}
+    counts = _rollup_counts(
+        all_claims=[],
+        section_blocks=[],
+        sections_total=1,
+        substrate=substrate,
+        groups_unsectioned=sum(unsectioned_by_facet.values()),
+        groups_unsectioned_by_facet=unsectioned_by_facet,
+        chunk_claims_rejected=0,
+        claims_rejected_structural=0,
+        gap_claims_degraded=0,
+        span_bind_failures=0,
+        unspanned_assertions=0,
+        unspanned_unbound=0,
+        tool_calls_total=0,
+    )
+    assert counts["groups_total"] == 2
+    assert counts["groups_unsectioned"] == 1
+    assert counts["groups_unsectioned_by_facet"] == {
+        "barrier_theme": 1,
+        "intervention": 0,
+    }
+
+    draft = _validate_theme_claim(
+        ClaimWire(
+            claim_type="theme",
+            text="The barrier grouping identifies planning delays.",
+            theme=ThemePayloadWire(
+                source="grouping",
+                referenced_ids=["barrier_theme:g01"],
+                base="extracted",
+            ),
+        ),
+        claim_id="c2",
+        claim_index=0,
+        substrate=substrate,
+    )
+    assert isinstance(draft, ClaimDraft)
+
+    rejected = _validate_theme_claim(
+        ClaimWire(
+            claim_type="theme",
+            text="The grouping identifies an unknown theme.",
+            theme=ThemePayloadWire(
+                source="grouping",
+                referenced_ids=["outcome:g01"],
+                base="extracted",
+            ),
+        ),
+        claim_id="c3",
+        claim_index=1,
+        substrate=substrate,
+    )
+    assert isinstance(rejected, RejectedClaim)
+    assert rejected.reason == "theme_unknown_id"
+
+
+def test_section_validation_rejects_unqualified_group_ids_with_expected_form() -> None:
+    summary = _grouping_summary(_single_facet_grouping_row())
+    assert summary is not None
+    substrate = _empty_substrate(summary)
+
+    _sections, reasons, _normalisations = _validate_sections(
+        SectionProposalWire(
+            sections=[
+                SectionWire(
+                    title="Legacy group",
+                    focus="Legacy id should not resolve.",
+                    group_ids=["g01"],
+                )
+            ]
+        ),
+        grouping_group_ids=substrate.grouping_group_ids,
+    )
+
+    assert len(reasons) == 1
+    assert "group_ids_unknown" in reasons[0]
+    assert "<facet>:gNN" in reasons[0]
+
+
+def test_failed_facet_stays_visible_while_sibling_groups_resolve() -> None:
+    row = _multi_facet_grouping_row()
+    row["groups"]["outcome"] = {
+        "groups": [],
+        "ungrouped": {"member_finding_ids": []},
+        "no_value": {"member_finding_ids": []},
+    }
+    row["counts"]["outcome"] = {"groups": 0, "ungrouped": 0, "no_value": 0}
+    row["flags"]["outcome"] = {
+        "status": "failed",
+        "failure_class": "backend_error",
+        "groups_rejected": False,
+        "value_cap_exceeded": False,
+    }
+
+    summary = _grouping_summary(row)
+    assert summary is not None
+    substrate = _empty_substrate(summary)
+
+    assert summary["facets"] == ["intervention", "barrier_theme", "outcome"]
+    assert summary["facet_status"]["outcome"]["status"] == "failed"
+    assert substrate.grouping_group_ids == {"intervention:g01", "barrier_theme:g01"}
+    assert _groups_unsectioned_by_facet(
+        substrate, assigned_groups={"intervention:g01", "barrier_theme:g01"}
+    ) == {"barrier_theme": 0, "intervention": 0, "outcome": 0}
 
 
 def _project_annotations(conn: Connection, project_id: uuid.UUID) -> list[Any]:

@@ -399,6 +399,8 @@ _SECTION_KEYS_REQUIRED = {"title", "focus"}
 _SECTION_KEYS_WITH_GROUPS = {"title", "focus", "group_ids"}
 _BOOST_KEYS = {"columns", "tags", "appraisal_tier"}
 _TOKEN_RE = re.compile(r"[0-9A-Za-z]+")
+GROUP_ID_EXPECTED_FORM = "<facet>:gNN"
+_QUALIFIED_GROUP_ID_RE = re.compile(r"^[a-z][a-z0-9_]*:g[0-9]{2,}$")
 
 
 def _directive_fail(message: str) -> None:
@@ -407,6 +409,18 @@ def _directive_fail(message: str) -> None:
 
 def _tool_fail(message: str) -> None:
     raise ToolValidationError(message)
+
+
+def is_qualified_group_id(value: str) -> bool:
+    """Return whether ``value`` uses the facet-qualified group id grammar.
+
+    Args:
+        value: Candidate group id.
+
+    Returns:
+        True when the id has the expected ``<facet>:gNN`` shape.
+    """
+    return bool(_QUALIFIED_GROUP_ID_RE.fullmatch(value))
 
 
 def _bounded_string(value: Any, *, field: str) -> str:
@@ -484,6 +498,8 @@ def _validate_findings_tool_arguments(arguments: dict[str, Any]) -> None:
     raw_group_id = arguments.get("group_id")
     if raw_group_id is not None and (not isinstance(raw_group_id, str) or not raw_group_id):
         _tool_fail("group_id must be a non-empty string")
+    if isinstance(raw_group_id, str) and not is_qualified_group_id(raw_group_id):
+        _tool_fail(f"group_id must use expected form {GROUP_ID_EXPECTED_FORM}")
     raw_direction = arguments.get("effect_direction")
     if raw_direction is not None and raw_direction not in EFFECT_DIRECTIONS:
         _tool_fail("effect_direction is invalid")
@@ -582,9 +598,16 @@ def _parse_sections(
                     or has_control_character(group_id)
                 ):
                     _directive_fail("synthesis directive group_ids must be bounded text")
+                if not is_qualified_group_id(group_id):
+                    _directive_fail(
+                        "synthesis directive group_ids must use expected form "
+                        f"{GROUP_ID_EXPECTED_FORM}"
+                    )
                 if group_id not in grouping_group_ids:
                     _directive_fail(
-                        f"synthesis directive group_ids[{group_index}] is unknown"
+                        f"synthesis directive group_ids[{group_index}] is unknown; "
+                        f"expected form {GROUP_ID_EXPECTED_FORM} resolving to grouping "
+                        "records"
                     )
                 group_ids.append(group_id)
             section["group_ids"] = group_ids
@@ -1602,9 +1625,13 @@ def _group_member_ids(grouping_groups: list[dict[str, Any]] | None) -> dict[str,
         return {}
     resolved: dict[str, set[str]] = {}
     for group in grouping_groups:
-        raw_id = group.get("group_id") or group.get("id") or group.get("label")
+        raw_id = group.get("group_id")
         raw_members = group.get("member_finding_ids") or group.get("finding_ids")
-        if isinstance(raw_id, str) and isinstance(raw_members, list):
+        if not isinstance(raw_id, str) or not is_qualified_group_id(raw_id):
+            raise ToolValidationError(
+                f"grouping group ids must use expected form {GROUP_ID_EXPECTED_FORM}"
+            )
+        if isinstance(raw_members, list):
             resolved[raw_id] = {member for member in raw_members if isinstance(member, str)}
     return resolved
 
@@ -1704,8 +1731,13 @@ def make_findings_reader(
                 _tool_fail("group_id requires grouping")
             if not isinstance(group_id, str) or not group_id:
                 _tool_fail("group_id must be a string")
+            if not is_qualified_group_id(group_id):
+                _tool_fail(f"group_id must use expected form {GROUP_ID_EXPECTED_FORM}")
             if group_id not in group_members:
-                _tool_fail("unknown group_id")
+                _tool_fail(
+                    f"unknown group_id; expected form {GROUP_ID_EXPECTED_FORM} "
+                    "resolving to grouping records"
+                )
             group_filter = group_members[group_id]
 
         effect_direction = arguments.get("effect_direction")
@@ -1847,30 +1879,56 @@ def _themes_summary(themes_payload: Any) -> dict[str, Any]:
 
 def _grouping_summary(groups_payload: Any) -> dict[str, Any]:
     if not isinstance(groups_payload, dict):
-        return {"groups": [], "residuals": {}}
-    raw_groups = groups_payload.get("groups")
+        return {"groups": [], "residuals": {}, "facets": []}
+    if isinstance(groups_payload.get("groups"), list):
+        raise ToolValidationError(
+            "grouping groups must be facet-keyed with group ids using expected "
+            f"form {GROUP_ID_EXPECTED_FORM}"
+        )
     groups: list[dict[str, Any]] = []
-    if isinstance(raw_groups, list):
-        for item in raw_groups:
+    residuals_by_facet: dict[str, dict[str, Any]] = {}
+    facets: list[str] = []
+    for facet, facet_payload in groups_payload.items():
+        if not isinstance(facet, str) or not isinstance(facet_payload, dict):
+            continue
+        facet_groups = facet_payload.get("groups")
+        if not isinstance(facet_groups, list):
+            continue
+        facets.append(facet)
+        for item in facet_groups:
             if not isinstance(item, dict):
                 continue
-            members = item.get("member_finding_ids", [])
+            group = {**item, "facet": item.get("facet", facet)}
+            group_id = group.get("group_id")
+            if not isinstance(group_id, str) or not is_qualified_group_id(group_id):
+                raise ToolValidationError(
+                    f"grouping group ids must use expected form {GROUP_ID_EXPECTED_FORM}"
+                )
+            if group_id.split(":", 1)[0] != facet:
+                raise ToolValidationError(
+                    "grouping group id facet must match its payload facet; "
+                    f"expected form {GROUP_ID_EXPECTED_FORM}"
+                )
+            members = group.get("member_finding_ids", [])
             if not isinstance(members, list):
                 members = []
             groups.append({
-                "group_id": item.get("group_id") or item.get("label"),
-                "label": item.get("label"),
-                "description": item.get("description"),
-                "size": item.get("size", len(members)),
-                "direction_spread": item.get("direction_spread", {}),
+                "group_id": group_id,
+                "facet": group.get("facet", facet),
+                "label": group.get("label"),
+                "description": group.get("description"),
+                "size": group.get("size", len(members)),
+                "direction_spread": group.get("direction_spread", {}),
                 "member_finding_ids": members,
             })
+        facet_residuals = {"ungrouped": facet_payload.get("ungrouped")}
+        if "no_value" in facet_payload:
+            facet_residuals["no_value"] = facet_payload.get("no_value")
+        residuals_by_facet[facet] = facet_residuals
     return {
         "groups": groups,
-        "residuals": {
-            "ungrouped": groups_payload.get("ungrouped"),
-            "no_value": groups_payload.get("no_value"),
-        },
+        "residuals": residuals_by_facet,
+        "facets": facets,
     }
 
 

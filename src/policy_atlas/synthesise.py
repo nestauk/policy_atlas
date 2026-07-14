@@ -75,6 +75,7 @@ from policy_atlas.synthesis_backend import (
 )
 from policy_atlas.synthesis_tools import (
     ARTEFACT_TITLE_MAX,
+    GROUP_ID_EXPECTED_FORM,
     REASONING_CLAIMS_MAX,
     REPAIR_ROUND_CAP,
     RETRIEVAL_UNIT_CAP,
@@ -92,6 +93,7 @@ from policy_atlas.synthesis_tools import (
     build_section_tools,
     chunk_text_basis_case,
     gathered_ids,
+    is_qualified_group_id,
     make_findings_reader,
     make_lookup_reader,
     parse_synthesis_directive,
@@ -457,9 +459,7 @@ class SubstrateView:
             return set()
         ids: set[str] = set()
         for group in _grouping_records(self.grouping):
-            group_id = _group_id(group)
-            if group_id is not None:
-                ids.add(group_id)
+            ids.add(_required_group_id(group))
         return ids
 
     @property
@@ -469,9 +469,7 @@ class SubstrateView:
             return {}
         result: dict[str, dict[str, Any]] = {}
         for group in _grouping_records(self.grouping):
-            group_id = _group_id(group)
-            if group_id is not None:
-                result[group_id] = group
+            result[_required_group_id(group)] = group
         return result
 
     @property
@@ -758,11 +756,26 @@ def _json_sha256(value: Any) -> str:
 def _group_id(group: Any) -> str | None:
     if not isinstance(group, dict):
         return None
-    for key in ("group_id", "id", "label"):
-        value = group.get(key)
-        if isinstance(value, str) and value:
-            return value
-    return None
+    value = group.get("group_id")
+    if not isinstance(value, str) or not value:
+        return None
+    return value if is_qualified_group_id(value) else None
+
+
+def _required_group_id(group: Any) -> str:
+    group_id = _group_id(group)
+    if group_id is None:
+        raise SynthesiseFailure(
+            f"grouping_group_id_invalid: expected form {GROUP_ID_EXPECTED_FORM}"
+        )
+    if isinstance(group, dict):
+        facet = group.get("facet")
+        if isinstance(facet, str) and group_id.split(":", 1)[0] != facet:
+            raise SynthesiseFailure(
+                "grouping_group_id_invalid: group id facet must match its "
+                f"payload facet; expected form {GROUP_ID_EXPECTED_FORM}"
+            )
+    return group_id
 
 
 def _grouping_records(payload: Any) -> list[dict[str, Any]]:
@@ -1487,12 +1500,13 @@ def _grouping_summary(row: Mapping[str, Any] | None) -> dict[str, Any] | None:
     groups: list[dict[str, Any]] = []
     for facet, facet_payload in facet_payloads:
         for item in _grouping_records({facet: facet_payload}):
+            group_id = _required_group_id(item)
             members = item.get("member_finding_ids", [])
             if not isinstance(members, list):
                 members = []
             groups.append(
                 {
-                    "group_id": _group_id(item),
+                    "group_id": group_id,
                     "facet": item.get("facet", facet),
                     "label": item.get("label"),
                     "description": item.get("description"),
@@ -1501,19 +1515,32 @@ def _grouping_summary(row: Mapping[str, Any] | None) -> dict[str, Any] | None:
                     "member_finding_ids": sorted(str(member) for member in members),
                 }
             )
-    residuals = {
-        facet: {
-            "ungrouped": facet_payload.get("ungrouped", {}),
-            "no_value": facet_payload.get("no_value", {}),
-        }
-        for facet, facet_payload in facet_payloads
-    }
+    residuals: dict[str, dict[str, Any]] = {}
+    for facet, facet_payload in facet_payloads:
+        facet_residuals = {"ungrouped": facet_payload.get("ungrouped", {})}
+        if "no_value" in facet_payload:
+            facet_residuals["no_value"] = facet_payload.get("no_value", {})
+        residuals[facet] = facet_residuals
     facets = [facet for facet, _ in facet_payloads]
+    raw_counts = row.get("counts")
+    facet_counts = {
+        facet: raw_counts.get(facet, {})
+        for facet in facets
+        if isinstance(raw_counts, dict) and isinstance(raw_counts.get(facet), dict)
+    }
+    raw_flags = row.get("flags")
+    facet_status = {
+        facet: raw_flags.get(facet, {})
+        for facet in facets
+        if isinstance(raw_flags, dict) and isinstance(raw_flags.get(facet), dict)
+    }
     return {
         "facet": facets[0] if len(facets) == 1 else None,
         "facets": facets,
         "groups": groups,
         "residuals": residuals,
+        "counts": facet_counts,
+        "facet_status": facet_status,
     }
 
 
@@ -1635,8 +1662,9 @@ def _validate_sections(
             if unknown:
                 reasons.append(
                     f"sections[{index}].group_ids_unknown: {unknown[:5]} are "
-                    "not supplied facet group ids — copy ids exactly from the "
-                    "grouping records, or omit group_ids"
+                    "not supplied qualified facet group ids — use expected form "
+                    f"{GROUP_ID_EXPECTED_FORM}, copy ids exactly from the grouping "
+                    "records, or omit group_ids"
                 )
         parsed.append(SectionSpec(title=title, focus=focus, group_ids=group_ids))
     return parsed, reasons, normalisations
@@ -3129,6 +3157,27 @@ def _computed_spread(section: SectionSpec, substrate: SubstrateView) -> dict[str
     return None
 
 
+def _groups_unsectioned_by_facet(
+    substrate: SubstrateView, assigned_groups: set[str]
+) -> dict[str, int]:
+    if substrate.grouping is None:
+        return {}
+    counts: Counter[str] = Counter()
+    raw_facets = substrate.grouping.get("facets", [])
+    if isinstance(raw_facets, list):
+        for facet in raw_facets:
+            if isinstance(facet, str):
+                counts.setdefault(facet, 0)
+    for group_id, group in substrate.group_by_id.items():
+        if group_id in assigned_groups:
+            continue
+        facet = group.get("facet")
+        if not isinstance(facet, str) or not facet:
+            facet = group_id.split(":", 1)[0]
+        counts[facet] += 1
+    return dict(sorted(counts.items()))
+
+
 def _gathered_hash(ids: dict[str, set[str]]) -> str:
     return _json_sha256({key: sorted(value) for key, value in sorted(ids.items())})
 
@@ -3251,6 +3300,7 @@ def _rollup_counts(
     sections_total: int,
     substrate: SubstrateView,
     groups_unsectioned: int | None,
+    groups_unsectioned_by_facet: Mapping[str, int] | None,
     chunk_claims_rejected: int,
     claims_rejected_structural: int,
     gap_claims_degraded: int,
@@ -3299,6 +3349,7 @@ def _rollup_counts(
     if substrate.grouping is not None:
         counts["groups_total"] = len(substrate.grouping_group_ids)
         counts["groups_unsectioned"] = groups_unsectioned or 0
+        counts["groups_unsectioned_by_facet"] = dict(groups_unsectioned_by_facet or {})
     return counts
 
 
@@ -3719,7 +3770,8 @@ def synthesise_scope(
     ]
 
     assigned_groups = {group_id for section in sections for group_id in section.group_ids}
-    groups_unsectioned = len(substrate.grouping_group_ids - assigned_groups)
+    groups_unsectioned_by_facet = _groups_unsectioned_by_facet(substrate, assigned_groups)
+    groups_unsectioned = sum(groups_unsectioned_by_facet.values())
 
     findings_reader = (
         make_findings_reader(
@@ -4004,6 +4056,7 @@ def synthesise_scope(
             "source": section_source,
             "sections": [section.as_seed() for section in sections],
             "groups_unsectioned": groups_unsectioned,
+            "groups_unsectioned_by_facet": groups_unsectioned_by_facet,
             # Deterministic proposal normalisations (visible, never silent):
             # overlong title/focus truncation; group_ids stripped when no
             # grouping is referenced (the rev 8 M5 clamp-over-reject posture).
@@ -4027,6 +4080,7 @@ def synthesise_scope(
         sections_total=len(sections),
         substrate=substrate,
         groups_unsectioned=groups_unsectioned,
+        groups_unsectioned_by_facet=groups_unsectioned_by_facet,
         chunk_claims_rejected=total_chunk_rejections,
         claims_rejected_structural=total_structural_rejections,
         gap_claims_degraded=total_gap_degraded,
