@@ -31,7 +31,7 @@ from policy_atlas.classify import ClassifyContext, classify_sources
 from policy_atlas.grounding import content_hash
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
-from policy_atlas.plan import Plan, compile
+from policy_atlas.run_spec import Plan, compile
 from policy_atlas.schema import (
     chunk,
     metadata,
@@ -669,7 +669,7 @@ def test_duplicate_backend_names_rejected_upfront(conn: Connection) -> None:
 
 def test_doi_guard_normalizes_persisted_uploaded_doi(conn: Connection) -> None:
     """An uploaded snapshot with a prefixed/mixed-case DOI still blocks re-acquisition."""
-    from policy_atlas.ingest import ingest_upload
+    from policy_atlas.ingest_upload import ingest_upload
 
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)

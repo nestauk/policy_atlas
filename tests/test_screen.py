@@ -13,7 +13,7 @@ import policy_atlas
 from policy_atlas import events
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
-from policy_atlas.plan import Plan, compile
+from policy_atlas.run_spec import Plan, compile
 from policy_atlas.schema import (
     DIRECTIVE_STRING_MAX,
     evidence_scope,

@@ -21,22 +21,22 @@ from openai.types.chat import ChatCompletionMessageParam
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
-import policy_atlas.extract_prompt as extract_prompt
+import policy_atlas.iof_prompt as iof_prompt
 from policy_atlas import extract as extract_module
 from policy_atlas.extract import (
     ExtractContext,
     extract_scope,
     extraction_fingerprint,
 )
-from policy_atlas.extract_prompt import (
+from policy_atlas.extraction_backend import StubExtractionBackend
+from policy_atlas.iof_prompt import (
     EXTRACT_SYSTEM_PROMPT,
     EXTRACT_USER_TEMPLATE,
     build_extract_messages,
     envelope_json,
     segments_json,
 )
-from policy_atlas.extraction_backend import StubExtractionBackend
-from policy_atlas.extraction_records import (
+from policy_atlas.iof_records import (
     ExtractionResponse,
     ExtractionWindowPayload,
     IOFRecordWire,
@@ -642,14 +642,14 @@ def test_repeated_quote_grounds_to_successive_occurrences(conn: Connection) -> N
 def test_preflight_rejects_non_verbatim_example(monkeypatch: pytest.MonkeyPatch) -> None:
     """A doctored few-shot example whose quote is not verbatim fails loudly at pre-flight."""
     # The real module imported fine (its own pre-flight ran at import).
-    assert extract_prompt.PROMPT_VERSION == "extract_iof_v7"
+    assert iof_prompt.PROMPT_VERSION == "extract_iof_v7"
 
-    doctored = extract_prompt.EXAMPLE_RESPONSE.model_copy(deep=True)
+    doctored = iof_prompt.EXAMPLE_RESPONSE.model_copy(deep=True)
     doctored.findings[0].anchors[0].quote = "this quote is absent from the example segment text"
-    monkeypatch.setattr(extract_prompt, "EXAMPLE_RESPONSE", doctored)
+    monkeypatch.setattr(iof_prompt, "EXAMPLE_RESPONSE", doctored)
 
     with pytest.raises(RuntimeError, match="not verbatim"):
-        extract_prompt._preflight_validate_example()
+        iof_prompt._preflight_validate_example()
 
 
 # --- 8. Socket-deny round trip ---------------------------------------------

@@ -6,7 +6,6 @@ from typing import cast
 
 import pytest
 
-from policy_atlas.grouping import GroupingDoc
 from policy_atlas.ranking import (
     SCORE_MAX,
     SCORE_MIN,
@@ -15,6 +14,7 @@ from policy_atlas.ranking import (
     StubRankingBackend,
     validate_ranked,
 )
+from policy_atlas.theme_grouping import GroupingDoc
 
 
 def _batch(size: int) -> list[GroupingDoc]:

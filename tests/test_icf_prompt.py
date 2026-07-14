@@ -17,8 +17,6 @@ import pytest
 from openai.types.chat import ChatCompletionMessageParam
 
 from policy_atlas.extract import _icf_judge_payload_entry
-from policy_atlas.extract_prompt import envelope_json
-from policy_atlas.extraction_records import ExtractionWindowPayload
 from policy_atlas.finding_vetter import (
     ICF_FINDING_VETTER_MODEL,
     ICF_FINDING_VETTER_PROMPT_VERSION,
@@ -29,7 +27,7 @@ from policy_atlas.finding_vetter import (
     build_icf_judge_messages,
     validate_icf_verdict_coverage,
 )
-from policy_atlas.implementation_context_prompt import (
+from policy_atlas.icf_prompt import (
     ICF_EXAMPLE_RESPONSE,
     ICF_EXAMPLE_SEGMENT_ID,
     ICF_EXAMPLE_SEGMENT_TEXT,
@@ -39,7 +37,9 @@ from policy_atlas.implementation_context_prompt import (
     _preflight_validate_example,
     build_icf_extract_messages,
 )
-from policy_atlas.implementation_context_records import ICFRecordWire
+from policy_atlas.icf_records import ICFRecordWire
+from policy_atlas.iof_prompt import envelope_json
+from policy_atlas.iof_records import ExtractionWindowPayload
 from policy_atlas.quote_verify import QuoteMatcher, build_basis, validate_icf_record
 from tests.helpers import make_icf_wire_record
 
@@ -134,7 +134,7 @@ def test_few_shot_preflight_binding() -> None:
 
     tampered = ICF_EXAMPLE_RESPONSE.model_copy(deep=True)
     tampered.findings[0].anchors[0].quote = "this quote is not in the example"
-    import policy_atlas.implementation_context_prompt as icp
+    import policy_atlas.icf_prompt as icp
 
     original = icp.ICF_EXAMPLE_RESPONSE
     icp.ICF_EXAMPLE_RESPONSE = tampered

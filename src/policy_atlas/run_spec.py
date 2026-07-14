@@ -64,12 +64,4 @@ class Config(_ValidatedRunSpec):
 
 def compile(plan: Plan) -> Config:  # noqa: A001
     """Compile a validated Plan into a machine-level Config."""
-    return Config(
-        component=plan.component,
-        search_backend_scope=plan.search_backend_scope,
-        evidence_scope_id=plan.evidence_scope_id,
-        characterisation_run_id=plan.characterisation_run_id,
-        selection_run_id=plan.selection_run_id,
-        extraction_run_id=plan.extraction_run_id,
-        grouping_run_id=plan.grouping_run_id,
-    )
+    return Config.model_validate(plan.model_dump())

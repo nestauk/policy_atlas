@@ -12,9 +12,9 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas import tracing
-from policy_atlas.grouping import GroupingDoc, records_json
 from policy_atlas.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.tags import has_control_character
+from policy_atlas.theme_grouping import GroupingDoc, records_json
 from policy_atlas.usage import UsageResult, usage_metadata
 
 log = structlog.get_logger()

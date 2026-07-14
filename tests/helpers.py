@@ -19,7 +19,7 @@ from policy_atlas.search_prompts import (
 from policy_atlas.usage import UsageResult
 
 if TYPE_CHECKING:
-    from policy_atlas.implementation_context_records import ICFRecordWire
+    from policy_atlas.icf_records import ICFRecordWire
 
 EVIDENCE_TYPE = "RCTs and Quasi-Experimental Studies"
 IOF_PROFILE_ID = "eb_iof_base_v1"
@@ -82,8 +82,8 @@ def executed_calls_for(
 
 def make_icf_wire_record(**overrides: Any) -> "ICFRecordWire":
     """Build an ICF wire record with sane defaults; override per test."""
-    from policy_atlas.extraction_records import IOFAnchorWire
-    from policy_atlas.implementation_context_records import ICFRecordWire
+    from policy_atlas.icf_records import ICFRecordWire
+    from policy_atlas.iof_records import IOFAnchorWire
 
     values: dict[str, Any] = {
         "context_type": "barrier",

@@ -1,13 +1,13 @@
 """The ``extract_icf_v2`` prompt — the ICF profile's extraction call.
 
-The second findings-layer prompt, parallel to ``extract_prompt``'s IOF surface:
+The second findings-layer prompt, parallel to ``iof_prompt``'s IOF surface:
 implementation-context findings (mechanisms, barriers, enablers, conditions,
 delivery processes, adaptations, fidelity) — the "how / why / under what
 conditions" half of the evidence, never blended with effect claims.
 
 Lead-authored and versioned; recorded in ICF extraction provenance. The
 envelope is fenced as one id-keyed JSON data object from day one (the 020
-pattern — reusing ``extract_prompt.envelope_json`` / ``segments_json`` so the
+pattern — reusing ``iof_prompt.envelope_json`` / ``segments_json`` so the
 fencing implementation cannot drift between profiles). Field documentation is
 generated from the ICF wire models, and the few-shot example is pre-flight
 validated at import: a demonstration quote that is not verbatim in its own
@@ -23,13 +23,13 @@ import json
 
 from openai.types.chat import ChatCompletionMessageParam
 
-from policy_atlas.extract_prompt import envelope_json, segments_json
-from policy_atlas.extraction_records import ExtractionWindowPayload, IOFAnchorWire
-from policy_atlas.implementation_context_records import (
+from policy_atlas.icf_records import (
     ICFExtractionResponse,
     ICFRecordWire,
     render_field_docs,
 )
+from policy_atlas.iof_prompt import envelope_json, segments_json
+from policy_atlas.iof_records import ExtractionWindowPayload, IOFAnchorWire
 
 ICF_PROMPT_VERSION = "extract_icf_v2"
 

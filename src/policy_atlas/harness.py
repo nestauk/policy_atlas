@@ -46,7 +46,6 @@ from policy_atlas.group import (
     StubGroupClusteringBackend,
     group_findings,
 )
-from policy_atlas.grouping import StubThemeGroupingBackend, ThemeGroupingBackend
 from policy_atlas.inference import InferenceProvider
 from policy_atlas.ingest_full_text import (
     DocumentFetcher,
@@ -54,8 +53,8 @@ from policy_atlas.ingest_full_text import (
     IngestFullTextContext,
     ingest_full_text_sources,
 )
-from policy_atlas.plan import Config
 from policy_atlas.ranking import RankingBackend
+from policy_atlas.run_spec import Config
 from policy_atlas.schema import evidence_scope, runs
 from policy_atlas.screen import ScreenContext, screen_sources
 from policy_atlas.screening_backend import ScreeningBackend, StubScreeningBackend
@@ -64,6 +63,7 @@ from policy_atlas.search_loop import run_search
 from policy_atlas.select import SelectContext, select_scope
 from policy_atlas.synthesis_backend import StubSynthesisBackend, SynthesisBackend
 from policy_atlas.synthesise import SynthesiseContext, SynthesiseFailure, synthesise_scope
+from policy_atlas.theme_grouping import StubThemeGroupingBackend, ThemeGroupingBackend
 
 log = structlog.get_logger()
 

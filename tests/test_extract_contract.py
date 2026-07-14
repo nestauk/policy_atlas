@@ -25,8 +25,8 @@ from sqlalchemy.exc import IntegrityError
 
 from policy_atlas import extract
 from policy_atlas.extract import ExtractContext, extract_scope, extraction_fingerprint
-from policy_atlas.extract_prompt import EXTRACT_SYSTEM_PROMPT
 from policy_atlas.extraction_backend import StubExtractionBackend
+from policy_atlas.iof_prompt import EXTRACT_SYSTEM_PROMPT
 from policy_atlas.schema import (
     chunk,
     extraction_result,

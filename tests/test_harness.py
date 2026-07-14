@@ -10,12 +10,12 @@ from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas import events
 from policy_atlas.grounding_judge import StubGroundingJudgeBackend
-from policy_atlas.grouping import StubThemeGroupingBackend
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
-from policy_atlas.plan import Plan, compile
+from policy_atlas.run_spec import Plan, compile
 from policy_atlas.schema import artefact, project, runs
 from policy_atlas.synthesis_backend import StubSynthesisBackend
+from policy_atlas.theme_grouping import StubThemeGroupingBackend
 from tests.helpers import (
     delete_project_data,
     now,

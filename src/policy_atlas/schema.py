@@ -638,7 +638,7 @@ _CONTEXT_TYPES_SQL = ", ".join(f"'{t}'" for t in CONTEXT_TYPES)
 _CLAIM_LEVELS_SQL = ", ".join(f"'{lv}'" for lv in CLAIM_LEVELS)
 _CLAIM_BASES_SQL = ", ".join(f"'{b}'" for b in CLAIM_BASES)
 _CONTEXT_LEVELS_SQL = ", ".join(f"'{lv}'" for lv in CONTEXT_LEVELS)
-# Keep this schema literal in sync with extract_prompt.UNCLASSIFIED_EVIDENCE_TYPE;
+# Keep this schema literal in sync with iof_prompt.UNCLASSIFIED_EVIDENCE_TYPE;
 # schema.py deliberately does not import prompt modules.
 _SER_UNCLASSIFIED_EVIDENCE_TYPE = "Unclassified"
 _SER_EVIDENCE_TYPES_SQL_LIST = ", ".join(

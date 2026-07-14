@@ -11,7 +11,7 @@ import structlog
 from sqlalchemy import exists, func, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas import grouping
+from policy_atlas import theme_grouping
 from policy_atlas.clustering_engine import (
     AssignmentOutput,
     ClusteringBackend,
@@ -24,12 +24,6 @@ from policy_atlas.clustering_engine import (
     cluster_units,
 )
 from policy_atlas.embeddings import EMBEDDING_PROFILE, UNIT_POLICY
-from policy_atlas.grouping import (
-    UNCLUSTERED,
-    GroupingDoc,
-    Theme,
-    ThemeGroupingBackend,
-)
 from policy_atlas.schema import (
     characterisation_result,
     chunk_embedding,
@@ -45,6 +39,12 @@ from policy_atlas.schema import (
 )
 from policy_atlas.screen import effective_screen_rows
 from policy_atlas.tags import insert_source_tags
+from policy_atlas.theme_grouping import (
+    UNCLUSTERED,
+    GroupingDoc,
+    Theme,
+    ThemeGroupingBackend,
+)
 from policy_atlas.usage import UsageResult
 
 log = structlog.get_logger()
@@ -486,17 +486,17 @@ def _doc_for_grouping(source: ScreenedSource) -> GroupingDoc:
 
 
 def _theme_bounds(n: int) -> tuple[int, int]:
-    min_themes = grouping.MIN_THEMES if n >= grouping.MIN_THEMES else 1
-    max_themes = min(n, grouping.MAX_THEMES)
+    min_themes = theme_grouping.MIN_THEMES if n >= theme_grouping.MIN_THEMES else 1
+    max_themes = min(n, theme_grouping.MAX_THEMES)
     return min_themes, max_themes
 
 
 def _call_budget(n: int) -> tuple[int, int, int]:
     plan = call_budget_for_unit_count(
         n,
-        assignment_batch_size=grouping.BATCH_SIZE,
-        discovery_retry_cap=grouping.DISCOVERY_RETRY_CAP,
-        assignment_repair_cap=grouping.ASSIGNMENT_REPAIR_CAP,
+        assignment_batch_size=theme_grouping.BATCH_SIZE,
+        discovery_retry_cap=theme_grouping.DISCOVERY_RETRY_CAP,
+        assignment_repair_cap=theme_grouping.ASSIGNMENT_REPAIR_CAP,
     )
     return plan.batch_count, plan.baseline, plan.maximum
 
@@ -528,17 +528,17 @@ def _characterise_clustering_policy(*, min_themes: int, max_themes: int) -> Clus
     return ClusteringPolicy(
         min_labels=min_themes,
         max_labels=max_themes,
-        assignment_batch_size=grouping.BATCH_SIZE,
-        discovery_retry_cap=grouping.DISCOVERY_RETRY_CAP,
-        assignment_repair_cap=grouping.ASSIGNMENT_REPAIR_CAP,
+        assignment_batch_size=theme_grouping.BATCH_SIZE,
+        discovery_retry_cap=theme_grouping.DISCOVERY_RETRY_CAP,
+        assignment_repair_cap=theme_grouping.ASSIGNMENT_REPAIR_CAP,
         residual_label=UNCLUSTERED,
         unresolved_policy="fail",
-        label_max=grouping.THEME_NAME_MAX,
-        description_max=grouping.THEME_DESC_MAX,
+        label_max=theme_grouping.THEME_NAME_MAX,
+        description_max=theme_grouping.THEME_DESC_MAX,
         forbidden_label_reason=_forbidden_theme_reason,
         label_noun="theme",
         log_event_prefix="characterise",
-        max_concurrent_batches=grouping.MAX_CONCURRENT_BATCHES,
+        max_concurrent_batches=theme_grouping.MAX_CONCURRENT_BATCHES,
     )
 
 
@@ -573,15 +573,15 @@ def _grouping_provenance(
     repair_calls_used: int,
     discovery_rejections: list[str],
 ) -> dict[str, Any]:
-    model = grouping.DISCOVERY_MODEL if backend.mode == "live" else "stub"
-    assignment_model = grouping.ASSIGNMENT_MODEL if backend.mode == "live" else "stub"
+    model = theme_grouping.DISCOVERY_MODEL if backend.mode == "live" else "stub"
+    assignment_model = theme_grouping.ASSIGNMENT_MODEL if backend.mode == "live" else "stub"
     return {
-        "prompt_version": grouping.PROMPT_VERSION,
+        "prompt_version": theme_grouping.PROMPT_VERSION,
         "discovery_model": model,
         "assignment_model": assignment_model,
-        "batch_size": grouping.BATCH_SIZE,
-        "discovery_retry_cap": grouping.DISCOVERY_RETRY_CAP,
-        "assignment_repair_cap": grouping.ASSIGNMENT_REPAIR_CAP,
+        "batch_size": theme_grouping.BATCH_SIZE,
+        "discovery_retry_cap": theme_grouping.DISCOVERY_RETRY_CAP,
+        "assignment_repair_cap": theme_grouping.ASSIGNMENT_REPAIR_CAP,
         "discovery_retries_used": discovery_retries_used,
         "discovery_rejections": discovery_rejections,
         "repair_calls_used": repair_calls_used,

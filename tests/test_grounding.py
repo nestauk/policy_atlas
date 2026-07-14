@@ -14,7 +14,7 @@ from policy_atlas.grounding import (
     quote_present,
 )
 from policy_atlas.inference import StubEchoProvider
-from policy_atlas.ingest import ingest_upload
+from policy_atlas.ingest_upload import ingest_upload
 from policy_atlas.schema import annotation, artefact, block, project
 from policy_atlas.schema import chunk as chunk_table
 from policy_atlas.schema import citation as citation_table

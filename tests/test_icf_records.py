@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from typing import get_args
 
-from policy_atlas.extraction_records import IOFAnchorWire
-from policy_atlas.implementation_context_records import (
+from policy_atlas.icf_records import (
     PROFILE_ID,
     SCHEMA_VERSION,
     ClaimBasis,
@@ -16,6 +15,7 @@ from policy_atlas.implementation_context_records import (
     ICFRecordWire,
     render_field_docs,
 )
+from policy_atlas.iof_records import IOFAnchorWire
 from policy_atlas.quote_verify import validate_icf_record
 from policy_atlas.schema import CLAIM_BASES, CLAIM_LEVELS, CONTEXT_LEVELS, CONTEXT_TYPES
 from tests.helpers import make_icf_wire_record

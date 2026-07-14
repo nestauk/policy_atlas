@@ -232,6 +232,7 @@ def appraise_sources(
     ).scalar_one()
 
     by_score: dict[int, int] = {}
+    appraisal_rows: list[dict[str, Any]] = []
 
     for pss_id, snap_id, evidence_type in appraisable_rows:
         result = AppraiseResult(
@@ -239,17 +240,17 @@ def appraise_sources(
             rubric_version=DEFAULT_RUBRIC_VERSION,
         )
 
-        conn.execute(
-            source_appraisal_result.insert().values(
-                source_appraisal_result_id=uuid.uuid4(),
-                evidence_scope_id=context.scope_id,
-                project_source_snapshot_id=pss_id,
-                project_id=project_id,
-                appraised_by_run_id=run_id,
-                quality_score=result.quality_score,
-                rubric_version=result.rubric_version,
-                appraised_at=datetime.now(UTC),
-            )
+        appraisal_rows.append(
+            {
+                "source_appraisal_result_id": uuid.uuid4(),
+                "evidence_scope_id": context.scope_id,
+                "project_source_snapshot_id": pss_id,
+                "project_id": project_id,
+                "appraised_by_run_id": run_id,
+                "quality_score": result.quality_score,
+                "rubric_version": result.rubric_version,
+                "appraised_at": datetime.now(UTC),
+            }
         )
 
         events.append(
@@ -267,6 +268,13 @@ def appraise_sources(
         )
 
         by_score[result.quality_score] = by_score.get(result.quality_score, 0) + 1
+
+    # One bulk INSERT for all appraisal rows (deterministic rubric lookup, no
+    # per-row DB round trip needed); event-log appends stay per-row above for
+    # sequence-uniqueness. Guarded: an empty executemany raises where the loop
+    # legitimately no-op'd (no appraisable rows this run).
+    if appraisal_rows:
+        conn.execute(source_appraisal_result.insert(), appraisal_rows)
 
     return {
         "appraised": len(appraisable_rows),

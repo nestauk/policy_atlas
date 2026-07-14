@@ -19,11 +19,11 @@ from typing import Any, Literal
 
 from langfuse import Langfuse
 
-from policy_atlas import embeddings, grouping
+from policy_atlas import embeddings, theme_grouping
 from policy_atlas.embeddings import EmbeddingBackend
-from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
-from policy_atlas.grouping import GroupingDoc, Theme, ThemeGroupingBackend
-from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
+from policy_atlas.icf_records import PROFILE_ID as ICF_PROFILE_ID
+from policy_atlas.iof_records import PROFILE_ID as IOF_PROFILE_ID
+from policy_atlas.theme_grouping import GroupingDoc, Theme, ThemeGroupingBackend
 from policy_atlas.usage import UsageResult, usage_metadata
 
 _ObservationType = Literal["embedding", "generation", "span"]
@@ -276,13 +276,13 @@ class TracedThemeGroupingBackend:
                 input={"intent": intent, "records": list(docs)},
                 output={"themes": themes},
                 metadata={
-                    "prompt_version": grouping.PROMPT_VERSION,
+                    "prompt_version": theme_grouping.PROMPT_VERSION,
                     "doc_count": len(docs),
                     "min_themes": min_themes,
                     "max_themes": max_themes,
                     **usage_metadata(usage),
                 },
-                model=grouping.DISCOVERY_MODEL,
+                model=theme_grouping.DISCOVERY_MODEL,
             )
             return themes, usage
 
@@ -309,11 +309,11 @@ class TracedThemeGroupingBackend:
                 input={"themes": list(themes), "records": list(batch)},
                 output={"assignments": assignments},
                 metadata={
-                    "prompt_version": grouping.PROMPT_VERSION,
+                    "prompt_version": theme_grouping.PROMPT_VERSION,
                     "batch_size": len(batch),
                     **usage_metadata(usage),
                 },
-                model=grouping.ASSIGNMENT_MODEL,
+                model=theme_grouping.ASSIGNMENT_MODEL,
             )
             return assignments, usage
 

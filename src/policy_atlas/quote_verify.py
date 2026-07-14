@@ -27,7 +27,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from policy_atlas.extraction_records import (
+from policy_atlas.icf_records import ICFRecord, ICFRecordWire
+from policy_atlas.iof_records import (
     IOFAnchor,
     IOFRecord,
     IOFRecordWire,
@@ -35,7 +36,6 @@ from policy_atlas.extraction_records import (
     IOFStratum,
     IOFStratumWire,
 )
-from policy_atlas.implementation_context_records import ICFRecord, ICFRecordWire
 
 QUOTE_VERIFIER_VERSION = "qv_v1"
 FIELD_RULES_VERSION = "iof_rules_v3"

@@ -43,7 +43,7 @@ from policy_atlas.ingest_full_text import (
     ingest_full_text_sources,
     parse_and_segment,
 )
-from policy_atlas.plan import Plan, compile
+from policy_atlas.run_spec import Plan, compile
 from policy_atlas.schema import chunk as chunk_table
 from policy_atlas.schema import (
     event_log,
@@ -788,8 +788,7 @@ def test_summary_includes_attempted_bytes_and_wall_clock(
 def test_live_flag_never_silently_falls_back_to_fixture_replay() -> None:
     """A live-flagged run constructs the live fetcher, never FixtureFetcher —
     the decision-12 test-pinned invariant riding decision 2's one switch."""
-    from policy_atlas.fetch_live import LiveDocumentFetcher
-    from policy_atlas.skeleton import select_document_fetcher
+    from policy_atlas.fetch_live import LiveDocumentFetcher, select_document_fetcher
 
     live_fetcher = select_document_fetcher(True)
     assert isinstance(live_fetcher, LiveDocumentFetcher)

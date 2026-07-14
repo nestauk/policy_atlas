@@ -27,7 +27,6 @@ from policy_atlas.extraction_backend import ExtractionBackend
 from policy_atlas.finding_vetter import FindingVetterBackend, ICFFindingVetterBackend
 from policy_atlas.grounding_judge import GroundingJudgeBackend
 from policy_atlas.group import GroupClusteringBackendFactory
-from policy_atlas.grouping import ThemeGroupingBackend
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
 from policy_atlas.ingest_full_text import DocumentFetcher
@@ -39,8 +38,8 @@ from policy_atlas.orchestration_plan import (
     compose,
     registry_component_for,
 )
-from policy_atlas.plan import Plan, compile
 from policy_atlas.ranking import RankingBackend
+from policy_atlas.run_spec import Plan, compile
 from policy_atlas.schema import event_log, evidence_scope, orchestration_plan, runs
 from policy_atlas.screening_backend import ScreeningBackend
 from policy_atlas.search_generation import SearchGenerationBackend
@@ -62,6 +61,7 @@ from policy_atlas.steering import (
     steer_point_triggers,
 )
 from policy_atlas.synthesis_backend import SynthesisBackend
+from policy_atlas.theme_grouping import ThemeGroupingBackend
 
 log = structlog.get_logger()
 

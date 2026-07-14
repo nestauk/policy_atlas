@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from policy_atlas.extraction_records import IOFAnchorWire
-from policy_atlas.implementation_context_records import ICFRecord
+from policy_atlas.icf_records import ICFRecord
+from policy_atlas.iof_records import IOFAnchorWire
 from policy_atlas.quote_verify import (
     ICF_FIELD_RULES_VERSION,
     dedup_icf_records,

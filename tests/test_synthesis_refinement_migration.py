@@ -12,7 +12,7 @@ from sqlalchemy import inspect, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
+from policy_atlas.iof_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.schema import (
     addressable_unit,
     annotation,

@@ -30,7 +30,7 @@ from policy_atlas.embeddings import (
     embed_pending_chunks,
     validate_vector,
 )
-from policy_atlas.ingest import ingest_upload
+from policy_atlas.ingest_upload import ingest_upload
 from policy_atlas.schema import (
     chunk as chunk_table,
 )

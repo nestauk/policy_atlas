@@ -3,7 +3,7 @@
 Per selected document: load the selection row, resolve the extraction basis
 (full-text chunks or the envelope abstract), check the durable memo, window and
 fan out the ``extract_iof`` prompt calls (versioned by
-``extract_prompt.PROMPT_VERSION``), validate / verify / dedup the emitted
+``iof_prompt.PROMPT_VERSION``), validate / verify / dedup the emitted
 records, then write the durable ``source_extraction_record`` +
 ``intervention_outcome_finding`` rows and, last of all, the run-scoped
 ``extraction_result`` roll-up.
@@ -31,21 +31,7 @@ from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
 from policy_atlas import tracing
-from policy_atlas.extract_prompt import (
-    EXTRACT_MAX_OUTPUT_TOKENS,
-    EXTRACTION_MODEL,
-    PROMPT_VERSION,
-    UNCLASSIFIED_EVIDENCE_TYPE,
-)
 from policy_atlas.extraction_backend import ExtractionBackend, StubICFExtractionBackend
-from policy_atlas.extraction_records import (
-    ABSTRACT_SEGMENT_ID,
-    PROFILE_ID,
-    SCHEMA_VERSION,
-    ExtractionWindowPayload,
-    IOFRecord,
-    IOFRecordWire,
-)
 from policy_atlas.finding_vetter import (
     FINDING_VETTER_MAX_OUTPUT_TOKENS,
     FINDING_VETTER_MODEL,
@@ -62,20 +48,34 @@ from policy_atlas.finding_vetter import (
     validate_icf_verdict_coverage,
     validate_verdict_coverage,
 )
-from policy_atlas.implementation_context_prompt import (
+from policy_atlas.icf_prompt import (
     ICF_EXTRACT_MAX_OUTPUT_TOKENS,
     ICF_EXTRACTION_MODEL,
     ICF_PROMPT_VERSION,
 )
-from policy_atlas.implementation_context_records import (
+from policy_atlas.icf_records import (
     PROFILE_ID as ICF_PROFILE_ID,
 )
-from policy_atlas.implementation_context_records import (
+from policy_atlas.icf_records import (
     SCHEMA_VERSION as ICF_SCHEMA_VERSION,
 )
-from policy_atlas.implementation_context_records import (
+from policy_atlas.icf_records import (
     ICFRecord,
     ICFRecordWire,
+)
+from policy_atlas.iof_prompt import (
+    EXTRACT_MAX_OUTPUT_TOKENS,
+    EXTRACTION_MODEL,
+    PROMPT_VERSION,
+    UNCLASSIFIED_EVIDENCE_TYPE,
+)
+from policy_atlas.iof_records import (
+    ABSTRACT_SEGMENT_ID,
+    PROFILE_ID,
+    SCHEMA_VERSION,
+    ExtractionWindowPayload,
+    IOFRecord,
+    IOFRecordWire,
 )
 from policy_atlas.openai_client import CallBudget
 from policy_atlas.quote_verify import (

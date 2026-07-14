@@ -42,8 +42,7 @@ from policy_atlas.finding_vetter import (
 from policy_atlas.fixtures import get_source
 from policy_atlas.grounding_judge import OpenAIGroundingJudgeBackend
 from policy_atlas.group_clustering import OpenAIGroupClusteringBackendFactory
-from policy_atlas.grouping import OpenAIThemeGroupingBackend, ThemeGroupingBackend
-from policy_atlas.ingest import ingest_upload
+from policy_atlas.ingest_upload import ingest_upload
 from policy_atlas.logging import configure_logging
 from policy_atlas.orchestration_plan import CountryGroupAuthorship, OrchestrationPlan
 from policy_atlas.planner import OpenAIPlannerBackend, PlannerBackend, StubPlannerBackend
@@ -61,6 +60,7 @@ from policy_atlas.steering import (
     render_check_in,
 )
 from policy_atlas.synthesis_backend import OpenAISynthesisBackend
+from policy_atlas.theme_grouping import OpenAIThemeGroupingBackend, ThemeGroupingBackend
 
 log = structlog.get_logger()
 

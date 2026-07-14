@@ -16,7 +16,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas import extract, extract_prompt
+from policy_atlas import extract, iof_prompt
 from policy_atlas.extract import (
     ExtractContext,
     ExtractError,
@@ -26,23 +26,23 @@ from policy_atlas.extract import (
     icf_extraction_fingerprint,
 )
 from policy_atlas.extraction_backend import StubExtractionBackend
-from policy_atlas.extraction_records import (
-    SCHEMA_VERSION as IOF_SCHEMA_VERSION,
-)
-from policy_atlas.extraction_records import (
-    IOFAnchor,
-    IOFRecord,
-    IOFStatistics,
-    IOFStratum,
-)
 from policy_atlas.finding_vetter import (
     FINDING_VETTER_PROMPT_VERSION,
     ICFFindingVetterResponse,
     ICFFlagClass,
     ICFVetterVerdictWire,
 )
-from policy_atlas.implementation_context_prompt import ICF_PROMPT_VERSION
-from policy_atlas.implementation_context_records import SCHEMA_VERSION as ICF_SCHEMA_VERSION
+from policy_atlas.icf_prompt import ICF_PROMPT_VERSION
+from policy_atlas.icf_records import SCHEMA_VERSION as ICF_SCHEMA_VERSION
+from policy_atlas.iof_records import (
+    SCHEMA_VERSION as IOF_SCHEMA_VERSION,
+)
+from policy_atlas.iof_records import (
+    IOFAnchor,
+    IOFRecord,
+    IOFStatistics,
+    IOFStratum,
+)
 from policy_atlas.schema import (
     chunk,
     extraction_result,
@@ -1013,7 +1013,7 @@ def test_nul_bearing_model_output_is_scrubbed(conn: Connection) -> None:
     Postgres rejects it in TEXT/JSONB and it aborted the first live run.
     Delivered via a misbehaving backend: a NUL can't ride the DB-stored stub
     sentinel for the same reason."""
-    from policy_atlas.extraction_records import (
+    from policy_atlas.iof_records import (
         ExtractionResponse,
         ExtractionWindowPayload,
         IOFRecordWire,
@@ -1104,7 +1104,7 @@ def test_evidence_type_provenance_recorded_on_attempted_call(conn: Connection) -
         )
     }
     assert rows[classified_pss] == "RCTs and Quasi-Experimental Studies"
-    assert rows[unclassified_pss] == extract_prompt.UNCLASSIFIED_EVIDENCE_TYPE
+    assert rows[unclassified_pss] == iof_prompt.UNCLASSIFIED_EVIDENCE_TYPE
 
 
 def test_evidence_type_provenance_null_on_pre_prompt_failure(conn: Connection) -> None:
@@ -1137,7 +1137,7 @@ def test_extraction_fingerprint_components_v3() -> None:
     assert components["profile"] == "eb_iof_base_v1"
     assert components["schema"] == "iof_v3"
     assert components["field_rules"] == "iof_rules_v3"
-    assert components["prompt"] == extract_prompt.PROMPT_VERSION
+    assert components["prompt"] == iof_prompt.PROMPT_VERSION
 
 
 def test_icf_fingerprint_v2_isolated_from_iof(
@@ -1159,7 +1159,7 @@ def test_icf_fingerprint_v2_isolated_from_iof(
         == "extract_icf_vetter_v2"
     )
     assert iof_components["schema"] == IOF_SCHEMA_VERSION
-    assert iof_components["prompt"] == extract_prompt.PROMPT_VERSION
+    assert iof_components["prompt"] == iof_prompt.PROMPT_VERSION
     assert isinstance(iof_components["finding_vetter"], dict)
     assert (
         iof_components["finding_vetter"]["prompt"]

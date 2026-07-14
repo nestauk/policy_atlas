@@ -110,7 +110,7 @@ class _FixedBackend:
         self._findings = findings
 
     def extract(self, payload: Any) -> Any:
-        from policy_atlas.extraction_records import ExtractionResponse
+        from policy_atlas.iof_records import ExtractionResponse
 
         return ExtractionResponse.model_validate({"findings": self._findings}), None
 
@@ -124,7 +124,7 @@ class _ByPssBackend:
         self._findings_by_pss = findings_by_pss
 
     def extract(self, payload: Any) -> Any:
-        from policy_atlas.extraction_records import ExtractionResponse
+        from policy_atlas.iof_records import ExtractionResponse
 
         return (
             ExtractionResponse.model_validate({

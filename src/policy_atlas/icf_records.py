@@ -12,7 +12,6 @@ from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from policy_atlas.extraction_records import IOFAnchor, IOFAnchorWire
 from policy_atlas.finding_references import (
     INTERVENTION_DESC,
     POPULATION_DESC,
@@ -20,6 +19,7 @@ from policy_atlas.finding_references import (
     STUDY_GEOGRAPHY_DESC,
     render_field_sections,
 )
+from policy_atlas.iof_records import IOFAnchor, IOFAnchorWire
 from policy_atlas.schema import CLAIM_BASES, CLAIM_LEVELS, CONTEXT_LEVELS, CONTEXT_TYPES
 
 # Fingerprint components for the independent ICF extraction profile.

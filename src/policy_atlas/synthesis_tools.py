@@ -37,8 +37,8 @@ from policy_atlas.embeddings import (
     validate_vector,
 )
 from policy_atlas.extract import record_ids_by_profile
-from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
-from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
+from policy_atlas.icf_records import PROFILE_ID as ICF_PROFILE_ID
+from policy_atlas.iof_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.schema import (
     CONTEXT_TYPES,
     EFFECT_DIRECTIONS,

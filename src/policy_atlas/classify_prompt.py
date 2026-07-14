@@ -81,7 +81,7 @@ EvidenceType = Literal[
 ]
 
 # The Literal type IS the schema CHECK vocabulary — drift fails at import
-# (the extraction_records pattern). Explicit raise, not assert: the check
+# (the iof_records pattern). Explicit raise, not assert: the check
 # must survive `python -O`.
 if get_args(EvidenceType) != EVIDENCE_TYPES:
     raise RuntimeError("EvidenceType literal has drifted from schema EVIDENCE_TYPES")

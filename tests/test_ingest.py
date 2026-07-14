@@ -6,7 +6,7 @@ from sqlalchemy import inspect, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.fixtures import get_source
-from policy_atlas.ingest import ingest_upload
+from policy_atlas.ingest_upload import ingest_upload
 from policy_atlas.schema import chunk as chunk_table
 from policy_atlas.schema import project, project_source_snapshot, source_snapshot
 from tests.helpers import now

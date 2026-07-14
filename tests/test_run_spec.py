@@ -5,7 +5,7 @@ import uuid
 import pytest
 from pydantic import ValidationError
 
-from policy_atlas.plan import Config, Plan, compile
+from policy_atlas.run_spec import Config, Plan, compile
 
 
 def test_valid_plan_compiles() -> None:

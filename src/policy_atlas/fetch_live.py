@@ -19,7 +19,7 @@ import httpcore
 import httpx
 import structlog
 
-from policy_atlas.ingest_full_text import FetchResult, _redact_url
+from policy_atlas.ingest_full_text import DocumentFetcher, FetchResult, FixtureFetcher, _redact_url
 
 log = structlog.get_logger()
 
@@ -741,5 +741,22 @@ def _clone_fetch_result(result: FetchResult) -> FetchResult:
         body=result.body,
         error=result.error,
     )
+
+
+def select_document_fetcher(live: bool) -> DocumentFetcher:
+    """Select the full-text fetcher for the skeleton entrypoint.
+
+    Args:
+        live: Whether the operator selected live mode via the skeleton's single
+            live flag.
+
+    Returns:
+        ``LiveDocumentFetcher`` in live mode, otherwise ``FixtureFetcher``.
+    """
+    if live:
+        fetcher = LiveDocumentFetcher()
+        assert fetcher.mode == "live"
+        return fetcher
+    return FixtureFetcher()
 
 

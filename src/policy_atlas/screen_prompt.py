@@ -26,7 +26,7 @@ from typing import Any, Literal
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, ConfigDict, Field
 
-from policy_atlas.extraction_records import SegmentRecord
+from policy_atlas.iof_records import SegmentRecord
 from policy_atlas.prompt_fields import sanitize_prompt_field
 
 SCREEN_PROMPT_VERSION = "screen_v2"

@@ -26,7 +26,6 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.appraise import SCORE_LABELS
 from policy_atlas.extract import record_ids_by_profile
-from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.grounding import content_hash
 from policy_atlas.grounding_judge import (
     ENVELOPE_VERSION,
@@ -35,7 +34,8 @@ from policy_atlas.grounding_judge import (
     GroundingJudgeBackend,
     build_envelope,
 )
-from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
+from policy_atlas.icf_records import PROFILE_ID as ICF_PROFILE_ID
+from policy_atlas.iof_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.quote_verify import BasisText, QuoteMatcher, build_basis
 from policy_atlas.schema import (
     EVIDENCE_TYPES,

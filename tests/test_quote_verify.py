@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from policy_atlas.extraction_records import (
+from policy_atlas.iof_records import (
     IOFAnchorWire,
     IOFRecord,
     IOFRecordWire,

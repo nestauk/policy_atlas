@@ -21,10 +21,9 @@ from policy_atlas.clustering_engine import (
     run_first_assignment_round as engine_run_first_assignment_round,
 )
 from policy_atlas.extract import _Doc, _iof_profile, _run_windows
-from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
-from policy_atlas.extraction_records import ExtractionWindowPayload
-from policy_atlas.grouping import GroupingDoc
-from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
+from policy_atlas.icf_records import PROFILE_ID as ICF_PROFILE_ID
+from policy_atlas.iof_records import PROFILE_ID as IOF_PROFILE_ID
+from policy_atlas.iof_records import ExtractionWindowPayload
 from policy_atlas.ranking import RankedDoc
 from policy_atlas.screen import _run_stage1_reps, _run_stage2_reps, _Stage1Doc
 from policy_atlas.screen_prompt import (
@@ -33,6 +32,7 @@ from policy_atlas.screen_prompt import (
     ScreenRepWire,
 )
 from policy_atlas.select import SelectionCandidate, _rerank_infos, _SignalDoc
+from policy_atlas.theme_grouping import GroupingDoc
 from policy_atlas.usage import TokenUsage, UsageResult
 
 _WORKER_CONTEXT: contextvars.ContextVar[str] = contextvars.ContextVar(

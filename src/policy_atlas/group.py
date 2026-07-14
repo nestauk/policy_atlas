@@ -33,7 +33,6 @@ from policy_atlas.clustering_engine import (
     cluster_units,
 )
 from policy_atlas.extract import record_ids_by_profile
-from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.facet_grouping import (
     DESCRIPTION_MAX,
     FACET_VALUE_CAP,
@@ -62,7 +61,8 @@ from policy_atlas.group_clustering import (
 from policy_atlas.group_clustering import (
     GROUP_RESIDUAL_LABEL as _GROUP_RESIDUAL_LABEL,
 )
-from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
+from policy_atlas.icf_records import PROFILE_ID as ICF_PROFILE_ID
+from policy_atlas.iof_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.schema import (
     extraction_result,
     finding_reference_union,
@@ -767,6 +767,11 @@ def _group_policy(*, unit_count: int) -> ClusteringPolicy:
         min_labels=0,
         max_labels=group_max_labels(unit_count),
         assignment_batch_size=GROUP_ASSIGNMENT_BATCH_SIZE,
+        # 4-wide assignment fan-out, matching theme_grouping.MAX_CONCURRENT_BATCHES
+        # (characterise runs the same engine at this width; batch-order merge is
+        # deterministic). Local literal, not an import — avoids a group→corpus edge
+        # (task 023 WP10a).
+        max_concurrent_batches=4,
         discovery_retry_cap=GROUP_DISCOVERY_RETRY_CAP,
         assignment_repair_cap=GROUP_ASSIGNMENT_REPAIR_CAP,
         residual_label=GROUP_RESIDUAL_LABEL,

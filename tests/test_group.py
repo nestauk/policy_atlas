@@ -13,7 +13,6 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.clustering_engine import ClusterLabel, ClusterUnit
-from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.facet_grouping import FACET_VALUE_CAP, LABEL_MAX, VALUE_SURFACE_MAX
 from policy_atlas.facet_values import FacetDirectiveError
 from policy_atlas.group import (
@@ -33,7 +32,8 @@ from policy_atlas.group import (
     group_findings,
     group_max_labels,
 )
-from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
+from policy_atlas.icf_records import PROFILE_ID as ICF_PROFILE_ID
+from policy_atlas.iof_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.schema import (
     extraction_result,
     grouping_result,

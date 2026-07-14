@@ -15,8 +15,8 @@ from policy_atlas.embeddings import (
     UNIT_CHAR_BUDGET,
     UNIT_POLICY,
 )
-from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.grounding import content_hash
+from policy_atlas.iof_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.schema import chunk as chunk_table
 from policy_atlas.schema import chunk_embedding, project_source_snapshot
 from policy_atlas.synthesis_backend import SectionProseWire
@@ -2071,8 +2071,8 @@ def _seed_profiled_reader_findings(
     iof_count: int,
     icf_count: int,
 ) -> tuple[list[uuid.UUID], list[uuid.UUID]]:
-    from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
-    from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
+    from policy_atlas.icf_records import PROFILE_ID as ICF_PROFILE_ID
+    from policy_atlas.iof_records import PROFILE_ID as IOF_PROFILE_ID
     from policy_atlas.schema import (
         extraction_result,
         implementation_context_finding,

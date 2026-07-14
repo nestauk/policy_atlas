@@ -718,7 +718,7 @@ def test_socket_deny_synthesise_harness_round_trip(
     from policy_atlas import events
     from policy_atlas.harness import run_harness
     from policy_atlas.inference import StubEchoProvider
-    from policy_atlas.plan import Plan, compile
+    from policy_atlas.run_spec import Plan, compile
 
     monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
     monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)

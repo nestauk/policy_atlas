@@ -16,7 +16,6 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas import tracing
 from policy_atlas.characterise import ScreenedSource, screened_sources
-from policy_atlas.grouping import UNCLUSTERED, GroupingDoc
 from policy_atlas.openai_client import CallBudget
 from policy_atlas.ranking import (
     MAX_CONCURRENT_RERANK_BATCHES,
@@ -36,6 +35,7 @@ from policy_atlas.schema import (
     source_tag,
 )
 from policy_atlas.tags import has_control_character
+from policy_atlas.theme_grouping import UNCLUSTERED, GroupingDoc
 from policy_atlas.usage import UsageAccumulator
 
 log = structlog.get_logger()

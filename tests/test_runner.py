@@ -15,7 +15,7 @@ from policy_atlas import events, harness
 from policy_atlas.characterise import CharacteriseFailure
 from policy_atlas.extract import KNOWN_PROFILE_IDS
 from policy_atlas.fixtures import get_source
-from policy_atlas.ingest import ingest_upload
+from policy_atlas.ingest_upload import ingest_upload
 from policy_atlas.orchestration_plan import OrchestrationPlan, compose
 from policy_atlas.runner import RunnerBackends, run_plan
 from policy_atlas.schema import (

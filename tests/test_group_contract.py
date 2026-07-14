@@ -24,10 +24,10 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
 from policy_atlas import events
-from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
-from policy_atlas.plan import Plan, compile
+from policy_atlas.iof_records import PROFILE_ID as IOF_PROFILE_ID
+from policy_atlas.run_spec import Plan, compile
 from policy_atlas.schema import (
     extraction_result,
     grouping_result,

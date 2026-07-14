@@ -11,7 +11,7 @@ import pytest
 from pydantic import ValidationError
 
 from policy_atlas.country_filters import ISO_3166_ALPHA2, expand_tier1, validate_iso_alpha2
-from policy_atlas.plan import Config, Plan, compile
+from policy_atlas.run_spec import Config, Plan, compile
 from policy_atlas.search_loop import (
     ROUND_CAP,
     SearchDirectiveError,

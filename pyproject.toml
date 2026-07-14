@@ -37,9 +37,6 @@ dependencies = [
     "httpcore>=1,<2",
 ]
 
-[project.scripts]
-policy-atlas-skeleton = "policy_atlas.skeleton:main"
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

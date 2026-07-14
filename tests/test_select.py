@@ -15,11 +15,10 @@ from sqlalchemy.exc import IntegrityError
 
 from policy_atlas import events
 from policy_atlas.characterise import ScreenedSource
-from policy_atlas.grouping import GroupingDoc
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
-from policy_atlas.plan import Plan, compile
 from policy_atlas.ranking import RERANK_MODEL, RankedDoc, StubRankingBackend
+from policy_atlas.run_spec import Plan, compile
 from policy_atlas.schema import (
     DIRECTIVE_STRING_MAX,
     TOPIC_THEME,
@@ -44,6 +43,7 @@ from policy_atlas.select import (
     select_scope,
 )
 from policy_atlas.tags import insert_source_tags
+from policy_atlas.theme_grouping import GroupingDoc
 from policy_atlas.usage import UsageResult
 from tests.helpers import (
     EVIDENCE_TYPE,

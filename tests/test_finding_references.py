@@ -8,14 +8,6 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy import Text
 
-from policy_atlas.extraction_records import (
-    IOFAnchor,
-    IOFAnchorWire,
-    IOFRecord,
-    IOFRecordWire,
-    IOFStatistics,
-    IOFStatisticsWire,
-)
 from policy_atlas.finding_references import (
     INTERVENTION_DESC,
     POPULATION_DESC,
@@ -24,7 +16,15 @@ from policy_atlas.finding_references import (
     STUDY_DESIGN_DESC,
     STUDY_GEOGRAPHY_DESC,
 )
-from policy_atlas.implementation_context_records import ICFRecord, ICFRecordWire
+from policy_atlas.icf_records import ICFRecord, ICFRecordWire
+from policy_atlas.iof_records import (
+    IOFAnchor,
+    IOFAnchorWire,
+    IOFRecord,
+    IOFRecordWire,
+    IOFStatistics,
+    IOFStatisticsWire,
+)
 from policy_atlas.quote_verify import NULL_LIKE_STRINGS, validate_icf_record, validate_record
 from policy_atlas.schema import implementation_context_finding, intervention_outcome_finding
 from tests.helpers import make_icf_wire_record

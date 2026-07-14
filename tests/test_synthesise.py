@@ -15,14 +15,14 @@ from sqlalchemy import event, func, select, update
 from sqlalchemy.engine import Connection
 
 from policy_atlas.embeddings import StubEmbeddingBackend
-from policy_atlas.extraction_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.grounding import content_hash
 from policy_atlas.grounding_judge import (
     JudgeResponseWire,
     StubGroundingJudgeBackend,
     UnspannedAssertionWire,
 )
-from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
+from policy_atlas.icf_records import PROFILE_ID as ICF_PROFILE_ID
+from policy_atlas.iof_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.quote_verify import build_basis
 from policy_atlas.schema import (
     addressable_unit,

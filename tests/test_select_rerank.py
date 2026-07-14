@@ -14,10 +14,8 @@ from sqlalchemy import select, update
 from sqlalchemy.engine import Connection
 
 from policy_atlas import events, ranking
-from policy_atlas.grouping import GroupingDoc, records_json
 from policy_atlas.harness import run_harness
 from policy_atlas.inference import StubEchoProvider
-from policy_atlas.plan import Plan, compile
 from policy_atlas.ranking import (
     RERANK_BATCH_SIZE,
     RERANK_RETRY_CAP,
@@ -25,6 +23,7 @@ from policy_atlas.ranking import (
     RankedDoc,
     StubRankingBackend,
 )
+from policy_atlas.run_spec import Plan, compile
 from policy_atlas.schema import (
     TOPIC_THEME,
     event_log,
@@ -33,6 +32,7 @@ from policy_atlas.schema import (
     source_snapshot,
     source_tag,
 )
+from policy_atlas.theme_grouping import GroupingDoc, records_json
 from policy_atlas.usage import UsageResult
 from tests.helpers import (
     now,

@@ -1,6 +1,6 @@
 """Extraction backend seam for both the extract_iof IOF and ICF extraction
-calls (see ``extract_prompt.PROMPT_VERSION`` and
-``implementation_context_prompt.ICF_PROMPT_VERSION`` for the live prompt
+calls (see ``iof_prompt.PROMPT_VERSION`` and
+``icf_prompt.ICF_PROMPT_VERSION`` for the live prompt
 versions)."""
 
 from __future__ import annotations
@@ -11,20 +11,20 @@ import structlog
 from langfuse import Langfuse
 
 from policy_atlas import tracing
-from policy_atlas.extract_prompt import (
-    EXTRACT_MAX_OUTPUT_TOKENS,
-    EXTRACTION_MODEL,
-    PROMPT_VERSION,
-    build_extract_messages,
-)
-from policy_atlas.extraction_records import ExtractionResponse, ExtractionWindowPayload
-from policy_atlas.implementation_context_prompt import (
+from policy_atlas.icf_prompt import (
     ICF_EXTRACT_MAX_OUTPUT_TOKENS,
     ICF_EXTRACTION_MODEL,
     ICF_PROMPT_VERSION,
     build_icf_extract_messages,
 )
-from policy_atlas.implementation_context_records import ICFExtractionResponse
+from policy_atlas.icf_records import ICFExtractionResponse
+from policy_atlas.iof_prompt import (
+    EXTRACT_MAX_OUTPUT_TOKENS,
+    EXTRACTION_MODEL,
+    PROMPT_VERSION,
+    build_extract_messages,
+)
+from policy_atlas.iof_records import ExtractionResponse, ExtractionWindowPayload
 from policy_atlas.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.usage import UsageResult, usage_metadata
 
