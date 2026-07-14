@@ -1093,10 +1093,10 @@ def test_group_membership_spans_iof_and_icf_with_iof_only_spread(
     assert summary["counts"]["intervention"]["findings_total"] == 2
     payload = cast("dict[str, Any]", _group_row(conn, project_id, group_run_id)["groups"])
     group = _facet_payload(payload)["groups"][0]
-    assert sorted(group["member_finding_ids"]) == sorted(
-        [str(iof_finding_id), str(icf_finding_id)]
+    members_by_id = dict(
+        zip(group["member_finding_ids"], group["member_finding_kinds"], strict=True)
     )
-    assert group["member_finding_kinds"] == ["iof", "icf"]
+    assert members_by_id == {str(iof_finding_id): "iof", str(icf_finding_id): "icf"}
     assert group["member_counts"] == {"iof": 1, "icf": 1}
     assert group["direction_spread"]["increase"] == 1
     assert sum(group["direction_spread"].values()) == 1

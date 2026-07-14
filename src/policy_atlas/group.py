@@ -54,6 +54,12 @@ from policy_atlas.facet_values import (
     extract_facet_values,
     parse_grouping_directive,
 )
+from policy_atlas.group_clustering import (
+    GROUP_CLUSTERING_PROMPT_VERSION,
+)
+from policy_atlas.group_clustering import (
+    GROUP_RESIDUAL_LABEL as _GROUP_RESIDUAL_LABEL,
+)
 from policy_atlas.implementation_context_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.schema import (
     extraction_result,
@@ -72,8 +78,8 @@ GROUP_ASSIGNMENT_BATCH_SIZE = 50
 GROUP_DISCOVERY_RETRY_CAP = 1
 GROUP_ASSIGNMENT_REPAIR_CAP = 1
 GROUP_CONTEXT_DISCOVERY_UNIT_LIMIT = 120
-GROUP_RESIDUAL_LABEL = "__ungrouped__"
-GROUP_PROMPT_VERSION: str | None = None
+GROUP_RESIDUAL_LABEL = _GROUP_RESIDUAL_LABEL
+GROUP_PROMPT_VERSION: str = GROUP_CLUSTERING_PROMPT_VERSION
 
 ProjectionKind = Literal["value", "claim"]
 FailureClass = Literal[

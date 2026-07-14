@@ -38,7 +38,7 @@ from policy_atlas.fetch_live import LiveDocumentFetcher
 from policy_atlas.finding_vetter import OpenAIFindingVetterBackend
 from policy_atlas.fixtures import get_source
 from policy_atlas.grounding_judge import OpenAIGroundingJudgeBackend
-from policy_atlas.group import StubGroupClusteringBackend
+from policy_atlas.group_clustering import OpenAIGroupClusteringBackendFactory
 from policy_atlas.grouping import OpenAIThemeGroupingBackend, ThemeGroupingBackend
 from policy_atlas.icf_finding_vetter import OpenAIICFFindingVetterBackend
 from policy_atlas.ingest import ingest_upload
@@ -574,7 +574,9 @@ def _live_planner_and_backends(
         icf_finding_vetter=OpenAIICFFindingVetterBackend(
             langfuse_client=langfuse_client
         ),
-        group_clustering=StubGroupClusteringBackend(),
+        group_clustering=OpenAIGroupClusteringBackendFactory(
+            langfuse_client=langfuse_client
+        ),
         synthesis=OpenAISynthesisBackend(langfuse_client=langfuse_client),
         grounding_judge=OpenAIGroundingJudgeBackend(langfuse_client=langfuse_client),
         search_backends=cast(list[SearchBackend], search_live.live_search_backends()),

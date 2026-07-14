@@ -45,6 +45,7 @@ from policy_atlas.grounding_judge import (
     StubGroundingJudgeBackend,
 )
 from policy_atlas.group import GroupClusteringBackendFactory, StubGroupClusteringBackend
+from policy_atlas.group_clustering import OpenAIGroupClusteringBackendFactory
 from policy_atlas.grouping import (
     OpenAIThemeGroupingBackend,
     StubThemeGroupingBackend,
@@ -634,7 +635,9 @@ def main() -> None:
         # Tracing lives inside OpenAIExtractionBackend itself — no wrapper
         # class, unlike the embedding/grouping backends below.
         extraction_backend = OpenAIExtractionBackend(langfuse_client=langfuse_client)
-        group_clustering_backend = StubGroupClusteringBackend()
+        group_clustering_backend = OpenAIGroupClusteringBackendFactory(
+            langfuse_client=langfuse_client
+        )
         search_backends = cast(list[SearchBackend], search_live.live_search_backends())
         search_generation_backend = search_generation.OpenAISearchGenerationBackend(
             langfuse_client=langfuse_client
