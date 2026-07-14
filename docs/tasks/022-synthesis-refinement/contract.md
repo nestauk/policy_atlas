@@ -102,7 +102,20 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
    + per-facet payload keys. One read path forever — no dual-shape reader
    (greenfield: no users, nothing in production, old rows carry no obligations
    beyond honest migration). One migration on `grouping_result`. `uq_grr_scope_run`
-   stays (one row per scope+run).
+   stays (one row per scope+run). Adversarial-review completions (2026-07-14):
+   - **The migration rewrites persisted consumers too** — group ids live outside
+     `grouping_result`: `synthesis_result.blocks` persists section `group_ids`,
+     and grouping-theme annotation payloads persist `referenced_ids` (today's
+     payloads carry no explicit `group_id`; readers fall back to label). The
+     migration applies one deterministic old-label → facet-qualified-id mapping
+     across all three surfaces, keeping the one-read-path property true
+     end-to-end rather than only on the grouping row.
+   - **Downgrade policy**: the down migration refuses when multi-facet rows
+     exist (a one-facet schema cannot faithfully represent them — refusal is
+     honest, lossy down-writes are not); the down test covers a pre-upgrade
+     dataset. The exact target JSON shapes (`groups`, per-facet residuals with
+     facet identity, `counts`, `flags`, provenance facet list) are pinned in
+     the plan and reviewed at the plan 🛑.
 3. **Facet-qualified group ids** — labels collide across facets; ids become
    facet-qualified everywhere they travel: directive `group_ids`, `query_findings`
    `group_id` filter, section assignment, `groups_unsectioned`, envelope carriage.
@@ -121,8 +134,14 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
    is parameterised by **unit projection**: a value facet's unit = the normalized
    value string + counterparts (today's `FacetValueRecord`); a claim-theme facet's
    unit = the claim's prose. Components stay distinct — characterise and group keep
-   their own substrates, gates and consumers; the *engine* is shared or
-   shape-identical (ADR records the boundary). `FACET_VALUE_CAP` survives as the
+   their own substrates, gates and consumers; the *engine* is **one shared
+   code-owned orchestration/validation core with substrate-specific adapters and
+   prompt backends** ("shape-identical" duplicate engines are exactly what this
+   settlement retires; ADR records the boundary). Adapter minima differ honestly
+   (adversarial review, 2026-07-14): group discovery's minimum is **zero**
+   (no-lower-target — zero discovered groups → all eligible units land in the
+   counted residual, assignment skipped); characterise keeps its existing ≥1
+   theme bound through its adapter. `FACET_VALUE_CAP` survives as the
    fail-closed input guard; the per-call bound becomes an internal batch size.
    **Characterise refactors onto the shared engine in this slice** (owner call,
    2026-07-14) — behaviour-preserving only: characterise's prompt surfaces stay
@@ -190,6 +209,14 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
    gets ground-truthed alongside the rest, which is exactly why it lands now or
    never cheaply. Readers: grouping unit context now; the finding explorer at the
    web-app slice (the data-model presentation-grain note).
+   **Claim-theme eligibility identity (adversarial review, 2026-07-14):** each
+   theme facet's eligible universe is exactly the ICF findings whose
+   `context_type` matches (e.g. `barrier_theme` = ICF rows with
+   `context_type="barrier"`); every eligible claim appears exactly once across
+   groups + residual; **all other findings (IOF and non-matching ICF) are
+   outside the facet base — never `no_value` residual members**. The eligible
+   base's size + content hash persist in that facet's provenance, so CAP,
+   failure and coverage denominators are deterministic and test-assertable.
    (A bare deterministic partition BY the seven-value enum is not a facet — that
    read surface already exists as `icf_context_type_count`; named here so nobody
    ships it as one.) Cross-kind clustering on the shared-reference facets is
@@ -201,22 +228,41 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
    facet set is a plan-time constant (named in the plan, not silently compiled).
 6. **Per-facet honesty** (decision 4 — **SETTLED: per-facet**, owner 2026-07-14):
    per-facet residuals, per-facet CAP accounting, per-facet `groups_unsectioned`;
-   one facet's clustering failure lands an honest per-facet failure row (rejection
-   reasons persisted, the 013 lesson) while sibling facets survive — never
-   all-or-nothing.
+   one facet's clustering failure lands honestly while sibling facets survive —
+   never all-or-nothing. **Executable failure model (adversarial review,
+   2026-07-14 — "failure row" was under-specified against the one-row-per-run
+   design):** each facet gets a per-facet outcome object *within the single
+   `grouping_result` row*: `status` (succeeded | failed), groups/residuals,
+   counts, rejection reasons, call accounting, flags. **Facet-local failures**
+   (caught, persisted on that facet's outcome, siblings continue): cap
+   exceeded, backend exception, discovery exhaustion, assignment exhaustion,
+   partition-validation failure. **Component-abort failures** (the whole run
+   fails structurally): corrupt shared extraction input, or a post-assembly
+   cross-facet invariant violation. "Fail-closed cap" thus means the FACET
+   fails closed, not the component.
 7. **Cross-kind UNION read view** (decision 5 — **SETTLED: build**, owner
    2026-07-14): the recorded seam whose named first reader is this slice's
-   cross-schema grouping. The multi-facet loader reads through it (retiring the
-   direct two-table read), making it the one shared-reference read surface over
-   both finding tables — the improved reader for anything downstream that queries
-   across kinds.
+   cross-schema grouping. Scope sharpened at the adversarial review (2026-07-14):
+   the view projects the **shared reference columns** (+ kind discriminator,
+   finding id, project/extraction scoping — per the data-model's commitment,
+   which is reference-columns-only); the multi-facet loader reads
+   **shared-reference (value-facet) projections** through it, retiring the
+   direct two-table read for those. **Claim-theme loading reads the ICF table
+   directly** — its unit projection needs `context_type` + `claim` prose, which
+   are deliberately NOT shared vocabulary; a kind-scoped facet gets a kind-scoped
+   read, honestly. The view is a **schema object inside the approved
+   `grouping_result` migration's approval envelope** (named in the rubric);
+   exact column list + down behaviour pinned in the plan.
 8. **Hybrid dimension search over finding reference values** (decision 6 —
    **SETTLED: defer**, owner 2026-07-14): the data-model's committed
    intervention/outcome dimension indexing (ICF's source-named values co-ride free
    by construction) stays behind its own observed-query-behaviour promotion gate —
    no observed behaviour exists yet, evals will generate it, and item 13's scoped
    `search_chunks` + kind-typed `query_findings` cover every reader this slice
-   has. Deferred.md entry updated with this adjudication.
+   has. Deferred.md entry updated with this adjudication — **and the flow-back
+   must touch data-model § findings layer's hybrid-indexing line**, which today
+   reads as committed-for-v3.0 (adversarial review: the deferral must be visible
+   in the spec, not only in deferred.md).
 
 **In — Phase 2 (cost + surface; ONE writer prompt bump, `synthesise_section_v6`):**
 
@@ -260,16 +306,28 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
     silently dropping every later ranked candidate. The **judge envelope stays
     unclamped** (agenda B, settled).
 13. **Writer read-tool scoping plumbing** — `search_chunks` gains optional
-    fail-closed scope filters (tags · doc ids · facet-group members · evidence
-    types), validated against the closed vocabularies like the directive boosts.
-    Plumbing + minimal tool-description text this slice; WHEN-to-scope prompt
-    guidance is post-eval tuning (lead-only, replay-evidenced when it comes).
+    fail-closed scope filters, **validated per argument** (adversarial review,
+    2026-07-14 — the earlier "like the directive boosts" precedent was wrong:
+    directive tag boosts accept bounded arbitrary keys and record unmatched
+    values rather than failing): doc ids must parse and belong to the scoped
+    corpus; group ids must resolve in the referenced grouping; evidence types
+    validate against the closed enum; tags must exist in the scoped project's
+    tag set — each rejecting loudly on miss. Plumbing + minimal tool-description
+    text this slice; WHEN-to-scope prompt guidance is post-eval tuning
+    (lead-only, replay-evidenced when it comes).
 14. **Pre-synthesise steer point** — the owner-confirmed seam: after group /
     characterise, surface proposed sections + discovered themes/facet groups; the
     response compiles into the **existing** fail-closed `context["synthesis"]`
     directive (sections + group_ids + retrieval_boosts — its first author).
-    Parameter authoring on built machinery; mode-governed pause UX stays deferred
-    (plan-as-object seam).
+    **Surface pinned (adversarial review, 2026-07-14 — the current proposal path
+    is NOT side-effect-free: `synthesise_scope` mints the artefact before
+    proposing sections):** a bounded, **side-effect-free**
+    `propose_synthesis_plan` + compile surface — an external caller obtains the
+    proposal (no artefact minted, no rows written), collects the user's
+    response out-of-band, and submits the compiled directive on a later
+    invocation; **no runtime pausing exists**. Input/output schemas pinned in
+    the plan; deterministic compile + no-write tests. Mode-governed pause UX
+    stays deferred (plan-as-object seam).
 15. **Screen-confidence retrieval boost** (decision 7 — **SETTLED: build**, owner
     2026-07-14): the pre-decided grammar (linear clamped functional multiplier,
     product clamped [0.1, 10], steerable-never-baked) wired as a directive boost
@@ -316,9 +374,13 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
       2026-07-14 — verified: `_bind_unspanned` already refuses to bind
       excerpts inside claim spans, so persisted records are already filtered):
       instead of a second drop-filter, split the single `unspanned_unbound`
-      counter into distinct `unspanned_overlap_filtered` /
-      duplicate-or-stale / genuinely-unlocated counters so judge over-report
-      is measurable separately from real binding failures.
+      counter into three, with **fixed names and classification precedence**
+      (adversarial review, 2026-07-14 — an excerpt can qualify for more than
+      one): (1st) `unspanned_overlap_filtered` — overlaps any final claim
+      span; (2nd) `unspanned_duplicate_stale` — exact duplicate of an
+      already-bound excerpt or a stale pre-splice result; (3rd)
+      `unspanned_unlocated` — not locatable in the final prose. Judge
+      over-report becomes measurable separately from real binding failures.
     - **(iii) Supersede, never concatenate** (Codex, 2026-07-14: 52/429
       excerpts are exact initial/re-judge duplicates): when repair changes the
       prose, the re-judge's unspanned results REPLACE the initial scan's
@@ -420,8 +482,12 @@ lead-authored): `synthesise_section_v6` (cache layout · repair schema · scopin
 description), the group discovery + assignment prompts (superseding
 `group_facet_v1`), the claim-theme facet prompts, `extract_icf_v2` (the
 `context_label` rule block — nothing else changes in that prompt), the ICF-vetter
-label flag class, planner prompt sweep for group-semantics vocabulary. Judge
-prompt/envelope changes only via decisions B/E under the A/B protocol.
+label flag class, planner prompt sweep for group-semantics vocabulary. The judge
+prompt and its verdict input set are byte-identical; the ONE approved
+judge-envelope change is item 17(i)'s span-map widening (`occupied_claim_spans`
+gains all final valid claim spans), with its mandatory re-judge-set replay —
+independent of B/E, which stay deferred. Any other judge prompt/envelope change
+is out of scope.
 
 ## Disciplines binding this slice
 
@@ -436,10 +502,11 @@ prompt/envelope changes only via decisions B/E under the A/B protocol.
 
 ## Stop conditions
 
-Halt and escalate when: a second schema change beyond the `grouping_result` migration
-appears · any judge-envelope change is tempted outside decisions B/E · the cache work
-tempts provider-specific API surface · scope grows past this contract (e.g. re-gather
-repair, pause UX, canonicalisation) · a spec is wrong enough to block · budget spent.
+Halt and escalate when: a schema change beyond the two approved migrations (+ the
+UNION view) appears · any judge-envelope change beyond item 17(i)'s span-map
+widening is tempted · the cache work tempts provider-specific API surface · scope
+grows past this contract (e.g. re-gather repair, pause UX, canonicalisation) · a
+spec is wrong enough to block · budget spent.
 
 ## Acceptance checks
 
@@ -451,14 +518,27 @@ repair, pause UX, canonicalisation) · a spec is wrong enough to block · budget
   1. Live grouped run at the previously-failing scale (both-profiles corpus,
      ≥184 distinct values) — healthy partitions, no duplicate-id rejection; the
      knowledge doc's failure mode demonstrably closed.
-  2. Live multi-facet run (≥2 facets incl. `context_type`) — per-facet groups +
-     residuals land; synthesise consumes both lenses via one grouping ref.
+  2. Live multi-facet run (≥2 facets incl. **at least one claim-theme facet**,
+     e.g. `barrier_theme` — `context_type` is the eligibility predicate, never
+     itself a facet) — per-facet groups + residuals land; synthesise consumes
+     both lenses via one grouping ref. The claim-theme arm runs at a realistic
+     claim count (≥ the ~200-claim live scale) **with context payloads enabled**:
+     discovery succeeds, assignment covers the eligible base exactly, group
+     count stays under the computed ceiling (the value-facet scale check does
+     not prove claim-theme scale — adversarial review, 2026-07-14).
   3. One cheap full-chain smoke (mandatory-spine composition).
-  4. **Cost re-measure**: same-shape synthesis run vs the $15.45 / 24%-cache
-     baseline — report $, cache hit rate, and the wall-time band (rider 16), on the
-     cache-discounted curve.
+  4. **Cost re-measure, two arms** (adversarial review, 2026-07-14 — a single
+     historical comparison conflates Phase 2 savings with Phase 1 substrate
+     growth): **(a)** `synthesise_section_v5` vs `v6` on the same legacy
+     one-facet substrate — isolates Phase 2's cost/quality neutrality;
+     **(b)** the final v6 multi-facet configuration vs the $15.45 / 24%-cache
+     historical baseline — the launch-plausible total. Each arm reports $,
+     cache hit rate and wall-time band (rider 16) on the cache-discounted
+     curve, recording facet set, section set, corpus, model, cache state,
+     repair incidence and run order.
 - Replay evidence per bumped prompt surface (refine-replay loop, ≤3 rounds,
-  pin-or-revert); A/B verdict-flip inspection if B/E adopt a judge-envelope change.
+  pin-or-revert); the mandatory 17(i) re-judge-set replay with verdict-flip
+  inspection (B/E stay deferred — no other envelope change exists to A/B).
 
 ## Verification evidence expected
 
@@ -507,7 +587,9 @@ correctness · scope creep toward the Out list.
 7. **Screen-confidence boost — SETTLED (owner, 2026-07-14): build** — pre-decided
    grammar in; constants plan-pinned, calibration eval-owned.
 8. **Agenda D + E — SETTLED (owner, 2026-07-14): both re-defer to the eval gate**,
-   E bundled with D into one judge-envelope re-baseline event.
+   evaluated there as **separate, sequential envelope A/Bs** (never one merged
+   baseline; neither shares item 17(i)'s replay baseline) — the E entry's
+   detailed ruling governs.
 9. **Agenda A–C — SETTLED (owner, 2026-07-14)**: A = grammar v2 subsumed and
    retired · B = judge envelope unclamped, tool-return clamp reshaped as
    oversized-only windowed returns (item 12) · C = coverage half parked,
