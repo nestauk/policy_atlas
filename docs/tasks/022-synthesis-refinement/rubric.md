@@ -30,7 +30,7 @@ is in progress, not done.
         `query_findings` filters, section assignment and envelope carriage all reject
         unqualified/ambiguous ids fail-closed (test-asserted).
 12. [ ] **Cost work is measured, not asserted**: BOTH arms of the two-arm
-        comparison on the cache-discounted curve — (a) v5 vs v6 on the legacy
+        comparison on the cache-discounted curve — (a) v6 vs v7 on the legacy
         one-facet substrate (Phase-2 isolation), (b) final multi-facet v6 vs the
         $15.45 / 24% historical baseline — each recording facet/section set,
         corpus, model, cache state, repair incidence, run order; no phase-2

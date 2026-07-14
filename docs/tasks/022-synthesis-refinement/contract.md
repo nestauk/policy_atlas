@@ -39,7 +39,7 @@ group ids through directive / `query_findings` / envelope, the **ICF claim-theme
 facets** (barrier/enabler/mechanism), the **cross-kind UNION read view** as the
 loader's read surface, the bounded **ICF `context_label` rider** (`icf_v2`); and the
 phase-2 cost/surface set under **one** writer prompt-version bump
-(`synthesise_section_v6`) with replay evidence and a before/after cost measurement on
+(`synthesise_section_v7`) with replay evidence and a before/after cost measurement on
 the cache-discounted curve. Spec flow-back (components §8/§9, data-model) +
 deferred.md discharge/narrowing + an ADR for the multi-facet design.
 
@@ -267,7 +267,7 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
    reads as committed-for-v3.0 (adversarial review: the deferral must be visible
    in the spec, not only in deferred.md).
 
-**In — Phase 2 (cost + surface; ONE writer prompt bump, `synthesise_section_v6`):**
+**In — Phase 2 (cost + surface; ONE writer prompt bump, `synthesise_section_v7`):**
 
 9. **Cache-prefix engineering** — a major quality-neutral lever (24% hit rate on
    the $15.45 run; a later trace showed 51.5% writer hit rate with 12/28 calls
@@ -359,7 +359,7 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
     never membership lists; the ordinary ledger slims to claim id/type/text
     (the evidence-bearing key-findings ledger stays separate). Small now
     (~1–5%) but grows directly with phase 1's multi-facet fan-out — the two
-    phases compound here. Quality-neutral; replay-checked with the v6 rounds.
+    phases compound here. Quality-neutral; replay-checked with the v7 rounds.
 17. **Unspanned-lane precision fixes** (owner-adopted 2026-07-14, from the live
     trace scan — 404 `synthesise:judge` observations, 429 unspanned excerpts:
     ~16% re-judge artifacts, ~24% judge over-reports inside mapped spans, ~59%
@@ -391,7 +391,7 @@ deferred.md discharge/narrowing + an ADR for the multi-facet design.
       no re-judge keeps no stale flags and relies on `unspanned_lane_skipped`.
     - The genuine ~59% (evidential summary sentences, "As an inference…"
       labelled-inference prose, cluster descriptions) is a named input to the
-      `synthesise_section_v6` replay work — claim-or-flag is a v6 taste call
+      `synthesise_section_v7` replay work — claim-or-flag is a v7 taste call
       made on replay evidence, not pre-decided here.
     - **Eval note:** `unspanned_assertions` counts before/after these fixes are
       NOT comparable — the eval slice must re-baseline that metric.
@@ -416,7 +416,7 @@ inherit the deferral" is the owner's own instruction):**
   item 17. `unspanned_lane_skipped` honesty flag unchanged.
 - **D. 018's dangling writer-envelope metadata A/B queue** — **SETTLED: explicit
   re-defer to the eval gate** (owner, 2026-07-14). Phase 2 already rebuilds the
-  writer surface (`synthesise_section_v6`); stacking an envelope-content A/B on
+  writer surface (`synthesise_section_v7`); stacking an envelope-content A/B on
   the cache/repair changes would muddy attribution of both, and this slice's cost
   measurement wants a clean before/after. Deferred.md entry re-recorded with this
   adjudication — the "dangling" state is discharged by the explicit decision.
@@ -458,7 +458,7 @@ inherit the deferral" is the owner's own instruction):**
 - **Schema** 🛑: two approved migrations — the `grouping_result` migration
   (decision 1) and the ICF `context_label` rider column (owner-approved
   2026-07-14, `icf_v2`). Any further table change is a stop condition.
-- **Prompt-bearing surfaces are lead-only** (AGENTS.md): `synthesise_section_v6`,
+- **Prompt-bearing surfaces are lead-only** (AGENTS.md): `synthesise_section_v7`,
   the group prompt surfaces (discovery + assignment — supersede `group_facet_v1`),
   the claim-theme facet prompts, the planner-prompt sweep (coupled-readers rule —
   multi-facet changes group semantics the planner describes), steer-point compile
@@ -481,7 +481,7 @@ rates) are public-safe.
 ## Model route
 
 OpenAI under approved controls (Bedrock post-eval). Prompt-bearing changes (all
-lead-authored): `synthesise_section_v6` (cache layout · repair schema · scoping tool
+lead-authored): `synthesise_section_v7` (cache layout · repair schema · scoping tool
 description), the group discovery + assignment prompts (superseding
 `group_facet_v1`), the claim-theme facet prompts, `extract_icf_v2` (the
 `context_label` rule block — nothing else changes in that prompt), the ICF-vetter
@@ -532,9 +532,9 @@ spec is wrong enough to block · budget spent.
   3. One cheap full-chain smoke (mandatory-spine composition).
   4. **Cost re-measure, two arms** (adversarial review, 2026-07-14 — a single
      historical comparison conflates Phase 2 savings with Phase 1 substrate
-     growth): **(a)** `synthesise_section_v5` vs `v6` on the same legacy
+     growth): **(a)** `synthesise_section_v6` (shipped in 021 as a tool-schema unit bump) vs `v7` on the same legacy
      one-facet substrate — isolates Phase 2's cost/quality neutrality;
-     **(b)** the final v6 multi-facet configuration vs the $15.45 / 24%-cache
+     **(b)** the final v7 multi-facet configuration vs the $15.45 / 24%-cache
      historical baseline — the launch-plausible total. Each arm reports $,
      cache hit rate and wall-time band (rider 16) on the cache-discounted
      curve, recording facet set, section set, corpus, model, cache state,

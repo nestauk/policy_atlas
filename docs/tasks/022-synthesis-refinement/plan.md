@@ -1,18 +1,24 @@
 # Plan: 022-synthesis-refinement
 
-> **Status:** DRAFTED — pending plan-stage adversarial review + owner approval (🛑).
-> Contract: [contract.md](contract.md) (approved 2026-07-14 · owner; contract-stage
-> adversarial review adjudicated 15/15). Rubric: [rubric.md](rubric.md) (22 boxes).
-> ADR: drafted at Phase H (multi-facet clustering-engine design + the reasoning
-> corrections recorded in contract item 5).
-> Executor marks default to subagents (orchestrator-delegation convention); lead marks
-> carry justification inline. Codex caveat (019/020/021 precedent): the codex sandbox
-> has no Postgres — the lead runs DB-gated acceptance after each codex delivery.
-> Pattern precedent: [021 plan](../021-icf/plan.md), mirrored against as-built code
-> (grouping machinery verified at `group.py` / `facet_values.py` / `facet_grouping.py`;
-> synthesis surfaces at `synthesise.py` / `synthesis_tools.py` / `synthesis_backend.py`;
-> unit policy at `embeddings.py`; all line-level claims re-verified in the design
-> conversation and by two Codex passes, 2026-07-14).
+> **Status:** DRAFTED rev 2 — pending owner approval (🛑).
+> Plan-stage adversarial review adjudicated 2026-07-14 (codex session 019f5e72,
+> 12 findings: 5 blocker · 7 material — ALL adopted: writer bump retargeted
+> v6→**v7** (v6 shipped in 021; contract + rubric corrected) · § Payload shapes +
+> § Steer schemas + id-mapping now pinned IN the plan · dedicated ICF-rider phase
+> added (was DDL-only) · Phase B widened to producer/reader compatibility so its
+> full gate is viable · orchestration facet-list mechanics assigned · cost
+> protocol = 3 runs with cache controls + v6-runnability harness · new decision 11
+> (confidence-boost wire syntax + constants) · Phase F split into bounded briefs
+> with lead-pinned message layout · call-budget formula corrected to the inherited
+> retry model · review-stack producer named (fresh conversation C) · context-payload
+> source pinned (anchor quotes, outside the view) · characterise keeps its own
+> min/max bounds policy).
+> Contract: [contract.md](contract.md) (approved 2026-07-14 · owner; the v7
+> retarget is a factual correction applied post-approval, flagged at this gate).
+> Rubric: [rubric.md](rubric.md) (22 boxes). ADR: drafted at Phase H.
+> Executor marks default to subagents; lead marks carry justification inline.
+> Codex caveat (019–021 precedent): the codex sandbox has no Postgres — the lead
+> runs DB-gated acceptance after each codex delivery.
 
 ## Phases
 
@@ -24,208 +30,297 @@
 **Phase A — the two-stage clustering engine + characterise refactor** — **codex**
 *(judgment-bearing multi-file coherence; done is machine-verifiable: characterise
 regression suite green + engine invariant tests)*
-- New engine module (e.g. `clustering_engine.py`): ONE shared orchestration/validation
-  core — stage 1 open discovery (labels + descriptions only, never an exhaustive id
-  list), stage 2 batched assignment validated per batch against the deterministically
-  known unit-id list; exhaustive coverage = groups + counted residual; unknown /
-  double-assigned ids reject at response grain; group-grain label/description rule
-  rejection (the 013 fix carries over); rejection reasons persist.
+- New engine module: ONE shared orchestration/validation core — stage 1 open
+  discovery (labels + descriptions only, never an exhaustive id list), stage 2
+  batched assignment validated per batch against the deterministically known
+  unit-id list; exhaustive coverage = groups + counted residual; unknown/
+  double-assigned ids reject at response grain; group-grain label/description
+  rejection (013 fix carries over); rejection reasons persist.
 - Parameterised by: **unit projection** (id, text, optional context payload,
-  optional counterparts) · **eligibility predicate** · **adapter minima** (group
-  discovery min = 0, zero themes → all eligible units residual, assignment skipped;
-  characterise keeps its ≥1 bound) · **granularity ceiling** (computed per run from
-  unit count — decision 3 — injected into the discovery prompt as that run's number;
-  no lower target) · assignment batch size (decision 8).
+  optional counterparts) · **eligibility predicate** · **component bound policy**
+  (adversarial finding 12 — min AND max are per-component: `group` = min 0 /
+  decision-3 ceiling; `characterise` = its existing `MIN_THEMES=3` /
+  `min(n, MAX_THEMES=12)` computation and prompt arguments, byte-identical) ·
+  assignment batch size + retry/repair caps (decision 8).
 - **Characterise refactors onto the engine, behaviour-preserving**: prompts
-  byte-identical (test-asserted against the current prompt constants), outputs/records
-  unchanged — regression evidence = existing characterise suite + a pinned-fixture
-  output-equivalence test. A characterise prompt diff is a stop condition.
-- `FACET_VALUE_CAP` survives as the fail-closed engine input guard (posture: value
-  unchanged at 400 — decision 2); per-call pressure moves to the batch size.
-- Gate: `make verify-fast` (new module + refactor; no schema contact — the
-  characterise regression suite is the load-bearing check here; full verify rides
-  Phase B's schema gate immediately after).
+  byte-identical (test-asserted against current prompt constants), outputs/records
+  unchanged — existing suite + a pinned-fixture output-equivalence test. A
+  characterise prompt diff is a stop condition.
+- `FACET_VALUE_CAP` survives as the fail-closed engine input guard (decision 2).
+- Gate: `make verify-fast` (no schema contact; full verify rides Phase B).
 
-**Phase B — schema: migration + UNION view + persisted-consumer rewrite** — **codex**
-*(exact spec below + § Payload shapes; machine-verifiable via up/down + rewrite tests)*
+**Phase B — schema + compatibility: migration · UNION view · consumer rewrite ·
+producer/reader shape-compat** — **codex** *(adversarial finding 4: the schema gate
+is only viable when schema, producer and readers are coherent — B lands the
+new-shape compatibility at current single-facet behaviour; C adds fan-out)*
 - ONE alembic migration on `grouping_result`: stamp each existing row's groups with
-  the row's single facet → per-facet payload keys (§ Payload shapes, decision 4) →
-  drop `facet` column + `ck_grr_facet`; provenance gains the run facet list.
-  `uq_grr_scope_run` + `fk_synr_grouping` untouched.
-- **Same migration rewrites persisted group-id consumers** (contract item 2):
-  deterministic old-label → facet-qualified-id mapping applied to
-  `synthesis_result.blocks` section `group_ids` and grouping-theme annotation
-  `referenced_ids`. Mapping is derivable per row (old rows have exactly one facet).
-- **Cross-kind UNION read view** in the same migration's approval envelope:
-  shared reference columns + kind discriminator + finding id + project/extraction
-  scoping (decision 5 pins the column list). Value-facet loading reads through it;
-  claim-theme loading reads `implementation_context_finding` directly.
+  the row's facet → per-facet payload keys (§ Payload shapes) → drop `facet` column
+  + `ck_grr_facet`; provenance gains the facet list. `uq_grr_scope_run` +
+  `fk_synr_grouping` untouched.
+- **Same migration rewrites persisted group-id consumers**: the § Id scheme mapping
+  applied to `synthesis_result.blocks` section `group_ids` and grouping-theme
+  annotation `referenced_ids` (derivable per row — old rows have exactly one facet).
+- **Cross-kind UNION read view** (same approval envelope; columns per decision 5).
 - **Downgrade refuses when multi-facet rows exist**; down test covers a pre-upgrade
-  dataset (contract item 2).
-- **ICF `context_label` rider**: nullable Text column on
-  `implementation_context_finding` — rides this migration file as a second,
-  clearly-commented op (one migration file, two approved DDL groups — decision 1).
-- Gate: **full `make verify`** (schema class).
+  dataset.
+- **Producer/reader shape-compat**: `group.py` writes the per-facet payload shape
+  (still one facet per run at this phase); `synthesise.py` grouping readers +
+  `_group_id`/`groups_unsectioned` consume it; loader reads value facets through
+  the view. Single-facet behaviour unchanged, test-pinned.
+- Gate: **full `make verify`** (schema class — coherent at this exit).
 
-**Phase C — multi-facet `group` component on the engine** — **codex** *(mechanics
+**Phase R — ICF `context_label` rider (beyond the DDL)** — **codex** records/plumbing,
+**lead** prompt + vetter text *(adversarial finding 3: the rider had no
+implementation phase; extraction-adjacent → its own full gate)*
+- The rider column itself lands in Phase B's migration file (second commented op).
+- `implementation_context_records.py`: `context_label` wire+stored field,
+  `SCHEMA_VERSION` → `icf_v2` (nothing else rides); `field_coverage` key-absence
+  semantics (v1 rows read "not recorded under icf_v1"); `render_field_docs` text
+  (**lead**-authored field description).
+- `extract_icf_v2` (**lead**): ONE rule block — filled only when the source itself
+  provides a short name; null otherwise; never extractor-authored summarisation.
+- ICF vetter (**lead** text, codex plumbing): `paraphrased_label` flag class —
+  a label not groundable in the record's anchors flags (fail-open, IOF-pattern
+  storage semantics); knobs unchanged, enters the ICF fingerprint sub-block.
+- Memo isolation test: icf_v1 memos stay valid-as-written; icf_v2 extracts fresh;
+  IOF memos untouched. Replay probes (share Phase D's tally): label-present doc ·
+  no-label doc (null holds) · paraphrase-bait doc (vetter flags).
+- Gate: **full `make verify`** (extraction/fingerprint-adjacent class).
+
+**Phase C — multi-facet fan-out + orchestration surface** — **codex** *(mechanics
 against pinned invariants; prompts excluded — Phase D)*
-- `facet_values.py` / `group.py`: directive facet **list** parse (fail-closed; facet
+- `facet_values.py` / `group.py`: directive facet **list** parse (fail-closed;
   vocabulary = `intervention` · `outcome` · `population` · `barrier_theme` ·
-  `enabler_theme` · `mechanism_theme`); per-facet fan-out — separate engine runs per
-  facet within one component execution, one `grouping_result` row.
-- Unit projections: value facets = normalized value + counterparts (+ context
-  payload, decision 6) via the UNION view; claim-theme facets = ICF claim prose,
-  eligibility = `context_type` match, **eligible base = matching ICF rows only**
-  (IOF + non-matching ICF are outside the base, never `no_value`), base size + hash
+  `enabler_theme` · `mechanism_theme`); per-facet engine runs within one component
+  execution, one row; facet-qualified ids minted at payload build (§ Id scheme).
+- Unit projections: value facets = normalized value + counterparts + context
+  payload (§ Context payloads — anchors loaded per finding-id, OUTSIDE the view);
+  claim-theme facets = ICF claim prose read directly from
+  `implementation_context_finding`, eligibility = `context_type` match, eligible
+  base = matching ICF rows only (never `no_value` for others), base size + hash
   into that facet's provenance.
-- **Facet-qualified group ids** (id scheme: `facet:LNN` shape or equivalent —
-  duplicate-proof, short, decision 7) minted at payload build.
-- **Per-facet failure model** (contract item 6): per-facet outcome object within the
-  single row; facet-local failure classes caught + persisted (cap · backend ·
-  discovery/assignment exhaustion · validation), siblings continue; component-abort
-  only on corrupt shared input / cross-facet invariant violation.
-- Call budget known before the run: `Σ_facets (1 + ceil(N_f/batch) + repair_cap)`.
+- **Per-facet failure model** (contract item 6): per-facet outcome object; local
+  classes caught + persisted (cap · backend · discovery/assignment exhaustion ·
+  validation), siblings continue; component-abort only on corrupt shared input /
+  cross-facet invariant violation.
+- **Orchestration surface** (adversarial finding 5): `orchestration_plan.py` —
+  `GroupingFacet` widens to the six-value literal; `grouping_facet` →
+  `grouping_facets: list` (fail-closed validator: requires `group` in components,
+  non-empty, known values, no duplicates); `ANALYSIS_DEPTH_TABLE` gains the
+  deep-depth default facet set (decision 10); directive compiler emits the facet
+  list; plan-compile tests.
+- Call budget (adversarial finding 9, the inherited retry model):
+  `Σ_f [1 + discovery_retry_cap + ceil(N_f/batch) × (1 + assignment_repair_cap)]`
+  with `discovery_retry_cap = 1`, `assignment_repair_cap = 1` (per batch) —
+  known before the run, recorded in provenance.
 - Gate: `make verify-fast`.
 
 **Phase D — group prompt surfaces + replay** — **lead** *(prompt-bearing is lead-only)*
-- Discovery prompt vNext (supersedes `group_facet_v1`): open discovery, granularity
-  ceiling as that run's number + the recurring-pattern qualitative line, forbidden
-  catch-all labels retained; per-projection variants (value vs claim-theme) sharing
-  one skeleton.
+- Discovery prompt vNext (supersedes `group_facet_v1`): open discovery, per-run
+  ceiling number + the recurring-pattern qualitative line, forbidden catch-all
+  labels retained; per-projection variants (value vs claim-theme) on one skeleton.
 - Assignment prompt (batched; id-keyed data records; context payloads fenced as data).
-- **Replay loop** (018 discipline; bounds: ≤3 rounds/surface, ≤35 live component
-  replays total, tally in verification.md): granularity checked across
-  **differently-sized pinned inputs** against the live over-fragmentation baseline
-  (rubric 22); context-payload pin-or-revert (anchoring + dilution probes); the
-  claim-theme scale arm at ≥200 claims with payloads enabled (acceptance live check 2
-  pins the live version; the replay version runs on pinned inputs first).
+- **Replay loop** (018 discipline; ≤3 rounds/surface, ≤35 live component replays
+  total incl. Phase R's probes, tally in verification.md): granularity across
+  differently-sized pinned inputs vs the live over-fragmentation baseline
+  (rubric 22); context-payload pin-or-revert (anchoring + dilution probes);
+  claim-theme scale replay at ≥200 claims with payloads enabled (live check 2's
+  pinned-input precursor).
 - Gate: `make verify-fast`.
 
 **Phase E — downstream id + consumption surfaces** — **codex** mechanics, **lead**
-tool-description text *(prompt-surface split per the 021 Phase-E precedent)*
+tool-description text *(021 Phase-E precedent split)*
 - Facet-qualified ids end-to-end: directive `group_ids`, `query_findings` group
   filter, section assignment, per-facet `groups_unsectioned`, envelope carriage —
   unqualified/ambiguous ids reject fail-closed (rubric 11).
-- `synthesise.py`: multi-facet grouping payload consumption (one grouping ref covers
-  all facets); theme-claim validation against per-facet groups; per-facet residual
-  honesty in coverage claims; `query_findings` tool-schema description bump
-  (**lead**-authored text).
-- Old-row (migrated) + single-facet-run tolerance tests on every read path.
-- Gate: `make verify-fast` (consumption surfaces; schema untouched — consolidation
-  argued: Phase B carried the schema-class full verify; Phase F exits full).
+- `synthesise.py`: multi-facet payload consumption (one grouping ref, all facets);
+  theme-claim validation against per-facet groups; per-facet residual honesty;
+  `query_findings` tool-schema description bump (**lead** text).
+- Migrated-row + single-facet-run tolerance tests on every read path.
+- Gate: `make verify-fast` (schema untouched; B carried the class gate; F2 exits full).
 
-**Phase F — writer/judge cost + surface mechanics** — **codex** *(precise specs, all
-test-pinned; every item has a contract line and most were twice-verified in code)*
-- Tool-return layer (`synthesis_tools.py`): dedup across ALL immutable records
-  (chunks/findings/lookups; repeat = `{id, already_returned: true}`; citation
-  eligibility = union; budget charges new content only) · oversized-only windowed
-  returns (retain winning-unit offsets through candidate construction; window =
-  matched unit span ± margin) · skip-and-continue past over-budget results ·
-  per-argument fail-closed scope filters (doc ids ∈ corpus · group ids resolve ·
-  evidence types enum · tags ∈ project tag set).
-- `_soft_prior`: screen-confidence multiplier (grammar per contract item 15) + final
-  product clamp [0.1, 10] + raw factors/executed multiplier/suppression provenance.
-- Repair micro-call (`synthesis_backend.py` + `synthesise.py`): dependency-complete
-  input assembly (failing claim id/reason, replacement span + adjacent prose,
-  per-claim-type dependency records), id-carrying replacement schema validated
-  against the failing set; full-transcript resend gone (input-content test).
-- Layered cache prefix assembly (`synthesis_backend.py`): stable system → stable run
-  substrate/intent → section-varying data → task restated; append-only within a
-  section; provider-neutral.
-- Unspanned lane: span map from ALL valid claims (`occupied_claim_spans` separate
-  from `claims_to_judge`) · three counters with pinned precedence · supersede-not-
-  concatenate on prose-changing repair.
-- DTO slimming (prompt-facing group/characterisation summaries + slim ledger) ·
-  key-findings cited-only seed filter · batched query embeddings · `lookup`
-  screening-row widening · steer surface: side-effect-free `propose_synthesis_plan`
-  + deterministic directive compile (schemas: decision 9), no-write test.
-- Gate: **full `make verify`** at Phase F exit (last heavy code phase; judge-path
-  contact).
+**Phase F — writer/judge mechanics, four bounded briefs** — *(adversarial finding 8:
+split; the message-layout design is prompt-bearing and lead-pinned first)*
+- **F0 (lead, precedes the briefs):** pin the v7 **message/prefix layout spec** —
+  stable system prompt → stable run substrate/intent block → section-varying data →
+  task restatement; append-only within a section; exact block boundaries and
+  ordering written down for F1/F3 to implement mechanically. *(Layout is a prompt
+  concern per doctrine; the builders in `synthesis_backend.py` implement it.)*
+- **F1 (codex) — tool-return + retrieval layer:** dedup across all immutable
+  records (`{id, already_returned: true}`; citation eligibility = union; budget
+  charges new content only) · oversized-only windowed returns (retain winning-unit
+  offsets; window = matched unit span ± margin) · skip-and-continue past
+  over-budget results · per-argument fail-closed scope filters (doc ids ∈ corpus ·
+  group ids resolve · evidence types enum · tags ∈ project tag set) ·
+  `_soft_prior` screen-confidence multiplier per decision 11 + final product clamp
+  [0.1, 10] + raw-factors/executed-multiplier/suppression provenance.
+- **F2 (codex) — repair micro-call:** dependency-complete input assembly (failing
+  claim id/reason, replacement span + adjacent prose, per-claim-type dependency
+  records), id-carrying replacement schema validated against the failing set;
+  full-transcript resend gone (input-content test). Layout per F0.
+  Gate at F2 exit: **full `make verify`** (judge-path contact; last heavy writer
+  mechanics).
+- **F3 (codex) — unspanned lane:** `occupied_claim_spans` (all valid claims,
+  all types) separate from `claims_to_judge`; the three counters with pinned
+  precedence; supersede-not-concatenate on prose-changing repair.
+- **F4 (fast-worker; mechanical, exact specs) — riders:** `lookup` widening to
+  screening rows · key-findings cited-only seed filter · batched query embeddings ·
+  prompt-facing DTO slimming per the § DTO spec (codex if the DTO split turns out
+  multi-file-coherent; fast-worker first).
+- **F5 (codex) — steer surface:** side-effect-free `propose_synthesis_plan` +
+  deterministic compile per § Steer schemas; no-write test; no runtime pause.
 
-**Phase G — `synthesise_section_v6` + planner sweep + A/B evidence** — **lead**
-*(prompt-bearing; the one writer bump carries items 9/10/11/12/13/18's prompt halves)*
-- `synthesise_section_v6`: cache-layout restructure · id-carrying repair
-  instructions · scoped-search tool description · dedup-reference semantics ("you
-  have already seen record X") · slimmed-DTO field reference. Conflict audit first
-  (prompting.md rule 1). Replay: v5 vs v6 on pinned sections (quality-neutrality
-  evidence for the two-arm cost check's arm (a)).
-- Planner prompt sweep (coupled-readers rule): multi-facet group semantics +
-  facet-list directive vocabulary; version-bumped, replay-evidenced.
+**Phase G — `synthesise_section_v7` + planner sweep + A/B evidence** — **lead**
+- `synthesise_section_v7`: F0's layout · id-carrying repair instructions ·
+  scoped-search tool description · dedup-reference semantics · slimmed-DTO field
+  reference. Conflict audit first. Replay: v6 vs v7 on pinned sections
+  (quality-neutrality evidence feeding cost arm (a)).
+- Planner prompt sweep (coupled-readers): multi-facet group semantics + facet-list
+  directive vocabulary; version-bumped, replay-evidenced.
 - **Mandatory 17(i) re-judge-set replay**: same rejudge claim set through old/new
   envelope, verdict-flip inspection (the slice's one judge-envelope change).
 - Gate: `make verify-fast`.
 
 **Phase H — records + live checks + review prep** — **lead** judgments,
 **fast-worker** sweeps
-- Spec flow-back (fast-worker draft, lead review): components §8 (multi-facet engine,
-  claim-theme facets, per-facet honesty) + §9 (theme-claim availability over
-  claim-theme groups; tool-return semantics) · data-model (facet grain; UNION view
-  built; **hybrid-indexing line receives the deferral adjudication**; context_label
-  joins the ICF field list) · prompting.md if the loop yields doctrine-grade lessons ·
-  spec-bundle `log.md`.
-- deferred.md sweep (fast-worker draft, lead review): grammar-v2 entry discharged
-  (subsumed) · gather/writer split evidence recorded post-eval-queue-head · D/E
-  sequential-A/B note · unspanned re-baseline note · multi-facet/UNION/ICF-facet
-  entries discharged/narrowed · new seams from the build.
-- ADR (**lead**): the clustering-engine design (components distinct, machinery
-  converged), facet-at-group-grain, claim-theme eligibility identity, the
-  context_label reasoning corrections, migration-rewrites-consumers posture.
-- **Live checks** (**lead**): the four contract-pinned checks — scale run (≥184
-  values) · multi-facet run incl. a claim-theme facet at ≥200 claims with payloads ·
-  full-chain smoke · **two-arm cost measurement** (arm (a) v5-vs-v6 legacy substrate;
-  arm (b) final config vs $15.45 baseline; full run-metadata recording; wall-time
-  band re-measure rides arm (b)).
+- Spec flow-back (fast-worker draft, lead review): components §8/§9 · data-model
+  (facet grain; UNION view built; **hybrid-indexing line gets the deferral**;
+  `context_label` joins the ICF field list) · prompting.md if doctrine-grade
+  lessons · spec-bundle `log.md`.
+- deferred.md sweep (fast-worker draft, lead review): grammar-v2 discharged ·
+  gather/writer-split evidence (post-eval queue head) · D/E sequential-A/B note ·
+  unspanned re-baseline note · multi-facet/UNION/ICF-facet entries
+  discharged/narrowed · new seams.
+- ADR (**lead**): engine design + facet-at-group-grain + claim-theme eligibility +
+  context_label reasoning corrections + migration-rewrites-consumers posture.
+- **Hygiene audit into verification.md** (adversarial finding 10): generated-files/
+  secrets diff check + test-diff review (no deletions/skips/weakenings unjustified)
+  — rubric boxes 4/5's named producer.
+- **Live checks** (**lead**): the four contract-pinned checks; cost protocol per
+  § Cost measurement (three runs).
 - verification.md complete. Gate: **full `make verify`** at step-6 exit.
+
+**Step 7–10 (rubric 8's producer — NOT a build phase):** the Tier-3 review stack
+(contract verifier · code/security review · adversarial · simplification) runs in a
+**fresh review conversation** per the task-cycle spine (the adjudicator must not be
+the build chat); findings + adjudications land in verification.md there.
+
+## Payload shapes (pinned — adversarial finding 2; field-level detail is normative)
+
+`grouping_result` after migration (JSONB columns):
+- `groups`: `{ "<facet>": [ {"group_id": "<facet>:gNN", "facet": "<facet>",
+  "label": str, "description": str, "member_values": [str] (value facets only),
+  "member_finding_ids": [str], "size": int, "direction_spread": {...}|null
+  (IOF members only, null for claim-theme groups)} ] }`
+- `counts`: `{ "<facet>": {"eligible_base": int, "grouped": int, "ungrouped": int,
+  "no_value": int (value facets; absent for claim-theme), "groups": int} }`
+- `flags`: `{ "<facet>": {"status": "succeeded"|"failed",
+  "failure_class": "cap_exceeded"|"backend_error"|"discovery_exhausted"|
+  "assignment_exhausted"|"validation_failed"|null, "groups_rejected": bool,
+  "value_cap_exceeded": bool} }`
+- residuals per facet inside `groups[facet]`'s sibling keys:
+  `"ungrouped": {"member_finding_ids": [...], "direction_spread": {...}|null}` and
+  (value facets only) `"no_value": {...}` — facet identity is the outer key.
+- `grouping_provenance`: existing required keys + `"facets": [str]` +
+  per-facet `{"eligible_base_size": int, "eligible_base_sha256": str,
+  "call_budget": int, "calls_used": int, "rejection_reasons": [...]}`.
+- **Migration transform of an old row**: wrap each JSONB column's current flat
+  value under the row's single facet key; mint `group_id`s per § Id scheme; stamp
+  `facet` into each group object; provenance gains `facets: [<facet>]`.
+
+## Id scheme + legacy mapping (pinned)
+
+`group_id = "<facet>:g<NN>"` (`NN` = 1-based position in that facet's accepted-group
+order, zero-padded to 2). Legacy mapping (migration + readers): an old row's group
+with label L at position i in facet f maps to `f:g<i>`; persisted consumer rewrite
+replaces label-or-position references in `synthesis_result.blocks[].group_ids` and
+theme-annotation `referenced_ids` via that row-local mapping. Directive `group_ids`
+and `query_findings` filters accept ONLY qualified ids post-migration (unqualified →
+fail-closed error naming the expected form).
+
+## Steer schemas (pinned — shapes normative, Pydantic naming free)
+
+- `propose_synthesis_plan(scope_ref) → {"proposed_sections": [{"title": str,
+  "focus": str, "group_ids": [str]}], "available_groups": [{"group_id": str,
+  "facet": str, "label": str, "size": int}], "boostable": {"appraisal_tiers": [str],
+  "evidence_types": [str], "screen_confidence": {"lo_bounds": [float,float],
+  "hi_bounds": [float,float]}}}` — read-only: no artefact mint, no row writes
+  (no-write test).
+- Compile: accepts a user-response object `{"sections": [...], "group_ids": [...],
+  "retrieval_boosts": {...}}` and emits the EXISTING `context["synthesis"]`
+  directive verbatim-grammar (plus decision 11's `screen_confidence` key) —
+  deterministic, fail-closed, pure function.
+
+## Context payloads (pinned — adversarial finding 11)
+
+Value-facet unit context = up to 2 verbatim **anchor quotes** from the value's
+member findings (deterministic: lowest finding_id first; each quote truncated to
+240 chars), loaded by finding-id from the finding tables' anchor/grounding columns —
+**outside the UNION view** (the view stays reference-columns-only). Claim-theme unit
+context = `context_label` (when present) + `intervention`. Missing anchors → empty
+context (never blocks). All context enters as id-keyed data records.
+
+## Cost measurement (pinned — adversarial finding 6)
+
+**Three synthesis runs**, all on the same corpus/intent, cold-cache start each
+(fresh section prefix; no warm run precedes), executed back-to-back same-day in
+this order: (1) legacy arm: v6 prompt + single-facet substrate — the runnable-v6
+harness keeps the v6 prompt constants importable and a backend version override
+selects them (direct config, no code fork); (2) new arm (a) partner: v7 prompt +
+same single-facet substrate → arm (a) = run 1 vs run 2 (Phase-2 isolation);
+(3) arm (b): v7 + the final multi-facet configuration → vs the $15.45 / 24%
+historical baseline. Each run records: prompt version, facet set, section set,
+corpus, model, cache hit/miss split, repair incidence, wall-time. Estimated live
+spend: 3 × $5–15 = **$15–45** + grouping runs ~$3–6 + smoke ~$2.
 
 ## Plan gate decisions (adjudicate at this plan approval 🛑)
 
-1. **The DDL set**: one migration file carrying (a) grouping_result facet-to-group-
-   grain + consumer rewrites + UNION view, (b) the ICF `context_label` column.
-   Downgrade refuses on multi-facet rows. *Recommend: approve as scoped.*
-2. **`FACET_VALUE_CAP`**: stays 400 as the engine input guard (scale pressure now
-   lives in the batch size, not the one-call partition). *Recommend: unchanged;
-   eval owns the ceiling.*
-3. **Granularity ceiling**: `max_groups = clamp(ceil(N/5), 3, 40)` computed per
-   facet run, injected into discovery; no lower target. *Recommend: this formula,
-   plan-pinned constant; eval owns calibration.*
-4. **Payload shapes**: per-facet keys under `groups` / `counts` / `flags`
-   (`{facet: {...}}`), per-facet outcome object with `status` · groups · residuals
-   (facet-tagged) · rejection_reasons · call accounting; provenance carries facet
-   list + per-facet eligible-base size/hash. Exact JSON in the Phase B codex brief.
-   *Recommend: approve shape class; field-level review at Phase B delivery.*
-5. **UNION view columns**: finding_id · kind · extraction_record_id · project scoping
-   legs · the six shared reference columns (intervention/outcome/population/setting/
-   study_geography/study_design). *Recommend: as listed — reference-columns-only per
-   the data-model commitment.*
-6. **Context payloads**: assignment batches always carry per-unit context (≤2
-   snippets × ≤240 chars, id-keyed, source content only); discovery carries context
-   only when the facet's unit count ≤ 120 (dilution guard). *Recommend: these
-   numbers, replay pin-or-revert.*
-7. **Group id scheme**: `"autonomy:g07"`-style `facet:gNN` ids (short, duplicate-proof
-   across facets, human-scannable in directives). *Recommend: yes.*
-8. **Assignment batch size**: 50 units/call (mirrors characterise's batched
-   assignment scale). *Recommend: 50, plan-pinned.*
-9. **Steer surface schemas**: `propose_synthesis_plan` returns proposed sections +
-   available facet groups/themes + boostable vocabularies; compile accepts the
-   existing directive grammar verbatim (no new grammar). *Recommend: approve;
-   exact Pydantic shapes at Phase F delivery.*
+1. **The DDL set**: one migration file — (a) grouping_result facet-to-group-grain +
+   consumer rewrites + UNION view, (b) ICF `context_label` column. Downgrade
+   refuses on multi-facet rows. *Recommend: approve as scoped.*
+2. **`FACET_VALUE_CAP`**: stays 400 as engine input guard. *Recommend: unchanged.*
+3. **Granularity ceiling — `group` component ONLY** (characterise keeps its own
+   min/max policy, finding 12): `max_groups = clamp(ceil(N/5), 3, 40)` per facet
+   run. *Recommend: this formula, plan-pinned; eval owns calibration.*
+4. **Payload shapes**: § Payload shapes above, normative. *Recommend: approve.*
+5. **UNION view columns**: finding_id · kind · extraction_record_id · project
+   scoping legs · the six shared reference columns. *Recommend: as listed.*
+6. **Context payloads**: § Context payloads above (anchor-quote source, 2 × 240
+   chars, discovery carries context only when facet unit count ≤ 120).
+   *Recommend: approve; replay pin-or-revert.*
+7. **Group id scheme**: § Id scheme above (`facet:gNN` + row-local legacy mapping).
+   *Recommend: yes.*
+8. **Engine call caps**: assignment batch = 50 units/call; `discovery_retry_cap=1`;
+   `assignment_repair_cap=1` per batch; budget formula per Phase C. *Recommend:
+   these values (mirror characterise's proven caps).*
+9. **Steer surface**: § Steer schemas above; compile emits the existing directive
+   grammar **plus decision 11's one new key** (the earlier "no new grammar" claim
+   is corrected — the confidence boost IS a bounded grammar extension).
+   *Recommend: approve.*
 10. **Deep-depth default facet set**: `intervention` · `outcome` · `barrier_theme` ·
-    `enabler_theme` · `mechanism_theme` (population stays request-only). The trio is
-    the slice's payoff; each facet's marginal cost is small (mini-model discovery +
-    batched assignment). *Recommend: all five; cost visible in live check 2.*
+    `enabler_theme` · `mechanism_theme` (population request-only). *Recommend: all
+    five; cost visible in live check 2.*
+11. **Screen-confidence boost wire syntax + constants** (adversarial finding 7 —
+    NEW): directive key `"screen_confidence": {"lo": float, "hi": float}` with
+    bounds 0.5 ≤ lo ≤ hi ≤ 4.0; defaults **lo = 1.0, hi = 2.0** (boost-only, the
+    `SELECTION_PRIOR_BOOST=2.0` precedent); multiplier = `lo + conf × (hi − lo)`
+    over the **effective screen confidence** (highest-stage non-failed row — the
+    effective-screen helper); missing confidence → 1.0; **suppression predicate**:
+    a resolved selection reference suppresses the confidence multiplier entirely
+    (selection already priced confidence, `select.py` reads it), recorded
+    `confidence_suppressed: true` in retrieval provenance. Retrieval docs load
+    confidence + stage at scope build. *Recommend: approve as specified.*
 
 ## Live-check pins
 
-The contract's four acceptance live checks, unchanged (contract § Acceptance).
-Estimated live spend: scale + multi-facet runs ~$3–6 (grouping is mini-tier);
-two-arm cost measurement = two synthesis runs ~$10–25 total (arm (a) legacy substrate,
-arm (b) final config); smoke ~$2. Replay budget: ≤35 component replays (Phase D+G
-tally shared).
+The contract's four acceptance live checks; cost protocol per § Cost measurement
+(three runs). Replay budget: ≤35 component replays total (Phases D + R + G share
+the tally, per-surface allocation recorded in verification.md).
 
 ## Dependencies
 
-Phase A → C, D (engine before its consumers) · Phase B → C, E (ids/view before
-consumers) · A and B are independent of each other · C → D (prompts replay against
-real machinery) · C+E before live check 2 · F → G (v6 describes F's mechanics) ·
-Phase-1 phases (A–E) and F are independent except E's envelope carriage lands before
-G's replay arm (b) · H last. Build order: 0 → A ∥ B → C → D ∥ E → F → G → H.
+Phase A → C, D · Phase B → C, E (B is self-coherent: schema + compat land together,
+finding 4) · A ∥ B independent · B → R (the rider column precedes the record field) ·
+C → D · C + E before live check 2 · F0 → F1/F2/F3 (layout pinned first) · F* → G ·
+E before G's arm (b) · H last. Build order:
+`0 → A ∥ B → R ∥ C → D ∥ E → F0 → F1–F5 → G → H`.
