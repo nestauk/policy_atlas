@@ -16,8 +16,8 @@ from sqlalchemy import func
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.appraise import SCORE_LABELS
-from policy_atlas.schema import (
+from policy_atlas.evidence_base.assess.appraise import SCORE_LABELS
+from policy_atlas.core.schema import (
     GROUPING_FACETS,
     addressable_unit,
     annotation,
@@ -35,11 +35,11 @@ from policy_atlas.schema import (
     source_tag,
     synthesis_result,
 )
-from policy_atlas.schema import artefact as artefact_table
-from policy_atlas.schema import block as block_table
-from policy_atlas.schema import chunk as chunk_table
-from policy_atlas.schema import citation as citation_table
-from policy_atlas.screen import effective_screen_rows
+from policy_atlas.core.schema import artefact as artefact_table
+from policy_atlas.core.schema import block as block_table
+from policy_atlas.core.schema import chunk as chunk_table
+from policy_atlas.core.schema import citation as citation_table
+from policy_atlas.evidence_base.assess.screen import effective_screen_rows
 
 # --- Shared metadata projections (acquire's envelope shape; see acquire.py mappers) ---
 

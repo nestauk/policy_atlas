@@ -20,8 +20,8 @@ from demo.server import orchestrator
 from demo.server.bus import EventBus
 from demo.server.driver import AnalysisDriver, install_log_bridge
 
-from policy_atlas.logging import configure_logging
-from policy_atlas.orchestration_plan import NAMED_PAIRINGS, OrchestrationPlan
+from policy_atlas.core.logging import configure_logging
+from policy_atlas.runtime.orchestration_plan import NAMED_PAIRINGS, OrchestrationPlan
 
 _SIDECAR = Path(__file__).parent / "projects.json"
 

@@ -20,11 +20,11 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import func, select
 
-from policy_atlas import events
-from policy_atlas.db import get_engine
-from policy_atlas.logging import configure_logging
-from policy_atlas.orchestration_plan import OrchestrationPlan
-from policy_atlas.schema import project_source_snapshot, synthesis_result
+from policy_atlas.core import events
+from policy_atlas.core.db import get_engine
+from policy_atlas.core.logging import configure_logging
+from policy_atlas.runtime.orchestration_plan import OrchestrationPlan
+from policy_atlas.core.schema import project_source_snapshot, synthesis_result
 
 _SIDECAR = Path(__file__).parent / "projects.json"
 _LOCK = threading.Lock()

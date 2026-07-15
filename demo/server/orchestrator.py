@@ -16,10 +16,10 @@ from typing import Any
 from openai import OpenAI
 from pydantic import ValidationError
 
-from policy_atlas import tracing
-from policy_atlas.orchestrate import _build_plan
-from policy_atlas.orchestration_plan import OrchestrationPlan, compose
-from policy_atlas.planner import OpenAIPlannerBackend, PlannerTurnWire
+from policy_atlas.core import tracing
+from policy_atlas.runtime.orchestrate import _build_plan
+from policy_atlas.runtime.orchestration_plan import OrchestrationPlan, compose
+from policy_atlas.runtime.planner import OpenAIPlannerBackend, PlannerTurnWire
 
 NARRATION_MODEL = os.environ.get("DEMO_ORCHESTRATOR_MODEL", "gpt-5.5")
 
