@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 from sqlalchemy import engine_from_config, pool
 
-from policy_atlas.schema import metadata
+from policy_atlas.core.schema import metadata
 
 config = context.config
 

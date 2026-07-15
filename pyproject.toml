@@ -6,19 +6,29 @@ license = "AGPL-3.0-only"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
-    "langgraph>=0.2",
+    # Floors raised to the locked majors in task 023 (approved dependency edit):
+    # the old floors were a full major behind the lock, so a clean re-resolve
+    # without uv.lock could legally land on incompatible pre-1.x/older lines.
+    "langgraph>=1",
     "pydantic>=2",
     "sqlalchemy>=2",
     "psycopg[binary]>=3",
     "alembic>=1.14",
-    "structlog>=24",
+    "structlog>=26",
     "python-dotenv>=1.2.2",
     # <1: the 1.x line hard-depends on pymupdf-layout/onnxruntime — the ML stack the
     # approved dependency gate excludes (contract decision 5; that tier is the docling seam)
     # >=0.3.4: the determinism source-patch in ingest_full_text targets 0.3.4's
     # column_boxes source; older floors would let a lock regen land on unpatched code
     "pymupdf4llm>=0.3.4,<1",
-    "trafilatura>=1.12",
+    # Task 023 (approved dependency edit, declaration-only promotions — the httpx/
+    # httpcore precedent): both are directly imported by ingest_full_text (lxml.html,
+    # pymupdf) but previously arrived only as transitives of trafilatura/pymupdf4llm;
+    # declaring them guards a lock regen dropping them. Zero new packages. NB pymupdf
+    # is AGPL-3.0/Artifex dual-licensed — compatible, this repo is AGPL-3.0-only.
+    "lxml>=6",
+    "pymupdf>=1.28",
+    "trafilatura>=2",
     # Task 009 (approved gated change 2): embeddings + structured generation, one SDK
     # >=2.44: what the live check actually ran; <3: a major bump on the
     # product-egress SDK must be a deliberate change, not a lock regen
@@ -36,9 +46,6 @@ dependencies = [
     # pinned transitive of httpx; declaring it guards a lock regen. Zero new packages.
     "httpcore>=1,<2",
 ]
-
-[project.scripts]
-policy-atlas-skeleton = "policy_atlas.skeleton:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -67,20 +74,19 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
-[tool.pyright]
-venvPath = "."
-venv = ".venv"
-pythonVersion = "3.12"
-
 [dependency-groups]
 demo = [
     "fastapi>=0.139.0",
     "uvicorn>=0.51.0",
 ]
 dev = [
-    "pytest>=8",
-    "mypy>=1.10",
+    # pytest/mypy floors raised to locked majors in task 023 (same rationale as the
+    # runtime floors above); [tool.pyright] pruned in the same slice — no consumer
+    # (mypy strict in `make verify` is the single type gate).
+    "pytest>=9",
+    "mypy>=2",
     "ruff>=0.4",
     "types-psycopg2",
     "pytest-socket>=0.8.0",
 ]
+

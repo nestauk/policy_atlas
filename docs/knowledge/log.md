@@ -1,5 +1,26 @@
 # Knowledge update log
 
+## 2026-07-15 (task 023 step-9 riders)
+* **Retirement**: [citation-flag-dont-drop](citation-flag-dont-drop.md) marked RETIRED — its mechanism (`produce_grounded_block`'s pre-raise citation/annotation writes) was deleted when the owner directed dissolving `grounding.py` at the step-9 gate (`content_hash` → `core/hashing.py`; the production-dead grounded-block leg + tests removed). The flag-don't-drop principle stays spec-level and lives in the extract-side verification chain.
+
+## 2026-07-14 (task 023 step 8)
+* **Creation**: Added [sumprod-hot-path-vector-maths](sumprod-hot-path-vector-maths.md) — math.sumprod + construction-time norm precompute as the stdlib answer to hot-path vector maths; extended-precision near-tie reordering makes it observable-change class (023 WP10c, verified by two review lanes).
+* **Creation**: Added [unmarked-default-naming-smell](unmarked-default-naming-smell.md) — the first-built variant hoarding generic names as a repeatable review lens; the IOF/ICF rename set was the instance (owner-caught at the 023 review).
+* **Update**: [testing-database](testing-database.md) — parallel-lane fences include the shared test DB (023 contamination recurrence, twice: concurrent lane done-checks + the ad-hoc smoke's committed rows); index hook also corrected — it still described the pre-flip task-001 convention.
+* **Declined**: gate-reading discipline (exit codes direct, `| tail` eats them, no `&&`-chained commits, done-checks = the gate's exact commands) → process lesson, recorded as a 2026-07-14 entry in `docs/agentic-ops/failure-log.md`; zero-egress-smoke-in-suite reframing → already authored at build step 6 as [orchestrate-stub-smoke](orchestrate-stub-smoke.md) (the review stack verified the reframing against the as-built test).
+
+## 2026-07-14 (task 023 build, step 6)
+* **Creation**: Added [orchestrate-stub-smoke](orchestrate-stub-smoke.md) — orchestrate as the one check vehicle after skeleton's retirement. Amended same day (owner correction at step-6 close): the automated gate smoke is the suite's own `test_full_stub_end_to_end_mints_artefact` (self-cleaning); the manual no-key command is the ad-hoc/live vehicle only, with the commits-rows caveat scoped to ad-hoc runs. Authored in-build per the approved 023 plan (Phase H); remaining 023 knowledge candidates land at step 8 from verification.md § Review handoff.
+* **Update**: [reasoning-model-output-cap](reasoning-model-output-cap.md) — living-doc sweep: `extract_prompt.py` citation repointed to `evidence_base/extract/iof_prompt.py` (023 regroup).
+
+## 2026-07-14 (task 022 step 8)
+* **Creation**: Added [two-stage-clustering-closes-partition-cliff](two-stage-clustering-closes-partition-cliff.md) — the ~184-value duplicate-id cliff was the exhaustive-partition response format, not model capacity (0/9 arms fabricated ids); same framing change removed over-fragmentation; component sentinels forbidden in discovery (022 replays + review stack).
+* **Creation**: Added [live-only-reachability-coverage-class](live-only-reachability-coverage-class.md) — three live-only bugs behind a green 1300-test suite: judge echo, enriched-record strict re-validation, tracing-enabled-only branch (022 live checks).
+* **Creation**: Added [langfuse-cost-by-time-window](langfuse-cost-by-time-window.md) — per-run $ by summing trace totalCost over the run's window; serialize arms; same-source before/after honesty (022 cost protocol).
+* **Update**: [judge-envelope-defines-verdicts](judge-envelope-defines-verdicts.md) — rules 4+5: identical-envelope variance baseline applied to EVERY reported metric (the 17(i) unspanned over-read the review stack corrected), and visible envelope data invites echo — validators anticipate verdicts for ids never asked about (022 live bug 1 + re-judge replay).
+* **Update**: [facet-partition-value-list-scale-limit](facet-partition-value-list-scale-limit.md) — Status: CLOSED addendum pointing to the two-stage concept; group_facet_v1 deleted at the 022 review stack.
+* **Declined**: nullable-wire-field ripples into few-shot examples → already covered by [wire-field-additions-break-all-construction-sites](wire-field-additions-break-all-construction-sites.md) (icf_v2 re-verified it, third confirmation — no new content); seeded-then-patched selection rows need the characterisation chain → test-helper locality, carried by the fixed helper + its test, not durable system knowledge; Codex parallel-write disjoint-file safety + Codex-authored tests as the dominant defect surface → delegation process lessons, recorded in `docs/agentic-ops/harness.md` (022 step 8).
+
 ## 2026-07-13 (task 021 step 8)
 * **Creation**: Added [removing-shape-tolerance-sweeps-every-reader](removing-shape-tolerance-sweeps-every-reader.md) — dropping old-shape tolerance is only done when every reader fails closed; the 021 amendment's missed twin fallback in synthesise, caught by the review stack.
 * **Creation**: Added [validate-effective-defaults-not-explicit-args](validate-effective-defaults-not-explicit-args.md) — query_findings' kind/filter guard skipped the omitted-kinds default path; validate resolved values, test the default path (021 Codex adversarial).

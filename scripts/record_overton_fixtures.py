@@ -15,7 +15,6 @@ Usage: uv run --env-file .env python scripts/record_overton_fixtures.py
 (``OVERTON_API_KEY`` required; read from the environment, never committed.)
 """
 
-import hashlib
 import json
 import os
 import sys
@@ -24,25 +23,20 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
+from _fixture_sanitizer import fake_doi as _fake_doi
+from _fixture_sanitizer import fake_name as _fake_name
+from _fixture_sanitizer import fake_url as _fake_url
+from _fixture_sanitizer import fake_words as _fake_words
+from _fixture_sanitizer import h as _h
+
 QUERY = "housing affordability policy"
 N_RECORDS = 12
 TIMEOUT_S = 30
 SANITIZER_VERSION = "v2"
 RAW_PATH = Path(__file__).parent / "recordings" / "overton_raw.json"
 FIXTURE_PATH = (
-    Path(__file__).parent.parent / "src" / "policy_atlas" / "data" / "overton_documents.json"
+    Path(__file__).parent.parent / "tests" / "data" / "provider_records" / "overton_documents.json"
 )
-
-# Deliberately neutral fake words — nothing domain-flavoured, so fabricated text can
-# never collide with (or be mistaken for) a real record's words.
-_LEXICON = (
-    "quartz", "meadow", "lantern", "willow", "cobalt", "harbor", "juniper", "marble",
-    "ember", "sable", "orchid", "pigment", "tundra", "velvet", "saffron", "timber",
-    "glacier", "mosaic", "pewter", "sonnet", "tapestry", "vertex", "zephyr", "cedar",
-    "delta", "onyx", "prairie", "quill",
-)
-_FIRST = ("Alex", "Sam", "Jordan", "Robin", "Casey", "Morgan", "Jamie", "Drew")
-_LAST = ("Sampleton", "Fixture", "Placeholder", "Mockford", "Fablewood", "Stubbs")
 
 # Free-text fields carrying the document's (or provider-LLM's) words — always fabricated.
 # Includes the cites-entry fields (reference_string embeds raw URLs mid-string).
@@ -58,31 +52,6 @@ _TEXT_KEYS = {
     "journal",
     "publisher",
 }
-
-
-def _h(s: str) -> str:
-    return hashlib.sha256(s.encode()).hexdigest()
-
-
-def _fake_words(s: str) -> str:
-    n = min(max(len(s.split()), 3), 12)
-    digest = _h("words:" + s)
-    words = [_LEXICON[int(digest[i * 2 : i * 2 + 2], 16) % len(_LEXICON)] for i in range(n)]
-    return " ".join(words).capitalize()
-
-
-def _fake_name(s: str) -> str:
-    digest = _h("name:" + s)
-    return f"{_FIRST[int(digest[:2], 16) % len(_FIRST)]} {_LAST[int(digest[2:4], 16) % len(_LAST)]}"
-
-
-def _fake_doi(s: str) -> str:
-    return "10.99999/" + _h("doi:" + s)[:10]
-
-
-def _fake_url(s: str) -> str:
-    suffix = ".pdf" if s.lower().endswith(".pdf") else ""
-    return "https://example.org/" + _h("url:" + s)[:12] + suffix
 
 
 def _fake_slug(s: str) -> str:

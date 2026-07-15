@@ -1,7 +1,7 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–021 — backend only; setup unchanged since 002; task 007 adds two dev-time
+stands (tasks 001–023 — backend only; setup unchanged since 002; task 007 adds two dev-time
 fixture-recorder scripts needing `OVERTON_API_KEY`/optional OpenAlex vars in `.env` — see
 `.env.example`; task 008 adds parsing deps (pymupdf/pymupdf4llm/trafilatura — arrive via
 `make setup`/`uv sync`) and a keyless dev-time recorder using system `curl`; task 009 adds
@@ -52,6 +52,14 @@ extracts BOTH profiles by default (ICF is mini-priced; the 021 both-profiles liv
 extract over 10 docs landed in low single-digit dollars, see 021 verification.md) —
 note pre-021 `extraction_result` rows are no longer referenceable by group/synthesise
 (greenfield ruling: flat roll-ups raise a loud corrupt-reference error);
+task 023 adds **no new env vars** — `lxml` + `pymupdf` become *declared* direct deps (no
+new packages, both already arrived transitively; via `uv sync`), the walking-skeleton CLI
+and its `policy-atlas-skeleton` console script are **retired** (where per-task notes above
+say "skeleton", today's equivalent is the one entry point
+`python -m policy_atlas.runtime.orchestrate` — note the new `runtime.` module path), and
+the provider fixture data + replay backends move into the test suite
+(`tests/data/provider_records/` + `tests/provider_fixtures.py`), so a no-key orchestrate
+run's acquire step adds nothing and the chain walks the seeded corpus;
 `make verify` and the test suite need none of them — stub backends + socket-deny keep
 the suite egress-free. One suite runner at a time: concurrent `make verify` runs
 contend on the shared test DB and flake (018 note).
@@ -101,7 +109,7 @@ N/A — no auth or tenancy yet (deferred seam).
 
 - **`DATABASE_URL`** (required) — e.g.
   `postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas`.
-  Canonical value is in `.env.example`; copy it to `.env`. The skeleton reads it; `conftest` calls
+  Canonical value is in `.env.example`; copy it to `.env`. The orchestrate entry point reads it; `conftest` calls
   `load_dotenv()` and fails loudly if it is unset.
 - **`TEST_DATABASE_URL`** — defaulted by the Makefile to the `policy_atlas_test` DB. `make test` /
   `make verify` export it as `DATABASE_URL`, so tests never touch the dev DB. Override only to point

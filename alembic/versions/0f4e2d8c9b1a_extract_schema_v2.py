@@ -24,7 +24,7 @@ depends_on: Union[str, Sequence[str], None] = None
 _EFFECT_BASIS_CHECK = "effect_basis IS NULL OR effect_basis IN ('observed', 'modelled')"
 
 # Keep the literal 'Unclassified' in sync with
-# extract_prompt.UNCLASSIFIED_EVIDENCE_TYPE; migrations must remain static.
+# iof_prompt.UNCLASSIFIED_EVIDENCE_TYPE; migrations must remain static.
 _SER_EVIDENCE_TYPE_CHECK = (
     "primary_evidence_type IS NULL OR primary_evidence_type IN ("
     "'Systematic Review and Meta-Analysis', "

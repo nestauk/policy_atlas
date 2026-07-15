@@ -1,23 +1,26 @@
 """Shared test helpers — not fixtures, plain functions."""
 
 import uuid
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.engine import Connection
 
-from policy_atlas.search_prompts import (
+from policy_atlas.core.usage import UsageResult
+from policy_atlas.evidence_base.sourcing.search_loop import CallVerb, ExecutedCall, QueryOrigin
+from policy_atlas.evidence_base.sourcing.search_prompts import (
     QueriesPayload,
     ReformulatePayload,
     SearchQueriesWire,
     SearchSuggestWire,
     SuggestPayload,
 )
-from policy_atlas.usage import UsageResult
 
 if TYPE_CHECKING:
-    from policy_atlas.implementation_context_records import ICFRecordWire
+    from policy_atlas.evidence_base.extract.icf_records import ICFRecordWire
 
 EVIDENCE_TYPE = "RCTs and Quasi-Experimental Studies"
 IOF_PROFILE_ID = "eb_iof_base_v1"
@@ -30,14 +33,149 @@ def now() -> datetime:
     return datetime.now(UTC)
 
 
+# --- Fake OpenAI ``chat.completions.parse`` client double (task 023 WP8) ---
+#
+# Every ``OpenAI*Backend.<verb>`` seam that calls ``self._client.chat.completions.parse(...)``
+# and reads ``response.choices[0].message.parsed`` shares this shape. Backends whose live path
+# calls ``.completions.create`` with tool-call messages (e.g. ``OpenAISynthesisBackend``'s
+# section-turn loop) are a genuinely different shape — those stay local to their test module.
+
+
+@dataclass
+class FakeParsedMessage:
+    parsed: Any
+
+
+@dataclass
+class FakeChoice:
+    message: FakeParsedMessage
+
+
+@dataclass
+class FakeParseResponse:
+    choices: list[FakeChoice]
+    usage: Any = None
+
+
+class FakeParseCompletions:
+    """Test double for ``client.chat.completions``, recording every ``parse()`` call's kwargs."""
+
+    def __init__(self, response: FakeParseResponse) -> None:
+        self._response = response
+        self.calls: list[dict[str, Any]] = []
+
+    def parse(self, **kwargs: Any) -> FakeParseResponse:
+        self.calls.append(kwargs)
+        return self._response
+
+
+class FakeParseChat:
+    def __init__(self, response: FakeParseResponse) -> None:
+        self.completions = FakeParseCompletions(response)
+
+
+class FakeOpenAIParseClient:
+    """Test double for an OpenAI client exposing only ``chat.completions.parse``.
+
+    Build via ``fake_parse_client``, not directly.
+    """
+
+    def __init__(self, response: FakeParseResponse) -> None:
+        self.chat = FakeParseChat(response)
+
+
+def fake_parse_client(
+    *,
+    parsed: Any = _UNSET,
+    usage: Any = None,
+    choices: list[FakeChoice] | None = None,
+) -> FakeOpenAIParseClient:
+    """Build a fake OpenAI client double for a ``chat.completions.parse`` backend seam.
+
+    The common case passes ``parsed``: it becomes the sole choice's
+    ``message.parsed`` (identity-preserved — ``result is parsed`` holds for
+    backends that return the parsed object verbatim). Pass ``choices``
+    directly instead — even ``[]`` — to control the choices list exactly,
+    e.g. to exercise a backend's no-choices error path. Exactly one of
+    ``parsed``/``choices`` should be given.
+
+    Every ``parse()`` call's kwargs are recorded on
+    ``client.chat.completions.calls``, in order, for assertions like
+    ``kwargs["model"] == ...``.
+
+    Args:
+        parsed: The parsed payload for the sole response choice.
+        usage: The fake response's ``usage`` attribute; most backends under
+            test don't read it, so it defaults to ``None``.
+        choices: An explicit choices list, bypassing ``parsed``.
+
+    Returns:
+        A fake client to assign onto a backend's ``_client`` attribute.
+    """
+    if choices is None:
+        if parsed is _UNSET:
+            raise ValueError("fake_parse_client requires parsed= or choices=")
+        choices = [FakeChoice(message=FakeParsedMessage(parsed))]
+    return FakeOpenAIParseClient(FakeParseResponse(choices=choices, usage=usage))
+
+
+def executed_calls_for(
+    backends: "Sequence[Any]",
+    query: str,
+    *,
+    verb: "CallVerb" = "search",
+    query_origin: "QueryOrigin" = "verbatim",
+) -> list[ExecutedCall]:
+    """Build one ``ExecutedCall`` per backend via a direct ``backend.search(query)`` call.
+
+    Mirrors the removed ``acquire.py`` legacy none-fabrication path (task 023 C3
+    cut): production always supplies ``executed_calls`` to ``acquire_sources``
+    now, so tests that exercised the old omitted-``executed_calls`` branch
+    build their own executed-call stream here, upstream of ``acquire_sources``.
+
+    Args:
+        backends: Backend instances to call ``search`` on, in order.
+        query: Query text passed to each backend's ``search``.
+        verb: Recorded call verb; defaults to ``"search"``.
+        query_origin: Recorded query origin; defaults to ``"verbatim"``.
+
+    Returns:
+        One ``ExecutedCall`` per backend, ``status="error"`` if ``search`` raised.
+    """
+    calls: list[ExecutedCall] = []
+    for backend in backends:
+        status: Literal["ok", "error"]
+        error: str | None
+        try:
+            records = backend.search(query)
+            status, error = "ok", None
+        except Exception as exc:
+            records = []
+            status, error = "error", str(exc)
+        calls.append(
+            ExecutedCall(
+                backend_name=backend.name,
+                verb=verb,
+                query=query,
+                query_origin=query_origin,
+                wire_params={},
+                records=records,
+                status=status,
+                error=error,
+            )
+        )
+    return calls
+
+
 def make_icf_wire_record(**overrides: Any) -> "ICFRecordWire":
     """Build an ICF wire record with sane defaults; override per test."""
-    from policy_atlas.extraction_records import IOFAnchorWire
-    from policy_atlas.implementation_context_records import ICFRecordWire
+    from policy_atlas.evidence_base.extract.icf_records import ICFRecordWire
+    from policy_atlas.evidence_base.extract.iof_records import IOFAnchorWire
 
     values: dict[str, Any] = {
         "context_type": "barrier",
         "claim": "Training gaps slowed delivery of the programme.",
+        "context_label": None,
         "intervention": "home visiting",
         "outcome": None,
         "population": "families with young children",
@@ -120,7 +258,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         conn: Open database connection.
         project_id: Project whose rows to remove.
     """
-    from policy_atlas.schema import (
+    from policy_atlas.core.schema import (
         addressable_unit,
         annotation,
         artefact,
@@ -146,10 +284,10 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         source_tag,
         synthesis_result,
     )
-    from policy_atlas.schema import (
+    from policy_atlas.core.schema import (
         chunk as chunk_table,
     )
-    from policy_atlas.schema import (
+    from policy_atlas.core.schema import (
         citation as citation_table,
     )
 
@@ -273,10 +411,10 @@ def seed_ingested_full_text(
 
     Returns the full-text snapshot id.
     """
-    from policy_atlas.embeddings import EMBEDDING_PROFILE, UNIT_POLICY, StubEmbeddingBackend
-    from policy_atlas.grounding import content_hash
-    from policy_atlas.schema import chunk as chunk_table
-    from policy_atlas.schema import chunk_embedding, project_source_snapshot, source_snapshot
+    from policy_atlas.core.embeddings import EMBEDDING_PROFILE, UNIT_POLICY, StubEmbeddingBackend
+    from policy_atlas.core.hashing import content_hash
+    from policy_atlas.core.schema import chunk as chunk_table
+    from policy_atlas.core.schema import chunk_embedding, project_source_snapshot, source_snapshot
 
     full_snapshot_id = uuid.uuid4()
     conn.execute(
@@ -329,7 +467,7 @@ def seed_source(
     conn: Connection, project_id: uuid.UUID, meta: dict[str, Any] | None = None
 ) -> tuple[uuid.UUID, uuid.UUID]:
     """Insert source_snapshot + project_source_snapshot; return (source_snapshot_id, pss_id)."""
-    from policy_atlas.schema import project_source_snapshot, source_snapshot
+    from policy_atlas.core.schema import project_source_snapshot, source_snapshot
 
     snap_id = uuid.uuid4()
     pss_id = uuid.uuid4()
@@ -356,7 +494,7 @@ def seed_scope(
     conn: Connection, project_id: uuid.UUID, context: dict[str, Any] | None = None
 ) -> uuid.UUID:
     """Insert a evidence_scope; return scope_id."""
-    from policy_atlas.schema import evidence_scope
+    from policy_atlas.core.schema import evidence_scope
 
     scope_id = uuid.uuid4()
     conn.execute(evidence_scope.insert().values(
@@ -385,7 +523,7 @@ def seed_screening_result(
     ``screen_stage`` defaults to 1; pass 2 to seed a stage-2 row (e.g. a
     demotion or confirmation) atop a doc's stage-1 row.
     """
-    from policy_atlas.schema import source_screening_result
+    from policy_atlas.core.schema import source_screening_result
 
     if status == "failed":
         basis = None
@@ -409,7 +547,7 @@ def seed_screening_result(
 
 def seed_project_and_run(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:
     """Insert a project + running run; return (project_id, run_id)."""
-    from policy_atlas.schema import project
+    from policy_atlas.core.schema import project
 
     pid = uuid.uuid4()
     conn.execute(project.insert().values(project_id=pid, created_at=now()))
@@ -418,7 +556,7 @@ def seed_project_and_run(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:
 
 def seed_run(conn: Connection, project_id: uuid.UUID) -> uuid.UUID:
     """Insert an additional running run for an existing project; return run_id."""
-    from policy_atlas.schema import runs
+    from policy_atlas.core.schema import runs
 
     rid = uuid.uuid4()
     conn.execute(
@@ -444,7 +582,7 @@ def seed_select_doc(
     text_basis: str = "full_text",
 ) -> uuid.UUID:
     """Insert a screened-relevant source ready for select, with optional classification."""
-    from policy_atlas.schema import (
+    from policy_atlas.core.schema import (
         project_source_snapshot,
         source_appraisal_result,
         source_classification_result,
@@ -501,7 +639,7 @@ def seed_characterisation(
     unclustered: list[uuid.UUID] | None = None,
 ) -> None:
     """Insert a characterisation_result row with the given theme membership."""
-    from policy_atlas.schema import characterisation_result
+    from policy_atlas.core.schema import characterisation_result
 
     conn.execute(characterisation_result.insert().values(
         characterisation_id=uuid.uuid4(),
@@ -536,8 +674,8 @@ def run_select(
     backend: Any = None,
 ) -> tuple[dict[str, Any], Any, uuid.UUID]:
     """Seed a fresh run and execute select_scope; return (summary, persisted row, run_id)."""
-    from policy_atlas.schema import selection_result
-    from policy_atlas.select import SelectContext, select_scope
+    from policy_atlas.core.schema import selection_result
+    from policy_atlas.evidence_base.corpus.select import SelectContext, select_scope
 
     run_id = seed_run(conn, project_id)
     summary = select_scope(

@@ -13,13 +13,11 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-import time
 from importlib import metadata
 from pathlib import Path
 from typing import Any
 
 import fitz
-
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = ROOT / "tests" / "data" / "fulltext"
@@ -108,21 +106,11 @@ def _atomic_write(path: Path, data: bytes) -> None:
 def _download(url: str) -> bytes:
     # curl rather than urllib: nature.com (and friends) bot-block urllib's
     # client fingerprint but serve curl. Dev-time only; never in the package.
-    last_error: BaseException | None = None
-    for attempt in range(1, 4):
-        try:
-            proc = subprocess.run(
-                ["curl", "-sSL", "--fail", "--max-time", str(TIMEOUT_S),
-                 "-A", USER_AGENT, url],
-                capture_output=True, timeout=TIMEOUT_S + 30, check=True,
-            )
-            return proc.stdout
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-            last_error = exc
-            print(f"retry {attempt}/3 failed for {url}: {exc}")
-            if attempt < 3:
-                time.sleep(1)
-    raise RuntimeError(f"failed after 3 attempts: {url}") from last_error
+    proc = subprocess.run(
+        ["curl", "-sSL", "--fail", "--max-time", str(TIMEOUT_S), "-A", USER_AGENT, url],
+        capture_output=True, timeout=TIMEOUT_S + 30, check=True,
+    )
+    return proc.stdout
 
 
 def _check_file(name: str, content_type: str) -> None:

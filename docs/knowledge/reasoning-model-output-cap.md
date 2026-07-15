@@ -46,7 +46,7 @@ run as "mostly worked".
 
 - [011-extract/verification.md](../tasks/011-extract/verification.md) (§ Live-run evidence,
   run 1; § Diff summary deviation 2)
-- `EXTRACT_MAX_OUTPUT_TOKENS` in `src/policy_atlas/extract_prompt.py`;
+- `EXTRACT_MAX_OUTPUT_TOKENS` in `src/policy_atlas/evidence_base/extract/iof_prompt.py`;
   fingerprint component `max_output_tokens` in `src/policy_atlas/extract.py`
 - [018 verification.md § B4](../tasks/018-dress-rehearsal/verification.md)
   (classify@xhigh FAILED validation; xhigh-uncapped experiment — keep high, on quality);

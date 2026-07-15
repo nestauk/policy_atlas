@@ -4,6 +4,26 @@ Recurring issues encountered during the task cycle. Each entry: what happened, r
 
 ---
 
+## 2026-07-14 — A commit landed on a red gate: gate exit codes must be read directly, with the gate's exact commands
+
+**What happened:** three related lapses in task 023's build. (1) The phase-F commit was
+`&&`-chained onto a `make verify` run that was red (test-DB contamination) — the chain
+was written before the gate's outcome was known. Self-caught: DB reset, gate re-run
+green on the identical tree, commit amended with the incident in its message. (2) A
+C-phase gate run was read as passing because `make verify | tail` reports the *pipe's*
+exit code — zsh spells the real one `pipestatus` (lowercase), and the tail of a red run
+can look green. (3) Parallel lane done-checks ran `mypy src/policy_atlas` where the gate
+runs `mypy src tests` — 15 test-side errors accumulated invisibly until the lead's full
+gate caught them.
+
+**Root cause:** in all three, a *proxy* for the gate (a chained command, a piped tail, a
+narrower approximation) was trusted where only the gate itself is evidence.
+
+**Rule:** a commit follows a gate it has *seen* exit 0 — never `&&`-chain a commit onto
+a gate run. Read exit codes directly, never through a pipe. Lane done-checks run the
+gate's exact commands, not approximations. (The companion test-DB contamination lesson
+lives in `docs/knowledge/testing-database.md` + the deferred.md per-lane-DB entry.)
+
 ## 2026-07-12 — Phase commit swept in 6,230 node_modules files: no JS ignores existed and nobody looked at the stat line
 
 **What happened:** Task 020's phase C commit staged `demo/frontend/node_modules`

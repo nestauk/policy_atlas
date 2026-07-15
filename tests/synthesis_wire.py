@@ -10,13 +10,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from policy_atlas.synthesis_backend import (
+from policy_atlas.core.usage import UsageResult
+from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     ClaimWire,
     RepairItemWire,
+    SectionProposalWire,
     SectionProseWire,
     SectionRepairWire,
+    SectionTurn,
 )
-from policy_atlas.usage import UsageResult
+from policy_atlas.evidence_base.synthesis.synthesis_tools import ToolExchange
 
 
 def empty_key_findings(_seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
@@ -44,11 +47,84 @@ def repair_wire(*, claims: list[ClaimWire]) -> SectionRepairWire:
     """Build a ``SectionRepairWire`` from reworded replacement claims.
 
     Each replacement claim's text is spliced verbatim as its prose segment (an
-    exact substring), positionally mapped to the failing claims.
+    exact substring), id-mapped to the failing claims.
     """
     return SectionRepairWire(
         repairs=[
-            RepairItemWire(replacement_segment=claim.text, claim=claim)
-            for claim in claims
+            RepairItemWire(
+                claim_id=f"s0c{index}",
+                replacement_segment=claim.text,
+                claim=claim,
+            )
+            for index, claim in enumerate(claims)
         ]
     )
+
+
+class ScriptedSynthesisBackend:
+    """Base for section-loop test doubles that script one scenario's ``section_turn``.
+
+    Shares the plumbing every scripted synthesis backend needs: ``mode =
+    "stub"``, a fixed ``propose_sections`` proposal (pass it via ``proposal=``
+    or set ``self._proposal`` in a subclass ``__init__``), an absence-path
+    ``write_key_findings`` (``empty_key_findings``), and a ``repair_section``
+    default that fails loudly if called — most scripted scenarios never
+    expect a repair pass. Override whichever of the three a scenario needs
+    differently; ``section_turn`` has no shared default (task 023 WP8 —
+    it's each scenario's reason for existing) and subclasses must implement it.
+    """
+
+    mode = "stub"
+
+    def __init__(self, *, proposal: SectionProposalWire | None = None) -> None:
+        self._proposal = proposal
+
+    def propose_sections(
+        self,
+        *,
+        intent: str,
+        substrate: dict[str, Any],
+        rejection: list[str] | None = None,
+    ) -> UsageResult[SectionProposalWire]:
+        del intent, substrate, rejection
+        if self._proposal is None:
+            raise AssertionError(
+                f"{type(self).__name__} has no propose_sections() proposal configured"
+            )
+        return self._proposal, None
+
+    def section_turn(
+        self,
+        seed: dict[str, Any],
+        transcript: list[ToolExchange],
+        *,
+        force_emit: bool,
+    ) -> UsageResult[SectionTurn]:
+        raise NotImplementedError
+
+    def repair_section(
+        self,
+        seed: dict[str, Any],
+        transcript: list[ToolExchange],
+        *,
+        failing: list[dict[str, Any]],
+    ) -> UsageResult[SectionRepairWire]:
+        del seed, transcript, failing
+        raise AssertionError(f"{type(self).__name__}.repair_section should not be called")
+
+    def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
+        return empty_key_findings(seed)
+
+    @staticmethod
+    def _repair_unchanged(failing: list[dict[str, Any]]) -> SectionRepairWire:
+        """Rebuild each failing claim's ``ClaimWire`` unchanged (a no-op passthrough repair).
+
+        Shared by scenarios whose repair pass deliberately returns the
+        failing claim(s) verbatim (e.g. a fabricated quote that repair cannot fix).
+        """
+        claims: list[ClaimWire] = []
+        for record in failing:
+            raw = record.get("claim", record)
+            claim_data = {k: v for k, v in raw.items() if k in ClaimWire.model_fields}
+            claims.append(ClaimWire.model_validate(claim_data))
+        return repair_wire(claims=claims)

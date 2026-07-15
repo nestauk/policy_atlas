@@ -22,35 +22,42 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `021-icf` (contract + plan APPROVED
-2026-07-12, all 8 contract-gate + 5 plan-gate decisions decided,
-both adversarial reviews adjudicated, ADR 0017 Accepted — build
-per `docs/tasks/021-icf/plan.md` in a fresh conversation,
-task-cycle-build; Tier 3).
+Implementation — task `023-codebase-health` (design in progress,
+2026-07-14). A behaviour-preserving pre-eval cleanup slice built
+from the owner-adjudicated whole-codebase review
+(`docs/tasks/023-codebase-health/review-findings.md` — six review
+lanes + a lead naming/structure re-sweep, all findings adjudicated
+2026-07-14): dead-code cuts (~830 lines + the adjudicated echo-chain
+cut), IOF/ICF naming symmetry (iof_/icf_ module pairs), the
+capability-aware package regroup (`runtime/` ·
+`evidence_base/{sourcing,assess,corpus,extract,group,synthesis}` ·
+`core/` — owner-named, monorepo/CDK-aware), embeddings.py client/usage
+split, test pre-hardening (string-path patch sites, country-filter
+fail-closed rows, search-generation wire test), docs truth (README
+rewrite, prompt-pin corrections), the three approved dependency
+edits (declare lxml+pymupdf, raise stale floors, prune
+[tool.pyright]), three adopted wall-clock optimisations (group
+assignment concurrency, appraise bulk insert, sumprod cosine), and
+**skeleton retirement** — `orchestrate` (no-key stub mode, scripted
+console) is the standardised smoke + live-check vehicle from this
+slice on. Tier 3 (deps hard gate). Design and build run in the
+review conversation by owner decision; the review stack runs
+fresh.
 
-Tasks `001-walking-skeleton` through `020-extract-v2` are complete
-(merged) — the EB chain runs end-to-end live behind the thin v1
-orchestrator with the prose-first synthesis output shape v2
+Tasks `001-walking-skeleton` through `022-synthesis-refinement` are
+complete (merged) — the EB chain runs end-to-end live behind the
+thin v1 orchestrator with prose-first synthesis output shape v2
 (ADR 0015), select at standard depth, fail-closed country
-filters/groups, IOF schema v2 (`iof_v2`: effect_basis +
-study_geography, envelope fencing — ADR 0016), and the pinned
-prompt surfaces (`planner_v3`, `extract_iof_v6` + finding vetter,
-`synthesise_section_v5`, `synthesise_sections_v2`). 018 trailing
-lanes: **C4 demo surface** (codex lane, throwaway `demo-live-run`
-branch — never merges) and **D2 rehearsal** (owner-scheduled).
-
-`021-icf` is the promoted pre-eval ICF slice of the owner-adjudicated
-sequencing (2026-07-12; criterion: schema/vocabulary/composition
-changes land BEFORE evals, prompt/constant tuning after, with eval
-cover): `implementation_context_finding` — the second reusable
-finding schema (mechanisms, barriers, implementation conditions).
-EB synthesis is its first reader; posture pinned at the 020 gate:
-separate extraction call/profile, own fingerprint domain, never
-invalidates IOF memos; same source-named reference vocabulary so
-cross-schema linkage stays reference-mediated via `group`. Then
-Slice C (synthesis multi-facet + cost/surface), then the eval slice
-with cost as a first-class axis (ICF ground truth authored alongside
-IOF's, with/without-ICF composition as an explicit axis). Bedrock
-migration, retrieval-boost grammar v2 and all other seams remain
-deferred (`docs/deferred.md`).
+filters/groups, IOF schema v2 (ADR 0016), the ICF second finding
+schema + kind-typed `query_findings` + kind-spanning membership
+bridge (ADR 0017), multi-facet grouping on the shared two-stage
+clustering engine + the 022 cost/surface work (ADR 0018, −49%
+synthesis cost), and the pinned prompt surfaces (`planner_v5`,
+`extract_iof_v7` + vetter, `extract_icf_v2` + vetter,
+`synthesise_section_v7` (v6 frozen as the cost-harness baseline),
+`synthesise_sections_v2`). 018 trailing lanes: **C4 demo surface**
+(codex lane, throwaway `demo-live-run` branch — never merges) and
+**D2 rehearsal** (owner-scheduled). After 023: the eval slice
+(cost as a first-class axis), then Bedrock, then the workspace
+cluster. All other seams remain deferred (`docs/deferred.md`).
 
