@@ -5,6 +5,16 @@
 > steering-event vocabulary).
 >
 > **Rev history**
+> - **rev 3** (2026-07-15): **walk identity decided (owner, at the gate)** —
+>   the zero-schema posture is reversed for the walk itself: 024 ships the
+>   minimal **`capability_run` entity** (the 017 deferred seam) as the one
+>   approved schema addition; steering events key on it (decision 1
+>   rewritten, 1b added). Driver: robust attachment (the owner challenged
+>   most-recent-run as the semantic anchor for walk-level events),
+>   multi-run projects (owner direction 2026-07-12), and the
+>   planning-conversation anchor (`session_id`). Also: **co-pilot Q&A
+>   sequenced as its own slice immediately after 024** (025) — recorded in
+>   Out of scope; not folded in.
 > - **rev 2** (2026-07-15): **ship-list decided (owner)** — S0 + S1 + **S2**
 >   (the owner upgraded the study's S0+S1 recommendation to include the
 >   thin-search steer point). S2 moves from Out to In with its mechanics
@@ -66,11 +76,15 @@ PR landing:
   refusal) · `component.skipped` (resolves 017's flagged deviation).
   Zero-schema: JSONB payloads on the existing `event_log`, attached to the
   most-recent attempted run id (decision 1).
-- **History read model**: `steering_history(conn, project_id)` — the
-  deterministic projection that rebuilds the ordered
-  check-in/pause/decision story from `event_log` + `orchestration_plan` +
-  `runs`; the front-end's read surface and the rebuildability test's
-  subject.
+- **The `capability_run` entity** (decision 1b): table + `runs` FK column +
+  alembic migration + runner threading (open/thread/close) — the walk's
+  durable identity, the multi-run project grouping key, and the
+  planning-conversation anchor (`session_id`).
+- **History read model**: `steering_history(conn, project_id,
+  capability_run_id=None)` — the deterministic projection that rebuilds the
+  ordered check-in/pause/decision story per walk from `event_log` +
+  `orchestration_plan` + `capability_run` + `runs`; the front-end's read
+  surface and the rebuildability test's subject.
 - **Interpreter seam**: `SteeringInterpreterBackend` protocol + live
   structured-output backend + stub; wire model = discriminated union over
   the closed steering vocabulary, validated fail-closed then compiled
@@ -126,7 +140,9 @@ PR landing:
 **In:**
 
 - `runtime/steering.py`, `runtime/runner.py`, `runtime/orchestrate.py` —
-  event emission, interpreter wiring, S1 steer point, S0 triggers.
+  event emission, interpreter wiring, S1/S2 steer points, S0 triggers,
+  capability_run threading.
+- `core/schema.py` + one alembic migration (decision 1b only).
 - New `runtime/steering_interpreter.py` (+ prompt module) + stub.
 - New history projection (module home plan-designed; likely
   `runtime/steering_history.py`).
@@ -151,25 +167,52 @@ PR landing:
   canonical events are the record — §9's line).
 - Front-end/API surfaces; the decision-log/catch-me-up *renderers* (the
   projection function is the v1 read surface).
-- Schema changes (decision 1 is zero-schema; a forced migration is a stop
-  condition, not a quiet pivot).
+- **Co-pilot Q&A — sequenced as the next slice (025, owner 2026-07-15)**:
+  follow-up questions over the collected evidence without a new capability
+  run (the spec's read-only co-pilot: `retrieve` · `lookup` ·
+  `query-findings`, no `search`, honestly tiered answers, ephemeral unless
+  promoted). Substrate largely built (kind-typed `query_findings`, scoped
+  `search_chunks`); its own contract, not a 024 rider.
+- Schema beyond decision 1b (any second table/column is a stop condition,
+  not a quiet pivot). Transcript persistence and conversation-turn tables
+  (workspace cluster; `session_id` is the anchor this slice leaves ready).
 
 ## Decisions
 
-1. **Events are zero-schema on the existing substrate, attached to the
-   most-recent attempted run id.** Every reachable pause has a predecessor
-   run (`runner.py` pauses only after a first check-in;
-   discretionary-skip and unattended boundaries likewise follow attempts),
-   so `event_log`'s non-null composite-FK `run_id` holds without migration
-   — the same table-first adjudication as 017 rev 2.5, now with the event
-   half completed. The alternative (synthetic plan-walk run row) is
-   presented to the plan gate but not preferred: it buys cleaner semantics
-   at the cost of `runs` no longer meaning "component attempt".
-   Payload rule: every steering event carries `plan_id` + `plan_version` +
-   `boundary`, so the projection can join decisions to plan lineage without
-   inference. Emission is transactional with its adjacent state change
-   where one exists (plan version row, abandon flip) — the §9 transaction
-   invariant.
+1. **Events ride the existing `event_log` unchanged; the walk gets a real
+   identity** *(rev 3 — rewritten at the gate)*. `event_log` itself is
+   untouched (append-only semantics, non-null composite-FK `run_id` intact).
+   Attachment rule: an `after_component` steering event attaches to the
+   component run it is *about* (the semantically correct anchor — a
+   deepening-selection decision belongs to its select run); walk-level and
+   `before_component` events attach to the most-recent attempted run as FK
+   plumbing only, with the semantic keys in the payload. Payload rule:
+   every steering event carries `capability_run_id` + `plan_id` +
+   `plan_version` + `boundary` — the projection keys on the entity, never
+   on FK convention. Emission is transactional with its adjacent state
+   change where one exists (plan version row, abandon flip) — the §9
+   transaction invariant.
+
+   **1b. The `capability_run` entity (the one approved schema addition;
+   discharges the 017 deferred seam).** Minimal by the "model only what
+   behaves" discipline: `capability_run_id` (pk) · `project_id` (FK) ·
+   `evidence_scope_id` · `capability` (text, `"evidence_base"` in v3.0) ·
+   `plan_id` + `plan_version` at approval (amendments recorded by the
+   steering events + plan rows, not by mutating this row) · `status`
+   (running / succeeded / degraded / failed / aborted) · `session_id`
+   (nullable — the planning-conversation anchor, the same Langfuse session
+   key `run.started` payloads already carry) · `started_at` / `ended_at`.
+   Plus one nullable `capability_run_id` FK column on `runs`, so component
+   attempts group under their walk. Deliberately NOT modelled (deferred
+   until a second capability behaves): multi-capability composition
+   fields, artefact back-reference (derivable via
+   `synthesis_result.run_id → runs.capability_run_id`), conversation-turn
+   tables. `run_plan` opens the row, threads the id, closes it with the
+   walk status. Alembic migration with explicit revisions + roundtrip
+   test (repo knowledge rule). Multi-run projects get their grouping key;
+   a future EB+options composition is one orchestration plan spanning
+   capabilities with each capability run still its own row (the spec's
+   two-tier plan structure).
 2. **The projection is the contract.** `steering_history()` returns the
    ordered decision story (pause → options/triggers → decision → outcome,
    with check-in renders reconstructable via `render_check_in` over
@@ -243,8 +286,10 @@ PR landing:
 - **Runtime egress (hard gate — approved by approving this contract):** one
   new inference surface (steering interpreter), pause-time only. No new
   search egress.
-- **Schema: none expected.** A design-forced migration is a stop condition
-  (halt, re-gate).
+- **Schema (hard gate — approved rev 3, owner at the gate):** exactly one
+  table (`capability_run`) + one nullable FK column (`runs.capability_run_id`)
+  per decision 1b. `event_log` untouched. Anything beyond this is a stop
+  condition (halt, re-gate).
 - **Deps: none.** CI: untouched. Public interfaces: CLI gains free-text
   input at existing prompts (additive).
 - Prompt-bearing surface (`steer_interpret_v1`) is lead-authored, pinned,
@@ -282,6 +327,8 @@ ship menu-only + flag, don't silently degrade the seam.
 ## Acceptance checks
 
 - `make verify` green (stub backends; zero egress).
+- **Migration:** alembic upgrade/downgrade roundtrip test (explicit
+  revisions, repo knowledge rule); schema diff is exactly decision 1b.
 - **Deterministic tests:** event emission at every steering path
   (pause/decision/rejected/refused/auto-resolved/skipped) · payload
   completeness (plan lineage + verbatim text) · the decision-2 rebuild test

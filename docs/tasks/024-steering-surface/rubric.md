@@ -5,9 +5,11 @@ The task is **done only if every box holds** — otherwise it is in progress.
 1. [ ] Implementation satisfies [contract.md](contract.md).
 2. [ ] `make verify` passes; declared manual/live checks pass (stub-backed,
        zero-egress in CI).
-3. [ ] No approval-gated change snuck in unapproved — **schema stays
-       untouched** (zero-schema events hold), no new deps, CI untouched;
-       the one approved egress surface is the pause-time interpreter only.
+3. [ ] No approval-gated change snuck in unapproved — schema diff is
+       **exactly** decision 1b (`capability_run` table +
+       `runs.capability_run_id`; `event_log` untouched), no new deps, CI
+       untouched; the one approved egress surface is the pause-time
+       interpreter only.
 4. [ ] No generated files or secrets edited by hand.
 5. [ ] No tests deleted, skipped or weakened without written justification.
 6. [ ] Verification evidence recorded ([verification.md](verification.md)).
@@ -22,7 +24,9 @@ Slice-specific:
 9.  [ ] **Rebuild holds:** a fresh-connection `steering_history()` over a
         scripted steered run reproduces the full pause → options/triggers →
         decision → outcome story from the database alone (test-asserted; no
-        in-memory or transcript input).
+        in-memory or transcript input) — keyed by `capability_run`, and
+        correct with two walks in one project (the multi-run case
+        test-asserted).
 10. [ ] **Every steering path emits its event:** pause presented · decision
         (all five response kinds incl. auto_resolved) · rejected adjustment ·
         refused intent · component skipped — each with plan id + version and

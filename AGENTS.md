@@ -39,9 +39,14 @@ provenance (revises 017's one-LLM-call sequencing invariant —
 runtime-egress hard gate); (c) **steer-point expansion study** —
 design-phase inventory of all EB components for decision-shaping
 moments worth surfacing as steer points, ranked in
-`docs/tasks/024-steering-surface/steer-point-study.md`; the owner
-picks the ship-list at the contract gate. Tier 3 (runtime egress +
-possible event-substrate schema change + prompt-bearing surface).
+`docs/tasks/024-steering-surface/steer-point-study.md`; owner
+ship-list (contract gate, 2026-07-15): **S0 + S1 + S2**; plus (d) the
+**minimal `capability_run` entity** (owner, rev 3 — the walk's durable
+identity + `runs.capability_run_id`; the one approved schema
+addition). Tier 3 (runtime egress + schema + prompt-bearing surface).
+Sequenced next after 024: **025 co-pilot Q&A** (owner, 2026-07-15) —
+read-only follow-up answers over collected evidence; then the eval
+slice.
 
 Tasks `001-walking-skeleton` through `022-synthesis-refinement` are
 complete (merged) — the EB chain runs end-to-end live behind the
