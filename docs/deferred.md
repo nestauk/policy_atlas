@@ -1402,6 +1402,15 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   serial gate re-runs + dropdb/createdb resets + the smoke recipe
   (`docs/knowledge/orchestrate-stub-smoke.md`). If parallel lanes stay routine, promote
   this to per-lane disposable DATABASE_URLs.
+- **`quote_verify` generic-matcher split (owner ruling, 2026-07-15: leave as-is, seam
+  recorded)** — `extract/quote_verify.py` is one engine with two kinds of content: the
+  generic `qv_v1` matcher substrate (`BasisText`/`QuoteMatcher`/`build_basis`) and the
+  extract-specific IOF/ICF field rules + grain gates that dominate the module. Synthesis
+  reaches back for exactly the matcher trio (`synthesise.py`) so both checkpoints share
+  one normalisation regime and offset convention — a clean downstream-imports-upstream
+  edge, verified acyclic. Split the matcher trio into `core/` (the `hashing.py` pattern)
+  only if a third consumer of the matcher appears; purity alone doesn't pay for the
+  extra module.
 - **Bedrock security-pass riders (023 review stack, security lane)** — two diff-scoped
   observations routed to the deferred whole-repo security pass: (1) the untrusted-input
   parsers `lxml` and `trafilatura` have floors but no ceilings — consider the `<N+1`
