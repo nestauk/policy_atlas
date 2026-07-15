@@ -22,42 +22,42 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `022-synthesis-refinement` (contract + plan
-APPROVED 2026-07-14 · owner; both adversarial reviews adjudicated
-(15/15 contract, 12/12 plan — headline: writer bump retargeted to
-`synthesise_section_v7`, v6 shipped in 021); ADR 0018 Accepted —
-design phase COMPLETE. Build per
-`docs/tasks/022-synthesis-refinement/plan.md` in a fresh
-conversation, task-cycle-build; Tier 3; build order
-0 → A∥B → R∥C → D∥E → F0 → F1–F5 → G → H). This is Slice C of the
-owner-adjudicated pre-eval sequencing (2026-07-12), shipped as
-ONE slice with two phases (owner call, 2026-07-14): **Phase 1 —
-multi-facet grouping** in the owner's in-component shape (facet
-fan-out within one `group` run; `facet` moves to group-row grain —
-small schema gate; per-call facet value-list scale is a
-first-class design constraint, live-proven limit ~184 values —
-`docs/knowledge/facet-partition-value-list-scale-limit.md`).
-**Phase 2 — cost + surface**, one prompt-version bump
-(cache-prefix engineering, repair-input scoping, tool-return
-hygiene, writer read-tool scoping plumbing, pre-synthesise steer
-point, id-carrying repair schema, screen-confidence retrieval
-boost gate). Contract agenda: the owner-reopened rulings
-(grammar-v2 boundary, judge-envelope clamp, unspanned-lane
-coverage, 018's writer-envelope metadata A/B queue, effect_basis
-judge-envelope candidate, hybrid dimension search build-or-defer,
-cross-kind UNION view).
+Implementation — task `023-codebase-health` (design in progress,
+2026-07-14). A behaviour-preserving pre-eval cleanup slice built
+from the owner-adjudicated whole-codebase review
+(`docs/tasks/023-codebase-health/review-findings.md` — six review
+lanes + a lead naming/structure re-sweep, all findings adjudicated
+2026-07-14): dead-code cuts (~830 lines + the adjudicated echo-chain
+cut), IOF/ICF naming symmetry (iof_/icf_ module pairs), the
+capability-aware package regroup (`runtime/` ·
+`evidence_base/{sourcing,assess,corpus,extract,group,synthesis}` ·
+`core/` — owner-named, monorepo/CDK-aware), embeddings.py client/usage
+split, test pre-hardening (string-path patch sites, country-filter
+fail-closed rows, search-generation wire test), docs truth (README
+rewrite, prompt-pin corrections), the three approved dependency
+edits (declare lxml+pymupdf, raise stale floors, prune
+[tool.pyright]), three adopted wall-clock optimisations (group
+assignment concurrency, appraise bulk insert, sumprod cosine), and
+**skeleton retirement** — `orchestrate` (no-key stub mode, scripted
+console) is the standardised smoke + live-check vehicle from this
+slice on. Tier 3 (deps hard gate). Design and build run in the
+review conversation by owner decision; the review stack runs
+fresh.
 
-Tasks `001-walking-skeleton` through `021-icf` are complete
-(merged) — the EB chain runs end-to-end live behind the thin v1
-orchestrator with prose-first synthesis output shape v2 (ADR 0015),
-select at standard depth, fail-closed country filters/groups, IOF
-schema v2 (ADR 0016), the ICF second finding schema + kind-typed
-`query_findings` + kind-spanning membership bridge (ADR 0017), and
-the pinned prompt surfaces (`planner_v3`, `extract_iof_v6` +
-vetter, `extract_icf_v1` + vetter, `synthesise_section_v5`,
+Tasks `001-walking-skeleton` through `022-synthesis-refinement` are
+complete (merged) — the EB chain runs end-to-end live behind the
+thin v1 orchestrator with prose-first synthesis output shape v2
+(ADR 0015), select at standard depth, fail-closed country
+filters/groups, IOF schema v2 (ADR 0016), the ICF second finding
+schema + kind-typed `query_findings` + kind-spanning membership
+bridge (ADR 0017), multi-facet grouping on the shared two-stage
+clustering engine + the 022 cost/surface work (ADR 0018, −49%
+synthesis cost), and the pinned prompt surfaces (`planner_v5`,
+`extract_iof_v7` + vetter, `extract_icf_v2` + vetter,
+`synthesise_section_v7` (v6 frozen as the cost-harness baseline),
 `synthesise_sections_v2`). 018 trailing lanes: **C4 demo surface**
 (codex lane, throwaway `demo-live-run` branch — never merges) and
-**D2 rehearsal** (owner-scheduled). After 022: the eval slice
+**D2 rehearsal** (owner-scheduled). After 023: the eval slice
 (cost as a first-class axis), then Bedrock, then the workspace
 cluster. All other seams remain deferred (`docs/deferred.md`).
 

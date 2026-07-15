@@ -1364,3 +1364,65 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   kwargs through every call site. `exc_info` renderers (`dict_tracebacks` for JSON,
   `format_exc_info` for console) were added to the processor chain so
   `exc_info=True` now carries type/traceback.
+
+## Codebase health (task 023 seams)
+
+- **4× ThreadPoolExecutor fan-out consolidation** — extract/screen(×2)/classify each
+  hand-roll the submit→wait→collect→retry shape; one `fan_out_with_retry` would save ~60
+  lines but the per-site diffs are subtle (error taxonomy, budget hooks). Excluded from
+  023's behaviour-preserving scope by contract; take it when one of the four next changes
+  for a product reason.
+- **Search-as-shared-tool layer** (owner ruling, 2026-07-14) — the spec classes search as
+  a universal core tool, but no incoming capability searches; they read the EB corpus.
+  Extract a `tools/`-style search layer only when a web-search capability or a new data
+  source lands. Until then search lives in `evidence_base/sourcing/`.
+- **Five-facet group fan-out** (023 optimisation lane #1, high impact on deep runs) — the
+  5 facet pipelines in `group` are verified order-independent, but claim-theme facets read
+  via a shared non-thread-safe Connection. Safe shape: hoist per-facet conn reads before a
+  pure-worker ThreadPoolExecutor region (mirror extract's fan-out). Candidate to ride the
+  eval slice if deep-run wall-time hurts throughput; stacks with the 4-wide assignment
+  fan-out 023 shipped (WP10a).
+- **Embeddings batch-slice parallelism** (023 optimisation lane #4, low) — slices are
+  independent but share the conn; not smallest-diff to do safely. Note, don't rush.
+- **Test consolidations 3–5** (023 lane 4) — IOF record-factory twin beside
+  `make_icf_wire_record` (~80–100 lines), shared fake-Langfuse (~50), `capturing_fetch`
+  factory in test_search_live (~60). Separable; take with the next test-heavy slice.
+- **`synthesis_prompts_v6` deletion** — KEEP ruling holds only through the eval slice
+  (frozen cost baseline); delete in the first post-eval cleanup.
+- **`run_harness(provider=…)` kwarg** — zero component readers post-echo; removal ripples
+  into every caller. Retire alongside the inference-seam decisions at Bedrock, when the
+  routing seam is touched anyway.
+- **`core/tracing.py` EB-domain score renderers** — tracing imports
+  `evidence_base.corpus.theme_grouping` + finding PROFILE_IDs for its `*_score_summary`
+  functions; a core→capability edge the regroup made visible. Relocate renderers into
+  their phase modules (or invert via injection) in a slice that touches tracing.
+- **Per-lane test-DB partition — RECURRENCE (023)** — the 018 entry above fired twice in
+  023's build: parallel lane done-checks and the orchestrate smoke both left committed
+  rows that break migration-roundtrip downgrades across sessions. 023's mitigations:
+  serial gate re-runs + dropdb/createdb resets + the smoke recipe
+  (`docs/knowledge/orchestrate-stub-smoke.md`). If parallel lanes stay routine, promote
+  this to per-lane disposable DATABASE_URLs.
+- **`quote_verify` generic-matcher split (owner ruling, 2026-07-15: leave as-is, seam
+  recorded)** — `extract/quote_verify.py` is one engine with two kinds of content: the
+  generic `qv_v1` matcher substrate (`BasisText`/`QuoteMatcher`/`build_basis`) and the
+  extract-specific IOF/ICF field rules + grain gates that dominate the module. Synthesis
+  reaches back for exactly the matcher trio (`synthesise.py`) so both checkpoints share
+  one normalisation regime and offset convention — a clean downstream-imports-upstream
+  edge, verified acyclic. Split the matcher trio into `core/` (the `hashing.py` pattern)
+  only if a third consumer of the matcher appears; purity alone doesn't pay for the
+  extra module.
+- **Bedrock security-pass riders (023 review stack, security lane)** — two diff-scoped
+  observations routed to the deferred whole-repo security pass: (1) the untrusted-input
+  parsers `lxml` and `trafilatura` have floors but no ceilings — consider the `<N+1`
+  treatment the product-egress SDK already gets, since a lock regen crossing a major on
+  an HTML parser is a silent behaviour change on hostile input; (2) `FixtureFetcher`'s
+  manifest-basename traversal guard is an `assert` (vanishes under `python -O`) —
+  dev/test-only surface today, should become a `ValueError`.
+- **Monorepo hoist: `backend/` (owner layout intent, 2026-07-14)** — when the frontend
+  is pulled into this repo it lands at `front-end/`, the CDK at `infra/` (the reason
+  023's shared-layer package is `core/`, not `infra/` — ADR 0019). At that point the
+  whole Python project (pyproject.toml, src/, tests/, alembic/, Makefile) hoists into
+  `backend/` as a sibling. The `policy_atlas` import name is untouched — src-layout
+  makes the hoist import-neutral; the cost is tooling paths only (CI working-directory,
+  Docker contexts, CDK references, doc links). Do it in the slice that brings the
+  frontend in, not before.
