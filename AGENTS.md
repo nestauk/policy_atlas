@@ -22,27 +22,26 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `023-codebase-health` (design in progress,
-2026-07-14). A behaviour-preserving pre-eval cleanup slice built
-from the owner-adjudicated whole-codebase review
-(`docs/tasks/023-codebase-health/review-findings.md` — six review
-lanes + a lead naming/structure re-sweep, all findings adjudicated
-2026-07-14): dead-code cuts (~830 lines + the adjudicated echo-chain
-cut), IOF/ICF naming symmetry (iof_/icf_ module pairs), the
-capability-aware package regroup (`runtime/` ·
-`evidence_base/{sourcing,assess,corpus,extract,group,synthesis}` ·
-`core/` — owner-named, monorepo/CDK-aware), embeddings.py client/usage
-split, test pre-hardening (string-path patch sites, country-filter
-fail-closed rows, search-generation wire test), docs truth (README
-rewrite, prompt-pin corrections), the three approved dependency
-edits (declare lxml+pymupdf, raise stale floors, prune
-[tool.pyright]), three adopted wall-clock optimisations (group
-assignment concurrency, appraise bulk insert, sumprod cosine), and
-**skeleton retirement** — `orchestrate` (no-key stub mode, scripted
-console) is the standardised smoke + live-check vehicle from this
-slice on. Tier 3 (deps hard gate). Design and build run in the
-review conversation by owner decision; the review stack runs
-fresh.
+Implementation — task `024-steering-surface` (design in progress,
+2026-07-15). The steering slice: (a) **steering-event persistence** —
+check-ins, pauses/steer-points (options + fired triggers), user
+decisions (continue / adjust / reselect / abort), rejected
+adjustments, refused intents and Unattended auto-resolutions become
+durable canonical events so a front-end can rebuild the orchestrated
+conversation's decision history from Postgres alone
+(execution-orchestration + §9 event-log spine; the run-less-boundary
+FK constraint is a named design decision); (b) **free-text steering
+interpretation** — a planner-pattern LLM seam that compiles a user's
+prose intent at a pause into the bounded steering vocabulary
+(option / adjust-delta / mode / nudge / abort), confirm-before-apply,
+honest refusal as the fallback, verbatim-text + interpreted-action
+provenance (revises 017's one-LLM-call sequencing invariant —
+runtime-egress hard gate); (c) **steer-point expansion study** —
+design-phase inventory of all EB components for decision-shaping
+moments worth surfacing as steer points, ranked in
+`docs/tasks/024-steering-surface/steer-point-study.md`; the owner
+picks the ship-list at the contract gate. Tier 3 (runtime egress +
+possible event-substrate schema change + prompt-bearing surface).
 
 Tasks `001-walking-skeleton` through `022-synthesis-refinement` are
 complete (merged) — the EB chain runs end-to-end live behind the
