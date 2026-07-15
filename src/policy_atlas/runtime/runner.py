@@ -23,6 +23,8 @@ from policy_atlas.core import events, tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.inference import StubEchoProvider
 from policy_atlas.core.schema import event_log, evidence_scope, orchestration_plan, runs
+from policy_atlas.evidence_base.assess.classification_backend import ClassificationBackend
+from policy_atlas.evidence_base.assess.screening_backend import ScreeningBackend
 from policy_atlas.evidence_base.corpus.ranking import RankingBackend
 from policy_atlas.evidence_base.corpus.theme_grouping import ThemeGroupingBackend
 from policy_atlas.evidence_base.extract.extraction_backend import ExtractionBackend
@@ -31,8 +33,6 @@ from policy_atlas.evidence_base.extract.finding_vetter import (
     ICFFindingVetterBackend,
 )
 from policy_atlas.evidence_base.group.group import GroupClusteringBackendFactory
-from policy_atlas.evidence_base.screen.classification_backend import ClassificationBackend
-from policy_atlas.evidence_base.screen.screening_backend import ScreeningBackend
 from policy_atlas.evidence_base.sourcing.acquire import SearchBackend
 from policy_atlas.evidence_base.sourcing.ingest_full_text import DocumentFetcher
 from policy_atlas.evidence_base.sourcing.search_generation import SearchGenerationBackend

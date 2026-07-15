@@ -22,8 +22,8 @@ from policy_atlas.core.schema import (
     source_screening_result,
 )
 from policy_atlas.core.usage import UsageResult
-from policy_atlas.evidence_base.screen.screen import ScreenContext, screen_sources
-from policy_atlas.evidence_base.screen.screen_prompt import (
+from policy_atlas.evidence_base.assess.screen import ScreenContext, screen_sources
+from policy_atlas.evidence_base.assess.screen_prompt import (
     ScreenEnvelopePayload,
     ScreenFullTextPayload,
     ScreenRepWire,

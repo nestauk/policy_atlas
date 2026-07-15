@@ -9,14 +9,14 @@ from openai.types.chat import ChatCompletionMessageParam
 
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.core.schema import METHODOLOGICAL_STRUCTURAL, TOPIC_THEME
-from policy_atlas.evidence_base.screen.classify_prompt import (
+from policy_atlas.evidence_base.assess.classify_prompt import (
     LABEL_TAG_MAX,
     PRIOR_FIELD_MAX,
     ClassifyEnvelopePayload,
     build_classify_messages,
     provider_priors,
 )
-from policy_atlas.evidence_base.screen.screen_prompt import (
+from policy_atlas.evidence_base.assess.screen_prompt import (
     ScreenEnvelopePayload,
     build_screen_messages,
 )

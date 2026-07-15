@@ -11,7 +11,7 @@ from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import confidence_is_valid, scrub_nul
 from policy_atlas.core.usage import UsageResult, usage_metadata
-from policy_atlas.evidence_base.screen.screen_prompt import (
+from policy_atlas.evidence_base.assess.screen_prompt import (
     SCREEN_FULLTEXT_PROMPT_VERSION,
     SCREEN_MAX_OUTPUT_TOKENS,
     SCREEN_MODEL,

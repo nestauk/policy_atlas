@@ -23,14 +23,14 @@ from policy_atlas.core import events
 from policy_atlas.core.prompt_fields import REASON_MAX, clamp_reason, sanitize_prompt_field
 from policy_atlas.core.schema import source_screening_result, source_snapshot
 from policy_atlas.core.usage import UsageResult
-from policy_atlas.evidence_base.screen.screen import (
+from policy_atlas.evidence_base.assess.screen import (
     ScreenContext,
     ScreenDirectiveError,
     _assert_stage1_relevant,
     effective_screen_rows,
     screen_sources,
 )
-from policy_atlas.evidence_base.screen.screen_prompt import (
+from policy_atlas.evidence_base.assess.screen_prompt import (
     SCREEN_REPS,
     ScreenEnvelopePayload,
     ScreenFullTextPayload,
@@ -38,7 +38,7 @@ from policy_atlas.evidence_base.screen.screen_prompt import (
     build_screen_fulltext_messages,
     build_screen_messages,
 )
-from policy_atlas.evidence_base.screen.screening_backend import OpenAIScreeningBackend
+from policy_atlas.evidence_base.assess.screening_backend import OpenAIScreeningBackend
 from tests.helpers import (
     fake_parse_client,
     seed_ingested_full_text,

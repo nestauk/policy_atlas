@@ -59,10 +59,10 @@ from policy_atlas.core.schema import (
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.tags import has_control_character
 from policy_atlas.core.usage import UsageAccumulator
+from policy_atlas.evidence_base.assess.screen import effective_screen_rows
 from policy_atlas.evidence_base.extract.extract import record_ids_by_profile
 from policy_atlas.evidence_base.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.evidence_base.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
-from policy_atlas.evidence_base.screen.screen import effective_screen_rows
 
 if TYPE_CHECKING:
     from policy_atlas.evidence_base.synthesis.synthesis_backend import SectionProseWire

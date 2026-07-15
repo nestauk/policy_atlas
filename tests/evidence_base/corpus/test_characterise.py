@@ -26,6 +26,8 @@ from policy_atlas.core.schema import (
     source_tag,
 )
 from policy_atlas.core.usage import UsageResult
+from policy_atlas.evidence_base.assess.appraise import AppraiseContext, appraise_sources
+from policy_atlas.evidence_base.assess.classify import ClassifyContext, classify_sources
 from policy_atlas.evidence_base.corpus import theme_grouping
 from policy_atlas.evidence_base.corpus.characterise import (
     CharacteriseContext,
@@ -38,8 +40,6 @@ from policy_atlas.evidence_base.corpus.theme_grouping import (
     StubThemeGroupingBackend,
     Theme,
 )
-from policy_atlas.evidence_base.screen.appraise import AppraiseContext, appraise_sources
-from policy_atlas.evidence_base.screen.classify import ClassifyContext, classify_sources
 from policy_atlas.evidence_base.sourcing.acquire import (
     AcquireContext,
     SearchBackend,

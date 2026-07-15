@@ -19,7 +19,7 @@ src/policy_atlas/
                    planner, steering, run-spec compile
   evidence_base/   the EB capability — future capabilities land as siblings
     sourcing/      search backends + loop, acquisition, full-text ingest, grounding
-    screen/        screening, classification, appraisal
+    assess/        screening, classification, appraisal
     corpus/        characterise, select, ranking, theme grouping
     extract/       IOF + ICF findings extraction, vetters, quote verification
     group/         multi-facet grouping over extracted findings

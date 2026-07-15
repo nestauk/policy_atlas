@@ -26,10 +26,17 @@ policy_atlas/
   runtime/        orchestrate, runner, harness, steering, orchestration_plan,
                   planner, planner_prompt, run_spec
   evidence_base/  clustering_engine
-    sourcing/ · screen/ · corpus/ · extract/ · group/ · synthesis/
+    sourcing/ · assess/ · corpus/ · extract/ · group/ · synthesis/
   core/           schema, db, events, logging, tracing, usage, inference,
                   openai_client, embeddings, prompt_fields, tags, fixtures, windowing
 ```
+
+(Amended, owner direction at step 9, 2026-07-15: the per-source judgment bucket renamed
+`screen/` → `assess/` — it holds three peer components (screen, classify, appraise), so
+naming it after its first member was the same unmarked-default smell the IOF/ICF rename
+fixed at module level. Considered and rejected: `triage/` — owner preferred `assess/`;
+`vetting` collides with `finding_vetter`, `selection` with `corpus/select`. The tree
+above reflects the rename.)
 
 (Amended, owner rider at step-6 close: the `data/` directory and the provider fixture
 backends moved OUT of the package — `tests/data/provider_records/` +

@@ -30,7 +30,7 @@ lanes + a lead naming/structure re-sweep, all findings adjudicated
 2026-07-14): dead-code cuts (~830 lines + the adjudicated echo-chain
 cut), IOF/ICF naming symmetry (iof_/icf_ module pairs), the
 capability-aware package regroup (`runtime/` ·
-`evidence_base/{sourcing,screen,corpus,extract,group,synthesis}` ·
+`evidence_base/{sourcing,assess,corpus,extract,group,synthesis}` ·
 `core/` — owner-named, monorepo/CDK-aware), embeddings.py client/usage
 split, test pre-hardening (string-path patch sites, country-filter
 fail-closed rows, search-generation wire test), docs truth (README

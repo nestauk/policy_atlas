@@ -28,7 +28,7 @@ from policy_atlas.core.schema import (
     source_snapshot,
 )
 from policy_atlas.core.usage import UsageAccumulator
-from policy_atlas.evidence_base.screen import screen
+from policy_atlas.evidence_base.assess import screen
 from policy_atlas.evidence_base.sourcing import acquire
 from policy_atlas.evidence_base.sourcing.country_filters import (
     OVERTON_DISPLAY_ALLOWLIST,

@@ -20,7 +20,7 @@ from policy_atlas.core.schema import (
     source_appraisal_result,
     source_classification_result,
 )
-from policy_atlas.evidence_base.screen.screen import effective_screen_rows
+from policy_atlas.evidence_base.assess.screen import effective_screen_rows
 
 DEFAULT_RUBRIC_VERSION = "v2-hierarchy-v1"
 

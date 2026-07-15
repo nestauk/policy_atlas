@@ -22,9 +22,9 @@ from policy_atlas.core.schema import (
     search_coverage_record,
     source_snapshot,
 )
-from policy_atlas.evidence_base.screen.appraise import AppraiseContext, appraise_sources
-from policy_atlas.evidence_base.screen.classify import ClassifyContext, classify_sources
-from policy_atlas.evidence_base.screen.screen import ScreenContext, screen_sources
+from policy_atlas.evidence_base.assess.appraise import AppraiseContext, appraise_sources
+from policy_atlas.evidence_base.assess.classify import ClassifyContext, classify_sources
+from policy_atlas.evidence_base.assess.screen import ScreenContext, screen_sources
 from policy_atlas.evidence_base.sourcing.acquire import (
     AcquireContext,
     BackendCaps,

@@ -84,7 +84,7 @@ behaviour-preserving except the three contract-named WP10 optimisations.
   fan-out 1→4 (local literal + parity comment; deliberately not an import). WP10b:
   appraise bulk insert with empty-rows guard; event appends stay per-row.
 - **E — capability-aware regroup** (`83d26c6`): 60 src modules + 71 test files →
-  `runtime/` · `evidence_base/{sourcing,screen,corpus,extract,group,synthesis}` (+
+  `runtime/` · `evidence_base/{sourcing,assess,corpus,extract,group,synthesis}` (+
   `clustering_engine` at capability root) · `core/`; `data/` stays at package root
   (top-package `importlib.resources` anchors unchanged). Content steps per contract:
   facet_grouping's 5 live constants folded into `facet_values` (module deleted);
@@ -196,6 +196,19 @@ no-key demo's acquire step now adds nothing (seeded corpus only) — accepted by
 as part of the rider. README/ADR 0019/runbook/contract amended in the same commit.
 Gates re-run post-rider: full `make verify` + grep gates (zero
 `files("policy_atlas")` anchors remain).
+
+## Post-review rider (owner-directed, 2026-07-15, at the step-9 gate)
+
+The owner renamed the per-source judgment bucket `evidence_base/screen/` →
+`evidence_base/assess/` (it holds three peer components — screen, classify, appraise —
+so the bucket carried its first member's name: the unmarked-default smell at directory
+level). Mechanical rename: `git mv` on the src + tests mirrors, import rewrites
+(`evidence_base.screen` → `evidence_base.assess`, zero residual hits), ruff import-sort
+fixes, and the living-doc sweep (README tree, ADR 0019 tree + amendment note, AGENTS.md,
+this file's phase-E line). Historical records (review-findings.md, plan.md) keep the
+name that was correct when they were written. Module names inside the bucket are
+unchanged (`screen.py` still names the screen component). Full `make verify` re-run
+green post-rename.
 
 ## Review findings
 

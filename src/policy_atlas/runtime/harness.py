@@ -20,6 +20,17 @@ from policy_atlas.core import events
 from policy_atlas.core.embeddings import EmbeddingBackend, StubEmbeddingBackend
 from policy_atlas.core.inference import InferenceProvider
 from policy_atlas.core.schema import evidence_scope, runs
+from policy_atlas.evidence_base.assess.appraise import AppraiseContext, appraise_sources
+from policy_atlas.evidence_base.assess.classification_backend import (
+    ClassificationBackend,
+    StubClassificationBackend,
+)
+from policy_atlas.evidence_base.assess.classify import ClassifyContext, classify_sources
+from policy_atlas.evidence_base.assess.screen import ScreenContext, screen_sources
+from policy_atlas.evidence_base.assess.screening_backend import (
+    ScreeningBackend,
+    StubScreeningBackend,
+)
 from policy_atlas.evidence_base.corpus.characterise import (
     CharacteriseContext,
     CharacteriseFailure,
@@ -50,17 +61,6 @@ from policy_atlas.evidence_base.group.group import (
     GroupContext,
     StubGroupClusteringBackend,
     group_findings,
-)
-from policy_atlas.evidence_base.screen.appraise import AppraiseContext, appraise_sources
-from policy_atlas.evidence_base.screen.classification_backend import (
-    ClassificationBackend,
-    StubClassificationBackend,
-)
-from policy_atlas.evidence_base.screen.classify import ClassifyContext, classify_sources
-from policy_atlas.evidence_base.screen.screen import ScreenContext, screen_sources
-from policy_atlas.evidence_base.screen.screening_backend import (
-    ScreeningBackend,
-    StubScreeningBackend,
 )
 from policy_atlas.evidence_base.sourcing.acquire import (
     AcquireContext,

@@ -18,14 +18,14 @@ from policy_atlas.core.schema import (
     source_appraisal_result,
     source_classification_result,
 )
-from policy_atlas.evidence_base.screen.appraise import (
+from policy_atlas.evidence_base.assess.appraise import (
     DEFAULT_RUBRIC,
     DEFAULT_RUBRIC_VERSION,
     SCORE_LABELS,
     AppraiseContext,
     appraise_sources,
 )
-from policy_atlas.evidence_base.screen.classify import ClassifyContext, classify_sources
+from policy_atlas.evidence_base.assess.classify import ClassifyContext, classify_sources
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.run_spec import Plan, compile
 from tests.helpers import (

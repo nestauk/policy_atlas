@@ -21,12 +21,12 @@ from policy_atlas.core.schema import (
     source_tag,
 )
 from policy_atlas.core.usage import TokenUsage, UsageResult
-from policy_atlas.evidence_base.screen.classification_backend import (
+from policy_atlas.evidence_base.assess.classification_backend import (
     OpenAIClassificationBackend,
     StubClassificationBackend,
 )
-from policy_atlas.evidence_base.screen.classify import ClassifyContext, classify_sources
-from policy_atlas.evidence_base.screen.classify_prompt import (
+from policy_atlas.evidence_base.assess.classify import ClassifyContext, classify_sources
+from policy_atlas.evidence_base.assess.classify_prompt import (
     CLASSIFY_MODEL,
     CLASSIFY_REASONING_EFFORT,
     TAG_MAX_CHARS,
@@ -498,7 +498,7 @@ def test_harness_classify_component(conn: Connection) -> None:
     seed_source(conn, pid, meta={"_stub_not_relevant": True, "abstract": "Off-topic."})
 
     # Screen first so there are relevant rows
-    from policy_atlas.evidence_base.screen.screen import ScreenContext, screen_sources
+    from policy_atlas.evidence_base.assess.screen import ScreenContext, screen_sources
     screen_ctx = ScreenContext(scope_id=scope_id, intent="Test", context={})
     screen_sources(conn, project_id=pid, run_id=rid_screen, context=screen_ctx)
 

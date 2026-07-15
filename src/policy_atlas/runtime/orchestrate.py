@@ -33,6 +33,8 @@ from policy_atlas.core.embeddings import EmbeddingBackend, OpenAIEmbeddingBacken
 from policy_atlas.core.fixtures import get_source
 from policy_atlas.core.logging import configure_logging
 from policy_atlas.core.schema import artefact, evidence_scope, orchestration_plan, project
+from policy_atlas.evidence_base.assess.classification_backend import OpenAIClassificationBackend
+from policy_atlas.evidence_base.assess.screening_backend import OpenAIScreeningBackend
 from policy_atlas.evidence_base.corpus.ranking import OpenAIRankingBackend
 from policy_atlas.evidence_base.corpus.theme_grouping import (
     OpenAIThemeGroupingBackend,
@@ -47,8 +49,6 @@ from policy_atlas.evidence_base.extract.finding_vetter import (
     OpenAIICFFindingVetterBackend,
 )
 from policy_atlas.evidence_base.group.group_clustering import OpenAIGroupClusteringBackendFactory
-from policy_atlas.evidence_base.screen.classification_backend import OpenAIClassificationBackend
-from policy_atlas.evidence_base.screen.screening_backend import OpenAIScreeningBackend
 from policy_atlas.evidence_base.sourcing import search_generation, search_live
 from policy_atlas.evidence_base.sourcing.acquire import SearchBackend
 from policy_atlas.evidence_base.sourcing.country_filters import TIER1_GROUPS, expand_tier1

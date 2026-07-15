@@ -11,7 +11,7 @@ from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import openai_kwargs, parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import confidence_is_valid, scrub_nul
 from policy_atlas.core.usage import UsageResult, usage_metadata
-from policy_atlas.evidence_base.screen.classify_prompt import (
+from policy_atlas.evidence_base.assess.classify_prompt import (
     CLASSIFY_MAX_OUTPUT_TOKENS,
     CLASSIFY_MODEL,
     CLASSIFY_PROMPT_VERSION,

@@ -22,9 +22,9 @@ from policy_atlas.core.schema import (
     runs,
     source_snapshot,
 )
+from policy_atlas.evidence_base.assess.screen import ScreenContext, screen_sources
 from policy_atlas.evidence_base.corpus.characterise import CharacteriseFailure
 from policy_atlas.evidence_base.extract.extract import KNOWN_PROFILE_IDS
-from policy_atlas.evidence_base.screen.screen import ScreenContext, screen_sources
 from policy_atlas.evidence_base.sourcing.ingest_upload import ingest_upload
 from policy_atlas.runtime import harness
 from policy_atlas.runtime.orchestration_plan import OrchestrationPlan, compose

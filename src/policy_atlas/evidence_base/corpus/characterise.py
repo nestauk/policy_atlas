@@ -27,6 +27,7 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.core.tags import insert_source_tags
 from policy_atlas.core.usage import UsageResult
+from policy_atlas.evidence_base.assess.screen import effective_screen_rows
 from policy_atlas.evidence_base.clustering_engine import (
     AssignmentOutput,
     ClusteringBackend,
@@ -45,7 +46,6 @@ from policy_atlas.evidence_base.corpus.theme_grouping import (
     Theme,
     ThemeGroupingBackend,
 )
-from policy_atlas.evidence_base.screen.screen import effective_screen_rows
 
 log = structlog.get_logger()
 

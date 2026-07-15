@@ -23,18 +23,18 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.core.tags import has_control_character, insert_source_tags
 from policy_atlas.core.usage import UsageAccumulator
-from policy_atlas.evidence_base.screen.classification_backend import (
+from policy_atlas.evidence_base.assess.classification_backend import (
     ClassificationBackend,
     StubClassificationBackend,
 )
-from policy_atlas.evidence_base.screen.classify_prompt import (
+from policy_atlas.evidence_base.assess.classify_prompt import (
     TAG_MAX_CHARS,
     TAGS_MAX_PER_DOC,
     ClassifyEnvelopePayload,
     ClassifyWire,
     provider_priors,
 )
-from policy_atlas.evidence_base.screen.screen import effective_screen_rows
+from policy_atlas.evidence_base.assess.screen import effective_screen_rows
 
 log = structlog.get_logger()
 

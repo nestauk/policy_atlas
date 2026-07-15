@@ -13,9 +13,9 @@ from typing import Any, Literal, Self, TypedDict
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from policy_atlas.core.schema import DIRECTIVE_STRING_MAX
+from policy_atlas.evidence_base.assess.screen import CRITERIA_LIST_MAX, _compose_screen_intent
+from policy_atlas.evidence_base.assess.screen_prompt import SCREEN_INTENT_MAX
 from policy_atlas.evidence_base.extract.extract import KNOWN_PROFILE_IDS
-from policy_atlas.evidence_base.screen.screen import CRITERIA_LIST_MAX, _compose_screen_intent
-from policy_atlas.evidence_base.screen.screen_prompt import SCREEN_INTENT_MAX
 from policy_atlas.evidence_base.sourcing.country_filters import (
     TIER1_GROUPS,
     SearchDirectiveError,

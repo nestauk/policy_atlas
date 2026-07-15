@@ -19,10 +19,10 @@ from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.schema import orchestration_plan, selection_result
+from policy_atlas.evidence_base.assess import screen as screen_module
 from policy_atlas.evidence_base.corpus import select as select_module
 from policy_atlas.evidence_base.extract import extract as extract_module
 from policy_atlas.evidence_base.group.facet_values import parse_grouping_directive
-from policy_atlas.evidence_base.screen import screen as screen_module
 from policy_atlas.evidence_base.sourcing.search_loop import (
     parse_search_directive,
     validate_scope_filters,

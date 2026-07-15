@@ -25,7 +25,7 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.core.usage import UsageResult
 from policy_atlas.core.windowing import greedy_windows
-from policy_atlas.evidence_base.screen.screen import (
+from policy_atlas.evidence_base.assess.screen import (
     CRITERIA_LIST_MAX,
     ScreenContext,
     ScreenDirectiveError,
@@ -34,13 +34,13 @@ from policy_atlas.evidence_base.screen.screen import (
     _stage2_payload,
     screen_sources,
 )
-from policy_atlas.evidence_base.screen.screen_prompt import (
+from policy_atlas.evidence_base.assess.screen_prompt import (
     STAGE2_WINDOW_CHAR_BUDGET,
     ScreenEnvelopePayload,
     ScreenFullTextPayload,
     ScreenRepWire,
 )
-from policy_atlas.evidence_base.screen.screening_backend import StubScreeningBackend
+from policy_atlas.evidence_base.assess.screening_backend import StubScreeningBackend
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.run_spec import Plan, compile
 from tests.helpers import (

@@ -26,7 +26,7 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.core.usage import UsageAccumulator
 from policy_atlas.core.windowing import greedy_windows
-from policy_atlas.evidence_base.screen.screen_prompt import (
+from policy_atlas.evidence_base.assess.screen_prompt import (
     SCREEN_QUORUM,
     SCREEN_REPS,
     STAGE2_REPS,
@@ -35,7 +35,7 @@ from policy_atlas.evidence_base.screen.screen_prompt import (
     ScreenFullTextPayload,
     ScreenRepWire,
 )
-from policy_atlas.evidence_base.screen.screening_backend import (
+from policy_atlas.evidence_base.assess.screening_backend import (
     ScreeningBackend,
     StubScreeningBackend,
 )

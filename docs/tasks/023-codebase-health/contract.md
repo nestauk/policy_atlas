@@ -21,7 +21,7 @@ expensive after eval baselines pin trace shapes and import paths.
 ## Deliverable
 
 One PR: the regrouped `src/policy_atlas/` package (`runtime/` ·
-`evidence_base/{sourcing,screen,corpus,extract,group,synthesis}` · `core/`), the rename set,
+`evidence_base/{sourcing,assess,corpus,extract,group,synthesis}` · `core/`), the rename set,
 the dead-code cuts, hardened tests, a truthful README, the approved `pyproject.toml` edits,
 and `verification.md` evidence that behaviour is preserved (prompt pin tests byte-identical,
 full `make verify`, stub full-chain skeleton smoke).

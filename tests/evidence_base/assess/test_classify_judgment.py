@@ -27,8 +27,8 @@ from policy_atlas.core.schema import (
     source_tag,
 )
 from policy_atlas.core.usage import UsageResult
-from policy_atlas.evidence_base.screen.classify import ClassifyContext, classify_sources
-from policy_atlas.evidence_base.screen.classify_prompt import (
+from policy_atlas.evidence_base.assess.classify import ClassifyContext, classify_sources
+from policy_atlas.evidence_base.assess.classify_prompt import (
     INDEXED_IN_MAX_ITEMS,
     LABEL_PRIORS_MAX,
     LABEL_PROVENANCE_MAX,
