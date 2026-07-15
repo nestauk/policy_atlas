@@ -8,7 +8,7 @@ the **Evidence Base**: plan → acquire → screen → classify → appraise →
 (characterise · select · extract · group, plan-selected) → synthesise.
 
 Product intent and system contracts live in [`docs/specs/`](docs/specs/index.md);
-architectural decisions in [`docs/adr/`](docs/adr/); per-task contracts and evidence
+architectural decisions in [`docs/adr/`](docs/adr/); per-task plans and evidence
 in [`docs/tasks/`](docs/tasks/).
 
 ## Layout
@@ -17,13 +17,13 @@ in [`docs/tasks/`](docs/tasks/).
 src/policy_atlas/
   runtime/         orchestrator CLI, capability runner, LangGraph harness,
                    planner, steering, run-spec compile
-  evidence_base/   the EB capability — future capabilities land as siblings
+  evidence_base/   the EB capability
     sourcing/      search backends + loop, acquisition, full-text ingest
     assess/        screening, classification, appraisal
     corpus/        characterise, select, ranking, theme grouping
-    extract/       IOF + ICF findings extraction, vetters, quote verification
+    extract/       Intervention, outcome and context findings extraction, vetters, quote verification
     group/         multi-facet grouping over extracted findings
-    synthesis/     terminal artefact composition, section loop, grounding judge
+    synthesis/     artefact composition, section generation loop, grounding judge
   core/            schema, db, events, logging, tracing, usage, model-client
                    plumbing, embeddings
 alembic/           database migrations
