@@ -245,14 +245,16 @@ function scopeChips(sc?: ScopeConstraints | null): string[] {
   const chips: string[] = []
   if (sc.published_after) chips.push(`Published after ${yearOf(sc.published_after)}`)
   if (sc.published_before) chips.push(`Published before ${yearOf(sc.published_before)}`)
-  if (sc.publisher_country) chips.push(`Publisher country: ${sc.publisher_country}`)
-  if (sc.author_affiliation_countries?.length)
-    chips.push(`Author countries: ${sc.author_affiliation_countries.join(', ')}`)
-  if (sc.country_group)
-    chips.push(
-      `Countries: ${sc.country_group.label}` +
-        (sc.country_group.countries?.length ? ` (${sc.country_group.countries.join(', ')})` : ''),
-    )
+  // One user-facing geography chip: the named group covers both search
+  // backends when present; otherwise the union of the backend-specific
+  // publisher (Overton) and author-affiliation (OpenAlex) country filters.
+  const geo = sc.country_group
+    ? sc.country_group.label +
+      (sc.country_group.countries?.length ? ` (${sc.country_group.countries.join(', ')})` : '')
+    : [...new Set([sc.publisher_country, ...(sc.author_affiliation_countries ?? [])])]
+        .filter(Boolean)
+        .join(', ')
+  if (geo) chips.push(`Geography: ${geo}`)
   return chips
 }
 
