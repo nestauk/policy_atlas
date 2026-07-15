@@ -6,6 +6,18 @@ tags: [grounding, citation, flag-dont-drop, invariant]
 timestamp: 2026-06-29
 ---
 
+# Status: RETIRED (2026-07-15, task 023 step-9 rider)
+
+The mechanism this concept describes was deleted: `produce_grounded_block` (and the
+deterministic grounding leg around it) was production-caller-less after 023's echo-chain
+cut, and the owner directed dissolving `grounding.py` at the step-9 gate (`content_hash`
+moved to `core/hashing.py`; the dead leg and its tests deleted, including
+`test_fail_annotation_survives_commit`, which had already gone with the echo cut). The
+**flag-don't-drop principle itself is not retired** — it is spec-level
+([provenance-grounding.md](../specs/system/provenance-grounding.md)) and lives on in the
+extract-side verification chain (`quote_verify.py`, the vetters' persisted verdicts).
+The text below is the historical record of the original mechanism.
+
 # Rule
 
 In `produce_grounded_block`, the `annotation` and `citation` rows are both written

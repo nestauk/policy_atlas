@@ -1,5 +1,8 @@
 # Knowledge update log
 
+## 2026-07-15 (task 023 step-9 riders)
+* **Retirement**: [citation-flag-dont-drop](citation-flag-dont-drop.md) marked RETIRED — its mechanism (`produce_grounded_block`'s pre-raise citation/annotation writes) was deleted when the owner directed dissolving `grounding.py` at the step-9 gate (`content_hash` → `core/hashing.py`; the production-dead grounded-block leg + tests removed). The flag-don't-drop principle stays spec-level and lives in the extract-side verification chain.
+
 ## 2026-07-14 (task 023 step 8)
 * **Creation**: Added [sumprod-hot-path-vector-maths](sumprod-hot-path-vector-maths.md) — math.sumprod + construction-time norm precompute as the stdlib answer to hot-path vector maths; extended-precision near-tie reordering makes it observable-change class (023 WP10c, verified by two review lanes).
 * **Creation**: Added [unmarked-default-naming-smell](unmarked-default-naming-smell.md) — the first-built variant hoarding generic names as a repeatable review lens; the IOF/ICF rename set was the instance (owner-caught at the 023 review).

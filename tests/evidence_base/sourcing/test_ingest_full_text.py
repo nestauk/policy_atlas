@@ -21,6 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from structlog.testing import capture_logs
 
 from policy_atlas.core import events
+from policy_atlas.core.hashing import content_hash
 from policy_atlas.core.inference import StubEchoProvider
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.schema import (
@@ -40,7 +41,6 @@ from policy_atlas.evidence_base.sourcing.acquire import (
     SearchBackend,
     acquire_sources,
 )
-from policy_atlas.evidence_base.sourcing.grounding import content_hash
 from policy_atlas.evidence_base.sourcing.ingest_full_text import (
     FixtureFetcher,
     IngestFullTextContext,

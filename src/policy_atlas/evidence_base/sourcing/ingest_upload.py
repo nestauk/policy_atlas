@@ -12,9 +12,9 @@ from policy_atlas.core.embeddings import (
     StubEmbeddingBackend,
     embed_pending_chunks,
 )
+from policy_atlas.core.hashing import content_hash
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.schema import project_source_snapshot, source_snapshot
-from policy_atlas.evidence_base.sourcing.grounding import content_hash
 
 log = structlog.get_logger()
 

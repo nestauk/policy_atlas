@@ -13,6 +13,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.core import events
+from policy_atlas.core.hashing import content_hash
 from policy_atlas.core.inference import StubEchoProvider
 from policy_atlas.core.schema import (
     chunk,
@@ -35,7 +36,6 @@ from policy_atlas.evidence_base.sourcing.acquire import (
     _reconstruct_abstract,
     acquire_sources,
 )
-from policy_atlas.evidence_base.sourcing.grounding import content_hash
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.run_spec import Plan, compile
 from tests.helpers import (

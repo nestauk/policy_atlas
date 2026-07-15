@@ -15,11 +15,11 @@ from policy_atlas.core.embeddings import (
     UNIT_CHAR_BUDGET,
     UNIT_POLICY,
 )
+from policy_atlas.core.hashing import content_hash
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.schema import chunk_embedding, project_source_snapshot
 from policy_atlas.core.usage import UsageResult
 from policy_atlas.evidence_base.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
-from policy_atlas.evidence_base.sourcing.grounding import content_hash
 from policy_atlas.evidence_base.synthesis.synthesis_backend import SectionProseWire
 from policy_atlas.evidence_base.synthesis.synthesis_tools import (
     BOOST_CLAMP_MAX,

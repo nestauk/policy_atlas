@@ -18,7 +18,7 @@ src/policy_atlas/
   runtime/         orchestrator CLI, capability runner, LangGraph harness,
                    planner, steering, run-spec compile
   evidence_base/   the EB capability — future capabilities land as siblings
-    sourcing/      search backends + loop, acquisition, full-text ingest, grounding
+    sourcing/      search backends + loop, acquisition, full-text ingest
     assess/        screening, classification, appraisal
     corpus/        characterise, select, ranking, theme grouping
     extract/       IOF + ICF findings extraction, vetters, quote verification

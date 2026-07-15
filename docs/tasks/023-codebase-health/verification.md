@@ -210,6 +210,19 @@ name that was correct when they were written. Module names inside the bucket are
 unchanged (`screen.py` still names the screen component). Full `make verify` re-run
 green post-rename.
 
+Second rider, same gate: the owner directed **dissolving `grounding.py`** (raised as
+"shouldn't it live in synthesis/?"; the facts said neither bucket — its only live export
+`content_hash` had three sourcing importers + one synthesis importer, and the
+grounded-block leg was production-dead post-echo-cut, per the stack's scope-guard
+finding). Resolution: `content_hash` (+ `_normalize`) → new `core/hashing.py` (generic
+utility, cross-bucket use); `produce_grounded_block`/`GroundingError`/`quote_present` +
+`test_grounding.py` **deleted** (owner-approved cut beyond the adjudicated list — this
+paragraph is the approval record; the two content_hash tests survive as
+`tests/core/test_hashing.py`). The deferred.md dead-leg entry is discharged in the same
+PR that added it; the `citation-flag-dont-drop` knowledge concept is marked RETIRED
+(the principle stays spec-level; `quote_verify.py` is the live verification mechanism).
+Full `make verify` re-run green post-dissolution.
+
 ## Review findings
 
 Stack run 2026-07-14 in a fresh conversation (this file's author-of-record for this

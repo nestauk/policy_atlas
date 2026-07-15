@@ -15,9 +15,9 @@ class SourceFixture:
     chunks: tuple[str, ...]
 
 
-# Synthetic sources used by the skeleton thread.
-# syn-001: the walking-skeleton echo source — the quote in produce_grounded_block
-# must be a verbatim substring of its joined chunks; its text is load-bearing.
+# Synthetic sources seeded into every orchestrate run's corpus.
+# syn-001: originally the walking-skeleton echo source (echo + its grounded-block
+# leg retired in 023); retained as a plain synthetic upload fixture.
 # syn-002: the on-topic appraised seed for the synthesise demo (task 013) — an
 # uploaded full-text document about the skeleton scope's intent, sentinel-
 # classified so appraise scores it; its chunks are what the chunk lane can

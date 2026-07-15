@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.embeddings import EMBEDDING_PROFILE, UNIT_POLICY, StubEmbeddingBackend
+from policy_atlas.core.hashing import content_hash
 from policy_atlas.core.schema import (
     addressable_unit,
     annotation,
@@ -30,7 +31,6 @@ from policy_atlas.core.schema import (
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.usage import UsageResult
 from policy_atlas.evidence_base.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
-from policy_atlas.evidence_base.sourcing.grounding import content_hash
 from policy_atlas.evidence_base.synthesis.grounding_judge import (
     JudgeResponseWire,
     StubGroundingJudgeBackend,

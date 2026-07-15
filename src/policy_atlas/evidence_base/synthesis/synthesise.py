@@ -24,6 +24,7 @@ from sqlalchemy import case as sa_case
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.core.hashing import content_hash
 from policy_atlas.core.schema import (
     EVIDENCE_TYPES,
     addressable_unit,
@@ -53,7 +54,6 @@ from policy_atlas.evidence_base.extract.extract import record_ids_by_profile
 from policy_atlas.evidence_base.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.evidence_base.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.evidence_base.extract.quote_verify import BasisText, QuoteMatcher, build_basis
-from policy_atlas.evidence_base.sourcing.grounding import content_hash
 from policy_atlas.evidence_base.synthesis.grounding_judge import (
     ENVELOPE_VERSION,
     JUDGE_MODEL,

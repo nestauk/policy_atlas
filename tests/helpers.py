@@ -412,9 +412,9 @@ def seed_ingested_full_text(
     Returns the full-text snapshot id.
     """
     from policy_atlas.core.embeddings import EMBEDDING_PROFILE, UNIT_POLICY, StubEmbeddingBackend
+    from policy_atlas.core.hashing import content_hash
     from policy_atlas.core.schema import chunk as chunk_table
     from policy_atlas.core.schema import chunk_embedding, project_source_snapshot, source_snapshot
-    from policy_atlas.evidence_base.sourcing.grounding import content_hash
 
     full_snapshot_id = uuid.uuid4()
     conn.execute(

@@ -1389,10 +1389,6 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   factory in test_search_live (~60). Separable; take with the next test-heavy slice.
 - **`synthesis_prompts_v6` deletion** — KEEP ruling holds only through the eval slice
   (frozen cost baseline); delete in the first post-eval cleanup.
-- **`grounding.produce_grounded_block` leg** — production-caller-less after 023's echo cut
-  (`content_hash` is the live part of `grounding.py`; the leg survives in tests only).
-  Split/retire the dead leg when `grounding.py` next changes; not cut in 023 (scope guard:
-  not on the adjudicated list).
 - **`run_harness(provider=…)` kwarg** — zero component readers post-echo; removal ripples
   into every caller. Retire alongside the inference-seam decisions at Bedrock, when the
   routing seam is touched anyway.
