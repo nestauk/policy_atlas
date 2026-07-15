@@ -5,6 +5,10 @@
 > steering-event vocabulary).
 >
 > **Rev history**
+> - **rev 2** (2026-07-15): **ship-list decided (owner)** — S0 + S1 + **S2**
+>   (the owner upgraded the study's S0+S1 recommendation to include the
+>   thin-search steer point). S2 moves from Out to In with its mechanics
+>   pinned (decision 6b): boundary after acquire, reselect-precedent re-run.
 > - **rev 1** (2026-07-15): initial draft. Origin: owner direction in the
 >   steering-persistence conversation — (a) the eventual front-end must
 >   rebuild the orchestrated conversation's check-in/steering history from
@@ -41,11 +45,13 @@ Make steering a first-class, durable, prose-capable surface:
    grammar cannot express it. Verbatim user text + interpreted action +
    interpreter execution profile persist together (never
    paraphrase-laundered).
-3. **Steer-point surface per the owner ship-list** (decision 6): enrich
-   deepening-selection's triggers from persisted-but-unread select signals
-   (study S0) and ship the pre-synthesise steer point on the built 022
-   compile machinery (study S1). Remaining study candidates land as named
-   seams.
+3. **Steer-point surface per the owner ship-list** (decision 6; owner,
+   2026-07-15): enrich deepening-selection's triggers from
+   persisted-but-unread select signals (study **S0**), ship the
+   pre-synthesise steer point on the built 022 compile machinery (study
+   **S1**), and ship the thin-search steer point (study **S2**) with
+   reselect-precedent re-run mechanics. Remaining candidates (S3–S5 + the
+   grammar seams) land as named seams.
 
 ## Deliverable
 
@@ -75,9 +81,13 @@ PR landing:
   free text; interpreted readings echo for confirmation; refusals render +
   record; Unattended unchanged (no pauses — auto-resolutions now emit
   events).
-- **Ship-list steer points** (decision 6): S0 trigger enrichment +
+- **Ship-list steer points** (decision 6): S0 trigger enrichment ·
   S1 pre-synthesise steer point (options compiling via
-  `compile_synthesis_directive`; triggers from grouping flags).
+  `compile_synthesis_directive`; triggers from grouping flags) ·
+  S2 thin-search steer point (post-acquire boundary; triggers from
+  `search_coverage_record`; deepen/rescope options compiling into the
+  search directive grammar; accept-thin flagged; re-run mechanics per
+  decision 6b).
 - **Spec/knowledge flow-back**: execution-orchestration § Steering modes
   gains the steering-event + free-text-interpretation refinement; ADR;
   deferred.md updates (study seams recorded; 017 deviations discharged);
@@ -126,10 +136,12 @@ PR landing:
 
 **Out (stay deferred — recorded with the study):**
 
-- Steer-point candidates S2–S5 (thin-search re-run mechanics, post-screen
-  bar, extract-profile point, post-group re-group) and all § Recorded-seams
-  items (appraise rubric grammar, classify/characterise/vetter steering,
-  granularity keys, threshold directive family, tag-boost vocabulary).
+- Steer-point candidates S3–S5 (post-screen bar, extract-profile point,
+  post-group re-group) and all § Recorded-seams items (appraise rubric
+  grammar, classify/characterise/vetter steering, granularity keys,
+  threshold directive family, tag-boost vocabulary). S2's own grammar gaps
+  (arm enable/disable, target/threshold overrides, query-term injection)
+  likewise stay seams — S2 ships on the depth + filters grammar as built.
 - Any new directive-grammar key. The interpreter compiles into grammars
   **as built**; inexpressible = refuse + record (the demand signal the
   deferred grammar seams wait on).
@@ -199,8 +211,27 @@ PR landing:
    steer point with options compiling through
    `compile_synthesis_directive`; triggers from grouping per-facet flags;
    Unattended auto-resolves via the existing `steer_point_defaults`
-   machinery, which generalises to a second point). S2–S5 recorded as
-   seams. _Owner's selection recorded here on approval._
+   machinery, which generalises to further points). **Owner selection
+   (2026-07-15): S0 + S1 + S2 ship; S3–S5 recorded as seams.**
+
+   **6b. S2 mechanics (pinned at owner upgrade).** Boundary: after
+   `acquire`, before any downstream spend — so a steer re-runs acquire
+   only, never a completed downstream component (the reselect precedent:
+   user-attributed plan version row + component re-run + fresh run id
+   threaded forward; `apply_reselect`'s shape generalised to a
+   component-parameterised form rather than duplicated). Triggers read
+   persisted `search_coverage_record` rows: `adequacy_verdict ==
+   "inadequate"`, `stop_condition` ∈ {`re_searched_still_thin`,
+   `budget_exhausted`, `wall_clock_exceeded`}. Options: **deepen** →
+   `{"search": {"depth": <next rung>}}` (compiles; new plan version via the
+   generic adjust path where acquire has not completed, re-run path where
+   it has) · **rescope** → `filters` delta (compiles; requires user input)
+   · **accept the thin base** → continue, flagged (the 017 rapid-mode
+   honesty preserved) · **abort**. Whether the same point also reads
+   post-screen thinness (screened-relevant counts vs the loop's floor) is a
+   plan-gate design detail — the trigger data is persisted either way.
+   Unattended: auto-resolves via `steer_point_defaults` like any steer
+   point, `unconfigured_default` loudest.
 7. **Unattended honesty completes.** Auto-resolutions emit
    `steering.decision` events (`response="auto_resolved"`, rule, action,
    `unconfigured_default` flagged loudest) — discharging "marked on the run
@@ -259,15 +290,22 @@ ship menu-only + flag, don't silently degrade the seam.
   a completed component, inexpressible verdict) · confirm-before-apply
   (unconfirmed never applies) · interpreter-error degradation to menu ·
   S0 trigger unit tests over seeded `selection_result` rows · S1 option
-  compile round-trip through `parse_synthesis_directive`.
+  compile round-trip through `parse_synthesis_directive` · S2 trigger unit
+  tests over seeded `search_coverage_record` rows + the acquire re-run path
+  (fault-injected: a failed re-run degrades honestly, never double-spends
+  downstream).
 - **Live check (contract-time pin):** one scoped Moderate run on the
   standard smoke corpus exercising: a free-text steer at
   deepening-selection (interpreted → confirmed → reselect), a free-text
   steer at pre-synthesise (sections pruned via prose), one deliberate
   inexpressible intent (refusal + event), then `steering_history()` output
-  captured from a fresh connection. Cost: one planner conversation + one
-  standard-depth chain + ≤6 interpreter calls — low single-digit dollars,
-  ~20–30 min wall. No full e2e beyond this.
+  captured from a fresh connection. S2 live firing is corpus-dependent (a
+  healthy smoke corpus may not trigger thin-search); the honest pin is:
+  S2 evidenced by the scripted fault-injected tests, exercised live only
+  if the corpus fires it — never a contrived live corpus just for the
+  check. Cost: one planner conversation + one standard-depth chain + ≤6
+  interpreter calls — low single-digit dollars, ~20–30 min wall. No full
+  e2e beyond this.
 
 ## Verification evidence expected
 

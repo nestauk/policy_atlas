@@ -42,9 +42,11 @@ Slice-specific:
 14. [ ] **Substance never silent:** Unattended auto-resolutions emit events
         with rule + action, `unconfigured_default` flagged loudest; the
         collation is derivable from persisted state.
-15. [ ] **Ship-list holds as approved:** S0 triggers read persisted
-        `selection_result` signals only (no recomputation); S1 options
-        round-trip through `parse_synthesis_directive`; no new
+15. [ ] **Ship-list holds as approved (S0+S1+S2):** S0 triggers read
+        persisted `selection_result` signals only (no recomputation); S1
+        options round-trip through `parse_synthesis_directive`; S2 triggers
+        read persisted `search_coverage_record` rows and its re-run path
+        never re-runs a completed downstream component; no new
         directive-grammar keys entered the slice.
 16. [ ] Spec flow-back + ADR landed (sequencing-invariant revision,
         steering-event vocabulary); `log.md` entry written.

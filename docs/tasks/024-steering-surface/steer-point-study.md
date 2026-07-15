@@ -166,3 +166,11 @@ gives the interpreter a second live point to prove generality). Hold **S2**
 as the named next steer-point slice (its re-run-from-acquire mechanics are
 real new machinery). Record S3–S5 + the seams above in deferred.md with
 their grammar gaps named.
+
+## Owner adjudication (2026-07-15, contract gate)
+
+**S0 + S1 + S2 ship in 024** — the owner upgraded the recommendation to
+include the thin-search steer point. S2 mechanics pinned in contract
+decision 6b (post-acquire boundary, reselect-precedent re-run,
+coverage-record triggers, depth/filters options as built). S3–S5 + the
+recorded seams stay deferred.
