@@ -869,6 +869,10 @@ def artefact(conn: Connection, project_id: uuid.UUID) -> dict[str, Any] | None:
                 }
             )
         claim_type = str(entry["annotation_type"])
+        # Grounding-review flags are backend/debug signal, not reader-facing:
+        # drop them here so no view renders them (the prose itself stays).
+        if claim_type == "unspanned_assertion":
+            continue
         if claim_type not in {
             "citation",
             "gap",
