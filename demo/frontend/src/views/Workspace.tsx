@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import type { CheckinParams } from '../api'
+import type { CheckinParams, ScopeConstraints } from '../api'
 import { useProject, type StageInfo, type ThreadMsg } from '../store'
 import { CountUp, Dot, formatElapsed, HBar, PaneH, Spinner, Tip } from '../ui'
 import Charts from './Charts'
@@ -240,12 +240,19 @@ function yearOf(iso: string): string {
   return m ? m[1] : iso
 }
 
-function scopeChips(sc?: { published_after?: string | null; published_before?: string | null; publisher_country?: string | null } | null): string[] {
+function scopeChips(sc?: ScopeConstraints | null): string[] {
   if (!sc) return []
   const chips: string[] = []
   if (sc.published_after) chips.push(`Published after ${yearOf(sc.published_after)}`)
   if (sc.published_before) chips.push(`Published before ${yearOf(sc.published_before)}`)
   if (sc.publisher_country) chips.push(`Publisher country: ${sc.publisher_country}`)
+  if (sc.author_affiliation_countries?.length)
+    chips.push(`Author countries: ${sc.author_affiliation_countries.join(', ')}`)
+  if (sc.country_group)
+    chips.push(
+      `Countries: ${sc.country_group.label}` +
+        (sc.country_group.countries?.length ? ` (${sc.country_group.countries.join(', ')})` : ''),
+    )
   return chips
 }
 

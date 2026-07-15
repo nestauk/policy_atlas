@@ -23,6 +23,8 @@ export interface ScopeConstraints {
   published_after?: string | null
   published_before?: string | null
   publisher_country?: string | null
+  author_affiliation_countries?: string[] | null
+  country_group?: { label: string; countries?: string[] | null } | null
 }
 
 export type SearchEffort = 'rapid' | 'standard' | 'deep'
