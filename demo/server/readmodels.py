@@ -1210,6 +1210,7 @@ def coverage(conn: Connection, project_id: uuid.UUID) -> dict[str, Any] | None:
             search_coverage_record.c.stop_condition,
             search_coverage_record.c.adequacy_verdict,
             search_coverage_record.c.verdict_origin,
+            search_coverage_record.c.acquired_by_run_id,
             search_coverage_record.c.created_at,
         )
         .where(search_coverage_record.c.project_id == project_id)
@@ -1237,8 +1238,53 @@ def coverage(conn: Connection, project_id: uuid.UUID) -> dict[str, Any] | None:
             f"Searching stopped because {stop_text}, but the analysis still judges "
             "coverage thin — recorded, not hidden."
         )
+    # Per-backend search audit, projected from the canonical event log: every
+    # query sent, its result count, and how many of the backend's sources
+    # screened relevant. Relevance is per-backend only — per-query attribution
+    # needs query→source provenance the pipeline doesn't record yet
+    # (docs/deferred.md, per-query source provenance).
+    detail: dict[str, dict[str, Any]] = {}
+    for payload in conn.execute(
+        sa_select(event_log.c.payload)
+        .where(event_log.c.project_id == project_id)
+        .where(event_log.c.run_id == row.acquired_by_run_id)
+        .where(event_log.c.event_type == "search.executed")
+        .order_by(event_log.c.sequence)
+    ).scalars():
+        if not isinstance(payload, dict):
+            continue
+        backend = payload.get("backend") or "?"
+        entry = detail.setdefault(backend, {"backend": backend, "queries": [], "results": 0, "relevant": 0})
+        count = payload.get("result_count")
+        entry["queries"].append({"query": payload.get("query"), "results": count})
+        if isinstance(count, (int, float)):
+            entry["results"] += int(count)
+
+    if detail:
+        effective = effective_screen_rows()
+        for metadata in conn.execute(
+            sa_select(source_snapshot.c.metadata)
+            .select_from(
+                effective.join(
+                    project_source_snapshot,
+                    effective.c.project_source_snapshot_id
+                    == project_source_snapshot.c.project_source_snapshot_id,
+                ).join(
+                    source_snapshot,
+                    project_source_snapshot.c.source_snapshot_id
+                    == source_snapshot.c.source_snapshot_id,
+                )
+            )
+            .where(effective.c.project_id == project_id)
+            .where(effective.c.status == "relevant")
+        ).scalars():
+            backend = metadata.get("backend") if isinstance(metadata, dict) else None
+            if backend in detail:
+                detail[backend]["relevant"] += 1
+
     return {
         "backends": [b.get("backend", "?") for b in backends if isinstance(b, dict)],
+        "backends_detail": list(detail.values()),
         "stop_condition": row.stop_condition,
         "stop_text": stop_texts.get(row.stop_condition, row.stop_condition),
         "summary": summary,

@@ -240,6 +240,9 @@ function yearOf(iso: string): string {
   return m ? m[1] : iso
 }
 
+const backendLabel = (b: string) =>
+  b === 'openalex' ? 'OpenAlex · academic research' : b === 'overton' ? 'Overton · policy documents' : b
+
 function scopeChips(sc?: ScopeConstraints | null): string[] {
   if (!sc) return []
   const chips: string[] = []
@@ -406,7 +409,9 @@ function Journey() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const complete = state.phase === 'complete'
   const aborted = state.phase === 'aborted'
-  const searching = ['acquire', 'screen'].some((s) => state.stages[s]?.status === 'active')
+  const searching = ['acquire', 'screen_abstract', 'screen_full'].some(
+    (s) => state.stages[s]?.status === 'active',
+  )
   const hasLandscape = !!state.landscape && Object.keys(state.landscape.evidence_types).length > 0
   const hasGroups = !!state.groups && state.groups.facets.length > 0
 
@@ -495,9 +500,36 @@ function Journey() {
         {state.coverage && (
           <div id="j-coverage" className="card anim-rise scroll-mt-14">
             <PaneH className="mb-2">Where I looked</PaneH>
-            <div className="text-sm font-medium text-navy">
-              {state.coverage.backends.map((b) => (b === 'openalex' ? 'OpenAlex' : b === 'overton' ? 'Overton' : b)).join(' · ')}
-            </div>
+            {(state.coverage.backends_detail?.length ?? 0) > 0 && (
+              <div className="mb-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {state.coverage.backends_detail!.map((b) => (
+                  <div key={b.backend} className="border hairline p-3.5">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[13px] font-bold text-navy">{backendLabel(b.backend)}</span>
+                      <span className="text-[12px] text-grey">
+                        <span className="font-display text-[18px] font-bold text-blue">{b.results}</span>
+                        {' results · '}
+                        <span className="font-display text-[18px] font-bold text-blue">{b.relevant}</span>
+                        {' relevant'}
+                      </span>
+                    </div>
+                    <div className="thin-scroll mt-2 max-h-28 space-y-0.5 overflow-y-auto">
+                      {b.queries.map((q, i) => (
+                        <div key={i} className="flex items-baseline justify-between gap-2 text-[11.5px]">
+                          <span className="truncate italic text-grey">“{q.query}”</span>
+                          <span className="shrink-0 text-navy-40">{q.results ?? '—'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!state.coverage.backends_detail?.length && (
+              <div className="text-sm font-medium text-navy">
+                {state.coverage.backends.map(backendLabel).join(' · ')}
+              </div>
+            )}
             <p className="mt-1 text-[13px] text-navy">
               {state.coverage.summary ??
                 (state.coverage.adequacy === 'adequate' ? 'Coverage judged adequate.' : 'Coverage judged thin — recorded, not hidden.')}

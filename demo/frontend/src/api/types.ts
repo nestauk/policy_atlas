@@ -189,6 +189,12 @@ export interface DecisionEntry {
 
 export interface Coverage {
   backends: string[]
+  backends_detail?: {
+    backend: string
+    queries: { query: string | null; results: number | null }[]
+    results: number
+    relevant: number
+  }[]
   stop_condition: string
   summary?: string
   adequacy: 'adequate' | 'inadequate'
