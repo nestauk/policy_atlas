@@ -245,7 +245,8 @@ front-end/API renderers · schema beyond decision 2.
 5. **The lattice and the modes** — as the annex pins them: P1 exception-
    only (coverage-record triggers) · P2 pre-select coverage (full
    picture: screened counts, type/quality mix, themes, executed queries;
-   additive re-search segment; criteria+re-screen; re-characterise) · P3
+   additive re-search segment; re-characterise — criteria+re-screen
+   excluded per decision 7b) · P3
    deepening-selection (S0-enriched triggers, selection preview, profile/
    refresh/strata/doc-exclusion options, combined free-text levers) · P4
    synthesis shape (proposal, sections, boosts, re-group). Modes renamed
@@ -286,14 +287,17 @@ front-end/API renderers · schema beyond decision 2.
    segment re-walk (acquire→assess forward, then one boundary re-entry
    to show updated coverage, capped at one re-entry cycle per boundary —
    the existing one-adjustment rule generalised) is budgeted as its own
-   plan phase. **(b) Criteria-changed re-screen is a supersession
-   redesign, not a tiebreak**: `effective_screen_rows` orders by stage
-   only (a fresh stage-1 row loses to a stale stage-2 confirmation; two
-   same-stage rows tie nondeterministically), so the plan must design
-   the supersession rule explicitly (e.g. per-doc re-screen generation
-   or run-recency ordering) and move every `effective_screen_rows`
-   consumer in lockstep (characterise confirmed among them); the
-   stage-2-supersession case is the named halt-and-re-gate trigger.
+   plan phase. **(b) Criteria-changed re-screen — EXCLUDED at the plan
+   gate (plan-review B1, 2026-07-16)**: the no-schema supersession
+   design proved infeasible as-built — `uq_ssr_scope_source_stage`
+   (partial UNIQUE on scope/doc/stage for non-failed rows) blocks the
+   fresh stage-1 INSERT itself, and every real fix is
+   schema-beyond-decision-2 or violates replacement-never-deletes. The
+   pre-authorised de-scope lever was exercised up front: doc-grain
+   re-screen supersession is **its own future slice** (which takes the
+   schema decision properly); P2's options exclude
+   criteria+re-screen; 024's replacement re-runs are exactly the
+   reference-moving ones (reselect · re-characterise · re-group).
 8. **The trigger floor** — computed from persisted state only, never
    recomputed, never watch-suppressible: the S0 select signals · P1
    coverage triggers · P2 coverage/type/quality collapse · P4 grouping

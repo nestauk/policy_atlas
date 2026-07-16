@@ -16,8 +16,10 @@
   `plan_version INT` · `status TEXT` (check: running/succeeded/degraded/
   failed/aborted) · `session_id UUID NULL` · `started_at/ended_at
   timestamptz`; composite FK `(evidence_scope_id, project_id)` →
-  evidence_scope (the selection_result precedent). `runs` gains
-  `capability_run_id UUID NULL` FK. One alembic revision, explicit ids,
+  evidence_scope (the selection_result precedent) + `UNIQUE
+  (capability_run_id, project_id)` so `runs` gains a **composite** FK
+  `(capability_run_id, project_id)` — the schema's cross-project-guard
+  convention (review m2). One alembic revision, explicit ids,
   roundtrip-tested.
 - **Event vocabulary**: `steering.pause` · `steering.decision` ·
   `steering.rejected` · `steering.refused` · `component.skipped` ·
@@ -26,20 +28,32 @@
   `decided_by` (`user|orchestrator|standing_default`), `authored_by`,
   `user_text` (verbatim, when prose given), `interpreted_action`,
   `confirmed`, execution profile, `rerun_mode`
-  (`additive|replacement|null`). Attachment: the run the event is about
-  (`after_component`); else most-recent attempted run id. Transactional
-  pairing: decision/skip/re-run with their state change; pause/refused/
-  rejected standalone.
-- **Effective-screen-row supersession rule (M4, lead design):
-  recency-first** — `effective_screen_rows` orders `created_at DESC,
-  screen_stage DESC` (stage only as same-timestamp tiebreak). A fresh
-  stage-1 row from a criteria-changed re-screen supersedes a stale
-  stage-2 confirmation (intended replacement semantics); the normal
-  stage-1→stage-2 flow is unaffected (stage-2 rows are newer). **No
-  schema change.** Consumers moving in lockstep: `characterise.py`
-  (both call sites), select's eligibility read, screen's own skip
-  logic. Demote-only stays an invariant *within* a screening pass;
-  across re-screens, recency wins by design (the ADR records this).
+  (`additive|replacement|null`); **mode changes ride `steering.decision`
+  (`response: mode_change`)** — every decision surfaces (review N3).
+  Attachment: the run the event is about (`after_component`); else
+  most-recent attempted run id — and (review M2, `event_log.run_id` is
+  NOT NULL) the invariant: **no steering event is emitted before the
+  first component run exists**; the watch's earliest emission is
+  acquire's *output* boundary, and Task 2 asserts a resolved run_id on
+  every emission. Transactional pairing: decision/skip/re-run with
+  their state change; pause/refused/rejected standalone.
+- **Criteria-changed re-screen — EXCLUDED from 024 (plan-review B1,
+  adjudicated 2026-07-16; the pre-authorised de-scope lever #2 exercised
+  up front on feasibility, not overrun).** The recency-first no-schema
+  pin is infeasible as-built: `uq_ssr_scope_source_stage` is a partial
+  UNIQUE on `(evidence_scope_id, project_source_snapshot_id,
+  screen_stage) WHERE status != 'failed'` (schema.py:268), so a second
+  non-failed stage-1 row cannot be INSERTed at all; `_load_stage1_docs`
+  skips already-screened docs (screen.py:357); and the timestamp column
+  is `screened_at`, not `created_at`. Every real fix (generation
+  column, index alter, row mutation) is schema-beyond-decision-2 or
+  violates replacement-never-deletes — the contract's own stop
+  condition. Disposition: doc-grain re-screen supersession moves to
+  **its own slice** (which takes the schema decision properly); P2's
+  option set drops "adjust criteria + re-screen"; replacement re-runs
+  in 024 are exactly the reference-moving ones (reselect ·
+  re-characterise · re-group). Contract decision 7(b) + decision 5 P2
+  amended to match; ADR records the exclusion + why.
 - **Watch caps (internal constants, dev-side only)**:
   `WATCH_FALLBACK_TOOL_CALLS = 2` · invocation classes = decision-point
   | trigger-fired | anomalous check-in (failed/retried/skipped/degraded)
@@ -83,12 +97,16 @@
 schema class, mandatory)**
 1. `capability_run` table + `runs.capability_run_id` + migration +
    roundtrip tests (DDL pinned above). — **fast-worker** *(mechanical)*
-2. Runner: walk-row lifecycle (open/thread/close) + steering-event
-   emission at every path (pause/decision/rejected/refused/skipped +
-   clean-boundary `agent_judgement_routed`) + payload rules +
-   transactional pairing; emission tests per path × decider. —
-   **codex→deep-reasoner** *(runner surgery, multi-path coherence;
-   machine-verifiable via the contract's event-path test list)*
+2. Runner: walk-row lifecycle (open/thread/close) + the **emission
+   chassis** (vocabulary, payload rules, run-id assertion,
+   transactional-pairing helper) + emission at the **Phase-1-reachable
+   paths only** (pause, user decision, skip) with their per-path tests.
+   Rescoped per review M1: the orchestrator-decider, router
+   (refused/rejected), and clean-boundary paths get their emission
+   wiring + tests **inside the tasks that build those paths** (11, 12,
+   14, 15) — rubric item 10's completeness is a **Phase-5 exit
+   criterion**, not Phase 1's. — **codex→deep-reasoner** *(runner
+   surgery; machine-verifiable per reachable path)*
 3. `steering_history` projection + two-walk rebuild test +
    payload-partition assertions (signature lead-pinned:
    `steering_history(conn, project_id, capability_run_id=None) →
@@ -122,10 +140,10 @@ effective rows)**
    fault-injected tests (failed re-entry degrades honestly, nothing
    already-processed re-runs, no double-spend downstream). —
    **codex→deep-reasoner** *(separate brief from 7 — one concern each)*
-9. Effective-screen-row recency-first rule + consumer lockstep
-   (characterise ×2, select eligibility, screen skip logic) +
-   supersession tests incl. the stage-2→fresh-stage-1 case. —
-   **codex→deep-reasoner** *(design pinned above; impl + lockstep)*
+9. ~~Effective-screen-row supersession~~ — **struck per review B1**
+   (criteria-changed re-screen excluded from 024; see the pins block).
+   Phase 3 ships tasks 7–8 only; the P2 option set in Task 11 excludes
+   "adjust criteria + re-screen".
 
 **Phase 4 — lattice + triggers + modes (`make verify-fast` —
 runner/steering-internal, schema untouched)**
@@ -133,8 +151,15 @@ runner/steering-internal, schema untouched)**
     + seeded-row tests. — **fast-worker** *(per-class specs from the
     study's file:line inventory)*
 11. P1–P4 wiring: pause-set recompile (mode table), bundle builders
-    (pins above), canonical floors incl. the generic non-lattice floor,
-    P3 preview/options, P4 `propose_synthesis_plan` wiring. —
+    (pins above; P2 options exclude criteria+re-screen per B1; P2's
+    executed/zero-result queries and screen quality-collapse triggers
+    parse `search.executed`/`source.screened` event JSONB — exact
+    payload keys pinned in the brief from the study, review N1),
+    canonical floors incl. the generic non-lattice floor, P3
+    preview/options, P4 `propose_synthesis_plan` wiring; **the
+    authority-order test lives here** (review m1): a live user answer
+    at an attended pause beats a standing declared rule
+    (user > declared rules; Task 12 pins rules > orchestrator). —
     **codex→deep-reasoner** *(runner+steering coherence)*
 12. Unattended (c): per-point standing-instructions vocabulary on
     `steer_point_defaults`, discretion path, hard-stop honouring,
@@ -142,7 +167,14 @@ runner/steering-internal, schema untouched)**
     **codex→deep-reasoner** *(same subsystem, separate brief)*
 
 **Phase 5 — orchestrator seam + prompts + B2′ + CLI (full verify —
-public interface + LLM integration)**
+public interface + LLM integration). Split-risk phase (review N5): if it
+needs splitting mid-build, the pre-marked seam is 5a = seam + prompts
+(13, 14) | 5b = router + CLI (15, 17) | 5c = B2′ + fixtures (16, 18),
+each sub-phase exiting on verify-fast with the full verify at 5's true
+exit. Deep-reasoner concentration acknowledged (review m4): nine heavy
+briefs route to one lane while Codex is out — phases serialize anyway;
+if lead adjudication saturates, the lightest briefs (7, 17) pull inline
+to the lead rather than queueing.**
 13. Prompt family: `orchestrator_v1` (three moments) ·
     `finding_relevance_v1` · `synthesise_section_v8` additive block ·
     guidance fenced-block texts. — **lead** *(prompt-bearing; the
@@ -155,9 +187,14 @@ public interface + LLM integration)**
 15. Router compile path: fan-out → per-component deltas through the
     existing apply paths; partial-compile per-fragment refusals;
     confirm-before-apply; degrade-to-menu. — **codex→deep-reasoner**
-16. B2′ annotator pass + run-scoped persistence + synthesis consumer
-    (marks into substrate payloads + P4 counts). — **fast-worker**
-    *(vetter-pattern mirror; prompt from 13)*
+16. B2′ (split per review M3 — it is a fencing surface, not volume):
+    **16a** annotator pass + fencing + finding-grain read post-vetting
+    (the roll-up is doc/profile-grain — the annotator reads finding
+    rows directly) + synthesis-consumer foregrounding wiring —
+    **codex→deep-reasoner** *(integrity-class; pairs with Task 13's
+    lead-owned v8 block)*; **16b** run-scoped persistence + coverage
+    validation + fail-open flag — **fast-worker** *(vetter-pattern
+    mirror, precise brief)*.
 17. CLI: free text at every pause, confirmation renders (fan-out +
     re-run mode declaration), mode labels, standing-instructions
     authoring flow; scripted-IO tests incl. stub e2e. —
@@ -222,6 +259,16 @@ Five full gates / six code phases; the three fast gates argued above.
 
 ## De-scope levers (contract stop-conditions, pre-authorised order)
 
-1. Fallback deliberation loop (ship single-shot only; escalation
-   demand-meter). 2. Criteria-changed re-screen at P2 (supersession
-   redesign moves to its own slice). Both flagged in verification.md.
+Lever #2 (criteria-changed re-screen) was **exercised at plan stage** on
+feasibility (review B1) — already out, recorded in the pins block. The
+remaining in-build lever: the fallback deliberation loop (ship
+single-shot only; escalation demand-meter). Flagged in verification.md
+if pulled.
+
+## Gate-framing note (review N4)
+
+`verify-fast` here = full test suite minus the slow ingest integration
+test, plus typecheck + lint — the three fast gates skip only
+`build`/`okf-validate`/one ingest test; seeded-row trigger tests and
+grammar suites run at their own phase gates. No mandatory-class signal
+is deferred by a fast gate.
