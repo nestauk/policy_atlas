@@ -43,7 +43,9 @@ Slice-specific:
         existing apply paths; unconfirmed readings never apply (attended);
         backend errors degrade to structural routing + canonical menu;
         the structural trigger floor is never suppressed by the watch
-        (test-asserted).
+        (test-asserted). **Deliberation bounded:** decision-point pull is
+        capped, `lookup`/`query_findings` only (never retrieve/search),
+        every call + digest evented; triage boundaries make no tool calls.
 13. [ ] **Honest refusal:** inexpressible intents (or fragments of a
         fan-out) yield the refusal + a `steering.refused` event, never a
         nearest-option approximation — including watch-authored proposals

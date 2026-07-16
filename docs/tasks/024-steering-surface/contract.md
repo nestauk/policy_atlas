@@ -170,15 +170,18 @@ front-end/API renderers · schema beyond decision 2.
    layer. **Authored options**: 2–5 run-specific suggested responses per
    pause on the canonical floor (the planner suggested-answers pattern);
    canonical options remain the floor and the stable vocabulary
-   `steer_point_defaults` anchor. **Information model — push-fed,
-   decider-symmetric, no tools** (annex § watch information model): the
-   harness composes a deterministic boundary context (orienting header +
-   **the exact payload a pausing user would see** + a run-so-far digest
-   incl. prior steering decisions read from the events); since pause
-   events persist the payload, watch decisions are replayable from
-   Postgres by construction. Insufficient context → bias-to-escalate with
-   the reason evented (the demand meter for the deferred tooled watch),
-   never tool-fishing.
+   `steer_point_defaults` anchor. **Information model — two-tier** (annex
+   § watch information model; symmetry of the information *environment*,
+   not the payload): routine boundary **triage is push-only** — a
+   deterministic composed context (orienting header + the payload a
+   pausing user would be shown + a run-so-far digest incl. prior steering
+   decisions from the events); at **decision points** (P1–P4 +
+   watch-escalated) the watch gets **bounded read-only deliberation** —
+   capped (~4) `lookup`/`query_findings` calls over canonical state
+   (never `retrieve`, never `search`), each call + result digest evented,
+   so replay-from-Postgres shows what the watch consulted, not just what
+   it decided. Insufficient context after the cap → bias-to-escalate with
+   the reason evented.
 4. **Sequencing-invariant revision (ADR + spec flow-back).** 017 decision
    5's "one LLM call, pre-run" is deliberately revised: mid-run LLM calls
    are permitted at component boundaries only (router at pauses, watch at
@@ -286,7 +289,9 @@ unsound (halt, re-gate that option).
   (fresh-connection `steering_history` reproduces a scripted steered
   multi-walk story, two walks in one project) · router/watch wire-model
   fail-closed suites + confirm gate (unconfirmed never applies) +
-  degrade-to-floor on backend error · floor-trigger tests over seeded
+  degrade-to-floor on backend error · watch deliberation bounds (call cap
+  enforced; lookup/query_findings only; calls + digests evented; stubbed
+  tools) · floor-trigger tests over seeded
   rows (all decision-8 classes) · authored-options degrade test · parser
   suites for every key/channel + `standard`/absent ≡ as-built guards ·
   B2′: vetter/extraction prompts byte-untouched, annotator coverage

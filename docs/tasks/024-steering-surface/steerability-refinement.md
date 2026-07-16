@@ -257,30 +257,42 @@ data (~6–9 boundary calls/run, judgment-class model, stub for tests).
    structural routing (today's behaviour). The run never depends on the
    judgement layer being up.
 
-**The watch's information model — push-fed, decider-symmetric (owner
-question, 2026-07-16; no new tools in v1).** The harness composes a
-deterministic **boundary context** per watch call: (1) orienting header —
-refined question/intent, plan summary, mode, standing instructions (the
-spec's orienting-context pattern: assembled, never gathered); (2) **the
-boundary payload — exactly what a pausing user would be shown** (check-in
-render, fired triggers, previews/proposals, canonical options): the
-decider dial moves who answers, so the information basis is identical by
-principle — if the payload is insufficient for the watch it was
-insufficient for the user, and the fix is enriching the payload for both,
-never a privileged orchestrator side-channel; (3) a run-so-far digest —
-completed components + headline counts + flags + prior steering decisions
-this walk (read from the steering events: decision memory). Because
-`steering.pause` events persist the payload, the watch's entire input is
-in the durable record — orchestrator decisions are replayable from
-Postgres by construction. **Insufficient context → bias-to-escalate**
-(route to user / declared default) with the reason evented, never
-tool-fishing or guessing; those events meter demand for the deferred
-**tooled watch** (scoped read-only `lookup` for targeted depth) — a named
-seam, not v1: per-boundary cost/latency, pull-context audit complexity,
-and it is the slope toward the EB-expert's read-upstream role, which has
-its own gate. Containment: boundary payloads carry corpus-derived text
-(titles, labels, queries) into the watch prompt — data-framed, and watch
-output still compiles through the author-blind grammar.
+**The watch's information model — two-tier: push triage, bounded pull at
+decision points (owner challenge upheld, 2026-07-16 round 5).** The first
+cut (push-only "the watch sees the payload the user sees") failed the
+owner's test: the payload is the *notification*; the user's real
+information environment at a pause is the whole workspace (evidence
+table, detail panels, coverage views, decision log) with agency to go
+digging. The corrected principle: **symmetry of the information
+environment, not of the payload** — same canonical state, same authority
+to consult it; the user reads it through UI projections, the watch
+through bounded read tools over the same tables.
+
+- **Tier 1 — boundary triage, push-only.** Every routine boundary call
+  gets the composed deterministic context: (1) orienting header (refined
+  question/intent, plan summary, mode, standing instructions); (2) the
+  boundary payload (check-in render, fired triggers, previews/proposals,
+  canonical options); (3) a run-so-far digest incl. prior steering
+  decisions read from the events (decision memory). One cheap judgment:
+  notable or not, route or proceed. No tools, no loops.
+- **Tier 2 — decision-point deliberation, bounded pull.** At P1–P4 and
+  watch-escalated boundaries — where a user would go digging — the watch
+  may make a **capped** number (~4) of **deterministic, read-only** calls
+  before deciding or authoring options: `lookup` (id/filter-addressed
+  canonical rows + aggregates) and `query_findings` at the later points.
+  E.g. pull the documents in the dropped stratum before authoring
+  "deepen 'rural childcare' (14 docs)"; check what screened out before
+  proposing a subtopic re-search. **Never `retrieve`** (chunk-text
+  injection surface) · **never `search`** (egress from a non-user
+  surface — the Q&A rule). In-repo precedent: synthesis's agentic
+  section loop over scoped read tools.
+- **Audit by eventing the deliberation**: each tool call + result digest
+  lands in the decision's event payload — replay-from-Postgres shows what
+  the watch looked at, not just what it decided.
+- **Insufficient context after the cap → bias-to-escalate** with the
+  reason evented. Containment unchanged: payload and tool-result text is
+  corpus-derived data, data-framed; watch output still compiles through
+  the author-blind grammar.
 
 **Orchestrator-authored options (owner, 2026-07-16 — IN).** At every
 pause the watch composes 2–5 run-specific suggested responses (label +
@@ -399,9 +411,11 @@ watch discipline 3).
 4b. **The EB-expert capability agent** (every-leg directive authoring,
    domain-expert persona) — post-eval as 017 pinned; 024 ships its three
    sockets (watch section) so arrival is a backend swap.
-4e. **The tooled watch** (scoped read-only `lookup` for targeted depth at
-   boundaries) — deferred; insufficient-context escalation events are the
-   demand meter (watch information model, above).
+4e. **Tooling at routine boundaries** — partially adjudicated IN (owner,
+   2026-07-16 round 5): bounded pull ships at decision points (tier 2,
+   above); tooling for tier-1 *triage* stays deferred (cost explodes for
+   little value) with insufficient-context escalations as its demand
+   meter.
 4c. **Query-set pre-approval** — approving generated queries before they
    execute requires an in-component pause (generation happens inside
    acquire's run). The iterative equivalent ships: B1 guidance in,
@@ -471,6 +485,14 @@ delegation-posture labels + decider dial · the mode table above · the
 orchestrator watch with full-user-surface discretion · orchestrator-
 authored options on the canonical floor · one orchestrator prompt family ·
 enlarged trigger floor · EB-expert stays post-eval with sockets shipped.
+
+**Settled at owner review round 5 (2026-07-16):** the watch information
+model corrected and pinned — two-tier: push-only triage at routine
+boundaries; **bounded read-only deliberation at decision points**
+(`lookup` + `query_findings`, call cap ~4, every call + digest evented,
+never retrieve/search) — symmetry of the information *environment*, not
+the payload; build grows a notch (tool plumbing on the in-repo loop
+precedent).
 
 **Settled at owner review round 4 (2026-07-16):** B2′ finding-relevance
 emphasis channel folded IN (owner call, upgrading round 3's seam):
