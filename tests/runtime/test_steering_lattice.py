@@ -1,0 +1,451 @@
+"""Task 024 Task 11 — the steer-point lattice: topology, options, bundles, authority.
+
+Covers the deliverables owned by the lattice task: the mode table topology
+(including Minimal's named fired-only behaviour change), every canonical option
+compiling through its existing grammar, deterministic bundle renders, the P4
+proposal wiring, lattice pause-event payloads (steer_point + options + triggers +
+bundle), and the authority-order rule (a live user answer beats a standing rule).
+"""
+
+from __future__ import annotations
+
+import uuid
+from typing import Any
+
+import pytest
+from sqlalchemy import select
+from sqlalchemy.engine import Engine
+
+from policy_atlas.core import events
+from policy_atlas.core.schema import orchestration_plan
+from policy_atlas.evidence_base.synthesis.synthesis_backend import StubSynthesisBackend
+from policy_atlas.evidence_base.synthesis.synthesis_tools import parse_synthesis_directive
+from policy_atlas.runtime import runner as runner_module
+from policy_atlas.runtime import steering_bundles
+from policy_atlas.runtime.runner import run_plan
+from policy_atlas.runtime.steering import (
+    DEEPENING_SELECTION,
+    EVIDENCE_BASE_COVERAGE,
+    SEARCH_EXCEPTION,
+    SYNTHESIS_SHAPE,
+    Adjust,
+    _validate_directive_delta,
+    build_steer_point_options,
+    generic_floor_options,
+)
+from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_project
+from tests.runtime.test_steering import ScriptedIO, _cleanup_project, _insert_plan_row
+
+_ALL_POINTS = [SEARCH_EXCEPTION, EVIDENCE_BASE_COVERAGE, DEEPENING_SELECTION, SYNTHESIS_SHAPE]
+
+
+# --- Option grammar: every canonical delta compiles ------------------------
+
+
+def _compile_option_delta(delta: dict[str, Any]) -> None:
+    """Compile one option delta through the grammar its shape names (fail-closed)."""
+    if not delta:
+        return  # continue / abort / accept_thin / as_proposed — no directive
+    keys = set(delta)
+    if keys == {"selection"}:
+        # Bare select fine-directive (the legacy P3 shape the wired reselect uses).
+        _validate_directive_delta("select", delta, backend_scope="both")
+        return
+    if keys == {"synthesis"}:
+        # Synthesis directive namespace (context["synthesis"]).
+        parse_synthesis_directive({"synthesis": delta["synthesis"]}, grouping_group_ids=set())
+        return
+    assert len(keys) == 1, f"component-qualified option delta must name one component: {delta!r}"
+    (component,) = keys
+    _validate_directive_delta(component, delta[component], backend_scope="both")
+
+
+def test_every_canonical_option_delta_compiles() -> None:
+    plan = _base_plan(search_effort="standard", analysis_depth="deep")
+    seen: set[str] = set()
+    for point in _ALL_POINTS:
+        options = build_steer_point_options(plan=plan, point=point)
+        assert options, f"{point} has no options"
+        for option in options:
+            # Every option is well-shaped data.
+            assert set(option) >= {"id", "intent", "label", "description", "delta"}
+            assert "requires_user_input" in option
+            assert option["intent"] and option["description"]
+            _compile_option_delta(option["delta"])  # raises on any non-compiling delta
+            seen.add(f"{point}:{option['id']}")
+    # Spot-check the point-keyed inventory landed (P3 gains four; P2/P4 present).
+    assert "deepening_selection:add_extraction_profile" in seen
+    assert "deepening_selection:scope_strata" in seen
+    assert "evidence_base_coverage:adjust_criteria_rescreen" in seen
+    assert "synthesis_shape:regroup_granularity" in seen
+
+
+def test_generic_floor_options_are_continue_change_mode_abort() -> None:
+    ids = [option["id"] for option in generic_floor_options()]
+    assert ids == ["continue", "change_mode", "abort"]
+    for option in generic_floor_options():
+        _compile_option_delta(option["delta"])  # all empty — trivially compile
+
+
+def test_unknown_steer_point_rejected() -> None:
+    with pytest.raises(ValueError, match="unknown steer point"):
+        build_steer_point_options(plan=_base_plan(), point="not_a_point")
+
+
+# --- Bundles: deterministic renders over persisted rows --------------------
+
+
+def _walk(engine: Engine, project_id: uuid.UUID, scope_id: uuid.UUID) -> dict[str, uuid.UUID]:
+    """Run a moderate deep plan to completion (NullIO) and return run ids by component."""
+    plan = _base_plan()  # moderate, deep chain
+    plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+    outcome = run_plan(
+        engine,
+        project_id=project_id,
+        evidence_scope_id=scope_id,
+        plan=plan,
+        plan_id=plan_id,
+        plan_version=1,
+        plan_row_id=plan_id,
+        backends=_runner_backends(),
+        io=ScriptedIO(),  # Continue at every fired/always pause
+    )
+    assert outcome.status == "succeeded"
+    return {step.component: step.run_id for step in outcome.steps if step.run_id is not None}
+
+
+def test_p3_bundle_shape_and_determinism(engine: Engine) -> None:
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        runs_by = _walk(engine, project_id, scope_id)
+        with engine.connect() as conn:
+            bundle = steering_bundles.p3_bundle(
+                conn, project_id=project_id, selection_run_id=runs_by["select"]
+            )
+            again = steering_bundles.p3_bundle(
+                conn, project_id=project_id, selection_run_id=runs_by["select"]
+            )
+        assert bundle == again  # deterministic
+        assert bundle["bundle_version"] == "v1"
+        assert set(bundle) == {
+            "bundle_version",
+            "budget",
+            "strategy",
+            "selection_preview",
+            "composition_by_stratum",
+            "full_text_availability",
+            "budget_picture",
+            "ranking_trust",
+            "flags",
+            "notable_exclusions",
+            "dropped_strata",
+        }
+        assert isinstance(bundle["selection_preview"], list)
+        assert len(bundle["selection_preview"]) <= steering_bundles.SELECTION_PREVIEW_N
+        for entry in bundle["selection_preview"]:
+            assert set(entry) == {
+                "pss_id",
+                "title",
+                "stratum",
+                "evidence_type",
+                "quality_tier",
+                "reason",
+                "text_basis",
+            }
+        assert set(bundle["ranking_trust"]) == {
+            "effective_weights",
+            "signal_availability",
+            "backend_mode",
+            "unmatched_boosts",
+        }
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_p2_bundle_shape_and_determinism(engine: Engine) -> None:
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        runs_by = _walk(engine, project_id, scope_id)
+        with engine.connect() as conn:
+            bundle = steering_bundles.p2_bundle(
+                conn,
+                project_id=project_id,
+                evidence_scope_id=scope_id,
+                characterisation_run_id=runs_by.get("characterise"),
+            )
+            again = steering_bundles.p2_bundle(
+                conn,
+                project_id=project_id,
+                evidence_scope_id=scope_id,
+                characterisation_run_id=runs_by.get("characterise"),
+            )
+        assert bundle == again
+        assert bundle["bundle_version"] == "v1"
+        assert set(bundle) == {
+            "bundle_version",
+            "coverage",
+            "themes",
+            "unclustered_count",
+            "search_coverage",
+            "screen_counts",
+            "screened_event_counts",
+            "executed_queries",
+            "zero_result_queries",
+        }
+        # Characterise ran, so coverage is present with its pinned top-level keys.
+        assert isinstance(bundle["coverage"], dict)
+        assert {"base", "base_counts", "distributions", "rates"} <= set(bundle["coverage"])
+        # Effective screen counts by status/stage/generation, sorted deterministically.
+        assert bundle["screen_counts"] == sorted(
+            bundle["screen_counts"],
+            key=lambda e: (e["status"], e["screen_stage"], e["screen_generation"]),
+        )
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_p2_bundle_parses_executed_and_zero_result_queries(engine: Engine) -> None:
+    """Executed/zero-result queries come from seeded search.executed event payloads."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        runs_by = _walk(engine, project_id, scope_id)
+        acquire_run_id = runs_by["acquire"]
+        # Seed two search.executed events on the acquire run (the N1 payload keys).
+        with engine.begin() as conn:
+            for query, count in (("childhood obesity policy", 7), ("rare edge subtopic", 0)):
+                events.append(
+                    conn,
+                    project_id=project_id,
+                    run_id=acquire_run_id,
+                    event_type="search.executed",
+                    payload={
+                        "backend": "openalex",
+                        "trust_class": "academic",
+                        "mode": "live",
+                        "query": query,
+                        "query_origin": "seed",
+                        "verb": "search",
+                        "depth": "standard",
+                        "filters": {},
+                        "status": "ok",
+                        "result_count": count,
+                        "error": None,
+                        "evidence_scope_id": str(scope_id),
+                    },
+                )
+        with engine.connect() as conn:
+            bundle = steering_bundles.p2_bundle(
+                conn, project_id=project_id, evidence_scope_id=scope_id
+            )
+        queries = [entry["query"] for entry in bundle["executed_queries"]]
+        assert queries == ["childhood obesity policy", "rare edge subtopic"]
+        assert bundle["executed_queries"][0]["result_count"] == 7
+        assert bundle["zero_result_queries"] == [
+            {"query": "rare edge subtopic", "backend": "openalex"}
+        ]
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_p4_bundle_wires_propose_synthesis_plan(engine: Engine) -> None:
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        runs_by = _walk(engine, project_id, scope_id)
+        with engine.connect() as conn:
+            context = runner_module._synthesise_context(  # the walk's real inputs
+                conn,
+                project_id=project_id,
+                evidence_scope_id=scope_id,
+                successful_runs=runs_by,
+            )
+            assert context is not None
+            bundle = steering_bundles.p4_bundle(
+                conn,
+                project_id=project_id,
+                context=context,
+                synthesis_backend=StubSynthesisBackend(),
+                group_run_id=runs_by.get("group"),
+            )
+        assert bundle["bundle_version"] == "v1"
+        assert set(bundle) == {"bundle_version", "proposal", "grouping_flags", "priority_counts"}
+        # The proposal is the read-only propose_synthesis_plan payload.
+        assert set(bundle["proposal"]) == {"proposed_sections", "available_groups", "boostable"}
+        # Grouping flags read from the group run; B2' priority counts absent (None).
+        assert isinstance(bundle["grouping_flags"], dict)
+        assert bundle["priority_counts"] is None
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+# --- Pause-event payloads carry the lattice surface ------------------------
+
+
+def _pause_events(engine: Engine, project_id: uuid.UUID) -> list[dict[str, Any]]:
+    with engine.connect() as conn:
+        return [
+            entry
+            for entry in events.read(conn, project_id)
+            if entry["event_type"] == "steering.pause"
+        ]
+
+
+def test_lattice_pause_events_carry_steer_point_options_triggers_and_bundle(
+    engine: Engine,
+) -> None:
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        _walk(engine, project_id, scope_id)  # moderate run, all pauses Continue
+        pauses = _pause_events(engine, project_id)
+        steer_pauses = {
+            entry["payload"]["steer_point"]: entry["payload"]
+            for entry in pauses
+            if entry["payload"].get("kind") == "steer_point"
+        }
+        # Moderate always pauses at P2/P3/P4; every lattice pause carries its
+        # steer_point name, options and fired triggers.
+        assert {EVIDENCE_BASE_COVERAGE, DEEPENING_SELECTION, SYNTHESIS_SHAPE} <= set(steer_pauses)
+        for name, payload in steer_pauses.items():
+            assert payload["steer_point"] == name
+            assert isinstance(payload["options"], list) and payload["options"]
+            assert "triggers" in payload
+        # P2/P3/P4 attach their deterministic bundle (the durable record).
+        for name in (EVIDENCE_BASE_COVERAGE, DEEPENING_SELECTION, SYNTHESIS_SHAPE):
+            assert steer_pauses[name].get("bundle", {}).get("bundle_version") == "v1"
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+# --- Minimal's named behaviour change: deepening_selection is fired-only ---
+
+
+def _minimal_run_steer_points(
+    engine: Engine, project_id: uuid.UUID, scope_id: uuid.UUID
+) -> list[str]:
+    plan = _base_plan(steering_mode="minimal")
+    plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+    io = ScriptedIO()
+    run_plan(
+        engine,
+        project_id=project_id,
+        evidence_scope_id=scope_id,
+        plan=plan,
+        plan_id=plan_id,
+        plan_version=1,
+        plan_row_id=plan_id,
+        backends=_runner_backends(),
+        io=io,
+    )
+    return [
+        point["steer_point"]
+        for point, _ in io.pauses
+        if point.get("kind") == "steer_point"
+    ]
+
+
+def test_minimal_deepening_selection_is_fired_only(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Named change: pre-024 Minimal always paused at deepening_selection; now it
+    pauses there only when the S0 select triggers fire."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        # No S0 triggers -> Minimal does NOT pause at deepening_selection.
+        monkeypatch.setattr(runner_module, "steer_point_triggers", lambda *a, **k: [])
+        without = _minimal_run_steer_points(engine, project_id, scope_id)
+        assert DEEPENING_SELECTION not in without
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_minimal_deepening_selection_pauses_when_fired(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        # A fired S0 trigger -> Minimal pauses at deepening_selection.
+        monkeypatch.setattr(
+            runner_module,
+            "steer_point_triggers",
+            lambda *a, **k: [{"trigger": "thin_base", "detail": {}}],
+        )
+        fired = _minimal_run_steer_points(engine, project_id, scope_id)
+        assert DEEPENING_SELECTION in fired
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+# --- Authority order: user answer beats a standing declared rule (review m1) -
+
+
+def test_user_answer_beats_standing_declared_rule(engine: Engine) -> None:
+    """At an attended pause a live user answer applies; the standing
+    steer_point_defaults rule for that point does not decide (Task 12 pins
+    rules > orchestrator; here user > declared rules)."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        # A standing rule for deepening_selection is present in the plan.
+        plan = _base_plan(
+            steering_mode="moderate",
+            steer_point_defaults=[
+                {"steer_point": "deepening_selection", "action": "proceed_flag"}
+            ],
+        )
+        assert plan.steer_point_defaults  # the rule stands in the plan
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        # The user answers differently at the P3 pause: a reselect.
+        io = ScriptedIO(
+            by_steer_point={
+                "deepening_selection": [
+                    Adjust(
+                        directive_deltas={
+                            "select": {"selection": {"weight_emphasis": {"quality": 2.0}}}
+                        }
+                    )
+                ]
+            }
+        )
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+        )
+        assert outcome.status == "succeeded"
+        # The user's reselect applied — a new user-attributed plan version.
+        with engine.connect() as conn:
+            versions = conn.execute(
+                select(orchestration_plan.c.version, orchestration_plan.c.created_by)
+                .where(orchestration_plan.c.project_id == project_id)
+                .order_by(orchestration_plan.c.version)
+            ).all()
+        assert (2, "user") in [(row.version, row.created_by) for row in versions]
+        # The decision was decided_by the user, not the standing default.
+        with engine.connect() as conn:
+            decisions = [
+                entry["payload"]
+                for entry in events.read(conn, project_id)
+                if entry["event_type"] == "steering.decision"
+            ]
+        reselect = next(d for d in decisions if d.get("rerun_mode") == "replacement")
+        assert reselect["decided_by"] == "user"
+        assert reselect["authored_by"] == "user"
+        # The standing rule never decided: attended mode consults no default
+        # (auto_resolved flags are the unattended-only signature of rule use).
+        assert not any(
+            flag.get("status") == "auto_resolved" for flag in outcome.flagged_events
+        )
+    finally:
+        _cleanup_project(engine, project_id)

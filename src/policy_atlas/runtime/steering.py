@@ -33,6 +33,10 @@ from policy_atlas.evidence_base.sourcing.search_loop import (
     parse_search_directive,
     validate_scope_filters,
 )
+from policy_atlas.evidence_base.synthesis.synthesis_tools import (
+    SynthesisDirectiveError,
+    parse_synthesis_directive,
+)
 from policy_atlas.runtime.orchestration_plan import (
     ANALYSIS_DEPTH_TABLE,
     EXTRACT_PROFILE_IDS,
@@ -50,14 +54,53 @@ from policy_atlas.runtime.orchestration_plan import (
 PauseBoundary = Literal["after_component", "before_component"]
 UnattendedAction = Literal["proceed_flag", "stop"]
 
-PAUSE_SETS: dict[SteeringMode, tuple[str, ...]] = {
-    "frequent": ("after_every_component",),
-    "moderate": ("deepening_selection", "before_synthesise"),
-    "minimal": ("deepening_selection",),
-    "unattended": (),
-}
-DEEPENING_SELECTION_STEER_POINT = "deepening_selection"
+# --- The steer-point lattice (task 024 decision 5) -------------------------
+#
+# Four named steer points at fixed component boundaries:
+#   acquire ─P1─> ... ─P2─> select ─P3─> ... ─P4─> synthesise
+# P1 after acquire (exception point) · P2 before select (the coverage /
+# "evidence base" point) · P3 after select (deepening selection, the existing
+# point) · P4 before synthesise (the synthesis-shape point).
+SEARCH_EXCEPTION = "search_exception"
+EVIDENCE_BASE_COVERAGE = "evidence_base_coverage"
+DEEPENING_SELECTION = "deepening_selection"
+SYNTHESIS_SHAPE = "synthesis_shape"
 
+# Retained for callers/tests that name the existing P3 point directly.
+DEEPENING_SELECTION_STEER_POINT = DEEPENING_SELECTION
+
+# Per-point per-mode policy — the annex mode table:
+#   "always" pauses whenever the point is present in the chain; "fired" pauses
+#   only when that point's floor triggers fire (read at the boundary through
+#   Task 10 readers, never recomputed); "off" never pauses. Frequent adds a
+#   generic-floor pause at every OTHER (non-lattice) component boundary.
+LatticePolicy = Literal["always", "fired", "off"]
+_LATTICE_MODE_POLICY: dict[SteeringMode, dict[str, LatticePolicy]] = {
+    "frequent": {
+        SEARCH_EXCEPTION: "always",
+        EVIDENCE_BASE_COVERAGE: "always",
+        DEEPENING_SELECTION: "always",
+        SYNTHESIS_SHAPE: "always",
+    },
+    "moderate": {
+        SEARCH_EXCEPTION: "fired",
+        EVIDENCE_BASE_COVERAGE: "always",
+        DEEPENING_SELECTION: "always",
+        SYNTHESIS_SHAPE: "always",
+    },
+    "minimal": {
+        SEARCH_EXCEPTION: "fired",
+        EVIDENCE_BASE_COVERAGE: "fired",
+        DEEPENING_SELECTION: "fired",
+        SYNTHESIS_SHAPE: "fired",
+    },
+    "unattended": {
+        SEARCH_EXCEPTION: "off",
+        EVIDENCE_BASE_COVERAGE: "off",
+        DEEPENING_SELECTION: "off",
+        SYNTHESIS_SHAPE: "off",
+    },
+}
 
 @dataclass(frozen=True, order=True)
 class PausePoint:
@@ -70,6 +113,46 @@ class PausePoint:
 
     boundary: PauseBoundary
     component: str
+
+
+# Canonical boundary for each lattice point. P2/P4 are before-boundaries; P1/P3
+# are after-boundaries. Defined after PausePoint (it constructs them).
+LATTICE_POINTS: dict[str, PausePoint] = {
+    SEARCH_EXCEPTION: PausePoint("after_component", "acquire"),
+    EVIDENCE_BASE_COVERAGE: PausePoint("before_component", "select"),
+    DEEPENING_SELECTION: PausePoint("after_component", "select"),
+    SYNTHESIS_SHAPE: PausePoint("before_component", "synthesise"),
+}
+_LATTICE_BY_POINT: dict[PausePoint, str] = {
+    point: name for name, point in LATTICE_POINTS.items()
+}
+
+
+def lattice_name_for(point: PausePoint) -> str | None:
+    """Return the lattice point name for a boundary, or ``None`` if not one.
+
+    Args:
+        point: A concrete component boundary.
+
+    Returns:
+        The steer-point name (``search_exception``/``evidence_base_coverage``/
+        ``deepening_selection``/``synthesis_shape``) or ``None`` when the
+        boundary is not a lattice point.
+    """
+    return _LATTICE_BY_POINT.get(point)
+
+
+def lattice_policy(mode: SteeringMode, name: str) -> LatticePolicy:
+    """Return the pause policy for a lattice point under a mode.
+
+    Args:
+        mode: Steering mode from the approved plan.
+        name: Lattice point name.
+
+    Returns:
+        ``"always"``, ``"fired"`` or ``"off"``.
+    """
+    return _LATTICE_MODE_POLICY[mode].get(name, "off")
 
 
 @dataclass(frozen=True)
@@ -144,24 +227,40 @@ class SteeringAdjustmentError(ValueError):
 
 
 def pause_points(mode: SteeringMode, chain: ComposedChain) -> set[PausePoint]:
-    """Compile a steering mode into concrete pause boundaries for a chain.
+    """Compile a steering mode into the *always-pause* boundaries for a chain.
+
+    This is the static pause set — the boundaries that pause unconditionally in
+    ``mode``. ``"fired"`` lattice points are deliberately NOT here: the runner
+    evaluates their floor triggers at the boundary (Task 10 readers) and pauses
+    only when a trigger fired, so a static set cannot express them.
+
+    Frequent pauses after every component (the pre-024 behaviour), enriching the
+    after-boundary lattice points (P1 after acquire, P3 after select), PLUS the
+    before-boundary lattice points P2 (before select) and P4 (before synthesise)
+    as additional enriched pauses — "walk me through everything" keeps the
+    per-component check-in and adds the coverage / synthesis-shape decision points.
+
+    Moderate/Minimal contribute only their ``always`` lattice points (Moderate:
+    P2/P3/P4; Minimal: none — all four are fired-only). Unattended is empty.
 
     Args:
         mode: Steering mode from the approved orchestration plan.
         chain: Deterministically composed component chain.
 
     Returns:
-        Concrete pause points present in ``chain``.
+        The always-pause points present in ``chain``.
     """
-    components = set(chain.components)
-    rules = PAUSE_SETS[mode]
+    component_set = set(chain.components)
     points: set[PausePoint] = set()
-    if "after_every_component" in rules:
-        points.update(PausePoint("after_component", step.component) for step in chain.steps)
-    if "deepening_selection" in rules and "select" in components:
-        points.add(PausePoint("after_component", "select"))
-    if "before_synthesise" in rules and "synthesise" in components:
-        points.add(PausePoint("before_component", "synthesise"))
+
+    if mode == "frequent":
+        points.update(PausePoint("after_component", component) for component in component_set)
+
+    for name, point in LATTICE_POINTS.items():
+        if lattice_policy(mode, name) != "always":
+            continue
+        if point.component in component_set:
+            points.add(point)
     return points
 
 
@@ -224,7 +323,17 @@ def render_collation(flagged_events: list[dict[str, Any]]) -> str:
             lines.append(f"{kind}: none")
             continue
         lines.append(f"{kind}:")
-        for event in events:
+        # Loudest-flag ordering (Unattended (c), ADR 0021 decision 4): auto-
+        # resolutions with rule="unconfigured_default" (no pinned rule decided —
+        # the loudest flag class) are reviewed FIRST; a stable sort keeps the
+        # relative order otherwise unchanged.
+        ordered = events
+        if kind == "auto-resolutions":
+            ordered = sorted(
+                events,
+                key=lambda event: 0 if event.get("rule") == "unconfigured_default" else 1,
+            )
+        for event in ordered:
             lines.append(f"- {_render_event(event)}")
     return "\n".join(lines)
 
@@ -257,6 +366,20 @@ RELEVANCE_CONFIDENCE_MULTIPLIER = 2.5
 REFUSAL_MESSAGE_TEMPLATE = (
     "Steering intent {intent!r} is not yet expressible in the selection grammar. "
     "It has been recorded as a seam rather than silently approximated."
+)
+
+# Placeholder tokens for requires_user_input option templates: the template must
+# itself compile through its grammar (guidance/criteria/strata channels reject
+# empty), so a bounded non-empty placeholder stands in until the router/CLI fills
+# it. Never applied unconfirmed.
+_GUIDANCE_PLACEHOLDER = "Describe what to prioritise"
+_CRITERIA_PLACEHOLDER = "Describe the new inclusion criterion"
+_STRATUM_PLACEHOLDER = "theme or stratum name"
+
+# The unfilled-template sentinels: a standing rule whose delta still carries one
+# of these has NOT supplied the user input its option needs (fail closed).
+_OPTION_PLACEHOLDERS: frozenset[str] = frozenset(
+    {_GUIDANCE_PLACEHOLDER, _CRITERIA_PLACEHOLDER, _STRATUM_PLACEHOLDER}
 )
 
 
@@ -318,32 +441,220 @@ def steer_point_triggers(
 
 def build_steer_point_options(
     *,
-    plan: OrchestrationPlan,
+    plan: OrchestrationPlan | None,
     point: str,
 ) -> list[dict[str, Any]]:
-    """Return the deepening-selection options in the user-intent vocabulary.
+    """Return the canonical floor options for a lattice point, in intent vocabulary.
 
     Each option is data — id, the user intent it speaks, a label, an honest
-    description and a ``delta`` template in the as-built selection grammar — for
-    an IO layer (the CLI) to render later. The option set is **closed**: a
-    free-text steering intent that maps to none of these must be answered with
-    ``refuse_inexpressible`` and recorded as a seam, never approximated to the
-    nearest option (contract "honest absence" discipline).
+    description, a ``delta`` template that compiles through an EXISTING grammar
+    (no new keys), and ``requires_user_input``. The per-point set is the closed
+    **deterministic floor** the watch/router build on and ``steer_point_defaults``
+    rules anchor (steerability-refinement "Orchestrator-authored options"). A
+    free-text intent matching none of them is answered with
+    ``refuse_inexpressible`` and recorded as a seam, never approximated.
 
     Args:
-        plan: Current orchestration plan (source of the current select budget).
-        point: Steer-point name being rendered (unused; one steer point in v1).
+        plan: Current orchestration plan (source of the current select budget), or
+            ``None`` when only the option vocabulary is needed (plan-validation
+            time): P3's budget-adjust template then falls back to
+            ``DEFAULT_SELECTION_BUDGET`` — the ids and grammar are plan-independent.
+        point: Lattice point name — one of ``search_exception``,
+            ``evidence_base_coverage``, ``deepening_selection``,
+            ``synthesis_shape``.
 
     Returns:
-        The five deepening-selection options with grammar-exact delta templates.
+        The point's canonical options with grammar-exact delta templates.
+
+    Raises:
+        ValueError: If ``point`` is not a known lattice point.
     """
-    del point
-    current_budget = ANALYSIS_DEPTH_TABLE[plan.analysis_depth]["selection_budget"]
+    if point == SEARCH_EXCEPTION:
+        return _p1_options()
+    if point == EVIDENCE_BASE_COVERAGE:
+        return _p2_options()
+    if point == DEEPENING_SELECTION:
+        return _p3_options(plan)
+    if point == SYNTHESIS_SHAPE:
+        return _p4_options()
+    raise ValueError(f"unknown steer point: {point!r}")
+
+
+def generic_floor_options() -> list[dict[str, Any]]:
+    """Return the generic non-lattice floor (finding M6).
+
+    At a Frequent-mode boundary that is not a lattice point the canonical menu is
+    continue · change mode · abort — always present, the degrade target for a
+    watch/authoring failure there. Free text arrives with the Phase-5 router; it
+    is not an option id.
+
+    Returns:
+        The three generic-floor options.
+    """
+    return [
+        {
+            "id": "continue",
+            "intent": "Continue",
+            "label": "Continue the run",
+            "description": "Proceed to the next component unchanged.",
+            "delta": {},
+            "requires_user_input": False,
+        },
+        {
+            "id": "change_mode",
+            "intent": "Change how often I am asked",
+            "label": "Change the steering mode",
+            "description": (
+                "Change how often the run pauses for you; provide the new mode "
+                "(frequent / moderate / minimal / unattended)."
+            ),
+            "delta": {},
+            "requires_user_input": True,
+        },
+        {
+            "id": "abort",
+            "intent": "Stop the run",
+            "label": "Stop the run here",
+            "description": "Abort the remaining walk; prior component work is preserved.",
+            "delta": {},
+            "requires_user_input": False,
+        },
+    ]
+
+
+def _p1_options() -> list[dict[str, Any]]:
+    """P1 search_exception floor (after acquire) — every delta on the acquire grammar."""
+    return [
+        {
+            "id": "deepen_search",
+            "intent": "Search harder",
+            "label": "Deepen the search",
+            "description": "Raise the acquisition depth rung to search harder for sources.",
+            "delta": {"acquire": {"search": {"depth": "deep"}}},
+            "requires_user_input": False,
+        },
+        {
+            "id": "rescope_filters",
+            "intent": "Change the search scope",
+            "label": "Rescope the search filters",
+            "description": (
+                "Change the recency / geography filters on the search; provide the "
+                "new filters."
+            ),
+            "delta": {
+                "acquire": {"search": {"filters": {"shared": {"published_after": "2015-01-01"}}}}
+            },
+            "requires_user_input": True,
+        },
+        {
+            "id": "guide_queries",
+            "intent": "Guide the queries",
+            "label": "Guide the search queries",
+            "description": (
+                "Add query guidance and re-search (additive: your evidence base "
+                "grows). Provide the guidance sentences."
+            ),
+            "delta": {"acquire": {"search": {"guidance": [_GUIDANCE_PLACEHOLDER]}}},
+            "requires_user_input": True,
+        },
+        {
+            "id": "accept_thin",
+            "intent": "Continue anyway",
+            "label": "Accept the thin evidence base and continue",
+            "description": "Proceed despite the coverage exception; the run is flagged.",
+            "delta": {},
+            "requires_user_input": False,
+        },
+        {
+            "id": "abort",
+            "intent": "Stop the run",
+            "label": "Stop the run here",
+            "description": "Abort the remaining walk; prior component work is preserved.",
+            "delta": {},
+            "requires_user_input": False,
+        },
+    ]
+
+
+def _p2_options() -> list[dict[str, Any]]:
+    """P2 evidence_base_coverage floor (before select).
+
+    ``search_more`` is ADDITIVE (segment re-entry back to acquire); the criteria
+    re-screen and re-characterise are REPLACEMENT re-runs (contract decision 7):
+    the criteria re-screen supersedes screen rows at document grain via the
+    generation mechanism (Task 9), even though the walk mechanics are an
+    acquire→assess re-walk. NOTE: a stage-2 toggle is deliberately OMITTED — the
+    plan grammar cannot express enabling ``screen_full`` mid-run as a directive
+    delta (it is a chain-composition change, not a component directive), so the
+    honest floor omits it rather than approximate it.
+    """
+    return [
+        {
+            "id": "continue",
+            "intent": "The evidence base looks right",
+            "label": "Continue to selection",
+            "description": "Proceed to selection over the current evidence base.",
+            "delta": {},
+            "requires_user_input": False,
+        },
+        {
+            "id": "search_more",
+            "intent": "Search more on a subtopic",
+            "label": "Add to your evidence base",
+            "description": (
+                "Additive re-search on a subtopic — your evidence base grows; nothing "
+                "already processed is redone. Provide what to search for."
+            ),
+            "delta": {"acquire": {"search": {"guidance": [_GUIDANCE_PLACEHOLDER]}}},
+            "requires_user_input": True,
+        },
+        {
+            "id": "adjust_criteria_rescreen",
+            "intent": "Change the screening criteria and re-screen",
+            "label": "Adjust criteria and re-screen (replaces screening)",
+            "description": (
+                "Re-screen every document at new criteria; the new screen rows "
+                "supersede the current ones at document grain. Provide the criteria."
+            ),
+            "delta": {
+                "screen_abstract": {
+                    "screening": {"criteria": [_CRITERIA_PLACEHOLDER], "rescreen": True}
+                }
+            },
+            "requires_user_input": True,
+        },
+        {
+            "id": "recharacterise",
+            "intent": "Re-map the themes",
+            "label": "Re-characterise the evidence (replaces characterisation)",
+            "description": (
+                "Redo theme discovery with your guidance and theme bounds; replaces "
+                "the current characterisation. Provide the guidance."
+            ),
+            "delta": {
+                "characterise": {
+                    "characterise": {"themes": "standard", "guidance": [_GUIDANCE_PLACEHOLDER]}
+                }
+            },
+            "requires_user_input": True,
+        },
+    ]
+
+
+def _p3_options(plan: OrchestrationPlan | None) -> list[dict[str, Any]]:
+    """P3 deepening_selection floor (after select) — the five existing plus four."""
+    current_budget = (
+        ANALYSIS_DEPTH_TABLE[plan.analysis_depth]["selection_budget"]
+        if plan is not None
+        else None
+    )
     budget_default = (
         current_budget
         if current_budget is not None
         else select_module.DEFAULT_SELECTION_BUDGET
     )
+    iof_id = EXTRACT_PROFILE_IDS["iof"]
+    icf_id = EXTRACT_PROFILE_IDS["icf"]
     return [
         {
             "id": "deepen_clusters",
@@ -394,12 +705,125 @@ def build_steer_point_options(
             "requires_user_input": True,
         },
         {
+            "id": "add_extraction_profile",
+            "intent": "Add the in-context-findings profile",
+            "label": "Add the ICF extraction profile",
+            "description": (
+                "Extract in-context findings (ICF) alongside the intervention-outcome "
+                "findings — additive at the profile grain."
+            ),
+            "delta": {"extract": {"extraction": {"profiles": [iof_id, icf_id]}}},
+            "requires_user_input": False,
+        },
+        {
+            "id": "refresh_extraction",
+            "intent": "Re-extract with new full text",
+            "label": "Refresh extraction for abstract-only docs",
+            "description": (
+                "Re-extract documents whose findings were abstract-only now full text "
+                "has landed (D3 memo refresh)."
+            ),
+            "delta": {
+                "extract": {"extraction": {"profiles": [iof_id], "refresh": "abstract_only"}}
+            },
+            "requires_user_input": False,
+        },
+        {
+            "id": "scope_strata",
+            "intent": "Only these themes go forward",
+            "label": "Scope selection to named strata",
+            "description": (
+                "Restrict selection to (or exclude) named strata/themes (D6). Provide "
+                "the strata to keep."
+            ),
+            "delta": {"selection": {"strata_scope": {"only": [_STRATUM_PLACEHOLDER]}}},
+            "requires_user_input": True,
+        },
+        {
+            "id": "exclude_docs",
+            "intent": "Drop specific documents",
+            "label": "Exclude documents I name",
+            "description": "Remove named documents from the selectable pool (D7). Provide the ids.",
+            "delta": {"selection": {"exclude_ids": []}},
+            "requires_user_input": True,
+        },
+        {
             "id": "as_proposed",
             "intent": "As proposed",
             "label": "Continue with the current selection",
             "description": "Proceed with the current selection unchanged.",
             "delta": {},
             "requires_user_input": False,
+        },
+    ]
+
+
+def _p4_options() -> list[dict[str, Any]]:
+    """P4 synthesis_shape floor (before synthesise).
+
+    ``edit_sections``/``emphasis_boosts`` target the synthesis directive grammar
+    (``context["synthesis"]``); ``regroup_*`` are REPLACEMENT re-runs of group.
+    Tag boosts are dropped (D4) — the boost floor speaks type/tier only.
+    """
+    return [
+        {
+            "id": "as_proposed",
+            "intent": "As proposed",
+            "label": "Synthesise as proposed",
+            "description": "Proceed with the proposed synthesis plan unchanged.",
+            "delta": {},
+            "requires_user_input": False,
+        },
+        {
+            "id": "edit_sections",
+            "intent": "Only these themes / edit the sections",
+            "label": "Edit the synthesis sections",
+            "description": (
+                "Set the synthesis sections yourself. Provide the section titles and focus."
+            ),
+            "delta": {
+                "synthesis": {
+                    "sections": [
+                        {
+                            "title": "Policy relevance of the evidence",
+                            "focus": "What the evidence says for the decision",
+                        }
+                    ]
+                }
+            },
+            "requires_user_input": True,
+        },
+        {
+            "id": "emphasis_boosts",
+            "intent": "Emphasise stronger evidence",
+            "label": "Boost evidence type / quality tier in synthesis",
+            "description": (
+                "Weight the synthesis retrieval toward stronger-appraised evidence "
+                "(type/tier boosts; tag boosts are not offered)."
+            ),
+            "delta": {"synthesis": {"retrieval_boosts": {"appraisal_tier": {"5": 2.0}}}},
+            "requires_user_input": False,
+        },
+        {
+            "id": "regroup_granularity",
+            "intent": "Coarser or finer groups",
+            "label": "Re-group at a different granularity (replaces grouping)",
+            "description": (
+                "Re-group findings coarser or finer (D8); replaces the current grouping."
+            ),
+            "delta": {"group": {"grouping": {"granularity": "coarser"}}},
+            "requires_user_input": False,
+        },
+        {
+            "id": "regroup_guided",
+            "intent": "Re-group my way",
+            "label": "Re-group with guidance (replaces grouping)",
+            "description": (
+                "Re-group findings with your guidance (B3); replaces the current "
+                "grouping. Provide the guidance."
+            ),
+            "delta": {"group": {"grouping": {"guidance": [_GUIDANCE_PLACEHOLDER]}}},
+            "requires_user_input": True,
         },
     ]
 
@@ -419,6 +843,135 @@ def refuse_inexpressible(intent_text: str) -> str:
         The standard not-yet-expressible refusal message.
     """
     return REFUSAL_MESSAGE_TEMPLATE.format(intent=intent_text)
+
+
+def validate_option_delta(delta: dict[str, Any], *, backend_scope: str = "both") -> None:
+    """Compile one canonical-option delta through its component grammar (fail-closed).
+
+    Mirrors the shapes :func:`build_steer_point_options` emits: an empty delta is
+    a no-op (continue / abort / accept_thin / as_proposed); a bare
+    ``{"selection": ...}`` is the legacy P3 select fine-directive; a bare
+    ``{"synthesis": ...}`` is the synthesis directive grammar; every other delta
+    names exactly one component and compiles through
+    :func:`_validate_directive_delta`. This is the single delta-compile seam the
+    ``SteerPointDefault`` validator and the router share.
+
+    Args:
+        delta: The compiled directive delta to compile-check.
+        backend_scope: Backend scope for acquire filter validation. Defaults to
+            ``"both"`` (the permissive compile check at plan-validation time,
+            where the run's scope is not the sub-model's to see); the real apply
+            path re-validates against the run's scope.
+
+    Raises:
+        SteeringAdjustmentError: If the delta does not compile.
+        ValueError: If the delta is not a single-component (or bare select /
+            synthesis) shape.
+    """
+    if not delta:
+        return
+    keys = set(delta)
+    if keys == {"selection"}:
+        try:
+            select_module._parse_directive(delta["selection"])
+        except select_module.DirectiveError as exc:
+            raise SteeringAdjustmentError(str(exc)) from exc
+        return
+    if keys == {"synthesis"}:
+        try:
+            parse_synthesis_directive(
+                {"synthesis": delta["synthesis"]}, grouping_group_ids=None
+            )
+        except SynthesisDirectiveError as exc:
+            raise SteeringAdjustmentError(str(exc)) from exc
+        return
+    if len(keys) != 1:
+        raise ValueError(
+            f"option delta must name exactly one component, got {sorted(keys)!r}"
+        )
+    (component,) = keys
+    _validate_directive_delta(component, delta[component], backend_scope=backend_scope)
+
+
+def _delta_has_content(value: Any) -> bool:
+    """Return whether a delta carries any supplied user input (fail-closed helper).
+
+    A ``requires_user_input`` option's rule must supply real input, not the
+    unfilled template. Content = any non-empty string that is NOT an option
+    placeholder sentinel, or any number, anywhere in the delta. Bare booleans
+    (e.g. ``rescreen: True``) and empty collections/placeholders are NOT content:
+    the template ``{"screening": {"criteria": ["Describe…"], "rescreen": True}}``
+    and ``{"selection": {"priority_strata": [], "must_include_ids": []}}`` both
+    read as unfilled.
+    """
+    if isinstance(value, dict):
+        return any(_delta_has_content(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_delta_has_content(item) for item in value)
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, str):
+        return bool(value) and value not in _OPTION_PLACEHOLDERS
+    if isinstance(value, int | float):
+        return True
+    return value is not None
+
+
+def validate_steer_point_default(
+    *,
+    steer_point: str,
+    action: str,
+    option_id: str | None,
+    delta: dict[str, Any] | None,
+) -> None:
+    """Fail-closed validation of a standing-instruction rule's option binding.
+
+    Called from ``SteerPointDefault``'s model validator when ``option_id`` or
+    ``delta`` is present (the bare two-field rule skips it). The steer-point name
+    itself is validated by the model's field validator; this asserts:
+
+    * the binding is only present on a ``proceed_flag`` action (a ``stop`` is a
+      hard stop — it carries no option);
+    * the ``option_id`` is a canonical option at the point (author-blind
+      vocabulary check against :func:`build_steer_point_options`);
+    * the ``delta`` compiles through the point's component grammar; and
+    * a ``requires_user_input`` option's rule supplies real input in its delta
+      (an unfilled template is rejected).
+
+    Args:
+        steer_point: The (already name-validated) lattice point name.
+        action: The rule's action — only ``proceed_flag`` may carry a binding.
+        option_id: The canonical option id, or ``None``.
+        delta: The compiled directive delta, or ``None``.
+
+    Raises:
+        ValueError: On any of the fail-closed conditions above.
+        SteeringAdjustmentError: If the delta does not compile (a ``ValueError``
+            subclass — pydantic surfaces it as a validation error either way).
+    """
+    if action != "proceed_flag":
+        raise ValueError(
+            f"steer_point_default for {steer_point!r} with action {action!r} cannot carry "
+            "an option_id/delta — only 'proceed_flag' rules bind an option"
+        )
+    options = build_steer_point_options(plan=None, point=steer_point)
+    by_id = {option["id"]: option for option in options}
+    if option_id is not None and option_id not in by_id:
+        raise ValueError(
+            f"option_id {option_id!r} is not a canonical option at steer point "
+            f"{steer_point!r}; expected one of {sorted(by_id)!r}"
+        )
+    if delta is not None:
+        validate_option_delta(delta)
+    if (
+        option_id is not None
+        and by_id[option_id].get("requires_user_input")
+        and not _delta_has_content(delta)
+    ):
+        raise ValueError(
+            f"option {option_id!r} at steer point {steer_point!r} requires user input, "
+            "but the standing rule's delta supplies none"
+        )
 
 
 def apply_adjustment(

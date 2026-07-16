@@ -61,8 +61,16 @@ IOF_PROFILE_ID, ICF_PROFILE_ID = KNOWN_PROFILE_IDS
 
 
 class ScriptedIO:
-    def __init__(self, responses: list[SteeringResponse] | None = None) -> None:
+    def __init__(
+        self,
+        responses: list[SteeringResponse] | None = None,
+        by_steer_point: dict[str, list[SteeringResponse]] | None = None,
+    ) -> None:
         self.responses = list(responses or [])
+        # Steer-point-keyed responses (popped in order) — robust to which other
+        # lattice points fire (P1 fires on the thin stub seed; positional
+        # scripting would drift). Falls through to ``responses`` then Continue.
+        self.by_steer_point = {key: list(value) for key, value in (by_steer_point or {}).items()}
         self.check_ins: list[tuple[str, dict[str, Any]]] = []
         self.pauses: list[tuple[dict[str, Any], str]] = []
 
@@ -71,6 +79,10 @@ class ScriptedIO:
 
     def pause(self, point: dict[str, Any], render: str) -> SteeringResponse:
         self.pauses.append((dict(point), render))
+        steer_point = point.get("steer_point")
+        queued = self.by_steer_point.get(steer_point) if steer_point is not None else None
+        if queued:
+            return queued.pop(0)
         if self.responses:
             return self.responses.pop(0)
         return Continue()
@@ -441,14 +453,25 @@ def test_pause_points_compile_pinned_for_all_modes() -> None:
     plan = _base_plan(search_effort="standard", analysis_depth="deep")
     chain = compose(plan)
 
+    # Frequent (task 024 lattice): pause after every component PLUS the two
+    # before-boundary lattice points P2 (before select) and P4 (before synthesise).
     assert pause_points("frequent", chain) == {
         PausePoint("after_component", component) for component in chain.components
+    } | {
+        PausePoint("before_component", "select"),
+        PausePoint("before_component", "synthesise"),
     }
+    # Moderate always-pauses at P2 + P3 + P4 (P1 is fired-only, so not static).
     assert pause_points("moderate", chain) == {
+        PausePoint("before_component", "select"),
         PausePoint("after_component", "select"),
         PausePoint("before_component", "synthesise"),
     }
-    assert pause_points("minimal", chain) == {PausePoint("after_component", "select")}
+    # Minimal: all four lattice points are fired-only (named behaviour change —
+    # the pre-024 minimal always-paused at deepening_selection); the static set
+    # is empty and the runner evaluates each point's floor triggers at the
+    # boundary.
+    assert pause_points("minimal", chain) == set()
     assert pause_points("unattended", chain) == set()
 
 
@@ -490,10 +513,20 @@ def test_frequent_run_pauses_after_every_component_and_continue_matches_nullio(
             io=NullIO(),
         )
 
+        # Frequent pauses after every component, with P2 (before select) inserted
+        # right before select runs and P4 (before synthesise) right before
+        # synthesise runs (the two before-boundary lattice points).
         expected_components = compose(plan).components
-        assert [(point["boundary"], point["component"]) for point, _ in io.pauses] == [
-            ("after_component", component) for component in expected_components
-        ]
+        expected_sequence: list[tuple[str, str]] = []
+        for component in expected_components:
+            if component == "select":
+                expected_sequence.append(("before_component", "select"))
+            if component == "synthesise":
+                expected_sequence.append(("before_component", "synthesise"))
+            expected_sequence.append(("after_component", component))
+        assert [
+            (point["boundary"], point["component"]) for point, _ in io.pauses
+        ] == expected_sequence
         assert pause_outcome.status == null_outcome.status
         assert [step.component for step in pause_outcome.steps] == [
             step.component for step in null_outcome.steps
@@ -717,12 +750,13 @@ def test_adjustment_naming_already_run_component_reprompts_without_plan_write(
         )
         # select is re-runnable at the deepening-selection steer point (task 7),
         # so the already-run rejection property is proven with characterise, an
-        # already-run discretionary component the steer point never re-runs.
+        # already-run discretionary component the steer point never re-runs. It is
+        # delivered at P2 (evidence_base_coverage, after characterise has run) so
+        # the rejection is "already-run"; the reprompt then Continues.
         io = ScriptedIO(
-            [
-                Adjust(directive_deltas={"characterise": {}}),
-                Continue(),
-            ]
+            by_steer_point={
+                "evidence_base_coverage": [Adjust(directive_deltas={"characterise": {}})]
+            }
         )
 
         outcome = run_plan(
@@ -738,8 +772,12 @@ def test_adjustment_naming_already_run_component_reprompts_without_plan_write(
         )
 
         assert outcome.status == "succeeded"
-        assert len(io.pauses) == 2
-        assert "already-run component 'characterise'" in io.pauses[1][1]
+        # Under the lattice an already-run adjustment is rejected at whichever
+        # lattice pause first fires (P2 fires on the thin seed); the rejection
+        # render surfaces and no plan-version row is written.
+        assert any(
+            "already-run component 'characterise'" in render for _, render in io.pauses
+        )
         with engine.connect() as conn:
             rows = conn.execute(
                 select(orchestration_plan.c.version, orchestration_plan.c.status)
@@ -835,16 +873,28 @@ def test_unattended_auto_resolves_steer_point_without_pause_and_collates_flag(
         ]
         assert outcome.status == "succeeded"
         assert io.pauses == []
-        assert auto_events == [
+        # Generalised path (Task 12): every lattice boundary auto-resolves in
+        # Unattended. P3 applies the pinned deepening_selection rule; P2/P4 fall
+        # to the discretion floor (unconfigured_default, no pinned rule).
+        rules = {event["rule"] for event in auto_events}
+        assert "deepening_selection" in rules
+        assert "unconfigured_default" in rules
+        p3 = [event for event in auto_events if event["steer_point"] == "deepening_selection"]
+        assert p3 == [
             {
                 "component": "select",
                 "status": "auto_resolved",
+                "steer_point": "deepening_selection",
                 "rule": "deepening_selection",
                 "action": "proceed_flag",
             }
         ]
-        assert "auto-resolutions" in outcome.collation_render
-        assert "deepening_selection" in outcome.collation_render
+        # Loudest-flag collation ordering: unconfigured_default is reviewed FIRST.
+        collation = outcome.collation_render
+        assert "auto-resolutions" in collation
+        assert collation.index("unconfigured_default") < collation.index(
+            "rule=deepening_selection"
+        )
     finally:
         _cleanup_project(engine, project_id)
 
@@ -1033,6 +1083,10 @@ def test_build_steer_point_options_speak_intents_with_pinned_grammar() -> None:
         "strongest_evidence",
         "most_relevant",
         "adjust_budget",
+        "add_extraction_profile",
+        "refresh_extraction",
+        "scope_strata",
+        "exclude_docs",
         "as_proposed",
     }
     assert by_id["deepen_clusters"]["delta"] == {
@@ -1119,14 +1173,18 @@ def test_moderate_steer_point_reselect_reruns_select_and_threads_new_run_id(
         plan_id = _insert_plan_row(
             engine, project_id=project_id, scope_id=scope_id, plan=plan
         )
+        # Reselect lands at the P3 deepening_selection pause; every other lattice
+        # pause (P1 fires on the thin stub seed, P2, P4) Continues.
         io = ScriptedIO(
-            [
-                Adjust(
-                    directive_deltas={
-                        "select": {"selection": {"weight_emphasis": {"quality": 2.0}}}
-                    }
-                )
-            ]
+            by_steer_point={
+                "deepening_selection": [
+                    Adjust(
+                        directive_deltas={
+                            "select": {"selection": {"weight_emphasis": {"quality": 2.0}}}
+                        }
+                    )
+                ]
+            }
         )
 
         outcome = run_plan(
@@ -1184,9 +1242,12 @@ def test_moderate_steer_point_reselect_reruns_select_and_threads_new_run_id(
         assert extract_payload["selection_run_id"] == str(select_run_ids[1])
         assert extract_payload["selection_run_id"] != str(select_run_ids[0])
 
-        # The steer point fired exactly once (no re-fire after the re-run).
-        steer_pauses = [point for point, _ in io.pauses if point.get("kind") == "steer_point"]
-        assert len(steer_pauses) == 1
+        # The P3 deepening_selection steer point fired exactly once — not
+        # re-entered after the reselect (one adjustment cycle per boundary).
+        steer_points = [
+            point["steer_point"] for point, _ in io.pauses if point.get("kind") == "steer_point"
+        ]
+        assert steer_points.count("deepening_selection") == 1
 
         # The walk completed through synthesise.
         assert [step.component for step in outcome.steps][-1] == "synthesise"
@@ -1456,14 +1517,17 @@ def test_reselect_preserves_both_selection_rows_and_moves_reference(
         project_id, scope_id = _seed_project(engine)
         plan = _base_plan()
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        # Reselect lands at P3 (deepening_selection); other lattice pauses Continue.
         io = ScriptedIO(
-            [
-                Adjust(
-                    directive_deltas={
-                        "select": {"selection": {"weight_emphasis": {"quality": 2.0}}}
-                    }
-                )
-            ]
+            by_steer_point={
+                "deepening_selection": [
+                    Adjust(
+                        directive_deltas={
+                            "select": {"selection": {"weight_emphasis": {"quality": 2.0}}}
+                        }
+                    )
+                ]
+            }
         )
         outcome = run_plan(
             engine,
@@ -1507,9 +1571,11 @@ def test_reselect_preserves_both_selection_rows_and_moves_reference(
         )
         assert extract_payload["selection_run_id"] == str(compiled_select[1])
 
-        # One adjustment cycle per boundary: the steer point fired exactly once.
-        steer_pauses = [point for point, _ in io.pauses if point.get("kind") == "steer_point"]
-        assert len(steer_pauses) == 1
+        # The P3 re-run boundary is not re-entered after the reselect (one cycle).
+        steer_points = [
+            point["steer_point"] for point, _ in io.pauses if point.get("kind") == "steer_point"
+        ]
+        assert steer_points.count("deepening_selection") == 1
 
         decisions = _replacement_decisions(engine, project_id)
         assert len(decisions) == 1

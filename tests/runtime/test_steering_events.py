@@ -364,13 +364,13 @@ def test_rejected_adjustment_emits_reason_then_continue(engine: Engine) -> None:
         project_id, scope_id = _seed_project(engine)
         plan = _base_plan(steering_mode="minimal")
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
-        # characterise has already run at the after-select pause: an adjustment
-        # naming it fails closed and is rejected; then Continue.
+        # characterise has already run by the P2 (evidence_base_coverage) pause:
+        # an adjustment naming it fails closed and is rejected; the reprompt then
+        # Continues (delivered by steer point, robust to which points fire).
         io = ScriptedIO(
-            [
-                Adjust(directive_deltas={"characterise": {}}),
-                # ScriptedIO returns Continue() once responses are exhausted.
-            ]
+            by_steer_point={
+                "evidence_base_coverage": [Adjust(directive_deltas={"characterise": {}})]
+            }
         )
 
         outcome = run_plan(
@@ -471,14 +471,18 @@ def test_reselect_decision_stamps_replacement_and_pairs_with_plan_version(
         project_id, scope_id = _seed_project(engine)
         plan = _base_plan()  # moderate, deep chain, after-select steer point
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        # Reselect lands at the P3 deepening_selection pause; other lattice
+        # pauses Continue (robust to which of P1/P2/P4 fire on the stub seed).
         io = ScriptedIO(
-            [
-                Adjust(
-                    directive_deltas={
-                        "select": {"selection": {"weight_emphasis": {"quality": 2.0}}}
-                    }
-                )
-            ]
+            by_steer_point={
+                "deepening_selection": [
+                    Adjust(
+                        directive_deltas={
+                            "select": {"selection": {"weight_emphasis": {"quality": 2.0}}}
+                        }
+                    )
+                ]
+            }
         )
 
         outcome = run_plan(

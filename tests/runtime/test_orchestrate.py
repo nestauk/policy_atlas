@@ -76,8 +76,15 @@ def test_full_stub_end_to_end_mints_artefact(engine: Engine) -> None:
                 "What works to reduce childhood obesity?",  # intent
                 "1",  # answer the shape question by picking suggestion 1
                 "approve",  # plan review
-                "1",  # deepening-selection steer point: continue
-                "1",  # before-synthesise pause: continue
+                # Task 024 lattice: Continue ("1") at each lattice pause a
+                # moderate deep run may present (P1 fired on the empty-search
+                # stub seed, P2 before select, P3 after select, P4 before
+                # synthesise). Extra unused continues are harmless.
+                "1",
+                "1",
+                "1",
+                "1",
+                "1",
             ]
         )
         result = main(console, engine=engine, backends=_stub_backends())
@@ -134,7 +141,12 @@ def test_landscape_sentinel_composes_without_deep_chain(engine: Engine) -> None:
                 "Map the evidence base on childhood obesity (landscape only)",  # intent
                 "landscape only",  # answer triggers the stub landscape draft
                 "approve",
-                "1",  # before-synthesise pause (moderate, no select boundary): continue
+                # Landscape has no select, so no P2/P3; Continue at P1 (fired on
+                # the empty-search seed) and P4 (before synthesise). Extra
+                # unused continues are harmless.
+                "1",
+                "1",
+                "1",
             ]
         )
         result = main(console, engine=engine, backends=_stub_backends())
@@ -169,6 +181,10 @@ def test_numbered_suggestion_pick_lands_in_turns(engine: Engine) -> None:
                 "What works to reduce childhood obesity?",
                 "2",  # pick the second suggested answer
                 "approve",
+                # Continue at each lattice pause (see full-stub test).
+                "1",
+                "1",
+                "1",
                 "1",
                 "1",
             ]
@@ -391,7 +407,12 @@ def test_planner_declared_steer_point_defaults_reach_the_plan(engine: Engine) ->
 
         assert result.plan is not None
         assert [d.model_dump() for d in result.plan.steer_point_defaults] == [
-            {"steer_point": "deepening_selection", "action": "stop"}
+            {
+                "steer_point": "deepening_selection",
+                "action": "stop",
+                "option_id": None,
+                "delta": None,
+            }
         ]
         assert _printed(console, "steer_point_defaults")
     finally:

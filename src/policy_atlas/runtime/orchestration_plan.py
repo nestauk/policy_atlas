@@ -51,10 +51,18 @@ CountryGroupAuthorship = Literal["pinned-table", "planner-proposed", "user-amend
 
 PUBLISHER_COUNTRY_MAX = 100
 
-# Steer points a plan may pre-declare defaults for (steering.py's
-# DEEPENING_SELECTION_STEER_POINT; the registry lives here so plan
-# validation stays fail-closed without an import cycle).
-STEER_POINTS: tuple[str, ...] = ("deepening_selection",)
+# Steer points a plan may pre-declare standing defaults for. The four names are
+# the steering lattice points (steering.py's SEARCH_EXCEPTION /
+# EVIDENCE_BASE_COVERAGE / DEEPENING_SELECTION / SYNTHESIS_SHAPE); the registry
+# lives here as literal strings so plan validation stays fail-closed without an
+# import cycle (steering.py imports this module). A guard test pins this tuple to
+# steering.LATTICE_POINTS so the two never drift.
+STEER_POINTS: tuple[str, ...] = (
+    "search_exception",
+    "evidence_base_coverage",
+    "deepening_selection",
+    "synthesis_shape",
+)
 
 SPINE: tuple[str, ...] = (
     "acquire",
@@ -520,18 +528,33 @@ class ScopeConstraints(BaseModel):
 
 
 class SteerPointDefault(BaseModel):
-    """Pre-declared default action for a steering point.
+    """Pre-declared standing-instruction rule for a steering lattice point.
+
+    The two-field form (``steer_point`` + ``action``) is the task-017 shape and
+    stays valid unchanged. Task 024 (Unattended = discretion-is-the-mode) widens
+    it with an optional canonical ``option_id`` at that point and its compiled
+    directive ``delta``, so a standing rule can pre-declare *which* option the
+    Unattended walk applies — not merely proceed/stop. When present, the pair is
+    validated fail-closed at plan-validation time (:func:`steering
+    .validate_steer_point_default`): the option id must belong to the point's
+    canonical vocabulary and the delta must compile through the component grammar;
+    an option that requires user input whose delta supplies none is rejected.
 
     Args:
-        steer_point: Name of the steer point the rule applies to.
-        action: Pre-declarable action. Runtime-data-specific actions are not
-            representable in this schema.
+        steer_point: Lattice point the rule applies to (one of ``STEER_POINTS``).
+        action: Pre-declarable action — ``proceed_flag`` or ``stop`` (a hard stop
+            is always honoured; discretion can never override it).
+        option_id: Optional canonical option id at the point (proceed_flag only).
+        delta: Optional compiled directive delta for that option (proceed_flag
+            only), validated against the point's option grammar.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
     steer_point: str
     action: SteerAction
+    option_id: str | None = None
+    delta: dict[str, Any] | None = None
 
     @field_validator("steer_point")
     @classmethod
@@ -551,6 +574,35 @@ class SteerPointDefault(BaseModel):
         if value not in STEER_POINTS:
             raise ValueError(f"steer_point must be one of {sorted(STEER_POINTS)}")
         return value
+
+    @model_validator(mode="after")
+    def validate_option_binding(self) -> Self:
+        """Fail-closed validation of the optional option_id/delta binding.
+
+        The check lives in steering.py (the option grammar and the per-point
+        vocabulary are its concern) and is imported lazily here to avoid the
+        import cycle (steering.py imports this module at load). A bare
+        two-field rule (no option_id, no delta) skips it and stays valid.
+
+        Returns:
+            The validated model.
+
+        Raises:
+            ValueError: If option_id/delta are present on a stop rule, the option
+                id is not canonical at the point, the delta does not compile, or a
+                requires-user-input option's delta supplies no input.
+        """
+        if self.option_id is None and self.delta is None:
+            return self
+        from policy_atlas.runtime.steering import validate_steer_point_default
+
+        validate_steer_point_default(
+            steer_point=self.steer_point,
+            action=self.action,
+            option_id=self.option_id,
+            delta=self.delta,
+        )
+        return self
 
 
 class OrchestrationPlan(BaseModel):
