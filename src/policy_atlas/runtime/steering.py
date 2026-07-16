@@ -98,7 +98,41 @@ class Abort:
     """Steering response that cleanly stops the remaining run walk."""
 
 
-SteeringResponse = Continue | Adjust | Abort
+# The only shipped additive-re-entry segment this slice (contract decision 7a):
+# the walk jumps back to acquire and re-walks forward. Any other start component
+# fails closed ("segment not shipped").
+SHIPPED_SEGMENT_START = "acquire"
+
+
+@dataclass(frozen=True)
+class ReEnterSegment:
+    """Additive segment re-entry (contract decision 7a) — a bounded re-walk.
+
+    At an ``after_component`` boundary the walk jumps BACK to ``segment_start``
+    with an amended directive, re-walks forward through every already-completed
+    component up to the boundary (in chain order), then re-enters the SAME
+    boundary once to show updated state. Incremental by construction: the
+    re-walked components run with their normal directives plus the amendment,
+    and each component's own memo/skip logic (acquire dedups; screen/classify/
+    appraise skip already-processed docs) means NOTHING already processed is
+    reprocessed. One re-entry cycle per boundary (the one-adjustment rule
+    generalised).
+
+    Args:
+        segment_start: Component the segment restarts from. Only
+            :data:`SHIPPED_SEGMENT_START` (``"acquire"``) is a shipped segment
+            this slice; anything else fails closed.
+        directive_deltas: The amendment — per-component directive deltas keyed
+            by component (typically ``{"acquire": {"search": {"guidance":
+            [...]}}}``), each validated fail-closed through the component's own
+            parser.
+    """
+
+    segment_start: str = SHIPPED_SEGMENT_START
+    directive_deltas: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+
+SteeringResponse = Continue | Adjust | Abort | ReEnterSegment
 
 
 class SteeringAdjustmentError(ValueError):
@@ -507,6 +541,155 @@ def _persist_new_plan_version(
     return new_plan_id, new_version
 
 
+# Replacement re-run components (contract decision 7): reselect · re-characterise
+# · re-group (same facet). Each maps its component name to the single fine-directive
+# context key its parser validates. The mode is "replacement" — old result rows
+# persist immutably; the walk's reference moves to the new run id.
+REPLACEMENT_RERUN_CONTEXT_KEYS: dict[str, str] = {
+    "select": "selection",
+    "characterise": "characterise",
+    "group": "grouping",
+}
+
+
+def _validate_replacement_directive(component: str, directive: dict[str, Any]) -> None:
+    """Validate a replacement re-run's fine directive through the component's parser.
+
+    Each replacement re-run carries a commit-layer directive under the component's
+    own context key; it is validated fail-closed by that component's parser and
+    never smuggled into the plan payload (the ``apply_reselect`` precedent).
+
+    Raises:
+        SteeringAdjustmentError: On any malformed shape, wrapping the component
+            parser's own fail-closed error.
+    """
+    if component == "select":
+        try:
+            select_module._parse_directive(directive.get("selection"))
+        except select_module.DirectiveError as exc:
+            raise SteeringAdjustmentError(str(exc)) from exc
+        return
+    if component == "characterise":
+        try:
+            characterise_module._parse_characterise_directive(directive.get("characterise"))
+        except characterise_module.CharacteriseDirectiveError as exc:
+            raise SteeringAdjustmentError(str(exc)) from exc
+        return
+    if component == "group":
+        try:
+            parse_grouping_directive({"grouping": directive.get("grouping")})
+        except FacetDirectiveError as exc:
+            raise SteeringAdjustmentError(str(exc)) from exc
+        return
+    raise SteeringAdjustmentError(
+        f"component {component!r} has no replacement re-run grammar"
+    )
+
+
+def apply_replacement_rerun(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    plan_row: Any,
+    plan: OrchestrationPlan,
+    component: str,
+    directive: dict[str, Any],
+) -> tuple[uuid.UUID, int]:
+    """Persist a user-attributed plan version row for a replacement re-run.
+
+    Generalises the deepening-selection reselect pattern to the three
+    reference-moving replacement re-runs (contract decision 7): reselect,
+    re-characterise and re-group. Each fires at a steer point *after* its
+    component has run, so the generic completed-component adjustment path
+    (``apply_adjustment``) cannot amend it — it treats the component as
+    already-run. This records the user's steering event as a new plan version
+    row (the "human substance enters honestly in provenance" rule).
+
+    The fine directive (select ``weight_emphasis``/``budget``, characterise
+    ``themes``/``guidance``, group ``granularity``/``guidance``/``facets``) is a
+    **commit-layer** directive the task-2 ``OrchestrationPlan`` model deliberately
+    does not carry: the runner applies it to the scope context and it is recorded
+    faithfully in the re-run's own result provenance — never smuggled into the
+    plan payload, which therefore carries forward unchanged.
+
+    Args:
+        conn: Open transaction for the version-row write.
+        project_id: Project owning the plan lineage.
+        plan_row: Current persisted orchestration-plan row.
+        plan: Current validated orchestration plan (carried forward unchanged).
+        component: The re-run component — ``select``/``characterise``/``group``.
+        directive: The merged fine directive, validated fail-closed.
+
+    Returns:
+        The new plan id and new plan version.
+
+    Raises:
+        SteeringAdjustmentError: If the merged directive is malformed, the
+            component has no replacement grammar, or the plan row lacks a UUID id
+            / integer version.
+    """
+    _validate_replacement_directive(component, directive)
+    return _persist_new_plan_version(
+        conn,
+        project_id=project_id,
+        plan_row=plan_row,
+        payload=plan.model_dump(mode="json"),
+    )
+
+
+def apply_segment_reentry(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    plan_row: Any,
+    plan: OrchestrationPlan,
+    segment_start: str,
+    directive_deltas: dict[str, dict[str, Any]],
+) -> tuple[uuid.UUID, int]:
+    """Persist a user-attributed plan version row for an additive segment re-entry.
+
+    Additive segment re-entry (contract decision 7a) is a user decision, so it
+    records a new plan version row the same way a replacement re-run does — but
+    it is *additive*, not reference-moving: the plan payload carries forward
+    unchanged and the amendment is a commit-layer directive the runner applies to
+    the scope context as it re-walks each segment component (the
+    ``apply_replacement_rerun`` / ``apply_reselect`` fine-directive precedent).
+
+    Fail-closed: ``segment_start`` must be the one shipped segment
+    (:data:`SHIPPED_SEGMENT_START`); every amendment delta is validated through
+    its component's own parser (:func:`_validate_directive_delta`).
+
+    Args:
+        conn: Open transaction for the version-row write.
+        project_id: Project owning the plan lineage.
+        plan_row: Current persisted orchestration-plan row.
+        plan: Current validated orchestration plan (carried forward unchanged).
+        segment_start: The segment start component; must be ``"acquire"``.
+        directive_deltas: The amendment, keyed by component.
+
+    Returns:
+        The new plan id and new plan version.
+
+    Raises:
+        SteeringAdjustmentError: If the segment is not shipped, an amendment
+            delta is malformed, or the plan row lacks a UUID id / integer
+            version.
+    """
+    if segment_start != SHIPPED_SEGMENT_START:
+        raise SteeringAdjustmentError(
+            f"segment {segment_start!r} not shipped; only {SHIPPED_SEGMENT_START!r} "
+            "is a shipped re-entry segment"
+        )
+    for component, delta in directive_deltas.items():
+        _validate_directive_delta(component, delta, backend_scope=plan.backend_scope)
+    return _persist_new_plan_version(
+        conn,
+        project_id=project_id,
+        plan_row=plan_row,
+        payload=plan.model_dump(mode="json"),
+    )
+
+
 def apply_reselect(
     conn: Connection,
     *,
@@ -515,45 +698,18 @@ def apply_reselect(
     plan: OrchestrationPlan,
     select_directive: dict[str, Any],
 ) -> tuple[uuid.UUID, int]:
-    """Persist a user-attributed plan version row for a deepening-selection re-run.
+    """Thin alias for ``apply_replacement_rerun`` at the ``select`` component.
 
-    The deepening-selection steer point fires *after* ``select`` runs, so the
-    generic completed-component adjustment path (``apply_adjustment``) cannot
-    amend it — it treats ``select`` as already-run. This records the user's
-    steering event as a new plan version row (the contract's "human substance
-    enters honestly in provenance" rule). The fine select directive
-    (``weight_emphasis`` / ``priority_strata`` / ``must_include_ids`` / a
-    non-``analysis_depth`` ``budget``) is a **commit-layer** directive the task-2
-    ``OrchestrationPlan`` model deliberately does not carry (decision 4 compiles
-    only the selection *budget* via ``analysis_depth``); the runner applies it to
-    the scope context and it is recorded faithfully in the re-run's
-    ``selection_result`` provenance — never smuggled into the plan payload, which
-    therefore carries forward unchanged.
-
-    Args:
-        conn: Open transaction for the version-row write.
-        project_id: Project owning the plan lineage.
-        plan_row: Current persisted orchestration-plan row.
-        plan: Current validated orchestration plan (carried forward unchanged).
-        select_directive: The merged select directive, validated fail-closed.
-
-    Returns:
-        The new plan id and new plan version.
-
-    Raises:
-        SteeringAdjustmentError: If the merged select directive is malformed or
-            the plan row lacks a UUID id / integer version.
+    Retained so existing reselect callers and tests read unchanged; new code uses
+    :func:`apply_replacement_rerun` with an explicit component.
     """
-    try:
-        select_module._parse_directive(select_directive.get("selection"))
-    except select_module.DirectiveError as exc:
-        raise SteeringAdjustmentError(str(exc)) from exc
-
-    return _persist_new_plan_version(
+    return apply_replacement_rerun(
         conn,
         project_id=project_id,
         plan_row=plan_row,
-        payload=plan.model_dump(mode="json"),
+        plan=plan,
+        component="select",
+        directive=select_directive,
     )
 
 

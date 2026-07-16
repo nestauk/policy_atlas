@@ -77,6 +77,17 @@ class ScreenDirectiveError(Exception):
     """Malformed screening directive; screen fails closed."""
 
 
+class ScreenSupersessionError(RuntimeError):
+    """A stage-2 re-screen collides with an existing stage-2 row at the effective
+    generation. Stage-2 supersession is deliberately NOT built (task 024
+    contract): stage-2 rows inherit their stage-1 generation rather than
+    minting their own, so there is no fresh generation to write into. This is a
+    reason-coded halt-and-re-gate trigger, never a silent skip.
+    """
+
+    reason = "stage2_supersession_collision"
+
+
 _CallBudget = CallBudget
 
 
@@ -105,10 +116,23 @@ class _Stage2Doc:
     source_snapshot_id: uuid.UUID
     metadata: dict[str, Any]
     chunks: list[tuple[uuid.UUID, str]]
+    # Generation of the effective stage-1 row: a stage-2 row ALWAYS inherits it
+    # (stage-2 never mints its own generation — ADR 0022).
+    stage1_generation: int
 
 
 def effective_screen_rows() -> Subquery:
-    """Return the highest-stage non-failed screening row per scope/source.
+    """Return the effective non-failed screening row per scope/source.
+
+    The effective row is the non-failed row ordering **generation DESC first,
+    stage DESC second** (task 024 generation supersession, ADR 0022). A
+    criteria-changed re-screen writes fresh rows at ``screen_generation =
+    max+1`` without touching prior rows; the newest generation's verdicts win
+    by design because the criteria changed. *Within* a generation the
+    stage-1→stage-2 flow and demote-only invariant still hold (stage DESC) —
+    that is what they always meant. For every existing and non-steered run the
+    column is inert at 0, so this is byte-identical to the prior
+    highest-stage-wins rule.
 
     Raw ``status='relevant'`` joins are structurally wrong under two-stage
     screening rows: demoted docs leak in, and confirmed docs can be read twice.
@@ -118,7 +142,8 @@ def effective_screen_rows() -> Subquery:
     ``excluded_retracted`` is a terminal effective status like any other
     non-failed status (task 019): it is always a stage-1 row (retraction
     exclusion happens before any stage-2 candidate exists), so it ranks as
-    the effective row and is never superseded. Consumers that filter on
+    the effective row within its generation and is never superseded by a
+    later stage of the same generation. Consumers that filter on
     ``status == 'relevant'`` already exclude it by construction; consumers
     that want a full status breakdown must read it as its own bucket.
 
@@ -135,7 +160,10 @@ def effective_screen_rows() -> Subquery:
                     source_screening_result.c.evidence_scope_id,
                     source_screening_result.c.project_source_snapshot_id,
                 ),
-                order_by=source_screening_result.c.screen_stage.desc(),
+                order_by=(
+                    source_screening_result.c.screen_generation.desc(),
+                    source_screening_result.c.screen_stage.desc(),
+                ),
             )
             .label("_screen_rank"),
         )
@@ -184,21 +212,30 @@ def _is_retracted(metadata: dict[str, Any]) -> bool:
     return bool(provider_fields.get("is_retracted"))
 
 
-def _parse_screen_directive(context: dict[str, Any]) -> tuple[Literal[1, 2], list[str]]:
+def _parse_screen_directive(
+    context: dict[str, Any],
+) -> tuple[Literal[1, 2], list[str], bool]:
     """Parse the ``{"screening": {...}}`` directive, fail-closed.
 
-    Grammar: ``{stage?: 1 | 2, criteria?: list[str]}``. Unknown keys reject.
-    ``criteria`` entries must be non-empty strings no longer than
-    ``DIRECTIVE_STRING_MAX`` chars; the list itself is bounded by
+    Grammar: ``{stage?: 1 | 2, criteria?: list[str], rescreen?: true}``.
+    Unknown keys reject. ``criteria`` entries must be non-empty strings no
+    longer than ``DIRECTIVE_STRING_MAX`` chars; the list itself is bounded by
     ``CRITERIA_LIST_MAX`` entries. Anything above a cap rejects — it is
     never truncated. Criteria are preserved alongside a stage-2 directive.
+
+    ``rescreen`` (task 024 generation supersession) accepts ONLY the literal
+    boolean ``True`` — any other value (including ``1``, ``"true"``, or
+    ``False``) rejects. It flags a replacement re-run: stage-1 re-screens all
+    scope docs at ``generation = max+1``; prior rows are never touched.
+
+    Returns ``(stage, criteria, rescreen)``.
     """
     raw = context.get("screening")
     if raw is None:
-        return 1, []
+        return 1, [], False
     if not isinstance(raw, dict):
         raise ScreenDirectiveError("screening directive must be an object")
-    unknown = set(raw) - {"stage", "criteria"}
+    unknown = set(raw) - {"stage", "criteria", "rescreen"}
     if unknown:
         raise ScreenDirectiveError("screening directive contains unknown keys")
 
@@ -227,7 +264,18 @@ def _parse_screen_directive(context: dict[str, Any]) -> tuple[Literal[1, 2], lis
                 )
             criteria.append(item)
 
-    return stage, criteria
+    rescreen = False
+    if "rescreen" in raw:
+        rescreen_raw = raw["rescreen"]
+        # Fail-closed: only the literal ``True`` enables a re-screen. ``is not``
+        # rejects truthy non-bools (``1``) and the string ``"true"`` alike.
+        if rescreen_raw is not True:
+            raise ScreenDirectiveError(
+                "screening directive rescreen must be the literal boolean true"
+            )
+        rescreen = True
+
+    return stage, criteria, rescreen
 
 
 def _compose_screen_intent(intent: str, criteria: list[str]) -> str:
@@ -271,6 +319,22 @@ def _p_relevant(rep: ScreenRepWire) -> float:
     return 0.5
 
 
+def _next_screen_generation(conn: Connection, *, scope_id: uuid.UUID) -> int:
+    """Generation for a re-screen's fresh rows: ``max over the scope's rows + 1``.
+
+    Computed once per re-screen run (ADR 0022). Failed rows are attempt history
+    but still count toward the max, so a fresh generation never collides with a
+    prior attempt's number. With no prior rows the max defaults to 0, so the
+    first re-screen writes at generation 1.
+    """
+    current = conn.execute(
+        sa_select(
+            func.coalesce(func.max(source_screening_result.c.screen_generation), 0)
+        ).where(source_screening_result.c.evidence_scope_id == scope_id)
+    ).scalar_one()
+    return int(current) + 1
+
+
 def _insert_screen_row(
     conn: Connection,
     *,
@@ -282,6 +346,7 @@ def _insert_screen_row(
     basis: ScreenBasis | None,
     confidence: float | None,
     stage: Literal[1, 2],
+    generation: int = 0,
 ) -> None:
     conn.execute(
         source_screening_result.insert().values(
@@ -294,6 +359,7 @@ def _insert_screen_row(
             screen_basis=basis,
             screen_decision_confidence=confidence,
             screen_stage=stage,
+            screen_generation=generation,
             screened_at=datetime.now(UTC),
         )
     )
@@ -314,6 +380,7 @@ def _append_screened_event(
     reps: list[dict[str, Any]],
     agreement: dict[str, int],
     flags: list[str],
+    generation: int = 0,
 ) -> None:
     events.append(
         conn,
@@ -328,6 +395,7 @@ def _append_screened_event(
             "screen_basis": basis,
             "screen_decision_confidence": confidence,
             "screen_stage": stage,
+            "screen_generation": generation,
             "reps": reps,
             "agreement": agreement,
             "aggregation_flags": flags,
@@ -341,8 +409,9 @@ def _load_stage1_docs(
     project_id: uuid.UUID,
     scope_id: uuid.UUID,
     intent: str,
+    rescreen: bool = False,
 ) -> list[_Stage1Doc]:
-    rows = conn.execute(
+    query = (
         sa_select(
             project_source_snapshot.c.project_source_snapshot_id,
             project_source_snapshot.c.source_snapshot_id,
@@ -354,7 +423,12 @@ def _load_stage1_docs(
             == source_snapshot.c.source_snapshot_id,
         )
         .where(project_source_snapshot.c.project_id == project_id)
-        .where(
+    )
+    # Normal runs skip docs that already carry a non-failed stage-1 row (any
+    # generation): stage-1 is idempotent. A re-screen re-run bypasses the skip
+    # entirely — every scope doc re-screens into the fresh generation.
+    if not rescreen:
+        query = query.where(
             ~exists().where(
                 (source_screening_result.c.evidence_scope_id == scope_id)
                 & (
@@ -365,7 +439,8 @@ def _load_stage1_docs(
                 & (source_screening_result.c.screen_stage == 1)
             )
         )
-        .order_by(project_source_snapshot.c.ingested_at)
+    rows = conn.execute(
+        query.order_by(project_source_snapshot.c.ingested_at)
     ).fetchall()
 
     docs: list[_Stage1Doc] = []
@@ -478,6 +553,7 @@ def _exclude_retracted_docs(
     run_id: uuid.UUID,
     context: ScreenContext,
     all_docs: list[_Stage1Doc],
+    generation: int = 0,
 ) -> tuple[list[_Stage1Doc], list[_Stage1Doc]]:
     """Split retracted docs out of a loaded stage-1 batch, excluding them.
 
@@ -510,6 +586,7 @@ def _exclude_retracted_docs(
             # requires a non-null confidence for every non-failed status.
             confidence=1.0,
             stage=1,
+            generation=generation,
         )
         _append_screened_event(
             conn,
@@ -525,6 +602,7 @@ def _exclude_retracted_docs(
             reps=[],
             agreement={"agreeing": 0, "survivors": 0},
             flags=["is_retracted"],
+            generation=generation,
         )
         log.info(
             "screen.excluded_retracted",
@@ -545,12 +623,19 @@ def _run_stage1(
     context: ScreenContext,
     effective_intent: str,
     screening_backend: ScreeningBackend,
+    rescreen: bool = False,
 ) -> dict[str, Any]:
+    # Generation is fixed once per run: a re-screen writes the whole batch at
+    # max+1; a normal run stays at the inert generation 0.
+    generation = (
+        _next_screen_generation(conn, scope_id=context.scope_id) if rescreen else 0
+    )
     all_docs = _load_stage1_docs(
         conn,
         project_id=project_id,
         scope_id=context.scope_id,
         intent=effective_intent,
+        rescreen=rescreen,
     )
     docs, retracted_docs = _exclude_retracted_docs(
         conn,
@@ -558,6 +643,7 @@ def _run_stage1(
         run_id=run_id,
         context=context,
         all_docs=all_docs,
+        generation=generation,
     )
     outcomes_by_doc, retries, usage_totals = _run_stage1_reps(
         docs, screening_backend=screening_backend
@@ -638,6 +724,7 @@ def _run_stage1(
             basis=basis,
             confidence=confidence,
             stage=1,
+            generation=generation,
         )
         _append_screened_event(
             conn,
@@ -653,13 +740,19 @@ def _run_stage1(
             reps=reps_payload,
             agreement=agreement,
             flags=flags,
+            generation=generation,
         )
 
         counts[status] += 1
         if basis is not None:
             counts[basis] += 1
 
-    return {**counts, "usage_totals": usage_totals}
+    return {
+        **counts,
+        "usage_totals": usage_totals,
+        "screen_generation": generation,
+        "rescreen": rescreen,
+    }
 
 
 def _stage2_text_snapshot_id(
@@ -722,9 +815,10 @@ def _load_stage2_docs(
     *,
     project_id: uuid.UUID,
     scope_id: uuid.UUID,
+    rescreen: bool = False,
 ) -> tuple[list[_Stage2Doc], int]:
     effective = effective_screen_rows()
-    rows = conn.execute(
+    query = (
         sa_select(
             project_source_snapshot.c.project_source_snapshot_id,
             project_source_snapshot.c.source_snapshot_id,
@@ -732,6 +826,7 @@ def _load_stage2_docs(
             project_source_snapshot.c.full_text_status,
             source_snapshot.c.text_basis,
             source_snapshot.c.metadata,
+            effective.c.screen_generation,
         )
         .join(
             effective,
@@ -748,23 +843,64 @@ def _load_stage2_docs(
         )
         .where(project_source_snapshot.c.project_id == project_id)
         .where(effective.c.evidence_scope_id == scope_id)
-        .where(effective.c.status == "relevant")
-        .where(effective.c.screen_stage == 1)
-        .where(
-            ~exists().where(
+    )
+    if not rescreen:
+        # A normal stage-2 pass advances docs whose EFFECTIVE row is a
+        # stage-1 ``relevant`` verdict. That already implies no non-failed
+        # stage-2 row at the effective generation (a stage-2 row would outrank
+        # the stage-1 row within its generation and become effective), so after
+        # a criteria re-screen to generation N the doc's gen-N stage-1 row is
+        # effective and it advances to stage 2 AT generation N — a stale gen-(N-1)
+        # stage-2 row no longer blocks it. The generation-scoped stage-2 skip
+        # below is redundant with that but pins the intent explicitly.
+        query = (
+            query.where(effective.c.status == "relevant")
+            .where(effective.c.screen_stage == 1)
+            .where(
+                ~exists().where(
+                    (source_screening_result.c.evidence_scope_id == scope_id)
+                    & (
+                        source_screening_result.c.project_source_snapshot_id
+                        == project_source_snapshot.c.project_source_snapshot_id
+                    )
+                    & (source_screening_result.c.status != "failed")
+                    & (source_screening_result.c.screen_stage == 2)
+                    & (
+                        source_screening_result.c.screen_generation
+                        == effective.c.screen_generation
+                    )
+                )
+            )
+        )
+    else:
+        # A stage-2 re-screen targets the EFFECTIVE generation regardless of
+        # whether that generation already advanced to stage 2 — a doc already
+        # carrying a stage-2 row at its effective generation is the collision
+        # the caller must be told about (surfaced below), not silently dropped.
+        # The candidate condition is therefore "the effective generation's
+        # stage-1 verdict is relevant", not "the effective row is stage 1".
+        query = query.where(
+            exists().where(
                 (source_screening_result.c.evidence_scope_id == scope_id)
                 & (
                     source_screening_result.c.project_source_snapshot_id
                     == project_source_snapshot.c.project_source_snapshot_id
                 )
-                & (source_screening_result.c.status != "failed")
-                & (source_screening_result.c.screen_stage == 2)
+                & (source_screening_result.c.status == "relevant")
+                & (source_screening_result.c.screen_stage == 1)
+                & (
+                    source_screening_result.c.screen_generation
+                    == effective.c.screen_generation
+                )
             )
         )
-        .order_by(project_source_snapshot.c.ingested_at)
+    rows = conn.execute(
+        query.order_by(project_source_snapshot.c.ingested_at)
     ).fetchall()
 
-    candidate_records: list[tuple[uuid.UUID, uuid.UUID, uuid.UUID, dict[str, Any]]] = []
+    candidate_records: list[
+        tuple[uuid.UUID, uuid.UUID, uuid.UUID, dict[str, Any], int]
+    ] = []
     skipped_no_fulltext = 0
     for row in rows:
         envelope_snapshot_id = cast("uuid.UUID", row.source_snapshot_id)
@@ -783,7 +919,18 @@ def _load_stage2_docs(
                 envelope_snapshot_id,
                 chunk_snapshot_id,
                 metadata_dict(row.metadata),
+                int(row.screen_generation),
             )
+        )
+
+    if rescreen:
+        _assert_no_stage2_collision(
+            conn,
+            scope_id=scope_id,
+            candidates=[
+                (pss_id, generation)
+                for pss_id, _, _, _, generation in candidate_records
+            ],
         )
 
     # Per-snapshot cache: candidate docs occasionally share a chunk_snapshot_id
@@ -791,7 +938,9 @@ def _load_stage2_docs(
     # redundant prefix query for the same snapshot within one call.
     prefix_cache: dict[uuid.UUID, list[tuple[uuid.UUID, str]]] = {}
     docs: list[_Stage2Doc] = []
-    for pss_id, source_snapshot_id, chunk_snapshot_id, metadata in candidate_records:
+    for pss_id, source_snapshot_id, chunk_snapshot_id, metadata, generation in (
+        candidate_records
+    ):
         if chunk_snapshot_id not in prefix_cache:
             prefix_cache[chunk_snapshot_id] = _load_stage2_chunk_prefix(
                 conn, chunk_snapshot_id=chunk_snapshot_id
@@ -802,9 +951,49 @@ def _load_stage2_docs(
                 source_snapshot_id=source_snapshot_id,
                 metadata=metadata,
                 chunks=prefix_cache[chunk_snapshot_id],
+                stage1_generation=generation,
             )
         )
     return docs, skipped_no_fulltext
+
+
+def _assert_no_stage2_collision(
+    conn: Connection,
+    *,
+    scope_id: uuid.UUID,
+    candidates: list[tuple[uuid.UUID, int]],
+) -> None:
+    """Halt a stage-2 re-screen that would collide with an existing stage-2 row.
+
+    A stage-2 row inherits its stage-1 generation rather than minting its own,
+    so a stage-2 re-screen has no fresh generation to write into: if a
+    non-failed stage-2 row already exists at a candidate's effective stage-1
+    generation, the widened unique index would reject the fresh insert. Rather
+    than a silent skip, surface it loudly and reason-coded — the contract pins
+    stage-2 supersession as a halt-and-re-gate trigger.
+    """
+    if not candidates:
+        return
+    existing = {
+        (cast("uuid.UUID", row.project_source_snapshot_id), int(row.screen_generation))
+        for row in conn.execute(
+            sa_select(
+                source_screening_result.c.project_source_snapshot_id,
+                source_screening_result.c.screen_generation,
+            )
+            .where(source_screening_result.c.evidence_scope_id == scope_id)
+            .where(source_screening_result.c.screen_stage == 2)
+            .where(source_screening_result.c.status != "failed")
+        ).fetchall()
+    }
+    for pss_id, generation in candidates:
+        if (pss_id, generation) in existing:
+            raise ScreenSupersessionError(
+                f"{ScreenSupersessionError.reason}: a non-failed stage-2 row "
+                f"already exists at generation {generation} for scope {scope_id} "
+                f"source {pss_id}; stage-2 supersession is not built — halt and "
+                "re-gate (task 024 contract)"
+            )
 
 
 def _stage2_payload(doc: _Stage2Doc, *, intent: str) -> ScreenFullTextPayload | None:
@@ -899,13 +1088,18 @@ def _assert_stage1_relevant(
     *,
     scope_id: uuid.UUID,
     pss_id: uuid.UUID,
+    generation: int,
 ) -> None:
+    # Generation-precise (ADR 0022): a stage-2 row confirms the stage-1 verdict
+    # of ITS OWN generation, so the guard requires a relevant stage-1 row at
+    # that generation, not merely at any generation.
     row = conn.execute(
         sa_select(source_screening_result.c.source_screening_result_id)
         .where(source_screening_result.c.evidence_scope_id == scope_id)
         .where(source_screening_result.c.project_source_snapshot_id == pss_id)
         .where(source_screening_result.c.screen_stage == 1)
         .where(source_screening_result.c.status == "relevant")
+        .where(source_screening_result.c.screen_generation == generation)
         .limit(1)
     ).first()
     if row is None:
@@ -920,9 +1114,10 @@ def _run_stage2(
     context: ScreenContext,
     effective_intent: str,
     screening_backend: ScreeningBackend,
+    rescreen: bool = False,
 ) -> dict[str, Any]:
     docs, skipped_no_fulltext = _load_stage2_docs(
-        conn, project_id=project_id, scope_id=context.scope_id
+        conn, project_id=project_id, scope_id=context.scope_id, rescreen=rescreen
     )
     payloads: dict[int, ScreenFullTextPayload] = {}
     empty_fulltext: set[int] = set()
@@ -978,7 +1173,15 @@ def _run_stage2(
                 flags.append("stage2_unsure_referred_back")
                 counts["stage2_unsure"] += 1
 
-        _assert_stage1_relevant(conn, scope_id=context.scope_id, pss_id=doc.pss_id)
+        # Stage-2 ALWAYS writes at the effective stage-1 generation (ADR 0022):
+        # it confirms/demotes that generation's stage-1 verdict, never mints a
+        # new generation of its own.
+        _assert_stage1_relevant(
+            conn,
+            scope_id=context.scope_id,
+            pss_id=doc.pss_id,
+            generation=doc.stage1_generation,
+        )
         _insert_screen_row(
             conn,
             project_id=project_id,
@@ -989,6 +1192,7 @@ def _run_stage2(
             basis=basis,
             confidence=confidence,
             stage=2,
+            generation=doc.stage1_generation,
         )
         _append_screened_event(
             conn,
@@ -1004,9 +1208,10 @@ def _run_stage2(
             reps=reps_payload,
             agreement=agreement,
             flags=flags,
+            generation=doc.stage1_generation,
         )
 
-    return {**counts, "usage_totals": usage_totals}
+    return {**counts, "usage_totals": usage_totals, "rescreen": rescreen}
 
 
 def screen_sources(
@@ -1033,9 +1238,11 @@ def screen_sources(
     Raises:
         ScreenDirectiveError: If ``context.context["screening"]`` is malformed.
         RuntimeError: If a stage-2 insert would violate the no-rescue invariant.
+        ScreenSupersessionError: If a stage-2 re-screen collides with an
+            existing stage-2 row at the effective generation.
     """
     backend = screening_backend if screening_backend is not None else StubScreeningBackend()
-    stage, criteria = _parse_screen_directive(context.context)
+    stage, criteria, rescreen = _parse_screen_directive(context.context)
     effective_intent = _compose_screen_intent(context.intent, criteria)
     if stage == 1:
         return _run_stage1(
@@ -1045,6 +1252,7 @@ def screen_sources(
             context=context,
             effective_intent=effective_intent,
             screening_backend=backend,
+            rescreen=rescreen,
         )
     return _run_stage2(
         conn,
@@ -1053,4 +1261,5 @@ def screen_sources(
         context=context,
         effective_intent=effective_intent,
         screening_backend=backend,
+        rescreen=rescreen,
     )

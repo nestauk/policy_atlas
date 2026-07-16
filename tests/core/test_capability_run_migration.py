@@ -30,7 +30,6 @@ from tests.helpers import (
     now,
     seed_project_and_run,
     seed_scope,
-    seed_screening_result,
     seed_source,
 )
 
@@ -55,7 +54,21 @@ def test_capability_run_and_screen_generation_migration_roundtrip(engine: Engine
     project_id, run_id = seed_project_and_run(connection)
     scope_id = seed_scope(connection, project_id)
     _, pss_id = seed_source(connection, project_id)
-    seed_screening_result(connection, project_id, run_id, scope_id, pss_id, status="relevant")
+    # Seed the v1-shaped row inline: the shared seed_screening_result helper now
+    # names screen_generation in its INSERT (task 024 generation supersession),
+    # which the downgraded table does not have yet.
+    connection.execute(source_screening_result.insert().values(
+        source_screening_result_id=uuid.uuid4(),
+        evidence_scope_id=scope_id,
+        project_source_snapshot_id=pss_id,
+        project_id=project_id,
+        screened_by_run_id=run_id,
+        status="relevant",
+        screen_basis="title_abstract",
+        screen_decision_confidence=0.9,
+        screen_stage=1,
+        screened_at=now(),
+    ))
     trans.commit()
     connection.close()
 

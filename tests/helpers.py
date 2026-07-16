@@ -272,6 +272,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         grouping_result,
         implementation_context_finding,
         intervention_outcome_finding,
+        orchestration_plan,
         project,
         project_source_snapshot,
         runs,
@@ -401,6 +402,10 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         conn.execute(delete(source_snapshot).where(
             source_snapshot.c.source_snapshot_id.in_(snapshot_ids)
         ))
+    # orchestration_plan before evidence_scope (fk_oplan_scope_project).
+    conn.execute(delete(orchestration_plan).where(
+        orchestration_plan.c.project_id == project_id
+    ))
     conn.execute(delete(evidence_scope).where(evidence_scope.c.project_id == project_id))
     conn.execute(delete(project).where(project.c.project_id == project_id))
 
@@ -521,11 +526,14 @@ def seed_screening_result(
     *,
     screen_stage: int = 1,
     screen_basis: str = "title_abstract",
-) -> None:
-    """Insert a source_screening_result row.
+    screen_generation: int = 0,
+) -> uuid.UUID:
+    """Insert a source_screening_result row; return its id.
 
     ``screen_stage`` defaults to 1; pass 2 to seed a stage-2 row (e.g. a
-    demotion or confirmation) atop a doc's stage-1 row.
+    demotion or confirmation) atop a doc's stage-1 row. ``screen_generation``
+    defaults to the inert 0; pass a higher value to seed a re-screen generation
+    (task 024 generation supersession).
     """
     from policy_atlas.core.schema import source_screening_result
 
@@ -535,8 +543,9 @@ def seed_screening_result(
     else:
         basis = screen_basis
         confidence = 0.9 if status == "relevant" else 0.95
+    row_id = uuid.uuid4()
     conn.execute(source_screening_result.insert().values(
-        source_screening_result_id=uuid.uuid4(),
+        source_screening_result_id=row_id,
         evidence_scope_id=scope_id,
         project_source_snapshot_id=pss_id,
         project_id=project_id,
@@ -545,8 +554,10 @@ def seed_screening_result(
         screen_basis=basis,
         screen_decision_confidence=confidence,
         screen_stage=screen_stage,
+        screen_generation=screen_generation,
         screened_at=now(),
     ))
+    return row_id
 
 
 def seed_project_and_run(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:

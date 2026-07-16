@@ -57,14 +57,17 @@ from policy_atlas.runtime.orchestration_plan import (
 from policy_atlas.runtime.run_spec import Plan, compile
 from policy_atlas.runtime.steering import (
     DEEPENING_SELECTION_STEER_POINT,
+    SHIPPED_SEGMENT_START,
     Abort,
     Adjust,
     Continue,
     PausePoint,
+    ReEnterSegment,
     SteeringAdjustmentError,
     SteeringResponse,
     apply_adjustment,
-    apply_reselect,
+    apply_replacement_rerun,
+    apply_segment_reentry,
     build_steer_point_options,
     pause_points,
     render_check_in,
@@ -94,6 +97,56 @@ DISCRETIONARY_REQUIREMENTS = {
     "select": "characterise",
     "extract": "select",
     "group": "extract",
+}
+
+
+@dataclass(frozen=True)
+class _ReplacementRerun:
+    """Component-parameterised rule for a reference-moving replacement re-run.
+
+    Args:
+        context_key: The single fine-directive context key the component's parser
+            validates (select ``selection`` / characterise ``characterise`` /
+            group ``grouping``).
+        reference_upstream: The upstream component whose successful run this
+            re-run references, or ``None`` when it references nothing upstream.
+        reference_kwarg: The reference-threading kwarg name for the harness, or
+            ``None`` when there is no upstream reference.
+        reference_rule: Human-readable reference rule recorded in the compiled
+            payload, or ``None``.
+    """
+
+    context_key: str
+    reference_upstream: str | None
+    reference_kwarg: str | None
+    reference_rule: str | None
+
+
+# Contract decision 7: the three reference-moving replacement re-runs. Old result
+# rows persist immutably; the walk's reference moves — the new run id replaces the
+# old in ``successful_runs`` so every downstream component references it. Only the
+# select (deepening-selection) steer point ENTERS this from a wired pause today;
+# P2 (re-characterise) and P4 (re-group) steer points land in Phase 4. The
+# machinery is component-generic so those can call it without change.
+REPLACEMENT_RERUNS: dict[str, _ReplacementRerun] = {
+    "select": _ReplacementRerun(
+        context_key="selection",
+        reference_upstream="characterise",
+        reference_kwarg="characterisation_run_id",
+        reference_rule="characterisation_run_id <- characterise",
+    ),
+    "characterise": _ReplacementRerun(
+        context_key="characterise",
+        reference_upstream=None,
+        reference_kwarg=None,
+        reference_rule=None,
+    ),
+    "group": _ReplacementRerun(
+        context_key="grouping",
+        reference_upstream="extract",
+        reference_kwarg="extraction_run_id",
+        reference_rule="extraction_run_id <- extract",
+    ),
 }
 
 RunPlanStatus = Literal["succeeded", "degraded", "failed", "aborted"]
@@ -260,7 +313,32 @@ class _PauseApplied:
     state: _SteeringState
     aborted: bool = False
     changed: bool = False
-    reselect: dict[str, Any] | None = None
+    # A triggered replacement re-run: ``{"component": str, "directive": dict}``.
+    rerun: dict[str, Any] | None = None
+    # A triggered additive segment re-entry (contract decision 7a):
+    # ``{"segment_start": str, "boundary_component": str, "directive_deltas":
+    # dict}``.
+    segment_reentry: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class _SegmentReentryResult:
+    """Outcome of one bounded additive segment re-walk.
+
+    Args:
+        last_check_in_payload: Check-in payload of the last re-walked component,
+            or ``None`` when the segment was empty.
+        most_recent_attempted_run_id: The last re-walked run id, or ``None``.
+        reenter_boundary: Whether the segment completed cleanly through the
+            boundary and the boundary should be re-presented once.
+        run_failed: Whether a spine component failed mid-segment (the run ends
+            failed; the boundary is never re-entered).
+    """
+
+    last_check_in_payload: dict[str, Any] | None
+    most_recent_attempted_run_id: uuid.UUID | None
+    reenter_boundary: bool
+    run_failed: bool
 
 
 def leg_directive(
@@ -522,6 +600,7 @@ def run_plan(
                 selection_run_id=(
                     final_attempt.run_id if step.component == "select" else None
                 ),
+                allow_segment_reentry=True,
             )
             steering_state = pause_result.state
             if pause_result.aborted:
@@ -533,14 +612,15 @@ def run_plan(
                     capability_run_id=capability_run_id,
                     project_id=project_id,
                 )
-            if pause_result.reselect is not None:
-                last_check_in_payload, most_recent_attempted_run_id = _run_select_rerun(
+            if pause_result.rerun is not None:
+                last_check_in_payload, most_recent_attempted_run_id = _run_component_rerun(
                     engine,
                     io_sink,
                     project_id=project_id,
                     evidence_scope_id=evidence_scope_id,
                     state=steering_state,
-                    directive_delta=pause_result.reselect["directive"],
+                    component=pause_result.rerun["component"],
+                    directive_delta=pause_result.rerun["directive"],
                     backends=backend_bundle,
                     session_id=session_id,
                     successful_runs=successful_runs,
@@ -549,6 +629,40 @@ def run_plan(
                     flagged_events=flagged_events,
                     capability_run_id=capability_run_id,
                 )
+            if pause_result.segment_reentry is not None:
+                segment_result = _run_plan_segment_reentry(
+                    engine,
+                    io_sink,
+                    project_id=project_id,
+                    evidence_scope_id=evidence_scope_id,
+                    boundary_step=step,
+                    segment_reentry=pause_result.segment_reentry,
+                    state=steering_state,
+                    backends=backend_bundle,
+                    session_id=session_id,
+                    successful_runs=successful_runs,
+                    blocked_discretionary=blocked_discretionary,
+                    completed_components=completed_components,
+                    step_outcomes=step_outcomes,
+                    flagged_events=flagged_events,
+                    capability_run_id=capability_run_id,
+                )
+                steering_state = segment_result.state
+                if segment_result.last_check_in_payload is not None:
+                    last_check_in_payload = segment_result.last_check_in_payload
+                if segment_result.most_recent_attempted_run_id is not None:
+                    most_recent_attempted_run_id = (
+                        segment_result.most_recent_attempted_run_id
+                    )
+                if segment_result.run_status is not None:
+                    return _finish_run(
+                        engine,
+                        step_outcomes,
+                        flagged_events,
+                        status=segment_result.run_status,
+                        capability_run_id=capability_run_id,
+                        project_id=project_id,
+                    )
             remaining_steps = _remaining_steps(
                 steering_state.chain,
                 completed_components=completed_components,
@@ -649,6 +763,7 @@ def _handle_after_component_boundary(
     most_recent_attempted_run_id: uuid.UUID | None,
     boundary_run_id: uuid.UUID | None,
     selection_run_id: uuid.UUID | None = None,
+    allow_segment_reentry: bool = False,
 ) -> _PauseApplied:
     if step.component == "select" and state.plan.steering_mode == "unattended":
         return _resolve_unattended_boundary(
@@ -669,6 +784,14 @@ def _handle_after_component_boundary(
     # The deepening-selection steer point only offers re-run options when select
     # actually produced a persisted selection to steer over.
     is_steer_point = step.component == "select" and selection_run_id is not None
+    # The component this steer point offers a replacement re-run of. Today only
+    # select is wired; P2 (characterise) and P4 (group) steer points land in
+    # Phase 4 and reuse the same generic re-run machinery.
+    rerun_component = (
+        step.component
+        if is_steer_point and step.component in REPLACEMENT_RERUNS
+        else None
+    )
     triggers: list[dict[str, Any]] | None = None
     if is_steer_point and selection_run_id is not None:
         with engine.connect() as conn:
@@ -678,6 +801,12 @@ def _handle_after_component_boundary(
                 selection_run_id=selection_run_id,
                 plan=state.plan,
             )
+    # Additive segment re-entry (contract decision 7a) is offered at an
+    # after_component boundary once acquire has run; the caller withholds it on
+    # the single re-presentation after a re-walk (one cycle per boundary).
+    segment_reentry_allowed = (
+        allow_segment_reentry and SHIPPED_SEGMENT_START in completed_components
+    )
     return _handle_pause(
         engine,
         io,
@@ -690,6 +819,8 @@ def _handle_after_component_boundary(
         event_run_id=event_run_id,
         steer_point=is_steer_point,
         triggers=triggers,
+        rerun_component=rerun_component,
+        segment_reentry_allowed=segment_reentry_allowed,
     )
 
 
@@ -706,6 +837,8 @@ def _handle_pause(
     event_run_id: uuid.UUID | None,
     steer_point: bool = False,
     triggers: list[dict[str, Any]] | None = None,
+    rerun_component: str | None = None,
+    segment_reentry_allowed: bool = False,
 ) -> _PauseApplied:
     pause_payload = _pause_payload(
         point, plan=state.plan, steer_point=steer_point, triggers=triggers
@@ -749,19 +882,74 @@ def _handle_pause(
                 event_run_id=event_run_id,
             )
             return _PauseApplied(state=state, aborted=True)
+        if isinstance(response, ReEnterSegment):
+            # Fail-closed at the surface: additive segment re-entry is offered
+            # only at an after_component boundary with acquire completed, and
+            # never on the one re-presentation after a re-walk (the one
+            # re-entry cycle per boundary rule).
+            offending = _reentry_interpreted_action(response, point.component)
+            if not segment_reentry_allowed:
+                exc = SteeringAdjustmentError(
+                    "segment re-entry is not available at this boundary presentation"
+                )
+                _emit_rejected(
+                    engine,
+                    project_id=project_id,
+                    run_id=event_run_id,
+                    base=base,
+                    exc=exc,
+                    offending_delta=offending,
+                )
+                current_render = f"{render}\nSegment re-entry rejected: {exc}"
+                continue
+            try:
+                reentry_state = _apply_segment_reentry(
+                    engine,
+                    project_id=project_id,
+                    state=state,
+                    response=response,
+                    base=base,
+                    event_run_id=event_run_id,
+                    completed_components=completed_components,
+                    boundary_component=point.component,
+                )
+            except SteeringAdjustmentError as exc:
+                _emit_rejected(
+                    engine,
+                    project_id=project_id,
+                    run_id=event_run_id,
+                    base=base,
+                    exc=exc,
+                    offending_delta=offending,
+                )
+                current_render = f"{render}\nSegment re-entry rejected: {exc}"
+                continue
+            return _PauseApplied(
+                state=reentry_state,
+                segment_reentry={
+                    "segment_start": response.segment_start,
+                    "boundary_component": point.component,
+                    "directive_deltas": response.directive_deltas,
+                },
+            )
         if isinstance(response, Adjust):
-            # At the deepening-selection steer point a select delta means re-run
-            # select (it has already run); everywhere else a select delta is a
-            # rejected already-run adjustment via the generic path below.
-            if steer_point and set(response.directive_deltas) == {"select"}:
+            # At a replacement-rerun steer point a delta naming exactly the
+            # steer-point's own component means re-run it (it has already run);
+            # everywhere else naming an already-run component is a rejected
+            # adjustment via the generic path below.
+            if (
+                rerun_component is not None
+                and set(response.directive_deltas) == {rerun_component}
+            ):
                 try:
-                    reselect_state, merged_directive = _apply_reselect(
+                    rerun_state, merged_directive = _apply_replacement_rerun(
                         engine,
                         project_id=project_id,
                         state=state,
                         adjustment=response,
                         base=base,
                         event_run_id=event_run_id,
+                        component=rerun_component,
                     )
                 except SteeringAdjustmentError as exc:
                     _emit_rejected(
@@ -770,13 +958,13 @@ def _handle_pause(
                         run_id=event_run_id,
                         base=base,
                         exc=exc,
-                        adjustment=response,
+                        offending_delta=_interpreted_action(response),
                     )
-                    current_render = f"{render}\nRe-selection rejected: {exc}"
+                    current_render = f"{render}\nRe-run rejected: {exc}"
                     continue
                 return _PauseApplied(
-                    state=reselect_state,
-                    reselect={"directive": merged_directive},
+                    state=rerun_state,
+                    rerun={"component": rerun_component, "directive": merged_directive},
                 )
             try:
                 amended_state = _apply_runner_adjustment(
@@ -795,7 +983,7 @@ def _handle_pause(
                     run_id=event_run_id,
                     base=base,
                     exc=exc,
-                    adjustment=response,
+                    offending_delta=_interpreted_action(response),
                 )
                 current_render = f"{render}\nAdjustment rejected: {exc}"
                 continue
@@ -854,6 +1042,22 @@ def _interpreted_action(adjustment: Adjust) -> dict[str, Any]:
     return summary
 
 
+def _reentry_interpreted_action(
+    response: ReEnterSegment,
+    boundary_component: str,
+) -> dict[str, Any]:
+    """Summarise an additive segment re-entry for the decision/rejected event.
+
+    Names the segment (start component, boundary, amended directive keys) — the
+    contract's interpreted-action requirement for a re-run event.
+    """
+    return {
+        "segment_start": response.segment_start,
+        "boundary": boundary_component,
+        "amended_directive_keys": sorted(response.directive_deltas),
+    }
+
+
 def _emit_decision_standalone(
     engine: Engine,
     *,
@@ -890,13 +1094,13 @@ def _emit_rejected(
     run_id: uuid.UUID | None,
     base: dict[str, Any],
     exc: SteeringAdjustmentError,
-    adjustment: Adjust,
+    offending_delta: dict[str, Any],
 ) -> None:
     """Append a standalone steering.rejected with the reason and offending delta."""
     payload = {
         **base,
         "reason": str(exc),
-        "offending_delta": _interpreted_action(adjustment),
+        "offending_delta": offending_delta,
     }
     steering_events.emit_standalone(
         engine,
@@ -1038,7 +1242,7 @@ def _apply_runner_adjustment(
     )
 
 
-def _apply_reselect(
+def _apply_replacement_rerun(
     engine: Engine,
     *,
     project_id: uuid.UUID,
@@ -1046,42 +1250,51 @@ def _apply_reselect(
     adjustment: Adjust,
     base: dict[str, Any],
     event_run_id: uuid.UUID | None,
+    component: str,
 ) -> tuple[_SteeringState, dict[str, Any]]:
-    """Persist a re-selection version row and return the merged select directive.
+    """Persist a replacement re-run version row and return the merged directive.
 
-    Merges the chosen steer-point option's select delta over the plan-compiled
-    select directive (so the re-run keeps the plan's budget while gaining the
-    option's emphasis/nominations), records a new user-attributed plan version
-    row, and returns steering state advanced to that version. The chain and plan
-    payload are unchanged — the fine directive lives at the commit layer.
+    Merges the chosen steer-point option's component delta over the plan-compiled
+    directive for that component (so the re-run keeps the plan's compiled content
+    — select budget, group facets — while gaining the option's fine directive),
+    records a new user-attributed plan version row, and returns steering state
+    advanced to that version. The chain and plan payload are unchanged — the fine
+    directive lives at the commit layer (contract decision 7). The decision pairs
+    transactionally with the plan-version row and stamps ``rerun_mode`` =
+    ``replacement``.
     """
+    spec = REPLACEMENT_RERUNS[component]
     if state.plan_row_id is None:
-        raise SteeringAdjustmentError("plan_row_id is required to persist a re-selection")
-    select_step = next(
-        (step for step in state.chain.steps if step.component == "select"),
+        raise SteeringAdjustmentError("plan_row_id is required to persist a replacement re-run")
+    target_step = next(
+        (step for step in state.chain.steps if step.component == component),
         None,
     )
-    if select_step is None:
-        raise SteeringAdjustmentError("composed chain has no select step to re-run")
-    base_selection = select_step.directive_delta.get("selection", {})
-    option_delta = adjustment.directive_deltas["select"]
-    option_selection = option_delta.get("selection") if isinstance(option_delta, dict) else None
-    if not isinstance(option_selection, dict) or not isinstance(base_selection, dict):
-        raise SteeringAdjustmentError("select re-run directive must contain a selection object")
-    merged_directive = {"selection": {**base_selection, **option_selection}}
+    if target_step is None:
+        raise SteeringAdjustmentError(f"composed chain has no {component} step to re-run")
+    key = spec.context_key
+    base_directive = target_step.directive_delta.get(key, {})
+    option_delta = adjustment.directive_deltas[component]
+    option_value = option_delta.get(key) if isinstance(option_delta, dict) else None
+    if not isinstance(option_value, dict) or not isinstance(base_directive, dict):
+        raise SteeringAdjustmentError(
+            f"{component} re-run directive must contain a {key!r} object"
+        )
+    merged_directive = {key: {**base_directive, **option_value}}
     with engine.begin() as conn:
         plan_row = conn.execute(
             select(orchestration_plan).where(orchestration_plan.c.plan_id == state.plan_row_id)
         ).one()
-        new_plan_id, new_version = apply_reselect(
+        new_plan_id, new_version = apply_replacement_rerun(
             conn,
             project_id=project_id,
             plan_row=plan_row,
             plan=state.plan,
-            select_directive=merged_directive,
+            component=component,
+            directive=merged_directive,
         )
-        # Reselect is the replacement re-run origin: the decision pairs with the
-        # new plan-version row and stamps rerun_mode "replacement".
+        # Every replacement re-run pairs its decision with the new plan-version
+        # row and stamps rerun_mode "replacement" (component-generic emission).
         decision = steering_events.decision_payload(
             base,
             decided_by="user",
@@ -1098,7 +1311,7 @@ def _apply_reselect(
             event_type=steering_events.STEERING_DECISION,
             payload=decision,
         )
-    reselect_state = _SteeringState(
+    rerun_state = _SteeringState(
         plan=state.plan,
         plan_id=new_plan_id,
         plan_version=new_version,
@@ -1106,16 +1319,17 @@ def _apply_reselect(
         chain=state.chain,
         pause_points=state.pause_points,
     )
-    return reselect_state, merged_directive
+    return rerun_state, merged_directive
 
 
-def _run_select_rerun(
+def _run_component_rerun(
     engine: Engine,
     io: CheckInIO,
     *,
     project_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     state: _SteeringState,
+    component: str,
     directive_delta: dict[str, Any],
     backends: RunnerBackends,
     session_id: uuid.UUID | None,
@@ -1125,25 +1339,32 @@ def _run_select_rerun(
     flagged_events: list[dict[str, Any]],
     capability_run_id: uuid.UUID,
 ) -> tuple[dict[str, Any], uuid.UUID]:
-    """Re-run ``select`` after a deepening-selection steer with a new directive.
+    """Re-run a component after a replacement-rerun steer with a new directive.
 
-    Creates a second ``select`` run under the amended plan version, applies the
-    merged directive to the scope context and threads the new selection run id
-    into ``successful_runs`` so downstream ``extract``/``group``/``synthesise``
-    reference it. The steer point is not re-entered (one adjustment cycle per
-    boundary). A failed re-run blocks the downstream deep chain, mirroring a
-    discretionary failure. Extraction has not yet spent, so this is cheap.
+    Creates a second run of ``component`` under the amended plan version, applies
+    the merged directive to the scope context and threads the new run id into
+    ``successful_runs`` so every downstream component references it (contract
+    decision 7 — the reference moves; old result rows persist immutably). The
+    upstream reference is component-parameterised: select references
+    characterise's run, group references extract's run, characterise references
+    nothing upstream. The steer point is not re-entered (one adjustment cycle per
+    boundary). A failed re-run marks the component blocked so downstream
+    discretionary dependents skip, mirroring a discretionary failure
+    (``DISCRETIONARY_REQUIREMENTS`` maps select→characterise, group→extract).
 
     Returns:
         The check-in payload for the re-run outcome (the new most-recent render)
         and the re-run's run id (the new most-recent attempted run).
     """
+    spec = REPLACEMENT_RERUNS[component]
+    reference_kwargs: dict[str, uuid.UUID] = {}
+    if spec.reference_upstream is not None and spec.reference_kwarg is not None:
+        reference_kwargs = {spec.reference_kwarg: successful_runs[spec.reference_upstream]}
     rerun_step = ComponentStep(
-        component="select",
+        component=component,
         directive_delta=directive_delta,
-        reference_rule="characterisation_run_id <- characterise",
+        reference_rule=spec.reference_rule,
     )
-    reference_kwargs = {"characterisation_run_id": successful_runs["characterise"]}
     retry_cap = COMPONENT_RETRY_CAP
     attempts: list[_AttemptOutcome] = []
     for attempt_index in range(retry_cap + 1):
@@ -1167,7 +1388,7 @@ def _run_select_rerun(
         if attempt_index < retry_cap:
             flagged_events.append(
                 {
-                    "component": "select",
+                    "component": component,
                     "status": "retrying",
                     "run_id": str(attempt.run_id),
                     "reason": attempt.error,
@@ -1178,9 +1399,9 @@ def _run_select_rerun(
     retried = len(attempts) > 1
     attempt_run_ids = [attempt.run_id for attempt in attempts]
     if final_attempt.status == "succeeded":
-        successful_runs["select"] = final_attempt.run_id
+        successful_runs[component] = final_attempt.run_id
         outcome = RunStepOutcome(
-            component="select",
+            component=component,
             run_id=final_attempt.run_id,
             status="succeeded",
             wall_clock_s=final_attempt.wall_clock_s,
@@ -1188,11 +1409,11 @@ def _run_select_rerun(
             attempt_run_ids=attempt_run_ids,
         )
     else:
-        reason = final_attempt.error or "select re-run failed"
-        successful_runs.pop("select", None)
-        blocked_discretionary["select"] = reason
+        reason = final_attempt.error or f"{component} re-run failed"
+        successful_runs.pop(component, None)
+        blocked_discretionary[component] = reason
         outcome = RunStepOutcome(
-            component="select",
+            component=component,
             run_id=final_attempt.run_id,
             status="failed",
             wall_clock_s=final_attempt.wall_clock_s,
@@ -1202,7 +1423,7 @@ def _run_select_rerun(
         )
         flagged_events.append(
             {
-                "component": "select",
+                "component": component,
                 "status": "failed",
                 "run_id": str(final_attempt.run_id),
                 "reason": reason,
@@ -1212,6 +1433,429 @@ def _run_select_rerun(
     return (
         _check_in(io, outcome, headline_counts=final_attempt.headline_counts),
         final_attempt.run_id,
+    )
+
+
+def _segment_components(
+    chain: ComposedChain,
+    *,
+    segment_start: str,
+    boundary_component: str,
+    completed_components: set[str],
+) -> list[str]:
+    """Completed components from ``segment_start`` to ``boundary_component`` inclusive.
+
+    Chain order, both ends inclusive, filtered to already-completed components —
+    the set the additive re-walk re-runs.
+    """
+    components = chain.components
+    start_idx = components.index(segment_start)
+    end_idx = components.index(boundary_component)
+    return [
+        component
+        for component in components[start_idx : end_idx + 1]
+        if component in completed_components
+    ]
+
+
+def _merge_amendment(
+    base_directive: dict[str, Any],
+    amendment: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge an amendment delta over a component's plan-compiled directive.
+
+    Shallow-merges one level under each shared top key (so an acquire amendment
+    ``{"search": {"guidance": [...]}}`` merges into the compiled ``{"search":
+    {"depth": ..., "filters": ...}}`` rather than replacing it).
+    """
+    merged = dict(base_directive)
+    for key, value in amendment.items():
+        existing = merged.get(key)
+        if isinstance(value, dict) and isinstance(existing, dict):
+            merged[key] = {**existing, **value}
+        else:
+            merged[key] = value
+    return merged
+
+
+def _apply_segment_reentry(
+    engine: Engine,
+    *,
+    project_id: uuid.UUID,
+    state: _SteeringState,
+    response: ReEnterSegment,
+    base: dict[str, Any],
+    event_run_id: uuid.UUID | None,
+    completed_components: set[str],
+    boundary_component: str,
+) -> _SteeringState:
+    """Persist an additive segment re-entry version row and advance steering state.
+
+    Validates the segment (start component + per-component amendment grammar via
+    :func:`apply_segment_reentry`) and that every amendment delta names a
+    component inside the re-walked segment, records a new user-attributed plan
+    version row (plan payload carries forward — the amendment is commit-layer),
+    and pairs the decision event with the version row transactionally, stamping
+    ``rerun_mode`` = ``additive`` (contract decision 7a).
+    """
+    if state.plan_row_id is None:
+        raise SteeringAdjustmentError("plan_row_id is required to persist a segment re-entry")
+    segment = set(
+        _segment_components(
+            state.chain,
+            segment_start=response.segment_start,
+            boundary_component=boundary_component,
+            completed_components=completed_components,
+        )
+    )
+    for component in response.directive_deltas:
+        if component not in segment:
+            raise SteeringAdjustmentError(
+                f"segment re-entry amendment names component {component!r} outside the "
+                "re-walked segment"
+            )
+    with engine.begin() as conn:
+        plan_row = conn.execute(
+            select(orchestration_plan).where(orchestration_plan.c.plan_id == state.plan_row_id)
+        ).one()
+        new_plan_id, new_version = apply_segment_reentry(
+            conn,
+            project_id=project_id,
+            plan_row=plan_row,
+            plan=state.plan,
+            segment_start=response.segment_start,
+            directive_deltas=response.directive_deltas,
+        )
+        decision = steering_events.decision_payload(
+            base,
+            decided_by="user",
+            authored_by="user",
+            response="adjust",
+            interpreted_action=_reentry_interpreted_action(response, boundary_component),
+            confirmed=True,
+            rerun_mode="additive",
+        )
+        steering_events.emit(
+            conn,
+            project_id=project_id,
+            run_id=event_run_id,
+            event_type=steering_events.STEERING_DECISION,
+            payload=decision,
+        )
+    return _SteeringState(
+        plan=state.plan,
+        plan_id=new_plan_id,
+        plan_version=new_version,
+        plan_row_id=new_plan_id,
+        chain=state.chain,
+        pause_points=state.pause_points,
+    )
+
+
+def _run_segment_reentry(
+    engine: Engine,
+    io: CheckInIO,
+    *,
+    project_id: uuid.UUID,
+    evidence_scope_id: uuid.UUID,
+    state: _SteeringState,
+    segment_start: str,
+    boundary_component: str,
+    directive_deltas: dict[str, dict[str, Any]],
+    backends: RunnerBackends,
+    session_id: uuid.UUID | None,
+    successful_runs: dict[str, uuid.UUID],
+    blocked_discretionary: dict[str, str],
+    completed_components: set[str],
+    step_outcomes: list[RunStepOutcome],
+    flagged_events: list[dict[str, Any]],
+    capability_run_id: uuid.UUID,
+) -> _SegmentReentryResult:
+    """Re-walk a bounded additive segment, then signal whether to re-enter the boundary.
+
+    Contract decision 7a: from ``segment_start`` the walk re-runs every
+    already-completed component up to ``boundary_component`` in chain order. Each
+    re-walked component gets a FRESH run threaded with ``capability_run_id`` (the
+    normal ``_run_step_attempt`` path), and ``successful_runs`` moves to each new
+    run so provenance records all contributing runs (union coverage). Incremental
+    behaviour is the components' own (acquire dedups; screen/classify/appraise
+    skip already-processed docs) — nothing already processed is reprocessed. The
+    amendment is applied per component by merging it over the plan-compiled
+    directive.
+
+    Honest degrade on a mid-segment failure (normal component-failure semantics):
+    a spine-component failure ends the run (``run_failed=True``) and never
+    re-enters the boundary; a discretionary-component failure blocks that
+    component (downstream dependents skip) and does not re-enter the boundary.
+    Only a clean re-walk through the boundary component signals
+    ``reenter_boundary=True``.
+    """
+    components = state.chain.components
+    end_idx = components.index(boundary_component)
+    # Invariant (contract decision 7a, downstream-invalidation guard): a boundary
+    # pause means nothing beyond it ran, so no completed component may sit after
+    # the boundary. Assert rather than handle.
+    for component in completed_components:
+        if component in components and components.index(component) > end_idx:
+            raise AssertionError(
+                f"segment re-entry invariant violated: completed component {component!r} "
+                f"is downstream of boundary {boundary_component!r}"
+            )
+    segment = _segment_components(
+        state.chain,
+        segment_start=segment_start,
+        boundary_component=boundary_component,
+        completed_components=completed_components,
+    )
+    steps_by_component = {step.component: step for step in state.chain.steps}
+
+    last_check_in_payload: dict[str, Any] | None = None
+    most_recent_attempted_run_id: uuid.UUID | None = None
+    for component in segment:
+        step = steps_by_component[component]
+        upstream_state = {"successful_run_ids": dict(successful_runs)}
+        base_directive = leg_directive(state.plan, step, upstream_state)
+        amendment = directive_deltas.get(component)
+        directive_delta = (
+            _merge_amendment(base_directive, amendment) if amendment else base_directive
+        )
+        reference_kwargs = _reference_kwargs(component, successful_runs)
+        retry_cap = COMPONENT_RETRY_CAP if component in LLM_BEARING_COMPONENTS else 0
+
+        attempts: list[_AttemptOutcome] = []
+        for attempt_index in range(retry_cap + 1):
+            attempt = _run_step_attempt(
+                engine,
+                project_id=project_id,
+                evidence_scope_id=evidence_scope_id,
+                plan=state.plan,
+                plan_id=state.plan_id,
+                plan_version=state.plan_version,
+                step=step,
+                directive_delta=directive_delta,
+                reference_kwargs=reference_kwargs,
+                backends=backends,
+                session_id=session_id,
+                capability_run_id=capability_run_id,
+            )
+            attempts.append(attempt)
+            most_recent_attempted_run_id = attempt.run_id
+            if attempt.status == "succeeded":
+                break
+            if attempt_index < retry_cap:
+                flagged_events.append(
+                    {
+                        "component": component,
+                        "status": "retrying",
+                        "run_id": str(attempt.run_id),
+                        "reason": attempt.error,
+                    }
+                )
+
+        final_attempt = attempts[-1]
+        retried = len(attempts) > 1
+        attempt_run_ids = [attempt.run_id for attempt in attempts]
+        if final_attempt.status == "succeeded":
+            successful_runs[component] = final_attempt.run_id
+            outcome = RunStepOutcome(
+                component=component,
+                run_id=final_attempt.run_id,
+                status="succeeded",
+                wall_clock_s=final_attempt.wall_clock_s,
+                retried=retried,
+                attempt_run_ids=attempt_run_ids,
+            )
+            step_outcomes.append(outcome)
+            if retried:
+                flagged_events.append(
+                    {
+                        "component": component,
+                        "status": "retried",
+                        "run_id": str(final_attempt.run_id),
+                    }
+                )
+            last_check_in_payload = _check_in(
+                io, outcome, headline_counts=final_attempt.headline_counts
+            )
+            continue
+
+        # Mid-segment failure — honest degrade; the boundary is not re-entered.
+        reason = final_attempt.error or f"{component} re-walk failed"
+        outcome = RunStepOutcome(
+            component=component,
+            run_id=final_attempt.run_id,
+            status="failed",
+            wall_clock_s=final_attempt.wall_clock_s,
+            retried=retried,
+            reason=reason,
+            attempt_run_ids=attempt_run_ids,
+        )
+        step_outcomes.append(outcome)
+        flagged_events.append(
+            {
+                "component": component,
+                "status": "failed",
+                "run_id": str(final_attempt.run_id),
+                "reason": reason,
+            }
+        )
+        last_check_in_payload = _check_in(
+            io, outcome, headline_counts=final_attempt.headline_counts
+        )
+        if component in SPINE_COMPONENTS:
+            # Spine failure ends the run (run_plan's spine-failure semantics).
+            return _SegmentReentryResult(
+                last_check_in_payload=last_check_in_payload,
+                most_recent_attempted_run_id=most_recent_attempted_run_id,
+                reenter_boundary=False,
+                run_failed=True,
+            )
+        # Discretionary failure: un-thread and block so downstream dependents skip.
+        successful_runs.pop(component, None)
+        blocked_discretionary[component] = reason
+        return _SegmentReentryResult(
+            last_check_in_payload=last_check_in_payload,
+            most_recent_attempted_run_id=most_recent_attempted_run_id,
+            reenter_boundary=False,
+            run_failed=False,
+        )
+
+    return _SegmentReentryResult(
+        last_check_in_payload=last_check_in_payload,
+        most_recent_attempted_run_id=most_recent_attempted_run_id,
+        reenter_boundary=True,
+        run_failed=False,
+    )
+
+
+@dataclass(frozen=True)
+class _PlanSegmentReentryResult:
+    """Result of running a segment re-walk plus its single boundary re-presentation.
+
+    Args:
+        state: The steering state after the re-walk and re-presentation.
+        last_check_in_payload: Most recent check-in payload, or ``None``.
+        most_recent_attempted_run_id: Most recent attempted run id, or ``None``.
+        run_status: A terminal status (``failed``/``aborted``) that ends the run,
+            or ``None`` to continue the outer walk past the boundary.
+    """
+
+    state: _SteeringState
+    last_check_in_payload: dict[str, Any] | None
+    most_recent_attempted_run_id: uuid.UUID | None
+    run_status: RunPlanStatus | None
+
+
+def _run_plan_segment_reentry(
+    engine: Engine,
+    io: CheckInIO,
+    *,
+    project_id: uuid.UUID,
+    evidence_scope_id: uuid.UUID,
+    boundary_step: ComponentStep,
+    segment_reentry: dict[str, Any],
+    state: _SteeringState,
+    backends: RunnerBackends,
+    session_id: uuid.UUID | None,
+    successful_runs: dict[str, uuid.UUID],
+    blocked_discretionary: dict[str, str],
+    completed_components: set[str],
+    step_outcomes: list[RunStepOutcome],
+    flagged_events: list[dict[str, Any]],
+    capability_run_id: uuid.UUID,
+) -> _PlanSegmentReentryResult:
+    """Run the additive re-walk, then re-present the boundary once (one cycle).
+
+    Drives :func:`_run_segment_reentry`; on a clean re-walk it re-presents the
+    boundary pause exactly once with segment re-entry disallowed (the one
+    re-entry cycle per boundary rule), handling Abort/Adjust/replacement-rerun on
+    that re-presentation. A spine failure mid-segment ends the run without any
+    re-presentation.
+    """
+    boundary_component = segment_reentry["boundary_component"]
+    result = _run_segment_reentry(
+        engine,
+        io,
+        project_id=project_id,
+        evidence_scope_id=evidence_scope_id,
+        state=state,
+        segment_start=segment_reentry["segment_start"],
+        boundary_component=boundary_component,
+        directive_deltas=segment_reentry["directive_deltas"],
+        backends=backends,
+        session_id=session_id,
+        successful_runs=successful_runs,
+        blocked_discretionary=blocked_discretionary,
+        completed_components=completed_components,
+        step_outcomes=step_outcomes,
+        flagged_events=flagged_events,
+        capability_run_id=capability_run_id,
+    )
+    last_check_in_payload = result.last_check_in_payload
+    most_recent_attempted_run_id = result.most_recent_attempted_run_id
+    if result.run_failed:
+        return _PlanSegmentReentryResult(
+            state=state,
+            last_check_in_payload=last_check_in_payload,
+            most_recent_attempted_run_id=most_recent_attempted_run_id,
+            run_status="failed",
+        )
+    if not result.reenter_boundary or last_check_in_payload is None:
+        return _PlanSegmentReentryResult(
+            state=state,
+            last_check_in_payload=last_check_in_payload,
+            most_recent_attempted_run_id=most_recent_attempted_run_id,
+            run_status=None,
+        )
+
+    # Re-present the boundary ONCE, segment re-entry withheld (one cycle rule).
+    reentry = _handle_after_component_boundary(
+        engine,
+        io,
+        step=boundary_step,
+        render=render_check_in(last_check_in_payload),
+        state=state,
+        project_id=project_id,
+        completed_components=completed_components,
+        flagged_events=flagged_events,
+        capability_run_id=capability_run_id,
+        most_recent_attempted_run_id=most_recent_attempted_run_id,
+        boundary_run_id=successful_runs.get(boundary_component),
+        selection_run_id=(
+            successful_runs.get("select") if boundary_component == "select" else None
+        ),
+        allow_segment_reentry=False,
+    )
+    state = reentry.state
+    if reentry.aborted:
+        return _PlanSegmentReentryResult(
+            state=state,
+            last_check_in_payload=last_check_in_payload,
+            most_recent_attempted_run_id=most_recent_attempted_run_id,
+            run_status="aborted",
+        )
+    if reentry.rerun is not None:
+        last_check_in_payload, most_recent_attempted_run_id = _run_component_rerun(
+            engine,
+            io,
+            project_id=project_id,
+            evidence_scope_id=evidence_scope_id,
+            state=state,
+            component=reentry.rerun["component"],
+            directive_delta=reentry.rerun["directive"],
+            backends=backends,
+            session_id=session_id,
+            successful_runs=successful_runs,
+            blocked_discretionary=blocked_discretionary,
+            step_outcomes=step_outcomes,
+            flagged_events=flagged_events,
+            capability_run_id=capability_run_id,
+        )
+    return _PlanSegmentReentryResult(
+        state=state,
+        last_check_in_payload=last_check_in_payload,
+        most_recent_attempted_run_id=most_recent_attempted_run_id,
+        run_status=None,
     )
 
 

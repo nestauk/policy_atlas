@@ -12,13 +12,14 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.core import events
 from policy_atlas.core.schema import (
+    characterisation_result,
     grouping_result,
     orchestration_plan,
     runs,
     selection_result,
     synthesis_result,
 )
-from policy_atlas.evidence_base.corpus.characterise import ScreenedSource
+from policy_atlas.evidence_base.corpus.characterise import CharacteriseFailure, ScreenedSource
 from policy_atlas.evidence_base.corpus.select import (
     SelectionCandidate,
     SelectionStratum,
@@ -26,8 +27,17 @@ from policy_atlas.evidence_base.corpus.select import (
     select_documents,
 )
 from policy_atlas.evidence_base.extract.extract import KNOWN_PROFILE_IDS
+from policy_atlas.runtime import harness, steering_events
 from policy_atlas.runtime.orchestration_plan import OrchestrationPlan, compose
-from policy_atlas.runtime.runner import NullIO, run_plan
+from policy_atlas.runtime.runner import (
+    NullIO,
+    _apply_replacement_rerun,
+    _reference_kwargs,
+    _run_component_rerun,
+    _skip_reason,
+    _SteeringState,
+    run_plan,
+)
 from policy_atlas.runtime.steering import (
     Abort,
     Adjust,
@@ -1192,3 +1202,394 @@ def test_refuse_inexpressible_returns_honest_not_yet_message() -> None:
     assert "not yet expressible" in message
     assert "rank by author reputation" in message
     assert "seam" in message
+
+
+# --- Replacement re-run generalisation (task 7 · contract decision 7) --------
+# reselect (wired via the deepening-selection steer point) · re-characterise ·
+# re-group. P2/P4 steer points that ENTER re-characterise/re-group land in
+# Phase 4; here the generalised runner functions are exercised directly against
+# a walked plan state, real DB, stub backends.
+
+
+def _walk_to_completion(
+    engine: Engine,
+    *,
+    project_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    plan: OrchestrationPlan,
+    plan_id: uuid.UUID,
+) -> tuple[Any, dict[str, uuid.UUID], _SteeringState]:
+    """Walk a plan to completion (no live steering) and reconstruct walk state.
+
+    Returns the run outcome, the ``component -> successful run id`` map read from
+    the outcome, and a ``_SteeringState`` positioned at the approved v1 plan row —
+    the input a replacement re-run needs.
+    """
+    outcome = run_plan(
+        engine,
+        project_id=project_id,
+        evidence_scope_id=scope_id,
+        plan=plan,
+        plan_id=plan_id,
+        plan_version=1,
+        plan_row_id=plan_id,
+        backends=_runner_backends(),
+        io=NullIO(),
+    )
+    assert outcome.status == "succeeded"
+    successful_runs = {
+        step.component: step.run_id
+        for step in outcome.steps
+        if step.status == "succeeded" and step.run_id is not None
+    }
+    state = _SteeringState(
+        plan=plan,
+        plan_id=plan_id,
+        plan_version=1,
+        plan_row_id=plan_id,
+        chain=compose(plan),
+        pause_points=set(),
+    )
+    return outcome, successful_runs, state
+
+
+def _plan_version_rows(engine: Engine, project_id: uuid.UUID) -> list[tuple[int, str, str]]:
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(
+                orchestration_plan.c.version,
+                orchestration_plan.c.status,
+                orchestration_plan.c.created_by,
+            )
+            .where(orchestration_plan.c.project_id == project_id)
+            .order_by(orchestration_plan.c.version)
+        ).all()
+    return [(row.version, row.status, row.created_by) for row in rows]
+
+
+def _replacement_decisions(engine: Engine, project_id: uuid.UUID) -> list[dict[str, Any]]:
+    with engine.connect() as conn:
+        return [
+            entry
+            for entry in events.read(conn, project_id)
+            if entry["event_type"] == steering_events.STEERING_DECISION
+            and entry["payload"].get("rerun_mode") == "replacement"
+        ]
+
+
+def test_re_characterise_moves_reference_preserves_rows_and_stamps_replacement(
+    engine: Engine,
+) -> None:
+    """Re-characterise: new characterisation_result row, both rows persist, the
+    walk's reference moves to the new run, a user-attributed plan version row is
+    appended and the decision stamps rerun_mode=replacement."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan()
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        outcome, successful_runs, state = _walk_to_completion(
+            engine, project_id=project_id, scope_id=scope_id, plan=plan, plan_id=plan_id
+        )
+        original_char = successful_runs["characterise"]
+
+        base = steering_events.base_payload(
+            capability_run_id=outcome.capability_run_id,
+            plan_id=plan_id,
+            plan_version=1,
+            boundary="after_component",
+            component="characterise",
+        )
+        adjustment = Adjust(
+            directive_deltas={"characterise": {"characterise": {"themes": "more"}}}
+        )
+        rerun_state, merged = _apply_replacement_rerun(
+            engine,
+            project_id=project_id,
+            state=state,
+            adjustment=adjustment,
+            base=base,
+            event_run_id=original_char,
+            component="characterise",
+        )
+        # characterise's compiled step carries no directive, so the merged fine
+        # directive is exactly the option value.
+        assert merged == {"characterise": {"themes": "more"}}
+
+        _, new_char = _run_component_rerun(
+            engine,
+            NullIO(),
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            state=rerun_state,
+            component="characterise",
+            directive_delta=merged,
+            backends=_runner_backends(),
+            session_id=None,
+            successful_runs=successful_runs,
+            blocked_discretionary={},
+            step_outcomes=[],
+            flagged_events=[],
+            capability_run_id=outcome.capability_run_id,
+        )
+
+        assert new_char != original_char
+        # The reference moves: downstream select would now reference the new run.
+        assert successful_runs["characterise"] == new_char
+        assert _reference_kwargs("select", successful_runs)["characterisation_run_id"] == new_char
+
+        with engine.connect() as conn:
+            char_run_ids = (
+                conn.execute(
+                    select(characterisation_result.c.run_id).where(
+                        characterisation_result.c.project_id == project_id
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        # Rows immutable: BOTH the old and new characterisation rows persist.
+        assert set(char_run_ids) == {original_char, new_char}
+
+        assert _plan_version_rows(engine, project_id) == [
+            (1, "superseded", "planner"),
+            (2, "approved", "user"),
+        ]
+        decisions = _replacement_decisions(engine, project_id)
+        assert len(decisions) == 1
+        assert decisions[0]["payload"]["boundary"] == "after_component"
+        assert decisions[0]["payload"]["component"] == "characterise"
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_re_group_moves_reference_preserves_rows_and_stamps_replacement(
+    engine: Engine,
+) -> None:
+    """Re-group (same facet): new grouping_result row, both rows persist, and
+    synthesise's reference rule picks the new grouping run."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan()
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        outcome, successful_runs, state = _walk_to_completion(
+            engine, project_id=project_id, scope_id=scope_id, plan=plan, plan_id=plan_id
+        )
+        original_group = successful_runs["group"]
+
+        base = steering_events.base_payload(
+            capability_run_id=outcome.capability_run_id,
+            plan_id=plan_id,
+            plan_version=1,
+            boundary="after_component",
+            component="group",
+        )
+        adjustment = Adjust(
+            directive_deltas={"group": {"grouping": {"granularity": "coarser"}}}
+        )
+        rerun_state, merged = _apply_replacement_rerun(
+            engine,
+            project_id=project_id,
+            state=state,
+            adjustment=adjustment,
+            base=base,
+            event_run_id=original_group,
+            component="group",
+        )
+        # group's compiled step carries the plan facet; the option merges over it.
+        assert merged == {"grouping": {"facets": ["outcome"], "granularity": "coarser"}}
+
+        _, new_group = _run_component_rerun(
+            engine,
+            NullIO(),
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            state=rerun_state,
+            component="group",
+            directive_delta=merged,
+            backends=_runner_backends(),
+            session_id=None,
+            successful_runs=successful_runs,
+            blocked_discretionary={},
+            step_outcomes=[],
+            flagged_events=[],
+            capability_run_id=outcome.capability_run_id,
+        )
+
+        assert new_group != original_group
+        assert successful_runs["group"] == new_group
+        # synthesise references group first (deepest-available reference rule).
+        assert _reference_kwargs("synthesise", successful_runs)["grouping_run_id"] == new_group
+
+        with engine.connect() as conn:
+            group_run_ids = (
+                conn.execute(
+                    select(grouping_result.c.run_id).where(
+                        grouping_result.c.project_id == project_id
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        assert set(group_run_ids) == {original_group, new_group}
+
+        assert _plan_version_rows(engine, project_id) == [
+            (1, "superseded", "planner"),
+            (2, "approved", "user"),
+        ]
+        decisions = _replacement_decisions(engine, project_id)
+        assert len(decisions) == 1
+        assert decisions[0]["payload"]["component"] == "group"
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_reselect_preserves_both_selection_rows_and_moves_reference(
+    engine: Engine,
+) -> None:
+    """Re-select via the wired deepening-selection steer point: both
+    selection_result rows persist (immutable), extract references the new run,
+    and the steer point is not re-entered (one adjustment cycle per boundary)."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan()
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        io = ScriptedIO(
+            [
+                Adjust(
+                    directive_deltas={
+                        "select": {"selection": {"weight_emphasis": {"quality": 2.0}}}
+                    }
+                )
+            ]
+        )
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+        )
+        assert outcome.status == "succeeded"
+
+        with engine.connect() as conn:
+            selection_run_ids = (
+                conn.execute(
+                    select(selection_result.c.run_id).where(
+                        selection_result.c.project_id == project_id
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            compiled = [
+                entry
+                for entry in events.read(conn, project_id)
+                if entry["event_type"] == "plan.compiled"
+            ]
+
+        compiled_select = [
+            entry["run_id"] for entry in compiled if entry["payload"]["component"] == "select"
+        ]
+        # Rows immutable: BOTH the original and re-run selection rows persist.
+        assert len(selection_run_ids) == 2
+        assert set(selection_run_ids) == set(compiled_select)
+
+        # The walk's reference moved: extract threads the re-run (second) select.
+        extract_payload = next(
+            entry["payload"] for entry in compiled if entry["payload"]["component"] == "extract"
+        )
+        assert extract_payload["selection_run_id"] == str(compiled_select[1])
+
+        # One adjustment cycle per boundary: the steer point fired exactly once.
+        steer_pauses = [point for point, _ in io.pauses if point.get("kind") == "steer_point"]
+        assert len(steer_pauses) == 1
+
+        decisions = _replacement_decisions(engine, project_id)
+        assert len(decisions) == 1
+        assert decisions[0]["payload"]["component"] == "select"
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_failed_replacement_rerun_blocks_downstream_discretionary(
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed replacement re-run marks the component blocked so downstream
+    discretionary dependents skip — mirroring a select re-run failure today
+    (DISCRETIONARY_REQUIREMENTS maps select->characterise)."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan()
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        outcome, successful_runs, state = _walk_to_completion(
+            engine, project_id=project_id, scope_id=scope_id, plan=plan, plan_id=plan_id
+        )
+
+        base = steering_events.base_payload(
+            capability_run_id=outcome.capability_run_id,
+            plan_id=plan_id,
+            plan_version=1,
+            boundary="after_component",
+            component="characterise",
+        )
+        adjustment = Adjust(
+            directive_deltas={"characterise": {"characterise": {"themes": "more"}}}
+        )
+        rerun_state, merged = _apply_replacement_rerun(
+            engine,
+            project_id=project_id,
+            state=state,
+            adjustment=adjustment,
+            base=base,
+            event_run_id=successful_runs["characterise"],
+            component="characterise",
+        )
+
+        # Fault-inject the re-run only (the initial walk already succeeded).
+        def failing_characterise_scope(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            del args, kwargs
+            raise CharacteriseFailure(
+                coverage={"base_counts": {}}, error="forced re-run failure"
+            )
+
+        monkeypatch.setattr(harness, "characterise_scope", failing_characterise_scope)
+
+        blocked_discretionary: dict[str, str] = {}
+        step_outcomes: list[Any] = []
+        flagged_events: list[dict[str, Any]] = []
+        _run_component_rerun(
+            engine,
+            NullIO(),
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            state=rerun_state,
+            component="characterise",
+            directive_delta=merged,
+            backends=_runner_backends(),
+            session_id=None,
+            successful_runs=successful_runs,
+            blocked_discretionary=blocked_discretionary,
+            step_outcomes=step_outcomes,
+            flagged_events=flagged_events,
+            capability_run_id=outcome.capability_run_id,
+        )
+
+        assert step_outcomes[-1].status == "failed"
+        assert step_outcomes[-1].retried is True
+        # The failed re-run is un-threaded and the component is blocked.
+        assert "characterise" not in successful_runs
+        assert "characterise" in blocked_discretionary
+        assert any(flag["status"] == "failed" for flag in flagged_events)
+        # Mirrors select's failure today: a downstream discretionary dependent skips.
+        assert _skip_reason("select", blocked_discretionary) is not None
+    finally:
+        _cleanup_project(engine, project_id)

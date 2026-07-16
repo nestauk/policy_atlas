@@ -218,6 +218,60 @@ def test_screened_sources_effective_grain_four_shapes(conn: Connection) -> None:
     assert row._mapping["flags"]["thin_base"] == {"sufficiently_confident": 2, "floor": 10}
 
 
+def test_screened_sources_follows_new_generation_after_rescreen(conn: Connection) -> None:
+    """select's eligibility (screened_sources) reads the newest generation: a doc
+    a gen1 criteria re-screen flipped to not_relevant drops out of the candidate
+    base, while a gen0-only relevant doc stays (task 024 generation supersession)."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+
+    def _seed_doc(title: str, gen_rows: list[tuple[int, str]]) -> uuid.UUID:
+        _, pss_id = seed_source(
+            conn, pid,
+            meta={"title": title, "abstract": f"Abstract for {title}.", "year": 2026},
+        )
+        for generation, status in gen_rows:
+            conn.execute(source_screening_result.insert().values(
+                source_screening_result_id=uuid.uuid4(),
+                evidence_scope_id=scope_id,
+                project_source_snapshot_id=pss_id,
+                project_id=pid,
+                screened_by_run_id=rid,
+                status=status,
+                screen_basis="title_abstract",
+                screen_decision_confidence=0.9 if status == "relevant" else 0.95,
+                screen_stage=1,
+                screen_generation=generation,
+                screened_at=now(),
+            ))
+        conn.execute(source_classification_result.insert().values(
+            source_classification_result_id=uuid.uuid4(),
+            evidence_scope_id=scope_id,
+            project_source_snapshot_id=pss_id,
+            project_id=pid,
+            classified_by_run_id=rid,
+            primary_evidence_type=EVIDENCE_TYPE,
+            classified_at=now(),
+        ))
+        return pss_id
+
+    flipped = _seed_doc("flipped", [(0, "relevant"), (1, "not_relevant")])
+    stable = _seed_doc("stable", [(0, "relevant")])
+
+    seed_characterisation(conn, pid, scope_id, rid, themes={"A": [flipped, stable]})
+
+    summary, row, _ = run_select(
+        conn, pid, scope_id, rid, context={"selection": {"budget": 10}}
+    )
+
+    assert summary["base"] == {
+        "screened_in": 1, "non_evidence": 0, "eligible": 1, "excluded_by_directive": 0,
+    }
+    records = {record["pss_id"]: record for record in row._mapping["selected"]}
+    assert set(records) == {str(stable)}
+    assert str(flipped) not in records
+
+
 def test_allocation_math_matches_hand_computed_fixture(conn: Connection) -> None:
     pid, characterise_run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
