@@ -257,6 +257,31 @@ data (~6–9 boundary calls/run, judgment-class model, stub for tests).
    structural routing (today's behaviour). The run never depends on the
    judgement layer being up.
 
+**The watch's information model — push-fed, decider-symmetric (owner
+question, 2026-07-16; no new tools in v1).** The harness composes a
+deterministic **boundary context** per watch call: (1) orienting header —
+refined question/intent, plan summary, mode, standing instructions (the
+spec's orienting-context pattern: assembled, never gathered); (2) **the
+boundary payload — exactly what a pausing user would be shown** (check-in
+render, fired triggers, previews/proposals, canonical options): the
+decider dial moves who answers, so the information basis is identical by
+principle — if the payload is insufficient for the watch it was
+insufficient for the user, and the fix is enriching the payload for both,
+never a privileged orchestrator side-channel; (3) a run-so-far digest —
+completed components + headline counts + flags + prior steering decisions
+this walk (read from the steering events: decision memory). Because
+`steering.pause` events persist the payload, the watch's entire input is
+in the durable record — orchestrator decisions are replayable from
+Postgres by construction. **Insufficient context → bias-to-escalate**
+(route to user / declared default) with the reason evented, never
+tool-fishing or guessing; those events meter demand for the deferred
+**tooled watch** (scoped read-only `lookup` for targeted depth) — a named
+seam, not v1: per-boundary cost/latency, pull-context audit complexity,
+and it is the slope toward the EB-expert's read-upstream role, which has
+its own gate. Containment: boundary payloads carry corpus-derived text
+(titles, labels, queries) into the watch prompt — data-framed, and watch
+output still compiles through the author-blind grammar.
+
 **Orchestrator-authored options (owner, 2026-07-16 — IN).** At every
 pause the watch composes 2–5 run-specific suggested responses (label +
 why + compiling delta) — the planner's suggested-answers pattern (017
@@ -374,6 +399,9 @@ watch discipline 3).
 4b. **The EB-expert capability agent** (every-leg directive authoring,
    domain-expert persona) — post-eval as 017 pinned; 024 ships its three
    sockets (watch section) so arrival is a backend swap.
+4e. **The tooled watch** (scoped read-only `lookup` for targeted depth at
+   boundaries) — deferred; insufficient-context escalation events are the
+   demand meter (watch information model, above).
 4c. **Query-set pre-approval** — approving generated queries before they
    execute requires an in-component pause (generation happens inside
    acquire's run). The iterative equivalent ships: B1 guidance in,
