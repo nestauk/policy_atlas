@@ -9,38 +9,59 @@ recommended unless challenged. On adjudication this becomes contract rev 4.
 
 ## The target shape
 
-**One steer-point lattice — a steer point at every major phase boundary —
-three compile-target families, one router.**
+**One steer-point lattice — two compile-target families (structured keys ·
+guidance channels), one router.** *(Restructured at owner review,
+2026-07-16: the coverage judgment moved to where it is actually judgeable —
+after assess, not after acquire.)*
 
 ```
-acquire ──P1──> screen ──P2──> (classify·appraise·characterise) ──> select ──P3──> extract ──> group ──P4──> synthesise
+acquire ─P1*─> screen ──> classify ──> appraise ──> (characterise) ──P2──> select ──P3──> extract ──> group ──P4──> synthesise
+        (*exception-only)                                    ↑______________additive re-search loops back to acquire
 ```
 
-- **P1 post-acquire — "the search"** (was S2): triggers from
-  `search_coverage_record` (`inadequate`, `re_searched_still_thin`,
-  budget/wall-clock stops). Options: deepen (depth rung) · rescope
-  (filters) · **guide the queries** (B1) · accept-thin (flagged) · abort.
-- **P2 post-screen — "the inclusion bar"** (was S3): triggers computed from
-  `source_screening_result` rows + `source.screened` event flags
-  (`tie_broken`, `non_unanimous`, `unsure` share, stage-2 demote rate).
-  Options: tighten/loosen criteria (existing free-text grammar) ·
-  strictness posture (C1) · run stage-2 confirm (existing `stage:2`) ·
-  re-screen re-run · continue.
+- **P1 post-acquire — exception point only, every mode.** Fires solely on
+  hard triggers: backend errors, `adequacy_verdict="inadequate"`,
+  `re_searched_still_thin` — no point assessing garbage. Options: deepen
+  (depth rung) · rescope (filters) · guide the queries (B1) · accept-thin
+  (flagged) · abort. Never a routine pause.
+- **P2 pre-select — "the evidence base" (the coverage steer point).**
+  Sits after screen + classify + appraise (+ characterise when composed),
+  where adequacy is actually judgeable. Renders the full coverage
+  picture: screened-in counts, document-type mix (classify), quality mix
+  (appraise), themes (characterise, when present), zero-result queries
+  and **the executed queries** (persisted per-call in `search.executed`
+  events). Triggers: screened-relevant below floor · type-mix collapse ·
+  quality collapse · coverage-verdict flags. Options: continue ·
+  **"search more on X"** (free text → search guidance → **additive
+  re-search segment**: acquire→assess re-walk, incremental by
+  construction) · adjust criteria + re-screen (**replacement** at doc
+  grain) · stage-2 toggle · re-characterise with guidance/bounds
+  (replacement). Note: pre-approval of the generated query set stays a
+  named seam (query generation is in-component); the iterative
+  equivalent — guidance in, executed queries visible, targeted re-search
+  after — is the shipped shape.
 - **P3 post-select — "deepening selection"** (existing point, enriched):
-  S0 trigger enrichment; options gain **extraction profiles** (add ICF —
-  the old S4, whose natural home is this pre-extract boundary) and
-  **re-extract refresh** (D3) alongside the five existing options.
-- **P4 post-group / pre-synthesise — "the synthesis shape"** (S1 + S5
-  merged): proposal via `propose_synthesis_plan`; triggers from grouping
-  per-facet flags. Options: only-these-themes / section edits (existing
-  grammar) · evidence emphasis boosts (existing) · tag boosts (D4) ·
-  re-group coarser/finer (C3) · re-group with guidance (B3) ·
-  as-proposed.
+  S0 trigger enrichment; the payload gains a **selection preview** (top
+  selected docs with strata/scores/reasons + notable exclusions, from
+  persisted `selected`/`excluded`) so the judgment is informed, not
+  blind. Options gain **extraction profiles** (add ICF — natural home:
+  this pre-extract boundary), **re-extract refresh** (D3), **strata
+  scoping** (D6) and **doc exclusion** (D7) alongside the five existing
+  options; the router compiles combined free-text asks ("fewer docs,
+  favour strong UK evidence, keep the IFS paper") into one confirmed
+  multi-lever delta.
+- **P4 post-group / pre-synthesise — "the synthesis shape"**: proposal via
+  `propose_synthesis_plan`; triggers from grouping per-facet flags.
+  Options: only-these-themes / section edits (existing grammar) ·
+  evidence emphasis boosts (type/tier columns — tag boosts dropped, see
+  D4) · re-group coarser/finer (`grouping.granularity`) · re-group with
+  guidance (B3) · as-proposed.
 
-Every point: numbered options **or free text through the router**;
-Unattended auto-resolves per `steer_point_defaults` (planner emits a
-default per point — planner prompt rev); every presentation/decision is a
-steering event (the 024 chassis).
+Every point: canonical floor options + orchestrator-authored run-specific
+options **or free text through the router**; Unattended resolves per the
+settled discretion model; every presentation/decision is a steering event
+(the 024 chassis). Every re-run option declares its mode — additive or
+replacement (§ The two re-run modes).
 
 **Modes — SETTLED (owner, 2026-07-16): four modes kept, renamed to the
 delegation-posture vocabulary; the organising principle is the decider
@@ -53,7 +74,7 @@ blocks and who answers.
 | User-facing label ("When should I come back to you?") | Plan value | User decides live | Orchestrator decides (recorded + flagged) | Pauses, healthy standard run |
 |---|---|---|---|---|
 | "Often — walk me through it" | frequent | everything (watch only *recommends*) | nothing | ~8–10 |
-| "At the key decisions" *(default)* | moderate | P3 + P4 always; P1/P2 + watch-escalations when fired | routine boundary residuals | 2 |
+| "At the key decisions" *(default)* | moderate | P2 + P3 + P4 always (the base · the selection · the synthesis shape); P1 + watch-escalations when fired | routine boundary residuals | 3 |
 | "Only if something needs my judgment" | minimal | fired triggers + watch-escalated substance | everything else, within the user surface | 0 |
 | "Never — here are my standing instructions" | unattended | nothing live | per the adjudicated Unattended model (watch section) | 0, guaranteed |
 
@@ -78,6 +99,11 @@ scrubbed, fail-closed parsed; persisted in that component's provenance;
   extractions never reuse each other. Provenance: extraction_result. **IN.**
 - **B3 `grouping.guidance`** — into discovery ("organise by policy
   instrument, not sector"). Provenance: grouping_provenance. **IN.**
+- **B5 `characterise.guidance`** *(owner review, 2026-07-16)* — into the
+  theme-discovery prompt ("organise around policy instruments; keep
+  delivery-model themes separate"), symmetric with B3; pairs with the
+  theme-bounds key and the landscape review/redo at P2. Provenance:
+  `characterisation_result.grouping_provenance`. **IN.**
 - **B4 `synthesis.guidance` (global) — HELD (owner, 2026-07-16)** for the
   audience-framing pair (two-overlapping-voice-levers risk). Global
   writing intents route through per-section focus fan-out + boosts
@@ -88,24 +114,24 @@ scrubbed, fail-closed parsed; persisted in that component's provenance;
   (integrity surfaces — users must not instruct their own verifier),
   classify (factual typing; the intent lands downstream in the rubric).
 
-## Family C — postures (named bundles over constants)
+## Family C — postures: RETIRED (owner review, 2026-07-16)
 
-Closed vocabularies compiling to pinned parameter sets, recorded in
-provenance (the `search_effort` precedent). No raw knob exposure.
+The posture *family* is retired. The test that killed it: "what does
+`strict` mean?" — screening strictness bundled consensus mechanics (reps,
+quorum, tie policy, title-only rescue) that control decision reliability,
+not the substantive bar; an opaque lever wearing a plain-language label,
+redundant next to free-text **criteria** (substantive, inspectable) and
+the appraise rubric / select emphasis (quality). **C1 dropped**; consensus
+constants stay module-owned, like the vetter internals. **C2 vetting: no
+steer of any kind** (quality-integrity surface; `vetting_failed` stays a
+floor trigger only).
 
-- **C1 `screening.strictness`**: `inclusive | standard | strict` →
-  (reps, quorum, tie policy, title-only rescue, stage-2 unsure handling).
-  `standard` = today's constants exactly. **IN.**
-- **C3 `grouping.granularity`**: `coarser | standard | finer` → the
-  `group_max_labels` ceiling (multiplier on the derived clamp; `standard`
-  = as-built). **IN.**
-- **C4 `characterise` theme bounds** — characterise gains its first
-  directive parser: `{"characterise": {"themes": "fewer" | "standard" |
-  "more"}}` → bounds override. **IN** (small; the parser is the cost).
-- **C2 vetter posture — OUT (owner, 2026-07-16)**: no vetting steer of
-  any kind this slice; vetter behaviour stays entirely fixed
-  (quality-integrity surface). `vetting_failed` stays a floor trigger
-  only.
+What survives moves to Family D as ordinary enumerated keys — granularity
+and theme bounds are single, monotonic, directly-observable properties of
+the *output* ("40 splinter groups → ~10 broad ones"), not bundles of
+internals. The resulting intent taxonomy: **substantive bars →
+criteria/guidance/rubric · output shape → enumerated keys · emphasis →
+weights/boosts.**
 
 ## Family D — structured keys
 
@@ -121,13 +147,33 @@ provenance (the `search_effort` precedent). No raw knob exposure.
   memo-invalidation ("re-extract the abstract-only docs now full text
   landed"). Compiles to fingerprint-bypass for the named class; provenance
   records the refresh. **IN.**
-- **D4 tag-boost vocabulary advertising** — `propose_synthesis_plan.boostable`
-  gains `tags` (from `source_tag`), discharging the deferred seam; the
-  boost grammar already accepts them. **IN** (cheap).
-- **C5/D5 `search.target`** — bounded override of
+- **D4 tag-boost vocabulary advertising — DROPPED (owner review,
+  2026-07-16).** The open tag layer is disparate at live scale (the 017
+  tag-consolidation trigger records exactly this fragmentation); an
+  exact-match boost over a fragmented vocabulary boosts a sliver and
+  silently distorts retrieval. The closed-vocabulary cases users actually
+  want are already boostable columns (`primary_evidence_type`, appraisal
+  tiers). The boost grammar keeps *accepting* tags (built, clamped,
+  `unmatched_boosts` honest) but nothing advertises or authors them; the
+  router steers tag-ish intents to type/tier boosts. Seam: tag boosts
+  return after tag consolidation + hybrid matching over the open layer.
+- **D5 `search.target`** — bounded override of
   `TARGET_CONFIDENT_RELEVANT` ("keep going until ~40 relevant"), clamped
   (e.g. 5–60), deep/standard loop only. **IN.**
-- **Select** — already the richest grammar; no additions.
+- **D6 `selection.strata_scope`** *(owner review, 2026-07-16)* — scope or
+  exclude strata/themes from selection ("only these themes go forward"):
+  the post-characterise filtering intent `priority_strata` (boost-only)
+  cannot express. Fail-closed; must-include conflicts flagged. **IN.**
+- **D7 `selection.exclude_ids`** *(owner review, 2026-07-16)* — remove a
+  named document, the complement of `must_include_ids`; flagged in
+  provenance. **IN.**
+- **D8 `grouping.granularity`**: `coarser | standard | finer` → the
+  `group_max_labels` ceiling (multiplier on the derived clamp; `standard`
+  ≡ as-built). *(Moved from the retired posture family.)* **IN.**
+- **D9 `characterise.themes`**: `fewer | standard | more` → theme-bounds
+  override; characterise's first directive parser (with B5 riding it).
+  *(Moved from the retired posture family.)* **IN.**
+- **Select** otherwise unchanged — already the richest grammar.
 
 ## The router (interpreter, upgraded from single-delta to fan-out)
 
@@ -167,9 +213,12 @@ data (~6–9 boundary calls/run, judgment-class model, stub for tests).
    modes where the user is available, prefer routing over self-deciding.
 3. **Self-decisions use the full user surface, no more, no less** (owner
    challenge upheld, 2026-07-16): the watch decides by the same options +
-   free-text-authored deltas (structured keys, postures, guidance
-   channels) a user has, compiled through the same author-blind fail-closed
-   grammar. Integrity surfaces (grounding judge, vetter sensitivity) are
+   free-text-authored deltas (structured keys, guidance channels) a user
+   has, compiled through the same author-blind fail-closed grammar. One
+   asymmetry by re-run mode (§ The two re-run modes): **additive** re-runs
+   are self-decidable where the mode delegates; **replacement** re-runs
+   bias-to-escalate in attended modes — they change what everything
+   downstream sees, the routing rule's definition of substance. Integrity surfaces (grounding judge, vetter sensitivity) are
    closed to everyone. Known risk, named for eval: watch-authored guidance
    entering downstream prompts is an LLM→LLM channel with no confirm gate —
    controls are attribution, flags, the review-first collation, and user
@@ -241,6 +290,38 @@ user-facing surface. **Authority order is fixed regardless of author:
 user > declared rules > orchestrator. Authorship is a seam; authority is
 not.**
 
+## The two re-run modes (owner distinction, 2026-07-16)
+
+Every steer that re-runs work is one of two kinds, and the kind is
+first-class vocabulary — declared in the confirmation ("this will *add
+to* your evidence base" vs "this will *redo* selection, replacing the
+current one"), stamped on the steering event, and visible in the history
+projection.
+
+- **Additive re-entry** — the incremental model, cheap by construction:
+  re-search adds sources (acquire dedups; screen/classify/appraise
+  process only the unprocessed); adding the ICF profile is additive at
+  the profile grain (memo skips existing IOF work); adding a facet is
+  additive at the facet grain. Prior outputs stand; the base grows;
+  coverage recomputes over the union; provenance records all contributing
+  runs. This is P2's "search more on X" **segment re-entry**: the walk
+  jumps back to acquire with the amended directive and proceeds forward
+  through the boundary again (contract 6b's single-component re-run
+  mechanics, generalised to a bounded segment).
+- **Replacement re-run** — for run-scoped outputs downstream references by
+  one run id: reselect (the pattern's origin), re-characterise, re-group
+  the same facet, re-screen with *changed criteria* (replacement at the
+  **document** grain — new screen rows must become the effective row over
+  already-screened docs, which touches the effective-screen-row read
+  rule: real plan-design work, named here honestly). Semantics: old rows
+  persist immutably; the walk's reference moves — **superseded, never
+  deleted**, the same posture as plan versions and the audit spine.
+
+Disciplines: (1) mode declared at confirmation + on the event ·
+(2) replacement never deletes · (3) the watch's delegation boundary
+follows the mode (additive self-decidable, replacement bias-to-escalate —
+watch discipline 3).
+
 ## Still OUT, even in the big slice (each with its reason)
 
 1. **Dual-view coverage / the source-evidence policy object** — a
@@ -259,15 +340,22 @@ not.**
 4b. **The EB-expert capability agent** (every-leg directive authoring,
    domain-expert persona) — post-eval as 017 pinned; 024 ships its three
    sockets (watch section) so arrival is a backend swap.
+4c. **Query-set pre-approval** — approving generated queries before they
+   execute requires an in-component pause (generation happens inside
+   acquire's run). The iterative equivalent ships: B1 guidance in,
+   executed queries visible at P1/P2, targeted additive re-search after.
+4d. **Tag boosts** (see D4) — return after tag consolidation + hybrid
+   matching over the open tag layer.
 5. **Transcript persistence / turn tables** — workspace cluster;
    `session_id` anchors are in (1b).
 
 ## Cross-cutting cost & discipline ledger
 
 - Every new grammar key: fail-closed parser + provenance + tests; B2/D3
-  additionally fingerprint participation; C1 changes screen's consensus
-  path behind a posture default that reproduces today's behaviour exactly
-  (guard tests pin `standard` ≡ as-built).
+  additionally fingerprint participation; D8/D9 carry guard tests pinning
+  `standard` ≡ as-built. Criteria-changed re-screen (replacement at doc
+  grain) adds effective-screen-row read-rule work — the one re-run with
+  real plumbing cost, plan-designed.
 - Prompt surfaces touched (all lead-authored): the **`orchestrator_v1`
   prompt family** — one system-prompt family, three moment-scoped
   framings: planning turn (absorbing `planner_v6`: steer-point defaults
@@ -309,3 +397,12 @@ delegation-posture labels + decider dial · the mode table above · the
 orchestrator watch with full-user-surface discretion · orchestrator-
 authored options on the canonical floor · one orchestrator prompt family ·
 enlarged trigger floor · EB-expert stays post-eval with sockets shipped.
+
+**Settled at owner review round 2 (2026-07-16):** lattice restructured —
+P1 exception-only, P2 = pre-select coverage point with executed-query
+visibility + additive re-search segment re-entry, Moderate = P2/P3/P4 ·
+B5 characterise guidance + landscape review/redo · D6 strata scoping +
+D7 exclude_ids + P3 selection preview · posture family retired (C1
+dropped; granularity/theme-bounds → D8/D9) · D4 tag boosts dropped to a
+named seam · the two re-run modes (additive vs replacement) pinned as
+first-class vocabulary with the watch delegation asymmetry.
