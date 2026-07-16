@@ -465,6 +465,28 @@ watch discipline 3).
   (chassis → grammar families → lattice → watch/router → prompts → live
   check) with per-phase verify gates.
 
+## Owner cost adjudication (2026-07-16, after the adversarial round)
+
+The M5 cost exposure resolved by design, not de-scope — **A + B + C
+adopted, D dropped**: (A) **structurally gated invocation** — watch
+called only at decision points / fired triggers / anomalous check-ins;
+clean boundaries emit deterministic `clean_boundary`
+`agent_judgement_routed` events, no LLM; (B) **single-shot deliberation
+over pre-fetched bundles** under the **option-completeness rule** (every
+canonical option answerable from the bundle or marked
+requires_user_input; P3 enriched: selected-vs-pool composition,
+full-text availability, budget picture, ranking-trust signals;
+representative digests, never full doc lists); fallback read-tool loop
+only on "insufficient", capped ≤2; (C) **model routing by moment** —
+mini-class triage, judgment-class decisions/authoring (cost tiering, not
+agent identity — decision-point authoring remains the EB-expert's future
+socket); (D — dropped, 017 standing rule reaffirmed) **no cost language
+on any user-facing surface**: caps are internal constants + telemetry;
+escalations never mention budgets. New envelope: ~6–10 orchestrator
+turns typical Moderate, ~15–20 worst case (was 35–40); live check
+~$5–12 / 30–45 min. This supersedes the tier-1/tier-2 loop-first
+framing above where they differ.
+
 ## Adversarial adjudication (2026-07-16, deep-reasoner lane — codex
 ## attempted first, workspace out of credits)
 

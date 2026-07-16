@@ -193,26 +193,47 @@ front-end/API renderers · schema beyond decision 2.
    layer. **Authored options**: 2–5 run-specific suggested responses per
    pause on the canonical floor (the planner suggested-answers pattern);
    canonical options remain the floor and the stable vocabulary
-   `steer_point_defaults` anchor. **Information model — two-tier** (annex
-   § watch information model; symmetry of the information *environment*,
-   not the payload): routine boundary **triage is push-only** — a
-   deterministic composed context (orienting header + the payload a
-   pausing user would be shown + a run-so-far digest incl. prior steering
-   decisions from the events); at **decision points** (P1–P4 +
-   watch-escalated) the watch gets **bounded read-only deliberation** —
-   capped (~4) `lookup`/`query_findings` calls over canonical state
-   (never `retrieve`, never `search`), each call + result digest evented,
-   so replay-from-Postgres shows what the watch consulted, not just what
-   it decided. Insufficient context after the cap → bias-to-escalate with
-   the reason evented. Two pins from adversarial findings m2/m6:
-   **every triage verdict emits `agent_judgement_routed`** (even
-   "nothing notable, proceed" — the spec's own rule; governance events
-   are excluded from the decision-log projection by default, so no
-   noise), making "observed and proceeded" distinguishable from "never
-   watched" in the rebuild; and the **promotion rule**: substance-or-
-   unsure at a triage boundary always promotes to decision-point
-   treatment (tier 2) before any self-decision — triage boundaries that
-   *proceed* make no tool calls.
+   `steer_point_defaults` anchor. **Information + cost model (owner
+   cost adjudication, 2026-07-16 — supersedes the loop-first two-tier
+   framing; symmetry of the information *environment*, not the payload):**
+   - **Structurally gated invocation:** the watch is called only at (i)
+     decision points, (ii) trigger-fired boundaries, (iii) anomalous
+     check-ins (failure/retry/skip/degraded). A clean boundary emits a
+     deterministic `agent_judgement_routed` event
+     (`clean_boundary — structurally resolved`, no LLM) and proceeds —
+     structure first, judgement for the residual (the spec's own rule);
+     the rebuild still distinguishes observed from unwatched.
+   - **Single-shot deliberation over pre-fetched bundles:** each decision
+     point gets a deterministic, versioned **bundle** pre-fetched by the
+     harness under the **option-completeness rule** — every canonical
+     option at that point must be answerable from the bundle, else the
+     bundle is enriched or the option is `requires_user_input`. (P3:
+     selection preview · selected-vs-pool composition · full-text
+     availability of the selected set · budget picture with
+     `budget_exhausted` vs `ranked_below_cut` · ranking-trust signals ·
+     representative digests, never full doc lists, for dropped strata.
+     P2: coverage object + search coverage record + screen counts. P4:
+     the proposal payload. Exact contents plan-pinned per point.) The
+     watch decides/authors in **one turn**; a read-tool fallback loop
+     survives only for a returned "insufficient — need X", capped at
+     **≤2** `lookup`/`query_findings` round-trips (never `retrieve`,
+     never `search`), each call + digest evented. Insufficient after the
+     cap → bias-to-escalate, reason evented.
+   - **Model routing by moment:** residual triage runs **mini-class**
+     (a notable-or-not judgment on a deterministic floor, mistakes
+     biased upward); decision-point deciding/authoring and the router
+     run judgment-class — the repo's existing volume/judgment split.
+     Routing is cost tiering, not agent identity: decision-point
+     authoring sits behind the authoring-seam protocol that the
+     post-eval EB-expert fills (decision 9); triage is not a
+     proto-capability-agent.
+   - **Costs are dev-side only** (017 standing owner rule reaffirmed):
+     caps are internal constants + telemetry, never plan content; no
+     cost language ever reaches a user-facing surface — an escalation
+     says it needs input, not that a budget ran out.
+   - **Promotion rule (m6):** substance-or-unsure at a triage boundary
+     always promotes to decision-point treatment before any
+     self-decision; triage calls that proceed make no tool calls.
 4. **Sequencing-invariant revision (ADR + spec flow-back).** 017 decision
    5's "one LLM call, pre-run" is deliberately revised: mid-run LLM calls
    are permitted at component boundaries only (router at pauses, watch at
@@ -293,17 +314,15 @@ front-end/API renderers · schema beyond decision 2.
 
 ## Constraints & approval gates
 
-- **Runtime egress (hard gate — figures re-derived per finding M5; ⚠
-  re-nod required, the number the gate is approved against changed):**
-  the orchestrator moments — watch triage at ~6–9 boundaries/run (single
-  calls) **plus tier-2 deliberation at ≤4 decision points × ≤6 LLM turns
-  each** (framing + ≤4 tool round-trips + decision/authoring) **plus**
-  router pause-time calls (~2–4) — a ceiling of **~35–40 orchestrator
-  turns/run worst case, ~15–25 typical Moderate**, all carrying project
-  data; and the B2′ annotator (per-doc mini-class, only when emphasis is
-  set). All behind the one seam with deterministic stubs; CI stays
-  zero-egress. No new search egress. No provider-side conversation state
-  (018 constraint).
+- **Runtime egress (hard gate — figures per the owner cost adjudication,
+  2026-07-16):** orchestrator moments under the gated/single-shot model —
+  decision-point calls (≤4 points × 1 turn + ≤2 fallback round-trips
+  each) + anomaly/trigger triage (mini-class, ~0–2 on a healthy run) +
+  router calls when the user types free text — **~6–10 orchestrator
+  turns typical Moderate, ~15–20 worst case**; plus the B2′ annotator
+  (per-doc mini-class, only when emphasis is set). All behind the one
+  seam with deterministic stubs; CI stays zero-egress. No new search
+  egress. No provider-side conversation state (018 constraint).
 - **Schema (hard gate — approved):** exactly decision 2. Anything further
   is a stop condition.
 - Deps: none. CI: untouched. Public interface: CLI additions only.
@@ -380,10 +399,10 @@ re-nod required on the sizing range and this de-scope ordering.
   one deliberately inexpressible intent (refusal + event); one Minimal
   segment where the watch self-decides (flagged); `steering_history()`
   captured from a fresh connection. P1 evidenced by fault-injected tests
-  (a healthy corpus may not fire it). Cost (re-derived per M5): one
-  planning conversation + one standard chain + **≤35 orchestrator turns**
-  (triage + up to three tier-2 deliberations live) — **~$10–20,
-  ~45–60 min**. No full e2e beyond this.
+  (a healthy corpus may not fire it). Cost (owner cost adjudication): one
+  planning conversation + one standard chain + **≤20 orchestrator turns**
+  (gated triage + single-shot decision points, fallback loops if hit) —
+  **~$5–12, ~30–45 min**. No full e2e beyond this.
 
 ## Verification evidence expected
 

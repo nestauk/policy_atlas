@@ -43,14 +43,19 @@ Slice-specific:
         existing apply paths; unconfirmed readings never apply (attended);
         backend errors degrade to structural routing + canonical menu;
         the structural trigger floor is never suppressed by the watch
-        (test-asserted). **Deliberation bounded:** decision-point pull is
-        capped, `lookup`/`query_findings` only (never retrieve/search),
-        every call + digest evented; triage boundaries that *proceed*
-        make no tool calls, and substance-or-unsure at triage always
+        (test-asserted). **Invocation gated + deliberation bounded:**
+        the watch is called only at decision points / fired triggers /
+        anomalous check-ins — clean boundaries emit deterministic
+        `clean_boundary` `agent_judgement_routed` events with no LLM
+        call (test-asserted); decision points are single-shot over
+        option-complete pre-fetched bundles, with the fallback loop
+        capped at ≤2 `lookup`/`query_findings` round-trips (never
+        retrieve/search), every call + digest evented; triage calls that
+        proceed make no tool calls, and substance-or-unsure at triage
         promotes to decision-point treatment before any self-decision
-        (the m6 promotion rule); every triage verdict emits
-        `agent_judgement_routed` (m2); poisoned-input fixtures +
-        author-blind scrub-equality tests pass (M7/n3).
+        (m6); no cost language on any user-facing surface (017 standing
+        rule); poisoned-input fixtures + author-blind scrub-equality
+        tests pass (M7/n3).
 13. [ ] **Honest refusal:** inexpressible intents (or fragments of a
         fan-out) yield the refusal + a `steering.refused` event, never a
         nearest-option approximation — including watch-authored proposals
