@@ -1,6 +1,8 @@
 # Task contract: 024-steering-surface
 
-> **Status:** approved (rev 4 + watch-information-model amendment).
+> **Status:** approved (rev 4 + adversarial adjudication + owner cost
+> adjudication — re-approved as amended, **2026-07-16 · owner**:
+> ADR-scope expansion and ~4–6× sizing + de-scope ordering both stand).
 > Contract approved: **2026-07-16 · owner** · Plan approved: _pending_ ·
 > ADR: expected (steering-event vocabulary · sequencing-invariant
 > revision · the decider dial). Contract-stage adversarial lane:
