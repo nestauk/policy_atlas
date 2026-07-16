@@ -3,10 +3,12 @@
 > **Status:** approved (rev 4 + watch-information-model amendment).
 > Contract approved: **2026-07-16 · owner** · Plan approved: _pending_ ·
 > ADR: expected (steering-event vocabulary · sequencing-invariant
-> revision · the decider dial). Contract-stage adversarial lanes:
-> **codex-rescue (primary, family-flip — owner corrected the routing;
-> quota had reset)** + deep-reasoner (second independent take, launched
-> under the stale quota-exhausted assumption; kept for adjudication).
+> revision · the decider dial). Contract-stage adversarial lane:
+> **deep-reasoner** — codex-rescue was attempted first at owner
+> direction (2026-07-16) and failed live ("workspace is out of
+> credits"), so the ladder substitution stands
+> (codex-exhaustion-fallback rule); re-run the family-flip lane if
+> credits land before the plan gate.
 >
 > **Rev history**
 > - **rev 4** (2026-07-16): **ground-up rewrite** (owner call) from the
