@@ -37,23 +37,28 @@
   acquire's *output* boundary, and Task 2 asserts a resolved run_id on
   every emission. Transactional pairing: decision/skip/re-run with
   their state change; pause/refused/rejected standalone.
-- **Criteria-changed re-screen — EXCLUDED from 024 (plan-review B1,
-  adjudicated 2026-07-16; the pre-authorised de-scope lever #2 exercised
-  up front on feasibility, not overrun).** The recency-first no-schema
-  pin is infeasible as-built: `uq_ssr_scope_source_stage` is a partial
-  UNIQUE on `(evidence_scope_id, project_source_snapshot_id,
-  screen_stage) WHERE status != 'failed'` (schema.py:268), so a second
-  non-failed stage-1 row cannot be INSERTed at all; `_load_stage1_docs`
-  skips already-screened docs (screen.py:357); and the timestamp column
-  is `screened_at`, not `created_at`. Every real fix (generation
-  column, index alter, row mutation) is schema-beyond-decision-2 or
-  violates replacement-never-deletes — the contract's own stop
-  condition. Disposition: doc-grain re-screen supersession moves to
-  **its own slice** (which takes the schema decision properly); P2's
-  option set drops "adjust criteria + re-screen"; replacement re-runs
-  in 024 are exactly the reference-moving ones (reselect ·
-  re-characterise · re-group). Contract decision 7(b) + decision 5 P2
-  amended to match; ADR records the exclusion + why.
+- **Criteria-changed re-screen — IN via generation supersession (owner
+  expanded the schema gate at the plan gate, 2026-07-16, reversing the
+  B1 exclusion).** Review B1 stands as the feasibility fact: the
+  no-schema recency-first pin was infeasible (`uq_ssr_scope_source_stage`
+  partial UNIQUE blocks the fresh stage-1 INSERT, schema.py:268;
+  `_load_stage1_docs` skips screened docs, screen.py:357; the column is
+  `screened_at`). Schema-backed design (lead): **(i)**
+  `source_screening_result.screen_generation INT NOT NULL DEFAULT 0`;
+  **(ii)** the partial unique index widened to `(evidence_scope_id,
+  project_source_snapshot_id, screen_stage, screen_generation) WHERE
+  status != 'failed'`. Re-screen (a replacement re-run) writes fresh
+  rows at `generation = max+1`; old rows immutable;
+  `effective_screen_rows` orders **generation DESC, stage DESC**
+  (stage-1→stage-2 flow and demote-only intact within a generation —
+  what they always meant); `_load_stage1_docs`'s skip is bypassed only
+  under the explicit re-screen re-run. Consumers move in lockstep
+  (characterise ×2, select eligibility, screen skip logic) — interface
+  unchanged, they consume the function. Stage-2 rows: a re-screen
+  re-runs stage 2 at the new generation only where the P2 option asks
+  for it; otherwise the new generation is stage-1-only and effective
+  rows for its docs are stage-1 (by design — the criteria changed).
+  Rides the same Phase-1 alembic revision as `capability_run`.
 - **Watch caps (internal constants, dev-side only)**:
   `WATCH_FALLBACK_TOOL_CALLS = 2` · invocation classes = decision-point
   | trigger-fired | anomalous check-in (failed/retried/skipped/degraded)
@@ -95,8 +100,10 @@
 
 **Phase 1 — walk identity + event chassis + projection (full verify —
 schema class, mandatory)**
-1. `capability_run` table + `runs.capability_run_id` + migration +
-   roundtrip tests (DDL pinned above). — **fast-worker** *(mechanical)*
+1. One alembic revision: `capability_run` table + composite `runs` FK
+   **+ `screen_generation` column + the widened partial unique index**
+   (both DDL pins above) + roundtrip tests. — **fast-worker**
+   *(mechanical)*
 2. Runner: walk-row lifecycle (open/thread/close) + the **emission
    chassis** (vocabulary, payload rules, run-id assertion,
    transactional-pairing helper) + emission at the **Phase-1-reachable
@@ -140,10 +147,14 @@ effective rows)**
    fault-injected tests (failed re-entry degrades honestly, nothing
    already-processed re-runs, no double-spend downstream). —
    **codex→deep-reasoner** *(separate brief from 7 — one concern each)*
-9. ~~Effective-screen-row supersession~~ — **struck per review B1**
-   (criteria-changed re-screen excluded from 024; see the pins block).
-   Phase 3 ships tasks 7–8 only; the P2 option set in Task 11 excludes
-   "adjust criteria + re-screen".
+9. Generation supersession (restored — owner schema-gate expansion; the
+   pin above is the design): `effective_screen_rows` generation-first
+   ordering + the re-screen generation write path + skip-logic bypass
+   under re-screen + consumer lockstep tests (characterise ×2, select
+   eligibility, screen skip) + the stage-2→fresh-generation-stage-1
+   supersession test (now buildable). — **codex→deep-reasoner**
+   *(reader-semantics change; the review's mandatory-class argument for
+   this phase's full gate)*
 
 **Phase 4 — lattice + triggers + modes (`make verify-fast` —
 runner/steering-internal, schema untouched)**
@@ -151,7 +162,8 @@ runner/steering-internal, schema untouched)**
     + seeded-row tests. — **fast-worker** *(per-class specs from the
     study's file:line inventory)*
 11. P1–P4 wiring: pause-set recompile (mode table), bundle builders
-    (pins above; P2 options exclude criteria+re-screen per B1; P2's
+    (pins above; P2 options include criteria+re-screen via Task 9's
+    generation path; P2's
     executed/zero-result queries and screen quality-collapse triggers
     parse `search.executed`/`source.screened` event JSONB — exact
     payload keys pinned in the brief from the study, review N1),
@@ -259,11 +271,13 @@ Five full gates / six code phases; the three fast gates argued above.
 
 ## De-scope levers (contract stop-conditions, pre-authorised order)
 
-Lever #2 (criteria-changed re-screen) was **exercised at plan stage** on
-feasibility (review B1) — already out, recorded in the pins block. The
-remaining in-build lever: the fallback deliberation loop (ship
-single-shot only; escalation demand-meter). Flagged in verification.md
-if pulled.
+Lever #2 (criteria-changed re-screen) was exercised on feasibility
+(review B1), then **restored by the owner's schema-gate expansion** —
+it returns to being an in-build lever, now cut-able as a clean
+sub-feature toggle (skip Task 9 + the P2 criteria option; the
+generation column ships regardless, inert at generation 0). Lever #1
+stays the first cut: the fallback deliberation loop (ship single-shot
+only; escalation demand-meter). Any pull is flagged in verification.md.
 
 ## Gate-framing note (review N4)
 

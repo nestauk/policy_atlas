@@ -465,6 +465,26 @@ watch discipline 3).
   (chassis → grammar families → lattice → watch/router → prompts → live
   check) with per-phase verify gates.
 
+## Plan-gate adjudications (2026-07-16)
+
+Plan-stage adversarial review (deep-reasoner lane of record; the Codex
+family-flip attempted twice, blocked on workspace credits — session
+resumable). All findings adjudicated into the plan; headline: **B1** —
+the no-schema recency-first screen supersession proved infeasible
+(partial unique index blocks the fresh-row INSERT), briefly excluded,
+then **restored by the owner's schema-gate expansion** ("I'm fine with
+schema changes for this slice") on the lead's generation-supersession
+design: `screen_generation` column + widened partial unique index;
+generation-first effective-row ordering; skip-bypass only under
+explicit re-screen. Schema gate now = capability_run (+ composite runs
+FK) + screen_generation (+ index). Also folded: task-2 emission rescope
+(per-path wiring lives with the path's task; rubric-10 closes at
+Phase-5 exit) · pre-first-run emission invariant · B2′ split
+(fencing/consumer → deep-reasoner) · composite runs FK ·
+mode_change on `steering.decision` · authority-order test owned ·
+Phase-5 split seam pre-marked · gate framing corrected (verify-fast
+defers less than implied).
+
 ## Owner cost adjudication (2026-07-16, after the adversarial round)
 
 The M5 cost exposure resolved by design, not de-scope — **A + B + C

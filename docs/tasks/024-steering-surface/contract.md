@@ -245,8 +245,8 @@ front-end/API renderers · schema beyond decision 2.
 5. **The lattice and the modes** — as the annex pins them: P1 exception-
    only (coverage-record triggers) · P2 pre-select coverage (full
    picture: screened counts, type/quality mix, themes, executed queries;
-   additive re-search segment; re-characterise — criteria+re-screen
-   excluded per decision 7b) · P3
+   additive re-search segment; criteria+re-screen via generation
+   supersession, decision 7b; re-characterise) · P3
    deepening-selection (S0-enriched triggers, selection preview, profile/
    refresh/strata/doc-exclusion options, combined free-text levers) · P4
    synthesis shape (proposal, sections, boosts, re-group). Modes renamed
@@ -293,11 +293,19 @@ front-end/API renderers · schema beyond decision 2.
    (partial UNIQUE on scope/doc/stage for non-failed rows) blocks the
    fresh stage-1 INSERT itself, and every real fix is
    schema-beyond-decision-2 or violates replacement-never-deletes. The
-   pre-authorised de-scope lever was exercised up front: doc-grain
-   re-screen supersession is **its own future slice** (which takes the
-   schema decision properly); P2's options exclude
-   criteria+re-screen; 024's replacement re-runs are exactly the
-   reference-moving ones (reselect · re-characterise · re-group).
+   pre-authorised de-scope lever was exercised up front — **then
+   reversed by the owner at the plan gate (2026-07-16): "I'm fine with
+   schema changes for this slice."** Criteria-changed re-screen is back
+   IN on the schema-backed design: **generation supersession** —
+   `source_screening_result.screen_generation INT NOT NULL DEFAULT 0` +
+   the partial unique index widened to include it; re-screen writes
+   fresh rows at `generation = max+1`; old rows immutable
+   (replacement-never-deletes holds); `effective_screen_rows` orders
+   generation-first, stage-second (stage-1→stage-2 flow and demote-only
+   intact within a generation); doc-skip bypassed only under an
+   explicit re-screen re-run. So 024's replacement re-runs are the
+   reference-moving ones (reselect · re-characterise · re-group) plus
+   doc-grain re-screen via generations.
 8. **The trigger floor** — computed from persisted state only, never
    recomputed, never watch-suppressible: the S0 select signals · P1
    coverage triggers · P2 coverage/type/quality collapse · P4 grouping
@@ -329,8 +337,12 @@ front-end/API renderers · schema beyond decision 2.
   (per-doc mini-class, only when emphasis is set). All behind the one
   seam with deterministic stubs; CI stays zero-egress. No new search
   egress. No provider-side conversation state (018 constraint).
-- **Schema (hard gate — approved):** exactly decision 2. Anything further
-  is a stop condition.
+- **Schema (hard gate — expanded by owner at the plan gate, 2026-07-16:
+  "I'm fine with schema changes for this slice"):** exactly (i) decision
+  2 (`capability_run` + the composite `runs` FK) and (ii) decision 7b
+  (`source_screening_result.screen_generation` + the widened partial
+  unique index). `event_log` untouched. Anything beyond these two is a
+  stop condition.
 - Deps: none. CI: untouched. Public interface: CLI additions only.
 
 ## Public / private boundary

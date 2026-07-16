@@ -8,10 +8,11 @@ The task is **done only if every box holds** — otherwise it is in progress.
 2. [ ] `make verify` passes; declared manual/live checks pass (stub-backed,
        zero-egress in CI); migration roundtrip green.
 3. [ ] No approval-gated change snuck in unapproved — schema diff is
-       **exactly** decision 2 (`capability_run` + `runs.capability_run_id`;
-       `event_log` untouched); no new deps; CI untouched; egress is the
-       orchestrator moments + B2′ annotator only; no provider-side
-       conversation state.
+       **exactly** decision 2 (`capability_run` + the composite `runs`
+       FK) plus decision 7b (`screen_generation` + the widened partial
+       unique index); `event_log` untouched; no new deps; CI untouched;
+       egress is the orchestrator moments + B2′ annotator only; no
+       provider-side conversation state.
 4. [ ] No generated files or secrets edited by hand.
 5. [ ] No tests deleted, skipped or weakened without written justification.
 6. [ ] Verification evidence recorded ([verification.md](verification.md)).
