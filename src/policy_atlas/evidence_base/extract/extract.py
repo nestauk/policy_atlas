@@ -123,6 +123,13 @@ MAX_CONCURRENT_EXTRACT = 4
 EXTRACTION_PROFILE = PROFILE_ID
 KNOWN_PROFILE_IDS = (PROFILE_ID, ICF_PROFILE_ID)
 
+# D3 (024 steering surface): extraction.refresh — memo-bypass class vocabulary.
+# "abstract_only" and "all" force a fresh extraction attempt for their class
+# even where a durable memo hit exists; "failed" needs no bypass code of its
+# own — MEMO_STATUSES already excludes extraction_failed rows from the memo
+# lookup, so a previously-failed document is always re-attempted regardless.
+EXTRACTION_REFRESH_VALUES: tuple[str, ...] = ("abstract_only", "failed", "all")
+
 # 018 C5 finding vetter: component.completed payload record cap (flag-not-drop —
 # every flagged finding is counted; only the displayed record list is capped).
 VETTED_OUT_RECORDS_CAP = 50
@@ -310,6 +317,12 @@ class _Doc:
     # Provenance class.
     reused: bool = False
     extractable: bool = False  # basis-ok, memo-miss: needs calls
+    # D3 (024 steering surface): set when extractable because refresh bypassed
+    # an existing memo hit — the write path must stamp this doc's fresh row
+    # with the refresh-tagged fingerprint (never the base one), or it would
+    # collide with the surviving base-fingerprint row on
+    # uq_ser_memo (project_id, source_snapshot_id, extraction_fingerprint).
+    refreshed: bool = False
 
     # Outcome.
     status: str = ""
@@ -594,8 +607,22 @@ def _apply_memo(
     project_id: uuid.UUID,
     fingerprint: str,
     docs: list[_Doc],
+    refresh: str | None = None,
 ) -> None:
-    """Mark basis-ok documents reused (memo hit) or extractable (memo miss)."""
+    """Mark basis-ok documents reused (memo hit) or extractable (memo miss).
+
+    Args:
+        conn: Open database connection.
+        project_id: Owning project.
+        fingerprint: Extraction fingerprint for this profile run.
+        docs: Profile-local documents to classify.
+        refresh: D3 ``extraction.refresh`` value, or ``None`` (as-built memo
+            behaviour). ``"all"`` bypasses every memo hit; ``"abstract_only"``
+            bypasses only hits whose stored ``basis`` is ``"abstract_only"``.
+            ``"failed"`` needs no bypass here — a prior ``extraction_failed``
+            row is never a memo hit (``MEMO_STATUSES`` excludes it), so a
+            previously-failed document is already re-attempted by default.
+    """
     basis_snapshots = [
         doc.basis_snapshot_id
         for doc in docs
@@ -615,9 +642,16 @@ def _apply_memo(
             .where(source_extraction_record.c.extraction_fingerprint == fingerprint)
             .where(source_extraction_record.c.status.in_(MEMO_STATUSES))
             .where(source_extraction_record.c.source_snapshot_id.in_(basis_snapshots))
+            # Deterministic pick when refresh (D3) has produced more than one
+            # successful row for the same fingerprint + snapshot: the most
+            # recent row is always the effective memo hit.
+            .order_by(source_extraction_record.c.created_at.desc())
         ).fetchall()
         for row in rows:
-            memo[cast("uuid.UUID", row.source_snapshot_id)] = _MemoHit(
+            snapshot_id = cast("uuid.UUID", row.source_snapshot_id)
+            if snapshot_id in memo:
+                continue
+            memo[snapshot_id] = _MemoHit(
                 extraction_record_id=row.extraction_record_id,
                 status=row.status,
                 basis=row.basis,
@@ -630,6 +664,10 @@ def _apply_memo(
         hit = memo.get(doc.basis_snapshot_id)
         if hit is None:
             doc.extractable = True
+            continue
+        if refresh == "all" or (refresh == "abstract_only" and hit.basis == "abstract_only"):
+            doc.extractable = True
+            doc.refreshed = True
             continue
         doc.reused = True
         doc.extraction_record_id = hit.extraction_record_id
@@ -1124,20 +1162,42 @@ def _write_docs(
     docs: list[_Doc],
     created_at: datetime,
     profile: ExtractionProfileBundle,
+    refresh_fingerprint: str | None = None,
 ) -> None:
-    """Write each non-reused document's record + findings in selected-set order."""
+    """Write each non-reused document's record + findings in selected-set order.
+
+    Args:
+        conn: Open database connection.
+        project_id: Owning project.
+        run_id: Run writing the records.
+        fingerprint: Base (non-refresh) extraction fingerprint.
+        docs: Profile-local documents to write.
+        created_at: Write timestamp.
+        profile: Extraction profile bundle.
+        refresh_fingerprint: D3 refresh-tagged fingerprint. Documents marked
+            ``doc.refreshed`` are stamped with this fingerprint instead of the
+            base one — the surviving base-fingerprint row for that snapshot
+            still exists, so writing under the same fingerprint would
+            collide with ``uq_ser_memo`` (project_id, source_snapshot_id,
+            extraction_fingerprint).
+    """
     for doc in docs:
         if doc.reused:
             continue
         record_id = uuid.uuid4()
         doc.extraction_record_id = record_id
+        doc_fingerprint = (
+            refresh_fingerprint
+            if doc.refreshed and refresh_fingerprint is not None
+            else fingerprint
+        )
         conn.execute(
             source_extraction_record.insert().values(
                 extraction_record_id=record_id,
                 project_id=project_id,
                 source_snapshot_id=doc.record_snapshot_id,
                 project_source_snapshot_id=doc.pss_id,
-                extraction_fingerprint=fingerprint,
+                extraction_fingerprint=doc_fingerprint,
                 status=doc.status,
                 basis=doc.basis,
                 primary_evidence_type=doc.sent_evidence_type,
@@ -1312,6 +1372,7 @@ def _build_summary(
     profile_runs: Sequence[_ProfileRun],
     *,
     selection_run_id: uuid.UUID,
+    refresh: str | None = None,
 ) -> dict[str, Any]:
     selected = len(base_docs)
     counts_profiles: dict[str, Any] = {}
@@ -1379,7 +1440,10 @@ def _build_summary(
         },
         "selection_run_id": str(selection_run_id),
         "flags": flags,
-        "provenance": {"profiles": provenance_profiles, "pass_count": 1},
+        # D3 (024 steering surface): the executed refresh value is echoed
+        # verbatim, scope-wide (it applies identically across every requested
+        # profile's memo bypass) — None when absent, byte-identical to as-built.
+        "provenance": {"profiles": provenance_profiles, "pass_count": 1, "refresh": refresh},
         "profiles": summary_profiles,
         "usage_totals": usage_accumulator.payload(),
     }
@@ -1463,53 +1527,73 @@ def _selected_profiles(
     ]
 
 
-def _parse_extraction_directive(raw: Any) -> tuple[str, ...]:
-    """Parse the scope-context extraction directive into canonical profile ids.
+def _parse_extraction_directive(raw: Any) -> tuple[tuple[str, ...], str | None]:
+    """Parse the scope-context extraction directive.
 
     Args:
         raw: The ``context["extraction"]`` object, or ``None``.
 
     Returns:
-        Requested profile ids in ``KNOWN_PROFILE_IDS`` order.
+        ``(profiles, refresh)``: requested profile ids in ``KNOWN_PROFILE_IDS``
+        order, and the D3 ``refresh`` value (``None`` when absent — absent is
+        byte-identical to as-built memo behaviour).
 
     Raises:
         ExtractError: If the directive shape is malformed, names an unknown or
-            duplicate profile id, is empty, or omits the required IOF profile.
+            duplicate profile id, is empty, omits the required IOF profile, or
+            carries a ``refresh`` value outside ``EXTRACTION_REFRESH_VALUES``.
     """
     if raw is None:
-        return (PROFILE_ID,)
+        return (PROFILE_ID,), None
     if not isinstance(raw, dict):
         raise ExtractError("extraction directive must be an object")
     if not raw:
-        return (PROFILE_ID,)
-    if set(raw) != {"profiles"}:
-        raise ExtractError("extraction directive must contain exactly ['profiles']")
-
-    profiles_raw = raw["profiles"]
-    if not isinstance(profiles_raw, list):
-        raise ExtractError("extraction directive profiles must be a list")
-    if not profiles_raw:
-        raise ExtractError("extraction directive profiles must not be empty")
-
-    requested: set[str] = set()
-    for item in profiles_raw:
-        if not isinstance(item, str):
-            raise ExtractError("extraction directive profile id must be a string")
-        if item not in KNOWN_PROFILE_IDS:
-            raise ExtractError(
-                f"extraction directive profiles contains unknown profile id {item!r}"
-            )
-        if item in requested:
-            raise ExtractError(
-                f"extraction directive profiles contains duplicate profile id {item!r}"
-            )
-        requested.add(item)
-    if PROFILE_ID not in requested:
+        return (PROFILE_ID,), None
+    unknown = set(raw) - {"profiles", "refresh"}
+    if unknown:
         raise ExtractError(
-            f"extraction directive profiles must include {PROFILE_ID!r}; "
-            "ICF-only extraction is unsupported"
+            f"extraction directive contains unknown keys: {sorted(unknown)}"
         )
-    return tuple(profile_id for profile_id in KNOWN_PROFILE_IDS if profile_id in requested)
+
+    profiles: tuple[str, ...] = (PROFILE_ID,)
+    if "profiles" in raw:
+        profiles_raw = raw["profiles"]
+        if not isinstance(profiles_raw, list):
+            raise ExtractError("extraction directive profiles must be a list")
+        if not profiles_raw:
+            raise ExtractError("extraction directive profiles must not be empty")
+
+        requested: set[str] = set()
+        for item in profiles_raw:
+            if not isinstance(item, str):
+                raise ExtractError("extraction directive profile id must be a string")
+            if item not in KNOWN_PROFILE_IDS:
+                raise ExtractError(
+                    f"extraction directive profiles contains unknown profile id {item!r}"
+                )
+            if item in requested:
+                raise ExtractError(
+                    f"extraction directive profiles contains duplicate profile id {item!r}"
+                )
+            requested.add(item)
+        if PROFILE_ID not in requested:
+            raise ExtractError(
+                f"extraction directive profiles must include {PROFILE_ID!r}; "
+                "ICF-only extraction is unsupported"
+            )
+        profiles = tuple(profile_id for profile_id in KNOWN_PROFILE_IDS if profile_id in requested)
+
+    refresh: str | None = None
+    if "refresh" in raw:
+        refresh_raw = raw["refresh"]
+        if not isinstance(refresh_raw, str) or refresh_raw not in EXTRACTION_REFRESH_VALUES:
+            raise ExtractError(
+                "extraction directive refresh must be one of "
+                f"{EXTRACTION_REFRESH_VALUES}"
+            )
+        refresh = refresh_raw
+
+    return profiles, refresh
 
 
 def _clone_doc_for_profile(doc: _Doc) -> _Doc:
@@ -1541,13 +1625,24 @@ def _run_profile(
     selected_count: int,
     profile: ExtractionProfileBundle,
     created_at: datetime,
+    refresh: str | None = None,
 ) -> _ProfileRun:
     finding_vetter_active = profile.vetter_backend is not None
     fingerprint, components = profile.fingerprint(
         profile.backend.mode, finding_vetter_active
     )
+    # D3: a refreshed doc's fresh write must never collide with the surviving
+    # base-fingerprint row for the same snapshot (uq_ser_memo) — refresh
+    # enters a SEPARATE write-only fingerprint, never the query fingerprint
+    # (memo lookups always use the base fingerprint, so future non-refresh
+    # runs keep reusing whichever row is currently effective).
+    refresh_fingerprint = (
+        _digest({**components, "refresh": refresh})[0] if refresh is not None else None
+    )
     docs = [_clone_doc_for_profile(doc) for doc in base_docs]
-    _apply_memo(conn, project_id=project_id, fingerprint=fingerprint, docs=docs)
+    _apply_memo(
+        conn, project_id=project_id, fingerprint=fingerprint, docs=docs, refresh=refresh
+    )
 
     per_doc, doc_errors, baseline, budget, retry_count, window_usage_totals = _run_windows(
         docs, profile=profile
@@ -1583,6 +1678,7 @@ def _run_profile(
         docs=docs,
         created_at=created_at,
         profile=profile,
+        refresh_fingerprint=refresh_fingerprint,
     )
     return _ProfileRun(
         profile_id=profile.profile_id,
@@ -1612,6 +1708,7 @@ def extract_scope(
     icf_extraction_backend: Any | None = None,
     icf_finding_vetter_backend: ICFFindingVetterBackend | None = None,
     profiles: Sequence[str] = (PROFILE_ID,),
+    refresh: str | None = None,
 ) -> dict[str, Any]:
     """Extract findings for one evidence scope's selection.
 
@@ -1632,6 +1729,8 @@ def extract_scope(
         icf_finding_vetter_backend: Optional ICF post-extract finding vetter.
         profiles: Selected extraction profile ids. Profiles run in
             ``KNOWN_PROFILE_IDS`` order regardless of caller order.
+        refresh: D3 ``extraction.refresh`` value (``"abstract_only" | "failed"
+            | "all"``), or ``None`` for as-built memo behaviour.
 
     Returns:
         The extraction summary payload for ``component.completed``.
@@ -1678,6 +1777,7 @@ def extract_scope(
             selected_count=len(selected),
             profile=profile,
             created_at=created_at,
+            refresh=refresh,
         )
         for profile in profile_bundles
     ]
@@ -1685,6 +1785,7 @@ def extract_scope(
         docs,
         profile_runs,
         selection_run_id=context.selection_run_id,
+        refresh=refresh,
     )
     # The roll-up is the LAST fallible statement (the 010 pattern): the harness
     # catches without rollback, so nothing may fail after this insert.

@@ -249,6 +249,7 @@ def _run(
     selection_run_id: uuid.UUID,
     *,
     profiles: tuple[str, ...] = (IOF_PROFILE_ID,),
+    refresh: str | None = None,
 ) -> tuple[dict[str, Any], uuid.UUID]:
     """Seed a fresh extract run and execute extract_scope; return (summary, run_id)."""
     run_id = seed_run(conn, project_id)
@@ -261,6 +262,7 @@ def _run(
         ),
         extraction_backend=StubExtractionBackend(),
         profiles=profiles,
+        refresh=refresh,
     )
     return summary, run_id
 
@@ -768,6 +770,164 @@ def test_memo_reuse(conn: Connection) -> None:
     assert profile_doc(second)["extraction_record_id"] == first_record_id
     # No new finding rows were written on the reused run.
     assert _finding_count(conn, project_id) == findings_after_first
+
+
+def test_memo_reuse_refresh_absent_is_byte_identical_to_as_built(conn: Connection) -> None:
+    """Guard test: refresh absent/None reuses the memo exactly as as-built."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    content = "Home visiting reduced hospital admissions among infants."
+    cid = uuid.uuid4()
+    pss_id, _ = _seed_full_text_doc(
+        conn, project_id, sel_run, scope_id, title="Home visiting", chunk_content=content,
+        chunk_id=cid,
+        stub_iof=[_record(
+            intervention="home visiting", outcome="hospital admissions",
+            quote="Home visiting reduced hospital admissions", segment_id=str(cid),
+            effect_direction="decrease",
+        )],
+    )
+    _seed_selection(conn, project_id, sel_run, scope_id,
+                    [{"pss_id": str(pss_id), "text_basis": "full_text"}])
+
+    first, _ = _run(conn, project_id, scope_id, sel_run)
+    assert first["provenance"]["refresh"] is None
+    first_record_id = profile_doc(first)["extraction_record_id"]
+
+    second, _ = _run(conn, project_id, scope_id, sel_run, refresh=None)
+
+    assert second["provenance"]["refresh"] is None
+    assert profile_counts(second)["reused"] == 1
+    assert profile_doc(second)["extraction_record_id"] == first_record_id
+
+
+def test_refresh_abstract_only_bypasses_only_that_class(conn: Connection) -> None:
+    """D3: refresh='abstract_only' re-extracts only prior abstract_only-basis docs."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+
+    abstract = "Mentoring improved school attendance for disadvantaged pupils."
+    abstract_pss_id = _seed_abstract_doc(
+        conn, project_id, title="Mentoring", abstract=abstract,
+        stub_iof=[_record(
+            intervention="mentoring", outcome="school attendance",
+            quote="Mentoring improved school attendance", segment_id="abstract",
+        )],
+    )
+    full_text_content = "Home visiting reduced hospital admissions among infants."
+    cid = uuid.uuid4()
+    full_text_pss_id, _ = _seed_full_text_doc(
+        conn, project_id, sel_run, scope_id, title="Home visiting",
+        chunk_content=full_text_content, chunk_id=cid,
+        stub_iof=[_record(
+            intervention="home visiting", outcome="hospital admissions",
+            quote="Home visiting reduced hospital admissions", segment_id=str(cid),
+            effect_direction="decrease",
+        )],
+    )
+    _seed_selection(conn, project_id, sel_run, scope_id, [
+        {"pss_id": str(abstract_pss_id), "text_basis": "abstract_only"},
+        {"pss_id": str(full_text_pss_id), "text_basis": "full_text"},
+    ])
+
+    first, _ = _run(conn, project_id, scope_id, sel_run)
+    by_pss_first = {d["pss_id"]: d for d in profile_docs(first)}
+    abstract_record_id_first = by_pss_first[str(abstract_pss_id)]["extraction_record_id"]
+    full_text_record_id_first = by_pss_first[str(full_text_pss_id)]["extraction_record_id"]
+
+    second, _ = _run(conn, project_id, scope_id, sel_run, refresh="abstract_only")
+
+    assert second["provenance"]["refresh"] == "abstract_only"
+    by_pss_second = {d["pss_id"]: d for d in profile_docs(second)}
+    # The abstract_only doc is re-extracted fresh (bypassed the memo hit)...
+    assert by_pss_second[str(abstract_pss_id)]["reused"] is False
+    assert (
+        by_pss_second[str(abstract_pss_id)]["extraction_record_id"]
+        != abstract_record_id_first
+    )
+    # ...while the full_text doc's memo hit is untouched (not in the refreshed class).
+    assert by_pss_second[str(full_text_pss_id)]["reused"] is True
+    assert (
+        by_pss_second[str(full_text_pss_id)]["extraction_record_id"]
+        == full_text_record_id_first
+    )
+
+
+def test_refresh_all_bypasses_every_memo_hit(conn: Connection) -> None:
+    """D3: refresh='all' re-extracts every selected doc regardless of basis."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    content = "Home visiting reduced hospital admissions among infants."
+    cid = uuid.uuid4()
+    pss_id, _ = _seed_full_text_doc(
+        conn, project_id, sel_run, scope_id, title="Home visiting", chunk_content=content,
+        chunk_id=cid,
+        stub_iof=[_record(
+            intervention="home visiting", outcome="hospital admissions",
+            quote="Home visiting reduced hospital admissions", segment_id=str(cid),
+            effect_direction="decrease",
+        )],
+    )
+    _seed_selection(conn, project_id, sel_run, scope_id,
+                    [{"pss_id": str(pss_id), "text_basis": "full_text"}])
+
+    first, _ = _run(conn, project_id, scope_id, sel_run)
+    first_record_id = profile_doc(first)["extraction_record_id"]
+
+    second, _ = _run(conn, project_id, scope_id, sel_run, refresh="all")
+
+    assert second["provenance"]["refresh"] == "all"
+    assert profile_doc(second)["reused"] is False
+    assert profile_doc(second)["extraction_record_id"] != first_record_id
+    assert profile_counts(second)["fresh"] == 1
+    assert profile_counts(second)["reused"] == 0
+
+
+def test_refresh_failed_class_leaves_successful_memo_hits_untouched(
+    conn: Connection,
+) -> None:
+    """D3: refresh='failed' only affects prior extraction_failed docs (already
+    the as-built retry behaviour — MEMO_STATUSES never memo-hits a failed row);
+    a sibling successful memo hit is unaffected."""
+    project_id, sel_run = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+
+    ok_chunk = uuid.uuid4()
+    ok_pss, _ = _seed_full_text_doc(
+        conn, project_id, sel_run, scope_id, title="Good doc",
+        chunk_content="Coaching increased graduation rates in the trial.",
+        chunk_id=ok_chunk,
+        stub_iof=[_record(
+            intervention="coaching", outcome="graduation rates",
+            quote="Coaching increased graduation rates", segment_id=str(ok_chunk),
+        )],
+    )
+    fail_pss, _ = _seed_full_text_doc(
+        conn, project_id, sel_run, scope_id, title="Bad doc",
+        chunk_content="Some content here.", stub_failed=True,
+    )
+    _seed_selection(conn, project_id, sel_run, scope_id, [
+        {"pss_id": str(ok_pss), "text_basis": "full_text"},
+        {"pss_id": str(fail_pss), "text_basis": "full_text"},
+    ])
+
+    first, _ = _run(conn, project_id, scope_id, sel_run)
+    by_pss_first = {d["pss_id"]: d for d in profile_docs(first)}
+    assert by_pss_first[str(fail_pss)]["status"] == "extraction_failed"
+    ok_record_id_first = by_pss_first[str(ok_pss)]["extraction_record_id"]
+
+    second, _ = _run(conn, project_id, scope_id, sel_run, refresh="failed")
+
+    assert second["provenance"]["refresh"] == "failed"
+    by_pss_second = {d["pss_id"]: d for d in profile_docs(second)}
+    # The previously-failed doc got a fresh attempt (as-built default already
+    # retries it; refresh='failed' does not change this).
+    assert by_pss_second[str(fail_pss)]["reused"] is False
+    assert by_pss_second[str(fail_pss)]["status"] == "extraction_failed"
+    # The sibling successful memo hit is untouched — refresh='failed' never
+    # bypasses a successful record.
+    assert by_pss_second[str(ok_pss)]["reused"] is True
+    assert by_pss_second[str(ok_pss)]["extraction_record_id"] == ok_record_id_first
 
 
 def test_fingerprint_change_extracts_fresh_alongside(

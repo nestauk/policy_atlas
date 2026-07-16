@@ -121,6 +121,311 @@ def test_extract_directive_delta_validation_fails_closed(
         _validate_directive_delta("extract", delta, backend_scope="both")
 
 
+@pytest.mark.parametrize(
+    ("delta", "match"),
+    [
+        ({"appraisal": {"rubric": {}}}, "non-empty"),
+        ({"appraisal": {"rubric": {"Not A Real Type": 3}}}, "unknown evidence type"),
+        (
+            {"appraisal": {"rubric": {"Expert Opinion and Commentary": 0}}},
+            "between 1 and 5",
+        ),
+        ({"screening": {}}, "must contain exactly"),  # wrong key for "appraise"
+    ],
+)
+def test_appraise_directive_delta_validation_fails_closed(
+    delta: dict[str, Any],
+    match: str,
+) -> None:
+    with pytest.raises(SteeringAdjustmentError, match=match):
+        _validate_directive_delta("appraise", delta, backend_scope="both")
+
+
+def test_appraise_directive_delta_validates_and_is_exempt_from_plan_round_trip() -> None:
+    """D1: the appraisal rubric override is a commit-layer directive with no
+    OrchestrationPlan field (apply_reselect precedent). It validates at the
+    parser but is honestly exempted from the generic round-trip check —
+    unlike every other component, it is never expected to appear in the
+    recomposed chain's directive_delta."""
+    delta = {"appraisal": {"rubric": {"Expert Opinion and Commentary": 5}}}
+    _validate_directive_delta("appraise", delta, backend_scope="both")  # does not raise
+
+    chain = compose(_base_plan())
+    _validate_delta_round_trip({"appraise": delta}, amended_chain=chain)  # does not raise
+    appraise_step = next(step for step in chain.steps if step.component == "appraise")
+    assert appraise_step.directive_delta == {}  # confirmed: no plan field carries it
+
+
+# --- D3 extraction.refresh: _validate_directive_delta flows through the parser ---
+
+
+@pytest.mark.parametrize(
+    "delta",
+    [
+        {"extraction": {"refresh": "abstract_only"}},
+        {"extraction": {"refresh": "failed"}},
+        {"extraction": {"refresh": "all"}},
+        {"extraction": {"profiles": [IOF_PROFILE_ID, ICF_PROFILE_ID], "refresh": "all"}},
+    ],
+)
+def test_extract_refresh_directive_delta_validates(delta: dict[str, Any]) -> None:
+    _validate_directive_delta("extract", delta, backend_scope="both")  # does not raise
+
+
+@pytest.mark.parametrize(
+    ("delta", "match"),
+    [
+        ({"extraction": {"refresh": "everything"}}, "refresh"),
+        ({"extraction": {"refresh": 1}}, "refresh"),
+        ({"extraction": {"bogus": True}}, "unknown keys"),
+    ],
+)
+def test_extract_refresh_directive_delta_rejects_bogus_value(
+    delta: dict[str, Any], match: str
+) -> None:
+    with pytest.raises(SteeringAdjustmentError, match=match):
+        _validate_directive_delta("extract", delta, backend_scope="both")
+
+
+def test_extract_refresh_is_exempt_from_plan_round_trip_but_profiles_still_are() -> None:
+    """D3: refresh has no OrchestrationPlan field (commit-layer, appraisal-rubric
+    precedent) and is silently exempted from the round-trip comparison; the
+    sibling profiles key still round-trips normally."""
+    # _base_plan()'s default "deep" depth compiles extract_profiles to both
+    # IOF and ICF (ANALYSIS_DEPTH_TABLE["deep"]) — matched here so the
+    # profiles half of the round-trip check genuinely passes.
+    delta = {
+        "extraction": {"profiles": [IOF_PROFILE_ID, ICF_PROFILE_ID], "refresh": "all"}
+    }
+    _validate_directive_delta("extract", delta, backend_scope="both")  # does not raise
+
+    chain = compose(_base_plan())
+    # Does not raise: profiles round-trips through extract_profiles; refresh is
+    # discarded rather than compared.
+    _validate_delta_round_trip({"extract": delta}, amended_chain=chain)
+
+
+# --- D5 search.target: _validate_directive_delta flows through the parser ---
+
+
+@pytest.mark.parametrize(
+    "delta",
+    [
+        {"search": {"target": 5}},
+        {"search": {"target": 60}},
+        {"search": {"depth": "deep", "target": 30}},
+    ],
+)
+def test_acquire_target_directive_delta_validates(delta: dict[str, Any]) -> None:
+    _validate_directive_delta("acquire", delta, backend_scope="both")  # does not raise
+
+
+@pytest.mark.parametrize(
+    "delta",
+    [
+        {"search": {"target": 4}},
+        {"search": {"target": 61}},
+        {"search": {"target": "30"}},
+    ],
+)
+def test_acquire_target_directive_delta_rejects_out_of_range(delta: dict[str, Any]) -> None:
+    with pytest.raises(SteeringAdjustmentError):
+        _validate_directive_delta("acquire", delta, backend_scope="both")
+
+
+# --- D6/D7 selection.strata_scope / selection.exclude_ids ---
+
+
+@pytest.mark.parametrize(
+    "delta",
+    [
+        {"selection": {"strata_scope": {"only": ["A"]}}},
+        {"selection": {"strata_scope": {"exclude": ["A", "B"]}}},
+        {"selection": {"exclude_ids": [str(uuid.uuid4())]}},
+        {
+            "selection": {
+                "strata_scope": {"only": ["A"]},
+                "exclude_ids": [str(uuid.uuid4())],
+            }
+        },
+    ],
+)
+def test_select_strata_scope_and_exclude_ids_directive_delta_validates(
+    delta: dict[str, Any]
+) -> None:
+    _validate_directive_delta("select", delta, backend_scope="both")  # does not raise
+
+
+@pytest.mark.parametrize(
+    "delta",
+    [
+        {"selection": {"strata_scope": {"only": ["A"], "exclude": ["B"]}}},
+        {"selection": {"strata_scope": {"only": []}}},
+        {"selection": {"exclude_ids": ["not-a-uuid"]}},
+    ],
+)
+def test_select_strata_scope_and_exclude_ids_directive_delta_rejects_bogus(
+    delta: dict[str, Any]
+) -> None:
+    with pytest.raises(SteeringAdjustmentError):
+        _validate_directive_delta("select", delta, backend_scope="both")
+
+
+def test_select_exclude_ids_conflicting_with_must_include_ids_rejected() -> None:
+    """D7: the same id in both exclude_ids and must_include_ids fails closed."""
+    shared_id = str(uuid.uuid4())
+    delta = {
+        "selection": {"must_include_ids": [shared_id], "exclude_ids": [shared_id]}
+    }
+    with pytest.raises(SteeringAdjustmentError, match="conflicts"):
+        _validate_directive_delta("select", delta, backend_scope="both")
+
+
+# --- D8 grouping.granularity ---
+
+
+@pytest.mark.parametrize(
+    "delta",
+    [
+        {"grouping": {"granularity": "coarser"}},
+        {"grouping": {"granularity": "standard"}},
+        {"grouping": {"granularity": "finer"}},
+        {"grouping": {"facet": "outcome", "granularity": "finer"}},
+    ],
+)
+def test_group_granularity_directive_delta_validates(delta: dict[str, Any]) -> None:
+    _validate_directive_delta("group", delta, backend_scope="both")  # does not raise
+
+
+@pytest.mark.parametrize(
+    "delta",
+    [
+        {"grouping": {"granularity": "bogus"}},
+        {"grouping": {"granularity": 1}},
+    ],
+)
+def test_group_granularity_directive_delta_rejects_bogus_value(
+    delta: dict[str, Any]
+) -> None:
+    with pytest.raises(SteeringAdjustmentError):
+        _validate_directive_delta("group", delta, backend_scope="both")
+
+
+# --- B1 search.guidance: _validate_directive_delta flows through the parser ---
+
+
+@pytest.mark.parametrize(
+    "delta",
+    [
+        {"search": {"guidance": ["prioritise UK policy evaluations"]}},
+        {
+            "search": {
+                "depth": "deep",
+                "target": 30,
+                "guidance": ["prioritise UK policy evaluations", "avoid clinical literature"],
+            }
+        },
+    ],
+)
+def test_acquire_guidance_directive_delta_validates(delta: dict[str, Any]) -> None:
+    _validate_directive_delta("acquire", delta, backend_scope="both")  # does not raise
+
+
+@pytest.mark.parametrize(
+    "delta",
+    [
+        {"search": {"guidance": []}},
+        {"search": {"guidance": ["a", "b", "c", "d", "e", "f"]}},
+        {"search": {"guidance": [""]}},
+        {"search": {"guidance": [123]}},
+    ],
+)
+def test_acquire_guidance_directive_delta_rejects_malformed(delta: dict[str, Any]) -> None:
+    with pytest.raises(SteeringAdjustmentError):
+        _validate_directive_delta("acquire", delta, backend_scope="both")
+
+
+# --- B3 grouping.guidance: _validate_directive_delta flows through the parser ---
+
+
+@pytest.mark.parametrize(
+    "delta",
+    [
+        {"grouping": {"guidance": ["organise by policy instrument, not sector"]}},
+        {"grouping": {"facet": "outcome", "granularity": "finer", "guidance": ["a"]}},
+    ],
+)
+def test_group_guidance_directive_delta_validates(delta: dict[str, Any]) -> None:
+    _validate_directive_delta("group", delta, backend_scope="both")  # does not raise
+
+
+@pytest.mark.parametrize(
+    "delta",
+    [
+        {"grouping": {"guidance": []}},
+        {"grouping": {"guidance": ["a", "b", "c", "d", "e", "f"]}},
+        {"grouping": {"guidance": [123]}},
+    ],
+)
+def test_group_guidance_directive_delta_rejects_malformed(delta: dict[str, Any]) -> None:
+    with pytest.raises(SteeringAdjustmentError):
+        _validate_directive_delta("group", delta, backend_scope="both")
+
+
+# --- B5/D9 characterise.themes / characterise.guidance ---
+
+
+@pytest.mark.parametrize(
+    "delta",
+    [
+        {"characterise": {"themes": "fewer"}},
+        {"characterise": {"themes": "standard"}},
+        {"characterise": {"themes": "more"}},
+        {"characterise": {"guidance": ["organise around policy instruments"]}},
+        {"characterise": {"themes": "fewer", "guidance": ["organise around policy instruments"]}},
+    ],
+)
+def test_characterise_directive_delta_validates(delta: dict[str, Any]) -> None:
+    _validate_directive_delta("characterise", delta, backend_scope="both")  # does not raise
+
+
+@pytest.mark.parametrize(
+    ("delta", "match"),
+    [
+        ({"characterise": {"themes": "bogus"}}, "themes"),
+        ({"characterise": {"guidance": []}}, "guidance"),
+        ({"characterise": {"unknown_key": True}}, "unknown keys"),
+        ({"screening": {}}, "must contain exactly"),  # wrong key for "characterise"
+    ],
+)
+def test_characterise_directive_delta_validation_fails_closed(
+    delta: dict[str, Any],
+    match: str,
+) -> None:
+    with pytest.raises(SteeringAdjustmentError, match=match):
+        _validate_directive_delta("characterise", delta, backend_scope="both")
+
+
+def test_characterise_directive_delta_validates_and_is_exempt_from_plan_round_trip() -> None:
+    """B5/D9: the characterise themes/guidance directive is a commit-layer
+    directive with no OrchestrationPlan field (the appraise/D1 precedent). It
+    validates at the parser but is honestly exempted from the generic
+    round-trip check — it is never expected to appear in the recomposed
+    chain's directive_delta."""
+    delta = {
+        "characterise": {
+            "themes": "fewer",
+            "guidance": ["organise around policy instruments"],
+        }
+    }
+    _validate_directive_delta("characterise", delta, backend_scope="both")  # does not raise
+
+    chain = compose(_base_plan())
+    _validate_delta_round_trip({"characterise": delta}, amended_chain=chain)  # does not raise
+    characterise_step = next(step for step in chain.steps if step.component == "characterise")
+    assert characterise_step.directive_delta == {}  # confirmed: no plan field carries it
+
+
 def test_pause_points_compile_pinned_for_all_modes() -> None:
     # deep depth: "select" must be present for the after-select pause points.
     plan = _base_plan(search_effort="standard", analysis_depth="deep")
@@ -303,6 +608,77 @@ def test_minimal_partial_delta_round_trips_despite_composer_injected_siblings(
             (2, "approved"),
         ]
         assert rows[1].payload["screening_criteria"] == ["Exclude opinion pieces."]
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_appraise_adjustment_accepted_end_to_end_but_absent_from_plan_payload(
+    engine: Engine,
+) -> None:
+    """D1 end-to-end: an appraisal-rubric Adjust for the not-yet-run
+    ``appraise`` component is accepted by the full ``apply_adjustment`` path
+    (parser validates, round-trip is exempted) and commits a new
+    user-attributed plan version — but, being a commit-layer directive with
+    no OrchestrationPlan field, the amended payload carries no trace of it.
+    This is the flagged, deliberately-landed behaviour for D1 (task 024
+    Family D), not a bug: a full commit-layer apply path (an appraise
+    analogue of ``apply_reselect``) is out of scope here."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan(steering_mode="frequent")
+        plan_id = _insert_plan_row(
+            engine,
+            project_id=project_id,
+            scope_id=scope_id,
+            plan=plan,
+        )
+        # "frequent" pauses after every component; the Adjust fires at the
+        # very first pause (after acquire) — appraise has not run yet either
+        # way, so any not-yet-run pause validates it (group-test precedent).
+        io = ScriptedIO(
+            [
+                Adjust(
+                    directive_deltas={
+                        "appraise": {
+                            "appraisal": {"rubric": {"Expert Opinion and Commentary": 5}}
+                        }
+                    }
+                )
+            ]
+        )
+
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+        )
+
+        assert outcome.status == "succeeded"
+        with engine.connect() as conn:
+            rows = conn.execute(
+                select(
+                    orchestration_plan.c.version,
+                    orchestration_plan.c.status,
+                    orchestration_plan.c.created_by,
+                    orchestration_plan.c.payload,
+                )
+                .where(orchestration_plan.c.project_id == project_id)
+                .order_by(orchestration_plan.c.version)
+            ).all()
+        assert [(row.version, row.status, row.created_by) for row in rows] == [
+            (1, "superseded", "planner"),
+            (2, "approved", "user"),
+        ]
+        # No OrchestrationPlan field carries the appraisal directive.
+        assert "appraisal" not in rows[1].payload
+        assert "rubric" not in rows[1].payload
     finally:
         _cleanup_project(engine, project_id)
 

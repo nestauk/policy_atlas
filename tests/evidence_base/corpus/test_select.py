@@ -181,7 +181,9 @@ def test_screened_sources_effective_grain_four_shapes(conn: Connection) -> None:
 
     # demoted excluded: the candidate set (and screened_in base) reflects only
     # the three effective-relevant docs, never the demoted doc's stale stage-1 row.
-    assert summary["base"] == {"screened_in": 3, "non_evidence": 0, "eligible": 3}
+    assert summary["base"] == {
+        "screened_in": 3, "non_evidence": 0, "eligible": 3, "excluded_by_directive": 0,
+    }
 
     records = {record["pss_id"]: record for record in row._mapping["selected"]}
     assert str(demoted) not in records
@@ -263,6 +265,7 @@ def test_allocation_math_matches_hand_computed_fixture(conn: Connection) -> None
         "screened_in": 20,
         "non_evidence": 0,
         "eligible": 20,
+        "excluded_by_directive": 0,
         "not_in_characterisation": 0,
     }
     assert row._mapping["flags"] == {}
@@ -605,11 +608,14 @@ def test_non_evidence_and_not_in_characterisation_are_base_counts(conn: Connecti
         context={"selection": {"budget": 5}},
     )
 
-    assert summary["base"] == {"screened_in": 4, "non_evidence": 1, "eligible": 3}
+    assert summary["base"] == {
+        "screened_in": 4, "non_evidence": 1, "eligible": 3, "excluded_by_directive": 0,
+    }
     assert row._mapping["excluded"]["base"] == {
         "screened_in": 4,
         "non_evidence": 1,
         "eligible": 3,
+        "excluded_by_directive": 0,
         "not_in_characterisation": 1,
     }
     assert summary["selected"]["count"] == 2
@@ -813,7 +819,9 @@ def test_eligibility_base_ladder_by_evidence_type(conn: Connection) -> None:
     # 3 docs screened relevant: 1 "Other (Non-evidence documents)" excluded;
     # "Unknown / Insufficient information" and unclassified/NULL both eligible.
     # screened_in (3) == non_evidence (1) + eligible (2).
-    assert summary["base"] == {"screened_in": 3, "non_evidence": 1, "eligible": 2}
+    assert summary["base"] == {
+        "screened_in": 3, "non_evidence": 1, "eligible": 2, "excluded_by_directive": 0,
+    }
     assert summary["base"]["screened_in"] == (
         summary["base"]["non_evidence"] + summary["base"]["eligible"]
     )
@@ -859,7 +867,9 @@ def test_counting_invariants_on_mixed_fixture(conn: Connection) -> None:
     # fraction) -> ranked A=1, B=1, unclustered=0.
     # Allocated: A=1+1=2, B=0+1=1 (+1 must), unclustered=1+0=1.
     # Selected = must(1) + breadth_floor(A:1, unclustered:1 = 2) + ranked(A:1, B:1 = 2) = 5.
-    assert summary["base"] == {"screened_in": 12, "non_evidence": 1, "eligible": 11}
+    assert summary["base"] == {
+        "screened_in": 12, "non_evidence": 1, "eligible": 11, "excluded_by_directive": 0,
+    }
     assert summary["selected"] == {
         "count": 5,
         "by_reason": {"must_include": 1, "breadth_floor": 2, "ranked": 2},
@@ -1160,6 +1170,8 @@ def test_directive_and_source_recorded_whole_in_provenance(conn: Connection) -> 
         "boosts": [],
         "weight_emphasis": {},
         "priority_strata": [],
+        "strata_scope": None,
+        "exclude_ids": [],
     }
 
     _summary_ctx, row_ctx, _ = run_select(
@@ -1174,6 +1186,8 @@ def test_directive_and_source_recorded_whole_in_provenance(conn: Connection) -> 
         "boosts": [],
         "weight_emphasis": {},
         "priority_strata": [],
+        "strata_scope": None,
+        "exclude_ids": [],
     }
 
 
@@ -1219,12 +1233,28 @@ def test_unknown_column_boost_is_flagged_non_fatal(conn: Connection) -> None:
         {"priority_strata": ["x" * (DIRECTIVE_STRING_MAX + 1)]},
         {"budget": DIRECTIVE_BUDGET_MAX + 1},
         {"must_include_ids": [str(uuid.uuid4()) for _ in range(DIRECTIVE_LIST_MAX + 1)]},
+        # D6 strata_scope: malformed shapes.
+        {"strata_scope": {"only": ["A"], "exclude": ["B"]}},
+        {"strata_scope": {}},
+        {"strata_scope": {"only": []}},
+        {"strata_scope": {"only": [f"s{i}" for i in range(21)]}},
+        {"strata_scope": {"bogus": ["A"]}},
+        # D7 exclude_ids: malformed shapes.
+        {"exclude_ids": ["not-a-uuid"]},
+        {"exclude_ids": [str(uuid.uuid4()) for _ in range(51)]},
     ],
     ids=[
         "boost_tag_control_character",
         "priority_stratum_too_long",
         "budget_over_max",
         "must_include_ids_over_max",
+        "strata_scope_both_keys",
+        "strata_scope_empty",
+        "strata_scope_empty_names",
+        "strata_scope_over_max",
+        "strata_scope_unknown_key",
+        "exclude_ids_invalid_uuid",
+        "exclude_ids_over_max",
     ],
 )
 def test_malformed_directive_shapes_raise(
@@ -1244,6 +1274,186 @@ def test_malformed_directive_shapes_raise(
             context={"selection": selection_directive},
         )
     assert _selection_row_count(conn, pid) == 0
+
+
+def test_exclude_ids_conflicting_with_must_include_ids_raises(conn: Connection) -> None:
+    """D7: the same id in both exclude_ids and must_include_ids is a contradiction."""
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    doc = seed_select_doc(conn, pid, characterise_run_id, scope_id, title="doc")
+    seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": [doc]})
+
+    with pytest.raises(DirectiveError, match="conflicts"):
+        run_select(
+            conn,
+            pid,
+            scope_id,
+            characterise_run_id,
+            context={
+                "selection": {
+                    "must_include_ids": [str(doc)],
+                    "exclude_ids": [str(doc)],
+                }
+            },
+        )
+    assert _selection_row_count(conn, pid) == 0
+
+
+# --- D6 selection.strata_scope ---
+
+
+def test_strata_scope_only_excludes_other_strata_from_ranking(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    theme_a = _docs(conn, pid, characterise_run_id, scope_id, "A", 3)
+    theme_b = _docs(conn, pid, characterise_run_id, scope_id, "B", 3)
+    seed_characterisation(
+        conn, pid, scope_id, characterise_run_id, themes={"A": theme_a, "B": theme_b}
+    )
+
+    summary, row, _ = run_select(
+        conn, pid, scope_id, characterise_run_id,
+        context={"selection": {"budget": 10, "strata_scope": {"only": ["A"]}}},
+    )
+
+    selected_pss_ids = {record["pss_id"] for record in row._mapping["selected"]}
+    assert selected_pss_ids == {str(pss_id) for pss_id in theme_a}
+    assert row._mapping["excluded"]["by_stratum"]["B"] == {"stratum_scoped_out": 3}
+    assert summary["provenance"]["unmatched_strata_scope"] == []
+
+
+def test_strata_scope_exclude_removes_named_stratum(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    theme_a = _docs(conn, pid, characterise_run_id, scope_id, "A", 3)
+    theme_b = _docs(conn, pid, characterise_run_id, scope_id, "B", 3)
+    seed_characterisation(
+        conn, pid, scope_id, characterise_run_id, themes={"A": theme_a, "B": theme_b}
+    )
+
+    summary, row, _ = run_select(
+        conn, pid, scope_id, characterise_run_id,
+        context={"selection": {"budget": 10, "strata_scope": {"exclude": ["B"]}}},
+    )
+
+    selected_pss_ids = {record["pss_id"] for record in row._mapping["selected"]}
+    assert selected_pss_ids == {str(pss_id) for pss_id in theme_a}
+    assert row._mapping["excluded"]["by_stratum"]["B"] == {"stratum_scoped_out": 3}
+    assert summary["selected"]["count"] == 3
+
+
+def test_strata_scope_unmatched_names_flagged_non_fatal(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    theme_a = _docs(conn, pid, characterise_run_id, scope_id, "A", 2)
+    seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": theme_a})
+
+    summary, _row, _ = run_select(
+        conn, pid, scope_id, characterise_run_id,
+        context={"selection": {"budget": 10, "strata_scope": {"only": ["A", "nonexistent"]}}},
+    )
+
+    assert summary["provenance"]["unmatched_strata_scope"] == ["nonexistent"]
+    assert summary["selected"]["count"] == 2
+
+
+def test_strata_scope_must_include_conflict_still_selected_and_flagged(
+    conn: Connection,
+) -> None:
+    """A must_include doc whose stratum is scoped out is still selected (flagged)."""
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    theme_a = _docs(conn, pid, characterise_run_id, scope_id, "A", 2)
+    theme_b = _docs(conn, pid, characterise_run_id, scope_id, "B", 2)
+    seed_characterisation(
+        conn, pid, scope_id, characterise_run_id, themes={"A": theme_a, "B": theme_b}
+    )
+
+    summary, row, _ = run_select(
+        conn, pid, scope_id, characterise_run_id,
+        context={
+            "selection": {
+                "budget": 10,
+                "strata_scope": {"only": ["A"]},
+                "must_include_ids": [str(theme_b[0])],
+            }
+        },
+    )
+
+    selected_pss_ids = {record["pss_id"] for record in row._mapping["selected"]}
+    # The must-include doc from scoped-out stratum B is still selected...
+    assert str(theme_b[0]) in selected_pss_ids
+    # ...but the conflict is flagged, never silently dropped.
+    assert row._mapping["flags"]["must_include_stratum_scoped_out"] == ["B"]
+    # The rest of B (non-must-include) is still excluded by scope.
+    assert row._mapping["excluded"]["by_stratum"]["B"] == {"stratum_scoped_out": 1}
+    _ = summary
+
+
+def test_strata_scope_standard_absent_matches_as_built(conn: Connection) -> None:
+    """Guard test: absent strata_scope selects exactly as as-built (no filtering)."""
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    theme_a = _docs(conn, pid, characterise_run_id, scope_id, "A", 3)
+    theme_b = _docs(conn, pid, characterise_run_id, scope_id, "B", 3)
+    seed_characterisation(
+        conn, pid, scope_id, characterise_run_id, themes={"A": theme_a, "B": theme_b}
+    )
+
+    summary_absent, row_absent, _ = run_select(
+        conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 10}},
+    )
+    summary_default, row_default, _ = run_select(
+        conn, pid, scope_id, characterise_run_id,
+        context={"selection": {"budget": 10}},
+    )
+
+    assert row_absent._mapping["selected"] == row_default._mapping["selected"]
+    assert summary_absent["selected"]["count"] == summary_default["selected"]["count"] == 6
+    assert "stratum_scoped_out" not in json.dumps(row_absent._mapping["excluded"])
+
+
+# --- D7 selection.exclude_ids ---
+
+
+def test_exclude_ids_removes_docs_from_selectable_pool(conn: Connection) -> None:
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    theme_a = _docs(conn, pid, characterise_run_id, scope_id, "A", 3)
+    seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": theme_a})
+
+    summary, row, _ = run_select(
+        conn, pid, scope_id, characterise_run_id,
+        context={"selection": {"budget": 10, "exclude_ids": [str(theme_a[0])]}},
+    )
+
+    selected_pss_ids = {record["pss_id"] for record in row._mapping["selected"]}
+    assert str(theme_a[0]) not in selected_pss_ids
+    assert selected_pss_ids == {str(pss_id) for pss_id in theme_a[1:]}
+    assert summary["base"]["excluded_by_directive"] == 1
+    assert summary["base"]["eligible"] == 2
+    assert {"pss_id": str(theme_a[0]), "flag": "excluded_by_directive"} in (
+        row._mapping["excluded"]["notable"]
+    )
+
+
+def test_exclude_ids_absent_matches_as_built(conn: Connection) -> None:
+    """Guard test: absent exclude_ids selects exactly as as-built."""
+    pid, characterise_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    theme_a = _docs(conn, pid, characterise_run_id, scope_id, "A", 3)
+    seed_characterisation(conn, pid, scope_id, characterise_run_id, themes={"A": theme_a})
+
+    summary_absent, row_absent, _ = run_select(
+        conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 10}},
+    )
+    summary_default, row_default, _ = run_select(
+        conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 10}},
+    )
+
+    assert row_absent._mapping["selected"] == row_default._mapping["selected"]
+    assert summary_absent["base"]["excluded_by_directive"] == 0
+    assert summary_default["base"]["excluded_by_directive"] == 0
 
 
 # --- Trigger-flag fixtures ---

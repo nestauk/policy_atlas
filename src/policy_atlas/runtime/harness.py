@@ -258,7 +258,7 @@ def _run_directed_extract_scope(
     Returns:
         The extraction component summary.
     """
-    profiles = _parse_extraction_directive(context.context.get("extraction"))
+    profiles, refresh = _parse_extraction_directive(context.context.get("extraction"))
     return extract_scope(
         conn,
         project_id=project_id,
@@ -269,6 +269,7 @@ def _run_directed_extract_scope(
         icf_extraction_backend=icf_extraction_backend,
         icf_finding_vetter_backend=icf_finding_vetter_backend,
         profiles=profiles,
+        refresh=refresh,
     )
 
 

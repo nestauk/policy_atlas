@@ -23,9 +23,14 @@ from policy_atlas.evidence_base.assess.appraise import (
     DEFAULT_RUBRIC_VERSION,
     SCORE_LABELS,
     AppraiseContext,
+    AppraiseDirectiveError,
+    _derive_rubric_version,
+    _parse_appraisal_directive,
     appraise_sources,
 )
 from policy_atlas.evidence_base.assess.classify import ClassifyContext, classify_sources
+from policy_atlas.evidence_base.corpus import select as select_corpus
+from policy_atlas.evidence_base.corpus.characterise import screened_sources
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.run_spec import Plan, compile
 from tests.helpers import (
@@ -108,6 +113,90 @@ def test_rubric_matches_v2_hierarchy_exactly() -> None:
 def test_score_labels_domain() -> None:
     # Wording itself is untested — presentation copy, retune freely.
     assert set(SCORE_LABELS) == {1, 2, 3, 4, 5}
+
+
+# --- D1: appraisal rubric override directive parser (pure Python, no DB) ---
+
+def test_appraisal_directive_accepts_valid_partial_override() -> None:
+    override = _parse_appraisal_directive(
+        {"rubric": {"Expert Opinion and Commentary": 5, "Modelling & Simulation": 4}}
+    )
+    assert override == {"Expert Opinion and Commentary": 5, "Modelling & Simulation": 4}
+
+
+def test_appraisal_directive_none_and_empty_are_default() -> None:
+    assert _parse_appraisal_directive(None) == {}
+    assert _parse_appraisal_directive({}) == {}
+
+
+def test_appraisal_directive_rejects_non_object() -> None:
+    with pytest.raises(AppraiseDirectiveError, match="must be an object"):
+        _parse_appraisal_directive("not-an-object")
+
+
+def test_appraisal_directive_rejects_unknown_sibling_key() -> None:
+    with pytest.raises(AppraiseDirectiveError, match="unknown keys"):
+        _parse_appraisal_directive(
+            {"rubric": {"Expert Opinion and Commentary": 5}, "guidance": "be harsh"}
+        )
+
+
+def test_appraisal_directive_rejects_empty_rubric_map() -> None:
+    with pytest.raises(AppraiseDirectiveError, match="non-empty"):
+        _parse_appraisal_directive({"rubric": {}})
+
+
+def test_appraisal_directive_rejects_non_dict_rubric() -> None:
+    with pytest.raises(AppraiseDirectiveError, match="non-empty object"):
+        _parse_appraisal_directive({"rubric": ["not", "a", "dict"]})
+
+
+def test_appraisal_directive_rejects_unknown_evidence_type() -> None:
+    with pytest.raises(AppraiseDirectiveError, match="unknown evidence type"):
+        _parse_appraisal_directive({"rubric": {"Not A Real Type": 3}})
+
+
+@pytest.mark.parametrize("bad_tier", [0, 6, -1, 10])
+def test_appraisal_directive_rejects_out_of_range_tier(bad_tier: int) -> None:
+    with pytest.raises(AppraiseDirectiveError, match="between 1 and 5"):
+        _parse_appraisal_directive({"rubric": {"Expert Opinion and Commentary": bad_tier}})
+
+
+@pytest.mark.parametrize("bad_tier", ["5", 3.0, True, None])
+def test_appraisal_directive_rejects_non_integer_tier(bad_tier: Any) -> None:
+    with pytest.raises(AppraiseDirectiveError, match="must be an integer"):
+        _parse_appraisal_directive({"rubric": {"Expert Opinion and Commentary": bad_tier}})
+
+
+# --- D1: derived rubric_version (pure Python, no DB) ---
+
+def test_derived_rubric_version_format_and_determinism() -> None:
+    override = {"Expert Opinion and Commentary": 5}
+    version = _derive_rubric_version(override)
+
+    assert version.startswith("v2-hierarchy-v1+")
+    suffix = version.removeprefix("v2-hierarchy-v1+")
+    assert len(suffix) == 8
+    assert all(char in "0123456789abcdef" for char in suffix)
+
+    # Determinism: the same override derives the same hash regardless of
+    # dict insertion order (canonical JSON sorts keys).
+    override_multi = {"Modelling & Simulation": 4, "Expert Opinion and Commentary": 5}
+    override_multi_reordered = {"Expert Opinion and Commentary": 5, "Modelling & Simulation": 4}
+    assert _derive_rubric_version(override_multi) == _derive_rubric_version(
+        override_multi_reordered
+    )
+
+
+def test_derived_rubric_version_differs_for_different_overrides() -> None:
+    assert _derive_rubric_version(
+        {"Expert Opinion and Commentary": 5}
+    ) != _derive_rubric_version({"Expert Opinion and Commentary": 4})
+
+
+def test_no_override_guard_byte_identical_to_default_version() -> None:
+    """No override reproduces today's version string byte-for-byte."""
+    assert _derive_rubric_version({}) == DEFAULT_RUBRIC_VERSION == "v2-hierarchy-v1"
 
 
 # --- Round-trips ---
@@ -303,6 +392,101 @@ def test_appraised_by_run_id(conn: Connection) -> None:
 
     (row,) = _appraisal_rows(conn, pid)
     assert row.appraised_by_run_id == rid
+
+
+# --- D1: appraisal rubric override — behaviour, provenance, downstream coherence ---
+
+def test_overridden_rubric_changes_persisted_scores_and_version(conn: Connection) -> None:
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _, pss_low = _seed_classified(conn, pid, rid, scope_id, "Expert Opinion and Commentary")
+
+    override = {"Expert Opinion and Commentary": 5}
+    context = AppraiseContext(
+        scope_id=scope_id, intent="Test", context={"appraisal": {"rubric": override}}
+    )
+    counts = appraise_sources(conn, project_id=pid, run_id=rid, context=context)
+
+    assert counts["appraised"] == 1
+    (row,) = _appraisal_rows(conn, pid)
+    assert row.project_source_snapshot_id == pss_low
+    assert row.quality_score == 5  # default rubric would give 1
+    expected_version = _derive_rubric_version(override)
+    assert expected_version != DEFAULT_RUBRIC_VERSION
+    assert row.rubric_version == expected_version
+
+
+def test_overridden_rubric_version_travels_in_event_payload(conn: Connection) -> None:
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _seed_classified(conn, pid, rid, scope_id, "Modelling & Simulation")
+
+    override = {"Modelling & Simulation": 1}
+    context = AppraiseContext(
+        scope_id=scope_id, intent="Test", context={"appraisal": {"rubric": override}}
+    )
+    appraise_sources(conn, project_id=pid, run_id=rid, context=context)
+
+    log_entries = events.read(conn, pid)
+    appraised_events = [e for e in log_entries if e["event_type"] == "source.appraised"]
+    assert len(appraised_events) == 1
+    expected_version = _derive_rubric_version(override)
+    assert appraised_events[0]["payload"]["rubric_version"] == expected_version
+    assert appraised_events[0]["payload"]["quality_score"] == 1  # default rubric would give 2
+
+
+def test_downstream_coherence_select_consumes_overridden_scores_unchanged(
+    conn: Connection,
+) -> None:
+    """Overriding the rubric changes what appraise persists; select reads the
+    persisted quality_score rows unchanged through its real DB path
+    (``screened_sources``) and its real ranking (``select_documents``) — no
+    select-side code is touched by D1."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _, pss_a = _seed_classified(conn, pid, rid, scope_id, "Systematic Review and Meta-Analysis")
+    _, pss_b = _seed_classified(conn, pid, rid, scope_id, "Expert Opinion and Commentary")
+
+    # Swap the two types' tiers: SR (default 5) -> 1, EO (default 1) -> 5.
+    override = {
+        "Systematic Review and Meta-Analysis": 1,
+        "Expert Opinion and Commentary": 5,
+    }
+    context = AppraiseContext(
+        scope_id=scope_id, intent="Test", context={"appraisal": {"rubric": override}}
+    )
+    appraise_sources(conn, project_id=pid, run_id=rid, context=context)
+
+    persisted = {r.project_source_snapshot_id: r.quality_score for r in _appraisal_rows(conn, pid)}
+    assert persisted[pss_a] == 1
+    assert persisted[pss_b] == 5
+
+    # screened_sources is select's real production read path (select_scope
+    # calls it directly) — unmodified by D1, it reflects the override as-is.
+    sources = {s.pss_id: s for s in screened_sources(conn, project_id=pid, scope_id=scope_id)}
+    assert sources[pss_a].quality_score == 1
+    assert sources[pss_b].quality_score == 5
+
+    # Feed the real (unmodified) ScreenedSource objects into select's real
+    # ranking function. All non-quality signals are tied (same seed_source /
+    # seed_screening_result defaults for both docs), so quality alone decides:
+    # doc B, now the higher-quality doc post-override, wins.
+    stratum = select_corpus.SelectionStratum(name="S", candidate_ids=(pss_a, pss_b))
+    candidates = [
+        select_corpus.SelectionCandidate(source=sources[pss_a], tags=()),
+        select_corpus.SelectionCandidate(source=sources[pss_b], tags=()),
+    ]
+    directive, _ = select_corpus._parse_directive({"budget": 1})
+
+    outcome = select_corpus.select_documents(
+        candidates,
+        strata=[stratum],
+        strategy="coverage_stratified_v1",
+        directive=directive,
+        intent="q",
+        ranking_backend=None,
+    )
+    assert [record["pss_id"] for record in outcome.selected] == [str(pss_b)]
 
 
 # --- Check / unique / FK constraints ---

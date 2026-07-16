@@ -15,9 +15,19 @@ from __future__ import annotations
 import unicodedata
 from typing import Any
 
+from policy_atlas.core.tags import has_control_character
+
 # Reason strings on both wire models (screen reps, classify) — the
 # select-rerank bound (contract decision 3, rev 1.2).
 REASON_MAX = 240
+
+# Shared bound for Family B guidance channels (024 steering surface):
+# search.guidance, grouping.guidance, characterise.guidance all carry this
+# shape — a bounded list of user-intent sentences. Hoisted here (rather than
+# duplicated per component) because all three parsers need byte-identical
+# fail-closed semantics: anything outside the shape rejects, never truncates
+# or silently drops.
+GUIDANCE_MAX_ITEMS = 5
 
 
 def metadata_dict(raw: Any) -> dict[str, Any]:
@@ -54,6 +64,46 @@ def sanitize_prompt_field(value: str, *, max_chars: int) -> str:
         if char == "\n" or not unicodedata.category(char).startswith("C")
     )
     return stripped[:max_chars]
+
+
+def parse_guidance_channel(
+    raw: Any,
+    *,
+    error: type[Exception],
+    max_chars: int,
+) -> list[str]:
+    """Parse one Family B guidance channel, fail-closed.
+
+    Shared shape (024 steering surface): a list of 1 to ``GUIDANCE_MAX_ITEMS``
+    non-empty user-intent sentences, each at most ``max_chars`` characters and
+    free of control characters. Anything outside this shape rejects — never
+    truncated, never silently dropped.
+
+    Args:
+        raw: The raw ``guidance`` value from a component directive.
+        error: Exception type raised for this component's directive grammar
+            (e.g. ``SearchDirectiveError``, ``FacetDirectiveError``).
+        max_chars: Maximum characters per guidance entry (``DIRECTIVE_STRING_MAX``).
+
+    Returns:
+        The validated guidance list, in order.
+
+    Raises:
+        error: If ``raw`` is not a list of 1 to ``GUIDANCE_MAX_ITEMS`` bounded,
+            non-empty, control-character-free strings.
+    """
+    if not isinstance(raw, list) or not (1 <= len(raw) <= GUIDANCE_MAX_ITEMS):
+        raise error(f"guidance must be a list of 1 to {GUIDANCE_MAX_ITEMS} strings")
+    guidance: list[str] = []
+    for item in raw:
+        if not isinstance(item, str) or not item.strip():
+            raise error("guidance entries must be non-empty strings")
+        if len(item) > max_chars:
+            raise error(f"guidance entries must be at most {max_chars} characters")
+        if has_control_character(item):
+            raise error("guidance entries must not contain control characters")
+        guidance.append(item)
+    return guidance
 
 
 def scrub_nul(value: str) -> str:

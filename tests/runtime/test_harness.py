@@ -104,11 +104,21 @@ def test_run_harness_binds_project_run_component_contextvars(conn: Connection) -
         mode = "stub"
 
         def discover(
-            self, docs: list[Any], *, intent: str, min_themes: int, max_themes: int
+            self,
+            docs: list[Any],
+            *,
+            intent: str,
+            min_themes: int,
+            max_themes: int,
+            guidance: list[str] | None = None,
         ) -> Any:
             seen_contextvars.update(structlog.contextvars.get_contextvars())
             return StubThemeGroupingBackend().discover(
-                docs, intent=intent, min_themes=min_themes, max_themes=max_themes
+                docs,
+                intent=intent,
+                min_themes=min_themes,
+                max_themes=max_themes,
+                guidance=guidance,
             )
 
         def assign(self, batch: list[Any], *, themes: list[Any]) -> Any:

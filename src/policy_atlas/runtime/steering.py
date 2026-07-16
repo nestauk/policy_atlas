@@ -19,11 +19,17 @@ from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.schema import orchestration_plan, selection_result
+from policy_atlas.evidence_base.assess import appraise as appraise_module
 from policy_atlas.evidence_base.assess import screen as screen_module
+from policy_atlas.evidence_base.corpus import characterise as characterise_module
 from policy_atlas.evidence_base.corpus import select as select_module
 from policy_atlas.evidence_base.extract import extract as extract_module
-from policy_atlas.evidence_base.group.facet_values import parse_grouping_directive
+from policy_atlas.evidence_base.group.facet_values import (
+    FacetDirectiveError,
+    parse_grouping_directive,
+)
 from policy_atlas.evidence_base.sourcing.search_loop import (
+    SearchDirectiveError,
     parse_search_directive,
     validate_scope_filters,
 )
@@ -627,8 +633,11 @@ def _validate_directive_delta(
         return
     if component == "acquire":
         _require_keys(component, delta, {"search"})
-        _, raw_filters = parse_search_directive({"search": delta["search"]})
-        validate_scope_filters(raw_filters, backend_names=_backend_names(backend_scope))
+        try:
+            _, raw_filters, _, _ = parse_search_directive({"search": delta["search"]})
+            validate_scope_filters(raw_filters, backend_names=_backend_names(backend_scope))
+        except SearchDirectiveError as exc:
+            raise SteeringAdjustmentError(str(exc)) from exc
         return
     if component in {"screen_abstract", "screen_full"}:
         _require_keys(component, delta, {"screening"})
@@ -636,7 +645,10 @@ def _validate_directive_delta(
         return
     if component == "select":
         _require_keys(component, delta, {"selection"})
-        select_module._parse_directive(delta["selection"])
+        try:
+            select_module._parse_directive(delta["selection"])
+        except select_module.DirectiveError as exc:
+            raise SteeringAdjustmentError(str(exc)) from exc
         return
     if component == "extract":
         _require_keys(component, delta, {"extraction"})
@@ -647,7 +659,24 @@ def _validate_directive_delta(
         return
     if component == "group":
         _require_keys(component, delta, {"grouping"})
-        parse_grouping_directive({"grouping": delta["grouping"]})
+        try:
+            parse_grouping_directive({"grouping": delta["grouping"]})
+        except FacetDirectiveError as exc:
+            raise SteeringAdjustmentError(str(exc)) from exc
+        return
+    if component == "appraise":
+        _require_keys(component, delta, {"appraisal"})
+        try:
+            appraise_module._parse_appraisal_directive(delta["appraisal"])
+        except appraise_module.AppraiseDirectiveError as exc:
+            raise SteeringAdjustmentError(str(exc)) from exc
+        return
+    if component == "characterise":
+        _require_keys(component, delta, {"characterise"})
+        try:
+            characterise_module._parse_characterise_directive(delta["characterise"])
+        except characterise_module.CharacteriseDirectiveError as exc:
+            raise SteeringAdjustmentError(str(exc)) from exc
         return
     raise SteeringAdjustmentError(f"component {component!r} has no steering directive grammar")
 
@@ -684,8 +713,27 @@ def _apply_component_delta_to_payload(
     elif component == "extract":
         _apply_extract_delta(payload, delta["extraction"])
     elif component == "group":
-        facets, _ = parse_grouping_directive({"grouping": delta["grouping"]})
+        # D8's granularity and B3's guidance are commit-layer directives with
+        # no OrchestrationPlan field (the appraisal-rubric precedent): only
+        # facets round-trip through the plan payload; granularity and guidance
+        # are discarded here and exempted below.
+        facets, _facet_source, _granularity, _guidance = parse_grouping_directive(
+            {"grouping": delta["grouping"]}
+        )
         payload["grouping_facets"] = facets
+    elif component == "appraise":
+        # D1's appraisal rubric override is a commit-layer directive with no
+        # OrchestrationPlan field (apply_reselect's fine select directive is
+        # the same precedent, documented on its docstring): there is nothing
+        # to write into the plan payload, so the amended payload carries
+        # appraisal forward unchanged, same as an untouched component.
+        pass
+    elif component == "characterise":
+        # B5/D9's characterise directive (themes bound + guidance) is a
+        # commit-layer directive with no OrchestrationPlan field (same
+        # precedent as appraise): nothing to write into the plan payload;
+        # characterise carries forward unchanged.
+        pass
 
 
 def _apply_acquire_delta(payload: dict[str, Any], search: Any) -> None:
@@ -769,8 +817,12 @@ def _apply_select_delta(payload: dict[str, Any], selection: Any) -> None:
 
 
 def _apply_extract_delta(payload: dict[str, Any], extraction: Any) -> None:
+    # D3's refresh is a commit-layer directive with no OrchestrationPlan field
+    # (the appraisal-rubric precedent): only profiles round-trip through the
+    # plan payload; refresh is discarded here and exempted in the round-trip
+    # check below.
     try:
-        profiles = extract_module._parse_extraction_directive(extraction)
+        profiles, _refresh = extract_module._parse_extraction_directive(extraction)
     except extract_module.ExtractError as exc:
         raise SteeringAdjustmentError(str(exc)) from exc
     by_profile_id = {profile_id: profile for profile, profile_id in EXTRACT_PROFILE_IDS.items()}
@@ -803,14 +855,24 @@ def _validate_delta_round_trip(
 ) -> None:
     amended_by_component = {step.component: step.directive_delta for step in amended_chain.steps}
     for component, requested_delta in directive_deltas.items():
+        # D1/B5/D9: appraise's appraisal-rubric delta and characterise's
+        # themes/guidance delta are commit-layer directives with no
+        # OrchestrationPlan field by design (same exemption as
+        # apply_reselect's fine select directive, which never re-enters this
+        # generic round-trip path at all) — there is no plan field for either
+        # to round-trip through, so both are exempted rather than failed closed.
+        if component in {"appraise", "characterise"}:
+            continue
         # compose() always injects sibling keys the caller need not supply
         # (e.g. acquire's "depth", screen_full's "stage"), so the recompiled
         # delta is checked to *contain* the request, not to equal it — a
         # requested value the plan fields cannot express still fails closed.
         if component == "extract" and requested_delta:
             try:
-                requested_profiles = extract_module._parse_extraction_directive(
-                    requested_delta.get("extraction")
+                requested_profiles, _requested_refresh = (
+                    extract_module._parse_extraction_directive(
+                        requested_delta.get("extraction")
+                    )
                 )
             except extract_module.ExtractError as exc:
                 raise SteeringAdjustmentError(str(exc)) from exc

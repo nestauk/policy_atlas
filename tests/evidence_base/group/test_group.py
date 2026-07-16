@@ -95,8 +95,9 @@ class ScriptedGroupClusteringBackend:
         facet: str,
         projection: str,
         include_context_in_discovery: bool,
+        guidance: list[str] | None = None,
     ) -> ScriptedGroupClusteringBackend:
-        del facet, projection, include_context_in_discovery
+        del facet, projection, include_context_in_discovery, guidance
         return self
 
     def discover(
@@ -643,6 +644,8 @@ def test_happy_path_writes_rollup_summary_and_provenance(conn: Connection) -> No
         "facet",
         "facets",
         "facet_source",
+        "granularity",
+        "guidance",
         "value_cap",
         "call_count",
         "repair_count",
@@ -659,6 +662,9 @@ def test_happy_path_writes_rollup_summary_and_provenance(conn: Connection) -> No
     assert provenance["facet"] == "intervention"
     assert provenance["facets"] == ["intervention"]
     assert provenance["facet_source"] == "default"
+    assert provenance["granularity"] == "standard"
+    # B3 (024 steering surface): guidance absent is byte-identical to as-built.
+    assert provenance["guidance"] is None
     assert provenance["value_cap"] == FACET_VALUE_CAP
     # Two-stage happy path: one discovery + one assignment call.
     assert provenance["call_count"] == 2
@@ -1395,8 +1401,172 @@ def test_group_ceiling_and_call_budget_formula() -> None:
     assert group_max_labels(1_000) == 40
     assert group_call_budget(0) == 2
     assert group_call_budget(1) == 4
+
+
+# --- D8 grouping.granularity ---
+
+
+def test_group_max_labels_standard_and_absent_are_byte_identical_to_as_built() -> None:
+    """Guard test: 'standard' and the default param reproduce the as-built ceiling."""
+    for unit_count in (0, 1, 15, 16, 60, 1_000):
+        base = group_max_labels(unit_count)
+        assert group_max_labels(unit_count, granularity="standard") == base
+
+
+def test_group_max_labels_coarser_halves_and_finer_doubles() -> None:
+    # unit_count=60 -> base ceil(60/5)=12, comfortably inside [3, 40] both ways.
+    assert group_max_labels(60) == 12
+    assert group_max_labels(60, granularity="coarser") == 6
+    assert group_max_labels(60, granularity="finer") == 24
+
+
+def test_group_max_labels_granularity_respects_hard_floor_and_cap() -> None:
+    # Small unit_count: base is already at the floor (3); coarser cannot go below it.
+    assert group_max_labels(1, granularity="coarser") == 3
+    # Huge unit_count: base is already at the cap (40); finer cannot exceed it.
+    assert group_max_labels(1_000, granularity="finer") == 40
+
+
+def test_group_granularity_flows_to_provenance_and_multiplies_ceiling(
+    conn: Connection,
+) -> None:
+    """D8 behavioural effect: granularity multiplies the ceiling actually used,
+    and is echoed verbatim in grouping_provenance."""
+    project_id, _ = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    # Same 6-distinct-intervention fixture as the happy-path test: base ceiling
+    # group_max_labels(6) == 3 (floor); "finer" doubles it to 6.
+    seeded = seed_extraction(
+        conn,
+        project_id,
+        scope_id,
+        docs=[
+            (
+                uuid.uuid4(),
+                [
+                    {
+                        "intervention": "Alpha counseling",
+                        "outcome": "Attendance",
+                        "effect_direction": "increase",
+                    },
+                    {
+                        "intervention": "Alpha coaching",
+                        "outcome": "Retention",
+                        "effect_direction": "decrease",
+                    },
+                    {
+                        "intervention": "Beta home visits",
+                        "outcome": "Employment",
+                        "effect_direction": "increase",
+                    },
+                    {
+                        "intervention": "Beta phone calls",
+                        "outcome": "Employment",
+                        "effect_direction": "no_effect",
+                    },
+                    {
+                        "intervention": "Gamma support",
+                        "outcome": "Wellbeing",
+                        "effect_direction": "mixed",
+                    },
+                    {
+                        "intervention": "Delta reach-out",
+                        "outcome": "Wellbeing",
+                        "effect_direction": "unclear",
+                    },
+                ],
+            )
+        ],
+    )
+
+    _summary, group_run_id = _run_group(
+        conn, project_id, scope_id, seeded.run_id,
+        context={"grouping": {"granularity": "finer"}},
+    )
+    row = _group_row(conn, project_id, group_run_id)
+
+    assert row["grouping_provenance"]["granularity"] == "finer"
+    assert row["grouping_provenance"]["facet_runs"]["intervention"]["max_labels"] == (
+        group_max_labels(6, granularity="finer")
+    )
+    assert group_max_labels(6, granularity="finer") == 6
     assert group_call_budget(50) == 4
     assert group_call_budget(51) == 6
+
+
+# --- B3 grouping.guidance ---
+
+
+def test_group_guidance_flows_to_provenance_and_discovery_only(conn: Connection) -> None:
+    """B3 behavioural + isolation: guidance is echoed verbatim in
+    grouping_provenance and reaches the stub's discover() call only — never
+    assign()."""
+    project_id, _ = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    seeded = seed_extraction(
+        conn,
+        project_id,
+        scope_id,
+        docs=[
+            (
+                uuid.uuid4(),
+                [
+                    {
+                        "intervention": "Alpha counseling",
+                        "outcome": "Attendance",
+                        "effect_direction": "increase",
+                    },
+                    {
+                        "intervention": "Beta home visits",
+                        "outcome": "Employment",
+                        "effect_direction": "increase",
+                    },
+                ],
+            )
+        ],
+    )
+
+    backend = StubGroupClusteringBackend()
+    guidance = ["organise by policy instrument, not sector"]
+    _summary, group_run_id = _run_group(
+        conn, project_id, scope_id, seeded.run_id,
+        context={"grouping": {"guidance": guidance}},
+        backend=backend,
+    )
+    row = _group_row(conn, project_id, group_run_id)
+
+    assert row["grouping_provenance"]["guidance"] == guidance
+    discover_calls = [call for call in backend.calls if call.stage == "discover"]
+    assign_calls = [call for call in backend.calls if call.stage == "assign"]
+    assert discover_calls and all(call.guidance == guidance for call in discover_calls)
+    assert assign_calls and all(call.guidance is None for call in assign_calls)
+
+
+def test_group_guidance_absent_is_byte_identical_to_as_built(conn: Connection) -> None:
+    project_id, _ = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    seeded = seed_extraction(
+        conn,
+        project_id,
+        scope_id,
+        docs=[
+            (
+                uuid.uuid4(),
+                [
+                    {
+                        "intervention": "Alpha counseling",
+                        "outcome": "Attendance",
+                        "effect_direction": "increase",
+                    },
+                ],
+            )
+        ],
+    )
+
+    _summary, group_run_id = _run_group(conn, project_id, scope_id, seeded.run_id)
+    row = _group_row(conn, project_id, group_run_id)
+
+    assert row["grouping_provenance"]["guidance"] is None
 
 
 def test_value_context_payloads_are_deterministic_and_discovery_gated(
