@@ -22,31 +22,33 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `024-steering-surface` (design in progress,
-2026-07-15). The steering slice: (a) **steering-event persistence** —
-check-ins, pauses/steer-points (options + fired triggers), user
-decisions (continue / adjust / reselect / abort), rejected
-adjustments, refused intents and Unattended auto-resolutions become
-durable canonical events so a front-end can rebuild the orchestrated
-conversation's decision history from Postgres alone
-(execution-orchestration + §9 event-log spine; the run-less-boundary
-FK constraint is a named design decision); (b) **free-text steering
-interpretation** — a planner-pattern LLM seam that compiles a user's
-prose intent at a pause into the bounded steering vocabulary
-(option / adjust-delta / mode / nudge / abort), confirm-before-apply,
-honest refusal as the fallback, verbatim-text + interpreted-action
-provenance (revises 017's one-LLM-call sequencing invariant —
-runtime-egress hard gate); (c) **steer-point expansion study** —
-design-phase inventory of all EB components for decision-shaping
-moments worth surfacing as steer points, ranked in
-`docs/tasks/024-steering-surface/steer-point-study.md`; owner
-ship-list (contract gate, 2026-07-15): **S0 + S1 + S2**; plus (d) the
-**minimal `capability_run` entity** (owner, rev 3 — the walk's durable
-identity + `runs.capability_run_id`; the one approved schema
-addition). Tier 3 (runtime egress + schema + prompt-bearing surface).
-Sequenced next after 024: **025 co-pilot Q&A** (owner, 2026-07-15) —
-read-only follow-up answers over collected evidence; then the eval
-slice.
+Implementation — task `024-steering-surface` (design in progress;
+contract rev 4 rewritten from scratch 2026-07-16, awaiting owner
+approval). **The steering slice — state-of-the-art human-in-the-loop
+(owner direction; deliberately large, no splitting).** Organising
+principle: every decision surfaces in the durable record; the mode
+moves the *decider* (user ↔ orchestrator), never visibility. Strands:
+(1) durable steering record — steering events on `event_log` + the
+`capability_run` walk entity (the one approved schema addition) + the
+`steering_history` projection (front-end rebuilds the decision
+history from Postgres alone); (2) **one orchestrator, three moments**
+(planning turn · free-text router · boundary watch) behind one seam +
+`orchestrator_v1` prompt family — router: prose → confirmed
+multi-stage bounded deltas; watch: routes/decides per the decider
+dial within the full user surface, authors run-specific options,
+fail-safe to the deterministic floor; (3) the **steer-point lattice**
+P1 (search exception) · P2 (pre-select evidence-base coverage) · P3
+(deepening-selection, enriched + preview) · P4 (synthesis shape) over
+**widened grammars** (channels B1/B3/B5 + B2′ finding-relevance
+annotator; keys D1/D3/D5–D9) with additive-vs-replacement re-run
+modes first-class; (4) modes renamed to delegation postures;
+Unattended = discretion-is-the-mode with planner-authored standing
+instructions. Design record: `docs/tasks/024-steering-surface/`
+`steerability-refinement.md` (annex, binds the contract) +
+`steer-point-study.md`. Tier 3 (runtime egress + schema +
+prompt-bearing surfaces). Build sizing ~3–3.5× the original rev 3
+scope. Sequenced after 024: **025 co-pilot Q&A + the per-user
+transcript store** (owner, 2026-07-16); then the eval slice.
 
 Tasks `001-walking-skeleton` through `022-synthesis-refinement` are
 complete (merged) — the EB chain runs end-to-end live behind the

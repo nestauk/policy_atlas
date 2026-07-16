@@ -1,370 +1,317 @@
 # Task contract: 024-steering-surface
 
-> **Status:** drafted (rev 1, 2026-07-15). Contract approved: _pending_ ·
-> Plan approved: _pending_ · ADR: expected (sequencing-invariant revision +
-> steering-event vocabulary).
+> **Status:** drafted (rev 4, 2026-07-16). Contract approved: _pending_ ·
+> Plan approved: _pending_ · ADR: expected (steering-event vocabulary ·
+> sequencing-invariant revision · the decider dial).
 >
 > **Rev history**
-> - **rev 3** (2026-07-15): **walk identity decided (owner, at the gate)** —
->   the zero-schema posture is reversed for the walk itself: 024 ships the
->   minimal **`capability_run` entity** (the 017 deferred seam) as the one
->   approved schema addition; steering events key on it (decision 1
->   rewritten, 1b added). Driver: robust attachment (the owner challenged
->   most-recent-run as the semantic anchor for walk-level events),
->   multi-run projects (owner direction 2026-07-12), and the
->   planning-conversation anchor (`session_id`). Also: **co-pilot Q&A
->   sequenced as its own slice immediately after 024** (025) — recorded in
->   Out of scope; not folded in.
-> - **rev 2** (2026-07-15): **ship-list decided (owner)** — S0 + S1 + **S2**
->   (the owner upgraded the study's S0+S1 recommendation to include the
->   thin-search steer point). S2 moves from Out to In with its mechanics
->   pinned (decision 6b): boundary after acquire, reselect-precedent re-run.
-> - **rev 1** (2026-07-15): initial draft. Origin: owner direction in the
->   steering-persistence conversation — (a) the eventual front-end must
->   rebuild the orchestrated conversation's check-in/steering history from
->   canonical state after the user goes away and comes back; (b) users
->   should be able to write free text at steer points, interpreted by the
->   orchestrator into bounded steering; (c) a design-phase study of further
->   steer points (owner picks the ship-list at this gate). Grounded on:
->   execution-orchestration § Steering modes + routing rule,
->   backend-architecture-reference §6/§9 (event-log spine, decision-log
->   projection, transcripts non-canonical), plan-as-object § audit posture,
->   the UX handoff §7.4 + wireframe frames 04/08/09, 017's contract
->   (decisions 5, 6, 11 + rev 2.5 blocker 2) and verification flagged
->   deviations, and [steer-point-study.md](steer-point-study.md).
+> - **rev 4** (2026-07-16): **ground-up rewrite** (owner call) from the
+>   settled design record after four owner review rounds —
+>   [steerability-refinement.md](steerability-refinement.md) is the design
+>   annex this contract binds; [steer-point-study.md](steer-point-study.md)
+>   is the evidence base behind it. Supersedes revs 1–3 wholesale.
+> - **rev 3** (2026-07-15): capability_run entity approved (walk identity);
+>   co-pilot Q&A sequenced as 025.
+> - **rev 2** (2026-07-15): owner ship-list S0+S1+S2 (superseded by the
+>   rev 4 lattice, which absorbs them).
+> - **rev 1** (2026-07-15): initial draft (persistence + interpreter +
+>   study).
 
 ## Goal
 
-Make steering a first-class, durable, prose-capable surface:
+Make Policy Atlas's steering a state-of-the-art human-in-the-loop system
+(owner direction, 2026-07-16), in one large slice. The organising
+principle: **every decision surfaces in the durable record; the steering
+mode never changes what is decided or what is visible — it moves the
+decider between the user and the orchestrator.** Four strands:
 
-1. **Steering-event persistence.** Every check-in boundary outcome the
-   runner reports, every pause/steer-point presented (options + fired
-   triggers), every user decision (continue · adjust · reselect · abort),
-   every rejected adjustment, every refused intent, and every Unattended
-   auto-resolution becomes a canonical `event_log` event — so the decision
-   history is a projection over Postgres alone (the §9 spine; no transcript
-   dependence), satisfying the spec lines 017 left thin: auto-resolutions
-   "marked on the run record", refusals "recorded as a seam", and 017's own
-   in-scope "steering-resolution events ride the run context".
-2. **Free-text steering interpretation.** At any pause, the user may answer
-   in prose. A new interpreter seam (planner-pattern: structured-output
-   backend + deterministic stub) compiles the intent into the bounded
-   steering vocabulary — option choice (params filled), directive-grammar
-   `Adjust` delta, mode change, nudge, or abort — **confirm-before-apply**,
-   with honest refusal (`refuse_inexpressible` + a recorded event) when the
-   grammar cannot express it. Verbatim user text + interpreted action +
-   interpreter execution profile persist together (never
-   paraphrase-laundered).
-3. **Steer-point surface per the owner ship-list** (decision 6; owner,
-   2026-07-15): enrich deepening-selection's triggers from
-   persisted-but-unread select signals (study **S0**), ship the
-   pre-synthesise steer point on the built 022 compile machinery (study
-   **S1**), and ship the thin-search steer point (study **S2**) with
-   reselect-precedent re-run mechanics. Remaining candidates (S3–S5 + the
-   grammar seams) land as named seams.
+1. **A durable steering record.** Every check-in, pause (options +
+   triggers), decision (user, orchestrator, or standing-default), rejected
+   adjustment, refused intent, and re-run becomes a canonical `event_log`
+   event keyed to a new `capability_run` walk identity — so a front-end
+   rebuilds the orchestrated conversation's decision history from
+   Postgres alone, across multiple runs per project.
+2. **One orchestrator, three moments.** The planner, the free-text
+   steering **router**, and the boundary **watch** are one agent (one
+   backend seam, one prompt family, shared session): the router compiles
+   prose at pauses into multi-stage bounded deltas (confirm-before-apply,
+   honest refusal); the watch observes every component boundary, routes
+   decisions per the decider dial, authors run-specific options, and
+   decides in loco user where the mode delegates — within the user's own
+   surface, attributed, fail-safe to the deterministic floor.
+3. **The steer-point lattice + grammar widening.** Four steer points (P1
+   search-exception · P2 evidence-base coverage, pre-select · P3
+   deepening-selection, enriched · P4 synthesis shape) over widened
+   fail-closed grammars: four guidance channels and seven structured keys
+   (annex §Families), with the two re-run modes (additive vs replacement)
+   as first-class vocabulary.
+4. **Modes as delegation postures.** Frequent · Moderate · Minimal ·
+   Unattended, renamed to the "when should I come back to you?"
+   vocabulary; Unattended = discretion-is-the-mode with planner-authored
+   standing instructions.
 
 ## Deliverable
 
 PR landing:
 
-- **Event vocabulary + emission** in the runner/steering layer:
-  `steering.pause` (boundary, kind, options, triggers, plan id/version) ·
-  `steering.decision` (response kind; verbatim `user_text` where prose was
-  given; `interpreted_action`; `confirmed`; option id / new plan
-  id+version / unattended rule+action) · `steering.rejected` (attempted
-  delta + validation error) · `steering.refused` (verbatim intent +
-  refusal) · `component.skipped` (resolves 017's flagged deviation).
-  Zero-schema: JSONB payloads on the existing `event_log`, attached to the
-  most-recent attempted run id (decision 1).
-- **The `capability_run` entity** (decision 1b): table + `runs` FK column +
-  alembic migration + runner threading (open/thread/close) — the walk's
-  durable identity, the multi-run project grouping key, and the
-  planning-conversation anchor (`session_id`).
+- **`capability_run` entity** (decision 2): table + nullable
+  `runs.capability_run_id` + alembic migration + runner threading — the
+  walk's identity, the multi-run grouping key, the planning-conversation
+  anchor (`session_id`).
+- **Steering events** (decision 1): `steering.pause` · `steering.decision`
+  (with `decided_by`/`authored_by`, verbatim `user_text`,
+  `interpreted_action`, re-run mode) · `steering.rejected` ·
+  `steering.refused` · `component.skipped` · `agent_judgement_routed` —
+  zero-schema JSONB on the existing `event_log`.
 - **History read model**: `steering_history(conn, project_id,
-  capability_run_id=None)` — the deterministic projection that rebuilds the
-  ordered check-in/pause/decision story per walk from `event_log` +
-  `orchestration_plan` + `capability_run` + `runs`; the front-end's read
-  surface and the rebuildability test's subject.
-- **Interpreter seam**: `SteeringInterpreterBackend` protocol + live
-  structured-output backend + stub; wire model = discriminated union over
-  the closed steering vocabulary, validated fail-closed then compiled
-  through the *existing* apply paths (`apply_adjustment` / reselect /
-  option compile) — the interpreter can never bypass grammar validation.
-  Prompt `steer_interpret_v1`, lead-authored.
-- **CLI wiring** (`orchestrate.py`): pause menus accept option number OR
-  free text; interpreted readings echo for confirmation; refusals render +
-  record; Unattended unchanged (no pauses — auto-resolutions now emit
-  events).
-- **Ship-list steer points** (decision 6): S0 trigger enrichment ·
-  S1 pre-synthesise steer point (options compiling via
-  `compile_synthesis_directive`; triggers from grouping flags) ·
-  S2 thin-search steer point (post-acquire boundary; triggers from
-  `search_coverage_record`; deepen/rescope options compiling into the
-  search directive grammar; accept-thin flagged; re-run mechanics per
-  decision 6b).
+  capability_run_id=None)` — the deterministic per-walk projection; the
+  front-end's read surface and the rebuild test's subject.
+- **The orchestrator seam** (decision 3): one backend protocol + live
+  structured-output implementation + deterministic stub; the
+  `orchestrator_v1` prompt family (planning turn absorbing `planner_v6` ·
+  router · watch), lead-authored.
+- **The lattice** (decision 5): P1–P4 wired into the runner with canonical
+  floor options, authored options, triggers from persisted state only,
+  selection preview at P3, `propose_synthesis_plan` wired at P4.
+- **Grammar widening** (decision 6): channels B1/B3/B5 + the B2′
+  finding-relevance annotator (`finding_relevance_v1` prompt + run-scoped
+  annotations + the synthesis consumer); keys D1/D3/D5/D6/D7/D8/D9 with
+  parsers, provenance, and guard tests.
+- **Re-run machinery** (decision 7): segment re-entry (additive) +
+  replacement re-runs generalised from reselect, incl. the
+  effective-screen-row read-rule work for criteria-changed re-screen.
+- **CLI wiring**: free text at every pause, confirmation rendering
+  (fan-out plan + re-run mode declaration), mode labels, Unattended
+  standing-instructions authoring in the planning conversation.
 - **Spec/knowledge flow-back**: execution-orchestration § Steering modes
-  gains the steering-event + free-text-interpretation refinement; ADR;
-  deferred.md updates (study seams recorded; 017 deviations discharged);
-  `log.md` entry.
-- Tests + `verification.md` with the pinned live check (§ Acceptance).
+  rewritten (decider dial, mode table, labels — discharges the "Thorough"
+  sync note); ADR; deferred.md (seams in/out per annex; 017 deviations
+  discharged; 025 scope notes: transcripts + Q&A); `log.md` entry.
+- Tests + `verification.md` with the pinned live check.
 
 ## Read first
 
+- [steerability-refinement.md](steerability-refinement.md) — **the design
+  annex**; this contract binds it. [steer-point-study.md](steer-point-study.md)
+  — the component-by-component evidence.
 - [execution-orchestration](../../specs/system/execution-orchestration.md)
-  — steering modes, the routing rule, "human substance enters two ways …
-  represented honestly in provenance"
-- [backend-architecture-reference](../../sources/backend/backend-architecture-reference.md)
-  §6 (steering) + §9 (event-log spine; decision log as projection;
-  transcripts non-canonical; transaction invariant) — via the specs'
-  distillation; source is frozen origin
-- [plan-as-object](../../specs/system/plan-as-object.md) — audit posture
-  across modes; plan-field ↔ chat-turn provenance (the verbatim-text rule's
-  origin)
+  — steering modes + routing rule (this slice revises both), durability.
+- [plan-as-object](../../specs/system/plan-as-object.md) — audit posture;
+  plan-field ↔ chat-turn provenance (the verbatim-text rule's origin).
 - [EB capability.md](../../specs/capabilities/evidence-base/capability.md)
-  § Check-in points — the two spec-named steer points
-- [steer-point-study.md](steer-point-study.md) — the ranked candidate study
-  (this slice's design input)
-- 017 [contract](../017-orchestrator/contract.md) (decisions 5/6/11, rev 2.5
-  blocker 2) + [verification](../017-orchestrator/verification.md) (flagged
-  deviations 1–2) — what this slice discharges
-- As-built: `runtime/steering.py` + `runtime/runner.py` (pause/adjust/
-  reselect paths; every emission site), `runtime/orchestrate.py` (CliIO /
-  UnattendedIO), `runtime/planner.py` (the backend pattern the interpreter
-  mirrors), `core/events.py` (append-only repository),
-  `synthesis/synthesise.py` `propose_synthesis_plan` /
-  `compile_synthesis_directive` (S1's built compile surface),
-  `corpus/select.py` flags/provenance (S0's trigger sources)
+  § Check-in points; [components.md](../../specs/capabilities/evidence-base/components.md)
+  for every touched directive surface.
+- backend-architecture-reference §6/§9 (via the specs; frozen origin) —
+  event-log spine, decision-log projection, `agent_judgement_routed`,
+  transcripts non-canonical.
+- 017 [contract](../017-orchestrator/contract.md) (decisions 2/5/6/11, rev
+  2.5 blocker 2) + [verification](../017-orchestrator/verification.md)
+  (flagged deviations) — what this slice discharges and revises.
+- As-built: `runtime/steering.py` · `runtime/runner.py` ·
+  `runtime/orchestrate.py` · `runtime/planner.py` (the seam pattern) ·
+  `core/events.py` · the directive parsers named in the annex (search_loop
+  · screen · select · extract · facet_values · synthesis_tools) ·
+  `synthesise.propose_synthesis_plan`/`compile_synthesis_directive` ·
+  the vetter coverage validator (`finding_vetter.py`) — B2′'s pattern.
 
 ## Scope / Out of scope
 
-**In:**
+**In:** `runtime/` (steering, runner, orchestrate, planner→orchestrator
+seam, new steering_interpreter/watch + history modules) · `core/schema.py`
++ one migration (decision 2 only) · the component modules gaining grammar
+keys/channels (search_loop, screen, characterise, appraise, select,
+extract + the B2′ annotator, facet_values/group, synthesis_tools/backend
+prompt touch) · prompts (`orchestrator_v1` family, `finding_relevance_v1`)
+· tests · spec flow-back/ADR/deferred/knowledge.
 
-- `runtime/steering.py`, `runtime/runner.py`, `runtime/orchestrate.py` —
-  event emission, interpreter wiring, S1/S2 steer points, S0 triggers,
-  capability_run threading.
-- `core/schema.py` + one alembic migration (decision 1b only).
-- New `runtime/steering_interpreter.py` (+ prompt module) + stub.
-- New history projection (module home plan-designed; likely
-  `runtime/steering_history.py`).
-- `core/events.py` — read helpers only if the projection needs them
-  (append semantics untouched).
-- Tests across all of the above; spec flow-back + ADR + deferred.md.
-
-**Out (stay deferred — recorded with the study):**
-
-- Steer-point candidates S3–S5 (post-screen bar, extract-profile point,
-  post-group re-group) and all § Recorded-seams items (appraise rubric
-  grammar, classify/characterise/vetter steering, granularity keys,
-  threshold directive family, tag-boost vocabulary). S2's own grammar gaps
-  (arm enable/disable, target/threshold overrides, query-term injection)
-  likewise stay seams — S2 ships on the depth + filters grammar as built.
-- Any new directive-grammar key. The interpreter compiles into grammars
-  **as built**; inexpressible = refuse + record (the demand signal the
-  deferred grammar seams wait on).
-- Free-text steering→**replanning** (planner re-entry mid-run), `clarify`/
-  `escalate` parking, narration voice, durable resume, transcript
-  persistence (the CLI planning/steering transcript remains ephemeral;
-  canonical events are the record — §9's line).
-- Front-end/API surfaces; the decision-log/catch-me-up *renderers* (the
-  projection function is the v1 read surface).
-- **Co-pilot Q&A — sequenced as the next slice (025, owner 2026-07-15)**:
-  follow-up questions over the collected evidence without a new capability
-  run (the spec's read-only co-pilot: `retrieve` · `lookup` ·
-  `query-findings`, no `search`, honestly tiered answers, ephemeral unless
-  promoted). Substrate largely built (kind-typed `query_findings`, scoped
-  `search_chunks`); its own contract, not a 024 rider.
-- Schema beyond decision 1b (any second table/column is a stop condition,
-  not a quiet pivot). Transcript persistence and conversation-turn tables
-  (workspace cluster; `session_id` is the anchor this slice leaves ready).
+**Out (annex § Still OUT carries reasons; all recorded seams):** B4 global
+synthesis guidance (held for audience-framing) · tag boosts (D4; post
+tag-consolidation) · any vetting steer or judge steering · classify
+steering · dual-view coverage / the policy object · mid-component pauses ·
+query-set pre-approval · free-text replanning (the watch adjusts within
+the composed chain, never recomposes) · the EB-expert capability agent
+(sockets only — decision 9) · transcript persistence + co-pilot Q&A
+(**025**, owner-sequenced, incl. the per-user transcript store) ·
+front-end/API renderers · schema beyond decision 2.
 
 ## Decisions
 
-1. **Events ride the existing `event_log` unchanged; the walk gets a real
-   identity** *(rev 3 — rewritten at the gate)*. `event_log` itself is
-   untouched (append-only semantics, non-null composite-FK `run_id` intact).
-   Attachment rule: an `after_component` steering event attaches to the
-   component run it is *about* (the semantically correct anchor — a
-   deepening-selection decision belongs to its select run); walk-level and
+1. **Steering events ride the existing `event_log` unchanged.**
+   `after_component` events attach to the run they are about; walk-level /
    `before_component` events attach to the most-recent attempted run as FK
-   plumbing only, with the semantic keys in the payload. Payload rule:
-   every steering event carries `capability_run_id` + `plan_id` +
-   `plan_version` + `boundary` — the projection keys on the entity, never
-   on FK convention. Emission is transactional with its adjacent state
-   change where one exists (plan version row, abandon flip) — the §9
-   transaction invariant.
-
-   **1b. The `capability_run` entity (the one approved schema addition;
-   discharges the 017 deferred seam).** Minimal by the "model only what
-   behaves" discipline: `capability_run_id` (pk) · `project_id` (FK) ·
-   `evidence_scope_id` · `capability` (text, `"evidence_base"` in v3.0) ·
-   `plan_id` + `plan_version` at approval (amendments recorded by the
-   steering events + plan rows, not by mutating this row) · `status`
-   (running / succeeded / degraded / failed / aborted) · `session_id`
-   (nullable — the planning-conversation anchor, the same Langfuse session
-   key `run.started` payloads already carry) · `started_at` / `ended_at`.
-   Plus one nullable `capability_run_id` FK column on `runs`, so component
-   attempts group under their walk. Deliberately NOT modelled (deferred
-   until a second capability behaves): multi-capability composition
-   fields, artefact back-reference (derivable via
-   `synthesis_result.run_id → runs.capability_run_id`), conversation-turn
-   tables. `run_plan` opens the row, threads the id, closes it with the
-   walk status. Alembic migration with explicit revisions + roundtrip
-   test (repo knowledge rule). Multi-run projects get their grouping key;
-   a future EB+options composition is one orchestration plan spanning
-   capabilities with each capability run still its own row (the spec's
-   two-tier plan structure).
-2. **The projection is the contract.** `steering_history()` returns the
-   ordered decision story (pause → options/triggers → decision → outcome,
-   with check-in renders reconstructable via `render_check_in` over
-   `component.completed`/`failed` + steering events). Acceptance pins a
-   **rebuild test**: run a scripted Moderate walk with steers (adjust,
-   reselect-with-free-text, a rejected delta, a refusal), open a fresh
-   connection, and assert the projection reproduces the full story from the
-   database alone — no in-memory state, no transcript.
-3. **Interpreter: planner-pattern seam, fail-closed twice.** Structured
-   output validated against a closed discriminated union (first gate), then
-   compiled through the existing steering apply paths (second gate —
-   `SteeringAdjustmentError` behaviour identical to a hand-authored delta).
-   Confirm-before-apply: the CLI echoes the interpreted reading
-   (plain-language + the exact delta) and applies only on user confirmation;
-   an unconfirmed reading re-prompts. Interpretation failure or an
-   `inexpressible` verdict → `refuse_inexpressible` + `steering.refused`
-   event. Model: judgment-class (planner precedent), env-overridable
-   (`POLICY_ATLAS_STEER_INTERPRET_MODEL`); no OpenAI-specific server-side
-   state (018 standing constraint).
-4. **Sequencing-invariant revision (spec/ADR flow-back).** 017 decision 5
-   pinned "the one LLM surface completes before acquire begins". This slice
-   deliberately revises it: mid-run LLM calls are permitted for
-   **steering interpretation only**, at pause boundaries, never inside a
-   component run — the run's components remain deterministic. The revision
-   lands as ADR + an execution-orchestration § Steering modes refinement,
-   with failure semantics pinned: an interpreter error at a pause degrades
-   to the numbered menu (the run never dies on interpretation).
-5. **Verbatim-text provenance.** `steering.decision` carries `user_text`
-   exactly as typed alongside `interpreted_action` + `confirmed` +
-   interpreter execution profile (model, prompt version) — the
-   plan-field ↔ chat-turn provenance rule applied at the steer grain;
-   attribution stays honest ("never paraphrase-laundered").
-6. **Ship-list (owner decision at this gate).** Study recommendation:
-   **S0** (deepening-selection triggers gain `thin_full_text`,
-   `unmatched_boosts`/`unmatched_priority_patterns`, `budget_exhausted`
-   stratum exclusions, rerank-degradation counters — all read from
-   persisted `selection_result`, no recomputation) + **S1** (pre-synthesise
-   steer point: `before_synthesise` pause upgraded from bare check-in to
-   steer point with options compiling through
-   `compile_synthesis_directive`; triggers from grouping per-facet flags;
-   Unattended auto-resolves via the existing `steer_point_defaults`
-   machinery, which generalises to further points). **Owner selection
-   (2026-07-15): S0 + S1 + S2 ship; S3–S5 recorded as seams.**
-
-   **6b. S2 mechanics (pinned at owner upgrade).** Boundary: after
-   `acquire`, before any downstream spend — so a steer re-runs acquire
-   only, never a completed downstream component (the reselect precedent:
-   user-attributed plan version row + component re-run + fresh run id
-   threaded forward; `apply_reselect`'s shape generalised to a
-   component-parameterised form rather than duplicated). Triggers read
-   persisted `search_coverage_record` rows: `adequacy_verdict ==
-   "inadequate"`, `stop_condition` ∈ {`re_searched_still_thin`,
-   `budget_exhausted`, `wall_clock_exceeded`}. Options: **deepen** →
-   `{"search": {"depth": <next rung>}}` (compiles; new plan version via the
-   generic adjust path where acquire has not completed, re-run path where
-   it has) · **rescope** → `filters` delta (compiles; requires user input)
-   · **accept the thin base** → continue, flagged (the 017 rapid-mode
-   honesty preserved) · **abort**. Whether the same point also reads
-   post-screen thinness (screened-relevant counts vs the loop's floor) is a
-   plan-gate design detail — the trigger data is persisted either way.
-   Unattended: auto-resolves via `steer_point_defaults` like any steer
-   point, `unconfigured_default` loudest.
-7. **Unattended honesty completes.** Auto-resolutions emit
-   `steering.decision` events (`response="auto_resolved"`, rule, action,
-   `unconfigured_default` flagged loudest) — discharging "marked on the run
-   record". The end-of-run collation stays derivable (a render over
-   events + outcomes), not separately persisted.
+   plumbing, with semantics in the payload: every steering event carries
+   `capability_run_id` + `plan_id` + `plan_version` + `boundary` (+
+   `decided_by`/`authored_by`, verbatim `user_text` where prose was given,
+   the interpreter/watch execution profile, and the re-run mode where one
+   is triggered). Emission is transactional with its adjacent state change
+   (plan version row, abandon flip) — the §9 invariant. Append-only stays
+   inviolate.
+2. **The `capability_run` entity — the one approved schema change.**
+   `capability_run_id` · `project_id` · `evidence_scope_id` · `capability`
+   ("evidence_base") · `plan_id`+`plan_version` at approval · `status`
+   (running/succeeded/degraded/failed/aborted) · `session_id` (nullable) ·
+   `started_at`/`ended_at`; plus nullable `runs.capability_run_id`.
+   Deliberately not modelled: composition fields, artefact back-refs
+   (derivable), turn tables (025). Alembic explicit-revisions roundtrip.
+3. **One orchestrator, three moments, five watch disciplines.** One
+   backend seam + `orchestrator_v1` prompt family + shared session. The
+   **router**: prose → fan-out plan across not-yet-run components mixing
+   channels and keys; partial compile with per-fragment honest refusal;
+   **nothing applies unconfirmed** (attended modes). The **watch**: at
+   every boundary — log · decide-in-loco-user · route — under the annex's
+   five disciplines: (i) the structural trigger floor is never
+   suppressible; (ii) bias-to-escalate when substance-or-unsure; (iii)
+   self-decisions use the full user surface (keys + channels), author-
+   blind-validated, with the re-run asymmetry (additive self-decidable,
+   replacement bias-to-escalate); (iv) first-class attribution
+   (`decided_by`/`authored_by`, `agent_judgement_routed`); (v) fail-safe:
+   watch/router errors degrade to the deterministic floor (structural
+   routing, canonical menu) — the run never depends on the judgement
+   layer. **Authored options**: 2–5 run-specific suggested responses per
+   pause on the canonical floor (the planner suggested-answers pattern);
+   canonical options remain the floor and the stable vocabulary
+   `steer_point_defaults` anchor.
+4. **Sequencing-invariant revision (ADR + spec flow-back).** 017 decision
+   5's "one LLM call, pre-run" is deliberately revised: mid-run LLM calls
+   are permitted at component boundaries only (router at pauses, watch at
+   boundaries, the B2′ annotator inside extract's run as a component
+   sub-step) — never steering a component from inside its own run.
+   Component execution itself stays deterministic.
+5. **The lattice and the modes** — as the annex pins them: P1 exception-
+   only (coverage-record triggers) · P2 pre-select coverage (full
+   picture: screened counts, type/quality mix, themes, executed queries;
+   additive re-search segment; criteria+re-screen; re-characterise) · P3
+   deepening-selection (S0-enriched triggers, selection preview, profile/
+   refresh/strata/doc-exclusion options, combined free-text levers) · P4
+   synthesis shape (proposal, sections, boosts, re-group). Modes renamed
+   to the delegation vocabulary; **Moderate = P2+P3+P4 always, P1 fired**;
+   Minimal = fired-only; **Unattended = discretion-is-the-mode (c)**:
+   pinned rules override, hard stops always honoured, no-pinned-rule
+   decisions flagged loudest; standing instructions are planner-authored
+   per steer point at plan time (suggested-answers pattern), skippable.
+6. **Grammar widening — exactly the adjudicated set.** Channels: B1
+   `search.guidance` · B3 `grouping.guidance` · B5 `characterise.guidance`
+   · **B2′** `extraction.relevance_emphasis` → the sibling annotator
+   (extraction and vetting prompts untouched — verdict fenced by
+   construction; run-scoped `relevance_annotations` in `extraction_result`
+   JSONB; no fingerprint participation; synthesis consumer in-slice;
+   pay-only-when-steered). Keys: D1 `appraisal.rubric` (partial type→tier
+   override; derived `rubric_version`) · D3 `extraction.refresh`
+   (fingerprint-bypass by class) · D5 `search.target` (clamped) · D6
+   `selection.strata_scope` · D7 `selection.exclude_ids` · D8
+   `grouping.granularity` · D9 `characterise.themes`. Every key/channel:
+   fail-closed parser, bounded scrubbed strings (data-not-instructions),
+   provenance, `standard`/absent ≡ as-built guard tests. The posture
+   family is retired; the intent taxonomy (substantive bars →
+   criteria/guidance/rubric · output shape → enumerated keys · emphasis →
+   weights/boosts) is the router's compile map.
+7. **Two re-run modes, first-class.** Additive re-entry (segment re-walk,
+   incremental by construction, union coverage, all contributing runs in
+   provenance) vs replacement re-run (reference moves, rows immutable —
+   superseded, never deleted; criteria-changed re-screen = doc-grain
+   replacement via the effective-screen-row read rule, plan-designed).
+   The mode is declared in every confirmation and stamped on the event.
+8. **The trigger floor** — computed from persisted state only, never
+   recomputed, never watch-suppressible: the S0 select signals · P1
+   coverage triggers · P2 coverage/type/quality collapse · P4 grouping
+   flags · screen quality-collapse · classify Unknown share · extraction
+   failure//vetting_failed spikes · **downstream-capability-reduced**.
+9. **The EB-expert boundary.** Post-eval as 017 pinned. 024 ships its
+   sockets: author-blind compile · authorship attribution in events · the
+   authoring seam as a protocol (+ the untouched `leg_directive` slot).
+   Authority order is fixed regardless of author: **user > declared rules
+   > orchestrator**. Authorship is a seam; authority is not.
+10. **Prompt surfaces** — all lead-authored, pinned, versioned in
+    provenance: the `orchestrator_v1` family, `finding_relevance_v1`, the
+    guidance-composition blocks (search-gen, group discovery, characterise
+    discovery, synthesis section prompt incl. priority-finding
+    foregrounding).
 
 ## Constraints & approval gates
 
-- **Runtime egress (hard gate — approved by approving this contract):** one
-  new inference surface (steering interpreter), pause-time only. No new
-  search egress.
-- **Schema (hard gate — approved rev 3, owner at the gate):** exactly one
-  table (`capability_run`) + one nullable FK column (`runs.capability_run_id`)
-  per decision 1b. `event_log` untouched. Anything beyond this is a stop
-  condition (halt, re-gate).
-- **Deps: none.** CI: untouched. Public interfaces: CLI gains free-text
-  input at existing prompts (additive).
-- Prompt-bearing surface (`steer_interpret_v1`) is lead-authored, pinned,
-  versioned in provenance.
-- `make verify` stays green, deterministic, zero-egress (stub interpreter
-  in tests/CLI-stub mode).
+- **Runtime egress (hard gate — approved by approving this contract):**
+  the orchestrator moments (router at pauses; watch at ~6–9 boundaries/run
+  carrying component outputs + authored options) and the B2′ annotator
+  (per-doc mini-class, only when emphasis is set). All behind the one
+  seam with deterministic stubs; CI stays zero-egress. No new search
+  egress. No provider-side conversation state (018 constraint).
+- **Schema (hard gate — approved):** exactly decision 2. Anything further
+  is a stop condition.
+- Deps: none. CI: untouched. Public interface: CLI additions only.
 
 ## Public / private boundary
 
-Committable: code, prompts, specs, tests with sanitized/synthetic steering
-text. Private: live-run transcripts and any real steering prose from live
-checks (verification quotes structure, not user content).
+Committable: code, prompts, specs, tests with synthetic steering text.
+Private: live transcripts and real steering prose from live checks
+(verification quotes structure, not content).
 
 ## Model route
 
-Interpreter: judgment-class via the existing OpenAI route (planner
-precedent), env-overridable; Bedrock migration posture unchanged (nothing
-couples to OpenAI-specific API surface). All other components: unchanged.
+Orchestrator moments: judgment-class via the existing OpenAI route,
+env-overridable (`POLICY_ATLAS_ORCHESTRATOR_MODEL`); B2′ annotator:
+mini-class. Bedrock posture unchanged.
 
 ## Disciplines binding this slice
 
-Template set, plus: **substance is never silent** (every auto-resolution and
-refusal is an event); **honest absence** (a steer the grammar can't express
-is refused + recorded, never approximated); **verbatim attribution** (user
-prose is data, never rewritten); events are **append-only** (no update path
-enters `core/events.py`).
+Template set, plus: substance never silent (every decision surfaces —
+the decider dial moves who answers, never visibility) · honest absence
+(inexpressible = refused + evented, never approximated) · verbatim
+attribution (user prose is data; never paraphrase-laundered) · append-only
+events · faithfulness of the extraction substrate (nothing user-authored
+enters extraction or vetting prompts) · replacement never deletes.
 
 ## Stop conditions
 
-Template set, plus: the zero-schema event design fails (a reachable
-boundary genuinely has no run id) → halt, present the migration options;
-interpreter latency/cost at a pause proves unusable in the live check →
-ship menu-only + flag, don't silently degrade the seam.
+Template set, plus: any schema need beyond decision 2 · a reachable
+boundary with no attachable run id · watch/router latency or cost proving
+unusable live (ship floor-only + flag, don't silently degrade the seam) ·
+the effective-screen-row rework revealing doc-grain replacement is
+unsound (halt, re-gate that option).
 
 ## Acceptance checks
 
-- `make verify` green (stub backends; zero egress).
-- **Migration:** alembic upgrade/downgrade roundtrip test (explicit
-  revisions, repo knowledge rule); schema diff is exactly decision 1b.
-- **Deterministic tests:** event emission at every steering path
-  (pause/decision/rejected/refused/auto-resolved/skipped) · payload
-  completeness (plan lineage + verbatim text) · the decision-2 rebuild test
-  (fresh-connection projection equals the scripted story) · interpreter
-  wire-model fail-closed suite (malformed output, unknown option, delta for
-  a completed component, inexpressible verdict) · confirm-before-apply
-  (unconfirmed never applies) · interpreter-error degradation to menu ·
-  S0 trigger unit tests over seeded `selection_result` rows · S1 option
-  compile round-trip through `parse_synthesis_directive` · S2 trigger unit
-  tests over seeded `search_coverage_record` rows + the acquire re-run path
-  (fault-injected: a failed re-run degrades honestly, never double-spends
-  downstream).
-- **Live check (contract-time pin):** one scoped Moderate run on the
-  standard smoke corpus exercising: a free-text steer at
-  deepening-selection (interpreted → confirmed → reselect), a free-text
-  steer at pre-synthesise (sections pruned via prose), one deliberate
-  inexpressible intent (refusal + event), then `steering_history()` output
-  captured from a fresh connection. S2 live firing is corpus-dependent (a
-  healthy smoke corpus may not trigger thin-search); the honest pin is:
-  S2 evidenced by the scripted fault-injected tests, exercised live only
-  if the corpus fires it — never a contrived live corpus just for the
-  check. Cost: one planner conversation + one standard-depth chain + ≤6
-  interpreter calls — low single-digit dollars, ~20–30 min wall. No full
-  e2e beyond this.
+- `make verify` green (stubs; zero egress). Migration upgrade/downgrade
+  roundtrip; schema diff exactly decision 2.
+- **Deterministic tests:** steering events at every path (pause · all
+  decision kinds × three deciders · rejected · refused · skipped ·
+  auto-resolved) with payload completeness · the **rebuild test**
+  (fresh-connection `steering_history` reproduces a scripted steered
+  multi-walk story, two walks in one project) · router/watch wire-model
+  fail-closed suites + confirm gate (unconfirmed never applies) +
+  degrade-to-floor on backend error · floor-trigger tests over seeded
+  rows (all decision-8 classes) · authored-options degrade test · parser
+  suites for every key/channel + `standard`/absent ≡ as-built guards ·
+  B2′: vetter/extraction prompts byte-untouched, annotator coverage
+  validation, run-scoped persistence, consumer payload carries marks ·
+  re-run modes: additive re-entry reprocesses nothing already processed;
+  replacement moves references with rows intact; segment re-entry
+  fault-injected · D1 rubric override → derived rubric_version travels ·
+  Unattended (c): pinned-rule override, hard-stop honoured, loudest-flag
+  ordering.
+- **Live check (pinned scope):** one Moderate run on the smoke corpus —
+  free-text steers at P2 (coverage → additive re-search on a subtopic),
+  P3 (combined levers + preview render), P4 (sections pruned via prose);
+  one deliberately inexpressible intent (refusal + event); one Minimal
+  segment where the watch self-decides (flagged); `steering_history()`
+  captured from a fresh connection. P1 evidenced by fault-injected tests
+  (a healthy corpus may not fire it). Cost: one planning conversation +
+  one standard chain + ≤12 orchestrator calls — ~$5–10, ~30–45 min. No
+  full e2e beyond this.
 
 ## Verification evidence expected
 
-Command results; the rebuild-test assertion; the live-check
-`steering_history()` capture (sanitized); event-log excerpt for the refusal
-path; diff summary; public-safety confirmation; seams recorded.
+Command results · rebuild-test assertion · live `steering_history()`
+capture (sanitized) · refusal-path event excerpt · B2′ fencing evidence
+(prompt diffs) · migration roundtrip output · diff summary ·
+public-safety confirmation · seams recorded.
 
 ## Risk tier & review focus
 
-**Tier 3** (runtime egress + prompt surface + audit-integrity substance).
-Review focus: event completeness vs the spec's decision-log claims ·
-interpreter injection surface (user prose → structured action: confirm
-gate, grammar fail-closed, no prompt-echo into applied state) · provenance
-honesty (verbatim text, execution profile) · projection determinism ·
-scope creep into deferred grammar seams.
+**Tier 3.** Review focus: event completeness vs the decider-dial claim
+(no decision path without an event) · injection surfaces (user prose →
+prompts: framing/bounds; watch-authored text → downstream prompts) ·
+verdict fencing (B2′) and integrity surfaces staying closed · provenance
+honesty (verbatim, attribution, execution profiles) · replacement/
+additive semantics (no silent deletion, no double-spend) · projection
+determinism · scope fidelity to the adjudicated set (no B4/D4/vetting
+creep) · migration safety.
