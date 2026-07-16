@@ -3,9 +3,10 @@
 > **Status:** approved (rev 4 + watch-information-model amendment).
 > Contract approved: **2026-07-16 · owner** · Plan approved: _pending_ ·
 > ADR: expected (steering-event vocabulary · sequencing-invariant
-> revision · the decider dial). Contract-stage adversarial lane:
-> **deep-reasoner** (Codex quota exhausted 2026-07-14 — ladder
-> substitution, logged here and in verification.md).
+> revision · the decider dial). Contract-stage adversarial lanes:
+> **codex-rescue (primary, family-flip — owner corrected the routing;
+> quota had reset)** + deep-reasoner (second independent take, launched
+> under the stale quota-exhausted assumption; kept for adjudication).
 >
 > **Rev history**
 > - **rev 4** (2026-07-16): **ground-up rewrite** (owner call) from the
