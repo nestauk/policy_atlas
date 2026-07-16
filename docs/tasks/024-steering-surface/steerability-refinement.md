@@ -93,10 +93,20 @@ scrubbed, fail-closed parsed; persisted in that component's provenance;
 - **B1 `search.guidance`** — into query generation + the reformulate arm
   ("prioritise UK policy evaluations; avoid clinical literature").
   Provenance: `search_coverage_record.scope_filters` sibling key. **IN.**
-- **B2 `extraction.guidance`** — into IOF/ICF extraction prompts
-  ("attend to cost-effectiveness outcomes"). **Enters the memo
-  fingerprint** (fingerprint-covers-knobs rule) — guided and unguided
-  extractions never reuse each other. Provenance: extraction_result. **IN.**
+- **B2 `extraction.guidance` — DROPPED (owner review round 3,
+  2026-07-16).** Extraction's contract is *faithfulness*: downstream
+  treats the findings layer as the complete substrate, and emphasis
+  guidance inside a bounded token budget tilts recall (over-X,
+  silently-under-Y) — an emphasis-shaped substrate misread as
+  comprehensive. Guidance would also enter the memo fingerprint,
+  fragmenting the cross-question extraction reuse the multi-question
+  project model depends on. The emphasis intent is fully expressible
+  downstream (screen criteria · select emphasis · boosts + section
+  focus) and at the profile grain (ICF). Seam recorded: **finding-grain
+  relevance annotation** — a vetter-adjacent pass where guidance feeds
+  only a `relevance: priority|normal` field, never the quality verdict
+  (verdict-fenced); eval-gated on evidence that doc/artefact-grain
+  emphasis is insufficient, and on a real downstream consumer.
 - **B3 `grouping.guidance`** — into discovery ("organise by policy
   instrument, not sector"). Provenance: grouping_provenance. **IN.**
 - **B5 `characterise.guidance`** *(owner review, 2026-07-16)* — into the
@@ -253,14 +263,24 @@ refusal demand-meter survives.
   `orchestrator_decides` per steer-point class (± standing-instruction
   text); the *delegation* is checkable at approval even though each
   decision isn't.
-- (c) **Discretion is what Unattended means** *(recommended)*: choosing
-  Unattended is the delegation; pinned rules override where given; hard
-  stop rules are always honoured (discretion can never override a
-  declared stop); every decision evented with reasoning + collated;
-  no-pinned-rule decisions flagged loudest, reviewed first. What approval
-  makes checkable is the delegation + pinned rules; the FOI record
-  improves over blanket proceed-and-flag because decisions carry
-  reasoning.
+- (c) **Discretion is what Unattended means** *(SETTLED — owner,
+  2026-07-16)*: choosing Unattended is the delegation; pinned rules
+  override where given; hard stop rules are always honoured (discretion
+  can never override a declared stop); every decision evented with
+  reasoning + collated; no-pinned-rule decisions flagged loudest,
+  reviewed first. What approval makes checkable is the delegation +
+  pinned rules; the FOI record improves over blanket proceed-and-flag
+  because decisions carry reasoning.
+
+  **How standing instructions are authored (owner UX question,
+  2026-07-16):** never a blank config field. When the user picks
+  Unattended, the **planner walks the steer points and proposes a
+  plain-language default for each** (the suggested-answers pattern),
+  anchored to the canonical option vocabulary; the user accepts, edits
+  in prose (the router compiles it to option ids/rules), or skips —
+  skipped points fall to watch discretion under (c), flagged loudest.
+  The pinned rules are visible plan content approved with the plan
+  (017's consent posture, preserved).
 
 **New floor triggers (Minimal's guarantee, enlarged from the study):**
 screen quality-collapse (rep-failure/quorum-failure rates, stage-2 demote
@@ -346,12 +366,21 @@ watch discipline 3).
    executed queries visible at P1/P2, targeted additive re-search after.
 4d. **Tag boosts** (see D4) — return after tag consolidation + hybrid
    matching over the open tag layer.
-5. **Transcript persistence / turn tables** — workspace cluster;
-   `session_id` anchors are in (1b).
+5. **Transcript persistence / turn tables — re-homed to 025 (owner,
+   2026-07-16)**: not workspace-cluster-distant after all — the co-pilot
+   Q&A slice *requires* persisted per-user sessions (spec: "multiple
+   persisted sessions; browse previous ones"), so the transcript
+   companion store (per-user/per-project turn table, surface +
+   session/`capability_run` linkage, window-plus-recall context
+   assembly) lands with 025, answering chat-continuity-on-return one
+   slice out. 024 ships the anchors (`session_id` on `capability_run`,
+   verbatim text in events). Provider-side conversation state (OpenAI
+   Responses, Bedrock sessions) stays forbidden — the record lives in
+   our store (018 standing constraint; audit/FOI/portability).
 
 ## Cross-cutting cost & discipline ledger
 
-- Every new grammar key: fail-closed parser + provenance + tests; B2/D3
+- Every new grammar key: fail-closed parser + provenance + tests; D3
   additionally fingerprint participation; D8/D9 carry guard tests pinning
   `standard` ≡ as-built. Criteria-changed re-screen (replacement at doc
   grain) adds effective-screen-row read-rule work — the one re-run with
@@ -361,9 +390,9 @@ watch discipline 3).
   framings: planning turn (absorbing `planner_v6`: steer-point defaults
   vocabulary ×4, posture awareness), steer interpretation/router, and the
   boundary watch (routing + option authoring + in-loco-user decisions) —
-  plus guidance-composition points in search-gen / extract ×2 / group
-  discovery / synthesis section prompts (data-not-instructions framing
-  blocks).
+  plus guidance-composition points in search-gen / group discovery /
+  characterise theme-discovery prompts (data-not-instructions framing
+  blocks; extraction and synthesis-global channels dropped/held per B2/B4).
 - Schema: **unchanged beyond decision 1b** — all new steering state rides
   `evidence_scope.context` + result-table JSONB provenance.
 - Eval: every steer-bearing lever is versioned in provenance, so the eval
@@ -397,6 +426,14 @@ delegation-posture labels + decider dial · the mode table above · the
 orchestrator watch with full-user-surface discretion · orchestrator-
 authored options on the canonical floor · one orchestrator prompt family ·
 enlarged trigger floor · EB-expert stays post-eval with sockets shipped.
+
+**Settled at owner review round 3 (2026-07-16):** Unattended (c)
+confirmed + the planner-authored standing-instructions flow pinned · B2
+extraction guidance dropped (faithful-substrate + memo-reuse rationale;
+finding-grain relevance annotation recorded as a verdict-fenced,
+eval-gated seam) · transcript persistence re-homed from workspace cluster
+to 025 (Q&A requires persisted sessions; provider-side state stays
+forbidden) · 025's scope note grows accordingly.
 
 **Settled at owner review round 2 (2026-07-16):** lattice restructured —
 P1 exception-only, P2 = pre-select coverage point with executed-query
