@@ -22,9 +22,11 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `024-steering-surface` (design in progress;
-contract rev 4 rewritten from scratch 2026-07-16, awaiting owner
-approval). **The steering slice — state-of-the-art human-in-the-loop
+Implementation — task `024-steering-surface` (**design COMPLETE
+2026-07-16**: contract + plan owner-approved, both adversarial reviews
+adjudicated, ADRs 0020–0023 committed — **build opens in a fresh
+conversation with `task-cycle-build`**, phases 0–7 per plan.md; schema
+gate = capability_run + screen_generation). **The steering slice — state-of-the-art human-in-the-loop
 (owner direction; deliberately large, no splitting).** Organising
 principle: every decision surfaces in the durable record; the mode
 moves the *decider* (user ↔ orchestrator), never visibility. Strands:

@@ -1,7 +1,9 @@
 # Implementation plan: 024-steering-surface
 
-> Status: drafted (2026-07-16) — plan-stage adversarial review pending ·
-> plan 🛑 pending. Binds to contract rev 4 (as amended: adversarial
+> Status: **approved (2026-07-16 · owner)** — plan-stage adversarial
+> review adjudicated (deep-reasoner lane of record; B1 resolved by the
+> owner's schema-gate expansion); ADRs 0020–0023 authored at
+> confirmation. Binds to contract rev 4 (as amended: adversarial
 > adjudication + owner cost adjudication) and the design annex
 > [steerability-refinement.md](steerability-refinement.md). Executor
 > reality: **Codex quota exhausted (verified live 2026-07-16)** — every
@@ -227,12 +229,12 @@ to the lead rather than queueing.**
 **Phase 7 — step-6 exit (full verify, mandatory) + live check +
 `verification.md`** — **lead**.
 
-**ADR** (step 4): lead authors `docs/adr/0020-steering-surface.md` at
-plan confirmation, committed before the build opens (017 precedent) —
-records: steering-event vocabulary + walk entity · the decider dial ·
-sequencing-invariant revision · classifier-⏸ discharge · Unattended (c)
-mechanism · recency-first screen supersession · the LLM→LLM residual
-acceptance.
+**ADRs** (step 4 — authored at plan confirmation, split by supersession
+lifecycle, owner-confirmed): **0020** steering record + capability_run ·
+**0021** orchestrator decider dial (sequencing revision, classifier-⏸
+discharge, Unattended (c), info/cost model, sockets/authority, LLM→LLM
+residual) · **0022** screen generation supersession · **0023** faithful
+substrate + run-scoped relevance. Task 19's spec rewrite references them.
 
 ## Live-check script (contract pin, cost-adjudicated)
 

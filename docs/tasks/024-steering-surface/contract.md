@@ -3,9 +3,14 @@
 > **Status:** approved (rev 4 + adversarial adjudication + owner cost
 > adjudication — re-approved as amended, **2026-07-16 · owner**:
 > ADR-scope expansion and ~4–6× sizing + de-scope ordering both stand).
-> Contract approved: **2026-07-16 · owner** · Plan approved: _pending_ ·
-> ADR: expected (steering-event vocabulary · sequencing-invariant
-> revision · the decider dial). Contract-stage adversarial lane:
+> Contract approved: **2026-07-16 · owner** · Plan approved:
+> **2026-07-16 · owner** ("Go ahead"; deep-reasoner plan review accepted
+> as lane of record; schema gate expanded same day — decision 7b) ·
+> ADRs: **0020** (steering record + capability_run) · **0021**
+> (orchestrator decider dial) · **0022** (screen generation
+> supersession) · **0023** (faithful substrate + run-scoped relevance) —
+> split by supersession lifecycle, owner-confirmed.
+> Contract-stage adversarial lane:
 > **deep-reasoner** — codex-rescue was attempted first at owner
 > direction (2026-07-16) and failed live ("workspace is out of
 > credits"), so the ladder substitution stands
