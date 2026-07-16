@@ -42,13 +42,24 @@ Unattended auto-resolves per `steer_point_defaults` (planner emits a
 default per point — planner prompt rev); every presentation/decision is a
 steering event (the 024 chassis).
 
-**Pause-set compile (ADJUDICATE — mode semantics).** With four steer
-points, "Moderate pauses at every point" ≈ 4 pauses/run (~heavy). Proposed
-table: **Frequent** = every component boundary (unchanged) · **Moderate** =
-P3 + P4 always, P1/P2 only when a trigger fires · **Minimal** = any point
-whose trigger fires (substance escalation, unchanged spirit) ·
-**Unattended** = none (defaults). Alternative: Moderate pauses at all four
-always. Owner call — this sets the product's default rhythm.
+**Modes — SETTLED (owner, 2026-07-16): four modes kept, renamed to the
+delegation-posture vocabulary; the organising principle is the decider
+dial.** *Every decision surfaces in the record; the mode never changes
+what is decided or what is visible — it moves the decider between the
+user and the orchestrator.* Check-in stream ≠ pauses: progress check-ins
+stream (and persist as events) in every mode; the mode governs only what
+blocks and who answers.
+
+| User-facing label ("When should I come back to you?") | Plan value | User decides live | Orchestrator decides (recorded + flagged) | Pauses, healthy standard run |
+|---|---|---|---|---|
+| "Often — walk me through it" | frequent | everything (watch only *recommends*) | nothing | ~8–10 |
+| "At the key decisions" *(default)* | moderate | P3 + P4 always; P1/P2 + watch-escalations when fired | routine boundary residuals | 2 |
+| "Only if something needs my judgment" | minimal | fired triggers + watch-escalated substance | everything else, within the user surface | 0 |
+| "Never — here are my standing instructions" | unattended | nothing live | per the adjudicated Unattended model (watch section) | 0, guaranteed |
+
+Spec flow-back: execution-orchestration § Steering modes gets this table +
+labels and discharges the standing "Thorough" label-sync note. Plan schema
+keeps the four values; presentation changes only.
 
 ## Family B — guidance channels (prose-as-data into LLM prompts)
 
@@ -135,6 +146,103 @@ provenance (the `search_effort` precedent). No raw knob exposure.
 - Refusal events per unexpressed fragment (the demand meter survives even
   in a wide grammar).
 
+## The orchestrator watch — the decider layer (owner-driven, 2026-07-16)
+
+The orchestrator observes every component boundary (input/output stage) and
+routes each decision per the decider dial: nothing notable → log ·
+notable-but-within-intent → decide itself (flagged, evented) → needs the
+user (by mode) → pause. It is the third *moment* of the one orchestrator
+agent (planning turn · steer interpretation · boundary watch) — **not a new
+agent**: one backend seam, one prompt family (`orchestrator_v1`,
+moment-scoped framings), one execution profile, the shared session id, so
+the watch reads the same refined intent the planning conversation
+produced. Egress accounting stays honest: new call sites carrying project
+data (~6–9 boundary calls/run, judgment-class model, stub for tests).
+
+**Layering disciplines (each hard-constrained):**
+
+1. **Structural triggers are the floor, never suppressible.** The declared
+   trigger table fires deterministically regardless of the watch's
+   judgement; the watch can add escalations, never remove one. Escalation
+   never depends on an LLM recognising substance in the moment.
+2. **Bias-to-escalate when substance-or-unsure** (the spec's rule) — in
+   modes where the user is available, prefer routing over self-deciding.
+3. **Self-decisions use the full user surface, no more, no less** (owner
+   challenge upheld, 2026-07-16): the watch decides by the same options +
+   free-text-authored deltas (structured keys, postures, guidance
+   channels) a user has, compiled through the same author-blind fail-closed
+   grammar. Integrity surfaces (grounding judge, vetter sensitivity) are
+   closed to everyone. Known risk, named for eval: watch-authored guidance
+   entering downstream prompts is an LLM→LLM channel with no confirm gate —
+   controls are attribution, flags, the review-first collation, and user
+   override at any attended pause; compounding across boundaries is an
+   eval measurement, not a silent assumption.
+4. **Attribution is first-class**: `decided_by: user | orchestrator |
+   standing_default` and `authored_by` on every decision/option; agent
+   decisions emit in the spec's `agent_judgement_routed` vocabulary with
+   the watch's reasoning and authored text verbatim. The history
+   projection renders one uniform story; only the decider varies by mode.
+5. **Fail-safe is the floor**: a watch-call failure degrades to pure
+   structural routing (today's behaviour). The run never depends on the
+   judgement layer being up.
+
+**Orchestrator-authored options (owner, 2026-07-16 — IN).** At every
+pause the watch composes 2–5 run-specific suggested responses (label +
+why + compiling delta) — the planner's suggested-answers pattern (017
+decision 5) moved to boundaries: "Deepen 'rural childcare subsidies' (14
+docs, dropped by budget)" instead of "Deepen the clusters you name."
+Authoring failure degrades to the canonical menu, never blocks. The
+canonical per-point options survive as two load-bearing things: the
+**deterministic floor** (always present, always valid) and the **stable
+vocabulary** `steer_point_defaults` rules and tests anchor on (ephemeral
+authored options can anchor neither). Authored options must compile —
+inexpressible proposals are caught by validation and logged, so the
+refusal demand-meter survives.
+
+**Unattended model (ADJUDICATE — a/b/c; lead recommends c):**
+- (a) Status quo: declared rules + proceed-and-flag only; zero runtime
+  judgement. Strongest approval-time checkability, weakest delegation.
+- (b) Opt-in discretion grant: the plan visibly carries
+  `orchestrator_decides` per steer-point class (± standing-instruction
+  text); the *delegation* is checkable at approval even though each
+  decision isn't.
+- (c) **Discretion is what Unattended means** *(recommended)*: choosing
+  Unattended is the delegation; pinned rules override where given; hard
+  stop rules are always honoured (discretion can never override a
+  declared stop); every decision evented with reasoning + collated;
+  no-pinned-rule decisions flagged loudest, reviewed first. What approval
+  makes checkable is the delegation + pinned rules; the FOI record
+  improves over blanket proceed-and-flag because decisions carry
+  reasoning.
+
+**New floor triggers (Minimal's guarantee, enlarged from the study):**
+screen quality-collapse (rep-failure/quorum-failure rates, stage-2 demote
+spike) · classify `Unknown` share · appraise `by_score` collapsed-to-weak ·
+extraction failure / `vetting_failed` spikes · **downstream capability
+reduced** (a discretionary component failed/skipped so the rest of the run
+is structurally poorer — e.g. group failed → ungrouped synthesis; today
+collation-only). Completeness beyond the cheap-and-persisted floor is the
+watch's residual coverage — no exhaustive pre-enumerated taxonomy (spec).
+
+**The capability-agent boundary and its sockets (walk-forward by
+construction).** The watch is the orchestrator as *decider-in-loco-user at
+delegated decision points*; the deferred EB-expert is a capability
+sub-agent as *default directive author on every leg* (replacing the
+deterministic compile as the routine path). The EB-expert stays post-eval
+as 017 pinned — its every-leg output has no human filter until the eval
+harness can measure directive quality, whereas every watch exit is either
+human-filtered (options) or flagged-and-collated (bounded decisions). 024
+builds its sockets so the later fill is a backend swap, not surgery:
+(1) author-blind compile (already the design) · (2) `authored_by`/
+`decided_by` attribution in the events (projection unchanged when the
+author changes) · (3) the authoring seam as a protocol — "boundary state +
+intent → suggested responses / decision" — the orchestrator implements
+today; post-eval the EB-expert plugs in behind it (and at the runner's
+existing `leg_directive` slot), with the orchestrator still the only
+user-facing surface. **Authority order is fixed regardless of author:
+user > declared rules > orchestrator. Authorship is a seam; authority is
+not.**
+
 ## Still OUT, even in the big slice (each with its reason)
 
 1. **Dual-view coverage / the source-evidence policy object** — a
@@ -148,6 +256,11 @@ provenance (the `search_effort` precedent). No raw knob exposure.
 4. **Free-text replanning** (recomposing the chain / adding components
    mid-run beyond the existing nudge mechanics) — planner re-entry is its
    own surface; the nudge + mode change remain the composition levers.
+   *(The watch inherits the same limit: it adjusts within the composed
+   chain, never recomposes it.)*
+4b. **The EB-expert capability agent** (every-leg directive authoring,
+   domain-expert persona) — post-eval as 017 pinned; 024 ships its three
+   sockets (watch section) so arrival is a backend swap.
 5. **Transcript persistence / turn tables** — workspace cluster;
    `session_id` anchors are in (1b).
 
@@ -157,25 +270,40 @@ provenance (the `search_effort` precedent). No raw knob exposure.
   additionally fingerprint participation; C1 changes screen's consensus
   path behind a posture default that reproduces today's behaviour exactly
   (guard tests pin `standard` ≡ as-built).
-- Prompt surfaces touched (all lead-authored): interpreter
-  (`steer_interpret_v1`, now a router), planner (`planner_v6`: steer-point
-  defaults vocabulary ×4, posture awareness), guidance-composition points
-  in search-gen / extract ×2 / group discovery / synthesis section
-  prompts (data-not-instructions framing blocks).
+- Prompt surfaces touched (all lead-authored): the **`orchestrator_v1`
+  prompt family** — one system-prompt family, three moment-scoped
+  framings: planning turn (absorbing `planner_v6`: steer-point defaults
+  vocabulary ×4, posture awareness), steer interpretation/router, and the
+  boundary watch (routing + option authoring + in-loco-user decisions) —
+  plus guidance-composition points in search-gen / extract ×2 / group
+  discovery / synthesis section prompts (data-not-instructions framing
+  blocks).
 - Schema: **unchanged beyond decision 1b** — all new steering state rides
   `evidence_scope.context` + result-table JSONB provenance.
 - Eval: every steer-bearing lever is versioned in provenance, so the eval
   slice can condition on steering state; posture vocabularies kept small
   so baselines stay tractable.
-- Build sizing: roughly 2.5–3× the rev 3 build. The plan will phase it
-  (chassis → grammar families → lattice → router → prompts → live check)
-  with per-phase verify gates.
+- Watch egress: ~6–9 boundary calls/run carrying component outputs +
+  authored options — named in the contract's egress gate alongside the
+  router's pause-time calls; all behind the one orchestrator seam with a
+  deterministic stub (zero-egress CI unchanged).
+- Build sizing: roughly 3–3.5× the rev 3 build. The plan will phase it
+  (chassis → grammar families → lattice → watch/router → prompts → live
+  check) with per-phase verify gates.
 
-## Adjudication list (owner)
+## Adjudication list (owner) — remaining
 
-1. Pause-set table (Moderate's rhythm): trigger-gated P1/P2 + always P3/P4
-   (lead recommendation) vs all-four-always.
-2. B4 global synthesis guidance: in now vs held for audience-framing.
-3. C2 vetting: binary on/off + retry (lead compromise) vs fully out vs
-   sensitivity dial (lead recommends against the dial).
-4. Anything in "Still OUT" the owner wants pulled back in.
+1. **Unattended model**: (a) declared-rules-only · (b) opt-in discretion
+   grant · (c) discretion-is-the-mode *(lead recommends c; hard stops
+   always honoured in every variant)*.
+2. **B4 global synthesis guidance**: in now vs held for audience-framing
+   (two-overlapping-voice-levers risk).
+3. **C2 vetting**: binary on/off + retry-failed (lead compromise) vs fully
+   out vs sensitivity dial (lead recommends against the dial).
+4. Anything in "Still OUT" to pull back in.
+
+**Settled at this working note (owner, 2026-07-16):** four modes with the
+delegation-posture labels + decider dial · the mode table above · the
+orchestrator watch with full-user-surface discretion · orchestrator-
+authored options on the canonical floor · one orchestrator prompt family ·
+enlarged trigger floor · EB-expert stays post-eval with sockets shipped.
