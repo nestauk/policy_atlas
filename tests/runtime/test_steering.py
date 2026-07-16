@@ -13,11 +13,17 @@ from sqlalchemy.engine import Engine
 from policy_atlas.core import events
 from policy_atlas.core.schema import (
     characterisation_result,
+    evidence_scope,
     grouping_result,
     orchestration_plan,
     runs,
     selection_result,
+    source_appraisal_result,
     synthesis_result,
+)
+from policy_atlas.evidence_base.assess.appraise import (
+    DEFAULT_RUBRIC_VERSION,
+    _derive_rubric_version,
 )
 from policy_atlas.evidence_base.corpus.characterise import CharacteriseFailure, ScreenedSource
 from policy_atlas.evidence_base.corpus.select import (
@@ -86,6 +92,44 @@ class ScriptedIO:
         if self.responses:
             return self.responses.pop(0)
         return Continue()
+
+
+class _InjectAtIO:
+    """Return one scripted response at the first after_component pause of a named
+    component, then Continue everywhere (for injecting a pending-component
+    adjustment before a downstream component runs)."""
+
+    def __init__(self, *, target_component: str, response: SteeringResponse) -> None:
+        self.target_component = target_component
+        self.response = response
+        self.fired = False
+        self.check_ins: list[tuple[str, dict[str, Any]]] = []
+        self.pauses: list[tuple[dict[str, Any], str]] = []
+
+    def check_in(self, component: str, payload: dict[str, Any]) -> None:
+        self.check_ins.append((component, payload))
+
+    def pause(self, point: dict[str, Any], render: str) -> SteeringResponse:
+        self.pauses.append((dict(point), render))
+        if (
+            not self.fired
+            and point.get("component") == self.target_component
+            and point.get("boundary") == "after_component"
+        ):
+            self.fired = True
+            return self.response
+        return Continue()
+
+
+def _compiled_by_component(
+    engine: Engine, project_id: uuid.UUID
+) -> dict[str, list[dict[str, Any]]]:
+    by_component: dict[str, list[dict[str, Any]]] = {}
+    with engine.connect() as conn:
+        for entry in events.read(conn, project_id):
+            if entry["event_type"] == "plan.compiled":
+                by_component.setdefault(entry["payload"]["component"], []).append(entry["payload"])
+    return by_component
 
 
 def _insert_plan_row(
@@ -748,14 +792,15 @@ def test_adjustment_naming_already_run_component_reprompts_without_plan_write(
             scope_id=scope_id,
             plan=plan,
         )
-        # select is re-runnable at the deepening-selection steer point (task 7),
-        # so the already-run rejection property is proven with characterise, an
-        # already-run discretionary component the steer point never re-runs. It is
-        # delivered at P2 (evidence_base_coverage, after characterise has run) so
-        # the rejection is "already-run"; the reprompt then Continues.
+        # select/characterise/group are each re-runnable at their own steer point
+        # (task 7 / 15b — characterise re-runs at P2), so the already-run rejection
+        # property is proven with appraise, an already-run component no steer point
+        # ever re-runs. It is delivered at P2 (evidence_base_coverage, after
+        # appraise has run) so the rejection is "already-run"; the reprompt then
+        # Continues.
         io = ScriptedIO(
             by_steer_point={
-                "evidence_base_coverage": [Adjust(directive_deltas={"characterise": {}})]
+                "evidence_base_coverage": [Adjust(directive_deltas={"appraise": {}})]
             }
         )
 
@@ -776,7 +821,7 @@ def test_adjustment_naming_already_run_component_reprompts_without_plan_write(
         # lattice pause first fires (P2 fires on the thin seed); the rejection
         # render surfaces and no plan-version row is written.
         assert any(
-            "already-run component 'characterise'" in render for _, render in io.pauses
+            "already-run component 'appraise'" in render for _, render in io.pauses
         )
         with engine.connect() as conn:
             rows = conn.execute(
@@ -1254,6 +1299,525 @@ def test_moderate_steer_point_reselect_reruns_select_and_threads_new_run_id(
         select_steps = [step for step in outcome.steps if step.component == "select"]
         assert len(select_steps) == 2
         assert all(step.status == "succeeded" for step in select_steps)
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_p2_recharacterise_option_reruns_and_rethreads_reference(engine: Engine) -> None:
+    """A canonical P2 (before select) re-characterise option Adjust re-runs
+    characterise (replacement) — both characterisation rows persist and select
+    references the NEW run (Task 15b)."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan()  # moderate: P2 (evidence_base_coverage) pauses
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        io = ScriptedIO(
+            by_steer_point={
+                "evidence_base_coverage": [
+                    Adjust(
+                        directive_deltas={
+                            "characterise": {
+                                "characterise": {
+                                    "themes": "standard",
+                                    "guidance": ["focus on rural areas"],
+                                }
+                            }
+                        }
+                    )
+                ]
+            }
+        )
+
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+        )
+        assert outcome.status == "succeeded"
+
+        with engine.connect() as conn:
+            compiled = [
+                entry
+                for entry in events.read(conn, project_id)
+                if entry["event_type"] == "plan.compiled"
+            ]
+            char_row_runs = set(
+                conn.execute(
+                    select(characterisation_result.c.run_id).where(
+                        characterisation_result.c.project_id == project_id
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        char_runs = [
+            entry["run_id"] for entry in compiled if entry["payload"]["component"] == "characterise"
+        ]
+        # Two characterise runs; both rows persist (replacement never deletes).
+        assert len(char_runs) == 2
+        assert char_row_runs == set(char_runs)
+        # select references the RE-RUN characterise, not the original.
+        select_payload = next(
+            entry["payload"] for entry in compiled if entry["payload"]["component"] == "select"
+        )
+        assert select_payload["characterisation_run_id"] == str(char_runs[1])
+        assert select_payload["characterisation_run_id"] != str(char_runs[0])
+        # The decision stamps rerun_mode=replacement.
+        with engine.connect() as conn:
+            replacements = [
+                entry
+                for entry in events.read(conn, project_id)
+                if entry["event_type"] == steering_events.STEERING_DECISION
+                and entry["payload"].get("rerun_mode") == "replacement"
+                and entry["payload"].get("boundary") == "before_component"
+            ]
+        assert len(replacements) == 1
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_p4_regroup_option_reruns_and_rethreads_reference(engine: Engine) -> None:
+    """A canonical P4 (before synthesise) re-group option Adjust re-runs group
+    (replacement) — both grouping rows persist and synthesise references the NEW
+    group run (Task 15b)."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan()  # moderate: P4 (synthesis_shape) pauses
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        io = ScriptedIO(
+            by_steer_point={
+                "synthesis_shape": [
+                    Adjust(directive_deltas={"group": {"grouping": {"granularity": "coarser"}}})
+                ]
+            }
+        )
+
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+        )
+        assert outcome.status == "succeeded"
+
+        with engine.connect() as conn:
+            compiled = [
+                entry
+                for entry in events.read(conn, project_id)
+                if entry["event_type"] == "plan.compiled"
+            ]
+            group_row_runs = set(
+                conn.execute(
+                    select(grouping_result.c.run_id).where(
+                        grouping_result.c.project_id == project_id
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        group_runs = [
+            entry["run_id"] for entry in compiled if entry["payload"]["component"] == "group"
+        ]
+        assert len(group_runs) == 2
+        assert group_row_runs == set(group_runs)
+        # synthesise references the RE-RUN group, not the original.
+        synth_payload = next(
+            entry["payload"] for entry in compiled if entry["payload"]["component"] == "synthesise"
+        )
+        assert synth_payload["grouping_run_id"] == str(group_runs[1])
+        assert synth_payload["grouping_run_id"] != str(group_runs[0])
+        with engine.connect() as conn:
+            replacements = [
+                entry
+                for entry in events.read(conn, project_id)
+                if entry["event_type"] == steering_events.STEERING_DECISION
+                and entry["payload"].get("rerun_mode") == "replacement"
+                and entry["payload"].get("boundary") == "before_component"
+            ]
+        assert len(replacements) == 1
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+# --- Pending commit-layer overlays (task 024, 15c) -------------------------
+
+
+def test_pending_overlay_appraise_rubric_reaches_run(engine: Engine) -> None:
+    """A pending appraise rubric adjustment (commit-layer, no plan field) is
+    stored as an overlay and reaches the appraise run: every appraisal row carries
+    the derived override rubric_version, and the plan.compiled event echoes it."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan(steering_mode="frequent")
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        rubric = {"Expert Opinion and Commentary": 5}
+        # Injected at the after-classify pause — appraise has not yet run.
+        io = _InjectAtIO(
+            target_component="classify",
+            response=Adjust(directive_deltas={"appraise": {"appraisal": {"rubric": rubric}}}),
+        )
+
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+        )
+        assert outcome.status == "succeeded"
+
+        expected_version = _derive_rubric_version(rubric)
+        assert expected_version != DEFAULT_RUBRIC_VERSION
+        with engine.connect() as conn:
+            versions = set(
+                conn.execute(
+                    select(source_appraisal_result.c.rubric_version).where(
+                        source_appraisal_result.c.project_id == project_id
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        # The override reached appraise: every row carries the derived version.
+        assert versions == {expected_version}
+
+        # Provenance: the appraise plan.compiled event echoes the executed overlay.
+        appraise_payloads = _compiled_by_component(engine, project_id)["appraise"]
+        assert appraise_payloads[0]["pending_overlay"] == {"appraisal": {"rubric": rubric}}
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_pending_overlay_characterise_echoes_and_does_not_leak(engine: Engine) -> None:
+    """A pending characterise themes/guidance overlay echoes on characterise's
+    plan.compiled event and does NOT leak onto other components' events."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan(steering_mode="frequent")
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        char_delta = {"characterise": {"themes": "standard", "guidance": ["focus on rural areas"]}}
+        io = _InjectAtIO(
+            target_component="classify",
+            response=Adjust(directive_deltas={"characterise": char_delta}),
+        )
+
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+        )
+        assert outcome.status == "succeeded"
+
+        by_component = _compiled_by_component(engine, project_id)
+        # The overlay echoes on characterise only.
+        assert by_component["characterise"][0]["pending_overlay"] == char_delta
+        # It does not leak onto appraise / select / group / synthesise events.
+        for other in ("appraise", "select", "group", "synthesise"):
+            assert all("pending_overlay" not in payload for payload in by_component[other])
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_plan_mappable_screening_criteria_takes_plan_path_no_overlay(engine: Engine) -> None:
+    """Guard: a plan-mappable delta (screening criteria) takes the EXISTING plan
+    path — it maps to the plan payload and is NOT overlaid (no double-apply)."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan(steering_mode="frequent")
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        new_criteria = ["Include only randomised controlled trials"]
+        # Injected at the after-acquire pause — screen_abstract has not yet run.
+        io = _InjectAtIO(
+            target_component="acquire",
+            response=Adjust(
+                directive_deltas={"screen_abstract": {"screening": {"criteria": new_criteria}}}
+            ),
+        )
+
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+        )
+        assert outcome.status == "succeeded"
+
+        # The criteria took the plan path: a new version carries them in its payload.
+        with engine.connect() as conn:
+            rows = conn.execute(
+                select(orchestration_plan.c.version, orchestration_plan.c.payload)
+                .where(orchestration_plan.c.project_id == project_id)
+                .order_by(orchestration_plan.c.version)
+            ).all()
+        assert rows[-1].payload["screening_criteria"] == new_criteria
+        # No overlay was minted for a plan-mappable component (no double-apply).
+        by_component = _compiled_by_component(engine, project_id)
+        for payloads in by_component.values():
+            assert all("pending_overlay" not in payload for payload in payloads)
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+# --- Mixed-grammar delta splitting (task 024, 15d) -------------------------
+
+
+def _scope_context(engine: Engine, scope_id: uuid.UUID) -> dict[str, Any]:
+    with engine.connect() as conn:
+        context: dict[str, Any] = conn.execute(
+            select(evidence_scope.c.context).where(
+                evidence_scope.c.evidence_scope_id == scope_id
+            )
+        ).scalar_one()
+    return context
+
+
+def test_pending_extract_split_maps_profiles_and_overlays_refresh_and_emphasis(
+    engine: Engine,
+) -> None:
+    """A pending-extract Adjust carrying profiles + refresh + relevance_emphasis
+    SPLITS: profiles map to the plan payload; refresh (D3) and relevance_emphasis
+    (the B2' entry point) fold into the overlay and reach the run — the scope
+    context carries all three and the plan.compiled event echoes ONLY the
+    commit-layer keys (never silently dropped again)."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan(steering_mode="frequent")
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        emphasis = ["prioritise rural areas"]
+        delta = {
+            "extract": {
+                "extraction": {
+                    "profiles": [IOF_PROFILE_ID],
+                    "refresh": "abstract_only",
+                    "relevance_emphasis": emphasis,
+                }
+            }
+        }
+        io = _InjectAtIO(target_component="select", response=Adjust(directive_deltas=delta))
+
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+        )
+        assert outcome.status == "succeeded"
+
+        # profiles took the PLAN path (a new version carries extract_profiles).
+        with engine.connect() as conn:
+            latest = conn.execute(
+                select(orchestration_plan.c.payload)
+                .where(orchestration_plan.c.project_id == project_id)
+                .order_by(orchestration_plan.c.version.desc())
+                .limit(1)
+            ).scalar_one()
+        assert latest["extract_profiles"] == ["iof"]
+
+        # The overlay echoes ONLY the commit-layer keys — profiles are NOT overlaid.
+        extract_compiled = _compiled_by_component(engine, project_id)["extract"]
+        assert extract_compiled[0]["pending_overlay"] == {
+            "extraction": {"refresh": "abstract_only", "relevance_emphasis": emphasis}
+        }
+
+        # The run consumed refresh + relevance_emphasis: the scope context carries
+        # them alongside the plan-path profiles (the merged executed directive).
+        extraction_ctx = _scope_context(engine, scope_id)["extraction"]
+        assert extraction_ctx["refresh"] == "abstract_only"
+        assert extraction_ctx["relevance_emphasis"] == emphasis
+        assert extraction_ctx["profiles"] == [IOF_PROFILE_ID]
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_pending_group_split_maps_facets_and_overlays_granularity_guidance(
+    engine: Engine,
+) -> None:
+    """A pending-group Adjust carrying facets + granularity + guidance SPLITS:
+    facets map to the plan; granularity (D8) + guidance (B3) overlay and reach the
+    run. The plan.compiled event echoes only the commit-layer keys and the scope
+    context carries them alongside the plan-path facets."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan(steering_mode="frequent")
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        guidance = ["group rural and urban separately"]
+        delta = {
+            "group": {
+                "grouping": {
+                    "facets": ["population"],
+                    "granularity": "coarser",
+                    "guidance": guidance,
+                }
+            }
+        }
+        io = _InjectAtIO(target_component="extract", response=Adjust(directive_deltas=delta))
+
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+        )
+        assert outcome.status == "succeeded"
+
+        # facets took the PLAN path.
+        with engine.connect() as conn:
+            latest = conn.execute(
+                select(orchestration_plan.c.payload)
+                .where(orchestration_plan.c.project_id == project_id)
+                .order_by(orchestration_plan.c.version.desc())
+                .limit(1)
+            ).scalar_one()
+        assert latest["grouping_facets"] == ["population"]
+
+        # The overlay echoes ONLY granularity + guidance (facets are NOT overlaid).
+        group_compiled = _compiled_by_component(engine, project_id)["group"]
+        assert group_compiled[0]["pending_overlay"] == {
+            "grouping": {"granularity": "coarser", "guidance": guidance}
+        }
+
+        # The run consumed granularity + guidance (scope-context row).
+        grouping_ctx = _scope_context(engine, scope_id)["grouping"]
+        assert grouping_ctx["granularity"] == "coarser"
+        assert grouping_ctx["guidance"] == guidance
+        assert grouping_ctx["facets"] == ["population"]
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_p3_refresh_extraction_option_applies_end_to_end(engine: Engine) -> None:
+    """The canonical P3 refresh_extraction option (profiles + refresh) applies
+    cleanly on pending extract: profiles map to the plan, refresh reaches the run
+    via the overlay."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan()  # moderate: P3 (deepening_selection) pauses
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        option = next(
+            opt
+            for opt in build_steer_point_options(plan=plan, point="deepening_selection")
+            if opt["id"] == "refresh_extraction"
+        )
+        io = ScriptedIO(
+            by_steer_point={
+                "deepening_selection": [Adjust(directive_deltas=option["delta"])]
+            }
+        )
+
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+        )
+        assert outcome.status == "succeeded"
+
+        # The refresh reached the run through the overlay.
+        extraction_ctx = _scope_context(engine, scope_id)["extraction"]
+        assert extraction_ctx["refresh"] == "abstract_only"
+        extract_compiled = _compiled_by_component(engine, project_id)["extract"]
+        assert extract_compiled[0]["pending_overlay"] == {
+            "extraction": {"refresh": "abstract_only"}
+        }
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_pending_select_fine_key_stays_honestly_rejected(engine: Engine) -> None:
+    """Guard: a non-budget fine key on PENDING select keeps its honest 'not yet
+    mappable' rejection — it is NOT silently overlaid (no canonical option needs
+    it there; the honest refusal is the contract)."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan(steering_mode="frequent")
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        io = _InjectAtIO(
+            target_component="characterise",
+            response=Adjust(
+                directive_deltas={"select": {"selection": {"weight_emphasis": {"quality": 2.0}}}}
+            ),
+        )
+
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+        )
+        assert outcome.status == "succeeded"
+
+        # The adjustment was rejected honestly and loudly — no overlay, no plan version.
+        with engine.connect() as conn:
+            rejected = [
+                entry
+                for entry in events.read(conn, project_id)
+                if entry["event_type"] == steering_events.STEERING_REJECTED
+            ]
+            versions = conn.execute(
+                select(orchestration_plan.c.version).where(
+                    orchestration_plan.c.project_id == project_id
+                )
+            ).scalars().all()
+        assert any("not yet mappable" in e["payload"]["reason"] for e in rejected)
+        assert list(versions) == [1]
+        # No overlay minted for the rejected select delta.
+        by_component = _compiled_by_component(engine, project_id)
+        assert all("pending_overlay" not in p for p in by_component["select"])
     finally:
         _cleanup_project(engine, project_id)
 

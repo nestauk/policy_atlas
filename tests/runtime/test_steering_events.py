@@ -364,12 +364,13 @@ def test_rejected_adjustment_emits_reason_then_continue(engine: Engine) -> None:
         project_id, scope_id = _seed_project(engine)
         plan = _base_plan(steering_mode="minimal")
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
-        # characterise has already run by the P2 (evidence_base_coverage) pause:
-        # an adjustment naming it fails closed and is rejected; the reprompt then
-        # Continues (delivered by steer point, robust to which points fire).
+        # appraise has already run by the P2 (evidence_base_coverage) pause and no
+        # steer point ever re-runs it (unlike characterise, which P2 re-runs since
+        # Task 15b): an adjustment naming it fails closed and is rejected; the
+        # reprompt then Continues (delivered by steer point, robust to which fire).
         io = ScriptedIO(
             by_steer_point={
-                "evidence_base_coverage": [Adjust(directive_deltas={"characterise": {}})]
+                "evidence_base_coverage": [Adjust(directive_deltas={"appraise": {}})]
             }
         )
 
@@ -390,8 +391,8 @@ def test_rejected_adjustment_emits_reason_then_continue(engine: Engine) -> None:
         assert len(rejected) == 1
         payload = rejected[0]["payload"]
         assert set(payload) >= BASE_KEYS
-        assert "already-run component 'characterise'" in payload["reason"]
-        assert payload["offending_delta"] == {"directive_deltas": {"characterise": {}}}
+        assert "already-run component 'appraise'" in payload["reason"]
+        assert payload["offending_delta"] == {"directive_deltas": {"appraise": {}}}
         assert rejected[0]["run_id"] is not None
 
         # No plan-version row was written (the rejected adjustment never applied).

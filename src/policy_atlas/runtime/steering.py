@@ -50,9 +50,85 @@ from policy_atlas.runtime.orchestration_plan import (
     _enabled_components,
     compose,
 )
+from policy_atlas.runtime.orchestrator_prompt import RouterCompileWire
 
 PauseBoundary = Literal["after_component", "before_component"]
 UnattendedAction = Literal["proceed_flag", "stop"]
+
+# Commit-layer components (task 024, 15c): their directive validates through
+# ``_validate_directive_delta`` but has NO OrchestrationPlan field to round-trip
+# through (appraise's rubric, characterise's themes/guidance, synthesise's
+# sections/boosts). A pending adjustment for one of these is recorded on the plan
+# version but reaches the component's run through the runner's PENDING OVERLAY,
+# not the plan payload. This is the single source of truth the round-trip
+# exemption and the overlay both read.
+COMMIT_LAYER_COMPONENTS: frozenset[str] = frozenset({"appraise", "characterise", "synthesise"})
+
+# Mixed-grammar components (task 024, 15d): part of the directive maps to a plan
+# field (extract ``profiles`` -> ``extract_profiles``; group ``facets`` ->
+# ``grouping_facets``) and part is commit-layer with NO plan field (extract
+# ``refresh`` (D3) + ``relevance_emphasis`` (the B2' entry point); group
+# ``granularity`` + ``guidance``). A pending adjustment SPLITS: the plan-mappable
+# part takes the plan path, the commit-layer remainder folds into the overlay.
+_MIXED_COMMIT_LAYER_KEYS: dict[str, tuple[str, frozenset[str]]] = {
+    "extract": ("extraction", frozenset({"refresh", "relevance_emphasis"})),
+    "group": ("grouping", frozenset({"granularity", "guidance"})),
+}
+
+
+def deep_merge_delta(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    """Deep-merge ``overlay`` over ``base`` — overlay wins per leaf key.
+
+    Nested objects merge recursively; a non-dict overlay value (list, scalar)
+    replaces the base value wholesale. Used to fold a pending overlay into a
+    component's composed directive at execution time (task 024, 15c).
+
+    Args:
+        base: The component's composed directive delta.
+        overlay: The pending overlay directive to merge over it.
+
+    Returns:
+        A new merged dict (inputs are not mutated).
+    """
+    merged = dict(base)
+    for key, value in overlay.items():
+        existing = merged.get(key)
+        if isinstance(value, dict) and isinstance(existing, dict):
+            merged[key] = deep_merge_delta(existing, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def commit_layer_overlay(component: str, delta: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the commit-layer part of a pending delta to fold into the overlay.
+
+    A pure commit-layer component (:data:`COMMIT_LAYER_COMPONENTS`) overlays its
+    whole delta. A mixed-grammar component (extract / group) overlays ONLY its
+    commit-layer keys — the plan-mappable part (extract profiles, group facets)
+    takes the plan path (task 024, 15d). Returns ``None`` when there is nothing to
+    overlay.
+
+    Args:
+        component: The pending component the delta targets.
+        delta: The component's directive delta (its own grammar).
+
+    Returns:
+        The commit-layer sub-delta to overlay, or ``None``.
+    """
+    if not delta:
+        return None
+    if component in COMMIT_LAYER_COMPONENTS:
+        return delta
+    spec = _MIXED_COMMIT_LAYER_KEYS.get(component)
+    if spec is None:
+        return None
+    context_key, keys = spec
+    inner = delta.get(context_key)
+    if not isinstance(inner, dict):
+        return None
+    part = {key: value for key, value in inner.items() if key in keys}
+    return {context_key: part} if part else None
 
 # --- The steer-point lattice (task 024 decision 5) -------------------------
 #
@@ -174,6 +250,10 @@ class Adjust:
     directive_deltas: dict[str, dict[str, Any]] = field(default_factory=dict)
     new_mode: str | None = None
     nudge: str | None = None
+    # Authorship of the delta's CONTENT (steering discipline iv): "orchestrator"
+    # when the user picked a watch-authored option — the user decided, the
+    # orchestrator authored. None ≡ user-authored.
+    authored_by: str | None = None
 
 
 @dataclass(frozen=True)
@@ -215,7 +295,24 @@ class ReEnterSegment:
     directive_deltas: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
-SteeringResponse = Continue | Adjust | Abort | ReEnterSegment
+@dataclass(frozen=True)
+class FreeText:
+    """Free-text steering prose typed at a pause (task 024, decision 3 — the router).
+
+    Returned by a pause-capable IO layer (the CLI, Task 17) when the user typed
+    prose rather than picking a canonical option. The runner compiles it through
+    the orchestrator ``route`` backend into a deterministically-validated fan-out
+    of bounded directive deltas, renders that fan-out for confirmation, and
+    applies only what the user confirms. ``NullIO`` never returns it.
+
+    Args:
+        text: The user's verbatim free-text steering prose.
+    """
+
+    text: str
+
+
+SteeringResponse = Continue | Adjust | Abort | ReEnterSegment | FreeText
 
 
 class SteeringAdjustmentError(ValueError):
@@ -845,6 +942,321 @@ def refuse_inexpressible(intent_text: str) -> str:
     return REFUSAL_MESSAGE_TEMPLATE.format(intent=intent_text)
 
 
+# --- The router fan-out (task 024, decision 3) -----------------------------
+#
+# A user's free-text utterance at a pause is compiled by the orchestrator
+# ``route`` backend into a fan-out of per-intent fragments. Every fragment the
+# model claims compiles is RE-VALIDATED here, author-blind, through the SAME
+# fail-closed grammars a canonical option choice takes (steering discipline 3):
+# nothing the model asserts is trusted — a fragment that fails validation is
+# demoted to refused (``validation_failed``). Nothing applies unconfirmed; the
+# render below is the confirmation the user sees.
+
+FragmentKind = Literal["plan_adjustment", "replacement_rerun", "segment_reentry"]
+
+
+@dataclass(frozen=True)
+class RerunSurface:
+    """The re-run surface available at one pause (what the router may target).
+
+    Args:
+        replacement_component: The component the point offers as a REPLACEMENT
+            re-run from the pause (``"select"`` at the deepening-selection point,
+            ``None`` elsewhere this slice), or ``None`` when no replacement re-run
+            is wired at this boundary.
+        segment_reentry_available: Whether an ADDITIVE segment re-entry (re-search
+            back to acquire, or a criteria re-screen re-walk) can execute at this
+            boundary — an after_component boundary with acquire already completed.
+    """
+
+    replacement_component: str | None
+    segment_reentry_available: bool
+
+
+@dataclass(frozen=True)
+class CompiledFragment:
+    """One router fragment that passed author-blind validation, ready to apply.
+
+    Args:
+        fragment_text: The part of the utterance this fragment answers (verbatim
+            from the router, for the confirmation render and the record).
+        kind: Which apply path the fragment takes.
+        component: The composed component the delta targets.
+        delta: The validated directive delta in the component's own grammar (the
+            same shape a canonical option's ``delta`` carries).
+        rerun_mode: ``"additive"`` / ``"replacement"`` for a re-run fragment, else
+            ``None``.
+    """
+
+    fragment_text: str
+    kind: FragmentKind
+    component: str
+    delta: dict[str, Any]
+    rerun_mode: str | None
+
+
+@dataclass(frozen=True)
+class RefusedFragment:
+    """One router fragment refused — by the model, by validation, or by the surface.
+
+    Args:
+        fragment_text: The part of the utterance this fragment answers (verbatim).
+        reason: One plain sentence naming why it was not applied — never a
+            suggestion to approximate it (the demand meter).
+    """
+
+    fragment_text: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class FanOut:
+    """A deterministically-validated fan-out: what will apply, what was refused.
+
+    Args:
+        compiled: Fragments that will apply on confirmation, in application order.
+        refused: Fragments refused, each carrying its verbatim text and reason.
+        summary: The router's one/two-sentence plain summary for the render.
+    """
+
+    compiled: list[CompiledFragment] = field(default_factory=list)
+    refused: list[RefusedFragment] = field(default_factory=list)
+    summary: str = ""
+
+    @property
+    def plan_adjustments(self) -> list[CompiledFragment]:
+        """The pending-component adjustment fragments (merged into one Adjust)."""
+        return [frag for frag in self.compiled if frag.kind == "plan_adjustment"]
+
+    @property
+    def rerun(self) -> CompiledFragment | None:
+        """The single re-run fragment to apply this pause, or ``None`` (one-cycle rule)."""
+        return next(
+            (frag for frag in self.compiled if frag.kind != "plan_adjustment"), None
+        )
+
+    def as_interpreted_action(self) -> dict[str, Any]:
+        """The JSON-safe fan-out record stamped on the confirmed decision event."""
+        return {
+            "compiled": [
+                {
+                    "fragment_text": frag.fragment_text,
+                    "kind": frag.kind,
+                    "component": frag.component,
+                    "delta": frag.delta,
+                    "rerun_mode": frag.rerun_mode,
+                }
+                for frag in self.compiled
+            ],
+            "refused": [
+                {"fragment_text": frag.fragment_text, "reason": frag.reason}
+                for frag in self.refused
+            ],
+            "summary": self.summary,
+        }
+
+
+class _FragmentRefused(Exception):
+    """Internal: a compiling fragment failed re-validation or the surface check.
+
+    Args:
+        reason: The honest refusal reason recorded on the refused fragment.
+    """
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def compile_fanout(
+    compile_result: RouterCompileWire,
+    *,
+    backend_scope: str,
+    current_components: set[str],
+    completed_components: set[str],
+    rerun_surface: RerunSurface,
+) -> FanOut:
+    """Re-validate a router compile, author-blind, into an apply-ready fan-out.
+
+    Each fragment the model marked ``compiles=false`` is refused as-is. Each
+    ``compiles=true`` fragment is re-validated through the same fail-closed
+    grammar its target takes (:func:`_validate_directive_delta` for a pending
+    component or an additive re-search / criteria re-screen; the replacement
+    grammar for a select/characterise/group re-run) AND checked against the
+    boundary's re-run surface and component bounds. A fragment that fails any
+    check is demoted to a refused fragment with a ``validation_failed`` reason —
+    the model's claim is never trusted (steering discipline 3). At most one
+    re-run fragment survives: a second re-run is refused (the one-cycle rule,
+    applying the one the utterance leads with).
+
+    Args:
+        compile_result: The router's raw fan-out.
+        backend_scope: The plan's backend scope (acquire filter validation).
+        current_components: The composed chain's component names.
+        completed_components: Components whose boundary has already passed.
+        rerun_surface: The re-run surface available at this boundary.
+
+    Returns:
+        The validated :class:`FanOut`.
+    """
+    compiled: list[CompiledFragment] = []
+    refused: list[RefusedFragment] = []
+    rerun_taken = False
+    for fragment in compile_result.fragments:
+        text = fragment.fragment_text
+        if not fragment.compiles:
+            refused.append(
+                RefusedFragment(text, fragment.refusal_reason or "not yet expressible")
+            )
+            continue
+        try:
+            candidate = _classify_and_validate(
+                fragment,
+                backend_scope=backend_scope,
+                current_components=current_components,
+                completed_components=completed_components,
+                rerun_surface=rerun_surface,
+            )
+        except _FragmentRefused as exc:
+            refused.append(RefusedFragment(text, exc.reason))
+            continue
+        if candidate.kind != "plan_adjustment":
+            if rerun_taken:
+                refused.append(
+                    RefusedFragment(
+                        text,
+                        "only one re-run can apply at a pause; an earlier re-run in your "
+                        "request leads and was applied instead",
+                    )
+                )
+                continue
+            rerun_taken = True
+        compiled.append(candidate)
+    return FanOut(compiled=compiled, refused=refused, summary=compile_result.summary)
+
+
+def _classify_and_validate(
+    fragment: Any,
+    *,
+    backend_scope: str,
+    current_components: set[str],
+    completed_components: set[str],
+    rerun_surface: RerunSurface,
+) -> CompiledFragment:
+    """Classify one compiling fragment and re-validate it fail-closed, or refuse it."""
+    component = fragment.component
+    delta = fragment.delta or {}
+    if not isinstance(component, str) or not component:
+        raise _FragmentRefused("validation_failed: compiling fragment named no component")
+    mode = fragment.rerun_mode
+
+    if mode == "additive":
+        if not rerun_surface.segment_reentry_available:
+            raise _FragmentRefused(
+                "validation_failed: an additive re-search is not available at this pause"
+            )
+        _revalidate_directive(component, delta, backend_scope=backend_scope)
+        return CompiledFragment(
+            fragment.fragment_text, "segment_reentry", component, delta, "additive"
+        )
+
+    if mode == "replacement":
+        if component in REPLACEMENT_RERUN_CONTEXT_KEYS:
+            if component != rerun_surface.replacement_component:
+                raise _FragmentRefused(
+                    f"validation_failed: a replacement re-run of {component!r} is not "
+                    "available at this pause"
+                )
+            try:
+                _validate_replacement_directive(component, delta)
+            except SteeringAdjustmentError as exc:
+                raise _FragmentRefused(f"validation_failed: {exc}") from exc
+            return CompiledFragment(
+                fragment.fragment_text, "replacement_rerun", component, delta, "replacement"
+            )
+        if component in {"screen_abstract", "screen_full"}:
+            # A criteria re-screen replaces screening at the document grain but its
+            # walk mechanics are an additive acquire->assess re-walk (contract
+            # decision 7 / P2 note), so it rides the segment-re-entry apply path.
+            if not rerun_surface.segment_reentry_available:
+                raise _FragmentRefused(
+                    "validation_failed: a criteria re-screen is not available at this pause"
+                )
+            _revalidate_directive(component, delta, backend_scope=backend_scope)
+            return CompiledFragment(
+                fragment.fragment_text, "segment_reentry", component, delta, "replacement"
+            )
+        raise _FragmentRefused(
+            f"validation_failed: {component!r} has no replacement re-run at this pause"
+        )
+
+    # No re-run mode: a bounded adjustment of a not-yet-run component.
+    if component in completed_components:
+        raise _FragmentRefused(
+            f"validation_failed: {component!r} has already run and cannot be adjusted"
+        )
+    if component not in current_components:
+        raise _FragmentRefused(f"validation_failed: {component!r} is not in the plan")
+    _revalidate_directive(component, delta, backend_scope=backend_scope)
+    return CompiledFragment(fragment.fragment_text, "plan_adjustment", component, delta, None)
+
+
+def _revalidate_directive(component: str, delta: dict[str, Any], *, backend_scope: str) -> None:
+    """Re-validate a directive delta fail-closed, mapping failure to a refusal."""
+    try:
+        _validate_directive_delta(component, delta, backend_scope=backend_scope)
+    except SteeringAdjustmentError as exc:
+        raise _FragmentRefused(f"validation_failed: {exc}") from exc
+
+
+def _fragment_mode_sentence(fragment: CompiledFragment) -> str:
+    """The plain-language mode sentence declared for one fragment in the render."""
+    if fragment.kind == "segment_reentry" and fragment.rerun_mode == "additive":
+        return "this will ADD TO your evidence base"
+    if fragment.kind == "segment_reentry" and fragment.rerun_mode == "replacement":
+        return "this will RE-SCREEN every document at new criteria, replacing the current screening"
+    if fragment.kind == "replacement_rerun":
+        noun = {
+            "select": "selection",
+            "characterise": "characterisation",
+            "group": "grouping",
+        }.get(fragment.component, fragment.component)
+        return f"this will REDO {noun}, replacing the current one"
+    return f"this will adjust {fragment.component} before it runs"
+
+
+def render_fanout_confirmation(fanout: FanOut) -> str:
+    """Render a validated fan-out for the confirmation gate, deterministically.
+
+    Each compiling fragment is shown with its target component and its re-run
+    mode declared in plain language ("this will ADD TO your evidence base" /
+    "this will REDO selection, replacing the current one"); each refused fragment
+    is named with its reason. Nothing here applies — the user's confirmation of
+    this render is the safety gate (contract decision 3).
+
+    Args:
+        fanout: The validated fan-out from :func:`compile_fanout`.
+
+    Returns:
+        Stable, human-readable confirmation text.
+    """
+    lines = ["Steering interpretation — confirm to apply:"]
+    if fanout.summary:
+        lines.append(fanout.summary)
+    if fanout.compiled:
+        lines.append("Will apply:")
+        for fragment in fanout.compiled:
+            lines.append(
+                f"- {fragment.fragment_text!r} → {fragment.component}: "
+                f"{_fragment_mode_sentence(fragment)}."
+            )
+    if fanout.refused:
+        lines.append("Refused (not expressible / not available):")
+        for refused in fanout.refused:
+            lines.append(f"- {refused.fragment_text!r}: {refused.reason}")
+    return "\n".join(lines)
+
+
 def validate_option_delta(delta: dict[str, Any], *, backend_scope: str = "both") -> None:
     """Compile one canonical-option delta through its component grammar (fail-closed).
 
@@ -1387,6 +1799,17 @@ def _validate_directive_delta(
         except characterise_module.CharacteriseDirectiveError as exc:
             raise SteeringAdjustmentError(str(exc)) from exc
         return
+    if component == "synthesise":
+        # P4 synthesis-shape edits (sections / retrieval boosts) are a
+        # commit-layer directive with no OrchestrationPlan field (the appraise /
+        # characterise precedent): validated through the synthesis grammar, and
+        # exempt from the plan round-trip below.
+        _require_keys(component, delta, {"synthesis"})
+        try:
+            parse_synthesis_directive({"synthesis": delta["synthesis"]}, grouping_group_ids=None)
+        except SynthesisDirectiveError as exc:
+            raise SteeringAdjustmentError(str(exc)) from exc
+        return
     raise SteeringAdjustmentError(f"component {component!r} has no steering directive grammar")
 
 
@@ -1422,14 +1845,17 @@ def _apply_component_delta_to_payload(
     elif component == "extract":
         _apply_extract_delta(payload, delta["extraction"])
     elif component == "group":
-        # D8's granularity and B3's guidance are commit-layer directives with
-        # no OrchestrationPlan field (the appraisal-rubric precedent): only
-        # facets round-trip through the plan payload; granularity and guidance
-        # are discarded here and exempted below.
-        facets, _facet_source, _granularity, _guidance = parse_grouping_directive(
-            {"grouping": delta["grouping"]}
-        )
-        payload["grouping_facets"] = facets
+        # Mixed grammar (task 024, 15d): ONLY facets map to the plan payload.
+        # D8 granularity and B3 guidance are commit-layer (folded into the
+        # pending overlay). Write grouping_facets ONLY when the delta actually
+        # names facets — a granularity-/guidance-only delta must NOT clobber the
+        # plan's facet set back to the default.
+        grouping = delta["grouping"]
+        if isinstance(grouping, dict) and ("facets" in grouping or "facet" in grouping):
+            facets, _facet_source, _granularity, _guidance = parse_grouping_directive(
+                {"grouping": grouping}
+            )
+            payload["grouping_facets"] = facets
     elif component == "appraise":
         # D1's appraisal rubric override is a commit-layer directive with no
         # OrchestrationPlan field (apply_reselect's fine select directive is
@@ -1442,6 +1868,11 @@ def _apply_component_delta_to_payload(
         # commit-layer directive with no OrchestrationPlan field (same
         # precedent as appraise): nothing to write into the plan payload;
         # characterise carries forward unchanged.
+        pass
+    elif component == "synthesise":
+        # P4's synthesis directive (sections / retrieval boosts) is a
+        # commit-layer directive with no OrchestrationPlan field (same
+        # precedent as characterise): nothing to write into the plan payload.
         pass
 
 
@@ -1526,14 +1957,19 @@ def _apply_select_delta(payload: dict[str, Any], selection: Any) -> None:
 
 
 def _apply_extract_delta(payload: dict[str, Any], extraction: Any) -> None:
-    # D3's refresh is a commit-layer directive with no OrchestrationPlan field
-    # (the appraisal-rubric precedent): only profiles round-trip through the
-    # plan payload; refresh is discarded here and exempted in the round-trip
-    # check below.
+    # Mixed grammar (task 024, 15d): ONLY ``profiles`` maps to the plan payload.
+    # ``refresh`` (D3) and ``relevance_emphasis`` (the B2' entry point) are
+    # commit-layer — validated here but folded into the pending overlay so they
+    # reach the run, never silently dropped. Parse validates the whole directive
+    # (incl. relevance_emphasis) fail-closed; profiles are written only when the
+    # delta actually names them (a refresh-/emphasis-only delta must NOT clobber
+    # the plan's profile set).
     try:
         profiles, _refresh = extract_module._parse_extraction_directive(extraction)
     except extract_module.ExtractError as exc:
         raise SteeringAdjustmentError(str(exc)) from exc
+    if not (isinstance(extraction, dict) and "profiles" in extraction):
+        return
     by_profile_id = {profile_id: profile for profile, profile_id in EXTRACT_PROFILE_IDS.items()}
     payload["extract_profiles"] = [by_profile_id[profile_id] for profile_id in profiles]
 
@@ -1570,18 +2006,25 @@ def _validate_delta_round_trip(
         # apply_reselect's fine select directive, which never re-enters this
         # generic round-trip path at all) — there is no plan field for either
         # to round-trip through, so both are exempted rather than failed closed.
-        if component in {"appraise", "characterise"}:
+        if component in COMMIT_LAYER_COMPONENTS:
             continue
         # compose() always injects sibling keys the caller need not supply
         # (e.g. acquire's "depth", screen_full's "stage"), so the recompiled
         # delta is checked to *contain* the request, not to equal it — a
         # requested value the plan fields cannot express still fails closed.
+        # Mixed grammar (task 024, 15d): only the plan-mappable part round-trips.
+        # extract -> profiles; group -> facets. The commit-layer remainder
+        # (extract refresh / relevance_emphasis; group granularity / guidance) is
+        # validated at _validate_directive_delta time and consumed verbatim by the
+        # component's own parser at run time via the pending overlay — it has no
+        # plan field to round-trip through, so it is exempt here (never dropped).
         if component == "extract" and requested_delta:
+            extraction = requested_delta.get("extraction")
+            if not (isinstance(extraction, dict) and "profiles" in extraction):
+                continue  # refresh / relevance_emphasis are commit-layer (overlay)
             try:
                 requested_profiles, _requested_refresh = (
-                    extract_module._parse_extraction_directive(
-                        requested_delta.get("extraction")
-                    )
+                    extract_module._parse_extraction_directive(extraction)
                 )
             except extract_module.ExtractError as exc:
                 raise SteeringAdjustmentError(str(exc)) from exc
@@ -1597,6 +2040,20 @@ def _validate_delta_round_trip(
             raise SteeringAdjustmentError(
                 f"adjustment for {component!r} cannot round-trip through plan fields"
             )
+        if component == "group" and requested_delta:
+            grouping = requested_delta.get("grouping")
+            facet_part = (
+                {key: value for key, value in grouping.items() if key in {"facet", "facets"}}
+                if isinstance(grouping, dict)
+                else {}
+            )
+            if facet_part and not _delta_contains(
+                amended_by_component.get(component), {"grouping": facet_part}
+            ):
+                raise SteeringAdjustmentError(
+                    f"adjustment for {component!r} cannot round-trip through plan fields"
+                )
+            continue
         if requested_delta and not _delta_contains(
             amended_by_component.get(component), requested_delta
         ):

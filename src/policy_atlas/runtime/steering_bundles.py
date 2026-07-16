@@ -24,6 +24,7 @@ from sqlalchemy.engine import Connection
 from policy_atlas.core.schema import (
     characterisation_result,
     event_log,
+    extraction_result,
     grouping_result,
     project_source_snapshot,
     search_coverage_record,
@@ -34,8 +35,11 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.evidence_base.assess.screen import effective_screen_rows
 from policy_atlas.evidence_base.synthesis.synthesis_backend import SynthesisBackend
+from policy_atlas.evidence_base.synthesis.synthesis_tools import priority_counts_by_group
 from policy_atlas.evidence_base.synthesis.synthesise import (
     SynthesiseContext,
+    _grouping_summary,
+    _relevance_annotations,
     propose_synthesis_plan,
 )
 
@@ -511,25 +515,43 @@ def p4_bundle(
             group did not run (grouping_flags then ``None``).
 
     Returns:
-        The versioned P4 bundle dict. ``priority_counts`` is ``None`` this
-        slice — the B2' relevance annotator ships in Phase 5; None means "not
-        computed", distinct from an empty ``{}`` (no priority findings).
+        The versioned P4 bundle dict. ``priority_counts`` is the per-group
+        B2' mark tally when this run's extraction carries relevance
+        annotations; ``None`` when it carries none (never fabricated).
     """
     proposal = propose_synthesis_plan(
         conn, project_id=project_id, context=context, synthesis_backend=synthesis_backend
     )
     grouping_flags: Any = None
+    grouping_groups: list[dict[str, Any]] | None = None
     if group_run_id is not None:
         group_row = conn.execute(
-            sa_select(grouping_result.c.flags)
+            sa_select(grouping_result.c.flags, grouping_result.c.groups)
             .where(grouping_result.c.project_id == project_id)
             .where(grouping_result.c.run_id == group_run_id)
         ).first()
         if group_row is not None:
             grouping_flags = group_row.flags if isinstance(group_row.flags, dict) else {}
+            summary = _grouping_summary(dict(group_row._mapping))
+            if summary is not None:
+                grouping_groups = summary["groups"]
+    # B2' priority counts: None = "no annotations on this run" (never
+    # fabricated); populated only when the extraction carried relevance marks.
+    priority_counts: dict[str, dict[str, int]] | None = None
+    if context.extraction_run_id is not None and grouping_groups is not None:
+        extraction_row = conn.execute(
+            sa_select(extraction_result.c.extraction_provenance)
+            .where(extraction_result.c.project_id == project_id)
+            .where(extraction_result.c.run_id == context.extraction_run_id)
+        ).first()
+        annotations = _relevance_annotations(
+            dict(extraction_row._mapping) if extraction_row is not None else None
+        )
+        if annotations:
+            priority_counts = priority_counts_by_group(grouping_groups, annotations)
     return {
         "bundle_version": BUNDLE_VERSION,
         "proposal": proposal,
         "grouping_flags": grouping_flags,
-        "priority_counts": None,
+        "priority_counts": priority_counts,
     }

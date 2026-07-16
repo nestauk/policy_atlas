@@ -47,7 +47,7 @@ from policy_atlas.runtime.steering import (
     apply_segment_reentry,
 )
 from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_project
-from tests.runtime.test_steering import _cleanup_project, _insert_plan_row
+from tests.runtime.test_steering import ScriptedIO, _cleanup_project, _insert_plan_row
 
 # The re-walked segment at an after-characterise boundary in the deep chain.
 _SEGMENT = [
@@ -298,8 +298,10 @@ def test_segment_reentry_second_request_at_reentry_boundary_rejected(
 
 
 def test_segment_reentry_rejected_at_before_component_boundary(engine: Engine) -> None:
-    """Segment re-entry is an after_component construct: a ReEnterSegment at a
-    before_component pause (moderate's before_synthesise) is rejected."""
+    """Segment re-entry stays OUT at P4 (before synthesise): a re-walk there would
+    additively re-run the run-scoped select/extract/group, so a ReEnterSegment at
+    moderate's before_synthesise pause is rejected (Task 15b narrows the old
+    'all before_component' rule — P2 now ALLOWS segment re-entry)."""
     project_id: uuid.UUID | None = None
     try:
         project_id, scope_id = _seed_project(engine)
@@ -588,5 +590,124 @@ def test_no_new_characterisation_row_leak_and_both_persist(engine: Engine) -> No
         # Both characterisation runs left an immutable row behind.
         assert char_runs == row_runs
         assert len(row_runs) == 2
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+# --- P2 (before select) segment re-entry (Task 15b) ------------------------
+
+
+def test_p2_segment_reentry_re_presents_once_and_second_request_rejected(
+    engine: Engine,
+) -> None:
+    """At P2 an additive re-search re-walks acquire→characterise and re-presents
+    P2 once; a second ReEnterSegment on the re-presentation is rejected (the
+    one-cycle rule), then Continue proceeds into select."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan()  # moderate: P2 (evidence_base_coverage) pauses
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        io = ScriptedIO(
+            by_steer_point={
+                "evidence_base_coverage": [
+                    ReEnterSegment(segment_start="acquire", directive_deltas=_AMENDMENT),
+                    ReEnterSegment(segment_start="acquire", directive_deltas=_AMENDMENT),
+                    Continue(),
+                ]
+            }
+        )
+
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+        )
+        assert outcome.status == "succeeded"
+
+        with engine.connect() as conn:
+            additive = [
+                entry
+                for entry in events.read(conn, project_id)
+                if entry["event_type"] == steering_events.STEERING_DECISION
+                and entry["payload"].get("rerun_mode") == "additive"
+            ]
+            rejected = [
+                entry
+                for entry in events.read(conn, project_id)
+                if entry["event_type"] == steering_events.STEERING_REJECTED
+                and entry["payload"].get("boundary") == "before_component"
+            ]
+        # Exactly one re-walk; the second request rejected (one cycle).
+        assert len(additive) == 1
+        assert additive[0]["payload"]["boundary"] == "before_component"
+        assert len(rejected) == 1
+        assert "not available" in rejected[0]["payload"]["reason"]
+        # characterise re-walked once (original + one re-walk), not twice.
+        runs_by_component = _runs_by_component(_plan_compiled(engine, project_id))
+        assert len(runs_by_component["characterise"]) == 2
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_p2_criteria_rescreen_writes_new_generation(engine: Engine) -> None:
+    """A P2 criteria re-screen rides the segment-re-entry path with a screening
+    amendment: the acquire→characterise re-walk re-screens abstracts at new
+    criteria, minting a fresh screen generation (supersession, ADR 0022)."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan()  # moderate: P2 pauses
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        io = ScriptedIO(
+            by_steer_point={
+                "evidence_base_coverage": [
+                    ReEnterSegment(
+                        segment_start="acquire",
+                        directive_deltas={
+                            "screen_abstract": {
+                                "screening": {
+                                    "criteria": ["Include only randomised controlled trials"],
+                                    "rescreen": True,
+                                }
+                            }
+                        },
+                    )
+                ]
+            }
+        )
+
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+        )
+        assert outcome.status == "succeeded"
+
+        with engine.connect() as conn:
+            generations = set(
+                conn.execute(
+                    select(source_screening_result.c.screen_generation).where(
+                        source_screening_result.c.project_id == project_id
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        # The re-screen minted a fresh generation coexisting with the original.
+        assert 0 in generations
+        assert max(generations) >= 1
     finally:
         _cleanup_project(engine, project_id)

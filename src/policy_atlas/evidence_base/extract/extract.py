@@ -32,7 +32,9 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import CallBudget
+from policy_atlas.core.prompt_fields import parse_guidance_channel
 from policy_atlas.core.schema import (
+    DIRECTIVE_STRING_MAX,
     MEMO_STATUSES,
     chunk,
     extraction_result,
@@ -108,6 +110,14 @@ from policy_atlas.evidence_base.extract.quote_verify import (
     icf_claim_key,
     validate_icf_record,
     validate_record,
+)
+from policy_atlas.evidence_base.extract.relevance_annotator import (
+    RELEVANCE_ANNOTATOR_MODEL,
+    RelevanceAnnotatorBackend,
+    validate_annotation_coverage,
+)
+from policy_atlas.evidence_base.extract.relevance_prompt import (
+    FINDING_RELEVANCE_PROMPT_VERSION,
 )
 
 log = structlog.get_logger()
@@ -1549,11 +1559,18 @@ def _parse_extraction_directive(raw: Any) -> tuple[tuple[str, ...], str | None]:
         raise ExtractError("extraction directive must be an object")
     if not raw:
         return (PROFILE_ID,), None
-    unknown = set(raw) - {"profiles", "refresh"}
+    unknown = set(raw) - {"profiles", "refresh", "relevance_emphasis"}
     if unknown:
         raise ExtractError(
             f"extraction directive contains unknown keys: {sorted(unknown)}"
         )
+    # B2′ (024): validate relevance_emphasis fail-closed here so the steering
+    # extract branch (which routes through this parser) rejects a malformed
+    # emphasis. The VALUE is read separately by the harness via
+    # `parse_relevance_emphasis` — this function's 2-tuple return is frozen for
+    # the runtime callers (harness / steering) that unpack it. The emphasis is
+    # never returned into the extraction fingerprint path (memo reuse untouched).
+    parse_relevance_emphasis(raw)
 
     profiles: tuple[str, ...] = (PROFILE_ID,)
     if "profiles" in raw:
@@ -1594,6 +1611,34 @@ def _parse_extraction_directive(raw: Any) -> tuple[tuple[str, ...], str | None]:
         refresh = refresh_raw
 
     return profiles, refresh
+
+
+def parse_relevance_emphasis(raw: Any) -> list[str] | None:
+    """Parse the B2′ ``extraction.relevance_emphasis`` channel, fail-closed.
+
+    A bounded list of 1–5 user-emphasis sentences (the Family B guidance shape,
+    ``parse_guidance_channel``). Returns the validated list, or ``None`` when
+    the key is absent — absent is byte-identical to as-built (no annotator pass,
+    no marks).
+
+    The emphasis is consumed only by the sibling annotator pass (post-vetting),
+    NEVER by the extraction prompt, the vetter prompt, or the extraction
+    fingerprint — verdict fenced by construction (ADR 0023).
+
+    Args:
+        raw: The ``context["extraction"]`` object, or ``None``.
+
+    Returns:
+        The parsed emphasis sentences, or ``None`` when absent.
+
+    Raises:
+        ExtractError: If ``relevance_emphasis`` is present but malformed.
+    """
+    if not isinstance(raw, dict) or "relevance_emphasis" not in raw:
+        return None
+    return parse_guidance_channel(
+        raw["relevance_emphasis"], error=ExtractError, max_chars=DIRECTIVE_STRING_MAX
+    )
 
 
 def _clone_doc_for_profile(doc: _Doc) -> _Doc:
@@ -1694,6 +1739,155 @@ def _run_profile(
     )
 
 
+# --- Relevance annotator (B2′ / ADR 0023) -----------------------------------
+
+
+def _relevance_record_ids(
+    summary: dict[str, Any],
+) -> tuple[list[uuid.UUID], list[uuid.UUID]]:
+    """Resolve this run's effective IOF/ICF extraction-record ids from the roll-up.
+
+    Reads ``summary["docs"]`` (the same per-profile doc grain synthesis reads),
+    so the annotated set is exactly the set synthesis surfaces — including
+    memo-reused records, whose findings still need a question-relative mark.
+    """
+    grouped = record_ids_by_profile(summary["docs"])
+
+    def _uuids(profile_id: str) -> list[uuid.UUID]:
+        parsed: list[uuid.UUID] = []
+        for raw_id in grouped.get(profile_id, []):
+            if isinstance(raw_id, uuid.UUID):
+                parsed.append(raw_id)
+            elif isinstance(raw_id, str):
+                try:
+                    parsed.append(uuid.UUID(raw_id))
+                except ValueError:
+                    continue
+        return parsed
+
+    return _uuids(PROFILE_ID), _uuids(ICF_PROFILE_ID)
+
+
+def _load_relevance_digests(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    iof_record_ids: Sequence[uuid.UUID],
+    icf_record_ids: Sequence[uuid.UUID],
+) -> list[dict[str, Any]]:
+    """Load id-keyed finding digests for the annotator, at FINDING grain.
+
+    Reads the persisted finding rows directly (never the doc/profile roll-up):
+    ``finding_id`` plus the subject fields the mark needs (intervention,
+    outcome, population, setting; claim/context for ICF). Deterministic order.
+    """
+    digests: list[dict[str, Any]] = []
+    if iof_record_ids:
+        rows = conn.execute(
+            sa_select(
+                intervention_outcome_finding.c.finding_id,
+                intervention_outcome_finding.c.intervention,
+                intervention_outcome_finding.c.outcome,
+                intervention_outcome_finding.c.population,
+                intervention_outcome_finding.c.setting,
+            )
+            .where(intervention_outcome_finding.c.project_id == project_id)
+            .where(intervention_outcome_finding.c.extraction_record_id.in_(iof_record_ids))
+            .order_by(intervention_outcome_finding.c.finding_id)
+        ).fetchall()
+        for row in rows:
+            digests.append({
+                "finding_id": str(row.finding_id),
+                "kind": "iof",
+                "intervention": row.intervention,
+                "outcome": row.outcome,
+                "population": row.population,
+                "setting": row.setting,
+            })
+    if icf_record_ids:
+        rows = conn.execute(
+            sa_select(
+                implementation_context_finding.c.finding_id,
+                implementation_context_finding.c.context_type,
+                implementation_context_finding.c.claim,
+                implementation_context_finding.c.intervention,
+                implementation_context_finding.c.setting,
+                implementation_context_finding.c.population,
+            )
+            .where(implementation_context_finding.c.project_id == project_id)
+            .where(implementation_context_finding.c.extraction_record_id.in_(icf_record_ids))
+            .order_by(implementation_context_finding.c.finding_id)
+        ).fetchall()
+        for row in rows:
+            digests.append({
+                "finding_id": str(row.finding_id),
+                "kind": "icf",
+                "context_type": row.context_type,
+                "claim": row.claim,
+                "intervention": row.intervention,
+                "setting": row.setting,
+                "population": row.population,
+            })
+    return digests
+
+
+def _run_relevance_annotator(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    summary: dict[str, Any],
+    emphasis: Sequence[str],
+    backend: RelevanceAnnotatorBackend,
+) -> None:
+    """Run the sibling relevance annotator and record run-scoped marks in-place.
+
+    Runs AFTER vetting and AFTER the finding writes (it reads the persisted
+    rows), and BEFORE the roll-up insert. Fail-open throughout: any failure —
+    backend error, parse failure, or coverage violation — leaves the extraction
+    unannotated with the ``relevance_unannotated`` flag and NEVER raises. The
+    executed emphasis and the annotator execution profile are echoed into
+    provenance whether or not the marks land, so the record shows the pass was
+    attempted. Persistence is run-scoped (``extraction_provenance["relevance"]``
+    in this run's roll-up) — no schema change, no fingerprint participation.
+    """
+    emphasis_list = list(emphasis)
+    relevance: dict[str, Any] = {
+        "emphasis": emphasis_list,
+        "annotator": {
+            "prompt_version": FINDING_RELEVANCE_PROMPT_VERSION,
+            "model": RELEVANCE_ANNOTATOR_MODEL,
+            "mode": backend.mode,
+        },
+    }
+    summary["provenance"]["relevance"] = relevance
+    try:
+        iof_ids, icf_ids = _relevance_record_ids(summary)
+        digests = _load_relevance_digests(
+            conn, project_id=project_id, iof_record_ids=iof_ids, icf_record_ids=icf_ids
+        )
+        response, usage = backend.annotate({"emphasis": emphasis_list, "findings": digests})
+        validate_annotation_coverage(digests, response.annotations)
+        annotations = {
+            annotation.finding_id: annotation.relevance for annotation in response.annotations
+        }
+    except Exception as exc:  # noqa: BLE001 — reduced to a type name for the record
+        log.warning("extract.relevance_unannotated", error=type(exc).__name__)
+        if "relevance_unannotated" not in summary["flags"]:
+            summary["flags"].append("relevance_unannotated")
+        return
+    relevance["annotations"] = annotations
+    if usage is not None:
+        accumulator = UsageAccumulator()
+        accumulator.add_payload(summary["usage_totals"])
+        accumulator.add(usage)
+        summary["usage_totals"] = accumulator.payload()
+    log.info(
+        "extract.relevance_annotated",
+        finding_count=len(annotations),
+        priority=sum(1 for mark in annotations.values() if mark == "priority"),
+    )
+
+
 # --- Public entry point -----------------------------------------------------
 
 
@@ -1707,6 +1901,8 @@ def extract_scope(
     finding_vetter_backend: FindingVetterBackend | None = None,
     icf_extraction_backend: Any | None = None,
     icf_finding_vetter_backend: ICFFindingVetterBackend | None = None,
+    relevance_annotator_backend: RelevanceAnnotatorBackend | None = None,
+    relevance_emphasis: Sequence[str] | None = None,
     profiles: Sequence[str] = (PROFILE_ID,),
     refresh: str | None = None,
 ) -> dict[str, Any]:
@@ -1727,6 +1923,14 @@ def extract_scope(
         icf_extraction_backend: The ICF extraction seam. ``None`` resolves to the
             deterministic ICF stub, preserving no-default-egress behaviour.
         icf_finding_vetter_backend: Optional ICF post-extract finding vetter.
+        relevance_annotator_backend: Optional B2′ sibling relevance annotator
+            (024 / ADR 0023). ``None`` (or absent ``relevance_emphasis``) means
+            no annotation pass — byte-identical to the pre-B2′ pipeline. Runs
+            post-vetting, pay-only-when-steered, fail-open.
+        relevance_emphasis: Optional parsed ``extraction.relevance_emphasis``
+            sentences. The annotator runs only when both this and the backend
+            are present. NEVER enters the extraction or vetter prompts, nor the
+            extraction fingerprint (memo reuse untouched).
         profiles: Selected extraction profile ids. Profiles run in
             ``KNOWN_PROFILE_IDS`` order regardless of caller order.
         refresh: D3 ``extraction.refresh`` value (``"abstract_only" | "failed"
@@ -1787,6 +1991,19 @@ def extract_scope(
         selection_run_id=context.selection_run_id,
         refresh=refresh,
     )
+    # B2′ (ADR 0023): the sibling relevance annotator runs post-vetting,
+    # post-write (it reads the persisted finding rows) and pre-roll-up. Gated on
+    # steering — only when emphasis is present AND a backend is wired — and
+    # fail-open by construction, so it never fails the extraction and never
+    # sits after the roll-up insert.
+    if relevance_emphasis and relevance_annotator_backend is not None:
+        _run_relevance_annotator(
+            conn,
+            project_id=project_id,
+            summary=summary,
+            emphasis=relevance_emphasis,
+            backend=relevance_annotator_backend,
+        )
     # The roll-up is the LAST fallible statement (the 010 pattern): the harness
     # catches without rollback, so nothing may fail after this insert.
     _write_rollup(

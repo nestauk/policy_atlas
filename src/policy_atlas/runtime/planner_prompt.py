@@ -20,13 +20,20 @@ mid-run (contract decision 5, sequencing invariant).
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 
-PLANNER_PROMPT_VERSION = "planner_v5"
+# The orchestrator_v1 planning moment (task 024 decision 3): one orchestrator
+# agent, three moments — this module is the planning moment's prompt, and it
+# succeeds the pinned planner_v5 (steer-point defaults vocabulary widened to
+# the four lattice points, delegation-posture mode labels, the Unattended
+# standing-instructions authoring flow). The router and watch moments live in
+# orchestrator_prompt.py.
+PLANNER_PROMPT_VERSION = "orchestrator_v1_planning"
 
 # Input-side caps at prompt assembly. Generous for legitimate intents; a
 # bound, not a filter (the screen prompt's M10 discipline).
@@ -91,7 +98,7 @@ class PlanDraftWire(BaseModel):
     grouping_facets: list[str] | None = None
     extract_profiles: list[str] | None = None
     steering_mode: str | None = None
-    steer_point_defaults: list[dict[str, str]] | None = None
+    steer_point_defaults: list[dict[str, Any]] | None = None
     assumptions: list[str] | None = None
 
 
@@ -275,16 +282,33 @@ yourself.
   scope). "icf" never runs alone. Omit the field to accept the default, and
   when you narrow it, say why in your reply.
 - steering_mode: frequent | moderate | minimal | unattended. Default
-  moderate. Mention that unattended runs never pause: flagged decisions
-  auto-resolve to the plan's pre-declared defaults.
-- steer_point_defaults: the pre-declared defaults those auto-resolutions
-  use. Whenever you propose unattended, set it — one entry per steer point,
-  each {"steer_point": ..., "action": ...}. The only steer point is
-  "deepening_selection" (fires after document selection); the only
-  pre-declarable actions are "proceed_flag" (continue and flag the
-  decision) and "stop" (end the run there). Runtime-data-specific choices
-  cannot be pre-declared. Leave it null in attended modes unless the user
-  asks.
+  moderate. The mode is a delegation posture — it answers "when should I
+  come back to you?", and it moves who decides, never what is decided or
+  recorded. Present the four as: frequent = "Often — walk me through it"
+  (a pause after every step); moderate = "At the key decisions" (the
+  evidence base, the selection, the synthesis shape — plus anything that
+  trips a warning); minimal = "Only if something needs my judgment"
+  (pauses only on tripped warnings); unattended = "Never — here are my
+  standing instructions" (no pauses, guaranteed; decisions the standing
+  instructions don't cover are taken by the orchestrator within the
+  user's own option surface, recorded, and flagged loudest for review).
+- steer_point_defaults: pre-declared standing instructions, one entry per
+  steer point, each {"steer_point": ..., "action": ...} plus optionally
+  {"option_id": ..., "delta": ...} to pin a concrete canonical option.
+  The steer points are "search_exception" (after searching, only when
+  results are thin or broken), "evidence_base_coverage" (the full
+  evidence-base picture, before selection), "deepening_selection" (after
+  document selection) and "synthesis_shape" (the report's shape, before
+  synthesis). Actions: "proceed_flag" (continue and flag) or "stop" (end
+  the run there — a hard stop is always honoured). When the user picks
+  unattended, WALK THE STEER POINTS with them: propose a plain-language
+  default for each as your question's suggested answers, one point per
+  turn; the user accepts, edits, or skips a point — a skipped point falls
+  to orchestrator discretion at run time and is flagged loudest, and say
+  so. Runtime-data-specific choices (which theme to deepen, which
+  document to exclude) cannot be pre-declared — the orchestrator handles
+  those within the standing instructions' bounds. Leave the field null in
+  attended modes unless the user asks.
 - assumptions: every guess you are making, stated plainly. A thin-context
   plan is a fine plan if its thinness is visible.
 

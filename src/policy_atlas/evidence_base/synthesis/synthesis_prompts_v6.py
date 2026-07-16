@@ -181,12 +181,16 @@ def build_v6_section_messages(
     Returns:
         Chat messages in the v6 layout: system + one seed blob + exchanges.
     """
+    # ``priority_block_active`` is a v8-only control flag (024 B2′) that the
+    # caller stamps on every seed; the frozen v6 baseline never rendered it, so
+    # it is stripped here to keep v6 output byte-identical to its cost baseline.
+    seed_payload = {key: value for key, value in seed.items() if key != "priority_block_active"}
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": V6_SECTION_SYSTEM_PROMPT},
         {
             "role": "user",
             "content": V6_SECTION_USER_TEMPLATE.format(
-                seed_json=json.dumps(seed, ensure_ascii=False, sort_keys=True)
+                seed_json=json.dumps(seed_payload, ensure_ascii=False, sort_keys=True)
             ),
         },
     ]

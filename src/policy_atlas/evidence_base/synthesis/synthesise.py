@@ -1248,6 +1248,34 @@ def _extraction_profile_ids(extraction_row: Mapping[str, Any] | None) -> set[str
     return {key for key in profiles if isinstance(key, str)}
 
 
+def _relevance_annotations(extraction_row: Mapping[str, Any] | None) -> dict[str, str]:
+    """Read this run's B2′ relevance marks from the extraction provenance.
+
+    Run-scoped by design (ADR 0023): relevance is question-relative, so it lives
+    in the extraction result's ``extraction_provenance["relevance"]["annotations"]``
+    JSONB — never on the finding rows. Returns ``{finding_id: "priority" |
+    "normal"}`` (only the two enum values survive), or an empty map when the run
+    carried no emphasis / the annotator failed open. Malformed shapes degrade to
+    empty rather than raising — the consumer never fabricates a mark.
+    """
+    if extraction_row is None:
+        return {}
+    provenance = extraction_row.get("extraction_provenance")
+    if not isinstance(provenance, Mapping):
+        return {}
+    relevance = provenance.get("relevance")
+    if not isinstance(relevance, Mapping):
+        return {}
+    annotations = relevance.get("annotations")
+    if not isinstance(annotations, Mapping):
+        return {}
+    return {
+        str(finding_id): mark
+        for finding_id, mark in annotations.items()
+        if isinstance(finding_id, str) and mark in ("priority", "normal")
+    }
+
+
 def _extraction_record_ids_by_profile(
     extraction_row: Mapping[str, Any] | None,
 ) -> dict[str, list[uuid.UUID]]:
@@ -1278,7 +1306,9 @@ def _load_findings(
     *,
     project_id: uuid.UUID,
     extraction_row: Mapping[str, Any] | None,
+    relevance_annotations: Mapping[str, str] | None = None,
 ) -> tuple[dict[str, FindingInfo], dict[str, FindingInfo], bool, dict[str, BasisText]]:
+    annotations = relevance_annotations or {}
     profile_ids = _extraction_profile_ids(extraction_row)
     record_ids_by_profile = _extraction_record_ids_by_profile(extraction_row)
     iof_record_ids = record_ids_by_profile.get(IOF_PROFILE_ID, [])
@@ -1418,6 +1448,9 @@ def _load_findings(
             "is_primary": row.is_primary,
             "field_coverage": row.field_coverage,
         }
+        mark = annotations.get(finding_id)
+        if mark is not None:
+            record["relevance"] = mark
         findings[finding_id] = FindingInfo(
             kind="iof",
             finding_id=finding_id,
@@ -1453,6 +1486,9 @@ def _load_findings(
             "workforce_requirements": row.workforce_requirements,
             "field_coverage": row.field_coverage,
         }
+        mark = annotations.get(finding_id)
+        if mark is not None:
+            record["relevance"] = mark
         icf_findings[finding_id] = FindingInfo(
             kind="icf",
             finding_id=finding_id,
@@ -4484,8 +4520,18 @@ def synthesise_scope(
         selected_pss_ids=selected_pss_ids_str,
         appraised_pss_ids=corpus.appraised_pss_ids,
     )
+    # B2′ (024 / ADR 0023): this run's relevance marks, read run-scoped from the
+    # extraction provenance. Empty when the run carried no emphasis / the
+    # annotator failed open. Threaded into every finding surface so member
+    # findings and query_findings results carry the mark; the priority block
+    # renders only when marks are present.
+    relevance_annotations = _relevance_annotations(refs.extraction_row)
+    priority_block_active = bool(relevance_annotations)
     finding_by_id, icf_finding_by_id, icf_profile_available, finding_bases = _load_findings(
-        conn, project_id=project_id, extraction_row=refs.extraction_row
+        conn,
+        project_id=project_id,
+        extraction_row=refs.extraction_row,
+        relevance_annotations=relevance_annotations,
     )
     group_doc_ids_by_group_id = _group_doc_ids_by_group_id(
         grouping_summary,
@@ -4609,6 +4655,7 @@ def synthesise_scope(
             grouping_groups=cast("list[dict[str, Any]]", grouping_summary["groups"])
             if grouping_summary is not None
             else None,
+            relevance_annotations=relevance_annotations,
         )
         if refs.extraction_run_id is not None
         else None
@@ -4671,6 +4718,10 @@ def synthesise_scope(
             "member_findings": member_findings,
             "computed_spread": _computed_spread(section, substrate),
             "ledger": build_ledger(all_claims),
+            # B2′ (024): gates the v8 priority-findings block into the section
+            # system prompt (a control flag on the seed, never a data-payload
+            # field — see synthesis_backend._section_system_prompt).
+            "priority_block_active": priority_block_active,
         }
         tools = build_section_tools(
             retriever=retriever,
@@ -4911,6 +4962,13 @@ def synthesise_scope(
         "sections": section_provenance,
         "inherited_chain_base": _inherited_chain_base(refs),
         "directive": directive.as_provenance(),
+        # B2′ (024 / ADR 0023): whether the v8 priority-findings block rendered
+        # (iff the run carried relevance annotations) and how many findings the
+        # run marked — so a reader distinguishes an annotated run from a bare one.
+        "relevance": {
+            "priority_block_active": priority_block_active,
+            "annotated_finding_count": len(relevance_annotations),
+        },
     }
     counts = _rollup_counts(
         all_claims=all_claims,
