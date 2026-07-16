@@ -78,11 +78,10 @@ scrubbed, fail-closed parsed; persisted in that component's provenance;
   extractions never reuse each other. Provenance: extraction_result. **IN.**
 - **B3 `grouping.guidance`** — into discovery ("organise by policy
   instrument, not sector"). Provenance: grouping_provenance. **IN.**
-- **B4 `synthesis.guidance`** (global) — into section drafting as
-  artefact-level emphasis. Overlaps: per-section `focus` already exists;
-  018's deferred audience-framing pair. **ADJUDICATE**: fold in as a
-  simple global channel, or hold for the audience-framing slice — risk is
-  two overlapping voice levers.
+- **B4 `synthesis.guidance` (global) — HELD (owner, 2026-07-16)** for the
+  audience-framing pair (two-overlapping-voice-levers risk). Global
+  writing intents route through per-section focus fan-out + boosts
+  meanwhile; refusal events meter residual demand.
 - Existing channels the router uses from day one: `screening.criteria`,
   `synthesis.sections[].focus`.
 - **Not channels (pinned OUT):** vetter prompts, grounding-judge prompts
@@ -103,11 +102,10 @@ provenance (the `search_effort` precedent). No raw knob exposure.
 - **C4 `characterise` theme bounds** — characterise gains its first
   directive parser: `{"characterise": {"themes": "fewer" | "standard" |
   "more"}}` → bounds override. **IN** (small; the parser is the cost).
-- **C2 vetter posture** — **ADJUDICATE, lead recommends OUT**: vetting is
-  quality-integrity adjacent; proposed compromise is a binary
-  `extraction.vetting: on | off` (visible, flagged in the artefact's
-  honesty labels) + a `retry_vetting_failed` action, not a sensitivity
-  dial. Sensitivity stays prompt-owned.
+- **C2 vetter posture — OUT (owner, 2026-07-16)**: no vetting steer of
+  any kind this slice; vetter behaviour stays entirely fixed
+  (quality-integrity surface). `vetting_failed` stays a floor trigger
+  only.
 
 ## Family D — structured keys
 
@@ -291,16 +289,20 @@ not.**
   (chassis → grammar families → lattice → watch/router → prompts → live
   check) with per-phase verify gates.
 
-## Adjudication list (owner) — remaining
+## Adjudication list — SETTLED (owner, 2026-07-16)
 
-1. **Unattended model**: (a) declared-rules-only · (b) opt-in discretion
-   grant · (c) discretion-is-the-mode *(lead recommends c; hard stops
-   always honoured in every variant)*.
-2. **B4 global synthesis guidance**: in now vs held for audience-framing
-   (two-overlapping-voice-levers risk).
-3. **C2 vetting**: binary on/off + retry-failed (lead compromise) vs fully
-   out vs sensitivity dial (lead recommends against the dial).
-4. Anything in "Still OUT" to pull back in.
+1. **Unattended model: (c) discretion-is-the-mode.** Choosing Unattended
+   is the delegation; pinned rules override; hard stops always honoured;
+   no-pinned-rule decisions flagged loudest, reviewed first.
+2. **B4 global synthesis guidance: HELD for audience-framing.** Global
+   writing intents route through per-section focus fan-out + boosts; the
+   global voice lever lands with the audience-framing pair as one design.
+   Refusal events are the demand meter meanwhile.
+3. **C2 vetting: FULLY OUT.** No vetting steer of any kind this slice —
+   no binary, no retry action, no dial; vetter behaviour stays entirely
+   fixed. (`vetting_failed` spikes remain a floor *trigger* — the user is
+   told; they just steer other levers in response.)
+4. No pull-backs from "Still OUT".
 
 **Settled at this working note (owner, 2026-07-16):** four modes with the
 delegation-posture labels + decider dial · the mode table above · the
