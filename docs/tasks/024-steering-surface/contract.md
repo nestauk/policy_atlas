@@ -1,8 +1,11 @@
 # Task contract: 024-steering-surface
 
-> **Status:** drafted (rev 4, 2026-07-16). Contract approved: _pending_ ·
-> Plan approved: _pending_ · ADR: expected (steering-event vocabulary ·
-> sequencing-invariant revision · the decider dial).
+> **Status:** approved (rev 4 + watch-information-model amendment).
+> Contract approved: **2026-07-16 · owner** · Plan approved: _pending_ ·
+> ADR: expected (steering-event vocabulary · sequencing-invariant
+> revision · the decider dial). Contract-stage adversarial lane:
+> **deep-reasoner** (Codex quota exhausted 2026-07-14 — ladder
+> substitution, logged here and in verification.md).
 >
 > **Rev history**
 > - **rev 4** (2026-07-16): **ground-up rewrite** (owner call) from the
