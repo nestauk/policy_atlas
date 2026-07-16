@@ -71,7 +71,7 @@ def _insert_chunk(
 
 
 def test_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 28
+    assert len(metadata.tables) == 29
 
 
 def test_uq_chunk_embedding_unit_rejects_duplicate(conn: Connection) -> None:

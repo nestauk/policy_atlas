@@ -263,6 +263,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         annotation,
         artefact,
         block,
+        capability_run,
         characterisation_result,
         chunk_embedding,
         event_log,
@@ -383,6 +384,9 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         project_source_snapshot.c.project_id == project_id
     ))
     conn.execute(delete(runs).where(runs.c.project_id == project_id))
+    # capability_run after runs (runs.capability_run_id FKs onto it) and before
+    # evidence_scope/project (its composite scope FK + project FK target them).
+    conn.execute(delete(capability_run).where(capability_run.c.project_id == project_id))
     if snapshot_ids:
         conn.execute(delete(chunk_embedding).where(
             chunk_embedding.c.chunk_id.in_(

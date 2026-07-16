@@ -22,7 +22,13 @@ from sqlalchemy.engine import Connection, Engine
 from policy_atlas.core import events, tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.inference import StubEchoProvider
-from policy_atlas.core.schema import event_log, evidence_scope, orchestration_plan, runs
+from policy_atlas.core.schema import (
+    capability_run,
+    event_log,
+    evidence_scope,
+    orchestration_plan,
+    runs,
+)
 from policy_atlas.evidence_base.assess.classification_backend import ClassificationBackend
 from policy_atlas.evidence_base.assess.screening_backend import ScreeningBackend
 from policy_atlas.evidence_base.corpus.ranking import RankingBackend
@@ -38,6 +44,7 @@ from policy_atlas.evidence_base.sourcing.ingest_full_text import DocumentFetcher
 from policy_atlas.evidence_base.sourcing.search_generation import SearchGenerationBackend
 from policy_atlas.evidence_base.synthesis.grounding_judge import GroundingJudgeBackend
 from policy_atlas.evidence_base.synthesis.synthesis_backend import SynthesisBackend
+from policy_atlas.runtime import steering_events
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.orchestration_plan import (
     SPINE,
@@ -219,12 +226,14 @@ class RunPlanOutcome:
         steps: Ordered per-step outcomes.
         flagged_events: Collated retry, failure and skip flags for review.
         collation_render: Deterministic end-of-run flagged-event render.
+        capability_run_id: The walk identity opened for this run (task 024).
     """
 
     status: RunPlanStatus
     steps: list[RunStepOutcome]
     flagged_events: list[dict[str, Any]]
     collation_render: str = ""
+    capability_run_id: uuid.UUID | None = None
 
 
 @dataclass
@@ -315,6 +324,16 @@ def run_plan(
     """
     backend_bundle = backends if backends is not None else RunnerBackends()
     io_sink = io if io is not None else NullIO()
+    capability_run_id = uuid.uuid4()
+    _open_capability_run(
+        engine,
+        capability_run_id=capability_run_id,
+        project_id=project_id,
+        evidence_scope_id=evidence_scope_id,
+        plan_id=plan_id,
+        plan_version=plan_version,
+        session_id=session_id,
+    )
     initial_chain = compose(plan)
     steering_state = _SteeringState(
         plan=plan,
@@ -331,6 +350,7 @@ def run_plan(
     blocked_discretionary: dict[str, str] = {}
     completed_components: set[str] = set()
     last_check_in_payload: dict[str, Any] | None = None
+    most_recent_attempted_run_id: uuid.UUID | None = None
 
     while remaining_steps:
         step = remaining_steps.pop(0)
@@ -344,13 +364,18 @@ def run_plan(
                 state=steering_state,
                 project_id=project_id,
                 completed_components=completed_components,
+                capability_run_id=capability_run_id,
+                event_run_id=most_recent_attempted_run_id,
             )
             steering_state = pause_result.state
             if pause_result.aborted:
                 return _finish_run(
+                    engine,
                     step_outcomes,
                     flagged_events,
                     status="aborted",
+                    capability_run_id=capability_run_id,
+                    project_id=project_id,
                 )
             if pause_result.changed:
                 remaining_steps = _remaining_steps(
@@ -373,6 +398,18 @@ def run_plan(
             blocked_discretionary[step.component] = skip_reason
             flag = {"component": step.component, "status": "skipped", "reason": skip_reason}
             flagged_events.append(flag)
+            # A skip can never precede the first run — _skip_reason requires a
+            # prior discretionary failure — so most_recent is set; the chassis
+            # asserts the invariant regardless.
+            _emit_component_skipped(
+                engine,
+                capability_run_id=capability_run_id,
+                project_id=project_id,
+                state=steering_state,
+                component=step.component,
+                reason=skip_reason,
+                run_id=most_recent_attempted_run_id,
+            )
             last_check_in_payload = _check_in(
                 io_sink,
                 outcome,
@@ -388,10 +425,20 @@ def run_plan(
                 project_id=project_id,
                 completed_components=completed_components,
                 flagged_events=flagged_events,
+                capability_run_id=capability_run_id,
+                most_recent_attempted_run_id=most_recent_attempted_run_id,
+                boundary_run_id=None,
             )
             steering_state = pause_result.state
             if pause_result.aborted:
-                return _finish_run(step_outcomes, flagged_events, status="aborted")
+                return _finish_run(
+                    engine,
+                    step_outcomes,
+                    flagged_events,
+                    status="aborted",
+                    capability_run_id=capability_run_id,
+                    project_id=project_id,
+                )
             remaining_steps = _remaining_steps(
                 steering_state.chain,
                 completed_components=completed_components,
@@ -417,8 +464,10 @@ def run_plan(
                 reference_kwargs=reference_kwargs,
                 backends=backend_bundle,
                 session_id=session_id,
+                capability_run_id=capability_run_id,
             )
             attempts.append(attempt)
+            most_recent_attempted_run_id = attempt.run_id
             if attempt.status == "succeeded":
                 break
             if attempt_index < retry_cap:
@@ -467,15 +516,25 @@ def run_plan(
                 project_id=project_id,
                 completed_components=completed_components,
                 flagged_events=flagged_events,
+                capability_run_id=capability_run_id,
+                most_recent_attempted_run_id=most_recent_attempted_run_id,
+                boundary_run_id=final_attempt.run_id,
                 selection_run_id=(
                     final_attempt.run_id if step.component == "select" else None
                 ),
             )
             steering_state = pause_result.state
             if pause_result.aborted:
-                return _finish_run(step_outcomes, flagged_events, status="aborted")
+                return _finish_run(
+                    engine,
+                    step_outcomes,
+                    flagged_events,
+                    status="aborted",
+                    capability_run_id=capability_run_id,
+                    project_id=project_id,
+                )
             if pause_result.reselect is not None:
-                last_check_in_payload = _run_select_rerun(
+                last_check_in_payload, most_recent_attempted_run_id = _run_select_rerun(
                     engine,
                     io_sink,
                     project_id=project_id,
@@ -488,6 +547,7 @@ def run_plan(
                     blocked_discretionary=blocked_discretionary,
                     step_outcomes=step_outcomes,
                     flagged_events=flagged_events,
+                    capability_run_id=capability_run_id,
                 )
             remaining_steps = _remaining_steps(
                 steering_state.chain,
@@ -529,10 +589,20 @@ def run_plan(
             project_id=project_id,
             completed_components=completed_components,
             flagged_events=flagged_events,
+            capability_run_id=capability_run_id,
+            most_recent_attempted_run_id=most_recent_attempted_run_id,
+            boundary_run_id=final_attempt.run_id,
         )
         steering_state = pause_result.state
         if pause_result.aborted:
-            return _finish_run(step_outcomes, flagged_events, status="aborted")
+            return _finish_run(
+                engine,
+                step_outcomes,
+                flagged_events,
+                status="aborted",
+                capability_run_id=capability_run_id,
+                project_id=project_id,
+            )
         remaining_steps = _remaining_steps(
             steering_state.chain,
             completed_components=completed_components,
@@ -540,7 +610,14 @@ def run_plan(
 
         if step.component in SPINE_COMPONENTS:
             summary_status: RunPlanStatus = "failed"
-            return _finish_run(step_outcomes, flagged_events, status=summary_status)
+            return _finish_run(
+                engine,
+                step_outcomes,
+                flagged_events,
+                status=summary_status,
+                capability_run_id=capability_run_id,
+                project_id=project_id,
+            )
         blocked_discretionary[step.component] = reason
 
     summary_status = (
@@ -548,7 +625,14 @@ def run_plan(
         if any(outcome.status in {"failed", "skipped"} for outcome in step_outcomes)
         else "succeeded"
     )
-    return _finish_run(step_outcomes, flagged_events, status=summary_status)
+    return _finish_run(
+        engine,
+        step_outcomes,
+        flagged_events,
+        status=summary_status,
+        capability_run_id=capability_run_id,
+        project_id=project_id,
+    )
 
 
 def _handle_after_component_boundary(
@@ -561,6 +645,9 @@ def _handle_after_component_boundary(
     project_id: uuid.UUID,
     completed_components: set[str],
     flagged_events: list[dict[str, Any]],
+    capability_run_id: uuid.UUID,
+    most_recent_attempted_run_id: uuid.UUID | None,
+    boundary_run_id: uuid.UUID | None,
     selection_run_id: uuid.UUID | None = None,
 ) -> _PauseApplied:
     if step.component == "select" and state.plan.steering_mode == "unattended":
@@ -575,6 +662,10 @@ def _handle_after_component_boundary(
     point = PausePoint("after_component", step.component)
     if point not in state.pause_points:
         return _PauseApplied(state=state)
+    # Run-id attachment (plan pin, review M2): an after_component event attaches
+    # to the run it is about; a skipped component has no run of its own, so it
+    # falls back to the most-recent attempted run id.
+    event_run_id = boundary_run_id if boundary_run_id is not None else most_recent_attempted_run_id
     # The deepening-selection steer point only offers re-run options when select
     # actually produced a persisted selection to steer over.
     is_steer_point = step.component == "select" and selection_run_id is not None
@@ -595,6 +686,8 @@ def _handle_after_component_boundary(
         state=state,
         project_id=project_id,
         completed_components=completed_components,
+        capability_run_id=capability_run_id,
+        event_run_id=event_run_id,
         steer_point=is_steer_point,
         triggers=triggers,
     )
@@ -609,19 +702,52 @@ def _handle_pause(
     state: _SteeringState,
     project_id: uuid.UUID,
     completed_components: set[str],
+    capability_run_id: uuid.UUID,
+    event_run_id: uuid.UUID | None,
     steer_point: bool = False,
     triggers: list[dict[str, Any]] | None = None,
 ) -> _PauseApplied:
     pause_payload = _pause_payload(
         point, plan=state.plan, steer_point=steer_point, triggers=triggers
     )
+    base = steering_events.base_payload(
+        capability_run_id=capability_run_id,
+        plan_id=state.plan_id,
+        plan_version=state.plan_version,
+        boundary=point.boundary,
+        component=point.component,
+    )
+    # One pause event per presentation; the re-prompt loop below marks each
+    # rejected retry with steering.rejected rather than a fresh pause.
+    steering_events.emit_standalone(
+        engine,
+        project_id=project_id,
+        run_id=event_run_id,
+        event_type=steering_events.STEERING_PAUSE,
+        payload={**base, **pause_payload},
+    )
     current_render = render
     while True:
         response = _pause_response(io, pause_payload, current_render)
         if isinstance(response, Continue):
+            _emit_decision_standalone(
+                engine,
+                project_id=project_id,
+                run_id=event_run_id,
+                base=base,
+                response="continue",
+                interpreted_action=None,
+                rerun_mode=None,
+            )
             return _PauseApplied(state=state)
         if isinstance(response, Abort):
-            _abandon_plan(engine, project_id=project_id, plan_row_id=state.plan_row_id)
+            _abort_and_record(
+                engine,
+                project_id=project_id,
+                state=state,
+                base=base,
+                event_run_id=event_run_id,
+            )
             return _PauseApplied(state=state, aborted=True)
         if isinstance(response, Adjust):
             # At the deepening-selection steer point a select delta means re-run
@@ -634,8 +760,18 @@ def _handle_pause(
                         project_id=project_id,
                         state=state,
                         adjustment=response,
+                        base=base,
+                        event_run_id=event_run_id,
                     )
                 except SteeringAdjustmentError as exc:
+                    _emit_rejected(
+                        engine,
+                        project_id=project_id,
+                        run_id=event_run_id,
+                        base=base,
+                        exc=exc,
+                        adjustment=response,
+                    )
                     current_render = f"{render}\nRe-selection rejected: {exc}"
                     continue
                 return _PauseApplied(
@@ -649,8 +785,18 @@ def _handle_pause(
                     state=state,
                     adjustment=response,
                     completed_components=completed_components,
+                    base=base,
+                    event_run_id=event_run_id,
                 )
             except SteeringAdjustmentError as exc:
+                _emit_rejected(
+                    engine,
+                    project_id=project_id,
+                    run_id=event_run_id,
+                    base=base,
+                    exc=exc,
+                    adjustment=response,
+                )
                 current_render = f"{render}\nAdjustment rejected: {exc}"
                 continue
             return _PauseApplied(state=amended_state, changed=True)
@@ -691,6 +837,152 @@ def _pause_payload(
     return payload
 
 
+def _decision_response(adjustment: Adjust) -> steering_events.DecisionResponse:
+    """An Adjust carrying a new mode surfaces as ``mode_change`` (review N3)."""
+    return "mode_change" if adjustment.new_mode is not None else "adjust"
+
+
+def _interpreted_action(adjustment: Adjust) -> dict[str, Any]:
+    """Summarise an Adjust as the bounded delta / action recorded on the event."""
+    summary: dict[str, Any] = {}
+    if adjustment.directive_deltas:
+        summary["directive_deltas"] = adjustment.directive_deltas
+    if adjustment.new_mode is not None:
+        summary["new_mode"] = adjustment.new_mode
+    if adjustment.nudge is not None:
+        summary["nudge"] = adjustment.nudge
+    return summary
+
+
+def _emit_decision_standalone(
+    engine: Engine,
+    *,
+    project_id: uuid.UUID,
+    run_id: uuid.UUID | None,
+    base: dict[str, Any],
+    response: steering_events.DecisionResponse,
+    interpreted_action: Any,
+    rerun_mode: steering_events.RerunMode | None,
+) -> None:
+    """Append a user decision that has no adjacent state change (a Continue)."""
+    payload = steering_events.decision_payload(
+        base,
+        decided_by="user",
+        authored_by="user",
+        response=response,
+        interpreted_action=interpreted_action,
+        confirmed=True,
+        rerun_mode=rerun_mode,
+    )
+    steering_events.emit_standalone(
+        engine,
+        project_id=project_id,
+        run_id=run_id,
+        event_type=steering_events.STEERING_DECISION,
+        payload=payload,
+    )
+
+
+def _emit_rejected(
+    engine: Engine,
+    *,
+    project_id: uuid.UUID,
+    run_id: uuid.UUID | None,
+    base: dict[str, Any],
+    exc: SteeringAdjustmentError,
+    adjustment: Adjust,
+) -> None:
+    """Append a standalone steering.rejected with the reason and offending delta."""
+    payload = {
+        **base,
+        "reason": str(exc),
+        "offending_delta": _interpreted_action(adjustment),
+    }
+    steering_events.emit_standalone(
+        engine,
+        project_id=project_id,
+        run_id=run_id,
+        event_type=steering_events.STEERING_REJECTED,
+        payload=payload,
+    )
+
+
+def _emit_component_skipped(
+    engine: Engine,
+    *,
+    capability_run_id: uuid.UUID,
+    project_id: uuid.UUID,
+    state: _SteeringState,
+    component: str,
+    reason: str,
+    run_id: uuid.UUID | None,
+) -> None:
+    """Append a standalone component.skipped attached to the most-recent run."""
+    base = steering_events.base_payload(
+        capability_run_id=capability_run_id,
+        plan_id=state.plan_id,
+        plan_version=state.plan_version,
+        boundary="after_component",
+        component=component,
+    )
+    steering_events.emit_standalone(
+        engine,
+        project_id=project_id,
+        run_id=run_id,
+        event_type=steering_events.COMPONENT_SKIPPED,
+        payload={**base, "reason": reason},
+    )
+
+
+def _abort_and_record(
+    engine: Engine,
+    *,
+    project_id: uuid.UUID,
+    state: _SteeringState,
+    base: dict[str, Any],
+    event_run_id: uuid.UUID | None,
+) -> None:
+    """Flip the plan to abandoned and record the abort decision atomically.
+
+    Contract decision 1 (finding m1): the abort decision commits on the same
+    transaction as the abandon flip. When there is no plan row to flip
+    (``plan_row_id`` is None — a run-local stop), the decision is a standalone
+    append with no state-change partner.
+    """
+    decision = steering_events.decision_payload(
+        base,
+        decided_by="user",
+        authored_by="user",
+        response="abort",
+        interpreted_action=None,
+        confirmed=True,
+        rerun_mode=None,
+    )
+    if state.plan_row_id is None:
+        steering_events.emit_standalone(
+            engine,
+            project_id=project_id,
+            run_id=event_run_id,
+            event_type=steering_events.STEERING_DECISION,
+            payload=decision,
+        )
+        return
+    with engine.begin() as conn:
+        conn.execute(
+            orchestration_plan.update()
+            .where(orchestration_plan.c.plan_id == state.plan_row_id)
+            .where(orchestration_plan.c.project_id == project_id)
+            .values(status="abandoned")
+        )
+        steering_events.emit(
+            conn,
+            project_id=project_id,
+            run_id=event_run_id,
+            event_type=steering_events.STEERING_DECISION,
+            payload=decision,
+        )
+
+
 def _apply_runner_adjustment(
     engine: Engine,
     *,
@@ -698,6 +990,8 @@ def _apply_runner_adjustment(
     state: _SteeringState,
     adjustment: Adjust,
     completed_components: set[str],
+    base: dict[str, Any],
+    event_run_id: uuid.UUID | None,
 ) -> _SteeringState:
     if state.plan_row_id is None:
         raise SteeringAdjustmentError("plan_row_id is required to persist an adjustment")
@@ -714,6 +1008,24 @@ def _apply_runner_adjustment(
             plan=state.plan,
             adjustment=adjustment,
             completed_components=completed_components,
+        )
+        # The decision commits on the plan-version transaction (finding m1). The
+        # base carries the version decided-over (pre-adjustment), matching pause.
+        decision = steering_events.decision_payload(
+            base,
+            decided_by="user",
+            authored_by="user",
+            response=_decision_response(adjustment),
+            interpreted_action=_interpreted_action(adjustment),
+            confirmed=True,
+            rerun_mode=None,
+        )
+        steering_events.emit(
+            conn,
+            project_id=project_id,
+            run_id=event_run_id,
+            event_type=steering_events.STEERING_DECISION,
+            payload=decision,
         )
     amended_chain = compose(amended_plan)
     return _SteeringState(
@@ -732,6 +1044,8 @@ def _apply_reselect(
     project_id: uuid.UUID,
     state: _SteeringState,
     adjustment: Adjust,
+    base: dict[str, Any],
+    event_run_id: uuid.UUID | None,
 ) -> tuple[_SteeringState, dict[str, Any]]:
     """Persist a re-selection version row and return the merged select directive.
 
@@ -766,6 +1080,24 @@ def _apply_reselect(
             plan=state.plan,
             select_directive=merged_directive,
         )
+        # Reselect is the replacement re-run origin: the decision pairs with the
+        # new plan-version row and stamps rerun_mode "replacement".
+        decision = steering_events.decision_payload(
+            base,
+            decided_by="user",
+            authored_by="user",
+            response=_decision_response(adjustment),
+            interpreted_action=_interpreted_action(adjustment),
+            confirmed=True,
+            rerun_mode="replacement",
+        )
+        steering_events.emit(
+            conn,
+            project_id=project_id,
+            run_id=event_run_id,
+            event_type=steering_events.STEERING_DECISION,
+            payload=decision,
+        )
     reselect_state = _SteeringState(
         plan=state.plan,
         plan_id=new_plan_id,
@@ -791,7 +1123,8 @@ def _run_select_rerun(
     blocked_discretionary: dict[str, str],
     step_outcomes: list[RunStepOutcome],
     flagged_events: list[dict[str, Any]],
-) -> dict[str, Any]:
+    capability_run_id: uuid.UUID,
+) -> tuple[dict[str, Any], uuid.UUID]:
     """Re-run ``select`` after a deepening-selection steer with a new directive.
 
     Creates a second ``select`` run under the amended plan version, applies the
@@ -802,7 +1135,8 @@ def _run_select_rerun(
     discretionary failure. Extraction has not yet spent, so this is cheap.
 
     Returns:
-        The check-in payload for the re-run outcome (the new most-recent render).
+        The check-in payload for the re-run outcome (the new most-recent render)
+        and the re-run's run id (the new most-recent attempted run).
     """
     rerun_step = ComponentStep(
         component="select",
@@ -825,6 +1159,7 @@ def _run_select_rerun(
             reference_kwargs=reference_kwargs,
             backends=backends,
             session_id=session_id,
+            capability_run_id=capability_run_id,
         )
         attempts.append(attempt)
         if attempt.status == "succeeded":
@@ -874,7 +1209,10 @@ def _run_select_rerun(
             }
         )
     step_outcomes.append(outcome)
-    return _check_in(io, outcome, headline_counts=final_attempt.headline_counts)
+    return (
+        _check_in(io, outcome, headline_counts=final_attempt.headline_counts),
+        final_attempt.run_id,
+    )
 
 
 def _resolve_unattended_boundary(
@@ -933,12 +1271,49 @@ def _abandon_plan(
         )
 
 
+def _open_capability_run(
+    engine: Engine,
+    *,
+    capability_run_id: uuid.UUID,
+    project_id: uuid.UUID,
+    evidence_scope_id: uuid.UUID,
+    plan_id: uuid.UUID,
+    plan_version: int,
+    session_id: uuid.UUID | None,
+) -> None:
+    """Open the walk-identity row before the step loop (contract decision 2)."""
+    with engine.begin() as conn:
+        conn.execute(
+            capability_run.insert().values(
+                capability_run_id=capability_run_id,
+                project_id=project_id,
+                evidence_scope_id=evidence_scope_id,
+                capability="evidence_base",
+                plan_id=plan_id,
+                plan_version=plan_version,
+                status="running",
+                session_id=session_id,
+                started_at=datetime.now(UTC),
+            )
+        )
+
+
 def _finish_run(
+    engine: Engine,
     outcomes: list[RunStepOutcome],
     flagged_events: list[dict[str, Any]],
     *,
     status: RunPlanStatus,
+    capability_run_id: uuid.UUID,
+    project_id: uuid.UUID,
 ) -> RunPlanOutcome:
+    with engine.begin() as conn:
+        conn.execute(
+            capability_run.update()
+            .where(capability_run.c.capability_run_id == capability_run_id)
+            .where(capability_run.c.project_id == project_id)
+            .values(status=status, ended_at=datetime.now(UTC))
+        )
     collation = render_collation(flagged_events)
     log.info("runner.collation", render=collation)
     _log_run_summary(outcomes, status=status)
@@ -947,6 +1322,7 @@ def _finish_run(
         steps=outcomes,
         flagged_events=flagged_events,
         collation_render=collation,
+        capability_run_id=capability_run_id,
     )
 
 
@@ -996,6 +1372,7 @@ def _run_step_attempt(
     reference_kwargs: dict[str, uuid.UUID],
     backends: RunnerBackends,
     session_id: uuid.UUID | None,
+    capability_run_id: uuid.UUID,
 ) -> _AttemptOutcome:
     registry_component = registry_component_for(step.component)
     run_id = uuid.uuid4()
@@ -1015,6 +1392,7 @@ def _run_step_attempt(
                 project_id=project_id,
                 status="running",
                 started_at=datetime.now(UTC),
+                capability_run_id=capability_run_id,
             )
         )
         events.append(
