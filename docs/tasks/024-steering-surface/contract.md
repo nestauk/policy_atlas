@@ -89,10 +89,21 @@ PR landing:
 - **CLI wiring**: free text at every pause, confirmation rendering
   (fan-out plan + re-run mode declaration), mode labels, Unattended
   standing-instructions authoring in the planning conversation.
-- **Spec/knowledge flow-back**: execution-orchestration § Steering modes
-  rewritten (decider dial, mode table, labels — discharges the "Thorough"
-  sync note); ADR; deferred.md (seams in/out per annex; 017 deviations
-  discharged; 025 scope notes: transcripts + Q&A); `log.md` entry.
+- **Spec/knowledge flow-back** *(scope corrected per adversarial findings
+  M1/M2/m5 — these are mechanism revisions, not label changes)*:
+  execution-orchestration § Steering modes AND § the routing rule
+  rewritten — (a) the decider dial, mode table, labels; (b) **explicit
+  discharge of the "no first-principles runtime classifier" ⏸**
+  (execution-orchestration.md:176): 024 un-defers it as an *additive,
+  floor-bounded, non-taxonomic* judgement layer over the intact
+  deterministic routing table; (c) **Unattended's unanticipated-substance
+  mechanism revision**: proceed-and-flag → watch discretion under (c),
+  with `unconfigured_default` retained as the loudest flag class for
+  no-pinned-rule watch decisions; (d) the **Minimal behaviour change**
+  (as-built unconditionally pauses at deepening-selection; becomes
+  fired-only) named as a change. All three land in the ADR, not just the
+  spec text. Plus deferred.md (seams per annex; 017 deviations
+  discharged; 025 notes) and `log.md`.
 - Tests + `verification.md` with the pinned live check.
 
 ## Read first
@@ -149,9 +160,15 @@ front-end/API renderers · schema beyond decision 2.
    `capability_run_id` + `plan_id` + `plan_version` + `boundary` (+
    `decided_by`/`authored_by`, verbatim `user_text` where prose was given,
    the interpreter/watch execution profile, and the re-run mode where one
-   is triggered). Emission is transactional with its adjacent state change
-   (plan version row, abandon flip) — the §9 invariant. Append-only stays
-   inviolate.
+   is triggered). Transactionality qualified (finding m1):
+   decision/skip/re-run events commit with their adjacent state change
+   (plan version row, abandon flip) — the §9 invariant; pause/refused/
+   rejected events are standalone appends (no state-change partner
+   exists). Append-only stays inviolate. Read-path note (m3):
+   `steering_history` partitions walks by the payload's
+   `capability_run_id` (serial v3.0 walks don't interleave; the rebuild
+   test asserts payload-key partitioning; a functional index is a
+   front-end-era option).
 2. **The `capability_run` entity — the one approved schema change.**
    `capability_run_id` · `project_id` · `evidence_scope_id` · `capability`
    ("evidence_base") · `plan_id`+`plan_version` at approval · `status`
@@ -187,7 +204,15 @@ front-end/API renderers · schema beyond decision 2.
    (never `retrieve`, never `search`), each call + result digest evented,
    so replay-from-Postgres shows what the watch consulted, not just what
    it decided. Insufficient context after the cap → bias-to-escalate with
-   the reason evented.
+   the reason evented. Two pins from adversarial findings m2/m6:
+   **every triage verdict emits `agent_judgement_routed`** (even
+   "nothing notable, proceed" — the spec's own rule; governance events
+   are excluded from the decision-log projection by default, so no
+   noise), making "observed and proceeded" distinguishable from "never
+   watched" in the rebuild; and the **promotion rule**: substance-or-
+   unsure at a triage boundary always promotes to decision-point
+   treatment (tier 2) before any self-decision — triage boundaries that
+   *proceed* make no tool calls.
 4. **Sequencing-invariant revision (ADR + spec flow-back).** 017 decision
    5's "one LLM call, pre-run" is deliberately revised: mid-run LLM calls
    are permitted at component boundaries only (router at pauses, watch at
@@ -206,6 +231,11 @@ front-end/API renderers · schema beyond decision 2.
    pinned rules override, hard stops always honoured, no-pinned-rule
    decisions flagged loudest; standing instructions are planner-authored
    per steer point at plan time (suggested-answers pattern), skippable.
+   **Non-lattice boundaries carry a generic floor** (finding M6): at any
+   Frequent-mode pause that is not a lattice point, the canonical menu is
+   continue · change mode · abort · free text through the router — always
+   present, the degrade target for watch/authoring failure there; no
+   `steer_point_defaults` entry needed (Unattended never pauses).
 6. **Grammar widening — exactly the adjudicated set.** Channels: B1
    `search.guidance` · B3 `grouping.guidance` · B5 `characterise.guidance`
    · **B2′** `extraction.relevance_emphasis` → the sibling annotator
@@ -225,9 +255,22 @@ front-end/API renderers · schema beyond decision 2.
 7. **Two re-run modes, first-class.** Additive re-entry (segment re-walk,
    incremental by construction, union coverage, all contributing runs in
    provenance) vs replacement re-run (reference moves, rows immutable —
-   superseded, never deleted; criteria-changed re-screen = doc-grain
-   replacement via the effective-screen-row read rule, plan-designed).
-   The mode is declared in every confirmation and stamped on the event.
+   superseded, never deleted). The mode is declared in every confirmation
+   and stamped on the event. Two honest re-scopings from adversarial
+   findings M3/M4: **(a) segment re-entry is a new bounded runner
+   construct, not a reselect extension** — as-built reselect is
+   single-component and non-re-entrant (`runner.py:794-802`); the
+   segment re-walk (acquire→assess forward, then one boundary re-entry
+   to show updated coverage, capped at one re-entry cycle per boundary —
+   the existing one-adjustment rule generalised) is budgeted as its own
+   plan phase. **(b) Criteria-changed re-screen is a supersession
+   redesign, not a tiebreak**: `effective_screen_rows` orders by stage
+   only (a fresh stage-1 row loses to a stale stage-2 confirmation; two
+   same-stage rows tie nondeterministically), so the plan must design
+   the supersession rule explicitly (e.g. per-doc re-screen generation
+   or run-recency ordering) and move every `effective_screen_rows`
+   consumer in lockstep (characterise confirmed among them); the
+   stage-2-supersession case is the named halt-and-re-gate trigger.
 8. **The trigger floor** — computed from persisted state only, never
    recomputed, never watch-suppressible: the S0 select signals · P1
    coverage triggers · P2 coverage/type/quality collapse · P4 grouping
@@ -239,19 +282,28 @@ front-end/API renderers · schema beyond decision 2.
    Authority order is fixed regardless of author: **user > declared rules
    > orchestrator**. Authorship is a seam; authority is not.
 10. **Prompt surfaces** — all lead-authored, pinned, versioned in
-    provenance: the `orchestrator_v1` family, `finding_relevance_v1`, the
-    guidance-composition blocks (search-gen, group discovery, characterise
-    discovery, synthesis section prompt incl. priority-finding
-    foregrounding).
+    provenance: the `orchestrator_v1` family (its planning moment
+    succeeds the pinned `planner_v5` — finding m4's label corrected),
+    `finding_relevance_v1`, the guidance-composition blocks (search-gen,
+    group discovery, characterise discovery). The synthesis section
+    prompt's priority-finding foregrounding is an **additive optional
+    block on `synthesise_section_v7` → v8 bump**, noting the frozen
+    cost-harness baseline (v6): the cost comparison re-baselines or the
+    block is measured as a delta — never silently absorbed (m4).
 
 ## Constraints & approval gates
 
-- **Runtime egress (hard gate — approved by approving this contract):**
-  the orchestrator moments (router at pauses; watch at ~6–9 boundaries/run
-  carrying component outputs + authored options) and the B2′ annotator
-  (per-doc mini-class, only when emphasis is set). All behind the one
-  seam with deterministic stubs; CI stays zero-egress. No new search
-  egress. No provider-side conversation state (018 constraint).
+- **Runtime egress (hard gate — figures re-derived per finding M5; ⚠
+  re-nod required, the number the gate is approved against changed):**
+  the orchestrator moments — watch triage at ~6–9 boundaries/run (single
+  calls) **plus tier-2 deliberation at ≤4 decision points × ≤6 LLM turns
+  each** (framing + ≤4 tool round-trips + decision/authoring) **plus**
+  router pause-time calls (~2–4) — a ceiling of **~35–40 orchestrator
+  turns/run worst case, ~15–25 typical Moderate**, all carrying project
+  data; and the B2′ annotator (per-doc mini-class, only when emphasis is
+  set). All behind the one seam with deterministic stubs; CI stays
+  zero-egress. No new search egress. No provider-side conversation state
+  (018 constraint).
 - **Schema (hard gate — approved):** exactly decision 2. Anything further
   is a stop condition.
 - Deps: none. CI: untouched. Public interface: CLI additions only.
@@ -283,7 +335,17 @@ Template set, plus: any schema need beyond decision 2 · a reachable
 boundary with no attachable run id · watch/router latency or cost proving
 unusable live (ship floor-only + flag, don't silently degrade the seam) ·
 the effective-screen-row rework revealing doc-grain replacement is
-unsound (halt, re-gate that option).
+unsound (halt, re-gate that option — the stage-2-supersession case
+specifically, decision 7b).
+
+**Pre-authorised overrun de-scope (findings M8 — sizing re-priced to an
+honest ~4–6× of the rev 3 chassis):** if the build overruns, the first
+cut is **tier-2 watch deliberation** (revert to tier-1 push-only;
+insufficient-context escalations become the demand meter — the annex's
+own documented fallback); the second is the **criteria-changed re-screen
+option** at P2 (ships without it; supersession redesign moves to its own
+slice). Both cuts are flagged in verification.md, never silent. ⚠ Owner
+re-nod required on the sizing range and this de-scope ordering.
 
 ## Acceptance checks
 
@@ -306,16 +368,22 @@ unsound (halt, re-gate that option).
   replacement moves references with rows intact; segment re-entry
   fault-injected · D1 rubric override → derived rubric_version travels ·
   Unattended (c): pinned-rule override, hard-stop honoured, loudest-flag
-  ordering.
+  ordering · **poisoned-input fixtures (findings M7/n3)**: a hostile
+  `query_findings` result in tier-2 deliberation and a hostile finding
+  fed to the B2′ annotator — both proving output stays inside the
+  bounded grammar/enums · **author-blind scrub equality**: watch-authored
+  strings pass through the identical scrub/bounds path as user prose
+  (test-asserted).
 - **Live check (pinned scope):** one Moderate run on the smoke corpus —
   free-text steers at P2 (coverage → additive re-search on a subtopic),
   P3 (combined levers + preview render), P4 (sections pruned via prose);
   one deliberately inexpressible intent (refusal + event); one Minimal
   segment where the watch self-decides (flagged); `steering_history()`
   captured from a fresh connection. P1 evidenced by fault-injected tests
-  (a healthy corpus may not fire it). Cost: one planning conversation +
-  one standard chain + ≤12 orchestrator calls — ~$5–10, ~30–45 min. No
-  full e2e beyond this.
+  (a healthy corpus may not fire it). Cost (re-derived per M5): one
+  planning conversation + one standard chain + **≤35 orchestrator turns**
+  (triage + up to three tier-2 deliberations live) — **~$10–20,
+  ~45–60 min**. No full e2e beyond this.
 
 ## Verification evidence expected
 

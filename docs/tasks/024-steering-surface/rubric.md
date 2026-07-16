@@ -45,7 +45,12 @@ Slice-specific:
         the structural trigger floor is never suppressed by the watch
         (test-asserted). **Deliberation bounded:** decision-point pull is
         capped, `lookup`/`query_findings` only (never retrieve/search),
-        every call + digest evented; triage boundaries make no tool calls.
+        every call + digest evented; triage boundaries that *proceed*
+        make no tool calls, and substance-or-unsure at triage always
+        promotes to decision-point treatment before any self-decision
+        (the m6 promotion rule); every triage verdict emits
+        `agent_judgement_routed` (m2); poisoned-input fixtures +
+        author-blind scrub-equality tests pass (M7/n3).
 13. [ ] **Honest refusal:** inexpressible intents (or fragments of a
         fan-out) yield the refusal + a `steering.refused` event, never a
         nearest-option approximation — including watch-authored proposals

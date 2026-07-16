@@ -465,6 +465,35 @@ watch discipline 3).
   (chassis → grammar families → lattice → watch/router → prompts → live
   check) with per-phase verify gates.
 
+## Adversarial adjudication (2026-07-16, deep-reasoner lane — codex
+## attempted first, workspace out of credits)
+
+All findings accepted in substance; deltas folded into the contract
+(which stays binding over this note where they touch the same ground):
+**M1/M2** flow-back + ADR scope expanded — the watch discharges the
+spec's "no first-principles runtime classifier" ⏸ (additive,
+floor-bounded, non-taxonomic) and Unattended (c) revises the
+unanticipated-substance mechanism (proceed-and-flag → watch discretion;
+`unconfigured_default` retained as the loudest flag class) · **M3**
+segment re-entry re-scoped as a new bounded runner construct (one
+re-entry cycle per boundary), its own plan phase · **M4**
+criteria-changed re-screen re-scoped as a supersession redesign
+(stage-2-supersession = halt-and-re-gate trigger; consumers move in
+lockstep) · **M5** egress + live-check figures re-derived for tier-2
+(~35–40 turn ceiling; live check ~$10–20/45–60 min) · **M6** generic
+floor pinned for non-lattice Frequent boundaries (continue · mode ·
+abort · free text) · **M7/n3** poisoned-input fixtures + author-blind
+scrub-equality tests added; ADR records the accepted LLM→LLM residual in
+delegated modes · **M8** sizing re-priced ~4–6×; pre-authorised overrun
+de-scope ordering recorded (tier-2 deliberation first, criteria-changed
+re-screen second) · **m1** transaction invariant qualified (pause/
+refused/rejected = standalone appends) · **m2** every triage verdict
+emits `agent_judgement_routed` · **m3** payload-key read path noted ·
+**m4** planner label corrected (v5 → orchestrator_v1 planning moment);
+section-prompt foregrounding = additive block on v7 → v8 with
+cost-baseline note · **m5** Minimal behaviour change named in flow-back ·
+**m6** tier-1→tier-2 promotion rule pinned.
+
 ## Adjudication list — SETTLED (owner, 2026-07-16)
 
 1. **Unattended model: (c) discretion-is-the-mode.** Choosing Unattended
