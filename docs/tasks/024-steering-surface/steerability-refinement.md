@@ -93,20 +93,34 @@ scrubbed, fail-closed parsed; persisted in that component's provenance;
 - **B1 `search.guidance`** — into query generation + the reformulate arm
   ("prioritise UK policy evaluations; avoid clinical literature").
   Provenance: `search_coverage_record.scope_filters` sibling key. **IN.**
-- **B2 `extraction.guidance` — DROPPED (owner review round 3,
-  2026-07-16).** Extraction's contract is *faithfulness*: downstream
-  treats the findings layer as the complete substrate, and emphasis
-  guidance inside a bounded token budget tilts recall (over-X,
-  silently-under-Y) — an emphasis-shaped substrate misread as
-  comprehensive. Guidance would also enter the memo fingerprint,
-  fragmenting the cross-question extraction reuse the multi-question
-  project model depends on. The emphasis intent is fully expressible
-  downstream (screen criteria · select emphasis · boosts + section
-  focus) and at the profile grain (ICF). Seam recorded: **finding-grain
-  relevance annotation** — a vetter-adjacent pass where guidance feeds
-  only a `relevance: priority|normal` field, never the quality verdict
-  (verdict-fenced); eval-gated on evidence that doc/artefact-grain
-  emphasis is insufficient, and on a real downstream consumer.
+- **B2 `extraction.guidance` (into the extraction prompt) — DROPPED;
+  replaced by B2′ (owner review rounds 3–4, 2026-07-16).** Extraction's
+  contract is *faithfulness*: downstream treats the findings layer as the
+  complete substrate, and emphasis guidance inside a bounded token budget
+  tilts recall (over-X, silently-under-Y); it would also enter the memo
+  fingerprint, fragmenting cross-question extraction reuse. Both
+  objections dissolve in B2′:
+- **B2′ finding-relevance emphasis channel — IN (owner, round 4).**
+  `context["extraction"]["relevance_emphasis"]`: bounded user-emphasis
+  sentences ("cost-effectiveness matters most for this question"),
+  fail-closed parsed, consumed by a **sibling annotator pass** — never by
+  the extraction or vetter prompts. Pipeline: extraction unguided →
+  vetting unguided (**verdict fenced by construction** — guidance never
+  enters that call) → when (and only when) emphasis is present, a small
+  annotator (`finding_relevance_v1`, mini-class, lead-authored) marks
+  each surviving finding `relevance: priority | normal`, coverage-
+  validated (each finding exactly once, the vetter validator pattern),
+  fail-open to unannotated with a flag. **Persistence is run-scoped, not
+  finding-scoped**: relevance is question-relative (memo-reused findings
+  differ per question), so it lands as `relevance_annotations:
+  {finding_id: …}` in that run's `extraction_result` JSONB — no schema
+  change, no fingerprint participation, memo reuse fully preserved.
+  **Consumer ships in-slice**: findings surfaced to synthesis (substrate
+  tools + section proposal) carry the marks; the section-drafting prompt
+  foregrounds priority findings where relevant; P4's proposal render
+  shows priority counts per group. Authored at P2/P3 by user free text
+  (router) or by the watch where the mode delegates; verbatim + compiled
+  provenance as for every channel.
 - **B3 `grouping.guidance`** — into discovery ("organise by policy
   instrument, not sector"). Provenance: grouping_provenance. **IN.**
 - **B5 `characterise.guidance`** *(owner review, 2026-07-16)* — into the
@@ -390,9 +404,12 @@ watch discipline 3).
   framings: planning turn (absorbing `planner_v6`: steer-point defaults
   vocabulary ×4, posture awareness), steer interpretation/router, and the
   boundary watch (routing + option authoring + in-loco-user decisions) —
-  plus guidance-composition points in search-gen / group discovery /
-  characterise theme-discovery prompts (data-not-instructions framing
-  blocks; extraction and synthesis-global channels dropped/held per B2/B4).
+  plus `finding_relevance_v1` (the B2′ annotator) and guidance-composition
+  points in search-gen / group discovery / characterise theme-discovery /
+  synthesis section prompts (data-not-instructions framing blocks;
+  priority-finding foregrounding rides the synthesis section prompt;
+  extraction-prompt and synthesis-global channels dropped/held per
+  B2/B4).
 - Schema: **unchanged beyond decision 1b** — all new steering state rides
   `evidence_scope.context` + result-table JSONB provenance.
 - Eval: every steer-bearing lever is versioned in provenance, so the eval
@@ -426,6 +443,13 @@ delegation-posture labels + decider dial · the mode table above · the
 orchestrator watch with full-user-surface discretion · orchestrator-
 authored options on the canonical floor · one orchestrator prompt family ·
 enlarged trigger floor · EB-expert stays post-eval with sockets shipped.
+
+**Settled at owner review round 4 (2026-07-16):** B2′ finding-relevance
+emphasis channel folded IN (owner call, upgrading round 3's seam):
+sibling annotator pass, verdict fenced by construction, run-scoped
+persistence in `extraction_result` JSONB (question-relative relevance;
+memo reuse preserved; no schema change), synthesis consumer in-slice,
+pay-only-when-steered.
 
 **Settled at owner review round 3 (2026-07-16):** Unattended (c)
 confirmed + the planner-authored standing-instructions flow pinned · B2
