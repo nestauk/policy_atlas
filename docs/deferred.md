@@ -1426,3 +1426,12 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   makes the hoist import-neutral; the cost is tooling paths only (CI working-directory,
   Docker contexts, CDK references, doc links). Do it in the slice that brings the
   frontend in, not before.
+- **Per-query source provenance (demo carry-back, 2026-07-15)** — the search fan-out is
+  already fully audited at the query grain (`search.executed` events persist query text,
+  backend, filters, origin and result count), but `source.acquired` /
+  `project_source_snapshot` never record *which query surfaced the source*. Two
+  consequences: per-query relevance ("this query surfaced 12 sources, 5 screened
+  relevant") is underivable, and any user-facing search-audit surface can only attribute
+  relevance per backend. Fix is in acquire: stamp acquired sources with the surfacing
+  query/queries (a set — multi-query dedupe means one source can arrive via several).
+  Pays off for search-loop tuning and for the demo/web-app search cards.
