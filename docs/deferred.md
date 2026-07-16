@@ -1593,10 +1593,13 @@ first-class vocabulary. What follows is what it deliberately left out.
     refresh on the same class collides with the first and is a no-op rather
     than a fresh re-extract. Supersession-style plumbing (mirroring the
     `screen_generation` pattern) is the fix if a second refresh is ever wanted.
-  - **Pending-select fine keys honestly rejected at P2** — the P2
-    pending-overlay only carries keys a canonical P2 option actually needs;
-    finer select-side keys are rejected fail-closed rather than silently
-    accepted. No canonical option needs them today.
+  - **Pending-select fine keys — overlay-carried since the review stack
+    (2026-07-16).** The build shipped these rejected fail-closed at P2; the
+    review stack found the compile grammar accepted them while the plan
+    mapper raised post-confirmation (MAJOR, fixed in-stack): `select` is now
+    in `_MIXED_COMMIT_LAYER_KEYS` (plan-mappable `budget`; commit-layer
+    `strata_scope`/`exclude_ids`/`weight_emphasis`/`must_include_ids`/
+    `boosts`/`priority_strata` overlay to the run).
   - **P2 `stage2_toggle` omitted** — turning stage-2 full-text screening
     on/off mid-run is a chain-composition change the plan grammar can't
     express (composition is fixed at plan-compile time); recorded, not built.
@@ -1605,11 +1608,72 @@ first-class vocabulary. What follows is what it deliberately left out.
     human-readable theme names without joining through group's
     theme-membership table; `p3_bundle` surfaces names+counts+notable digests
     where the join is cheap, digests-only where it isn't.
-  - **Mixed-grammar overlay for select** — the per-key pending/delta split
-    exists for extract (`refresh`/`relevance_emphasis`) and group
-    (`granularity`/`guidance`) only; select's directive stays whole-delta.
+  - ~~Mixed-grammar overlay for select~~ — **discharged by the review stack
+    (2026-07-16)**: select joined the mixed-grammar split (see the
+    pending-select entry above).
   - **Deliberation `needs_tool` structured field is primary** — the watch's
     fallback tool-call loop reads the structured `needs_tool`/`needs_arguments`
     wire fields (`orchestrator_backend.py:578`, `orchestrator_prompt.py:229`)
     first; the legacy JSON-in-`needs` free-text fallback is retained for
     backward parse tolerance, not the primary path.
+
+- **Review-stack seams (024 step 7, 2026-07-16)** — surfaced by the review
+  lanes, adjudicated as deferrals (each has a reason; fixes applied in-stack
+  are NOT listed here — see verification.md § Review findings):
+  - **Live router compile robustness** — in the pinned live runs ~3 of 6
+    free-text steers mis-compiled (malformed `acquire` delta on an
+    expressible P2 additive re-search; a P4 sections edit mis-labelled
+    `replacement`); every failure was caught fail-closed (refusal, no
+    invalid apply) but compile quality is below the surface's ambition.
+    The delta render at the confirm gate (review fix) is the mitigation;
+    router prompt iteration belongs to the eval slice, where compile
+    fidelity can be measured, not vibed.
+  - **Classify/appraise collapse triggers are not generation-scoped** —
+    after a criteria re-screen demotes docs at a new generation, their old
+    classification/appraisal rows still count in the trigger denominators
+    (`steering_triggers.py:233,296` read the result tables directly). ADR
+    0022 names re-classify/re-appraise generation-awareness as future work;
+    the honest fix is a join through `effective_screen_rows` when those
+    components gain generation semantics.
+  - **Re-screen quorum-failure falls back to the prior generation's verdict
+    unflagged** — `effective_screen_rows` excludes `failed`, so a doc whose
+    gen-N re-screen failed silently keeps its gen-N−1 verdict: a criteria
+    mix inside one effective set with no marker. Needs a flag class (or a
+    bundle note) when effective rows span generations.
+  - **Router-reachable `screen_full` re-screen is untested** — the fixed P2
+    catalog never emits `{"stage": 2, "rescreen": true}` but a router
+    replacement fragment can; the same-generation stage-2 collision then
+    halts the whole batch loudly (`ScreenSupersessionError`, by design —
+    the reason now persists on the `component.failed` event, review fix).
+    Pin a test + decide the partial-batch semantics if this path is ever
+    advertised.
+  - **Structural consolidation sweep (post-merge slice candidate)** — the
+    review confirmed 12 duplication/altitude sites that stay correct today
+    but must be edited in lockstep: the attempt/retry loop ×3
+    (`runner.py:792/2532/2796`), apply-path state reconstruction ×3
+    (`runner.py:2324/2399/2643`), the before/after boundary-handler twins
+    (`runner.py:1027/1216`), the segment-reentry runner twins
+    (`runner.py:2919/3036`), quorum trigger stage blocks
+    (`steering_triggers.py:399`), segment-reentry compile duplication
+    (`steering.py:1186`), the replacement-validation ladder vs
+    `REPLACEMENT_RERUN_CONTEXT_KEYS` (+ the diverging noun table,
+    `steering.py:1561-1599/1266`), `_reference_kwargs` vs
+    `REPLACEMENT_RERUNS` (`runner.py:4094`), the `floor_triggers` dispatch
+    ladder (`steering_triggers.py:573`), `selection_run_id` bespoke
+    threading, `_doc_metadata` title fallback ×3, and per-boundary double
+    `engine.connect()`. Deferred as one refactor slice rather than churning
+    a 19k-line surface mid-review; the fresh grammar/behaviour tests make
+    the later refactor safe.
+  - **Event-payload display strings persist NUL-scrubbed only** — the full
+    control/format-char defence lives at the CLI output seam
+    (`_strip_control`, now incl. Cf); the 025 web renderer must scrub on
+    render or the persistence layer should adopt `sanitize_prompt_field`
+    for model-authored display strings (security-lane recommendation).
+  - **Watch `choose_option` id never resolved against the canonical menu**
+    — a delta-less `choose_option` silently proceeds; grammar fencing makes
+    it safe, but resolving the id (or renaming the event action) would make
+    provenance more truthful (security-lane recommendation).
+  - **CLI re-prints the stale check-in line on every re-presentation** —
+    cosmetic duplicate "component: succeeded" lines in the pause loop
+    (visible in the live transcripts); tidy with the next CLI-surface
+    slice.

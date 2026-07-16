@@ -34,16 +34,15 @@ from policy_atlas.runtime.steering_events import (
 )
 
 # The steering-event vocabulary (plan "Event vocabulary" pin) — the only
-# event_type values that ever belong to a walk story.
-STEERING_EVENT_TYPES = frozenset(
-    {
-        STEERING_PAUSE,
-        STEERING_DECISION,
-        STEERING_REJECTED,
-        STEERING_REFUSED,
-        COMPONENT_SKIPPED,
-        AGENT_JUDGEMENT_ROUTED,
-    }
+# event_type values that ever belong to a walk story. A tuple (not a set) so
+# it satisfies events.read's Sequence[str] event_types parameter directly.
+STEERING_EVENT_TYPES = (
+    STEERING_PAUSE,
+    STEERING_DECISION,
+    STEERING_REJECTED,
+    STEERING_REFUSED,
+    COMPONENT_SKIPPED,
+    AGENT_JUDGEMENT_ROUTED,
 )
 
 
@@ -82,9 +81,7 @@ def steering_history(
             return []
 
     events_by_walk: dict[str, list[dict[str, Any]]] = {}
-    for entry in events.read(conn, project_id):
-        if entry["event_type"] not in STEERING_EVENT_TYPES:
-            continue
+    for entry in events.read(conn, project_id, event_types=STEERING_EVENT_TYPES):
         walk_key = entry["payload"].get("capability_run_id")
         if walk_key is None:
             # Not a walk-scoped steering event — excluded regardless of vocabulary.

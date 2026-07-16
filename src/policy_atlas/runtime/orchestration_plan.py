@@ -13,7 +13,11 @@ from typing import Any, Literal, Self, TypedDict
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from policy_atlas.core.schema import DIRECTIVE_STRING_MAX
-from policy_atlas.evidence_base.assess.screen import CRITERIA_LIST_MAX, _compose_screen_intent
+from policy_atlas.evidence_base.assess.screen import (
+    CRITERIA_LIST_MAX,
+    ScreenDirectiveError,
+    _compose_screen_intent,
+)
 from policy_atlas.evidence_base.assess.screen_prompt import SCREEN_INTENT_MAX
 from policy_atlas.evidence_base.extract.extract import KNOWN_PROFILE_IDS
 from policy_atlas.evidence_base.sourcing.country_filters import (
@@ -858,14 +862,17 @@ class OrchestrationPlan(BaseModel):
         # Compile-target parity for the screen prompt: the composed intent
         # (question + criteria block, via the real composer) must fit the
         # prompt-assembly cap, or criteria would be silently truncated away
-        # while the plan row claims they governed screening.
-        composed_intent = _compose_screen_intent(self.question, self.screening_criteria)
-        if len(composed_intent) > SCREEN_INTENT_MAX:
+        # while the plan row claims they governed screening. The composer
+        # enforces the cap itself (fail-closed, review fix); translate its
+        # error into the plan grammar's ValueError so pydantic wraps it.
+        try:
+            _compose_screen_intent(self.question, self.screening_criteria)
+        except ScreenDirectiveError as exc:
             raise ValueError(
-                f"question plus screening_criteria compose to {len(composed_intent)} "
-                f"characters; the screen prompt caps its intent input at "
-                f"{SCREEN_INTENT_MAX}, so later criteria would be silently dropped"
-            )
+                f"question plus screening_criteria exceed the screen prompt's "
+                f"{SCREEN_INTENT_MAX}-character intent cap, so later criteria "
+                f"would be silently dropped ({exc})"
+            ) from exc
         return self
 
 

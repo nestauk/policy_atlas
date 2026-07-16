@@ -13,11 +13,11 @@ import uuid
 from typing import Any
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.engine import Engine
 
 from policy_atlas.core import events
-from policy_atlas.core.schema import orchestration_plan
+from policy_atlas.core.schema import extraction_result, orchestration_plan
 from policy_atlas.evidence_base.synthesis.synthesis_backend import StubSynthesisBackend
 from policy_atlas.evidence_base.synthesis.synthesis_tools import parse_synthesis_directive
 from policy_atlas.runtime import runner as runner_module
@@ -250,6 +250,47 @@ def test_p2_bundle_parses_executed_and_zero_result_queries(engine: Engine) -> No
         _cleanup_project(engine, project_id)
 
 
+def test_p2_bundle_screened_event_counts_reflect_latest_generation_only(
+    engine: Engine,
+) -> None:
+    """A criteria re-screen bumps ``screen_generation`` scope-wide; the P2
+    ``screened_event_counts`` tally must reflect the current generation only —
+    not an inflated sum across a stale generation and the current one."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        runs_by = _walk(engine, project_id, scope_id)
+        screen_run_id = runs_by["screen_full"]
+        with engine.begin() as conn:
+            for status, generation in (
+                ("included", 0),
+                ("included", 0),
+                ("excluded", 0),
+                ("included", 1),
+                ("included", 1),
+                ("included", 1),
+            ):
+                events.append(
+                    conn,
+                    project_id=project_id,
+                    run_id=screen_run_id,
+                    event_type="source.screened",
+                    payload={
+                        "evidence_scope_id": str(scope_id),
+                        "status": status,
+                        "screen_generation": generation,
+                    },
+                )
+        with engine.connect() as conn:
+            bundle = steering_bundles.p2_bundle(
+                conn, project_id=project_id, evidence_scope_id=scope_id
+            )
+        # Only the max-generation (1) events count — generation 0 is superseded.
+        assert bundle["screened_event_counts"] == {"included": 3}
+    finally:
+        _cleanup_project(engine, project_id)
+
+
 def test_p4_bundle_wires_propose_synthesis_plan(engine: Engine) -> None:
     project_id: uuid.UUID | None = None
     try:
@@ -277,6 +318,81 @@ def test_p4_bundle_wires_propose_synthesis_plan(engine: Engine) -> None:
         # Grouping flags read from the group run; B2' priority counts absent (None).
         assert isinstance(bundle["grouping_flags"], dict)
         assert bundle["priority_counts"] is None
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def _walk_no_group(
+    engine: Engine, project_id: uuid.UUID, scope_id: uuid.UUID
+) -> dict[str, uuid.UUID]:
+    """Run a moderate deep plan through extract but with no group step configured."""
+    plan = _base_plan(
+        components=["screen_full", "characterise", "select", "extract"],
+        component_rationale={
+            "screen_full": "Full-text confirmation is useful for this run",
+            "characterise": "Maps themes and coverage before deeper work",
+            "select": "Narrows the relevant corpus for extraction",
+            "extract": "Captures intervention-outcome findings",
+        },
+        grouping_facets=None,
+    )
+    plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+    outcome = run_plan(
+        engine,
+        project_id=project_id,
+        evidence_scope_id=scope_id,
+        plan=plan,
+        plan_id=plan_id,
+        plan_version=1,
+        plan_row_id=plan_id,
+        backends=_runner_backends(),
+        io=ScriptedIO(),  # Continue at every fired/always pause
+    )
+    assert outcome.status == "succeeded"
+    return {step.component: step.run_id for step in outcome.steps if step.run_id is not None}
+
+
+def test_p4_bundle_priority_counts_ungrouped_totals_without_group_step(engine: Engine) -> None:
+    """Fix C: extract carries B2' relevance annotations but no group step ran —
+    priority_counts must report the ungrouped totals, not None (which would be
+    indistinguishable from "no annotations")."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        runs_by = _walk_no_group(engine, project_id, scope_id)
+        assert "group" not in runs_by
+        extract_run_id = runs_by["extract"]
+        with engine.begin() as conn:
+            provenance = conn.execute(
+                select(extraction_result.c.extraction_provenance).where(
+                    extraction_result.c.run_id == extract_run_id
+                )
+            ).scalar_one()
+            provenance["relevance"] = {
+                "annotations": {"f1": "priority", "f2": "normal", "f3": "priority"}
+            }
+            conn.execute(
+                update(extraction_result)
+                .where(extraction_result.c.run_id == extract_run_id)
+                .values(extraction_provenance=provenance)
+            )
+        with engine.connect() as conn:
+            context = runner_module._synthesise_context(
+                conn,
+                project_id=project_id,
+                evidence_scope_id=scope_id,
+                successful_runs=runs_by,
+            )
+            assert context is not None
+            bundle = steering_bundles.p4_bundle(
+                conn,
+                project_id=project_id,
+                context=context,
+                synthesis_backend=StubSynthesisBackend(),
+                group_run_id=runs_by.get("group"),
+            )
+        assert bundle["grouping_flags"] is None
+        assert bundle["priority_counts"] == {"priority": 2, "normal": 1}
     finally:
         _cleanup_project(engine, project_id)
 

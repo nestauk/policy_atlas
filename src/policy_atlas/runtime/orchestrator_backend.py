@@ -564,6 +564,13 @@ class WatchDecisionResult:
         return [step.as_payload() for step in self.deliberation]
 
 
+# Cap on a folded deliberation-loop tool result (distinct from the smaller
+# event-record digest default): bounds a hostile oversized read result so it
+# cannot crowd steer_point/triggers out of the payload's own truncation prefix
+# (see run_watch_decision).
+FOLDED_RESULT_MAX = 2000
+
+
 def _digest(value: Any, *, max_chars: int = 500) -> str:
     """A bounded, deterministic digest of tool args / results for the event record."""
     try:
@@ -684,8 +691,14 @@ def run_watch_decision(
         steps.append(step)
         # Fold the read result into a bounded deliberation record on the payload copy
         # so the re-invoked decide sees what it asked for (data, not instructions).
+        # The result is untrusted tool output (e.g. a hostile oversized
+        # query_findings hit) — bound it here too, not just the evented digest,
+        # so it cannot push steer_point/triggers out of the sort_keys=True
+        # truncation prefix applied to the whole payload downstream.
         deliberation_record = list(working_payload.get("deliberation", []))
-        deliberation_record.append(step.as_payload() | {"result": result})
+        deliberation_record.append(
+            step.as_payload() | {"result": _digest(result, max_chars=FOLDED_RESULT_MAX)}
+        )
         working_payload = {**working_payload, "deliberation": deliberation_record}
         decision = backend.decide(
             request, header, working_payload, digest, framing=framing, session_id=session_id

@@ -1772,20 +1772,26 @@ def test_p3_refresh_extraction_option_applies_end_to_end(engine: Engine) -> None
         _cleanup_project(engine, project_id)
 
 
-def test_pending_select_fine_key_stays_honestly_rejected(engine: Engine) -> None:
-    """Guard: a non-budget fine key on PENDING select keeps its honest 'not yet
-    mappable' rejection — it is NOT silently overlaid (no canonical option needs
-    it there; the honest refusal is the contract)."""
+def test_pending_select_commit_layer_key_overlays_to_run(engine: Engine) -> None:
+    """FIX 3b: a non-budget select key on PENDING select is now a commit-layer
+    directive — it folds into the pending overlay and reaches select's executed
+    directive at its run (the same mechanism appraise/characterise/synthesise use),
+    closing the compile/apply gap that previously crashed or was falsely rejected.
+    ``strata_scope`` (D6) + ``weight_emphasis`` ride the overlay; ``exclude`` names
+    a non-existent stratum so selection is unaffected (only the plumbing is under
+    test)."""
     project_id: uuid.UUID | None = None
     try:
         project_id, scope_id = _seed_project(engine)
         plan = _base_plan(steering_mode="frequent")
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        selection_delta = {
+            "strata_scope": {"exclude": ["nonexistent-stratum"]},
+            "weight_emphasis": {"quality": 2.0},
+        }
         io = _InjectAtIO(
             target_component="characterise",
-            response=Adjust(
-                directive_deltas={"select": {"selection": {"weight_emphasis": {"quality": 2.0}}}}
-            ),
+            response=Adjust(directive_deltas={"select": {"selection": selection_delta}}),
         )
 
         outcome = run_plan(
@@ -1801,23 +1807,26 @@ def test_pending_select_fine_key_stays_honestly_rejected(engine: Engine) -> None
         )
         assert outcome.status == "succeeded"
 
-        # The adjustment was rejected honestly and loudly — no overlay, no plan version.
+        # No honest-rejection this time: the commit-layer keys are accepted, not
+        # refused as "not yet mappable".
         with engine.connect() as conn:
             rejected = [
                 entry
                 for entry in events.read(conn, project_id)
                 if entry["event_type"] == steering_events.STEERING_REJECTED
             ]
-            versions = conn.execute(
-                select(orchestration_plan.c.version).where(
-                    orchestration_plan.c.project_id == project_id
-                )
-            ).scalars().all()
-        assert any("not yet mappable" in e["payload"]["reason"] for e in rejected)
-        assert list(versions) == [1]
-        # No overlay minted for the rejected select delta.
-        by_component = _compiled_by_component(engine, project_id)
-        assert all("pending_overlay" not in p for p in by_component["select"])
+        assert not any("not yet mappable" in e["payload"].get("reason", "") for e in rejected)
+
+        # The plan.compiled event echoes the whole commit-layer select delta
+        # (nothing is plan-mappable here — budget is absent — so ALL of it overlays).
+        select_compiled = _compiled_by_component(engine, project_id)["select"]
+        assert select_compiled[0]["pending_overlay"] == {"selection": selection_delta}
+
+        # The run consumed it: select's executed directive input (the scope context)
+        # carries strata_scope + weight_emphasis.
+        selection_ctx = _scope_context(engine, scope_id)["selection"]
+        assert selection_ctx["strata_scope"] == {"exclude": ["nonexistent-stratum"]}
+        assert selection_ctx["weight_emphasis"] == {"quality": 2.0}
     finally:
         _cleanup_project(engine, project_id)
 

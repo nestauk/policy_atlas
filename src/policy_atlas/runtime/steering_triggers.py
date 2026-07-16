@@ -44,6 +44,7 @@ from policy_atlas.runtime.steering import steer_point_triggers
 __all__ = [
     "EXTRACT_FAILED_SHARE",
     "EXTRACT_VETTING_FAILED_SHARE",
+    "FLOOR_BOUNDARY_FOR_COMPONENT",
     "P1_STOP_CONDITIONS",
     "P2_MIN_RELEVANT",
     "QUALITY_COLLAPSE_SCORE_MAX",
@@ -568,6 +569,22 @@ FloorBoundary = Literal[
     "after_group",
     "after_extract",
 ]
+
+#: The non-lattice after_component boundaries that carry their own floor trigger
+#: classes (FIX 1 / contract decision 8). Maps a composed-step component to the
+#: :data:`FloorBoundary` whose classes fire at its after_component boundary, so
+#: the runner can read the floor at boundaries the lattice does not cover.
+#: ``acquire`` is excluded (P1's lattice read covers it);
+#: ``select``/``characterise``/``synthesise``/``ingest_full_text`` have no floor
+#: classes of their own.
+FLOOR_BOUNDARY_FOR_COMPONENT: dict[str, FloorBoundary] = {
+    "screen_abstract": "after_screen",
+    "screen_full": "after_screen",
+    "classify": "after_classify",
+    "appraise": "after_appraise",
+    "extract": "after_extract",
+    "group": "after_group",
+}
 
 
 def floor_triggers(

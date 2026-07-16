@@ -28,7 +28,6 @@ from policy_atlas.evidence_base.extract.extract import (
     ExtractError,
     _parse_extraction_directive,
     extract_scope,
-    extraction_fingerprint,
     parse_relevance_emphasis,
 )
 from policy_atlas.evidence_base.extract.finding_vetter import (
@@ -475,9 +474,6 @@ def test_fingerprint_excludes_emphasis_via_memo_hit(conn: Connection) -> None:
     assert relevance is not None
     assert set(relevance["annotations"].values()) <= {"priority", "normal"}
     assert "priority" in relevance["annotations"].values()
-
-    # The fingerprint function itself never takes emphasis — identical both ways.
-    assert extraction_fingerprint("stub")[0] == extraction_fingerprint("stub")[0]
 
 
 # --- 4. Annotator pass: persistence, fail-open, gating -----------------------

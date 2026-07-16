@@ -18,6 +18,7 @@ from pydantic import ValidationError
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.core.prompt_fields import scrub_nul
 from policy_atlas.core.schema import orchestration_plan, selection_result
 from policy_atlas.evidence_base.assess import appraise as appraise_module
 from policy_atlas.evidence_base.assess import screen as screen_module
@@ -66,13 +67,30 @@ COMMIT_LAYER_COMPONENTS: frozenset[str] = frozenset({"appraise", "characterise",
 
 # Mixed-grammar components (task 024, 15d): part of the directive maps to a plan
 # field (extract ``profiles`` -> ``extract_profiles``; group ``facets`` ->
-# ``grouping_facets``) and part is commit-layer with NO plan field (extract
-# ``refresh`` (D3) + ``relevance_emphasis`` (the B2' entry point); group
-# ``granularity`` + ``guidance``). A pending adjustment SPLITS: the plan-mappable
-# part takes the plan path, the commit-layer remainder folds into the overlay.
+# ``grouping_facets``; select ``budget`` -> ``analysis_depth``) and part is
+# commit-layer with NO plan field (extract ``refresh`` (D3) +
+# ``relevance_emphasis`` (the B2' entry point); group ``granularity`` +
+# ``guidance``; select's D6 ``strata_scope`` / D7 ``exclude_ids`` and the rest of
+# its rich grammar). A pending adjustment SPLITS: the plan-mappable part takes the
+# plan path, the commit-layer remainder folds into the overlay so it reaches the
+# component's executed directive at its run (FIX 3b — closes the P2 pending-select
+# compile/apply gap).
 _MIXED_COMMIT_LAYER_KEYS: dict[str, tuple[str, frozenset[str]]] = {
     "extract": ("extraction", frozenset({"refresh", "relevance_emphasis"})),
     "group": ("grouping", frozenset({"granularity", "guidance"})),
+    "select": (
+        "selection",
+        frozenset(
+            {
+                "must_include_ids",
+                "boosts",
+                "weight_emphasis",
+                "priority_strata",
+                "strata_scope",
+                "exclude_ids",
+            }
+        ),
+    ),
 }
 
 
@@ -770,7 +788,8 @@ def _p3_options(plan: OrchestrationPlan | None) -> list[dict[str, Any]]:
             "label": "Favour the strongest-quality evidence",
             "description": (
                 "Doubles the appraisal-quality weight in selection ranking "
-                "(weight_emphasis quality x2.0 — a multiplier on the default weight)."
+                "(weight_emphasis quality x2.0 — a multiplier on the default weight); "
+                "re-runs selection, replacing the current one."
             ),
             "delta": {
                 "selection": {"weight_emphasis": {"quality": STRONGEST_QUALITY_MULTIPLIER}}
@@ -784,7 +803,8 @@ def _p3_options(plan: OrchestrationPlan | None) -> list[dict[str, Any]]:
             "description": (
                 "Lifts screen confidence as the closest as-built relevance proxy "
                 "(weight_emphasis screen_confidence x2.5) — an honest proxy, not a "
-                "true question-relevance signal."
+                "true question-relevance signal. Re-runs selection, replacing the "
+                "current one."
             ),
             "delta": {
                 "selection": {
@@ -797,7 +817,10 @@ def _p3_options(plan: OrchestrationPlan | None) -> list[dict[str, Any]]:
             "id": "adjust_budget",
             "intent": "Adjust the budget",
             "label": "Change how many documents are selected",
-            "description": "Change the selection budget; provide the new document budget.",
+            "description": (
+                "Change the selection budget; provide the new document budget. "
+                "Re-runs selection, replacing the current one."
+            ),
             "delta": {"selection": {"budget": budget_default}},
             "requires_user_input": True,
         },
@@ -1273,14 +1296,83 @@ def _fragment_mode_sentence(fragment: CompiledFragment) -> str:
     return f"this will adjust {fragment.component} before it runs"
 
 
+# Bounds for the confirm-gate delta/refusal renders: a large model-authored
+# delta or reason cannot flood the surface — it truncates with an explicit
+# marker (FIX A/B).
+_DELTA_RENDER_MAX = 500
+_REFUSED_TEXT_MAX = 200
+_REFUSED_REASON_MAX = 300
+
+
+def _bound_display(value: str, limit: int) -> str:
+    """NUL-scrub then length-bound one model-authored string for a user surface.
+
+    The scrub is the existing output path (:func:`scrub_nul`); over the bound the
+    string is truncated with an explicit ``…(truncated)`` marker so a large model
+    string cannot flood the confirmation surface.
+    """
+    scrubbed = scrub_nul(value)
+    if len(scrubbed) > limit:
+        return scrubbed[:limit] + "…(truncated)"
+    return scrubbed
+
+
+def _bounded_delta_render(delta: dict[str, Any]) -> str:
+    """Compact, sorted, bounded JSON render of a fragment delta for the confirm gate.
+
+    Deterministic (``sort_keys``) so the same delta always renders the same text,
+    NUL-scrubbed through the existing output path, and bounded to
+    :data:`_DELTA_RENDER_MAX` characters. Lets the user SEE the compiled delta
+    ("drop methodology sections" became ``{"synthesis":{"sections":[...]}}``)
+    before confirming — the summary sentence alone can hide a diverging compile
+    (FIX A).
+    """
+    dumped = json.dumps(delta, sort_keys=True, separators=(",", ":"), default=str)
+    return _bound_display(dumped, _DELTA_RENDER_MAX)
+
+
+def render_refused_fragment(refused: RefusedFragment) -> str:
+    """One bounded confirm-surface line for a refused fragment: verbatim text + reason.
+
+    Shared by :func:`render_fanout_confirmation` and the runner's all-refused note
+    (FIX B) so both surface the same ``- 'text': reason`` line — the plain-language
+    reason no longer lives only in the event log. Text and reason are NUL-scrubbed
+    and length-bounded.
+    """
+    text = _bound_display(refused.fragment_text, _REFUSED_TEXT_MAX)
+    reason = _bound_display(refused.reason, _REFUSED_REASON_MAX)
+    return f"- {text!r}: {reason}"
+
+
+def render_authored_replacement_confirmation(fragment: CompiledFragment) -> str:
+    """Confirm-gate render for a picked watch-authored re-run/re-entry option (FIX C).
+
+    A watch-AUTHORED option the user picked takes the same replacement-re-run or
+    segment-re-entry apply path a confirmed router fan-out does, so it gets the
+    same plain-language mode declaration ("this will REDO selection, replacing the
+    current one" / additive equivalent) plus the bounded delta render before it
+    applies. The user's y/N on THIS render is the safety gate — nothing applies
+    unconfirmed (contract decision 3).
+    """
+    return "\n".join(
+        [
+            "Confirm this run-specific change:",
+            f"- {fragment.component}: {_fragment_mode_sentence(fragment)}.",
+            f"    {_bounded_delta_render(fragment.delta)}",
+        ]
+    )
+
+
 def render_fanout_confirmation(fanout: FanOut) -> str:
     """Render a validated fan-out for the confirmation gate, deterministically.
 
-    Each compiling fragment is shown with its target component and its re-run
-    mode declared in plain language ("this will ADD TO your evidence base" /
-    "this will REDO selection, replacing the current one"); each refused fragment
-    is named with its reason. Nothing here applies — the user's confirmation of
-    this render is the safety gate (contract decision 3).
+    Each compiling fragment is shown with its target component, its re-run mode
+    declared in plain language ("this will ADD TO your evidence base" / "this will
+    REDO selection, replacing the current one"), and — indented beneath — the
+    actual compiled delta as a bounded, deterministic JSON render (FIX A), so the
+    user can SEE what the prose compiled to before confirming. Each refused
+    fragment is named with its reason. Nothing here applies — the user's
+    confirmation of this render is the safety gate (contract decision 3).
 
     Args:
         fanout: The validated fan-out from :func:`compile_fanout`.
@@ -1298,10 +1390,11 @@ def render_fanout_confirmation(fanout: FanOut) -> str:
                 f"- {fragment.fragment_text!r} → {fragment.component}: "
                 f"{_fragment_mode_sentence(fragment)}."
             )
+            lines.append(f"    {_bounded_delta_render(fragment.delta)}")
     if fanout.refused:
         lines.append("Refused (not expressible / not available):")
         for refused in fanout.refused:
-            lines.append(f"- {refused.fragment_text!r}: {refused.reason}")
+            lines.append(render_refused_fragment(refused))
     return "\n".join(lines)
 
 
@@ -1987,10 +2080,17 @@ def _apply_screen_delta(
 
 
 def _apply_select_delta(payload: dict[str, Any], selection: Any) -> None:
+    # Mixed grammar (task 024, 15d / FIX 3b): ONLY ``budget`` maps to the plan
+    # payload (via ``analysis_depth``). The rest of select's grammar (D6
+    # strata_scope, D7 exclude_ids, weight_emphasis, boosts, must_include_ids,
+    # priority_strata) is commit-layer — validated fail-closed at
+    # ``_validate_directive_delta`` time and folded into the pending overlay so it
+    # reaches select's executed directive at its run, never silently dropped. Only
+    # a key outside select's whole grammar is the loud raise (the guarded path).
     if not isinstance(selection, dict):
         raise SteeringAdjustmentError("selection directive must be an object")
-    mappable_keys = {"budget"}
-    if set(selection) - mappable_keys:
+    _context_key, commit_keys = _MIXED_COMMIT_LAYER_KEYS["select"]
+    if set(selection) - ({"budget"} | commit_keys):
         raise SteeringAdjustmentError("selection directive is not yet mappable to plan fields")
     if "budget" not in selection:
         return
@@ -2088,6 +2188,25 @@ def _validate_delta_round_trip(
             raise SteeringAdjustmentError(
                 f"adjustment for {component!r} cannot round-trip through plan fields"
             )
+        if component == "select" and requested_delta:
+            # Mixed grammar (FIX 3b): only ``budget`` round-trips (through
+            # analysis_depth); the commit-layer keys (D6 strata_scope, D7
+            # exclude_ids, weight_emphasis, ...) have no plan field and reach
+            # select's executed directive via the pending overlay, so they are
+            # exempt here (never dropped) — exactly the extract/group pattern.
+            selection = requested_delta.get("selection")
+            budget_part = (
+                {"budget": selection["budget"]}
+                if isinstance(selection, dict) and "budget" in selection
+                else {}
+            )
+            if budget_part and not _delta_contains(
+                amended_by_component.get(component), {"selection": budget_part}
+            ):
+                raise SteeringAdjustmentError(
+                    f"adjustment for {component!r} cannot round-trip through plan fields"
+                )
+            continue
         if component == "group" and requested_delta:
             grouping = requested_delta.get("grouping")
             facet_part = (

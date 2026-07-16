@@ -269,4 +269,175 @@ Langfuse sessions for the two runs (2026-07-16, projects `105dd61a`,
 
 Seams recorded in [docs/deferred.md](../../deferred.md) § Steering surface
 (task 024 seams) — 11 annex Still-OUT entries + 8 file-anchored
-build-discovered seams; 017-era discharges marked in place.
+build-discovered seams; 017-era discharges marked in place. The review stack
+added 8 more (§ Review-stack seams) and updated two build entries the fixes
+inverted (pending-select overlay; select mixed-grammar).
+
+## Review findings (step 7, conversation C, 2026-07-16/17)
+
+Tier-3 stack, fresh conversation. Lanes: **contract-verifier** (pinned Opus,
+all 20 rubric items + verification/ADR claims vs as-built) ·
+**security-auditor** · **adversarial** (deep-reasoner — Codex quota still
+exhausted, codex-exhaustion fallback; family-flip unavailable, noted) ·
+**`/code-review` medium** (8 scoped finder angles → 31 candidates → batched
+1-vote verify → 8 survived) · **live-trace content lane** (lead; the 013
+rule) · `make okf-validate` inside `make verify`. `/simplify` not run —
+the code-review cleanup angles covered reuse/simplification/efficiency/
+altitude and their adopted findings were applied; a second same-family pass
+would duplicate it. Token economy: the ≤250K reasoning / ≤500K fast-worker
+budgets are per-routine-slice cost proxies; this 4–6× slice ran ≈3× those
+figures across lanes+verifiers — proportionate, recorded honestly.
+
+**Convergent findings (multi-lane, high-confidence):**
+
+- **Confirm-gate fidelity** (live-trace + adversarial + code-review):
+  confirmations rendered the router's summary, never the compiled delta. In
+  the live runs two confirmed steers diverged materially from intent
+  invisibly — "drop any section about methodology" compiled to REPLACING the
+  8-section proposal with one generic "What works" section (artefact:
+  2 sections vs 9 in the twin run), and "Select fewer documents" compiled to
+  `budget: 15`, the unchanged value. Watch-authored replacement picks applied
+  with `confirmed=true` and no on-screen replacement declaration; the three
+  canonical P3 re-run options lacked "(re-runs selection)" wording.
+  **Fixed:** the confirm render now shows each fragment's bounded compiled
+  delta; orchestrator-authored replacement picks get an explicit y/N with the
+  mode declaration (fail-closed for non-confirm IO); the three canonical
+  labels now declare the re-run; all-refused steers now list per-fragment
+  reasons instead of a bare "None of that could be applied".
+
+**Adversarial MAJORs (all three lead-verified in code before adoption —
+unique to that lane; they hollowed out Minimal's delegation guarantee):**
+
+1. **Trigger-floor classes 5/8 were dead code; class 9 blind to failures.**
+   `floor_triggers` had exactly one runtime call site (P2/pre_select);
+   screen quality-collapse and extraction/vetting-failed spikes never ran,
+   and `downstream_capability_reduced` saw only *successful* run ids.
+   Verification.md's "all decision-8 classes" was true of the readers,
+   an overclaim of the integration. **Fixed:** `FLOOR_BOUNDARY_FOR_COMPONENT`
+   wires the floor at after-screen/classify/appraise/extract/group
+   boundaries; an `attempted_runs` map (incl. failed attempts) un-blinds
+   class 9; fired non-lattice triggers pause frequent/moderate/minimal on
+   the generic floor menu and, in unattended, flag + flow to watch triage
+   without pausing. Design note: Moderate pauses *directly* on a fired floor
+   trigger (not only via watch escalation) — the decider dial must be
+   monotone (Minimal pauses on fired triggers, so Moderate cannot surface
+   less) and a floor signal must not depend on the judgement layer.
+2. **The watch's `promoted` verdict was inert** — emitted and discarded;
+   the m6 promotion rule had no code path in attended modes (a shipped test
+   enshrined the inert behaviour). **Fixed:** `_watch_observe_boundary`
+   returns a structured observation; a promotion now escalates the boundary
+   to a pause in attended modes ("The orchestrator flagged this boundary:
+   …"); never in unattended (0-pauses guarantee); the enshrining test now
+   asserts the pause.
+3. **Confirmed fan-out could crash at apply time with no event** — compile
+   accepted pending-select D6/D7 keys that `_apply_select_delta` (budget
+   only) raised on, and the free-text apply path lacked the
+   `SteeringAdjustmentError` guard the direct-option paths had. **Fixed:**
+   both fan-out applies are guarded (`steering.rejected` + honest
+   re-present, never a crash), and `select` joined `_MIXED_COMMIT_LAYER_KEYS`
+   so commit-layer selection keys overlay to the pending run — the same
+   15c/15d mechanism the build shipped for extract/appraise/characterise/
+   synthesise. (Two deferred.md build entries this inverted were updated.)
+
+**Security lane** — 0 critical/high/medium; author-blind equality, hard-stop
+structure, B2′ byte-fencing, the caged read-tool loop, and no-unconfirmed-
+apply were all positively verified. Four LOWs, all adopted and fixed:
+hostile oversized read results bounded before payload fold (truncation could
+evict `steer_point`/`triggers` from the decide prompt); Unicode Cf/bidi
+characters now stripped at the CLI output seam (confirm-render spoofing);
+migration downgrade now fails loudly before DDL when superseded generations
+exist (was: partial-downgrade wreck); over-long intent+criteria compositions
+now refuse fail-closed instead of silently truncating confirmed criteria
+(plan-level validator updated to keep its `ValidationError` contract).
+Three recommendations deferred to deferred.md (event display-string
+scrubbing for 025's renderer; `choose_option` id resolution; Langfuse
+prompt-content register note).
+
+**`/code-review` medium** (31 candidates → verified) — adopted+fixed:
+unbounded full-project `event_log` scans (SQL `event_types` filter added;
+used by `steering_history`, both P2 bundle readers, the watch digest);
+P2 bundle generation-inconsistency (`screened_event_counts` now tallies the
+latest generation only); `priority_counts` no longer masked when extract ran
+without group (ungrouped totals); `ScreenSupersessionError.reason` now
+persists on the `component.failed` event (the 013 corollary); the
+P2/P3/P4 bundle is built once per decision point (was twice); the
+triple-copied guidance-injection guard hoisted to `core/prompt_fields.py`
+(byte-identical proofs unmodified). Notable refutations (verifier lane):
+the segment-`ValueError` crash is unreachable (all constructors pin the
+default), memo-pick nondeterminism is impossible (`uq_ser_memo`), the select
+invariant was tautological *before* 024 (no regression), and the
+`by_steer_point` test migration kept exact-count pause assertions.
+12 confirmed duplication/altitude sites deferred as one consolidation-slice
+entry (churning a 19k-line surface mid-review buys regression risk, and the
+fresh behaviour tests make the later refactor safe).
+
+**Contract-verifier** — 19/20 rubric items pass on evidence (item 8 is this
+stack); no fake-done patterns; the schema hard-gate holds exactly
+(decision 2 + 7b, nothing else); scope-creep traps (B4/D4/vetting) clean.
+Nine MINORs: adopted+fixed — delegation-asymmetry head-to-head test,
+attended floor-non-suppressibility test, cost-language regression guard over
+every render surface, tautological assertion deleted. Declined with reasons —
+triage zero-tool assertion (structural: no tool path exists in the type),
+user>rules head-to-head (exists: `test_steering_lattice.py:503`), skip-event
+transaction classification (the *contract prose* is wrong, not the code — a
+skip writes no DB state, so there is no partner write; noted here rather
+than editing the historical contract). Deferred — rollback fault-injection
+test for transactional pairing (co-occurrence verified by inspection at four
+sites).
+
+**Live-trace lane** (all traces read for content; both anomalies
+root-caused in-stack): the `clean_boundary` "double-emit" is **by design** —
+two distinct boundary objects per transition (`after_component` N /
+`before_component` N+1), each with its own payload; declined, no fix. The
+watch re-authors options (fresh LLM call) at each re-presentation of a
+decision point — defensible (state changed), noted for the eval slice.
+Live router compile flakiness (~3 of 6 free-text steers mis-compiled across
+the two runs; every one caught fail-closed) deferred to the eval slice with
+the confirm-delta render as the shipped mitigation. Cosmetic stale check-in
+re-render deferred.
+
+**Flagged build deviations — all seven explicitly re-examined and
+CONFIRMED** (each verified by at least one lane): stage2_toggle omission
+(deferred.md entry checked) · the 15d silent-drop fix (adversarial: "real,
+load-bearing") · the 15c pending overlay (extended by MAJOR-3's fix, same
+mechanism) · transport twins (strictness regression test pins) · the
+delta-envelope normaliser (security: widens parsing only, revalidated) ·
+authored-option attribution (rubric 11 evidence) · Minimal fired-only
+(contract-named; and the adversarial lane confirmed as-built Minimal never
+self-decides — *narrower* than the annex row, i.e. safe-side; the flow-back
+naming covers it).
+
+**Fake-done check on the fixes:** no test was weakened — the one inverted
+test (`test_pending_select_fine_key_stays_honestly_rejected` →
+`…_commit_layer_key_overlays_to_run`) tracks a deliberate behaviour change
+recorded above; `test_anomalous_check_in_triages` was *strengthened* (now
+asserts the pause). Two scripted CLI consoles gained continue inputs because
+the wired floor genuinely pauses more on degenerate 2-doc fixtures — the
+new pauses are the fix working. All fix agents ran on file-disjoint
+mandates; substitutions: all reasoning-class fix work ran on deep-reasoner
+(Codex still exhausted).
+
+**Knowledge adjudication (step 8, both sources — build handoff candidates +
+stack findings):** authored — `live-structured-output-wire-seam` (folds
+build candidates 1+2+7), `plan-mappable-vs-commit-layer-keys` (build
+candidate 3 + MAJOR-3), `confirm-gate-renders-compiled-action` (stack,
+live-evidenced), `tested-in-isolation-is-not-wired` (stack, MAJOR-1/2
+lesson); updated — `effective-screen-row-read-rule` (was stale: no
+generation axis — the step-8 contradiction check working as intended);
+failure-log — shared-checkout parallel agents; shared-test-DB migration
+hygiene (build candidates 4+5+6). Declined with reasons — D3
+repeat-refresh ceiling (already a deferred.md seam), clean_boundary
+double-emit (resolved by-design in-stack), watch authoring quality note
+(soft observation; the router-flakiness deferred.md entry carries the
+eval-slice pointer).
+
+**Post-fix gate:** full `make verify` re-run green after all fixes —
+**1797 tests** (1767 at step-6 exit + 30 net new from the stack's fixes and
+hardening), typecheck clean (181 source files), lint clean, build ok,
+okf-validate 81 concepts / 0 violations (4 new knowledge concepts + 1
+updated). One re-run note, honestly recorded: the first post-fix gate
+failed on four *other* slices' migration-roundtrip tests — 9 orphaned test
+projects left by the concurrent fix agents' interrupted runs violated an
+old check constraint on downgrade (the exact failure class the build's
+knowledge candidates predicted; now a failure-log entry). Orphans deleted
+via `delete_project_data`, gate green on the re-run.

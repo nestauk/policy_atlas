@@ -29,6 +29,24 @@ def test_cross_project_event_append_rejected(conn: Connection) -> None:
         events.append(conn, project_id=pid1, run_id=rid2, event_type="poisoned", payload={})
 
 
+def test_read_filters_by_event_types(conn: Connection) -> None:
+    """``event_types`` restricts the read to those event_type values, in the SQL
+    WHERE (sequence ordering preserved); ``None`` (default) is unchanged."""
+    pid, rid = seed_project_and_run(conn)
+
+    events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
+    events.append(conn, project_id=pid, run_id=rid, event_type="steering.pause", payload={})
+    events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
+    events.append(conn, project_id=pid, run_id=rid, event_type="steering.decision", payload={})
+
+    filtered = events.read(conn, pid, event_types=["steering.pause", "steering.decision"])
+    assert [e["event_type"] for e in filtered] == ["steering.pause", "steering.decision"]
+    assert [e["sequence"] for e in filtered] == [2, 4]
+
+    unfiltered = events.read(conn, pid)
+    assert len(unfiltered) == 4
+
+
 def test_sequence_is_per_project(conn: Connection) -> None:
     """Two projects have independent sequence counters."""
     pid1, rid1 = seed_project_and_run(conn)

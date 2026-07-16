@@ -36,9 +36,10 @@ from policy_atlas.evidence_base.corpus import characterise as characterise_modul
 from policy_atlas.evidence_base.extract import extract as extract_module
 from policy_atlas.evidence_base.group import facet_values
 from policy_atlas.evidence_base.sourcing import search_loop
+from policy_atlas.runtime import orchestrator_prompt, steering, steering_events
 from policy_atlas.runtime import runner as runner_module
-from policy_atlas.runtime import steering, steering_events
 from policy_atlas.runtime.orchestrator_backend import (
+    FOLDED_RESULT_MAX,
     WATCH_FALLBACK_TOOL_CALLS,
     StubOrchestratorBackend,
     build_watch_discretion_hook,
@@ -153,6 +154,128 @@ def test_poisoned_content_cannot_redirect_the_loop_to_a_banned_tool() -> None:
     assert result.decision.action == "escalate"
     assert "search" in (result.escalated_reason or "")
     assert result.deliberation == []  # no call was ever made — the allowlist held
+
+
+class _PayloadCapturingOrchestrator:
+    """Records every payload handed to ``decide()`` (stub-capture test seam).
+
+    Unlike :class:`StubOrchestratorBackend`, which discards its arguments, this
+    stub keeps the exact ``payload`` dict ``run_watch_decision`` re-invokes
+    ``decide`` with on each round — including the mutated copy carrying the
+    folded deliberation record — so a test can inspect what the re-invoked
+    decide prompt would actually see.
+    """
+
+    def __init__(self, decide_responses: list[WatchDecisionWire]) -> None:
+        self._queue = list(decide_responses)
+        self.decide_payloads: list[dict[str, Any]] = []
+
+    def route(
+        self,
+        utterance: str,
+        pause_context: dict[str, Any],
+        *,
+        session_id: Any = None,
+    ) -> Any:
+        raise NotImplementedError("decide-only capture stub")
+
+    def triage(
+        self,
+        request: str,
+        header: dict[str, Any],
+        payload: dict[str, Any],
+        digest: dict[str, Any],
+        *,
+        session_id: Any = None,
+    ) -> Any:
+        raise NotImplementedError("decide-only capture stub")
+
+    def decide(
+        self,
+        request: str,
+        header: dict[str, Any],
+        payload: dict[str, Any],
+        digest: dict[str, Any],
+        *,
+        framing: str = "decision",
+        session_id: Any = None,
+    ) -> WatchDecisionWire:
+        del request, header, digest, framing, session_id
+        self.decide_payloads.append(payload)
+        if len(self._queue) > 1:
+            return self._queue.pop(0)
+        return self._queue[0]
+
+
+def test_oversized_hostile_result_leaves_steer_point_and_triggers_in_bounded_prompt() -> None:
+    """FIX A regression: an oversized (~12K-char) hostile query_findings result
+    folded whole into the payload copy could push steer_point/triggers out of
+    the ``_bounded_json`` truncation prefix the live decide prompt applies
+    (``sort_keys=True`` sorts ``deliberation`` ahead of ``steer_point``/
+    ``triggers`` alphabetically). Bounding the folded result (FOLDED_RESULT_MAX)
+    keeps the re-invoked decide payload — and the actual bounded prompt text —
+    small enough that steer_point and triggers survive."""
+    insufficient = WatchDecisionWire(
+        action="insufficient",
+        reasoning="need the surviving findings",
+        needs_tool="query_findings",
+        needs_arguments={},
+    )
+    proceed = WatchDecisionWire(action="proceed", reasoning="clear now")
+    orch = _PayloadCapturingOrchestrator([insufficient, proceed])
+    payload = {
+        "steer_point": "deepening_selection",
+        "boundary": "after_component",
+        "component": "select",
+        "triggers": [{"trigger": "low_yield"}],
+        "bundle": {"selected": 3},
+    }
+    hostile_tools = {
+        "query_findings": _hostile_query_findings,
+        "lookup": lambda args: {"rows": []},
+    }
+    result = run_watch_decision(
+        orch, request="r", header={}, payload=payload, digest={}, read_tools=hostile_tools
+    )
+    assert result.decision.action == "proceed"
+    assert len(orch.decide_payloads) == 2
+    re_invoked_payload = orch.decide_payloads[1]
+
+    # The folded result on the deliberation record is itself bounded.
+    folded_result = re_invoked_payload["deliberation"][0]["result"]
+    assert len(folded_result) <= FOLDED_RESULT_MAX + 3  # +3 for the "..." suffix
+
+    # Reproduce the live path's own bounding (build_watch_messages ->
+    # _bounded_json(payload, WATCH_PAYLOAD_MAX)) and confirm steer_point and
+    # triggers survive in the actual prompt text sent to the model.
+    bounded = orchestrator_prompt._bounded_json(
+        re_invoked_payload, orchestrator_prompt.WATCH_PAYLOAD_MAX
+    )
+    assert '"steer_point"' in bounded
+    assert '"deepening_selection"' in bounded
+    assert '"triggers"' in bounded
+
+
+def test_strip_control_drops_bidi_override_characters() -> None:
+    """FIX B: ``_strip_control`` must also drop Unicode category-Cf format
+    characters (bidi overrides U+202A-U+202E, U+2066-U+2069, zero-width
+    joiners/spaces), not just C0/C1/DEL — model-authored display strings
+    (summary, refusal_reason, label/why) reach the confirm render through this
+    exact seam, and a bidi override could visually reorder or hide text there.
+    Mirrors the input-side ``sanitize_prompt_field`` (core/prompt_fields.py)."""
+    from policy_atlas.runtime.orchestrate import _strip_control
+
+    # RIGHT-TO-LEFT OVERRIDE (U+202E) ... POP DIRECTIONAL FORMATTING (U+202C),
+    # plus a ZERO WIDTH SPACE (U+200B) — all Unicode format (Cf) characters,
+    # not caught by the old C0/C1/DEL-only filter.
+    hostile = "Total: ‮100$‬ fee​"
+    stripped = _strip_control(hostile)
+    assert "‮" not in stripped
+    assert "‬" not in stripped
+    assert "​" not in stripped
+    assert stripped == "Total: 100$ fee"
+    # Newlines/tabs are still preserved (legitimate in multi-line renders).
+    assert _strip_control("line one\n\tline two") == "line one\n\tline two"
 
 
 # --------------------------------------------------------------------------

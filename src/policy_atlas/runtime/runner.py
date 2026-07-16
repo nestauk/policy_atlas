@@ -94,13 +94,17 @@ from policy_atlas.runtime.steering import (
     lattice_name_for,
     lattice_policy,
     pause_points,
+    render_authored_replacement_confirmation,
     render_check_in,
     render_collation,
     render_fanout_confirmation,
+    render_refused_fragment,
     steer_point_triggers,
 )
 from policy_atlas.runtime.steering_bundles import p2_bundle, p3_bundle, p4_bundle
 from policy_atlas.runtime.steering_triggers import (
+    FLOOR_BOUNDARY_FOR_COMPONENT,
+    FloorBoundary,
     floor_triggers,
     grouping_flag_triggers,
     p1_coverage_triggers,
@@ -371,6 +375,26 @@ class _PauseApplied:
 
 
 @dataclass(frozen=True)
+class _WatchObservation:
+    """What the gated watch observed at one boundary (FIX 2).
+
+    Args:
+        authored_options: Watch-authored decision-point options (or ``None`` when
+            the watch triaged, authoring failed, or no orchestrator ran).
+        promoted: Whether a triage verdict PROMOTED — the m6 rule; an attended
+            non-decision boundary then escalates to a generic-floor pause.
+        promoted_reason: The triage's reason, surfaced in the escalation render.
+        bundle: The P2/P3/P4 decision-point bundle the watch built for authoring,
+            threaded back so the pause reuses it (FIX 2b — built once per boundary).
+    """
+
+    authored_options: list[dict[str, Any]] | None = None
+    promoted: bool = False
+    promoted_reason: str | None = None
+    bundle: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
 class _SegmentReentryResult:
     """Outcome of one bounded additive segment re-walk.
 
@@ -608,6 +632,14 @@ def run_plan(
     step_outcomes: list[RunStepOutcome] = []
     flagged_events: list[dict[str, Any]] = []
     successful_runs: dict[str, uuid.UUID] = {}
+    # The most-recent ATTEMPTED run id per registry component, INCLUDING failed
+    # attempts (FIX 1): un-blinds class 9 (downstream_capability_reduced), which
+    # scans the walk's attempted run ids for component.failed/skipped events — a
+    # failed run is never threaded into ``successful_runs`` (it is popped), so the
+    # floor would otherwise never see it. Keyed by registry component so the floor
+    # readers' ``run_ids["screen"]`` etc. resolve (screen_abstract/screen_full both
+    # register as ``"screen"``).
+    attempted_runs: dict[str, uuid.UUID] = {}
     blocked_discretionary: dict[str, str] = {}
     completed_components: set[str] = set()
     last_check_in_payload: dict[str, Any] | None = None
@@ -629,6 +661,7 @@ def run_plan(
                 completed_components=completed_components,
                 capability_run_id=capability_run_id,
                 most_recent_attempted_run_id=most_recent_attempted_run_id,
+                attempted_runs=attempted_runs,
                 flagged_events=flagged_events,
                 discretion_hook=discretion,
                 orchestrator=orchestrator,
@@ -755,6 +788,7 @@ def run_plan(
                 flagged_events=flagged_events,
                 capability_run_id=capability_run_id,
                 most_recent_attempted_run_id=most_recent_attempted_run_id,
+                attempted_runs=attempted_runs,
                 boundary_run_id=None,
                 discretion_hook=discretion,
                 orchestrator=orchestrator,
@@ -820,6 +854,9 @@ def run_plan(
                 )
 
         final_attempt = attempts[-1]
+        # Record the final attempted run (succeeded OR failed) so class 9 is never
+        # blind to a discretionary failure that the walk continues past (FIX 1).
+        attempted_runs[registry_component_for(step.component)] = final_attempt.run_id
         retried = len(attempts) > 1
         if final_attempt.status == "succeeded":
             successful_runs[step.component] = final_attempt.run_id
@@ -860,6 +897,7 @@ def run_plan(
                 flagged_events=flagged_events,
                 capability_run_id=capability_run_id,
                 most_recent_attempted_run_id=most_recent_attempted_run_id,
+                attempted_runs=attempted_runs,
                 boundary_run_id=final_attempt.run_id,
                 selection_run_id=(
                     final_attempt.run_id if step.component == "select" else None
@@ -976,6 +1014,7 @@ def run_plan(
             flagged_events=flagged_events,
             capability_run_id=capability_run_id,
             most_recent_attempted_run_id=most_recent_attempted_run_id,
+            attempted_runs=attempted_runs,
             boundary_run_id=final_attempt.run_id,
             discretion_hook=discretion,
             orchestrator=orchestrator,
@@ -1040,6 +1079,7 @@ def _handle_after_component_boundary(
     capability_run_id: uuid.UUID,
     most_recent_attempted_run_id: uuid.UUID | None,
     boundary_run_id: uuid.UUID | None,
+    attempted_runs: dict[str, uuid.UUID] | None = None,
     selection_run_id: uuid.UUID | None = None,
     allow_segment_reentry: bool = False,
     discretion_hook: DiscretionHook = _deterministic_discretion_floor,
@@ -1048,6 +1088,9 @@ def _handle_after_component_boundary(
     anomalous: bool = False,
 ) -> _PauseApplied:
     point = PausePoint("after_component", step.component)
+    floor_run_ids = attempted_runs if attempted_runs is not None else _registry_run_ids(
+        successful_runs
+    )
     # Unattended = discretion-is-the-mode: at every lattice boundary the walk
     # never pauses — a pinned standing rule decides, else the discretion floor
     # (Task 12). Reuses the lattice detection; select's P3 replacement re-run and
@@ -1063,6 +1106,7 @@ def _handle_after_component_boundary(
             project_id=project_id,
             evidence_scope_id=evidence_scope_id,
             successful_runs=successful_runs,
+            attempted_runs=floor_run_ids,
             completed_components=completed_components,
             flagged_events=flagged_events,
             capability_run_id=capability_run_id,
@@ -1087,6 +1131,7 @@ def _handle_after_component_boundary(
         project_id=project_id,
         evidence_scope_id=evidence_scope_id,
         successful_runs=successful_runs,
+        attempted_runs=floor_run_ids,
     )
     # The deepening-selection (P3) steer point only offers its bundle/re-run when
     # select actually produced a persisted selection; a failed select degrades to
@@ -1102,9 +1147,9 @@ def _handle_after_component_boundary(
     # — authoring at a decision-point pause, triaging an anomalous/trigger-fired
     # boundary, or emitting a deterministic clean_boundary event. No orchestrator =
     # no watch = today's behaviour (no judgement events).
-    authored_options: list[dict[str, Any]] | None = None
+    observation = _WatchObservation()
     if orchestrator is not None and event_run_id is not None:
-        authored_options = _watch_observe_boundary(
+        observation = _watch_observe_boundary(
             engine,
             orchestrator=orchestrator,
             point=point,
@@ -1120,8 +1165,29 @@ def _handle_after_component_boundary(
             is_decision_point=should_pause and steer_point_name is not None,
             anomalous=anomalous,
         )
-    if not should_pause:
+    authored_options = observation.authored_options
+    # FIX 2: a watch triage that PROMOTES escalates an otherwise-non-pausing
+    # attended boundary to a generic-floor pause (the m6 rule / "watch-escalated
+    # substance"). Unattended never pauses (mode table), so a promotion there is
+    # recorded only. A promotion cannot add a pause where one already happens.
+    promoted_escalation = (
+        observation.promoted
+        and not should_pause
+        and state.plan.steering_mode != "unattended"
+    )
+    if not should_pause and not promoted_escalation:
+        # FIX 1: a fired non-lattice floor trigger that did not pause (Unattended)
+        # still flows to the collation so review sees it (the floor is never silent).
+        if triggers:
+            flagged_events.append(_trigger_fired_flag(point, triggers))
         return _PauseApplied(state=state)
+    if promoted_escalation:
+        # Escalate as a generic non-lattice floor pause (FIX 2): the canonical
+        # floor menu, the promotion surfaced in the render, no decision-point
+        # bundle/re-run surface (steer_point_name dropped to None).
+        steer_point_name = None
+        triggers = None
+        render = f"{render}\nThe orchestrator flagged this boundary: {observation.promoted_reason}"
     options, bundle = _pause_options_and_bundle(
         engine,
         steer_point_name=steer_point_name,
@@ -1130,6 +1196,7 @@ def _handle_after_component_boundary(
         evidence_scope_id=evidence_scope_id,
         successful_runs=successful_runs,
         backends=backends,
+        prebuilt_bundle=observation.bundle,
     )
     # Only the P3 select steer point wires a replacement re-run from the pause
     # today; P2/P4 present their re-run options as data for the Phase-5 router.
@@ -1228,6 +1295,7 @@ def _handle_before_component_boundary(
     capability_run_id: uuid.UUID,
     most_recent_attempted_run_id: uuid.UUID | None,
     flagged_events: list[dict[str, Any]],
+    attempted_runs: dict[str, uuid.UUID] | None = None,
     discretion_hook: DiscretionHook = _deterministic_discretion_floor,
     orchestrator: OrchestratorBackend | None = None,
     session_id: uuid.UUID | None = None,
@@ -1249,6 +1317,9 @@ def _handle_before_component_boundary(
     machinery), else the discretion floor (Task 12).
     """
     point = PausePoint("before_component", step.component)
+    floor_run_ids = attempted_runs if attempted_runs is not None else _registry_run_ids(
+        successful_runs
+    )
     name = lattice_name_for(point)
     rerun_component, segment_reentry_allowed = _before_boundary_surface(
         state, completed_components, allow_segment_reentry=allow_segment_reentry
@@ -1262,6 +1333,7 @@ def _handle_before_component_boundary(
             project_id=project_id,
             evidence_scope_id=evidence_scope_id,
             successful_runs=successful_runs,
+            attempted_runs=floor_run_ids,
             completed_components=completed_components,
             flagged_events=flagged_events,
             capability_run_id=capability_run_id,
@@ -1279,10 +1351,11 @@ def _handle_before_component_boundary(
         project_id=project_id,
         evidence_scope_id=evidence_scope_id,
         successful_runs=successful_runs,
+        attempted_runs=floor_run_ids,
     )
-    authored_options: list[dict[str, Any]] | None = None
+    observation = _WatchObservation()
     if orchestrator is not None and most_recent_attempted_run_id is not None:
-        authored_options = _watch_observe_boundary(
+        observation = _watch_observe_boundary(
             engine,
             orchestrator=orchestrator,
             point=point,
@@ -1298,8 +1371,22 @@ def _handle_before_component_boundary(
             is_decision_point=should_pause and steer_point_name is not None,
             anomalous=anomalous,
         )
-    if not should_pause:
+    authored_options = observation.authored_options
+    promoted_escalation = (
+        observation.promoted
+        and not should_pause
+        and state.plan.steering_mode != "unattended"
+    )
+    if not should_pause and not promoted_escalation:
+        if triggers:
+            flagged_events.append(_trigger_fired_flag(point, triggers))
         return _PauseApplied(state=state)
+    if promoted_escalation:
+        steer_point_name = None
+        triggers = None
+        rerun_component = None
+        segment_reentry_allowed = False
+        render = f"{render}\nThe orchestrator flagged this boundary: {observation.promoted_reason}"
     options, bundle = _pause_options_and_bundle(
         engine,
         steer_point_name=steer_point_name,
@@ -1308,6 +1395,7 @@ def _handle_before_component_boundary(
         evidence_scope_id=evidence_scope_id,
         successful_runs=successful_runs,
         backends=backends,
+        prebuilt_bundle=observation.bundle,
     )
     return _handle_pause(
         engine,
@@ -1331,6 +1419,47 @@ def _handle_before_component_boundary(
     )
 
 
+def _registry_run_ids(runs: dict[str, uuid.UUID]) -> dict[str, uuid.UUID]:
+    """Re-key a component→run map by registry component (screen_abstract → screen).
+
+    The floor readers address a boundary's own run by registry name
+    (``run_ids["screen"]``); ``successful_runs`` is keyed by composed-step name, so
+    a screen run lives under ``screen_abstract``/``screen_full``. Used as the
+    attempted-run fallback at the re-walk re-presentation call sites, which do not
+    thread the main loop's ``attempted_runs`` map.
+    """
+    return {registry_component_for(component): run_id for component, run_id in runs.items()}
+
+
+def _floor_boundary_triggers(
+    engine: Engine,
+    *,
+    boundary: FloorBoundary,
+    project_id: uuid.UUID,
+    evidence_scope_id: uuid.UUID,
+    attempted_runs: dict[str, uuid.UUID],
+) -> list[dict[str, Any]]:
+    """Read the floor triggers for one non-lattice after_component boundary (FIX 1).
+
+    Threads the attempted-run map (including failed attempts) so class 9
+    (downstream_capability_reduced) is un-blinded. Returns ``[]`` when the
+    boundary's own run id is absent (e.g. a skipped discretionary component leaves
+    no run to key on — the skip is caught as class 9 at a later boundary).
+    """
+    required = {"after_screen": "screen", "after_group": "group", "after_extract": "extract"}
+    key = required.get(boundary)
+    if key is not None and key not in attempted_runs:
+        return []
+    with engine.connect() as conn:
+        return floor_triggers(
+            conn,
+            project_id=project_id,
+            boundary_component=boundary,
+            evidence_scope_id=evidence_scope_id,
+            run_ids=dict(attempted_runs),
+        )
+
+
 def _evaluate_boundary(
     engine: Engine,
     *,
@@ -1339,14 +1468,18 @@ def _evaluate_boundary(
     project_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     successful_runs: dict[str, uuid.UUID],
+    attempted_runs: dict[str, uuid.UUID],
 ) -> tuple[bool, str | None, list[dict[str, Any]] | None]:
     """Decide whether a boundary pauses, per the annex mode table.
 
     Returns ``(should_pause, steer_point_name, triggers)``. A lattice point pauses
     on ``always`` or on ``fired`` with non-empty triggers (read through Task 10
     readers at the boundary, never recomputed); triggers are attached to the
-    payload either way. A non-lattice boundary pauses only when it is a Frequent
-    generic pause (present in the static pause set), with no steer point.
+    payload either way. A non-lattice after_component boundary that carries its own
+    floor classes (:data:`FLOOR_BOUNDARY_FOR_COMPONENT`, FIX 1) reads them here:
+    when they fire it pauses (attended) or flows them to the watch/collation only
+    (Unattended), with no steer point. A boundary that fires nothing pauses only
+    when it is a Frequent generic pause (present in the static pause set).
     """
     name = lattice_name_for(point)
     if name is not None:
@@ -1360,10 +1493,28 @@ def _evaluate_boundary(
             project_id=project_id,
             evidence_scope_id=evidence_scope_id,
             successful_runs=successful_runs,
+            attempted_runs=attempted_runs,
         )
         if policy == "fired" and not triggers:
             return (False, name, triggers)
         return (True, name, triggers)
+    # FIX 1: a non-lattice after_component boundary with its own floor classes.
+    floor_boundary = FLOOR_BOUNDARY_FOR_COMPONENT.get(point.component)
+    if point.boundary == "after_component" and floor_boundary is not None:
+        floor = _floor_boundary_triggers(
+            engine,
+            boundary=floor_boundary,
+            project_id=project_id,
+            evidence_scope_id=evidence_scope_id,
+            attempted_runs=attempted_runs,
+        )
+        if floor:
+            # Unattended never pauses (mode table); the fired floor still flows to
+            # the watch and the collation. Every attended mode pauses on the
+            # generic non-lattice floor menu.
+            if state.plan.steering_mode == "unattended":
+                return (False, None, floor)
+            return (True, None, floor)
     if point in state.pause_points:
         return (True, None, None)
     return (False, None, None)
@@ -1377,6 +1528,7 @@ def _lattice_triggers(
     project_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     successful_runs: dict[str, uuid.UUID],
+    attempted_runs: dict[str, uuid.UUID],
 ) -> list[dict[str, Any]]:
     """Read a lattice point's floor triggers from persisted state (Task 10)."""
     with engine.connect() as conn:
@@ -1393,7 +1545,7 @@ def _lattice_triggers(
                 project_id=project_id,
                 boundary_component="pre_select",
                 evidence_scope_id=evidence_scope_id,
-                run_ids=dict(successful_runs),
+                run_ids=dict(attempted_runs),
             )
         if name == DEEPENING_SELECTION:
             selection_run_id = successful_runs.get("select")
@@ -1424,6 +1576,7 @@ def _pause_options_and_bundle(
     evidence_scope_id: uuid.UUID,
     successful_runs: dict[str, uuid.UUID],
     backends: RunnerBackends,
+    prebuilt_bundle: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     """Return the canonical options + (P2/P3/P4) bundle for a pause.
 
@@ -1431,17 +1584,25 @@ def _pause_options_and_bundle(
     gets its point-keyed canonical options and, at P2/P3/P4, its deterministic
     bundle. Bundle building is fail-safe: a build error degrades to no bundle
     (the watch/authoring fail-safe discipline) rather than failing the pause.
+
+    FIX 2b: when the watch already built this boundary's bundle for authoring, it
+    is threaded in as ``prebuilt_bundle`` and reused — the P2/P3/P4 bundle is built
+    once per decision point, not once for authoring and again for the pause.
     """
     if steer_point_name is None:
         return generic_floor_options(), None
     options = build_steer_point_options(plan=state.plan, point=steer_point_name)
-    bundle = _build_bundle(
-        engine,
-        name=steer_point_name,
-        project_id=project_id,
-        evidence_scope_id=evidence_scope_id,
-        successful_runs=successful_runs,
-        backends=backends,
+    bundle = (
+        prebuilt_bundle
+        if prebuilt_bundle is not None
+        else _build_bundle(
+            engine,
+            name=steer_point_name,
+            project_id=project_id,
+            evidence_scope_id=evidence_scope_id,
+            successful_runs=successful_runs,
+            backends=backends,
+        )
     )
     return options, bundle
 
@@ -1682,6 +1843,38 @@ def _handle_pause(
                 rerun_component is not None
                 and set(response.directive_deltas) == {rerun_component}
             ):
+                # FIX C: a picked watch-AUTHORED option whose delta re-runs the
+                # steer point's component takes the same replacement-re-run apply
+                # path a confirmed router fan-out does — so it gets the same
+                # on-screen mode declaration + bounded delta render behind the
+                # confirm gate before anything applies. A user-authored canonical
+                # pick (authored_by None) keeps direct-apply — its label already
+                # carries the replacement wording. Declined (or a non-confirm IO,
+                # fail-closed) → nothing applies, the decision is recorded
+                # confirmed=false, and the canonical menu is re-presented.
+                if response.authored_by == "orchestrator" and not _confirm(
+                    io,
+                    render_authored_replacement_confirmation(
+                        CompiledFragment(
+                            "",
+                            "replacement_rerun",
+                            rerun_component,
+                            response.directive_deltas[rerun_component],
+                            "replacement",
+                        )
+                    ),
+                ):
+                    _emit_authored_declined(
+                        engine,
+                        project_id=project_id,
+                        run_id=event_run_id,
+                        base=base,
+                        interpreted_action=_interpreted_action(response),
+                    )
+                    current_render = (
+                        f"{render}\nNothing applied (not confirmed); please choose an option."
+                    )
+                    continue
                 try:
                     rerun_state, merged_directive = _apply_replacement_rerun(
                         engine,
@@ -1889,7 +2082,21 @@ def _handle_free_text(
         )
 
     if not fanout.compiled:
-        return _FreeTextResult(None, "None of that could be applied; please choose an option.")
+        # FIX B: when ALL fragments were refused, surface each fragment's
+        # plain-language reason on the re-presented render — not only in the
+        # event log — mirroring the per-fragment reasons a partial refusal
+        # already shows at the confirm gate.
+        if fanout.refused:
+            note = "\n".join(
+                [
+                    "None of that could be applied:",
+                    *(render_refused_fragment(refused) for refused in fanout.refused),
+                    "…please choose an option.",
+                ]
+            )
+        else:
+            note = "None of that could be applied; please choose an option."
+        return _FreeTextResult(None, note)
 
     confirmation = render_fanout_confirmation(fanout)
     if not _confirm(io, confirmation):
@@ -1904,18 +2111,16 @@ def _handle_free_text(
         )
         return _FreeTextResult(None, "Nothing applied (not confirmed); please choose an option.")
 
-    return _FreeTextResult(
-        _apply_fanout(
-            engine,
-            fanout=fanout,
-            utterance=utterance,
-            point=point,
-            state=state,
-            project_id=project_id,
-            completed_components=completed_components,
-            base=base,
-            event_run_id=event_run_id,
-        )
+    return _apply_fanout(
+        engine,
+        fanout=fanout,
+        utterance=utterance,
+        point=point,
+        state=state,
+        project_id=project_id,
+        completed_components=completed_components,
+        base=base,
+        event_run_id=event_run_id,
     )
 
 
@@ -1930,7 +2135,7 @@ def _apply_fanout(
     completed_components: set[str],
     base: dict[str, Any],
     event_run_id: uuid.UUID | None,
-) -> _PauseApplied:
+) -> _FreeTextResult:
     """Apply a confirmed fan-out: merged plan adjustment then at most one re-run.
 
     Refusals are already evented. Plan-adjustment fragments merge into ONE Adjust
@@ -1938,6 +2143,13 @@ def _apply_fanout(
     and the fan-out as its interpreted action). A single re-run fragment then
     applies on the resulting state — the one the utterance leads with (the
     one-cycle rule was resolved in :func:`compile_fanout`).
+
+    FIX 3a: each apply is guarded separately. A confirmed fan-out whose apply raises
+    :class:`SteeringAdjustmentError` (e.g. a re-run that cannot re-thread, or a
+    delta the plan fields cannot map) no longer crashes the walk: the failing part
+    emits ``steering.rejected`` (verbatim utterance + reason) and the canonical menu
+    is re-presented. Anything that already applied stays applied — its own
+    decision/refused events remain truthful about what did and did not land.
     """
     interpreted = fanout.as_interpreted_action()
     changed = False
@@ -1946,39 +2158,86 @@ def _apply_fanout(
 
     adjustments = fanout.plan_adjustments
     if adjustments:
-        state = _apply_runner_adjustment(
-            engine,
-            project_id=project_id,
-            state=state,
-            adjustment=Adjust(
-                directive_deltas={frag.component: frag.delta for frag in adjustments}
-            ),
-            completed_components=completed_components,
-            base=base,
-            event_run_id=event_run_id,
-            user_text=utterance,
-            interpreted_action=interpreted,
-        )
+        try:
+            state = _apply_runner_adjustment(
+                engine,
+                project_id=project_id,
+                state=state,
+                adjustment=Adjust(
+                    directive_deltas={frag.component: frag.delta for frag in adjustments}
+                ),
+                completed_components=completed_components,
+                base=base,
+                event_run_id=event_run_id,
+                user_text=utterance,
+                interpreted_action=interpreted,
+            )
+        except SteeringAdjustmentError as exc:
+            return _fanout_apply_rejected(
+                engine,
+                project_id=project_id,
+                event_run_id=event_run_id,
+                base=base,
+                exc=exc,
+                interpreted=interpreted,
+                utterance=utterance,
+            )
         changed = True
 
     rerun_fragment = fanout.rerun
     if rerun_fragment is not None:
-        state, rerun, segment_reentry = _apply_fanout_rerun(
-            engine,
-            fragment=rerun_fragment,
-            utterance=utterance,
-            interpreted=interpreted,
-            point=point,
-            state=state,
-            project_id=project_id,
-            completed_components=completed_components,
-            base=base,
-            event_run_id=event_run_id,
-        )
+        try:
+            state, rerun, segment_reentry = _apply_fanout_rerun(
+                engine,
+                fragment=rerun_fragment,
+                utterance=utterance,
+                interpreted=interpreted,
+                point=point,
+                state=state,
+                project_id=project_id,
+                completed_components=completed_components,
+                base=base,
+                event_run_id=event_run_id,
+            )
+        except SteeringAdjustmentError as exc:
+            return _fanout_apply_rejected(
+                engine,
+                project_id=project_id,
+                event_run_id=event_run_id,
+                base=base,
+                exc=exc,
+                interpreted=interpreted,
+                utterance=utterance,
+            )
 
-    return _PauseApplied(
-        state=state, changed=changed, rerun=rerun, segment_reentry=segment_reentry
+    return _FreeTextResult(
+        _PauseApplied(
+            state=state, changed=changed, rerun=rerun, segment_reentry=segment_reentry
+        )
     )
+
+
+def _fanout_apply_rejected(
+    engine: Engine,
+    *,
+    project_id: uuid.UUID,
+    event_run_id: uuid.UUID | None,
+    base: dict[str, Any],
+    exc: SteeringAdjustmentError,
+    interpreted: dict[str, Any],
+    utterance: str,
+) -> _FreeTextResult:
+    """Event a confirmed-fan-out apply failure and re-present the menu (FIX 3a)."""
+    _emit_rejected(
+        engine,
+        project_id=project_id,
+        run_id=event_run_id,
+        base=base,
+        exc=exc,
+        offending_delta=interpreted,
+        user_text=utterance,
+    )
+    return _FreeTextResult(None, f"That could not be applied: {exc}; please choose an option.")
 
 
 def _apply_fanout_rerun(
@@ -2087,6 +2346,41 @@ def _emit_fanout_declined(
     )
 
 
+def _emit_authored_declined(
+    engine: Engine,
+    *,
+    project_id: uuid.UUID,
+    run_id: uuid.UUID | None,
+    base: dict[str, Any],
+    interpreted_action: dict[str, Any],
+) -> None:
+    """Record a picked-then-declined watch-authored replacement (FIX C): confirmed=false.
+
+    The user picked a watch-authored replacement option but declined its mode+delta
+    confirm (or the IO cannot confirm), so nothing applied — but the decision still
+    surfaces in the durable record as an offered-and-declined authored action
+    (decided_by=user, authored_by=orchestrator).
+    """
+    if run_id is None:
+        return
+    payload = steering_events.decision_payload(
+        base,
+        decided_by="user",
+        authored_by="orchestrator",
+        response="adjust",
+        interpreted_action=interpreted_action,
+        confirmed=False,
+        rerun_mode=None,
+    )
+    steering_events.emit_standalone(
+        engine,
+        project_id=project_id,
+        run_id=run_id,
+        event_type=steering_events.STEERING_DECISION,
+        payload=payload,
+    )
+
+
 def _emit_router_degrade(
     engine: Engine,
     *,
@@ -2174,13 +2468,16 @@ def _reentry_interpreted_action(
 ) -> dict[str, Any]:
     """Summarise an additive segment re-entry for the decision/rejected event.
 
-    Names the segment (start component, boundary, amended directive keys) — the
-    contract's interpreted-action requirement for a re-run event.
+    Names the segment (start component, boundary) and records the full amended
+    directive deltas — parity with the adjustment path (which records
+    ``directive_deltas``, not just key names), so ``steering_history`` alone can
+    show what a re-search was steered to (FIX D). The delta payload is already
+    bounded/scrubbed at the parser layer.
     """
     return {
         "segment_start": response.segment_start,
         "boundary": boundary_component,
-        "amended_directive_keys": sorted(response.directive_deltas),
+        "directive_deltas": response.directive_deltas,
     }
 
 
@@ -2221,13 +2518,20 @@ def _emit_rejected(
     base: dict[str, Any],
     exc: SteeringAdjustmentError,
     offending_delta: dict[str, Any],
+    user_text: str | None = None,
 ) -> None:
-    """Append a standalone steering.rejected with the reason and offending delta."""
+    """Append a standalone steering.rejected with the reason and offending delta.
+
+    ``user_text`` records the verbatim steering utterance when the rejection comes
+    from a confirmed router fan-out apply (FIX 3a).
+    """
     payload = {
         **base,
         "reason": str(exc),
         "offending_delta": offending_delta,
     }
+    if user_text is not None:
+        payload["user_text"] = user_text
     steering_events.emit_standalone(
         engine,
         project_id=project_id,
@@ -3160,6 +3464,7 @@ def _resolve_unattended_boundary(
     project_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     successful_runs: dict[str, uuid.UUID],
+    attempted_runs: dict[str, uuid.UUID],
     completed_components: set[str],
     flagged_events: list[dict[str, Any]],
     capability_run_id: uuid.UUID,
@@ -3198,6 +3503,7 @@ def _resolve_unattended_boundary(
         project_id=project_id,
         evidence_scope_id=evidence_scope_id,
         successful_runs=successful_runs,
+        attempted_runs=attempted_runs,
     )
     # P1 is exception-only: with nothing fired there is no decision to take.
     if name == SEARCH_EXCEPTION and not triggers:
@@ -3480,6 +3786,21 @@ def _standing_flag(
     }
 
 
+def _trigger_fired_flag(point: PausePoint, triggers: list[dict[str, Any]]) -> dict[str, Any]:
+    """One collation flag for a fired non-lattice floor trigger that did not pause (FIX 1).
+
+    Unattended never pauses, so a fired floor trigger there rides the collation
+    (and the watch's trigger-fired triage) instead of a user pause — review still
+    sees the floor fired.
+    """
+    return {
+        "component": point.component,
+        "status": "triggers_fired",
+        "boundary": point.boundary,
+        "triggers": triggers,
+    }
+
+
 def _rule_echo(rule: Any) -> dict[str, Any]:
     """Echo a standing rule onto its decision event (attribution, decision 9)."""
     echo: dict[str, Any] = {"steer_point": rule.steer_point, "action": rule.action}
@@ -3567,18 +3888,20 @@ def _watch_observe_boundary(
     triggers: list[dict[str, Any]],
     is_decision_point: bool,
     anomalous: bool,
-) -> list[dict[str, Any]] | None:
+) -> _WatchObservation:
     """Observe one attended boundary under the gated-invocation model (Task 14).
 
     Classifies the boundary (:func:`classify_boundary`) and emits the matching
     ``agent_judgement_routed`` event:
 
     - **decision_point** (a lattice pause the user will see): the watch AUTHORS 2–5
-      run-specific options on the canonical floor. Returns them (or ``None`` on
-      authoring failure — the canonical menu is then unchanged, never blocked).
+      run-specific options on the canonical floor, returned in the observation (or
+      ``None`` on authoring failure — the canonical menu is then unchanged, never
+      blocked). The built bundle rides back for the pause to reuse (FIX 2b).
     - **triage** (trigger-fired or anomalous, not a decision point): a mini-class
       notable-or-not verdict — ``triaged_not_notable`` proceeds; notable PROMOTES
-      (the m6 rule). Triage makes no tool calls.
+      (the m6 rule), and the observation carries ``promoted=True`` so an attended
+      caller escalates to a pause (FIX 2). Triage makes no tool calls.
     - **clean_boundary**: a deterministic no-LLM event.
 
     ANY backend exception degrades to the deterministic floor (watch discipline 5):
@@ -3601,7 +3924,7 @@ def _watch_observe_boundary(
             verdict="clean_boundary",
             reason="structurally resolved",
         )
-        return None
+        return _WatchObservation()
 
     header = _watch_header(state)
     digest = _watch_digest(engine, project_id=project_id, capability_run_id=capability_run_id)
@@ -3643,7 +3966,8 @@ def _watch_observe_boundary(
                 reason="authoring failed — canonical menu unchanged",
                 extra={"authored": False},
             )
-            return None
+            # The bundle still rides back so the pause reuses it (FIX 2b).
+            return _WatchObservation(bundle=bundle)
         authored_dicts = (
             [option.model_dump() for option in authored] if authored else None
         )
@@ -3665,7 +3989,7 @@ def _watch_observe_boundary(
                 },
             },
         )
-        return authored_dicts
+        return _WatchObservation(authored_options=authored_dicts, bundle=bundle)
 
     # triage
     try:
@@ -3687,7 +4011,7 @@ def _watch_observe_boundary(
             verdict="watch_error",
             reason="triage failed — proceeding on the deterministic floor",
         )
-        return None
+        return _WatchObservation()
     if triage.notable:
         _emit_judgement_routed(
             engine,
@@ -3699,18 +4023,19 @@ def _watch_observe_boundary(
             verdict="promoted",
             reason=triage.reason,
         )
-    else:
-        _emit_judgement_routed(
-            engine,
-            project_id=project_id,
-            capability_run_id=capability_run_id,
-            state=state,
-            point=point,
-            run_id=event_run_id,
-            verdict="triaged_not_notable",
-            reason=triage.reason,
-        )
-    return None
+        # FIX 2: the promotion escalates an attended non-decision boundary to a pause.
+        return _WatchObservation(promoted=True, promoted_reason=triage.reason)
+    _emit_judgement_routed(
+        engine,
+        project_id=project_id,
+        capability_run_id=capability_run_id,
+        state=state,
+        point=point,
+        run_id=event_run_id,
+        verdict="triaged_not_notable",
+        reason=triage.reason,
+    )
+    return _WatchObservation()
 
 
 def _watch_header(state: _SteeringState) -> dict[str, Any]:
@@ -3740,9 +4065,10 @@ def _watch_digest(
                 "decided_by": entry["payload"].get("decided_by"),
                 "response": entry["payload"].get("response"),
             }
-            for entry in events.read(conn, project_id)
-            if entry["event_type"] == steering_events.STEERING_DECISION
-            and entry["payload"].get("capability_run_id") == walk_key
+            for entry in events.read(
+                conn, project_id, event_types=[steering_events.STEERING_DECISION]
+            )
+            if entry["payload"].get("capability_run_id") == walk_key
         ]
     return {"prior_decisions": prior}
 

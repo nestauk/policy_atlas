@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import unicodedata
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -217,10 +218,26 @@ class ConsoleIO(Protocol):
 
 
 def _strip_control(text: str) -> str:
+    """Strip terminal control characters and Unicode format characters.
+
+    C0/C1/DEL are dropped outright (escape sequences could rewrite or hide
+    plan lines). Category-Cf format characters (bidi overrides U+202A-U+202E,
+    U+2066-U+2069, zero-width joiners/spaces, etc.) are also dropped — a
+    model-authored display string (summary, refusal_reason, label/why) could
+    otherwise use them to visually reorder or hide text at render time.
+    Mirrors the input-side ``sanitize_prompt_field`` (core/prompt_fields.py),
+    which strips all Unicode C categories the same way, newlines excepted.
+    """
     return "".join(
         ch
         for ch in text
-        if ch in ("\n", "\t") or (ch >= " " and ch != "\x7f" and not ("\x80" <= ch <= "\x9f"))
+        if ch in ("\n", "\t")
+        or (
+            ch >= " "
+            and ch != "\x7f"
+            and not ("\x80" <= ch <= "\x9f")
+            and not unicodedata.category(ch).startswith("C")
+        )
     )
 
 

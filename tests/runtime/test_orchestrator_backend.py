@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
 from policy_atlas.core import events
-from policy_atlas.core.schema import selection_result
+from policy_atlas.core.schema import orchestration_plan, selection_result
 from policy_atlas.runtime import runner as runner_module
 from policy_atlas.runtime import steering_events
 from policy_atlas.runtime.orchestrator_backend import (
@@ -50,7 +50,7 @@ from policy_atlas.runtime.runner import (
     _DiscretionOutcome,
     run_plan,
 )
-from policy_atlas.runtime.steering import Continue
+from policy_atlas.runtime.steering import Adjust, Continue, SteeringResponse
 from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_project
 from tests.runtime.test_steering import _cleanup_project, _insert_plan_row
 
@@ -343,6 +343,48 @@ class _CapturingIO:
         return Continue()
 
 
+class _PickAuthoredIO:
+    """Picks the first watch-authored option once at a steer point; answers confirm.
+
+    Models the CLI: a user picking a "Suggested for this run" option yields an
+    ``Adjust`` carrying ``authored_by='orchestrator'`` (the user decided; the
+    orchestrator authored). ``confirm_result`` answers the FIX-C mode+delta gate.
+    ``confirmable=False`` models a non-confirm-capable IO — the gate then fails
+    closed (nothing applies) because the IO exposes no ``confirm`` method.
+    """
+
+    def __init__(self, *, at: str, confirm_result: bool = True, confirmable: bool = True) -> None:
+        self._at = at
+        self._confirm_result = confirm_result
+        self._fired = False
+        self.pauses: list[dict[str, Any]] = []
+        self.confirm_renders: list[str] = []
+        if confirmable:
+            # Bind confirm only when the IO is meant to be confirm-capable.
+            self.confirm = self._confirm
+
+    def check_in(self, component: str, payload: dict[str, Any]) -> None:
+        del component, payload
+
+    def pause(self, point: dict[str, Any], render: str) -> SteeringResponse:
+        del render
+        self.pauses.append(dict(point))
+        if not self._fired and point.get("steer_point") == self._at and point.get(
+            "authored_options"
+        ):
+            self._fired = True
+            option = point["authored_options"][0]
+            return Adjust(
+                directive_deltas={option["component"]: option["delta"]},
+                authored_by="orchestrator",
+            )
+        return Continue()
+
+    def _confirm(self, render: str) -> bool:
+        self.confirm_renders.append(render)
+        return self._confirm_result
+
+
 def _judgement_events(engine: Engine, project_id: uuid.UUID) -> list[dict[str, Any]]:
     with engine.connect() as conn:
         return [
@@ -360,6 +402,45 @@ def _orchestrator_decisions(engine: Engine, project_id: uuid.UUID) -> list[dict[
             if entry["event_type"] == steering_events.STEERING_DECISION
             and entry["payload"].get("decided_by") == "orchestrator"
         ]
+
+
+def _all_decisions(engine: Engine, project_id: uuid.UUID) -> list[dict[str, Any]]:
+    with engine.connect() as conn:
+        return [
+            entry["payload"]
+            for entry in events.read(conn, project_id)
+            if entry["event_type"] == steering_events.STEERING_DECISION
+        ]
+
+
+def _plan_versions(engine: Engine, project_id: uuid.UUID) -> set[int]:
+    with engine.connect() as conn:
+        return {
+            row.version
+            for row in conn.execute(
+                select(orchestration_plan.c.version).where(
+                    orchestration_plan.c.project_id == project_id
+                )
+            )
+        }
+
+
+# A reusable watch-authored replacement option: at P3 (deepening_selection) its
+# delta re-runs the steer point's own component (select), so a pick routes to the
+# replacement-rerun apply path — the FIX-C confirm gate.
+def _authored_reselect() -> WatchDecisionWire:
+    return WatchDecisionWire(
+        action="proceed",
+        reasoning="authoring a run-specific reselect",
+        authored_options=[
+            AuthoredOptionWire(
+                label="Favour the strongest evidence",
+                why="tilt selection toward tier-1 evidence",
+                component="select",
+                delta={"selection": {"weight_emphasis": {"quality": 2.0}}},
+            )
+        ],
+    )
 
 
 def test_clean_boundary_emits_event_and_makes_no_backend_call(
@@ -434,7 +515,10 @@ def test_trigger_fired_boundary_triages_not_notable(
 
 
 def test_anomalous_check_in_triages(engine: Engine) -> None:
-    """A failed/degraded step is anomalous → the watch triages that boundary."""
+    """A failed/degraded step is anomalous → the watch triages that boundary, and
+    (FIX 2) a notable verdict now PAUSES rather than being inert. The failed extract
+    boundary also fires class 9 (downstream_capability_reduced, FIX 1), so the
+    escalation is doubly warranted; either way the boundary now pauses."""
     project_id: uuid.UUID | None = None
     try:
         project_id, scope_id = _seed_project(engine)
@@ -449,16 +533,19 @@ def test_anomalous_check_in_triages(engine: Engine) -> None:
                 raise RuntimeError("stub extract failure")
 
         backends.extraction = _FailingExtraction()  # type: ignore[assignment]
+        io = _CapturingIO()
         plan = _base_plan(steering_mode="minimal", steer_point_defaults=[])
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         run_plan(
             engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
             plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
-            backends=backends, io=runner_module.NullIO(), orchestrator=stub,
+            backends=backends, io=io, orchestrator=stub,
         )
         judged = _judgement_events(engine, project_id)
         assert any(p["verdict"] == "promoted" for p in judged), judged
         assert stub.triage_calls >= 1
+        # The anomalous boundary now pauses (previously inert — FIX 2 / FIX 1).
+        assert io.pauses, "expected the anomalous boundary to pause"
     finally:
         _cleanup_project(engine, project_id)
 
@@ -525,6 +612,122 @@ def test_authoring_failure_leaves_canonical_menu_unchanged(engine: Engine) -> No
         p3_pause = next(p for p in io.pauses if p.get("steer_point") == "deepening_selection")
         assert p3_pause["options"]  # canonical floor intact
         assert "authored_options" not in p3_pause
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_watch_authored_replacement_applies_only_after_user_pick_and_confirm(
+    engine: Engine,
+) -> None:
+    """FIX C / E1: a watch-AUTHORED replacement option applies only after an explicit
+    user pick AND the FIX-C mode+delta confirm — the watch never auto-applies it.
+    The applied decision is decided_by=user, authored_by=orchestrator, confirmed=true,
+    and NO steering.decision at the attended pause is decided_by=orchestrator."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        orch = _SteerPointOrchestrator(at="deepening_selection", decide=_authored_reselect())
+        io = _PickAuthoredIO(at="deepening_selection", confirm_result=True)
+        plan = _base_plan(steering_mode="moderate", steer_point_defaults=[])
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        outcome = run_plan(
+            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
+            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
+            backends=_runner_backends(), io=io, orchestrator=orch,
+        )
+        assert outcome.status == "succeeded"
+        # The FIX-C gate was rendered (mode declaration + bounded delta) before applying.
+        assert io.confirm_renders
+        assert any(
+            "REDO selection, replacing the current one" in render
+            for render in io.confirm_renders
+        )
+        assert any('"weight_emphasis"' in render for render in io.confirm_renders)
+        # The reselect applied: a new plan version was minted.
+        assert 2 in _plan_versions(engine, project_id)
+        decisions = _all_decisions(engine, project_id)
+        reselect = next(d for d in decisions if d.get("rerun_mode") == "replacement")
+        assert reselect["decided_by"] == "user"
+        assert reselect["authored_by"] == "orchestrator"
+        assert reselect["confirmed"] is True
+        # The watch NEVER decided at the attended pause (delegation asymmetry).
+        assert not _orchestrator_decisions(engine, project_id)
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+@pytest.mark.parametrize(
+    "confirmable,confirm_result",
+    [(True, False), (False, True)],
+    ids=["declined", "non_confirm_capable_io"],
+)
+def test_watch_authored_replacement_fails_closed_without_confirm(
+    engine: Engine, confirmable: bool, confirm_result: bool
+) -> None:
+    """FIX C / E1 head-to-head: the SAME watch-authored replacement, picked but NOT
+    confirmed (declined, or a non-confirm-capable IO that fails closed), applies
+    nothing — no new plan version, the declined decision is recorded confirmed=false
+    (authored_by=orchestrator), and no decision is decided_by=orchestrator."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        orch = _SteerPointOrchestrator(at="deepening_selection", decide=_authored_reselect())
+        io = _PickAuthoredIO(
+            at="deepening_selection", confirm_result=confirm_result, confirmable=confirmable
+        )
+        plan = _base_plan(steering_mode="moderate", steer_point_defaults=[])
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        outcome = run_plan(
+            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
+            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
+            backends=_runner_backends(), io=io, orchestrator=orch,
+        )
+        assert outcome.status == "succeeded"
+        # Nothing applied: no reselect version, no confirmed replacement decision.
+        assert _plan_versions(engine, project_id) == {1}
+        decisions = _all_decisions(engine, project_id)
+        assert not any(
+            d.get("rerun_mode") == "replacement" and d.get("confirmed") for d in decisions
+        )
+        # The picked-then-declined authored action surfaces confirmed=false (FIX C).
+        assert any(
+            d.get("authored_by") == "orchestrator" and d.get("confirmed") is False
+            for d in decisions
+        )
+        assert not _orchestrator_decisions(engine, project_id)
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_attended_floor_pause_not_suppressible_by_not_notable_watch(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FIX E2: a fired lattice trigger forces an attended (moderate) pause even when
+    the watch triages the boundary not-notable — the watch adds pauses (promote),
+    never removes the floor's. The fired P1 (search_exception, 'fired' in moderate)
+    pauses despite the stub watch's default not-notable triage."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        # Force a fired P1 coverage trigger; moderate P1 policy is 'fired', so the
+        # trigger — not an 'always' policy — is what drives should_pause.
+        monkeypatch.setattr(
+            runner_module,
+            "p1_coverage_triggers",
+            lambda *a, **k: [{"trigger": "zero_results", "detail": {}}],
+        )
+        stub = StubOrchestratorBackend()  # default triage → not notable
+        io = _CapturingIO()
+        plan = _base_plan(steering_mode="moderate", steer_point_defaults=[])
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        outcome = run_plan(
+            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
+            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
+            backends=_runner_backends(), io=io, orchestrator=stub,
+        )
+        assert outcome.status == "succeeded"
+        # The fired-trigger P1 pause fired despite the not-notable watch verdict.
+        assert any(p.get("steer_point") == "search_exception" for p in io.pauses)
     finally:
         _cleanup_project(engine, project_id)
 
@@ -682,3 +885,288 @@ def test_author_blind_out_of_grammar_delta_rejected_and_floor(engine: Engine) ->
 def test_deliberation_step_payload_shape() -> None:
     step = DeliberationStep(tool="lookup", args_digest="a", result_digest="b")
     assert step.as_payload() == {"tool": "lookup", "args_digest": "a", "result_digest": "b"}
+
+
+# --------------------------------------------------------------------------
+# FIX 1 — the dead floor-trigger classes wired at non-lattice boundaries
+# --------------------------------------------------------------------------
+
+
+class _RecordingIO:
+    """A pause-capable IO recording each (pause point, render) and continuing."""
+
+    def __init__(self) -> None:
+        self.pauses: list[dict[str, Any]] = []
+        self.renders: list[str] = []
+
+    def check_in(self, component: str, payload: dict[str, Any]) -> None:
+        del component, payload
+
+    def pause(self, point: dict[str, Any], render: str) -> Continue:
+        self.pauses.append(point)
+        self.renders.append(render)
+        return Continue()
+
+
+def _after_pause(io: _RecordingIO, component: str) -> dict[str, Any]:
+    return next(
+        p
+        for p in io.pauses
+        if p["boundary"] == "after_component" and p["component"] == component
+    )
+
+
+def _silence_lattice(monkeypatch: pytest.MonkeyPatch, *, keep: str | None = None) -> None:
+    """Silence the P1/P3/P4 readers so only the boundary under test can fire.
+
+    ``keep`` names a ``floor_triggers`` boundary_component that should still return
+    a fired trigger; every other floor read (incl. P2's pre_select) returns [].
+    """
+    fired = [{"trigger": "screen_quorum_failure_spike", "detail": {"failed": 3, "screened": 5}}]
+
+    def fake_floor(conn: Any, *, boundary_component: str, **kwargs: Any) -> list[dict[str, Any]]:
+        return list(fired) if boundary_component == keep else []
+
+    monkeypatch.setattr(runner_module, "floor_triggers", fake_floor)
+    for name in ("p1_coverage_triggers", "grouping_flag_triggers", "steer_point_triggers"):
+        monkeypatch.setattr(runner_module, name, lambda *a, **k: [])
+    return None
+
+
+def test_fix1_after_screen_floor_pauses_minimal(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """(a) A screen quorum-failure spike at the after-screen boundary pauses a
+    MINIMAL run with the generic non-lattice menu and the trigger in the payload."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        _silence_lattice(monkeypatch, keep="after_screen")
+        io = _RecordingIO()
+        plan = _base_plan(steering_mode="minimal", steer_point_defaults=[])
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        outcome = run_plan(
+            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
+            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
+            backends=_runner_backends(), io=io,
+        )
+        assert outcome.status == "succeeded"
+        pause = next(
+            p
+            for p in io.pauses
+            if p["boundary"] == "after_component"
+            and p["component"] in {"screen_abstract", "screen_full"}
+        )
+        assert pause["kind"] == "check_in"  # generic non-lattice floor, no steer point
+        assert pause["triggers"][0]["trigger"] == "screen_quorum_failure_spike"
+        assert pause["options"], "the generic floor menu is present"
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_fix1_after_extract_floor_pauses_moderate(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """(b) An extraction-spike at the after-extract boundary pauses a MODERATE run
+    on the generic menu (in addition to the always-on P2/P3/P4 lattice pauses)."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        _silence_lattice(monkeypatch, keep="after_extract")
+        io = _RecordingIO()
+        plan = _base_plan(steering_mode="moderate", steer_point_defaults=[])
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        outcome = run_plan(
+            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
+            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
+            backends=_runner_backends(), io=io,
+        )
+        assert outcome.status == "succeeded"
+        pause = _after_pause(io, "extract")
+        assert pause["kind"] == "check_in"
+        assert pause["triggers"][0]["trigger"] == "screen_quorum_failure_spike"
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_fix1_failed_component_fires_class9_at_boundary(engine: Engine) -> None:
+    """(c) A failed discretionary component (extract) fires class 9
+    (downstream_capability_reduced) at its boundary — proving the failed attempt's
+    run id is threaded into the floor's run_ids (real reader, no monkeypatch)."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        backends = _runner_backends()
+
+        class _FailingExtraction:
+            def extract(self, *a: Any, **k: Any) -> Any:
+                raise RuntimeError("stub extract failure")
+
+        backends.extraction = _FailingExtraction()  # type: ignore[assignment]
+        io = _RecordingIO()
+        plan = _base_plan(steering_mode="minimal", steer_point_defaults=[])
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        outcome = run_plan(
+            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
+            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
+            backends=backends, io=io,
+        )
+        assert outcome.status == "degraded"  # extract failed; the run continued
+        pause = _after_pause(io, "extract")
+        assert any(
+            t["trigger"] == "downstream_capability_reduced" for t in pause["triggers"]
+        ), pause["triggers"]
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_fix1_unattended_fired_floor_triages_and_collates_without_pause(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """(d) UNATTENDED with a fired non-lattice floor trigger: no pause ever, the
+    watch triages the trigger-fired boundary, and the trigger rides the collation."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        _silence_lattice(monkeypatch, keep="after_screen")
+        stub = StubOrchestratorBackend()  # triage defaults to not-notable
+        io = _RecordingIO()
+        plan = _base_plan(steering_mode="unattended", steer_point_defaults=[])
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        outcome = run_plan(
+            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
+            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
+            backends=_runner_backends(), io=io, orchestrator=stub,
+        )
+        assert outcome.status == "succeeded"
+        # Unattended never pauses — not at the fired after-screen boundary.
+        assert not any(
+            p["boundary"] == "after_component"
+            and p["component"] in {"screen_abstract", "screen_full"}
+            for p in io.pauses
+        )
+        assert stub.triage_calls >= 1  # the fired boundary was triaged
+        # The trigger rode the collation (flagged-events) for review.
+        assert any(
+            flag.get("status") == "triggers_fired"
+            and flag["triggers"][0]["trigger"] == "screen_quorum_failure_spike"
+            for flag in outcome.flagged_events
+        ), outcome.flagged_events
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_fix1_healthy_moderate_pauses_exactly_at_lattice(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """(e) Regression guard: a healthy Moderate run (nothing fires) still pauses
+    exactly at P2/P3/P4 — the non-lattice floor adds no new pause."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        _silence_lattice(monkeypatch, keep=None)  # nothing fires anywhere
+        io = _RecordingIO()
+        plan = _base_plan(steering_mode="moderate", steer_point_defaults=[])
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        outcome = run_plan(
+            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
+            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
+            backends=_runner_backends(), io=io,
+        )
+        assert outcome.status == "succeeded"
+        boundaries = [(p["boundary"], p["component"]) for p in io.pauses]
+        assert boundaries == [
+            ("before_component", "select"),
+            ("after_component", "select"),
+            ("before_component", "synthesise"),
+        ]
+        assert all(p["kind"] == "steer_point" for p in io.pauses)
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+# --------------------------------------------------------------------------
+# FIX 2 — the watch's promoted verdict now actually pauses (attended)
+# --------------------------------------------------------------------------
+
+
+def _silence_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in (
+        "p1_coverage_triggers",
+        "floor_triggers",
+        "grouping_flag_triggers",
+        "steer_point_triggers",
+    ):
+        monkeypatch.setattr(runner_module, name, lambda *a, **k: [])
+
+
+def test_fix2_promotion_escalates_anomalous_boundary_to_pause(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FIX 2: with the whole floor silenced, a NOTABLE triage at an anomalous
+    boundary in MINIMAL escalates to a pause carrying the promotion line, and a
+    scripted continue proceeds."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        _silence_floor(monkeypatch)  # the ONLY reason to pause is the promotion
+        notable = WatchTriageWire(notable=True, reason="a boundary worth your judgment")
+        stub = StubOrchestratorBackend(triage_responses=notable)
+        backends = _runner_backends()
+
+        class _FailingExtraction:
+            def extract(self, *a: Any, **k: Any) -> Any:
+                raise RuntimeError("stub extract failure")
+
+        backends.extraction = _FailingExtraction()  # type: ignore[assignment]
+        io = _RecordingIO()
+        plan = _base_plan(steering_mode="minimal", steer_point_defaults=[])
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        outcome = run_plan(
+            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
+            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
+            backends=backends, io=io, orchestrator=stub,
+        )
+        assert outcome.status == "degraded"  # extract failed; scripted continue proceeded
+        promoted_renders = [
+            r for r in io.renders if "The orchestrator flagged this boundary" in r
+        ]
+        assert promoted_renders, io.renders
+        assert any("a boundary worth your judgment" in r for r in promoted_renders)
+        extract_pause = _after_pause(io, "extract")
+        assert extract_pause["kind"] == "check_in"  # generic non-lattice floor menu
+        assert any(p["verdict"] == "promoted" for p in _judgement_events(engine, project_id))
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_fix2_not_notable_triage_does_not_pause(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FIX 2 negative: with the floor silenced, a not-notable triage at an anomalous
+    boundary does NOT pause (unchanged behaviour)."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        _silence_floor(monkeypatch)
+        stub = StubOrchestratorBackend()  # triage → not notable
+        backends = _runner_backends()
+
+        class _FailingExtraction:
+            def extract(self, *a: Any, **k: Any) -> Any:
+                raise RuntimeError("stub extract failure")
+
+        backends.extraction = _FailingExtraction()  # type: ignore[assignment]
+        io = _RecordingIO()
+        plan = _base_plan(steering_mode="minimal", steer_point_defaults=[])
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        outcome = run_plan(
+            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
+            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
+            backends=backends, io=io, orchestrator=stub,
+        )
+        assert outcome.status == "degraded"
+        assert stub.triage_calls >= 1
+        assert not io.pauses, "a not-notable triage must not pause"
+    finally:
+        _cleanup_project(engine, project_id)

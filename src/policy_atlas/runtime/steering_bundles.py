@@ -21,9 +21,9 @@ from sqlalchemy import func
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.core import events
 from policy_atlas.core.schema import (
     characterisation_result,
-    event_log,
     extraction_result,
     grouping_result,
     project_source_snapshot,
@@ -179,15 +179,10 @@ def _executed_queries(
     ``error``/``evidence_scope_id`` (+ optional ``post_filter_excluded``). A
     zero-result query is an ``ok`` call whose ``result_count`` is 0.
     """
-    rows = conn.execute(
-        sa_select(event_log.c.payload)
-        .where(event_log.c.project_id == project_id)
-        .where(event_log.c.event_type == "search.executed")
-        .order_by(event_log.c.sequence)
-    ).all()
     executed: list[dict[str, Any]] = []
     zero_result: list[dict[str, Any]] = []
-    for (payload,) in rows:
+    for entry in events.read(conn, project_id, event_types=["search.executed"]):
+        payload = entry["payload"]
         if not isinstance(payload, dict):
             continue
         if payload.get("evidence_scope_id") != str(evidence_scope_id):
@@ -210,18 +205,33 @@ def _executed_queries(
 def _source_screened_counts(
     conn: Connection, *, project_id: uuid.UUID, evidence_scope_id: uuid.UUID
 ) -> dict[str, int]:
-    """Tally ``source.screened`` event payloads by status for the scope."""
-    rows = conn.execute(
-        sa_select(event_log.c.payload)
-        .where(event_log.c.project_id == project_id)
-        .where(event_log.c.event_type == "source.screened")
-        .order_by(event_log.c.sequence)
-    ).all()
+    """Tally the scope's *current* ``source.screened`` event payloads by status.
+
+    Generation-scoped, to stay consistent with ``screen_counts`` (which reads
+    ``effective_screen_rows``, itself current-generation-only): a criteria
+    re-screen bumps ``screen_generation`` for the whole scope (screen.py), so
+    superseded generations must not add into the tally. Only payloads at the
+    scope's max ``screen_generation`` seen among these events count; a payload
+    predating the ``screen_generation`` key is treated as generation 0.
+    """
+    scoped_payloads = [
+        payload
+        for entry in events.read(conn, project_id, event_types=["source.screened"])
+        if isinstance(payload := entry["payload"], dict)
+        and payload.get("evidence_scope_id") == str(evidence_scope_id)
+    ]
+    if not scoped_payloads:
+        return {}
+
+    def _generation(payload: dict[str, Any]) -> int:
+        generation = payload.get("screen_generation")
+        return generation if isinstance(generation, int) else 0
+
+    max_generation = max(_generation(payload) for payload in scoped_payloads)
+
     counts: dict[str, int] = {}
-    for (payload,) in rows:
-        if not isinstance(payload, dict):
-            continue
-        if payload.get("evidence_scope_id") != str(evidence_scope_id):
+    for payload in scoped_payloads:
+        if _generation(payload) != max_generation:
             continue
         status = payload.get("status")
         if isinstance(status, str):
@@ -515,9 +525,15 @@ def p4_bundle(
             group did not run (grouping_flags then ``None``).
 
     Returns:
-        The versioned P4 bundle dict. ``priority_counts`` is the per-group
-        B2' mark tally when this run's extraction carries relevance
-        annotations; ``None`` when it carries none (never fabricated).
+        The versioned P4 bundle dict. ``priority_counts`` reports the B2'
+        mark tally whenever this run's extraction carries relevance
+        annotations, regardless of whether group ran: with a group run it is
+        the per-group breakdown (``{group_id: {"priority": n, "normal": m,
+        "total": t}}``); without one (no ``group_run_id``, or a group run
+        whose groups did not resolve) it is the flat, ungrouped totals
+        (``{"priority": n, "normal": m}``) — never per-group in that case.
+        ``None`` when the extraction carries no annotations, or when
+        ``context.extraction_run_id`` is ``None`` (never fabricated).
     """
     proposal = propose_synthesis_plan(
         conn, project_id=project_id, context=context, synthesis_backend=synthesis_backend
@@ -536,9 +552,11 @@ def p4_bundle(
             if summary is not None:
                 grouping_groups = summary["groups"]
     # B2' priority counts: None = "no annotations on this run" (never
-    # fabricated); populated only when the extraction carried relevance marks.
-    priority_counts: dict[str, dict[str, int]] | None = None
-    if context.extraction_run_id is not None and grouping_groups is not None:
+    # fabricated); populated whenever the extraction carried relevance marks,
+    # independent of whether a group step ran (grouping only decides the
+    # per-group vs. ungrouped-totals shape below).
+    priority_counts: dict[str, Any] | None = None
+    if context.extraction_run_id is not None:
         extraction_row = conn.execute(
             sa_select(extraction_result.c.extraction_provenance)
             .where(extraction_result.c.project_id == project_id)
@@ -548,7 +566,13 @@ def p4_bundle(
             dict(extraction_row._mapping) if extraction_row is not None else None
         )
         if annotations:
-            priority_counts = priority_counts_by_group(grouping_groups, annotations)
+            if grouping_groups is not None:
+                priority_counts = priority_counts_by_group(grouping_groups, annotations)
+            else:
+                priority_counts = {
+                    "priority": sum(1 for mark in annotations.values() if mark == "priority"),
+                    "normal": sum(1 for mark in annotations.values() if mark == "normal"),
+                }
     return {
         "bundle_version": BUNDLE_VERSION,
         "proposal": proposal,

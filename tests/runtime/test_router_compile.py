@@ -16,11 +16,13 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+import pytest
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
 from policy_atlas.core import events
 from policy_atlas.core.schema import evidence_scope, grouping_result, orchestration_plan
+from policy_atlas.runtime import runner as runner_module
 from policy_atlas.runtime import steering_events
 from policy_atlas.runtime.orchestrator_backend import StubOrchestratorBackend
 from policy_atlas.runtime.orchestrator_prompt import RouterCompileWire, RouterFragmentWire
@@ -31,6 +33,7 @@ from policy_atlas.runtime.steering import (
     FanOut,
     FreeText,
     RefusedFragment,
+    SteeringAdjustmentError,
     SteeringResponse,
     render_fanout_confirmation,
 )
@@ -244,6 +247,61 @@ def test_free_text_fanout_applies_confirmed_adjustment_and_rerun(engine: Engine)
             "REDO selection, replacing the current one" in render
             for render in io.confirm_renders
         )
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_free_text_confirmed_fanout_apply_error_rejects_and_re_presents(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FIX 3a: a CONFIRMED fan-out whose apply raises SteeringAdjustmentError no
+    longer crashes the run — it emits steering.rejected (reason + verbatim
+    utterance) and re-presents the canonical menu, from which the user continues."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan()  # moderate, deep chain: P3 pauses
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        utterance = "group by population"
+        stub = StubOrchestratorBackend(route_responses=[_compile([_GROUP_ADJUST])])
+        io = _FreeTextIO(utterance=utterance, target=_P3, confirm_result=True)
+
+        # Force the confirmed adjustment apply to fail loudly at apply time.
+        def _boom(*a: Any, **k: Any) -> Any:
+            raise SteeringAdjustmentError("apply blew up")
+
+        monkeypatch.setattr(runner_module, "_apply_runner_adjustment", _boom)
+
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+            orchestrator=stub,
+        )
+        # The run did NOT crash.
+        assert outcome.status in {"succeeded", "degraded"}
+
+        # steering.rejected was emitted with the reason + verbatim utterance.
+        rejected = _read_events(engine, project_id, steering_events.STEERING_REJECTED)
+        assert rejected, "the failed confirmed-fan-out apply must emit steering.rejected"
+        assert any(
+            "apply blew up" in r["payload"].get("reason", "")
+            and r["payload"].get("user_text") == utterance
+            for r in rejected
+        ), rejected
+
+        # The P3 menu was re-presented (the same pause appears again after the
+        # free-text; the IO continues on that re-presentation).
+        p3_pauses = [
+            point for point, _ in io.pauses if point.get("steer_point") == "deepening_selection"
+        ]
+        assert len(p3_pauses) >= 2, "the canonical menu must be re-presented after the reject"
     finally:
         _cleanup_project(engine, project_id)
 

@@ -30,6 +30,7 @@ from tests.helpers import (
     now,
     seed_project_and_run,
     seed_scope,
+    seed_screening_result,
     seed_source,
 )
 
@@ -166,6 +167,50 @@ def test_capability_run_and_screen_generation_migration_roundtrip(engine: Engine
             connection.execute(
                 capability_run.delete().where(capability_run.c.project_id == project_id)
             )
+            delete_project_data(connection, project_id)
+            trans.commit()
+        finally:
+            connection.close()
+
+
+def test_downgrade_blocked_by_superseded_generation(engine: Engine) -> None:
+    """Review fix C: downgrade's guard query must raise BEFORE any DDL runs
+    when a re-screen (screen_generation > 0) has happened — the narrow
+    (evidence_scope_id, project_source_snapshot_id, screen_stage) unique index
+    the downgrade recreates cannot coexist with superseded generations. Assert
+    the schema is left completely untouched by the aborted downgrade."""
+    cfg = _alembic_cfg()
+    command.upgrade(cfg, "head")
+
+    connection = engine.connect()
+    trans = connection.begin()
+    project_id, run_id = seed_project_and_run(connection)
+    scope_id = seed_scope(connection, project_id)
+    _, pss_id = seed_source(connection, project_id)
+    # A generation-1 row: a re-screen has run for this scope/source/stage.
+    seed_screening_result(
+        connection, project_id, run_id, scope_id, pss_id, screen_generation=1
+    )
+    trans.commit()
+    connection.close()
+
+    try:
+        with pytest.raises(RuntimeError, match="screen_generation > 0"):
+            command.downgrade(cfg, PRE_MIGRATION_REVISION)
+
+        # No DDL ran: the schema is exactly as it was at head.
+        inspector = inspect(engine)
+        assert "capability_run" in set(inspector.get_table_names())
+        runs_columns = {c["name"] for c in inspector.get_columns("runs")}
+        ssr_columns = {c["name"] for c in inspector.get_columns("source_screening_result")}
+        assert "capability_run_id" in runs_columns
+        assert "screen_generation" in ssr_columns
+        ssr_indexes = {ix["name"] for ix in inspector.get_indexes("source_screening_result")}
+        assert "uq_ssr_scope_source_stage" in ssr_indexes
+    finally:
+        connection = engine.connect()
+        trans = connection.begin()
+        try:
             delete_project_data(connection, project_id)
             trans.commit()
         finally:

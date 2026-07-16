@@ -101,6 +101,28 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Guard BEFORE any DDL runs: the narrow index this downgrade recreates
+    # (evidence_scope_id, project_source_snapshot_id, screen_stage) has no
+    # screen_generation column, so any re-screen (a generation-1+ row) collides
+    # with its generation-0 predecessor at the same scope/source/stage and the
+    # CREATE UNIQUE INDEX below fails mid-downgrade, leaving partial state
+    # (narrow index dropped, wide index not yet recreated). Fail loud first.
+    bind = op.get_bind()
+    superseded = bind.execute(
+        sa.text(
+            "SELECT 1 FROM source_screening_result WHERE screen_generation > 0 LIMIT 1"
+        )
+    ).first()
+    if superseded is not None:
+        raise RuntimeError(
+            "downgrade blocked: source_screening_result has rows with "
+            "screen_generation > 0 (a re-screen has run). The narrow "
+            "(evidence_scope_id, project_source_snapshot_id, screen_stage) unique "
+            "index this downgrade recreates cannot coexist with superseded "
+            "generations. Manually delete or fail-mark the superseded-generation "
+            "rows before downgrading."
+        )
+
     op.drop_index("uq_ssr_scope_source_stage", table_name="source_screening_result")
     op.create_index(
         "uq_ssr_scope_source_stage",

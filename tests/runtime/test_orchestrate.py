@@ -42,7 +42,18 @@ from policy_atlas.runtime.planner_prompt import (
     SteerPointDefaultDraft,
 )
 from policy_atlas.runtime.runner import RunnerBackends
-from policy_atlas.runtime.steering import Adjust, FreeText, build_steer_point_options
+from policy_atlas.runtime.steering import (
+    Adjust,
+    CompiledFragment,
+    FanOut,
+    FreeText,
+    RefusedFragment,
+    build_steer_point_options,
+    render_authored_replacement_confirmation,
+    render_check_in,
+    render_collation,
+    render_fanout_confirmation,
+)
 from tests.helpers import delete_project_data
 
 
@@ -722,6 +733,12 @@ def test_free_text_refusal_re_presents_the_menu(engine: Engine) -> None:
                 "1",
                 "1",
                 "1",
+                # Wired floor triggers (review fix, MAJOR-1) can fire collapse
+                # classes on this degenerate 2-doc fixture at the after_classify/
+                # after_appraise boundaries — continue through any extra pauses.
+                "1",
+                "1",
+                "1",
             ]
         )
         # main() constructs the deterministic StubOrchestratorBackend (refuse-all).
@@ -746,6 +763,12 @@ def test_confirmed_free_text_steer_applies_in_a_full_run(engine: Engine) -> None
                 "group by population",  # first pause: free-text steer
                 "y",  # confirm the rendered fan-out
                 "1",  # remaining lattice pauses continue
+                "1",
+                "1",
+                # Wired floor triggers (review fix, MAJOR-1) can fire collapse
+                # classes on this degenerate 2-doc fixture at the after_classify/
+                # after_appraise boundaries — continue through any extra pauses.
+                "1",
                 "1",
                 "1",
             ]
@@ -878,3 +901,111 @@ def test_standing_instructions_authoring_flow_two_points(engine: Engine) -> None
         assert _printed(console, "steer_point_defaults")
     finally:
         _cleanup(engine, result.project_id if result else None)
+
+
+# --- FIX E3: cost-of-inference language never reaches a user-facing surface ---
+
+# The SELECTION budget is legitimate user vocabulary ("Change how many documents
+# are selected" / "the selection budget"), so it is deliberately NOT banned; the
+# guard is scoped to cost-of-inference language a policy maker must never see.
+_COST_TERMS = ["cost", "token", "price", "$", "spend", "quota"]
+
+
+def _assert_no_cost_language(surface: str, text: str) -> None:
+    lowered = text.lower()
+    for term in _COST_TERMS:
+        assert term not in lowered, f"cost language {term!r} leaked into {surface}: {text!r}"
+
+
+def test_no_cost_language_on_any_user_facing_surface() -> None:
+    """Render every user-facing steering surface from representative fixtures and
+    assert none carries cost-of-inference language (FIX E3). Covers the check-in
+    and collation renders, the fan-out confirmation (incl. the FIX-A bounded delta
+    render and a refusal line), the FIX-C authored-replacement confirmation, and
+    the canonical + watch-authored option menus rendered through the CLI."""
+    surfaces: dict[str, str] = {}
+
+    # 1. Check-in + collation renders (deterministic runner surfaces).
+    surfaces["check_in"] = render_check_in(
+        {
+            "component": "select",
+            "status": "succeeded",
+            "wall_clock_s": 1.234,
+            "headline_counts": {"selected": 15, "candidates": 40},
+            "reason": "budget applied to the candidate pool",
+        }
+    )
+    surfaces["collation"] = render_collation(
+        [
+            {"component": "extract", "status": "retrying", "reason": "transient backend error"},
+            {"component": "group", "status": "skipped", "reason": "upstream extract failed"},
+            {
+                "component": "select",
+                "status": "auto_resolved",
+                "rule": "unconfigured_default",
+                "reason": "no pinned rule; proceeded at standard depth",
+            },
+        ]
+    )
+
+    # 2. Fan-out confirmation, incl. the FIX-A bounded delta render + a refusal.
+    fanout = FanOut(
+        compiled=[
+            CompiledFragment(
+                "drop any section about methodology",
+                "replacement_rerun",
+                "synthesise",
+                {"synthesis": {"sections": [{"title": "What works", "focus": "outcomes"}]}},
+                "replacement",
+            ),
+            CompiledFragment(
+                "select fewer documents",
+                "replacement_rerun",
+                "select",
+                {"selection": {"budget": 15}},
+                "replacement",
+            ),
+        ],
+        refused=[
+            RefusedFragment(
+                "rank by author reputation", "ranking by author reputation is not yet expressible"
+            )
+        ],
+        summary="Two changes; one refusal.",
+    )
+    surfaces["fanout_confirmation"] = render_fanout_confirmation(fanout)
+
+    # 3. FIX-C authored-replacement confirmation (mode declaration + bounded delta).
+    surfaces["authored_replacement_confirmation"] = render_authored_replacement_confirmation(
+        CompiledFragment(
+            "", "replacement_rerun", "select", {"selection": {"budget": 15}}, "replacement"
+        )
+    )
+
+    # 4. Canonical + watch-authored option menus, rendered through the real CLI.
+    authored = [
+        AuthoredOptionWire(
+            label="Change how many documents are selected — 14 dropped at the current budget",
+            why="a smaller selection focuses the evidence base",
+            component="select",
+            delta={"selection": {"budget": 15}},
+        ).model_dump()
+    ]
+    for point_name, boundary, component in (
+        ("search_exception", "after_component", "acquire"),
+        ("evidence_base_coverage", "after_component", "characterise"),
+        ("deepening_selection", "after_component", "select"),
+        ("synthesis_shape", "before_component", "synthesise"),
+    ):
+        payload = _steer_point_payload(
+            point_name,
+            boundary=boundary,
+            component=component,
+            authored_options=authored if point_name == "deepening_selection" else None,
+        )
+        console = ScriptedConsole(["1"])  # render the full menu, then Continue
+        CliIO(console).pause(payload, f"{component}: succeeded")
+        surfaces[f"menu:{point_name}"] = "\n".join(console.output)
+
+    for surface, text in surfaces.items():
+        _assert_no_cost_language(surface, text)

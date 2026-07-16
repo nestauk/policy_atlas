@@ -172,10 +172,18 @@ def _run_scope_component(
         counts = sources_fn(conn, project_id=project_id, run_id=run_id, context=ctx)
     except Exception as exc:
         err = str(exc)
+        # A structured exception's own reason (e.g. ScreenSupersessionError's
+        # "stage2_supersession_collision") must persist alongside the message —
+        # the 013 rule: a persisted rejection must persist its reason, or the
+        # halt-and-re-gate is undiagnosable from the record.
+        reason = getattr(exc, "reason", None)
+        payload: dict[str, Any] = {"component": config.component, "error": err}
+        if reason is not None:
+            payload["reason"] = reason
         events.append(
             conn, project_id=project_id, run_id=run_id,
             event_type="component.failed",
-            payload={"component": config.component, "error": err},
+            payload=payload,
         )
         return {**state, "error": err}
 

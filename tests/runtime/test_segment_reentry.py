@@ -205,7 +205,9 @@ def test_segment_reentry_happy_path_re_walks_segment_and_reenters_once(
         action = additive[0]["payload"]["interpreted_action"]
         assert action["segment_start"] == "acquire"
         assert action["boundary"] == "characterise"
-        assert action["amended_directive_keys"] == ["acquire"]
+        # FIX D: the full amended deltas are recorded (parity with the adjustment
+        # path), so steering_history alone shows what the re-search was steered to.
+        assert action["directive_deltas"] == _AMENDMENT
 
         # The boundary was re-presented exactly once (two after-characterise pauses).
         char_pauses = [
