@@ -15,6 +15,7 @@ never leaves the machine.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import uuid
@@ -619,6 +620,17 @@ def _build_plan(
             }
     if constraints:
         data["scope_constraints"] = constraints
+    # The wire carries a pinned option's delta JSON-encoded (strict schemas
+    # cannot carry open objects); decode fail-closed — a malformed string is
+    # passed through as-is so SteerPointDefault's dict validation rejects it.
+    for rule in data.get("steer_point_defaults") or []:
+        if isinstance(rule, dict) and "delta_json" in rule:
+            raw = rule.pop("delta_json")
+            if raw is not None:
+                try:
+                    rule["delta"] = json.loads(raw)
+                except (TypeError, ValueError):
+                    rule["delta"] = raw
     return OrchestrationPlan.model_validate(data)
 
 

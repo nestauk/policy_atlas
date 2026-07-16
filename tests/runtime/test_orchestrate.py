@@ -36,7 +36,11 @@ from policy_atlas.runtime.orchestrator_prompt import (
     RouterFragmentWire,
 )
 from policy_atlas.runtime.planner import _STUB_SUGGESTED_ANSWERS, StubPlannerBackend
-from policy_atlas.runtime.planner_prompt import PlanDraftWire, PlannerTurnWire
+from policy_atlas.runtime.planner_prompt import (
+    PlanDraftWire,
+    PlannerTurnWire,
+    SteerPointDefaultDraft,
+)
 from policy_atlas.runtime.runner import RunnerBackends
 from policy_atlas.runtime.steering import Adjust, FreeText, build_steer_point_options
 from tests.helpers import delete_project_data
@@ -404,7 +408,9 @@ def test_planner_declared_steer_point_defaults_reach_the_plan(engine: Engine) ->
                     grouping_facets=["outcome"],
                     steering_mode="unattended",
                     steer_point_defaults=[
-                        {"steer_point": "deepening_selection", "action": "stop"}
+                        SteerPointDefaultDraft(
+                            steer_point="deepening_selection", action="stop"
+                        )
                     ],
                     assumptions=["Stub: unattended proposal."],
                 ),
@@ -780,17 +786,19 @@ class _StandingInstructionsPlanner:
     mode = "stub"
     _POINTS = ("evidence_base_coverage", "deepening_selection")
 
-    def _default_for(self, point: str, answer: str) -> dict[str, Any]:
+    def _default_for(self, point: str, answer: str) -> SteerPointDefaultDraft:
         if answer.startswith("stop"):
-            return {"steer_point": point, "action": "stop"}
+            return SteerPointDefaultDraft(steer_point=point, action="stop")
         if "strongest" in answer:
-            return {
-                "steer_point": point,
-                "action": "proceed_flag",
-                "option_id": "strongest_evidence",
-                "delta": {"selection": {"weight_emphasis": {"quality": 2.0}}},
-            }
-        return {"steer_point": point, "action": "proceed_flag"}
+            # The wire carries the delta JSON-encoded (strict response-format
+            # schemas cannot carry open objects); _build_plan decodes it.
+            return SteerPointDefaultDraft(
+                steer_point=point,
+                action="proceed_flag",
+                option_id="strongest_evidence",
+                delta_json='{"selection": {"weight_emphasis": {"quality": 2.0}}}',
+            )
+        return SteerPointDefaultDraft(steer_point=point, action="proceed_flag")
 
     def plan_turn(
         self,

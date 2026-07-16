@@ -249,6 +249,252 @@ class WatchDecisionWire(BaseModel):
     )
 
 
+# --- Transport models (the strict response-format schema the API sees) ---
+#
+# The OpenAI strict response-format rejects open JSON objects (every object
+# node needs additionalProperties=false), so `dict[str, Any]` delta fields
+# cannot ride the wire directly. These transport twins carry every delta as a
+# JSON-ENCODED STRING; `to_wire()` decodes fail-closed into the domain models
+# above — a fragment whose delta does not parse is demoted to an honest
+# refusal, an authored option is dropped, a decision delta becomes None (the
+# author-blind grammar then rejects downstream). Field descriptions are prompt
+# surface, mirrored from the domain models.
+
+
+def _loads_object(raw: str | None) -> dict[str, Any] | None:
+    if raw is None:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+class RouterFragmentTransport(BaseModel):
+    """Transport twin of :class:`RouterFragmentWire` (delta as JSON string)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    fragment_text: str = Field(
+        description=(
+            "The part of the user's utterance this fragment answers, quoted "
+            "or minimally paraphrased so the user can recognise it in the "
+            "confirmation."
+        )
+    )
+    compiles: bool = Field(
+        description=(
+            "True when this fragment maps onto the directive vocabulary in "
+            "the system prompt; false when it does not — a false fragment "
+            "carries a refusal_reason and NO delta."
+        )
+    )
+    component: str | None = Field(
+        default=None,
+        description=(
+            "The composed component this fragment's delta targets, or null "
+            "on a refused fragment."
+        ),
+    )
+    delta_json: str | None = Field(
+        default=None,
+        description=(
+            "The directive delta in the component's own grammar, JSON-encoded "
+            "as an object string (e.g. '{\"search\": {\"guidance\": [...]}}'). "
+            "Null on a refused fragment."
+        ),
+    )
+    rerun_mode: str | None = Field(
+        default=None,
+        description=(
+            "'additive' | 'replacement' | null, as in the vocabulary section."
+        ),
+    )
+    refusal_reason: str | None = Field(
+        default=None,
+        description=(
+            "On a refused fragment: one plain sentence naming what the user "
+            "asked for and saying it is not yet expressible."
+        ),
+    )
+
+
+class RouterCompileTransport(BaseModel):
+    """Transport twin of :class:`RouterCompileWire`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    fragments: list[RouterFragmentTransport] = Field(
+        description=(
+            "Every distinct intent in the utterance, each compiled or "
+            "honestly refused. Cover the WHOLE utterance."
+        )
+    )
+    summary: str = Field(
+        description=(
+            "One or two plain sentences for the confirmation render: what "
+            "will change, what was refused."
+        )
+    )
+
+    def to_wire(self) -> RouterCompileWire:
+        fragments: list[RouterFragmentWire] = []
+        for fragment in self.fragments:
+            delta = _loads_object(fragment.delta_json)
+            if fragment.compiles and fragment.delta_json is not None and delta is None:
+                fragments.append(
+                    RouterFragmentWire(
+                        fragment_text=fragment.fragment_text,
+                        compiles=False,
+                        refusal_reason=(
+                            "the compiled delta was not a valid JSON object "
+                            "(validation_failed)"
+                        ),
+                    )
+                )
+                continue
+            fragments.append(
+                RouterFragmentWire(
+                    fragment_text=fragment.fragment_text,
+                    compiles=fragment.compiles,
+                    component=fragment.component,
+                    delta=delta,
+                    rerun_mode=fragment.rerun_mode,
+                    refusal_reason=fragment.refusal_reason,
+                )
+            )
+        return RouterCompileWire(fragments=fragments, summary=self.summary)
+
+
+class AuthoredOptionTransport(BaseModel):
+    """Transport twin of :class:`AuthoredOptionWire` (delta as JSON string)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = Field(
+        description=(
+            "A short, run-specific label citing the concrete state that "
+            "motivates it — never a generic template."
+        )
+    )
+    why: str = Field(
+        description=(
+            "One sentence of honest rationale grounded in the bundle."
+        )
+    )
+    component: str = Field(
+        description="The composed component the option's delta targets."
+    )
+    delta_json: str = Field(
+        description=(
+            "The compiling directive delta in that component's grammar, "
+            "JSON-encoded as an object string."
+        )
+    )
+    rerun_mode: str | None = Field(
+        default=None,
+        description="'additive' | 'replacement' | null.",
+    )
+
+
+class WatchDecisionTransport(BaseModel):
+    """Transport twin of :class:`WatchDecisionWire`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    action: str = Field(
+        description=(
+            "'choose_option' | 'author' | 'proceed' | 'escalate' | "
+            "'insufficient' — as defined in the system prompt."
+        )
+    )
+    option_id: str | None = Field(
+        default=None,
+        description="The canonical option id when action is 'choose_option'.",
+    )
+    component: str | None = Field(
+        default=None,
+        description="Target component when action is 'author'.",
+    )
+    delta_json: str | None = Field(
+        default=None,
+        description=(
+            "The authored delta when action is 'author', JSON-encoded as an "
+            "object string — the same bounded grammar a user's free text "
+            "compiles to."
+        ),
+    )
+    rerun_mode: str | None = Field(
+        default=None,
+        description="'additive' | 'replacement' | null for the chosen action.",
+    )
+    reasoning: str = Field(
+        description=(
+            "Your reasoning, verbatim for the record: what in the bundle "
+            "drove this decision."
+        )
+    )
+    needs: str | None = Field(
+        default=None,
+        description=(
+            "When action is 'insufficient': one plain sentence saying what "
+            "you need and why."
+        ),
+    )
+    needs_tool: str | None = Field(
+        default=None,
+        description=(
+            "When action is 'insufficient': 'lookup' or 'query_findings', "
+            "nothing else."
+        ),
+    )
+    needs_arguments_json: str | None = Field(
+        default=None,
+        description=(
+            "When action is 'insufficient': the tool's arguments, "
+            "JSON-encoded as an object string."
+        ),
+    )
+    authored_options: list[AuthoredOptionTransport] | None = Field(
+        default=None,
+        description=(
+            "When asked to author options: 2–5 run-specific suggestions. "
+            "Null otherwise."
+        ),
+    )
+
+    def to_wire(self) -> WatchDecisionWire:
+        authored: list[AuthoredOptionWire] | None = None
+        if self.authored_options is not None:
+            authored = []
+            for option in self.authored_options:
+                delta = _loads_object(option.delta_json)
+                if delta is None:
+                    continue  # undecodable authored option: dropped, floor stands
+                authored.append(
+                    AuthoredOptionWire(
+                        label=option.label,
+                        why=option.why,
+                        component=option.component,
+                        delta=delta,
+                        rerun_mode=option.rerun_mode,
+                    )
+                )
+        return WatchDecisionWire(
+            action=self.action,
+            option_id=self.option_id,
+            component=self.component,
+            delta=_loads_object(self.delta_json),
+            rerun_mode=self.rerun_mode,
+            reasoning=self.reasoning,
+            needs=self.needs,
+            needs_tool=self.needs_tool,
+            needs_arguments=_loads_object(self.needs_arguments_json),
+            authored_options=authored,
+        )
+
+
 # --- System prompts ---
 
 _SHARED_PREAMBLE = """\
@@ -297,14 +543,26 @@ Re-runs are first-class and their mode is part of the compile: "search more
 on X" is an ADDITIVE segment re-entry (acquire re-runs with guidance; the
 evidence base grows); changed screening criteria, a redone selection,
 characterisation or grouping are REPLACEMENT re-runs (fresh results
-supersede; nothing is deleted). Say which mode a fragment is in.
+supersede; nothing is deleted). Say which mode a fragment is in. A re-run
+mode belongs only to work that ALREADY ran: a fragment steering a component
+the run has not reached yet (synthesis section edits and boosts are the
+common case — synthesise has not run at any pause) is a plain adjustment
+with rerun_mode null, never a replacement.
 
 ## Rules
 
 - One utterance usually carries several intents ("fewer docs, favour strong
   UK evidence, keep the IFS paper" is three fragments). Split them; compile
   each against the component the run has not yet passed — or, at a steer
-  point, against that point's re-run surface.
+  point, against that point's re-run surface. Do NOT split one action into
+  fragments: "search for X and add it to the evidence base" is ONE additive
+  re-search fragment, not two.
+- A fragment's delta is the component's own directive OBJECT: its top-level
+  key is the directive family (search / screening / selection / extraction /
+  grouping / characterise / appraisal / synthesis), never the component name
+  and never a dotted path. Example — an additive re-search fragment targeting
+  component "acquire": delta_json = '{"search": {"guidance": ["find evidence
+  on attendance mentors"]}}' with rerun_mode "additive".
 - Fail closed and refuse honestly: an intent with no home in the vocabulary
   above gets compiles=false and a refusal_reason naming it. NEVER
   approximate a refused intent to the nearest expressible one, and never

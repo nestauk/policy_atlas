@@ -47,7 +47,9 @@ from policy_atlas.runtime.orchestrator_prompt import (
     WATCH_DECISION_MAX_OUTPUT_TOKENS,
     WATCH_PROMPT_VERSION,
     WATCH_TRIAGE_MAX_OUTPUT_TOKENS,
+    RouterCompileTransport,
     RouterCompileWire,
+    WatchDecisionTransport,
     WatchDecisionWire,
     WatchTriageWire,
     build_router_messages,
@@ -257,7 +259,7 @@ class OpenAIOrchestratorBackend:
         messages = build_router_messages(utterance, pause_context)
         parsed = self._parse(
             messages,
-            response_format=RouterCompileWire,
+            response_format=RouterCompileTransport,
             model=ORCHESTRATOR_MODEL,
             max_output_tokens=ROUTER_MAX_OUTPUT_TOKENS,
             usage_event="orchestrator.route.usage",
@@ -266,7 +268,7 @@ class OpenAIOrchestratorBackend:
             name="orchestrator:route",
             session_id=session_id,
         )
-        return _scrub_router(parsed)
+        return _scrub_router(parsed.to_wire())
 
     def triage(
         self,
@@ -310,7 +312,7 @@ class OpenAIOrchestratorBackend:
         )
         parsed = self._parse(
             messages,
-            response_format=WatchDecisionWire,
+            response_format=WatchDecisionTransport,
             model=ORCHESTRATOR_MODEL,
             max_output_tokens=WATCH_DECISION_MAX_OUTPUT_TOKENS,
             usage_event="orchestrator.decide.usage",
@@ -319,7 +321,7 @@ class OpenAIOrchestratorBackend:
             name=f"orchestrator:{framing}",
             session_id=session_id,
         )
-        return _scrub_decision(parsed)
+        return _scrub_decision(parsed.to_wire())
 
     def _parse[T: BaseModel](
         self,

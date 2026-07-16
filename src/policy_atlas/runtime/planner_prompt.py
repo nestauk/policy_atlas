@@ -20,7 +20,6 @@ mid-run (contract decision 5, sequencing invariant).
 from __future__ import annotations
 
 import json
-from typing import Any
 
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, ConfigDict, Field
@@ -72,6 +71,42 @@ class CountryGroupDraft(BaseModel):
     )
 
 
+class SteerPointDefaultDraft(BaseModel):
+    """One standing instruction in the plan draft.
+
+    The OpenAI strict response-format schema cannot carry open JSON objects,
+    so a pinned option's delta travels JSON-encoded as a string and is parsed
+    fail-closed code-side at plan build.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    steer_point: str = Field(
+        description=(
+            "The steer point this default covers: search_exception, "
+            "evidence_base_coverage, deepening_selection, or synthesis_shape."
+        )
+    )
+    action: str = Field(
+        description="'proceed_flag' (continue and flag) or 'stop' (hard stop)."
+    )
+    option_id: str | None = Field(
+        default=None,
+        description=(
+            "A canonical option id at that point, when the user pinned a "
+            "concrete standing instruction. Null for a bare action."
+        ),
+    )
+    delta_json: str | None = Field(
+        default=None,
+        description=(
+            "The pinned option's directive delta as a JSON-encoded object "
+            "string (e.g. '{\"selection\": {\"budget\": 25}}'), only when the "
+            "option needs one. Null otherwise."
+        ),
+    )
+
+
 class PlanDraftWire(BaseModel):
     """The planner's current plan draft — every field optional (a draft).
 
@@ -98,7 +133,7 @@ class PlanDraftWire(BaseModel):
     grouping_facets: list[str] | None = None
     extract_profiles: list[str] | None = None
     steering_mode: str | None = None
-    steer_point_defaults: list[dict[str, Any]] | None = None
+    steer_point_defaults: list[SteerPointDefaultDraft] | None = None
     assumptions: list[str] | None = None
 
 

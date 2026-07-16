@@ -1135,6 +1135,54 @@ def compile_fanout(
     return FanOut(compiled=compiled, refused=refused, summary=compile_result.summary)
 
 
+def _normalise_fragment_delta(component: Any, delta: dict[str, Any]) -> dict[str, Any]:
+    """Normalise common live-model delta envelopes before fail-closed validation.
+
+    Live routers sometimes wrap the directive in the component's own name
+    (``{"acquire": {"search": ...}}``) or use the prompt's dotted family names
+    (``{"search.guidance": [...]}``). Both are unambiguous; unwrapping/expanding
+    them here is author-blind-safe because the SAME fail-closed validation runs
+    on the result — this widens what parses, never what validates (024 live-check
+    finding: a well-formed additive re-search was demoted on its envelope alone).
+    """
+    normalised = delta
+    # Per-component directive-family key; unwrapping {component: inner} is only
+    # unambiguous when the component name is NOT itself the family key
+    # (characterise's family IS "characterise" — never unwrap it).
+    family_keys = {
+        "acquire": "search",
+        "screen_abstract": "screening",
+        "screen_full": "screening",
+        "select": "selection",
+        "extract": "extraction",
+        "group": "grouping",
+        "characterise": "characterise",
+        "appraise": "appraisal",
+        "synthesise": "synthesis",
+    }
+    if (
+        isinstance(component, str)
+        and set(normalised) == {component}
+        and isinstance(normalised[component], dict)
+        and family_keys.get(component) != component
+    ):
+        normalised = normalised[component]
+    if any("." in key for key in normalised):
+        expanded: dict[str, Any] = {}
+        for key, value in normalised.items():
+            if "." in key:
+                family, _, leaf = key.partition(".")
+                if not isinstance(expanded.get(family), dict):
+                    expanded[family] = {}
+                expanded[family][leaf] = value
+            elif isinstance(value, dict) and isinstance(expanded.get(key), dict):
+                expanded[key] = {**expanded[key], **value}
+            else:
+                expanded[key] = value
+        normalised = expanded
+    return normalised
+
+
 def _classify_and_validate(
     fragment: Any,
     *,
@@ -1145,7 +1193,7 @@ def _classify_and_validate(
 ) -> CompiledFragment:
     """Classify one compiling fragment and re-validate it fail-closed, or refuse it."""
     component = fragment.component
-    delta = fragment.delta or {}
+    delta = _normalise_fragment_delta(fragment.component, fragment.delta or {})
     if not isinstance(component, str) or not component:
         raise _FragmentRefused("validation_failed: compiling fragment named no component")
     mode = fragment.rerun_mode
