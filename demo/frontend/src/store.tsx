@@ -8,7 +8,7 @@ import {
 } from 'react'
 import { api } from './api'
 import type {
-  CheckinOption, CheckinParams, CheckinTrigger, Coverage, DemoEvent, Funnel, Groups,
+  CheckinOption, CheckinParams, CheckinTrigger, Coverage, DemoEvent, Funnel, Groups, LiveSection,
   Landscape, Plan, ProgressData,
 } from './api'
 
@@ -64,14 +64,23 @@ interface State {
   completionStatus: 'succeeded' | 'degraded' | null
   collation: string | null
   suggestions: string[]
+  liveSections: LiveSection[]
 }
 
 const initial: State = {
   phase: 'planning', plan: null, thread: [], thinking: false, plannerProgress: null,
   stages: {}, stageOrder: [], activity: [], search: {}, paused: false,
   funnel: null, landscape: null, groups: null, coverage: null, failure: null,
-  completionStatus: null, collation: null, suggestions: [],
+  completionStatus: null, collation: null, suggestions: [], liveSections: [],
 }
+
+// Upsert a live section by title: skeleton entries and streamed sections meet here
+const upsertSection = (
+  sections: LiveSection[], title: string, patch: Partial<LiveSection>,
+): LiveSection[] =>
+  sections.some((s) => s.title === title)
+    ? sections.map((s) => (s.title === title ? { ...s, ...patch } : s))
+    : [...sections, { title, status: 'pending', ...patch }]
 
 let seq = 1
 const nid = () => seq++
@@ -152,7 +161,21 @@ function onEvent(state: State, ev: DemoEvent): State {
         suggestions: ev.data.suggestions ?? state.suggestions,
       }
     case 'analysis.started':
-      return { ...state, phase: 'analysing', suggestions: [] }
+      return { ...state, phase: 'analysing', suggestions: [], liveSections: [] }
+    case 'artefact.skeleton':
+      return {
+        ...state,
+        liveSections: ev.data.sections.map((s) => ({ ...s, status: 'pending' as const })),
+      }
+    case 'artefact.section_started':
+      return { ...state, liveSections: upsertSection(state.liveSections, ev.data.title, { status: 'writing' }) }
+    case 'artefact.section_completed':
+      return {
+        ...state,
+        liveSections: upsertSection(state.liveSections, ev.data.title, {
+          status: 'done', content: ev.data.content,
+        }),
+      }
     case 'analysis.completed':
       return {
         ...state, phase: 'complete', paused: false,

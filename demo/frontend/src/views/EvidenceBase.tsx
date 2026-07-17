@@ -12,6 +12,7 @@ import {
   type ChunkContext,
   type Citation,
   type Claim,
+  type LiveSection,
 } from '../api'
 import { SourceLink } from '../sourcePanel'
 import { useProject } from '../store'
@@ -28,6 +29,7 @@ export default function EvidenceBase() {
   }, [id, state.phase])
 
   if (!artefact) {
+    if (state.liveSections.length > 0) return <LiveArtefact sections={state.liveSections} />
     return (
       <div className="mx-auto max-w-[760px] px-8 py-16 text-center text-[13px] text-grey">
         The evidence base appears here once the analysis has written it.
@@ -335,5 +337,39 @@ function Highlighted({ text, quote }: { text: string; quote: string }) {
       <mark className="bg-yellow-tint font-medium text-navy">{text.slice(start, end)}</mark>
       {text.slice(end)}
     </>
+  )
+}
+
+// The artefact-in-progress: the streamed section skeleton fills in as the
+// synthesis writes each section. Citations/provenance arrive with the final
+// read model once the run commits — the prose here is the persisted prose.
+function LiveArtefact({ sections }: { sections: LiveSection[] }) {
+  return (
+    <div className="min-h-[calc(100vh-58px)]">
+      <main className="anim-rise mx-auto max-w-[780px] bg-white px-10 py-9 shadow-card ring-1 ring-line md:my-8">
+        <div className="flex items-center gap-2 text-[12.5px] text-grey">
+          <Dot tone="progress" /> Being written now — sections appear as they are drafted
+        </div>
+        {sections.map((s) => (
+          <section key={s.title} className="mt-9">
+            <h2 className="font-display text-[18px] font-bold text-navy">{s.title}</h2>
+            {s.status === 'done' && s.content ? (
+              <p className="anim-rise mt-2 whitespace-pre-line text-[14.5px] leading-relaxed text-navy">
+                {s.content}
+              </p>
+            ) : s.status === 'writing' ? (
+              <p className="mt-2 flex items-center gap-2 text-[13px] text-grey">
+                <Dot tone="progress" /> Writing this section now…
+              </p>
+            ) : (
+              <p className="mt-2 text-[13px] italic text-grey">{s.focus || 'Waiting to be written.'}</p>
+            )}
+          </section>
+        ))}
+        <p className="mt-10 border-t hairline pt-4 text-[12px] text-grey">
+          Citations and source provenance are attached when the write-up completes and is checked.
+        </p>
+      </main>
+    </div>
   )
 }

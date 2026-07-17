@@ -99,6 +99,16 @@ first (so refresh mid-run rebuilds state), then live events follow.
   confirm gate: `render` holds the compiled fan-out, options are `apply`/`cancel`.
   `triggers` lists fired steer-point triggers `[{trigger, detail}]`
   (e.g. `excluded_large_stratum`).
+- `artefact.skeleton` `{sections: [{title, focus, role}]}` — emitted when synthesise
+  proposes the section list (roles: `key_findings` · `standard` · `conclusions`,
+  in final page order). The evidence-base page renders this as the artefact
+  skeleton and fills it in as sections stream.
+- `artefact.section_started` `{index, title}` — the section loop began drafting
+  this section.
+- `artefact.section_completed` `{index, title, content}` — the section's FINAL
+  persisted prose (exactly what lands in the block row; `index: -1` = the
+  post-loop Key-findings block). Citations/provenance arrive only with the
+  `/artefact` read model after the run commits — the live stream is prose-only.
 - `analysis.completed` `{status: "succeeded"|"degraded", collation}` — `collation` is the
   runner's flagged-event render (failures/retries/skips), shown honestly on completion
 - `analysis.failed` `{stage, message, collation?}` · `analysis.aborted` `{collation}`

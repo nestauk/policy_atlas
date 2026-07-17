@@ -30,7 +30,8 @@ export function ProjectTabs() {
   const { id } = useParams<{ id: string }>()
   const { state } = useProject()
   const hasFindings = (state.funnel?.findings ?? 0) > 0
-  const hasArtefact = state.phase === 'complete' || (state.funnel?.cited ?? 0) > 0
+  const hasArtefact =
+    state.phase === 'complete' || (state.funnel?.cited ?? 0) > 0 || state.liveSections.length > 0
 
   const tab = (to: string, label: string, end = false) => (
     <NavLink

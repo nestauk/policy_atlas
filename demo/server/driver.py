@@ -23,6 +23,8 @@ from demo.server import orchestrator
 from demo.server.bus import EventBus
 
 from policy_atlas.core import tracing
+from policy_atlas.evidence_base.synthesis import synthesis_backend as _synthesis_backend
+from policy_atlas.evidence_base.synthesis import synthesise as _synthesise
 from policy_atlas.runtime import runner
 from policy_atlas.core.db import get_engine
 from policy_atlas.runtime.orchestrate import _live_planner_and_backends, _route_option_delta
@@ -136,6 +138,78 @@ def _observing_leg_directive(
 
 
 runner.leg_directive = _observing_leg_directive
+
+# --- live artefact streaming shims ---
+# The synthesise component commits once at its end, so Postgres cannot show a
+# partially-written artefact. These observe the synthesis module seams and
+# stream the section skeleton + each section's final persisted prose over SSE,
+# so the evidence-base page fills in as the write-up happens.
+# ponytail: same one-live-analysis module globals as the log bridge above.
+
+_SECTION: dict[str, Any] | None = None
+
+
+def _emit_artefact(event: str, data: dict[str, Any]) -> None:
+    if _BUS is not None:
+        try:
+            _BUS.emit(event, data)
+        except Exception:  # noqa: BLE001 — observability must never break synthesis
+            log.exception("demo.artefact_stream_failed")
+
+
+_ORIG_PROPOSE_SECTIONS = _synthesis_backend.OpenAISynthesisBackend.propose_sections
+
+
+def _observing_propose_sections(
+    self: Any, *, intent: str, substrate: dict[str, Any],
+    rejection: list[str] | None = None,
+) -> Any:
+    result = _ORIG_PROPOSE_SECTIONS(
+        self, intent=intent, substrate=substrate, rejection=rejection)
+    # mirror the final artefact layout: Key findings on top, Conclusions last
+    # (both code-injected around the proposed sections; repair calls re-emit)
+    skeleton = [{"title": _synthesise.KEY_FINDINGS_TITLE,
+                 "focus": "The report's headline claims.", "role": "key_findings"}]
+    skeleton += [{"title": s.title, "focus": s.focus, "role": "standard"}
+                 for s in result[0].sections]
+    skeleton.append({"title": _synthesise.CONCLUSIONS_TITLE,
+                     "focus": "What the evidence adds up to.", "role": "conclusions"})
+    _emit_artefact("artefact.skeleton", {"sections": skeleton})
+    return result
+
+
+_synthesis_backend.OpenAISynthesisBackend.propose_sections = _observing_propose_sections
+
+_ORIG_RUN_SECTION_LOOP = _synthesise.run_section_loop
+
+
+def _observing_run_section_loop(backend: Any, **kwargs: Any) -> Any:
+    global _SECTION
+    section = kwargs.get("seed", {}).get("section") or {}
+    _SECTION = {"index": int(kwargs.get("seed", {}).get("section_index", 0)),
+                "title": str(section.get("title", ""))}
+    _emit_artefact("artefact.section_started", dict(_SECTION))
+    return _ORIG_RUN_SECTION_LOOP(backend, **kwargs)
+
+
+_synthesise.run_section_loop = _observing_run_section_loop
+
+_ORIG_WRITE_SECTION = _synthesise._write_section
+
+
+def _observing_write_section(conn: Any, **kwargs: Any) -> str:
+    global _SECTION
+    block_id = _ORIG_WRITE_SECTION(conn, **kwargs)
+    # every run_section_loop is followed by exactly one write; the one write
+    # with no loop before it is the post-loop Key findings block
+    current = _SECTION or {"index": -1, "title": _synthesise.KEY_FINDINGS_TITLE}
+    _SECTION = None
+    _emit_artefact("artefact.section_completed",
+                   {**current, "content": str(kwargs.get("prose", ""))})
+    return block_id
+
+
+_synthesise._write_section = _observing_write_section
 
 _SUMMARY_DROP = ("docs", "selected", "excluded", "groups", "themes", "distributions", "rounds")
 

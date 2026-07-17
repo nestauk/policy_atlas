@@ -257,6 +257,9 @@ export type DemoEvent =
       }
     }
   | { type: 'checkin.resolved'; data: { checkin_id: string; reply: string } }
+  | { type: 'artefact.skeleton'; data: { sections: { title: string; focus: string; role: string }[] } }
+  | { type: 'artefact.section_started'; data: { index: number; title: string } }
+  | { type: 'artefact.section_completed'; data: { index: number; title: string; content: string } }
   | { type: 'analysis.completed'; data: { status: 'succeeded' | 'degraded'; collation: string } }
   | { type: 'analysis.failed'; data: { stage?: string | null; message: string; collation?: string } }
   | { type: 'analysis.aborted'; data: { collation: string } }
@@ -275,7 +278,17 @@ export const EVENT_TYPES: DemoEvent['type'][] = [
   'plan.updated', 'analysis.started', 'stage.started', 'stage.progress',
   'stage.completed', 'stage.failed', 'narration', 'user.message', 'checkin',
   'checkin.resolved', 'analysis.completed', 'analysis.failed', 'analysis.aborted',
+  'artefact.skeleton', 'artefact.section_started', 'artefact.section_completed',
 ]
+
+// A section of the artefact-in-progress, streamed while synthesise runs
+export interface LiveSection {
+  title: string
+  focus?: string
+  role?: string
+  status: 'pending' | 'writing' | 'done'
+  content?: string
+}
 
 export type CheckinParams =
   | { budget?: number }
