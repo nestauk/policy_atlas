@@ -496,9 +496,9 @@ function Journey() {
       <div className="sticky top-0 z-20 -mx-7 mb-4 flex gap-4 border-b hairline bg-ground/95 px-7 py-2 backdrop-blur-sm">
         {[
           ['#j-progress', 'Progress', true],
+          ['#j-coverage', 'Coverage', !!state.coverage],
           ['#j-landscape', 'Landscape', hasLandscape],
           ['#j-findings', 'Findings', hasGroups],
-          ['#j-coverage', 'Coverage', !!state.coverage],
         ].map(([sel, label, on]) => (
           <button
             key={String(label)}
@@ -516,7 +516,7 @@ function Journey() {
       </h2>
       {complete && state.completionStatus === 'degraded' && (
         <p className="mb-4 border-l-[3px] border-orange bg-orange-tint p-3 text-[13px] text-navy">
-          Completed with some flagged events — recorded, not hidden. See the details below.
+          Completed with some flagged events — recorded in the decision log, not hidden.
         </p>
       )}
       {aborted && (
@@ -535,6 +535,7 @@ function Journey() {
 
         <div id="j-progress" className="scroll-mt-14 space-y-5">
           {searching && <SearchCard />}
+          {state.coverage && <CoverageCard />}
           {state.phase === 'analysing' && <ActivityCard />}
           <div className="card anim-rise">
             <PaneH className="mb-3">{complete || aborted ? 'How it got there' : 'The plan in motion'}</PaneH>
@@ -544,12 +545,6 @@ function Journey() {
             <div className="card anim-rise">
               <PaneH className="mb-3">From sources to evidence</PaneH>
               <Funnel />
-            </div>
-          )}
-          {(complete || aborted) && state.collation && (
-            <div className="card anim-rise">
-              <PaneH className="mb-2">Flagged events</PaneH>
-              <pre className="thin-scroll max-h-40 overflow-auto whitespace-pre-wrap text-[12px] leading-relaxed text-navy">{state.collation}</pre>
             </div>
           )}
         </div>
@@ -566,46 +561,53 @@ function Journey() {
           </div>
         )}
 
-        {state.coverage && (
-          <div id="j-coverage" className="card anim-rise scroll-mt-14">
-            <PaneH className="mb-2">Where I looked</PaneH>
-            {(state.coverage.backends_detail?.length ?? 0) > 0 && (
-              <div className="mb-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {state.coverage.backends_detail!.map((b) => (
-                  <div key={b.backend} className="border hairline p-3.5">
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-[13px] font-bold text-navy">{backendLabel(b.backend)}</span>
-                      <span className="text-[12px] text-grey">
-                        <span className="font-display text-[18px] font-bold text-blue">{b.results}</span>
-                        {' results · '}
-                        <span className="font-display text-[18px] font-bold text-blue">{b.relevant}</span>
-                        {' relevant'}
-                      </span>
-                    </div>
-                    <div className="thin-scroll mt-2 max-h-28 space-y-0.5 overflow-y-auto">
-                      {b.queries.map((q, i) => (
-                        <div key={i} className="flex items-baseline justify-between gap-2 text-[11.5px]">
-                          <span className="truncate italic text-grey">“{q.query}”</span>
-                          <span className="shrink-0 text-navy-40">{q.results ?? '—'}</span>
-                        </div>
-                      ))}
-                    </div>
+      </div>
+    </div>
+  )
+}
+
+// The durable "Where I looked" record: the permanent successor to the live
+// search card — same top-of-page slot, so search coverage never disappears.
+function CoverageCard() {
+  const { state } = useProject()
+  const coverage = state.coverage!
+  return (
+    <div id="j-coverage" className="card anim-rise scroll-mt-14">
+      <PaneH className="mb-2">Where I looked</PaneH>
+      {(coverage.backends_detail?.length ?? 0) > 0 && (
+        <div className="mb-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {coverage.backends_detail!.map((b) => (
+            <div key={b.backend} className="border hairline p-3.5">
+              <div className="flex items-baseline justify-between">
+                <span className="text-[13px] font-bold text-navy">{backendLabel(b.backend)}</span>
+                <span className="text-[12px] text-grey">
+                  <span className="font-display text-[18px] font-bold text-blue">{b.results}</span>
+                  {' results · '}
+                  <span className="font-display text-[18px] font-bold text-blue">{b.relevant}</span>
+                  {' relevant'}
+                </span>
+              </div>
+              <div className="thin-scroll mt-2 max-h-28 space-y-0.5 overflow-y-auto">
+                {b.queries.map((q, i) => (
+                  <div key={i} className="flex items-baseline justify-between gap-2 text-[11.5px]">
+                    <span className="truncate italic text-grey">“{q.query}”</span>
+                    <span className="shrink-0 text-navy-40">{q.results ?? '—'}</span>
                   </div>
                 ))}
               </div>
-            )}
-            {!state.coverage.backends_detail?.length && (
-              <div className="text-sm font-medium text-navy">
-                {state.coverage.backends.map(backendLabel).join(' · ')}
-              </div>
-            )}
-            <p className="mt-1 text-[13px] text-navy">
-              {state.coverage.summary ??
-                (state.coverage.adequacy === 'adequate' ? 'Coverage judged adequate.' : 'Coverage judged thin — recorded, not hidden.')}
-            </p>
-          </div>
-        )}
-      </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {!coverage.backends_detail?.length && (
+        <div className="text-sm font-medium text-navy">
+          {coverage.backends.map(backendLabel).join(' · ')}
+        </div>
+      )}
+      <p className="mt-1 text-[13px] text-navy">
+        {coverage.summary ??
+          (coverage.adequacy === 'adequate' ? 'Coverage judged adequate.' : 'Coverage judged thin — recorded, not hidden.')}
+      </p>
     </div>
   )
 }
