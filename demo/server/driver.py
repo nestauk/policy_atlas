@@ -25,7 +25,7 @@ from demo.server.bus import EventBus
 from policy_atlas.core import tracing
 from policy_atlas.runtime import runner
 from policy_atlas.core.db import get_engine
-from policy_atlas.runtime.orchestrate import _live_planner_and_backends
+from policy_atlas.runtime.orchestrate import _live_planner_and_backends, _route_option_delta
 from policy_atlas.runtime.orchestration_plan import OrchestrationPlan
 from policy_atlas.core.schema import evidence_scope, orchestration_plan, project
 from policy_atlas.runtime.steering import Abort, Adjust, Continue, SteeringResponse
@@ -330,7 +330,9 @@ class AnalysisDriver:
         checkin_id = str(uuid.uuid4())
         kind = str(point.get("kind", "check_in"))
         try:
-            text = orchestrator.checkin_prose(self.plan.question, render, kind)
+            # lattice pauses carry the 024 steer-point name — richer than the kind
+            text = orchestrator.checkin_prose(
+                self.plan.question, render, str(point.get("steer_point") or kind))
         except Exception:  # noqa: BLE001 — prose is garnish; the render is the content
             text = render
         options = [{"id": "continue", "label": "Continue",
@@ -338,6 +340,14 @@ class AnalysisDriver:
         for option in point.get("options") or []:
             if option["id"] == "as_proposed":
                 continue  # semantically identical to the leading Continue
+            # the frontend only collects input for the two options below; a
+            # requires-input option it can't fill would be a dead button —
+            # those details are best given in prose (the 024 router surface,
+            # which the demo doesn't wire up)
+            if option["requires_user_input"] and option["id"] not in (
+                "adjust_budget", "deepen_clusters",
+            ):
+                continue
             options.append({k: option[k] for k in
                             ("id", "label", "description", "requires_user_input")})
         options.append({"id": "abort", "label": "Stop the analysis",
@@ -383,9 +393,13 @@ class AnalysisDriver:
                 "priority_strata": [s for s in params.get("strata", []) if s],
                 "must_include_ids": [d for d in params.get("docs", []) if d],
             }}
+        if not delta:
+            # 024 canonical options with no delta (accept_thin & co) mean proceed
+            self.bus.emit("narration", {"text": "Noted — carrying on."})
+            return Continue()
         self.bus.emit("narration", {"text": f"Noted — {option['label'].lower()}. "
-                                    "Re-running the shortlist."})
-        return Adjust(directive_deltas={"select": delta})
+                                    "Adjusting the run."})
+        return Adjust(directive_deltas=_route_option_delta(delta))
 
 
 def _set_stage(stage: str | None) -> None:

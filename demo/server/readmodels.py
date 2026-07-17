@@ -16,6 +16,8 @@ from sqlalchemy import func
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
+from demo.server.orchestrator import STAGES
+
 from policy_atlas.evidence_base.assess.appraise import SCORE_LABELS
 from policy_atlas.core.schema import (
     GROUPING_FACETS,
@@ -1184,8 +1186,29 @@ def decision_log(conn: Connection, project_id: uuid.UUID) -> list[dict[str, Any]
         elif row.event_type == "component.failed":
             text = f"{_LOG_LABELS.get(component, component or 'step')} — failed: " \
                 f"{payload.get('error', 'see logs')}"
+        elif row.event_type == "steering.decision":
+            # the 024 durable steering record: who decided what, at which boundary
+            who = {"user": "you", "orchestrator": "the orchestrator",
+                   "standing_default": "a standing instruction"}.get(
+                str(payload.get("decided_by")), "someone")
+            verb = {"continue": "carried on", "adjust": "adjusted the run",
+                    "abort": "stopped the run",
+                    "mode_change": "changed the steering mode"}.get(
+                str(payload.get("response")), str(payload.get("response") or "answered"))
+            at = STAGES.get(component, (component, ""))[0] if component else "a pause"
+            text = f"Steering — {who} {verb} at {at}"
+            if payload.get("rerun_mode"):
+                text += f" ({payload['rerun_mode']} re-run)"
+        elif row.event_type == "steering.rejected":
+            text = f"Steering adjustment rejected — {payload.get('reason', 'see record')}"
+        elif row.event_type == "steering.refused":
+            text = "An instruction couldn't be expressed as a bounded change — " \
+                f"{payload.get('reason', 'refused')}"
+        elif row.event_type == "component.skipped":
+            text = f"{_LOG_LABELS.get(component, component or 'step')} — skipped: " \
+                f"{payload.get('reason', 'see record')}"
         else:
-            continue  # run.started etc. add noise, not information
+            continue  # run.started, steering.pause etc. add noise, not information
         detail = _decision_detail(payload)
         entries.append(
             {

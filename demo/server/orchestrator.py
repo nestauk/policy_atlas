@@ -182,9 +182,16 @@ def checkin_prose(question: str, render: str, kind: str) -> str:
     steering render; only the phrasing is LLM-authored.
     """
     decision = {
-        "steer_point": "The close-reading shortlist has been chosen — the user can steer "
-        "what gets read in depth before the deep reading begins.",
-        "check_in": "About to write the evidence base — a moment to pause before the write-up.",
+        # the four 024 steer-point lattice names, plus the generic boundary kind
+        "search_exception": "The search pass has finished but tripped an exception "
+        "trigger — the user can widen or accept before screening starts.",
+        "evidence_base_coverage": "Screening is done — a look at what the evidence base "
+        "covers (and where it's thin) before the shortlist is drawn.",
+        "deepening_selection": "The close-reading shortlist has been chosen — the user "
+        "can steer what gets read in depth before the deep reading begins.",
+        "synthesis_shape": "Everything is read and grouped — the user can shape the "
+        "write-up (sections, emphasis) before it's drafted.",
+        "check_in": "About to move to the next stage — a moment to pause and steer.",
     }.get(kind, kind)
     response = client().chat.completions.create(
         model=NARRATION_MODEL,
