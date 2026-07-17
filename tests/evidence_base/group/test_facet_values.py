@@ -118,18 +118,52 @@ def test_counterparts_are_deduped_ranked_and_capped() -> None:
 
 
 def test_parse_grouping_directive_defaults_and_valid_scope_context() -> None:
-    assert parse_grouping_directive({}) == (["intervention"], "default")
-    assert parse_grouping_directive({"grouping": {}}) == (["intervention"], "default")
+    assert parse_grouping_directive({}) == (["intervention"], "default", "standard", None)
+    assert parse_grouping_directive({"grouping": {}}) == (
+        ["intervention"], "default", "standard", None,
+    )
     assert parse_grouping_directive({"grouping": {"facet": "outcome"}}) == (
         ["outcome"],
         "scope_context",
+        "standard",
+        None,
     )
     assert parse_grouping_directive(
         {"grouping": {"facets": ["outcome", "barrier_theme"]}}
     ) == (
         ["outcome", "barrier_theme"],
         "scope_context",
+        "standard",
+        None,
     )
+
+
+def test_parse_grouping_directive_granularity_only_defaults_facets() -> None:
+    assert parse_grouping_directive({"grouping": {"granularity": "coarser"}}) == (
+        ["intervention"], "default", "coarser", None,
+    )
+
+
+@pytest.mark.parametrize("granularity", ["coarser", "standard", "finer"])
+def test_parse_grouping_directive_accepts_valid_granularity(granularity: str) -> None:
+    assert parse_grouping_directive(
+        {"grouping": {"facet": "outcome", "granularity": granularity}}
+    ) == (["outcome"], "scope_context", granularity, None)
+
+
+@pytest.mark.parametrize(
+    "context",
+    [
+        {"grouping": {"granularity": "bogus"}},
+        {"grouping": {"granularity": 1}},
+        {"grouping": {"granularity": None}},
+    ],
+)
+def test_parse_grouping_directive_rejects_malformed_granularity(
+    context: dict[str, Any]
+) -> None:
+    with pytest.raises(FacetDirectiveError, match="granularity"):
+        parse_grouping_directive(context)
 
 
 @pytest.mark.parametrize(
@@ -152,6 +186,60 @@ def test_parse_grouping_directive_rejects_malformed_directives(
 ) -> None:
     with pytest.raises(FacetDirectiveError):
         parse_grouping_directive(context)
+
+
+# --- B3 grouping.guidance: fail-closed matrix ---
+
+
+def test_parse_grouping_directive_guidance_absent_is_none() -> None:
+    assert parse_grouping_directive({"grouping": {"facet": "outcome"}}) == (
+        ["outcome"], "scope_context", "standard", None,
+    )
+
+
+@pytest.mark.parametrize(
+    "guidance",
+    [
+        ["organise by policy instrument, not sector"],
+        ["organise by policy instrument, not sector", "keep delivery-model themes separate"],
+        ["a", "b", "c", "d", "e"],
+    ],
+)
+def test_parse_grouping_directive_accepts_valid_guidance(guidance: list[str]) -> None:
+    assert parse_grouping_directive({"grouping": {"guidance": guidance}}) == (
+        ["intervention"], "default", "standard", guidance,
+    )
+
+
+def test_parse_grouping_directive_guidance_combines_with_facet_and_granularity() -> None:
+    assert parse_grouping_directive(
+        {
+            "grouping": {
+                "facet": "outcome",
+                "granularity": "finer",
+                "guidance": ["organise by policy instrument"],
+            }
+        }
+    ) == (["outcome"], "scope_context", "finer", ["organise by policy instrument"])
+
+
+@pytest.mark.parametrize(
+    "guidance",
+    [
+        [],
+        ["a", "b", "c", "d", "e", "f"],
+        "not a list",
+        [123],
+        [""],
+        ["   "],
+        [None],
+        ["x" * (DIRECTIVE_STRING_MAX + 1)],
+        ["contains\x00control"],
+    ],
+)
+def test_parse_grouping_directive_rejects_malformed_guidance(guidance: object) -> None:
+    with pytest.raises(FacetDirectiveError):
+        parse_grouping_directive({"grouping": {"guidance": guidance}})
 
 
 def test_build_groups_payload_and_invariants_cover_all_buckets_and_directions() -> None:

@@ -46,6 +46,7 @@ from policy_atlas.evidence_base.extract.extract import (
     ExtractContext,
     _parse_extraction_directive,
     extract_scope,
+    parse_relevance_emphasis,
 )
 from policy_atlas.evidence_base.extract.extraction_backend import (
     ExtractionBackend,
@@ -55,6 +56,9 @@ from policy_atlas.evidence_base.extract.extraction_backend import (
 from policy_atlas.evidence_base.extract.finding_vetter import (
     FindingVetterBackend,
     ICFFindingVetterBackend,
+)
+from policy_atlas.evidence_base.extract.relevance_annotator import (
+    RelevanceAnnotatorBackend,
 )
 from policy_atlas.evidence_base.group.group import (
     GroupClusteringBackendFactory,
@@ -115,6 +119,7 @@ class HarnessState(TypedDict):
     finding_vetter_backend: FindingVetterBackend | None
     icf_extraction_backend: Any
     icf_finding_vetter_backend: ICFFindingVetterBackend | None
+    relevance_annotator_backend: RelevanceAnnotatorBackend | None
     group_clustering_backend: GroupClusteringBackendFactory
     synthesis_backend: SynthesisBackend
     grounding_judge_backend: GroundingJudgeBackend
@@ -167,10 +172,18 @@ def _run_scope_component(
         counts = sources_fn(conn, project_id=project_id, run_id=run_id, context=ctx)
     except Exception as exc:
         err = str(exc)
+        # A structured exception's own reason (e.g. ScreenSupersessionError's
+        # "stage2_supersession_collision") must persist alongside the message —
+        # the 013 rule: a persisted rejection must persist its reason, or the
+        # halt-and-re-gate is undiagnosable from the record.
+        reason = getattr(exc, "reason", None)
+        payload: dict[str, Any] = {"component": config.component, "error": err}
+        if reason is not None:
+            payload["reason"] = reason
         events.append(
             conn, project_id=project_id, run_id=run_id,
             event_type="component.failed",
-            payload={"component": config.component, "error": err},
+            payload=payload,
         )
         return {**state, "error": err}
 
@@ -242,6 +255,7 @@ def _run_directed_extract_scope(
     finding_vetter_backend: FindingVetterBackend | None = None,
     icf_extraction_backend: Any | None = None,
     icf_finding_vetter_backend: ICFFindingVetterBackend | None = None,
+    relevance_annotator_backend: RelevanceAnnotatorBackend | None = None,
 ) -> dict[str, Any]:
     """Run extract with profiles parsed from scope context.
 
@@ -254,11 +268,15 @@ def _run_directed_extract_scope(
         finding_vetter_backend: Optional IOF finding vetter.
         icf_extraction_backend: Optional ICF extraction backend.
         icf_finding_vetter_backend: Optional ICF finding vetter.
+        relevance_annotator_backend: Optional B2′ relevance annotator; runs only
+            when the scope context carries ``extraction.relevance_emphasis``.
 
     Returns:
         The extraction component summary.
     """
-    profiles = _parse_extraction_directive(context.context.get("extraction"))
+    directive = context.context.get("extraction")
+    profiles, refresh = _parse_extraction_directive(directive)
+    relevance_emphasis = parse_relevance_emphasis(directive)
     return extract_scope(
         conn,
         project_id=project_id,
@@ -268,7 +286,10 @@ def _run_directed_extract_scope(
         finding_vetter_backend=finding_vetter_backend,
         icf_extraction_backend=icf_extraction_backend,
         icf_finding_vetter_backend=icf_finding_vetter_backend,
+        relevance_annotator_backend=relevance_annotator_backend,
+        relevance_emphasis=relevance_emphasis,
         profiles=profiles,
+        refresh=refresh,
     )
 
 
@@ -284,6 +305,7 @@ def _run_extract(state: HarnessState) -> HarnessState:
         finding_vetter_backend=state["finding_vetter_backend"],
         icf_extraction_backend=state["icf_extraction_backend"],
         icf_finding_vetter_backend=state["icf_finding_vetter_backend"],
+        relevance_annotator_backend=state["relevance_annotator_backend"],
     )
     return _run_scope_component(state, context_cls, sources_fn)
 
@@ -594,6 +616,7 @@ def run_harness(
     finding_vetter_backend: FindingVetterBackend | None = None,
     icf_extraction_backend: Any | None = None,
     icf_finding_vetter_backend: ICFFindingVetterBackend | None = None,
+    relevance_annotator_backend: RelevanceAnnotatorBackend | None = None,
     group_clustering_backend: GroupClusteringBackendFactory | None = None,
     synthesis_backend: SynthesisBackend | None = None,
     grounding_judge_backend: GroundingJudgeBackend | None = None,
@@ -646,6 +669,11 @@ def run_harness(
             defaults to ``StubICFExtractionBackend()`` — no default egress.
         icf_finding_vetter_backend: Post-extract ICF finding vetter. ``None``
             means judging is off for ICF.
+        relevance_annotator_backend: B2′ relevance annotator for the extract
+            component (024). Like the finding vetter it stays ``None`` by
+            default with NO stub substitution — ``None`` (or absent
+            ``extraction.relevance_emphasis``) means the annotator pass never
+            runs, so extract output is byte-identical to the pre-B2′ pipeline.
         group_clustering_backend: Group clustering backend factory for the
             group component; defaults to ``StubGroupClusteringBackend()`` —
             no default egress.
@@ -722,6 +750,9 @@ def run_harness(
             else StubICFExtractionBackend()
         ),
         "icf_finding_vetter_backend": icf_finding_vetter_backend,
+        # No stub substitution (the finding-vetter pattern): None means the
+        # annotator pass is OFF, so extract_scope's own None default is reachable.
+        "relevance_annotator_backend": relevance_annotator_backend,
         "group_clustering_backend": (
             group_clustering_backend
             if group_clustering_backend is not None

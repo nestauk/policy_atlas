@@ -7,6 +7,7 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
+from policy_atlas.core.prompt_fields import parse_guidance_channel
 from policy_atlas.core.schema import DIRECTIVE_STRING_MAX, EFFECT_DIRECTIONS, GROUPING_FACETS
 from policy_atlas.core.tags import has_control_character
 
@@ -47,6 +48,12 @@ FORBIDDEN_GROUP_LABELS = frozenset(
     {"general", "miscellaneous", "other", "misc", "general theme",
      "uncategorised", "uncategorized"}
 )
+
+# D8 (024 steering surface): grouping.granularity — multiplier on the derived
+# group_max_labels ceiling. "standard" and absent are byte-identical to
+# as-built (guard test pins this).
+GRANULARITY_VALUES = ("coarser", "standard", "finer")
+GRANULARITY_MULTIPLIERS: dict[str, float] = {"coarser": 0.5, "standard": 1.0, "finer": 2.0}
 
 
 class FacetDirectiveError(ValueError):
@@ -130,28 +137,35 @@ def normalize_value(raw: str) -> str:
     return " ".join(raw.split()).casefold()
 
 
-def parse_grouping_directive(context: dict[str, Any]) -> tuple[list[str], str]:
+def parse_grouping_directive(
+    context: dict[str, Any],
+) -> tuple[list[str], str, str, list[str] | None]:
     """Parse the scope-context grouping directive.
 
     Args:
         context: Scope context JSON-like mapping.
 
     Returns:
-        ``(facets, facet_source)`` where source is ``"default"`` or
-        ``"scope_context"``.
+        ``(facets, facet_source, granularity, guidance)`` where source is
+        ``"default"`` or ``"scope_context"``, granularity is ``"coarser" |
+        "standard" | "finer"`` (``"standard"`` when absent — byte-identical to
+        as-built), and guidance is the B3 ``grouping.guidance`` list or
+        ``None`` when absent.
 
     Raises:
-        FacetDirectiveError: If the directive is malformed or names an
-            unsupported facet.
+        FacetDirectiveError: If the directive is malformed, names an
+            unsupported facet, carries an unrecognised granularity value, or
+            carries a malformed ``guidance`` channel (1-5 non-empty, bounded,
+            control-character-free strings).
     """
     if "grouping" not in context or context["grouping"] == {}:
-        return list(DEFAULT_FACETS), "default"
+        return list(DEFAULT_FACETS), "default", "standard", None
 
     directive = context["grouping"]
     if not isinstance(directive, dict):
         raise FacetDirectiveError("grouping directive must be an object")
 
-    unknown_keys = set(directive) - {"facet", "facets"}
+    unknown_keys = set(directive) - {"facet", "facets", "granularity", "guidance"}
     if unknown_keys:
         # Bounded echo (012 review, security lane): keys are untrusted JSONB text
         # and the message lands in the component.failed event payload.
@@ -166,8 +180,15 @@ def parse_grouping_directive(context: dict[str, Any]) -> tuple[list[str], str]:
         if not isinstance(raw_facets, list) or not raw_facets:
             raise FacetDirectiveError("grouping facets must be a non-empty list")
         facets = [_validate_grouping_facet(facet) for facet in raw_facets]
-    else:
+        facet_source = "scope_context"
+    elif "facet" in directive:
         facets = [_validate_grouping_facet(directive.get("facet"))]
+        facet_source = "scope_context"
+    else:
+        # granularity-only directive: facets fall back to the default, same
+        # as an absent/empty grouping block.
+        facets = list(DEFAULT_FACETS)
+        facet_source = "default"
 
     seen: set[str] = set()
     for facet in facets:
@@ -175,7 +196,22 @@ def parse_grouping_directive(context: dict[str, Any]) -> tuple[list[str], str]:
             raise FacetDirectiveError(f"duplicate grouping facet: {facet}")
         seen.add(facet)
 
-    return facets, "scope_context"
+    granularity = "standard"
+    if "granularity" in directive:
+        raw_granularity = directive["granularity"]
+        if not isinstance(raw_granularity, str) or raw_granularity not in GRANULARITY_VALUES:
+            raise FacetDirectiveError(
+                f"grouping directive granularity must be one of {GRANULARITY_VALUES}"
+            )
+        granularity = raw_granularity
+
+    guidance: list[str] | None = None
+    if "guidance" in directive:
+        guidance = parse_guidance_channel(
+            directive["guidance"], error=FacetDirectiveError, max_chars=DIRECTIVE_STRING_MAX
+        )
+
+    return facets, facet_source, granularity, guidance
 
 
 def _validate_grouping_facet(facet: Any) -> str:

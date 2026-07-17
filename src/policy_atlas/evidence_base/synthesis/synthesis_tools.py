@@ -218,6 +218,9 @@ class FindingRecord(TypedDict):
     effect_basis: str | None
     is_primary: bool | None
     field_coverage: dict[str, str]
+    # B2′ (024 / ADR 0023): "priority" | "normal" when this run's extraction
+    # carries relevance annotations; absent otherwise (never fabricated).
+    relevance: NotRequired[str]
     # Owner-adopted default metadata set (ADR 0015 §8 / B-B3): omit-if-absent.
     year: NotRequired[Any]
     evidence_type: NotRequired[str]
@@ -248,6 +251,9 @@ class ICFFindingRecord(TypedDict):
     resource_requirements: str | None
     workforce_requirements: str | None
     field_coverage: dict[str, str]
+    # B2′ (024 / ADR 0023): "priority" | "normal" when this run carries
+    # relevance annotations; absent otherwise (never fabricated).
+    relevance: NotRequired[str]
     year: NotRequired[Any]
     evidence_type: NotRequired[str]
     appraisal_label: NotRequired[str]
@@ -2060,6 +2066,47 @@ def _group_member_ids(grouping_groups: list[dict[str, Any]] | None) -> dict[str,
     return resolved
 
 
+def priority_counts_by_group(
+    grouping_groups: list[dict[str, Any]] | None,
+    relevance_annotations: Mapping[str, str] | None,
+) -> dict[str, dict[str, int]]:
+    """Per-group priority/normal/total member counts for the P4 proposal render.
+
+    Pure (no DB, no I/O): the P4 steering bundle shows, per group, how many of
+    its member findings the B2′ annotator marked ``priority`` — so the user
+    sees where their stated emphasis landed before steering the synthesis shape.
+
+    Args:
+        grouping_groups: Flat group records (each carrying ``group_id`` and
+            ``member_finding_ids``), or ``None``. The same shape
+            ``_group_member_ids`` consumes.
+        relevance_annotations: This run's marks (``finding_id`` → "priority" |
+            "normal"), or ``None`` when the run carries no annotations.
+
+    Returns:
+        ``{group_id: {"priority": n, "normal": m, "total": t}}`` for each group
+        with a qualified id. Members absent from the annotations map count into
+        ``total`` only. An empty/``None`` annotations map yields all-zero
+        priority/normal counts (never fabricated marks).
+    """
+    annotations = relevance_annotations or {}
+    counts: dict[str, dict[str, int]] = {}
+    for group in grouping_groups or []:
+        group_id = group.get("group_id")
+        if not isinstance(group_id, str) or not is_qualified_group_id(group_id):
+            continue
+        members = group.get("member_finding_ids") or group.get("finding_ids") or []
+        member_ids = [member for member in members if isinstance(member, str)]
+        priority = sum(1 for member in member_ids if annotations.get(member) == "priority")
+        normal = sum(1 for member in member_ids if annotations.get(member) == "normal")
+        counts[group_id] = {
+            "priority": priority,
+            "normal": normal,
+            "total": len(member_ids),
+        }
+    return counts
+
+
 def _requested_finding_kinds(arguments: dict[str, Any]) -> tuple[str, ...]:
     raw_kinds = arguments.get("kinds")
     if raw_kinds is None:
@@ -2183,6 +2230,7 @@ def make_findings_reader(
     extraction_run_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     grouping_groups: list[dict[str, Any]] | None,
+    relevance_annotations: Mapping[str, str] | None = None,
 ) -> Callable[[dict[str, Any]], dict[str, Any]]:
     """Create a scoped extraction finding reader.
 
@@ -2192,6 +2240,11 @@ def make_findings_reader(
         extraction_run_id: Referenced extraction run id.
         evidence_scope_id: Evidence scope id.
         grouping_groups: Optional grouping records for group-id filtering.
+        relevance_annotations: B2′ run-scoped marks (``finding_id`` → "priority"
+            | "normal") from this run's extraction result, or ``None``. When
+            present, each returned ``query_findings`` record gains a
+            ``"relevance"`` key for its finding id; findings not in the map (and
+            the ``None`` case) carry no ``"relevance"`` key — never fabricated.
 
     Returns:
         A validated ``query_findings`` implementation.
@@ -2227,9 +2280,18 @@ def make_findings_reader(
         if ICF_PROFILE_ID in available_profiles
         else []
     )
+    annotations = relevance_annotations or {}
+
+    def _marked(finding: Mapping[str, Any]) -> dict[str, Any]:
+        record = dict(finding)
+        mark = annotations.get(str(record.get("finding_id")))
+        if mark is not None:
+            record["relevance"] = mark
+        return record
+
     findings_by_kind: dict[str, list[dict[str, Any]]] = {
-        "iof": [dict(finding) for finding in iof_findings],
-        "icf": [dict(finding) for finding in icf_findings],
+        "iof": [_marked(finding) for finding in iof_findings],
+        "icf": [_marked(finding) for finding in icf_findings],
     }
     available_by_kind = {
         kind

@@ -2,6 +2,7 @@
 
 import uuid
 from pathlib import Path
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -29,18 +30,27 @@ from policy_atlas.evidence_base.assess.screen import (
     CRITERIA_LIST_MAX,
     ScreenContext,
     ScreenDirectiveError,
+    ScreenSupersessionError,
+    _compose_screen_intent,
     _load_stage2_docs,
+    _next_screen_generation,
     _parse_screen_directive,
     _stage2_payload,
+    effective_screen_rows,
     screen_sources,
 )
 from policy_atlas.evidence_base.assess.screen_prompt import (
+    SCREEN_INTENT_MAX,
     STAGE2_WINDOW_CHAR_BUDGET,
     ScreenEnvelopePayload,
     ScreenFullTextPayload,
     ScreenRepWire,
 )
 from policy_atlas.evidence_base.assess.screening_backend import StubScreeningBackend
+from policy_atlas.evidence_base.corpus.characterise import (
+    _base_counts,
+    screened_sources,
+)
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.run_spec import Plan, compile
 from tests.helpers import (
@@ -56,7 +66,7 @@ from tests.helpers import (
 # --- Schema / structure ---
 
 def test_screen_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 28
+    assert len(metadata.tables) == 29
 
 
 def test_pss_has_composite_unique(conn: Connection) -> None:
@@ -751,7 +761,7 @@ def test_harness_screen_component(conn: Connection) -> None:
         "component", "screened", "relevant", "not_relevant",
         "failed", "excluded_retracted", "title_abstract", "title_only", "unsure_reps",
         "non_unanimous", "rep_failures", "tie_broken", "retries",
-        "usage_totals",
+        "usage_totals", "screen_generation", "rescreen",
     }
     assert set(payload.keys()) == expected_keys
 
@@ -889,29 +899,47 @@ def test_stage2_prefix_hydration_small_doc_unchanged(conn: Connection) -> None:
 # plan rev 2 finding 3): {stage?, criteria?} ---
 
 def test_parse_screen_directive_default_no_screening_key() -> None:
-    assert _parse_screen_directive({}) == (1, [])
+    assert _parse_screen_directive({}) == (1, [], False)
 
 
 def test_parse_screen_directive_criteria_round_trip_stage1() -> None:
-    stage, criteria = _parse_screen_directive(
+    stage, criteria, rescreen = _parse_screen_directive(
         {"screening": {"criteria": ["only studies with under-5s", "UK context"]}}
     )
     assert stage == 1
     assert criteria == ["only studies with under-5s", "UK context"]
+    assert rescreen is False
 
 
 def test_parse_screen_directive_criteria_round_trip_stage2() -> None:
-    stage, criteria = _parse_screen_directive(
+    stage, criteria, rescreen = _parse_screen_directive(
         {"screening": {"stage": 2, "criteria": ["peer-reviewed only"]}}
     )
     assert stage == 2
     assert criteria == ["peer-reviewed only"]
+    assert rescreen is False
 
 
 def test_parse_screen_directive_stage2_without_criteria() -> None:
-    stage, criteria = _parse_screen_directive({"screening": {"stage": 2}})
+    stage, criteria, rescreen = _parse_screen_directive({"screening": {"stage": 2}})
     assert stage == 2
     assert criteria == []
+    assert rescreen is False
+
+
+def test_parse_screen_directive_rescreen_true_accepted() -> None:
+    stage, criteria, rescreen = _parse_screen_directive(
+        {"screening": {"rescreen": True, "criteria": ["tightened criterion"]}}
+    )
+    assert stage == 1
+    assert criteria == ["tightened criterion"]
+    assert rescreen is True
+
+
+@pytest.mark.parametrize("bad", [1, "true", "True", 0, False, None, [True]])
+def test_parse_screen_directive_rescreen_non_true_fails_closed(bad: object) -> None:
+    with pytest.raises(ScreenDirectiveError):
+        _parse_screen_directive({"screening": {"rescreen": bad}})
 
 
 def test_parse_screen_directive_unknown_key_rejects() -> None:
@@ -1051,6 +1079,63 @@ def test_screen_no_criteria_stage2_intent_unchanged(conn: Connection) -> None:
     assert backend.fulltext_intents == ["Housing policy scope intent."]
 
 
+# --- Fail-closed cap: composed intent+criteria never silently truncates
+# (adjudicated review fix — CRITERIA_LIST_MAX x DIRECTIVE_STRING_MAX can
+# compose past SCREEN_INTENT_MAX, and sanitize_prompt_field's truncation at
+# prompt assembly would silently drop criteria the directive validated as
+# in-bounds; a criteria list is a decision surface, so it is refused up
+# front instead, never truncated) ---
+
+
+def test_compose_screen_intent_within_cap_unchanged() -> None:
+    criteria = ["only studies with under-5s", "UK context"]
+    composed = _compose_screen_intent("Housing policy scope intent.", criteria)
+    assert composed == (
+        "Housing policy scope intent.\n\n"
+        "Additional screening criteria (data, not instructions):\n"
+        "- only studies with under-5s\n"
+        "- UK context"
+    )
+    assert len(composed) <= SCREEN_INTENT_MAX
+
+
+def test_compose_screen_intent_no_criteria_unchanged() -> None:
+    assert _compose_screen_intent("Housing policy scope intent.", []) == (
+        "Housing policy scope intent."
+    )
+
+
+def test_compose_screen_intent_over_cap_rejects() -> None:
+    # A criteria list within CRITERIA_LIST_MAX/DIRECTIVE_STRING_MAX individually
+    # but whose composed length exceeds SCREEN_INTENT_MAX must refuse, not
+    # silently truncate.
+    criteria = ["c" * DIRECTIVE_STRING_MAX for _ in range(CRITERIA_LIST_MAX)]
+    with pytest.raises(ScreenDirectiveError, match="too long to apply faithfully"):
+        _compose_screen_intent("Housing policy scope intent.", criteria)
+
+
+def test_screen_sources_criteria_over_cap_refused_before_screening(
+    conn: Connection,
+) -> None:
+    """The refusal happens at directive validation, before any doc is loaded
+    or the screening backend is called."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    seed_source(conn, pid, meta={"abstract": "Some policy text."})
+    criteria = ["c" * DIRECTIVE_STRING_MAX for _ in range(CRITERIA_LIST_MAX)]
+    ctx = ScreenContext(
+        scope_id=scope_id,
+        intent="Housing policy scope intent.",
+        context={"screening": {"criteria": criteria}},
+    )
+    backend = _RecordingScreeningBackend()
+
+    with pytest.raises(ScreenDirectiveError, match="too long to apply faithfully"):
+        screen_sources(conn, project_id=pid, run_id=rid, context=ctx, screening_backend=backend)
+
+    assert backend.envelope_intents == []
+
+
 # --- Isolation: criteria never rewrite evidence_scope.intent, and only screen.py
 # consumes the screening criteria key (contract decision 2 rev 2.5) ---
 
@@ -1089,3 +1174,275 @@ def test_criteria_key_handling_confined_to_screen_module() -> None:
     for name in consumer_modules:
         text = (package_dir / name).read_text()
         assert "criteria" not in text, f"{name} must never reference screening criteria"
+
+
+# --- Generation supersession (task 024 decision 7b, ADR 0022) ---
+
+def _effective_row(
+    conn: Connection, pid: uuid.UUID, scope_id: uuid.UUID, pss_id: uuid.UUID
+) -> Any:
+    effective = effective_screen_rows()
+    return conn.execute(
+        select(effective)
+        .where(effective.c.project_id == pid)
+        .where(effective.c.evidence_scope_id == scope_id)
+        .where(effective.c.project_source_snapshot_id == pss_id)
+    ).one()
+
+
+def _rows_for(conn: Connection, pss_id: uuid.UUID) -> list[dict[str, Any]]:
+    """All screening rows for a doc as plain dicts, newest generation first."""
+    return [
+        dict(row._mapping)
+        for row in conn.execute(
+            select(source_screening_result)
+            .where(source_screening_result.c.project_source_snapshot_id == pss_id)
+            .order_by(
+                source_screening_result.c.screen_generation.desc(),
+                source_screening_result.c.screen_stage.desc(),
+            )
+        ).fetchall()
+    ]
+
+
+def test_effective_row_newest_generation_supersedes_stale_stage2(conn: Connection) -> None:
+    """The plan's stage-2->fresh-generation-stage-1 supersession case, now buildable:
+    gen0 stage-1+stage-2 relevant, then gen1 stage-1 not_relevant => effective is
+    the gen1 stage-1 row (generation DESC wins over the stale stage-2 confirmation)."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _, pss_id = seed_source(conn, pid, meta={"abstract": "x"})
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant",
+                          screen_stage=1, screen_generation=0)
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant",
+                          screen_stage=2, screen_basis="full_text", screen_generation=0)
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="not_relevant",
+                          screen_stage=1, screen_generation=1)
+
+    row = _effective_row(conn, pid, scope_id, pss_id)
+    assert row.screen_generation == 1
+    assert row.screen_stage == 1
+    assert row.status == "not_relevant"
+
+
+def test_failed_rows_never_effective_at_any_generation(conn: Connection) -> None:
+    """A failed row is excluded before the generation ordering: a gen1 failed row
+    does not supersede a gen0 relevant row."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _, pss_id = seed_source(conn, pid, meta={"abstract": "x"})
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant",
+                          screen_stage=1, screen_generation=0)
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="failed",
+                          screen_stage=1, screen_generation=1)
+
+    row = _effective_row(conn, pid, scope_id, pss_id)
+    assert row.screen_generation == 0
+    assert row.status == "relevant"
+
+
+def test_rescreen_writes_next_generation_bypasses_skip_and_leaves_old_rows_identical(
+    conn: Connection,
+) -> None:
+    """A re-screen re-runs every scope doc at generation max+1 (bypassing the
+    already-screened skip) and never mutates the prior generation's rows."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _, pss_id = seed_source(conn, pid, meta={"abstract": "Policy text."})
+
+    first = screen_sources(
+        conn, project_id=pid, run_id=rid,
+        context=ScreenContext(scope_id=scope_id, intent="Test", context={}),
+    )
+    assert first["screen_generation"] == 0
+    assert first["rescreen"] is False
+    gen0_before = _rows_for(conn, pss_id)
+    assert len(gen0_before) == 1
+    assert gen0_before[0]["screen_generation"] == 0
+
+    rescreen_run = seed_run(conn, pid)
+    summary = screen_sources(
+        conn, project_id=pid, run_id=rescreen_run,
+        context=ScreenContext(
+            scope_id=scope_id, intent="Test",
+            context={"screening": {"rescreen": True}},
+        ),
+    )
+    assert summary["screen_generation"] == 1
+    assert summary["rescreen"] is True
+    # Skip bypassed: the already-screened doc re-screened into generation 1.
+    assert summary["screened"] == 1
+    assert summary["relevant"] == 1
+
+    rows_after = _rows_for(conn, pss_id)
+    gen0_after = [r for r in rows_after if r["screen_generation"] == 0]
+    gen1_after = [r for r in rows_after if r["screen_generation"] == 1]
+    assert len(gen0_after) == 1
+    assert len(gen1_after) == 1
+    # Byte-identical: the prior generation's row is untouched, screened_at and all.
+    assert gen0_after[0] == gen0_before[0]
+    # Effective row is now the fresh generation.
+    assert _effective_row(conn, pid, scope_id, pss_id).screen_generation == 1
+
+
+def test_absent_rescreen_matches_as_built_skip_and_generation_zero(conn: Connection) -> None:
+    """Without a rescreen directive, behaviour is byte-identical to as-built:
+    fresh docs write at generation 0 and a re-run skips already-screened docs."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _, pss_id = seed_source(conn, pid, meta={"abstract": "x"})
+    ctx = ScreenContext(scope_id=scope_id, intent="Test", context={})
+
+    first = screen_sources(conn, project_id=pid, run_id=rid, context=ctx)
+    assert first["screen_generation"] == 0
+    assert first["rescreen"] is False
+    assert [r["screen_generation"] for r in _rows_for(conn, pss_id)] == [0]
+
+    second = screen_sources(conn, project_id=pid, run_id=seed_run(conn, pid), context=ctx)
+    assert second["screened"] == 0
+    assert len(_rows_for(conn, pss_id)) == 1
+
+
+def test_stage2_inherits_stage1_generation_and_demote_only_within_generation(
+    conn: Connection,
+) -> None:
+    """After a gen1 stage-1 re-screen, a normal stage-2 pass writes stage-2 rows
+    AT gen1 (inheriting the effective stage-1 generation); confirm and demote both
+    land at gen1 and the demote-only flow holds within the generation."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+
+    _, confirm = seed_source(conn, pid, meta={"title": "confirm"})
+    seed_screening_result(conn, pid, rid, scope_id, confirm, status="relevant",
+                          screen_stage=1, screen_generation=1)
+    seed_ingested_full_text(conn, pss_id=confirm, chunks=["confirm full text evidence."])
+
+    _, demote = seed_source(conn, pid, meta={"title": "demote", "_stub_stage2_demote": True})
+    seed_screening_result(conn, pid, rid, scope_id, demote, status="relevant",
+                          screen_stage=1, screen_generation=1)
+    seed_ingested_full_text(conn, pss_id=demote, chunks=["demote full text evidence."])
+
+    summary = screen_sources(
+        conn, project_id=pid, run_id=rid,
+        context=ScreenContext(
+            scope_id=scope_id, intent="Test", context={"screening": {"stage": 2}}
+        ),
+    )
+    assert summary["confirmed"] == 1
+    assert summary["demoted"] == 1
+
+    confirm_row = _effective_row(conn, pid, scope_id, confirm)
+    assert (confirm_row.screen_stage, confirm_row.screen_generation, confirm_row.status) == (
+        2, 1, "relevant",
+    )
+    demote_row = _effective_row(conn, pid, scope_id, demote)
+    assert (demote_row.screen_stage, demote_row.screen_generation, demote_row.status) == (
+        2, 1, "not_relevant",
+    )
+
+
+def test_stage2_rescreen_same_generation_collision_is_loud_and_reason_coded(
+    conn: Connection,
+) -> None:
+    """A stage-2 re-screen against a doc that already carries a non-failed stage-2
+    row at its effective generation is a loud, reason-coded failure naming the
+    stage-2-supersession seam — never a silent skip."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _, pss_id = seed_source(conn, pid, meta={"title": "collide"})
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant",
+                          screen_stage=1, screen_generation=1)
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant",
+                          screen_stage=2, screen_basis="full_text", screen_generation=1)
+    seed_ingested_full_text(conn, pss_id=pss_id, chunks=["full text evidence."])
+
+    with pytest.raises(ScreenSupersessionError) as excinfo:
+        screen_sources(
+            conn, project_id=pid, run_id=seed_run(conn, pid),
+            context=ScreenContext(
+                scope_id=scope_id, intent="Test",
+                context={"screening": {"stage": 2, "rescreen": True}},
+            ),
+        )
+    assert excinfo.value.reason == "stage2_supersession_collision"
+    assert "stage2_supersession_collision" in str(excinfo.value)
+
+
+def test_next_screen_generation_counts_all_rows_including_failed(conn: Connection) -> None:
+    """max+1 is taken over every row in the scope (failed rows count), so a fresh
+    generation never reuses a prior attempt's number."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _, pss_id = seed_source(conn, pid, meta={"abstract": "x"})
+    assert _next_screen_generation(conn, scope_id=scope_id) == 1
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="failed",
+                          screen_stage=1, screen_generation=3)
+    assert _next_screen_generation(conn, scope_id=scope_id) == 4
+
+
+# --- Consumer lockstep after a re-screen (seeded rows, no LLM) ---
+
+def _seed_flip_and_stable(
+    conn: Connection, pid: uuid.UUID, rid: uuid.UUID, scope_id: uuid.UUID
+) -> tuple[uuid.UUID, uuid.UUID]:
+    """Two docs: ``flipped`` was relevant at gen0 then re-screened not_relevant at
+    gen1; ``stable`` is relevant at gen0 only. Returns (flipped, stable)."""
+    _, flipped = seed_source(conn, pid, meta={"abstract": "flip", "title": "flip"})
+    seed_screening_result(conn, pid, rid, scope_id, flipped, status="relevant",
+                          screen_stage=1, screen_generation=0)
+    seed_screening_result(conn, pid, rid, scope_id, flipped, status="not_relevant",
+                          screen_stage=1, screen_generation=1)
+    _, stable = seed_source(conn, pid, meta={"abstract": "stay", "title": "stay"})
+    seed_screening_result(conn, pid, rid, scope_id, stable, status="relevant",
+                          screen_stage=1, screen_generation=0)
+    return flipped, stable
+
+
+def test_consumer_characterise_screened_sources_follows_new_generation(
+    conn: Connection,
+) -> None:
+    """characterise's doc universe (screened_sources) drops the doc the gen1
+    re-screen flipped to not_relevant."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    flipped, stable = _seed_flip_and_stable(conn, pid, rid, scope_id)
+
+    sources = screened_sources(conn, project_id=pid, scope_id=scope_id)
+    ids = {source.pss_id for source in sources}
+    assert stable in ids
+    assert flipped not in ids
+
+
+def test_consumer_characterise_base_counts_follows_new_generation(
+    conn: Connection,
+) -> None:
+    """characterise's status counts (_base_counts) read the gen1 verdict: one
+    relevant (screened_in), one not_relevant."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _flipped, _stable = _seed_flip_and_stable(conn, pid, rid, scope_id)
+
+    counts = _base_counts(conn, project_id=pid, scope_id=scope_id)
+    assert counts["screened_in"] == 1
+    assert counts["not_relevant"] == 1
+
+
+def test_consumer_stage2_skip_advances_doc_at_new_generation(conn: Connection) -> None:
+    """screen skip logic (_load_stage2_docs) follows the gen1 effective row: a doc
+    whose only stage-2 row is a stale gen0 confirmation is eligible for stage 2
+    again at gen1 after a gen1 stage-1 re-screen keeps it relevant."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _, pss_id = seed_source(conn, pid, meta={"title": "advance"})
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant",
+                          screen_stage=1, screen_generation=0)
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant",
+                          screen_stage=2, screen_basis="full_text", screen_generation=0)
+    seed_screening_result(conn, pid, rid, scope_id, pss_id, status="relevant",
+                          screen_stage=1, screen_generation=1)
+    seed_ingested_full_text(conn, pss_id=pss_id, chunks=["full text evidence."])
+
+    docs, skipped = _load_stage2_docs(conn, project_id=pid, scope_id=scope_id)
+    assert skipped == 0
+    assert [doc.pss_id for doc in docs] == [pss_id]
+    assert docs[0].stage1_generation == 1

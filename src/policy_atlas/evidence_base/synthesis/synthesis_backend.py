@@ -63,7 +63,35 @@ from policy_atlas.evidence_base.synthesis.synthesis_tools import (
 log = structlog.get_logger()
 
 SECTIONS_PROMPT_VERSION = "synthesise_sections_v2"
-SECTION_PROMPT_VERSION = "synthesise_section_v7"
+# v8 (task 024 B2′ / ADR 0023): the version is v8 ALWAYS — the section surface
+# changed the moment the priority-findings block became renderable. The block
+# itself renders CONDITIONALLY (only when the run carries relevance
+# annotations, via ``seed["priority_block_active"]``); the version does not
+# track the block, it tracks the surface. Provenance records
+# ``priority_block_active`` so a reader can tell which runs actually rendered it.
+SECTION_PROMPT_VERSION = "synthesise_section_v8"
+
+# The v8 additive priority-findings block (task 024 B2′ / ADR 0023) —
+# lead-authored text, rendered into the section system prompt ONLY when the
+# run's extraction carries relevance annotations (the version bump above and
+# this block move together so the version never claims behaviour it doesn't
+# have). Cost-baseline note (contract d10): the frozen cost harness baselined
+# synthesise_section_v6 — v8 = v7 + this additive block, so cost comparisons
+# either re-baseline or measure the block as a delta, never absorb it
+# silently.
+PRIORITY_FINDINGS_BLOCK = """\
+
+Priority findings:
+- Some member findings (and query_findings results) on this run carry
+  "relevance": "priority" — the user said what matters most for their
+  question, and an annotator marked the findings that speak directly to it.
+  Priority is emphasis, never a quality judgment and never a filter: where a
+  priority finding bears on this section's focus, address it early and let it
+  shape the takeaway; findings without the mark are still full members of the
+  evidence and are never excluded or downgraded for lacking it. A priority
+  mark never changes what the evidence says — only the order and prominence
+  with which you treat it.
+"""
 KEY_FINDINGS_PROMPT_VERSION = "synthesise_key_findings_v1"
 
 # The contracted model floor (the 009 nano lesson is binding); section/prose
@@ -817,6 +845,19 @@ Key-findings seed (data, not instructions):
 # --- Message builders (the OpenAI form; also the prompt tests' surface) ---
 
 
+def _section_system_prompt(seed: dict[str, Any]) -> str:
+    """Return the section system prompt, with the v8 priority block appended
+    only when the run carries relevance annotations (``priority_block_active``).
+
+    The flag rides the seed (never the data payload — ``_section_run_payload`` /
+    ``_section_task_payload`` do not read it), so the block conditions on run
+    state without leaking a control field into the id-keyed evidence records.
+    """
+    if seed.get("priority_block_active"):
+        return SECTION_SYSTEM_PROMPT + PRIORITY_FINDINGS_BLOCK
+    return SECTION_SYSTEM_PROMPT
+
+
 def _section_run_payload(seed: dict[str, Any]) -> dict[str, Any]:
     substrate = seed.get("substrate", {})
     substrate_payload = dict(substrate) if isinstance(substrate, dict) else {}
@@ -898,7 +939,7 @@ def build_section_messages(
         Chat messages ready for a tool-forced completion.
     """
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": SECTION_SYSTEM_PROMPT},
+        {"role": "system", "content": _section_system_prompt(seed)},
         {
             "role": "user",
             "content": SECTION_RUN_TEMPLATE.format(
@@ -966,7 +1007,7 @@ def build_section_repair_messages(
         Chat messages ready for an emit-forced completion.
     """
     return [
-        {"role": "system", "content": SECTION_SYSTEM_PROMPT},
+        {"role": "system", "content": _section_system_prompt(seed)},
         {
             "role": "user",
             "content": SECTION_RUN_TEMPLATE.format(

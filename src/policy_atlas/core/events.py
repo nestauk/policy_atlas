@@ -10,6 +10,7 @@ Separate from LangGraph execution checkpoints (audit plane ≠ telemetry plane).
 """
 
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
@@ -67,21 +68,29 @@ def append(
     return event_id
 
 
-def read(conn: Connection, project_id: uuid.UUID) -> list[dict[str, Any]]:
-    """Return all events for a project ordered by sequence (not occurred_at).
+def read(
+    conn: Connection,
+    project_id: uuid.UUID,
+    event_types: Sequence[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Return events for a project ordered by sequence (not occurred_at).
 
     Args:
         conn: Open database connection.
         project_id: Project whose events to read.
+        event_types: When given, restrict the read to these ``event_type``
+            values (pushed into the SQL ``WHERE``, not a post-filter) —
+            callers that only ever want a fixed vocabulary avoid a full
+            project-history scan. ``None`` (default) reads every event,
+            unchanged from prior behaviour.
 
     Returns:
         Event rows as dicts, ordered by ascending sequence.
     """
-    rows = conn.execute(
-        select(event_log).where(event_log.c.project_id == project_id).order_by(
-            event_log.c.sequence
-        )
-    )
+    query = select(event_log).where(event_log.c.project_id == project_id)
+    if event_types is not None:
+        query = query.where(event_log.c.event_type.in_(event_types))
+    rows = conn.execute(query.order_by(event_log.c.sequence))
     return [dict(row._mapping) for row in rows]
 
 

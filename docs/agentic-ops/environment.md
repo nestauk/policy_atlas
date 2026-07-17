@@ -1,7 +1,7 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–023 — backend only; setup unchanged since 002; task 007 adds two dev-time
+stands (tasks 001–024 — backend only; setup unchanged since 002; task 007 adds two dev-time
 fixture-recorder scripts needing `OVERTON_API_KEY`/optional OpenAlex vars in `.env` — see
 `.env.example`; task 008 adds parsing deps (pymupdf/pymupdf4llm/trafilatura — arrive via
 `make setup`/`uv sync`) and a keyless dev-time recorder using system `curl`; task 009 adds
@@ -60,6 +60,13 @@ say "skeleton", today's equivalent is the one entry point
 the provider fixture data + replay backends move into the test suite
 (`tests/data/provider_records/` + `tests/provider_fixtures.py`), so a no-key orchestrate
 run's acquire step adds nothing and the chain walks the seeded corpus;
+task 024 adds **no new deps** and one **optional** env var —
+`POLICY_ATLAS_ORCHESTRATOR_MODEL` overrides the judgment-class model behind the
+orchestrator's three moments (planning · router · watch; the same `OPENAI_API_KEY`
+flag makes them live), one schema migration rides it (`a3c6f9e2b7d4`,
+`capability_run` + `screen_generation` — the dev-DB `alembic upgrade head` gotcha
+below applies), and free-text steering at every pause runs through the confirm gate
+(stubbed + scripted in the suite).
 `make verify` and the test suite need none of them — stub backends + socket-deny keep
 the suite egress-free. One suite runner at a time: concurrent `make verify` runs
 contend on the shared test DB and flake (018 note).

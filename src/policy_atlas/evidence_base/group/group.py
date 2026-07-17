@@ -50,6 +50,7 @@ from policy_atlas.evidence_base.group.facet_values import (
     FACET_COUNTERPART,
     FACET_VALUE_CAP,
     FORBIDDEN_GROUP_LABELS,
+    GRANULARITY_MULTIPLIERS,
     LABEL_MAX,
     VALUE_FACETS,
     VALUE_SURFACE_MAX,
@@ -142,6 +143,7 @@ class GroupClusteringBackendFactory(Protocol):
         facet: str,
         projection: ProjectionKind,
         include_context_in_discovery: bool,
+        guidance: list[str] | None = None,
     ) -> ClusteringBackend:
         """Return an engine backend for one facet run.
 
@@ -150,6 +152,9 @@ class GroupClusteringBackendFactory(Protocol):
             projection: Unit projection kind.
             include_context_in_discovery: Whether discovery calls may see
                 per-unit context payloads. Assignment calls always receive them.
+            guidance: B3 (024 steering surface) ``grouping.guidance`` — bounded
+                user-intent sentences steering the label-DISCOVERY prompt only.
+                ``None``/empty is byte-identical to as-built.
 
         Returns:
             A clustering-engine backend.
@@ -166,12 +171,16 @@ class StubGroupCall:
         facet: Facet being clustered.
         projection: Unit projection kind.
         payloads: Prompt-facing unit payload copies seen by the call.
+        guidance: B3 ``grouping.guidance`` seen by this call. Always ``None``
+            for ``"assign"`` — the stub never threads guidance into
+            assignment (isolation property).
     """
 
     stage: Literal["discover", "assign"]
     facet: str
     projection: ProjectionKind
     payloads: list[dict[str, Any]]
+    guidance: list[str] | None = None
 
 
 class StubGroupClusteringBackend:
@@ -212,6 +221,7 @@ class StubGroupClusteringBackend:
         facet: str,
         projection: ProjectionKind,
         include_context_in_discovery: bool,
+        guidance: list[str] | None = None,
     ) -> ClusteringBackend:
         """Return a facet-scoped stub adapter.
 
@@ -220,6 +230,9 @@ class StubGroupClusteringBackend:
             projection: Unit projection kind.
             include_context_in_discovery: Whether discovery records include
                 context.
+            guidance: B3 ``grouping.guidance``; recorded on stub discovery
+                calls (``StubGroupCall.guidance``) but has no effect on the
+                stub's deterministic first-token grouping.
 
         Returns:
             A clustering backend for the requested facet.
@@ -229,6 +242,7 @@ class StubGroupClusteringBackend:
             facet=facet,
             projection=projection,
             include_context_in_discovery=include_context_in_discovery,
+            guidance=guidance,
         )
 
 
@@ -240,11 +254,13 @@ class _StubGroupFacetBackend:
         facet: str,
         projection: ProjectionKind,
         include_context_in_discovery: bool,
+        guidance: list[str] | None = None,
     ) -> None:
         self._parent = parent
         self._facet = facet
         self._projection = projection
         self._include_context_in_discovery = include_context_in_discovery
+        self._guidance = guidance
 
     def discover(
         self,
@@ -264,7 +280,12 @@ class _StubGroupFacetBackend:
             Discovered labels plus no token usage.
         """
         del min_labels
-        self._record("discover", units, include_context=self._include_context_in_discovery)
+        self._record(
+            "discover",
+            units,
+            include_context=self._include_context_in_discovery,
+            guidance=self._guidance,
+        )
         if self._facet in self._parent.fail_facets:
             raise RuntimeError("backend_error: Stub group discovery failure sentinel.")
         if self._facet in self._parent.zero_label_facets:
@@ -322,6 +343,7 @@ class _StubGroupFacetBackend:
         units: list[ClusterUnit],
         *,
         include_context: bool,
+        guidance: list[str] | None = None,
     ) -> None:
         self._parent.calls.append(
             StubGroupCall(
@@ -332,6 +354,7 @@ class _StubGroupFacetBackend:
                     _payload_copy(unit.payload, include_context=include_context)
                     for unit in units
                 ],
+                guidance=guidance,
             )
         )
 
@@ -422,7 +445,7 @@ def group_findings(
         else StubGroupClusteringBackend()
     )
 
-    facets, facet_source = parse_grouping_directive(context.context)
+    facets, facet_source, granularity, guidance = parse_grouping_directive(context.context)
     docs, extraction_profile_counts, extraction_profile_provenance, raw_counts = (
         _load_extraction_rollup(
             conn,
@@ -466,6 +489,8 @@ def group_findings(
                 references=references,
                 finding_details=finding_details,
                 backend_factory=backend_factory,
+                granularity=granularity,
+                guidance=guidance,
             )
         elif facet in CLAIM_THEME_FACETS:
             assembly = _run_claim_theme_facet(
@@ -474,6 +499,8 @@ def group_findings(
                 facet=facet,
                 extraction_record_ids_by_kind=extraction_record_ids_by_kind,
                 backend_factory=backend_factory,
+                granularity=granularity,
+                guidance=guidance,
             )
         else:
             raise GroupError(f"grouping invariant violated: unsupported facet {facet}")
@@ -496,11 +523,13 @@ def group_findings(
         backend=backend_factory,
         facets=facets,
         facet_source=facet_source,
+        granularity=granularity,
         facet_provenance=facet_provenance,
         extraction_run_id=context.extraction_run_id,
         extraction_profile_counts=extraction_profile_counts,
         extraction_profile_provenance=extraction_profile_provenance,
         finding_ids=[str(reference["finding_id"]) for reference in references],
+        guidance=guidance,
     )
     summary = _build_summary(
         facets=facets,
@@ -532,16 +561,25 @@ def group_findings(
     return summary
 
 
-def group_max_labels(unit_count: int) -> int:
+def group_max_labels(unit_count: int, *, granularity: str = "standard") -> int:
     """Compute the group discovery ceiling for one facet run.
 
     Args:
         unit_count: Number of eligible units in the facet run.
+        granularity: D8 ``grouping.granularity`` value. ``"standard"`` (the
+            default) is byte-identical to as-built. ``"coarser"`` halves and
+            ``"finer"`` doubles the derived ceiling before re-applying the
+            same hard floor/cap.
 
     Returns:
-        ``ceil(N/5)`` clamped to ``[3, 40]``.
+        ``ceil(N/5)`` clamped to ``[3, 40]``, then multiplied by the
+        granularity factor and re-clamped to the same ``[3, 40]`` bounds.
     """
-    return max(3, min(40, math.ceil(unit_count / 5)))
+    base = max(3, min(40, math.ceil(unit_count / 5)))
+    if granularity == "standard":
+        return base
+    multiplier = GRANULARITY_MULTIPLIERS[granularity]
+    return max(3, min(40, round(base * multiplier)))
 
 
 def group_call_budget(unit_count: int) -> int:
@@ -567,6 +605,8 @@ def _run_value_facet(
     references: Sequence[Mapping[str, Any]],
     finding_details: Mapping[str, FindingDetail],
     backend_factory: GroupClusteringBackendFactory,
+    granularity: str = "standard",
+    guidance: list[str] | None = None,
 ) -> FacetAssembly:
     views = _project_reference_rows(
         references,
@@ -600,6 +640,8 @@ def _run_value_facet(
             facet=facet,
             projection="value",
             backend_factory=backend_factory,
+            granularity=granularity,
+            guidance=guidance,
         )
     elif failure is None:
         result = None
@@ -639,7 +681,7 @@ def _run_value_facet(
         ),
         projection="value",
         unit_count=len(values),
-        max_labels=group_max_labels(len(values)),
+        max_labels=group_max_labels(len(values), granularity=granularity),
         assignment_repair_calls_used=(
             result.assignment_repair_calls_used if result is not None else 0
         ),
@@ -664,6 +706,8 @@ def _run_claim_theme_facet(
     facet: str,
     extraction_record_ids_by_kind: Mapping[str, Sequence[uuid.UUID]],
     backend_factory: GroupClusteringBackendFactory,
+    granularity: str = "standard",
+    guidance: list[str] | None = None,
 ) -> FacetAssembly:
     claims = _load_claim_theme_units(
         conn,
@@ -691,6 +735,8 @@ def _run_claim_theme_facet(
             facet=facet,
             projection="claim",
             backend_factory=backend_factory,
+            granularity=granularity,
+            guidance=guidance,
         )
 
     groups, ungrouped_finding_ids = _claim_groups_from_result(claims, result)
@@ -719,7 +765,7 @@ def _run_claim_theme_facet(
         ),
         projection="claim",
         unit_count=len(claims),
-        max_labels=group_max_labels(len(claims)),
+        max_labels=group_max_labels(len(claims), granularity=granularity),
         assignment_repair_calls_used=(
             result.assignment_repair_calls_used if result is not None else 0
         ),
@@ -743,12 +789,15 @@ def _cluster_facet_units(
     facet: str,
     projection: ProjectionKind,
     backend_factory: GroupClusteringBackendFactory,
+    granularity: str = "standard",
+    guidance: list[str] | None = None,
 ) -> tuple[ClusteringResult | None, FailureClass | None, list[str]]:
-    policy = _group_policy(unit_count=len(units))
+    policy = _group_policy(unit_count=len(units), granularity=granularity)
     backend = backend_factory.for_facet(
         facet=facet,
         projection=projection,
         include_context_in_discovery=len(units) <= GROUP_CONTEXT_DISCOVERY_UNIT_LIMIT,
+        guidance=guidance,
     )
     try:
         result = cluster_units(units, backend=backend, policy=policy)
@@ -760,10 +809,10 @@ def _cluster_facet_units(
     return result, None, []
 
 
-def _group_policy(*, unit_count: int) -> ClusteringPolicy:
+def _group_policy(*, unit_count: int, granularity: str = "standard") -> ClusteringPolicy:
     return ClusteringPolicy(
         min_labels=0,
-        max_labels=group_max_labels(unit_count),
+        max_labels=group_max_labels(unit_count, granularity=granularity),
         assignment_batch_size=GROUP_ASSIGNMENT_BATCH_SIZE,
         # 4-wide assignment fan-out, matching theme_grouping.MAX_CONCURRENT_BATCHES
         # (characterise runs the same engine at this width; batch-order merge is
@@ -1411,11 +1460,13 @@ def _build_provenance(
     backend: GroupClusteringBackendFactory,
     facets: Sequence[str],
     facet_source: str,
+    granularity: str,
     facet_provenance: Mapping[str, dict[str, Any]],
     extraction_run_id: uuid.UUID,
     extraction_profile_counts: dict[str, dict[str, Any]],
     extraction_profile_provenance: dict[str, dict[str, Any]],
     finding_ids: Sequence[str],
+    guidance: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     mode = backend.mode
     model = str(getattr(backend, "model", mode))
@@ -1431,6 +1482,12 @@ def _build_provenance(
         "facet": facets[0] if len(facets) == 1 else None,
         "facets": list(facets),
         "facet_source": facet_source,
+        # D8 (024 steering surface): executed granularity, echoed verbatim —
+        # "standard" (default) is byte-identical to as-built.
+        "granularity": granularity,
+        # B3 (024 steering surface): executed grouping.guidance, echoed
+        # verbatim — absent is byte-identical to as-built.
+        "guidance": list(guidance) if guidance else None,
         "value_cap": FACET_VALUE_CAP,
         "call_count": sum(
             cast("int", facet_provenance[facet]["calls_used"]) for facet in facets

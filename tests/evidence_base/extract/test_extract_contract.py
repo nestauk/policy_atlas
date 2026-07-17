@@ -1258,7 +1258,8 @@ def test_summary_payload_shape(conn: Connection) -> None:
         "extracted", "no_findings", "failed", "fresh", "reused", "findings",
         "field_coverage",
     }
-    assert set(summary["provenance"].keys()) == {"profiles", "pass_count"}
+    assert set(summary["provenance"].keys()) == {"profiles", "pass_count", "refresh"}
+    assert summary["provenance"]["refresh"] is None
     assert set(profile_provenance(summary).keys()) == {
         "profile", "schema", "prompt", "model", "mode", "field_rules", "verifier",
         "window", "max_output_tokens", "retry_cap", "fingerprint", "call_budget",

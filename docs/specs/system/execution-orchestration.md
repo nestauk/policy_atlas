@@ -132,14 +132,34 @@ quality/latency/filtering/scale/operability.
 
 ## Steering modes & the routing rule
 
-**Steering mode** = a per-run dial for involvement *frequency* (mutable mid-run; check-ins
-suppressible) — **Minimal** (runs to completion; substance still pauses) · **Moderate**
-(recommended default; pauses on important decisions) · **Frequent** (every section/block) ·
-**Unattended** (zero mid-run interaction; task 017 refinement, see below).
-*(UX label currently reads "Thorough" — sync; "thoroughness" is the separate depth axis, §5.)*
-Per-mode approval/recording guarantees (forecast/shape approval up front in every mode;
-per-commit approval in Frequent/Moderate; every commit recorded) — the **audit posture across
-the modes** — live in [plan-as-object.md](plan-as-object.md).
+*(Rewritten by task 024 — ADRs 0020–0023. The organising principle is the **decider dial**:
+every decision surfaces in the durable record; the steering mode never changes what is
+decided or what is visible — it moves the **decider** between the user and the orchestrator.)*
+
+**Steering mode** = a per-run **delegation posture** (mutable mid-run), answering "when
+should I come back to you?". Check-in *stream* ≠ pauses: progress check-ins stream (and
+persist as steering events) in every mode; the mode governs only what blocks and who
+answers. The four modes, with their user-facing labels:
+
+| Label ("When should I come back to you?") | Plan value | User decides live | Orchestrator decides (recorded + flagged) |
+|---|---|---|---|
+| "Often — walk me through it" | `frequent` | everything (the watch only *recommends*) | nothing |
+| "At the key decisions" *(default)* | `moderate` | P2 + P3 + P4 always (the evidence base · the selection · the synthesis shape); P1 + watch escalations when fired | routine boundary residuals |
+| "Only if something needs my judgment" | `minimal` | fired triggers + watch-escalated substance | everything else, within the user's own surface |
+| "Never — here are my standing instructions" | `unattended` | nothing live | per the discretion model below |
+
+The pauses hang on the **steer-point lattice** (task 024): **P1** `search_exception`
+(after acquire, exception-only — fires on hard coverage triggers in every attended mode) ·
+**P2** `evidence_base_coverage` (before select — the full coverage picture, where adequacy
+is actually judgeable) · **P3** `deepening_selection` (after select, with a selection
+preview) · **P4** `synthesis_shape` (before synthesise, with the proposal). Every pause
+presents the canonical floor options + orchestrator-authored run-specific options + free
+text through the router; every pause and decision is a durable steering event keyed to the
+walk's `capability_run` identity. Named behaviour change (024): **Minimal is now
+fired-only at every lattice point** — the as-built 017 behaviour paused unconditionally at
+deepening-selection; Minimal's guarantee is the enlarged structural trigger floor, not a
+fixed pause. Per-mode approval/recording guarantees — the **audit posture across the
+modes** — live in [plan-as-object.md](plan-as-object.md).
 
 **The routing rule** — when a run hits something the plan didn't anticipate, route to *pause &
 ask* / *flag & continue* / *silently log & continue*, by **kind of decision × mode**:
@@ -148,40 +168,69 @@ ask* / *flag & continue* / *silently log & continue*, by **kind of decision × m
 |---|---|---|---|---|
 | Method — within a declared escape hatch | log + continue | log + continue | flag + continue | pause |
 | Method — outside the hatch envelope | flag + continue | flag + continue | pause | pause |
-| **Substance — declared gate *or* conclusion-shaping residual** | **pre-declared visible default, flagged** | **pause** | **pause** | **pause** |
+| **Substance — declared gate *or* conclusion-shaping residual** | **standing rule, else watch discretion (flagged loudest)** | **pause** | **pause** | **pause** |
 
-- **Firm principle: substance escalates to a human in *every* mode** — and a substance check-in
-  can **never** be silenced by the frequency dial or a suppression rule (hard-constrained).
-- **Unattended — the pre-declared-visible-defaults path** *(task 017 refinement; the firm
-  principle's accountability purpose preserved, its mechanism generalised)*: the run never
-  pauses. Instead, each **anticipated** steer-point's default resolution is **visible plan
-  content approved with the plan** — a pre-declarable rule per steer-point *class* (e.g. "on
-  any deepening-selection trigger: proceed as proposed and flag"), never a
-  runtime-data-specific answer (trigger data such as cluster names exists only after the
-  component runs, so every rule must be checkable at approval time). Approving/starting the
-  run is the consent; nothing extra is asked. Every auto-resolution is **flagged, collated
-  into the end-of-run review, and marked on the run record** — the human substance decision
-  still happens and is still attributable; it moves from run-time to plan-time. Substance is
-  therefore *never silent* in any mode, but no longer always *live*: an **unanticipated**
-  substance residual (no pre-declared rule covers it) resolves to the safe declared default
-  (proceed-and-flag) and is flagged as `unconfigured_default` — the loudest flag class,
-  reviewed first in the collation.
-- **Classification is resolved structurally, not by a from-scratch runtime judgement**: substance
-  is pre-declared as **anticipated mandatory checkpoints** (§4 — unconditional gates *or*
-  conditional steer-points with explicit escalation triggers); sanctioned method is pre-declared
-  as **escape hatches**. The residual = **agent judgement calls** (broader than "would the
-  conclusion change?" — covers emphasis/prioritisation/interpretation/downstream use;
-  **bias-to-escalate when substance-or-unsure**), each emitting a durable **`agent_judgement_routed`
-  governance event** (so even "method, continue" is reviewable/sampleable). ⏸ no first-principles
-  runtime classifier and **no pre-enumerated judgement taxonomy** (brittle, falsely complete) —
-  the event stream is the evidence base for later gates/hatches. Known residual-of-the-residual:
-  **under-emission**, now measurable by sampling traces.
-- **Minimal flags are batch-active, passively-live** — no mid-run interrupt; collated into the
-  end-of-run review. **Checkpoints are steer-points, not approve/reject** (the user injects
-  reasoning, reshapes output, overrides a verdict since rejected alternatives are visible).
-- **Human substance enters two ways**: steering at check-ins, and human-authored/amended
-  artefact content — both represented honestly in provenance (never paraphrase-laundered into
-  agent-attributed text).
+- **Firm principle, restated for the decider dial: substance is never silent in any mode.**
+  A substance decision always surfaces in the durable record with its decider attributed
+  (`decided_by: user | orchestrator | standing_default`); the dial can move the decider,
+  never the visibility. The **structural trigger floor is never suppressible** — declared
+  triggers fire deterministically regardless of the watch's judgement, which can add
+  escalations but never remove one.
+- **The orchestrator watch — the decider layer** *(024; discharges this spec's former
+  "⏸ no first-principles runtime classifier" deferral — see below)*: one orchestrator
+  agent, three moments (the planning conversation · the free-text steering **router** at
+  pauses · the boundary **watch**), one prompt family, one shared session. The watch
+  observes component boundaries under **structurally gated invocation**: clean boundaries
+  are resolved deterministically (a no-LLM `agent_judgement_routed` `clean_boundary`
+  event); anomalous check-ins get a mini-class notable-or-not triage (mistakes bias upward
+  — substance-or-unsure always promotes to decision-point treatment); decision points get
+  a single-shot judgment-class deliberation over a pre-fetched **bundle** built under the
+  option-completeness rule, with a capped read-tool fallback (bounded, allowlisted,
+  every call + digest evented). Where the mode delegates, the watch decides **in loco
+  user, within the user's own surface** — the same options and free-text grammar,
+  compiled through the same author-blind fail-closed parsers — attributed, flagged, and
+  overridable at any attended pause. **Authority order is fixed regardless of author:
+  user > declared rules > orchestrator.** Replacement re-runs bias-to-escalate in
+  attended modes (they change what everything downstream sees); additive re-runs are
+  self-decidable where the mode delegates. Fail-safe: a watch or router failure degrades
+  to the deterministic floor (structural routing, canonical menu) — the run never depends
+  on the judgement layer being up.
+- **Unattended — discretion is the mode** *(024 revision of the 017 proceed-and-flag
+  mechanism)*: choosing Unattended **is** the delegation. Standing instructions are
+  pre-declared per steer point as visible plan content (authored in the planning
+  conversation: the planner walks the steer points proposing plain-language defaults —
+  accepted, edited, or skipped), and a **pinned rule always overrides the watch**; a
+  declared hard stop is always honoured — discretion can never override a declared stop.
+  A decision no pinned rule covers is taken by the watch under the disciplines above and
+  flagged **`unconfigured_default` — the loudest flag class, reviewed first in the
+  collation** (retained from the 017 design; what changed is the resolver: watch
+  discretion with recorded reasoning replaces the blanket proceed-and-flag, so the FOI
+  record carries *why*, not just *that*). Approving the plan is the consent; every
+  auto-resolution is flagged, collated into the end-of-run review, and marked on the run
+  record.
+- **The classifier deferral, discharged honestly** *(the former ⏸)*: classification is
+  still resolved structurally first — substance as **anticipated mandatory checkpoints**
+  (§4), sanctioned method as **escape hatches**, and the deterministic routing table above
+  intact. What 024 adds is an **additive, floor-bounded, non-taxonomic judgement layer**
+  over the residual: the watch triages what structure did not resolve, biased to
+  escalate, with every verdict emitting a durable **`agent_judgement_routed`** governance
+  event (so even "clean boundary, continue" is reviewable). There is still **no
+  pre-enumerated judgement taxonomy** — completeness beyond the cheap-and-persisted
+  trigger floor is the watch's residual coverage, and the event stream remains the
+  evidence base for later gates/hatches. Known residual-of-the-residual: **under-emission**,
+  measurable by sampling traces; plus the named LLM→LLM channel — watch-authored text
+  entering downstream prompts in delegated modes has no confirm gate; its controls are
+  attribution, loudest-first flags, author-blind compilation, and user override at any
+  attended pause (an eval measurement, not a silent assumption — ADR 0021).
+- **Minimal flags are batch-active, passively-live** — no mid-run interrupt; collated into
+  the end-of-run review. **Checkpoints are steer-points, not approve/reject** (the user
+  injects reasoning, reshapes output, overrides a verdict since rejected alternatives are
+  visible). Every re-run option declares its mode — **additive** (grows the evidence base;
+  prior outputs stand) vs **replacement** (redoes and supersedes; rows immutable, the
+  walk's reference moves — superseded, never deleted).
+- **Human substance enters two ways**: steering at check-ins (verbatim `user_text` on the
+  decision event — prose is data, never paraphrase-laundered), and human-authored/amended
+  artefact content — both represented honestly in provenance.
 
 ## Durability & concurrency
 

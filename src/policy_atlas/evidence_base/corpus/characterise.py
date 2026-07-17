@@ -12,7 +12,9 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.embeddings import EMBEDDING_PROFILE, UNIT_POLICY
+from policy_atlas.core.prompt_fields import parse_guidance_channel
 from policy_atlas.core.schema import (
+    DIRECTIVE_STRING_MAX,
     characterisation_result,
     chunk_embedding,
     project_source_snapshot,
@@ -51,6 +53,64 @@ log = structlog.get_logger()
 
 _UNKNOWN_EVIDENCE_TYPE = "Unknown / Insufficient information"
 
+# D9/B5 (024 steering surface): characterise's first directive parser.
+# ``themes``: fewer|standard|more scales the derived theme-count bounds;
+# "standard"/absent is byte-identical to as-built (guard-tested).
+# ``guidance``: the shared Family B channel shape, into the theme-DISCOVERY
+# prompt only.
+THEMES_VALUES = ("fewer", "standard", "more")
+THEMES_MULTIPLIERS: dict[str, float] = {"fewer": 0.5, "standard": 1.0, "more": 2.0}
+
+
+class CharacteriseDirectiveError(ValueError):
+    """Malformed ``context["characterise"]`` directive; characterise fails closed."""
+
+
+def _parse_characterise_directive(raw: Any) -> tuple[str, list[str] | None]:
+    """Parse ``context["characterise"]``, characterise's first directive parser.
+
+    Grammar: ``{themes?: "fewer"|"standard"|"more", guidance?: [str, ...]}``.
+    Unknown keys reject. ``guidance`` follows the shared Family B shape
+    (``parse_guidance_channel``): 1-5 non-empty, bounded, control-character-free
+    strings.
+
+    Args:
+        raw: The ``context["characterise"]`` object, or ``None``.
+
+    Returns:
+        ``(themes, guidance)`` — ``themes`` defaults to ``"standard"``
+        (byte-identical to as-built); ``guidance`` is ``None`` when absent.
+
+    Raises:
+        CharacteriseDirectiveError: On any malformed shape.
+    """
+    if raw is None:
+        return "standard", None
+    if not isinstance(raw, dict):
+        raise CharacteriseDirectiveError("characterise directive must be an object")
+    unknown = set(raw) - {"themes", "guidance"}
+    if unknown:
+        raise CharacteriseDirectiveError("characterise directive contains unknown keys")
+
+    themes = "standard"
+    if "themes" in raw:
+        raw_themes = raw["themes"]
+        if not isinstance(raw_themes, str) or raw_themes not in THEMES_VALUES:
+            raise CharacteriseDirectiveError(
+                f"characterise directive themes must be one of {THEMES_VALUES}"
+            )
+        themes = raw_themes
+
+    guidance: list[str] | None = None
+    if "guidance" in raw:
+        guidance = parse_guidance_channel(
+            raw["guidance"],
+            error=CharacteriseDirectiveError,
+            max_chars=DIRECTIVE_STRING_MAX,
+        )
+
+    return themes, guidance
+
 
 @dataclass(frozen=True)
 class CharacteriseContext:
@@ -59,7 +119,9 @@ class CharacteriseContext:
     Attributes:
         scope_id: The evidence scope whose screened-in corpus is characterised.
         intent: The evidence-scope intent used to ground thematic grouping.
-        context: Scope context JSONB, carried for signature parity with peers.
+        context: Scope context JSONB, optionally carrying
+            ``{"characterise": {"themes": "fewer"|"standard"|"more",
+            "guidance": [str, ...]}}`` (D9/B5, 024 steering surface).
     """
 
     scope_id: uuid.UUID
@@ -112,9 +174,16 @@ class ScreenedSource:
 
 
 class _CharacteriseClusteringBackend(ClusteringBackend):
-    def __init__(self, backend: ThemeGroupingBackend, *, intent: str) -> None:
+    def __init__(
+        self,
+        backend: ThemeGroupingBackend,
+        *,
+        intent: str,
+        guidance: list[str] | None = None,
+    ) -> None:
         self._backend = backend
         self._intent = intent
+        self._guidance = guidance
 
     def discover(
         self,
@@ -129,6 +198,7 @@ class _CharacteriseClusteringBackend(ClusteringBackend):
             intent=self._intent,
             min_themes=min_labels,
             max_themes=max_labels,
+            guidance=self._guidance,
         )
         return _labels_from_themes(themes), usage
 
@@ -485,10 +555,32 @@ def _doc_for_grouping(source: ScreenedSource) -> GroupingDoc:
     return {"id": str(source.pss_id), "title": title, "abstract": abstract}
 
 
-def _theme_bounds(n: int) -> tuple[int, int]:
+def _theme_bounds(n: int, *, themes: str = "standard") -> tuple[int, int]:
+    """Derive theme-count bounds for one characterise run.
+
+    D9 (024 steering surface): ``themes`` scales the as-built derived bounds —
+    "fewer" halves and "more" doubles both bounds (rounded); "standard" (the
+    default) is byte-identical to as-built. The hard floors respected after
+    scaling are the same ones the unscaled bounds already enforce: never fewer
+    than 1 theme, and never more themes than there are documents (``n``).
+
+    Args:
+        n: Number of documents being characterised.
+        themes: D9 ``characterise.themes`` value.
+
+    Returns:
+        ``(min_themes, max_themes)``.
+    """
     min_themes = theme_grouping.MIN_THEMES if n >= theme_grouping.MIN_THEMES else 1
     max_themes = min(n, theme_grouping.MAX_THEMES)
-    return min_themes, max_themes
+    if themes == "standard":
+        return min_themes, max_themes
+    multiplier = THEMES_MULTIPLIERS[themes]
+    scaled_min = max(1, min(n, round(min_themes * multiplier)))
+    scaled_max = max(1, min(n, round(max_themes * multiplier)))
+    if scaled_min > scaled_max:
+        scaled_min = scaled_max
+    return scaled_min, scaled_max
 
 
 def _call_budget(n: int) -> tuple[int, int, int]:
@@ -507,14 +599,16 @@ def _cluster_characterise_docs(
     docs: list[GroupingDoc],
     intent: str,
     coverage: dict[str, Any],
+    themes: str = "standard",
+    guidance: list[str] | None = None,
 ) -> ClusteringResult:
-    min_themes, max_themes = _theme_bounds(len(docs))
+    min_themes, max_themes = _theme_bounds(len(docs), themes=themes)
     _, baseline, maximum = _call_budget(len(docs))
     log.info("characterise.call_budget", baseline=baseline, maximum=maximum)
     try:
         return cluster_units(
             [ClusterUnit(unit_id=doc["id"], payload=doc) for doc in docs],
-            backend=_CharacteriseClusteringBackend(backend, intent=intent),
+            backend=_CharacteriseClusteringBackend(backend, intent=intent, guidance=guidance),
             policy=_characterise_clustering_policy(
                 min_themes=min_themes,
                 max_themes=max_themes,
@@ -572,6 +666,8 @@ def _grouping_provenance(
     discovery_retries_used: int,
     repair_calls_used: int,
     discovery_rejections: list[str],
+    themes: str = "standard",
+    guidance: list[str] | None = None,
 ) -> dict[str, Any]:
     model = theme_grouping.DISCOVERY_MODEL if backend.mode == "live" else "stub"
     assignment_model = theme_grouping.ASSIGNMENT_MODEL if backend.mode == "live" else "stub"
@@ -586,6 +682,11 @@ def _grouping_provenance(
         "discovery_rejections": discovery_rejections,
         "repair_calls_used": repair_calls_used,
         "backend_mode": backend.mode,
+        # D9/B5 (024 steering surface): executed themes bound directive and
+        # guidance, echoed verbatim — "standard"/absent are byte-identical to
+        # as-built.
+        "themes": themes,
+        "guidance": list(guidance) if guidance else None,
     }
 
 
@@ -690,9 +791,14 @@ def characterise_scope(
         Landscape summary payload for ``component.completed``.
 
     Raises:
+        CharacteriseDirectiveError: If ``context.context["characterise"]`` is
+            malformed.
         CharacteriseFailure: If discovery, assignment repair, call budget or the
             grouping count invariant fails after coverage has been computed.
     """
+    themes_directive, guidance = _parse_characterise_directive(
+        context.context.get("characterise")
+    )
     coverage, sources = _coverage(conn, project_id=project_id, context=context)
     docs = [_doc_for_grouping(source) for source in sources]
     n = len(docs)
@@ -712,6 +818,8 @@ def characterise_scope(
             docs=docs,
             intent=context.intent,
             coverage=coverage,
+            themes=themes_directive,
+            guidance=guidance,
         )
         themes = _themes_from_labels(clustering.labels)
         assignments = clustering.assignments
@@ -738,6 +846,8 @@ def characterise_scope(
         discovery_retries_used=discovery_retries_used,
         repair_calls_used=repair_calls_used,
         discovery_rejections=discovery_rejections,
+        themes=themes_directive,
+        guidance=guidance,
     )
     theme_payload = _theme_payload(themes, assignments)
     now = datetime.now(UTC)

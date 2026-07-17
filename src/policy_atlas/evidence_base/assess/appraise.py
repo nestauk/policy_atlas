@@ -6,6 +6,8 @@ rubric (v2's expert-calibrated five-point hierarchy carried forward). The steera
 plan-carried rubric and the full-text second pass are deferred seams.
 """
 
+import hashlib
+import json
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -16,6 +18,7 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.core import events
 from policy_atlas.core.schema import (
+    EVIDENCE_TYPES,
     project_source_snapshot,
     source_appraisal_result,
     source_classification_result,
@@ -55,6 +58,94 @@ _NON_EVIDENCE_TYPE = "Other (Non-evidence documents)"
 _UNKNOWN_TYPE = "Unknown / Insufficient information"
 
 
+class AppraiseDirectiveError(Exception):
+    """Malformed appraisal directive; appraise fails closed."""
+
+
+def _parse_appraisal_directive(raw: Any) -> dict[str, int]:
+    """Parse the scope-context appraisal directive into a partial rubric override.
+
+    Mirrors the select ``_parse_directive`` house pattern (unknown keys
+    rejected, types validated, fail-closed throughout). Grammar:
+    ``{rubric?: {evidence_type: tier}}``.
+
+    - Unknown top-level keys (anything but ``rubric``) reject.
+    - ``rubric``, when present, must be a non-empty partial map. Its keys
+      must be exact strings from ``EVIDENCE_TYPES`` (schema.py's closed
+      type vocabulary) — anything else rejects. Its values must be ints
+      1..5 — anything else (including bool, float, out-of-range) rejects.
+    - An empty ``rubric`` map rejects: a directive with no scoring effect
+      is meaningless and must not silently no-op.
+
+    Args:
+        raw: The ``context["appraisal"]`` object, or ``None``.
+
+    Returns:
+        The partial ``evidence_type -> tier`` override map. ``{}`` when no
+        directive is present (``raw`` is ``None`` or an empty object).
+
+    Raises:
+        AppraiseDirectiveError: On any malformed shape.
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise AppraiseDirectiveError("appraisal directive must be an object")
+    if not raw:
+        return {}
+    unknown = set(raw) - {"rubric"}
+    if unknown:
+        raise AppraiseDirectiveError("appraisal directive contains unknown keys")
+    if "rubric" not in raw:
+        return {}
+
+    rubric_raw = raw["rubric"]
+    if not isinstance(rubric_raw, dict) or not rubric_raw:
+        raise AppraiseDirectiveError("appraisal directive rubric must be a non-empty object")
+
+    override: dict[str, int] = {}
+    for evidence_type, tier in rubric_raw.items():
+        if evidence_type not in EVIDENCE_TYPES:
+            raise AppraiseDirectiveError(
+                "appraisal directive rubric contains an unknown evidence type"
+            )
+        if isinstance(tier, bool) or not isinstance(tier, int):
+            raise AppraiseDirectiveError("appraisal directive rubric tier must be an integer")
+        if not 1 <= tier <= 5:
+            raise AppraiseDirectiveError(
+                "appraisal directive rubric tier must be between 1 and 5"
+            )
+        override[evidence_type] = tier
+    return override
+
+
+def _derive_rubric_version(override: dict[str, int]) -> str:
+    """Derive the ``rubric_version`` for an (optionally overridden) rubric.
+
+    No override -> ``DEFAULT_RUBRIC_VERSION`` byte-identical (guard-tested).
+    An override derives ``f"{DEFAULT_RUBRIC_VERSION}+{hash8}"`` where
+    ``hash8`` is the first 8 hex characters of the sha256 digest of the
+    override's canonical JSON (``json.dumps(override, sort_keys=True,
+    separators=(",", ":"))``) — deterministic: the same override always
+    derives the same version string, and travels in every
+    ``source_appraisal_result.rubric_version`` row exactly as the base
+    version does today.
+
+    Args:
+        override: The partial ``evidence_type -> tier`` override map (``{}``
+            for no override).
+
+    Returns:
+        The ``rubric_version`` string to persist on every appraisal row
+        produced by this run.
+    """
+    if not override:
+        return DEFAULT_RUBRIC_VERSION
+    canonical_json = json.dumps(override, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()[:8]
+    return f"{DEFAULT_RUBRIC_VERSION}+{digest}"
+
+
 @dataclass
 class AppraiseContext:
     """Scope-level input to an appraise run.
@@ -76,8 +167,9 @@ class AppraiseResult:
 
     Attributes:
         quality_score: 1..5, 5 = strongest (v2 evidence-hierarchy rating).
-        rubric_version: Rubric that produced the score; always
-            DEFAULT_RUBRIC_VERSION in v3.0.
+        rubric_version: Rubric that produced the score; ``DEFAULT_RUBRIC_VERSION``
+            unless a scope-context ``appraisal.rubric`` override is in effect (D1),
+            in which case it is the derived ``f"{base}+{hash8}"`` version.
     """
 
     quality_score: int
@@ -94,16 +186,33 @@ def appraise_sources(
     """Appraise all classified evidence sources for a screening scope.
 
     Reads source_classification_result rows for the scope; for each whose
-    primary_evidence_type is in DEFAULT_RUBRIC, inserts one
+    primary_evidence_type is in the effective rubric's domain, inserts one
     source_appraisal_result row and emits a source.appraised event. Types
-    outside the rubric's domain (Non-evidence, Unknown) are skipped and
-    counted, never scored. Already-appraised rows are skipped (idempotent).
+    outside the effective rubric's domain are skipped and counted, never
+    scored. Already-appraised rows are skipped (idempotent).
+
+    D1 steering: ``context.context["appraisal"]`` may carry
+    ``{"rubric": {evidence_type: tier}}``, a partial override parsed
+    fail-closed by ``_parse_appraisal_directive``. The effective rubric is
+    DEFAULT_RUBRIC overlaid with the override (the override's types and
+    tiers win; unmentioned types keep their default tier); the effective
+    rubric's key set is this run's appraisability domain, so overriding a
+    normally non-appraisable type (e.g. "Other (Non-evidence documents)")
+    makes it scorable for this run — a deliberate consequence of the
+    override, not special-cased away. ``rubric_version`` is derived from the
+    override (``_derive_rubric_version``) and travels on every row this run
+    produces, exactly as the unversioned default does today. No override
+    reproduces today's behaviour byte-for-byte.
 
     Args:
         conn: Open database connection; all writes occur within its transaction.
         project_id: Owning project.
         run_id: The run recorded as appraised_by_run_id.
-        context: Scope-level input naming the classified set.
+        context: Scope-level input naming the classified set and optionally
+            carrying the appraisal directive.
+
+    Raises:
+        AppraiseDirectiveError: If ``context.context["appraisal"]`` is malformed.
 
     Returns:
         Counts: ``appraised`` (rows inserted this call), ``by_score`` (sparse,
@@ -115,6 +224,10 @@ def appraise_sources(
         Invariant: appraised + already_appraised + skipped_non_evidence +
         skipped_unknown + skipped_demoted = classification rows for the scope.
     """
+    rubric_override = _parse_appraisal_directive(context.context.get("appraisal"))
+    effective_rubric: dict[str, int] = {**DEFAULT_RUBRIC, **rubric_override}
+    rubric_version = _derive_rubric_version(rubric_override)
+
     scoped_classifications = (
         (source_classification_result.c.evidence_scope_id == context.scope_id)
         & (source_classification_result.c.project_id == project_id)
@@ -136,7 +249,7 @@ def appraise_sources(
             select(source_classification_result.c.primary_evidence_type, func.count())
             .where(scoped_classifications)
             .where(source_classification_result.c.primary_evidence_type.not_in(
-                list(DEFAULT_RUBRIC)
+                list(effective_rubric)
             ))
             .group_by(source_classification_result.c.primary_evidence_type)
         ).fetchall()
@@ -191,7 +304,7 @@ def appraise_sources(
         .where(effective.c.evidence_scope_id == context.scope_id)
         .where(effective.c.status == "relevant")
         .where(scoped_classifications)
-        .where(source_classification_result.c.primary_evidence_type.in_(list(DEFAULT_RUBRIC)))
+        .where(source_classification_result.c.primary_evidence_type.in_(list(effective_rubric)))
         .where(
             ~exists().where(
                 (source_appraisal_result.c.evidence_scope_id == context.scope_id)
@@ -210,7 +323,7 @@ def appraise_sources(
         select(func.count())
         .select_from(source_classification_result)
         .where(scoped_classifications)
-        .where(source_classification_result.c.primary_evidence_type.in_(list(DEFAULT_RUBRIC)))
+        .where(source_classification_result.c.primary_evidence_type.in_(list(effective_rubric)))
         .where(
             ~exists()
             .where(effective.c.evidence_scope_id == context.scope_id)
@@ -236,8 +349,8 @@ def appraise_sources(
 
     for pss_id, snap_id, evidence_type in appraisable_rows:
         result = AppraiseResult(
-            quality_score=DEFAULT_RUBRIC[evidence_type],
-            rubric_version=DEFAULT_RUBRIC_VERSION,
+            quality_score=effective_rubric[evidence_type],
+            rubric_version=rubric_version,
         )
 
         appraisal_rows.append(

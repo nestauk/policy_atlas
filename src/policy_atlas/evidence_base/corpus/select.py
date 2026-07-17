@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -67,9 +67,20 @@ THIN_BASE_FLOOR = 10
 THIN_FULL_TEXT_SHARE = 0.5
 NON_EVIDENCE_TYPE = "Other (Non-evidence documents)"
 
-_DIRECTIVE_KEYS = {"budget", "must_include_ids", "boosts", "weight_emphasis", "priority_strata"}
+_DIRECTIVE_KEYS = {
+    "budget",
+    "must_include_ids",
+    "boosts",
+    "weight_emphasis",
+    "priority_strata",
+    "strata_scope",
+    "exclude_ids",
+}
 _BOOST_KEYS = {"match", "weight"}
 _REASON_ORDER = ("must_include", "breadth_floor", "ranked")
+# D6/D7 (024 steering surface): bounded list sizes for the new directive keys.
+STRATA_SCOPE_LIST_MAX = 20
+EXCLUDE_IDS_MAX = 50
 
 
 class SelectError(Exception):
@@ -146,6 +157,20 @@ class _Boost:
 
 
 @dataclass(frozen=True)
+class _StrataScope:
+    """D6 ``selection.strata_scope`` — validated stratum-eligibility filter.
+
+    Attributes:
+        mode: ``"only"`` (allow-list) or ``"exclude"`` (deny-list) — mutually
+            exclusive by construction (the parser accepts exactly one).
+        names: Bounded, non-empty list of stratum names.
+    """
+
+    mode: str
+    names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SelectionDirective:
     """Validated selection directive.
 
@@ -155,6 +180,10 @@ class SelectionDirective:
         boosts: Soft boost rules that multiply matched document composites.
         weight_emphasis: Multipliers for default signal weights.
         priority_strata: Soft priority patterns used only for trigger flags.
+        strata_scope: D6 stratum eligibility filter, or ``None`` (as-built:
+            every stratum eligible).
+        exclude_ids: D7 candidate ids removed from the selectable pool before
+            ranking — the complement of ``must_include_ids``.
     """
 
     budget: int = DEFAULT_SELECTION_BUDGET
@@ -162,6 +191,8 @@ class SelectionDirective:
     boosts: tuple[_Boost, ...] = ()
     weight_emphasis: dict[str, float] | None = None
     priority_strata: tuple[str, ...] = ()
+    strata_scope: _StrataScope | None = None
+    exclude_ids: tuple[uuid.UUID, ...] = ()
 
     def normalized(self) -> dict[str, Any]:
         """Return the executed directive as deterministic JSON-compatible data.
@@ -183,6 +214,12 @@ class SelectionDirective:
                 if signal in emphasis
             },
             "priority_strata": list(self.priority_strata),
+            "strata_scope": (
+                {self.strata_scope.mode: list(self.strata_scope.names)}
+                if self.strata_scope is not None
+                else None
+            ),
+            "exclude_ids": [str(pss_id) for pss_id in self.exclude_ids],
         }
 
 
@@ -420,6 +457,35 @@ def _parse_directive(raw: Any) -> tuple[SelectionDirective, str]:
             parsed_priority.append(pattern)
         priority_strata = tuple(parsed_priority)
 
+    strata_scope: _StrataScope | None = None
+    if "strata_scope" in raw:
+        strata_scope = _parse_strata_scope(raw["strata_scope"])
+
+    exclude_ids: tuple[uuid.UUID, ...] = ()
+    if "exclude_ids" in raw:
+        exclude_raw = raw["exclude_ids"]
+        if not isinstance(exclude_raw, list) or len(exclude_raw) > EXCLUDE_IDS_MAX:
+            _fail(
+                "selection directive exclude_ids must be a bounded list of at most "
+                f"{EXCLUDE_IDS_MAX} items"
+            )
+        parsed_exclude: list[uuid.UUID] = []
+        for item in exclude_raw:
+            item_string = _string_value(item, field="exclude id")
+            try:
+                parsed_exclude.append(uuid.UUID(item_string))
+            except ValueError as exc:
+                raise DirectiveError(
+                    "selection directive contains invalid exclude id"
+                ) from exc
+        exclude_ids = tuple(parsed_exclude)
+
+    if set(exclude_ids) & set(must_include_ids):
+        # D7: exclude_ids is the complement of must_include_ids — the same id
+        # in both is a contradictory directive, refused rather than silently
+        # resolved in either direction.
+        _fail("selection directive exclude_ids conflicts with must_include_ids")
+
     return (
         SelectionDirective(
             budget=budget,
@@ -427,9 +493,35 @@ def _parse_directive(raw: Any) -> tuple[SelectionDirective, str]:
             boosts=boosts,
             weight_emphasis=weight_emphasis,
             priority_strata=priority_strata,
+            strata_scope=strata_scope,
+            exclude_ids=exclude_ids,
         ),
         "scope_context",
     )
+
+
+def _parse_strata_scope(raw: Any) -> _StrataScope:
+    if not isinstance(raw, dict):
+        _fail("selection directive strata_scope must be an object")
+    keys = set(raw)
+    if keys not in ({"only"}, {"exclude"}):
+        _fail(
+            "selection directive strata_scope must contain exactly one of "
+            "'only' or 'exclude'"
+        )
+    mode = "only" if "only" in raw else "exclude"
+    raw_names = raw[mode]
+    if (
+        not isinstance(raw_names, list)
+        or not raw_names
+        or len(raw_names) > STRATA_SCOPE_LIST_MAX
+    ):
+        _fail(
+            f"selection directive strata_scope.{mode} must be a non-empty list "
+            f"of at most {STRATA_SCOPE_LIST_MAX} items"
+        )
+    names = tuple(_string_value(item, field=f"strata_scope.{mode} name") for item in raw_names)
+    return _StrataScope(mode=mode, names=names)
 
 
 def _effective_weights(directive: SelectionDirective) -> dict[str, float]:
@@ -640,11 +732,41 @@ def _largest_remainder_slots(
     return allocations
 
 
+def _resolve_strata_scope(
+    strata_scope: _StrataScope | None,
+    strata: Sequence[SelectionStratum],
+) -> tuple[set[str], list[str]]:
+    """Resolve D6's strata_scope against the actual stratum names present.
+
+    Args:
+        strata_scope: Validated D6 directive, or ``None`` (as-built: every
+            stratum eligible).
+        strata: Characterisation strata over the eligible candidates.
+
+    Returns:
+        ``(scoped_out_names, unmatched_names)``: the stratum names ineligible
+        for ranking, and any directive names matching no existing stratum
+        (flag-not-block — never fatal, matches the ``unmatched_boosts``
+        convention).
+    """
+    if strata_scope is None:
+        return set(), []
+    all_names = {stratum.name for stratum in strata}
+    requested = set(strata_scope.names)
+    unmatched = [name for name in strata_scope.names if name not in all_names]
+    if strata_scope.mode == "only":
+        scoped_out = {name for name in all_names if name not in requested}
+    else:
+        scoped_out = {name for name in all_names if name in requested}
+    return scoped_out, unmatched
+
+
 def _allocate(
     *,
     strata: Sequence[SelectionStratum],
     directive: SelectionDirective,
     selected_must_by_stratum: dict[str, set[uuid.UUID]],
+    scoped_out_names: Collection[str] = (),
 ) -> _Allocation:
     remaining_budget = directive.budget
     floor_slots = {stratum.name: 0 for stratum in strata}
@@ -653,6 +775,11 @@ def _allocate(
     for stratum in strata:
         if remaining_budget == 0:
             break
+        if stratum.name in scoped_out_names:
+            # D6: a scoped-out stratum gets no breadth-floor slot — its
+            # non-must-include candidates are ineligible for ranking, never
+            # silently competed for budget.
+            continue
         if not stratum.candidate_ids or selected_must_by_stratum[stratum.name]:
             continue
         floor_slots[stratum.name] = 1
@@ -660,6 +787,9 @@ def _allocate(
 
     capacities: dict[str, int] = {}
     for stratum in strata:
+        if stratum.name in scoped_out_names:
+            capacities[stratum.name] = 0
+            continue
         must_count = len(selected_must_by_stratum[stratum.name])
         capacities[stratum.name] = max(
             0,
@@ -955,6 +1085,7 @@ def _flags(
     signal_docs: dict[uuid.UUID, _SignalDoc],
     priority_matched_strata: set[str],
     must_include_out_of_scope: list[str],
+    must_include_stratum_scoped_out: Sequence[str] = (),
 ) -> dict[str, Any]:
     flags: dict[str, Any] = {}
     large_strata = [
@@ -977,6 +1108,12 @@ def _flags(
 
     if must_include_out_of_scope:
         flags["must_include_conflict"] = must_include_out_of_scope
+
+    if must_include_stratum_scoped_out:
+        # D6: a must_include doc whose stratum was scoped out by strata_scope
+        # is still selected (must-include always wins) — the conflict is
+        # flagged here, never silently dropped.
+        flags["must_include_stratum_scoped_out"] = list(must_include_stratum_scoped_out)
 
     sufficiently_confident = sum(
         1
@@ -1084,6 +1221,11 @@ def select_documents(
     selectable_ids = set(stratum_by_doc)
     not_in_characterisation = len(set(candidate_by_id) - selectable_ids)
 
+    # D6: resolve strata_scope against the strata actually present.
+    scoped_out_names, unmatched_strata_scope = _resolve_strata_scope(
+        directive.strata_scope, ordered_strata
+    )
+
     # Out of scope = not selectable: not eligible, or eligible but absent from the
     # referenced characterisation (a must-include is never silently unselected).
     must_include_out_of_scope = [
@@ -1100,10 +1242,19 @@ def select_documents(
         if pss_id in selectable_ids:
             selected_must_by_stratum[stratum_by_doc[pss_id]].add(pss_id)
 
+    # D6: a must-include doc in a scoped-out stratum is still selected — the
+    # conflict is flagged, never silently dropped (see _flags below).
+    must_include_stratum_scoped_out = [
+        stratum.name
+        for stratum in ordered_strata
+        if stratum.name in scoped_out_names and selected_must_by_stratum[stratum.name]
+    ]
+
     allocation = _allocate(
         strata=ordered_strata,
         directive=directive,
         selected_must_by_stratum=selected_must_by_stratum,
+        scoped_out_names=scoped_out_names,
     )
     rankable_by_stratum = {
         stratum.name: [
@@ -1182,11 +1333,16 @@ def select_documents(
 
         unselected_count = len(stratum.candidate_ids) - len(selected_by_stratum[stratum.name])
         if unselected_count:
-            reason_class = (
-                "ranked_below_cut"
-                if allocation.ranked_slots[stratum.name] > 0
-                else "budget_exhausted"
-            )
+            if stratum.name in scoped_out_names:
+                # D6: the true reason non-must-include docs in a scoped-out
+                # stratum were excluded is the scope, not a ranking/budget cut.
+                reason_class = "stratum_scoped_out"
+            else:
+                reason_class = (
+                    "ranked_below_cut"
+                    if allocation.ranked_slots[stratum.name] > 0
+                    else "budget_exhausted"
+                )
             excluded_by_stratum[stratum.name] = {reason_class: unselected_count}
 
     priority_matched_strata, unmatched_priority_patterns = _priority_matches(
@@ -1201,6 +1357,7 @@ def select_documents(
         signal_docs=signal_docs,
         priority_matched_strata=priority_matched_strata,
         must_include_out_of_scope=must_include_out_of_scope,
+        must_include_stratum_scoped_out=must_include_stratum_scoped_out,
     )
 
     strata_summary: list[dict[str, Any]] = []
@@ -1236,6 +1393,7 @@ def select_documents(
         "recency_reference_year": reference_year,
         "unmatched_boosts": unmatched_boosts,
         "unmatched_priority_patterns": unmatched_priority_patterns,
+        "unmatched_strata_scope": unmatched_strata_scope,
         "backend_mode": backend_mode,
     }
     if strategy == "llm_rerank_v1":
@@ -1408,8 +1566,9 @@ def _assert_base_invariants(
     eligible: int,
     selected: Sequence[dict[str, Any]],
     not_selected: int,
+    excluded_by_directive: int = 0,
 ) -> None:
-    if screened_in != non_evidence + eligible:
+    if screened_in != non_evidence + eligible + excluded_by_directive:
         raise SelectError("selection invariant violated: screened base mismatch")
     if eligible != len(selected) + not_selected:
         raise SelectError("selection invariant violated: selected base mismatch")
@@ -1452,6 +1611,7 @@ def _empty_summary(
     directive: SelectionDirective,
     directive_source: str,
     ranking_backend: RankingBackend | None,
+    excluded_by_directive_ids: Sequence[uuid.UUID] = (),
 ) -> dict[str, Any]:
     provenance: dict[str, Any] = {
         "strategy_version": strategy,
@@ -1462,6 +1622,9 @@ def _empty_summary(
         "signal_availability": {signal: 0 for signal in DEFAULT_WEIGHTS},
         "unmatched_boosts": [boost.index for boost in directive.boosts],
         "unmatched_priority_patterns": list(directive.priority_strata),
+        "unmatched_strata_scope": (
+            list(directive.strata_scope.names) if directive.strata_scope is not None else []
+        ),
         "backend_mode": ranking_backend.mode if ranking_backend is not None else "none",
     }
     if strategy == "llm_rerank_v1":
@@ -1480,11 +1643,18 @@ def _empty_summary(
     return {
         "strata": [],
         "selected": {"count": 0, "by_reason": {}},
-        "excluded": {"by_stratum_reason_counts": {}, "notable": []},
+        "excluded": {
+            "by_stratum_reason_counts": {},
+            "notable": [
+                {"pss_id": str(pss_id), "flag": "excluded_by_directive"}
+                for pss_id in excluded_by_directive_ids
+            ],
+        },
         "base": {
             "screened_in": screened_in,
             "non_evidence": non_evidence,
             "eligible": 0,
+            "excluded_by_directive": len(excluded_by_directive_ids),
         },
         "characterisation_run_id": str(characterisation_run_id),
         "flags": {"empty_scope": {"eligible": 0}},
@@ -1520,13 +1690,24 @@ def select_scope(
     strategy = "llm_rerank_v1" if ranking_backend is not None else "coverage_stratified_v1"
     directive, directive_source = _parse_directive(context.context.get("selection"))
     candidates = screened_sources(conn, project_id=project_id, scope_id=context.scope_id)
-    eligible_sources = [
+    non_evidence_free = [
         source
         for source in candidates
         if source.primary_evidence_type != NON_EVIDENCE_TYPE
     ]
+    # D7: exclude_ids removes named docs from the selectable pool before strata
+    # are even loaded (_load_strata filters candidate_ids to eligible_ids, so
+    # an excluded doc drops out of every stratum too) — the complement of
+    # must_include_ids (contradiction already fail-closed at parse time).
+    exclude_ids = set(directive.exclude_ids)
+    excluded_by_directive_sources = [
+        source for source in non_evidence_free if source.pss_id in exclude_ids
+    ]
+    eligible_sources = [
+        source for source in non_evidence_free if source.pss_id not in exclude_ids
+    ]
     screened_in = len(candidates)
-    non_evidence = screened_in - len(eligible_sources)
+    non_evidence = screened_in - len(non_evidence_free)
     if not eligible_sources:
         return _empty_summary(
             screened_in=screened_in,
@@ -1536,6 +1717,7 @@ def select_scope(
             directive=directive,
             directive_source=directive_source,
             ranking_backend=ranking_backend,
+            excluded_by_directive_ids=[source.pss_id for source in excluded_by_directive_sources],
         )
 
     tags_by_pss = _tags_by_source(
@@ -1560,14 +1742,20 @@ def select_scope(
         intent=context.intent,
         ranking_backend=ranking_backend,
     )
+    excluded_by_directive = len(excluded_by_directive_sources)
     base = {
         "screened_in": screened_in,
         "non_evidence": non_evidence,
         "eligible": len(eligible_sources),
+        "excluded_by_directive": excluded_by_directive,
     }
     excluded = {
         "by_stratum": outcome.excluded_by_stratum,
-        "notable": outcome.notable_exclusions,
+        "notable": outcome.notable_exclusions
+        + [
+            {"pss_id": str(source.pss_id), "flag": "excluded_by_directive"}
+            for source in excluded_by_directive_sources
+        ],
         "base": {
             **base,
             "not_in_characterisation": outcome.not_in_characterisation,
@@ -1583,6 +1771,7 @@ def select_scope(
         eligible=len(eligible_sources),
         selected=outcome.selected,
         not_selected=not_selected,
+        excluded_by_directive=excluded_by_directive,
     )
     provenance = _selection_provenance(
         strategy=strategy,

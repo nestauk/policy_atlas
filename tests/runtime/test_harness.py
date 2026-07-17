@@ -14,6 +14,7 @@ from policy_atlas.core.schema import artefact, project, runs
 from policy_atlas.evidence_base.corpus.theme_grouping import StubThemeGroupingBackend
 from policy_atlas.evidence_base.synthesis.grounding_judge import StubGroundingJudgeBackend
 from policy_atlas.evidence_base.synthesis.synthesis_backend import StubSynthesisBackend
+from policy_atlas.runtime import harness
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.run_spec import Plan, compile
 from tests.evidence_base.corpus.test_characterise import _RaisingDiscoverBackend, _seed_doc
@@ -104,11 +105,21 @@ def test_run_harness_binds_project_run_component_contextvars(conn: Connection) -
         mode = "stub"
 
         def discover(
-            self, docs: list[Any], *, intent: str, min_themes: int, max_themes: int
+            self,
+            docs: list[Any],
+            *,
+            intent: str,
+            min_themes: int,
+            max_themes: int,
+            guidance: list[str] | None = None,
         ) -> Any:
             seen_contextvars.update(structlog.contextvars.get_contextvars())
             return StubThemeGroupingBackend().discover(
-                docs, intent=intent, min_themes=min_themes, max_themes=max_themes
+                docs,
+                intent=intent,
+                min_themes=min_themes,
+                max_themes=max_themes,
+                guidance=guidance,
             )
 
         def assign(self, batch: list[Any], *, themes: list[Any]) -> Any:
@@ -203,6 +214,46 @@ def test_failed_characterise_emits_component_failed_with_coverage(conn: Connecti
     assert "coverage" in cf["payload"], (
         "persisted coverage must appear in component.failed audit event"
     )
+
+
+def test_component_failed_persists_structured_exception_reason(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review fix D (harness.py ~171): a sources_fn raising a structured
+    exception with a ``.reason`` attribute (e.g. ``ScreenSupersessionError``'s
+    ``stage2_supersession_collision``) must have that reason persisted onto
+    the ``component.failed`` event — flattening to ``str(exc)`` alone would
+    make a halt-and-re-gate undiagnosable from the record (the 013 rule: a
+    persisted rejection must persist its reason)."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    config = compile(Plan(component="screen", evidence_scope_id=scope_id))
+
+    events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
+    events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
+
+    class _ReasonedError(RuntimeError):
+        reason = "stage2_supersession_collision"
+
+    def failing_screen_sources(
+        conn: Connection,
+        *,
+        project_id: uuid.UUID,
+        run_id: uuid.UUID,
+        context: Any,
+        screening_backend: Any = None,
+    ) -> dict[str, Any]:
+        del conn, project_id, run_id, context, screening_backend
+        raise _ReasonedError("forced supersession collision")
+
+    monkeypatch.setattr(harness, "screen_sources", failing_screen_sources)
+
+    run_harness(conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider())
+
+    event_log = events.read(conn, pid)
+    cf = next(e for e in event_log if e["event_type"] == "component.failed")
+    assert cf["payload"]["error"] == "forced supersession collision"
+    assert cf["payload"]["reason"] == "stage2_supersession_collision"
 
 
 def test_event_log_five_types_in_order(conn: Connection) -> None:
