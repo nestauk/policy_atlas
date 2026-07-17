@@ -495,6 +495,7 @@ def acquire_sources(
     depth: str = "rapid",
     scope_wire_params: dict[str, Any] | None = None,
     wall_clock_breached: bool = False,
+    search_guidance: list[str] | None = None,
 ) -> dict[str, Any]:
     """Acquire metadata-only sources for an evidence scope over the given backends.
 
@@ -521,6 +522,9 @@ def acquire_sources(
             fan-out's honest stop-grain signal, mirroring the deep loop's
             ``budget_exhausted``). Ignored when ``any_error`` is true — an
             error stop is always reported as ``'error'``.
+        search_guidance: B1 (024 steering surface) executed ``search.guidance``
+            list, echoed verbatim onto ``search_coverage_record.scope_filters``
+            as a sibling ``guidance`` key when present.
 
     Returns:
         Counts dict: ``acquired``, ``already_acquired``, ``skipped_unusable``,
@@ -834,6 +838,8 @@ def acquire_sources(
     ]
     if post_filter_exclusions:
         coverage_scope_filters["post_filter_exclusions"] = post_filter_exclusions
+    if search_guidance:
+        coverage_scope_filters["guidance"] = list(search_guidance)
 
     coverage_record_id = uuid.uuid4()
     conn.execute(

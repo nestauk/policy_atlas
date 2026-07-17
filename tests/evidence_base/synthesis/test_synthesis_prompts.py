@@ -42,7 +42,7 @@ from policy_atlas.evidence_base.synthesis.synthesis_tools import (
 
 def test_prompt_versions_are_distinct_constants() -> None:
     assert SECTIONS_PROMPT_VERSION == "synthesise_sections_v2"
-    assert SECTION_PROMPT_VERSION == "synthesise_section_v7"
+    assert SECTION_PROMPT_VERSION == "synthesise_section_v8"
     assert JUDGE_PROMPT_VERSION == "grounding_judge_v2"
     assert ENVELOPE_VERSION == "synthesis_envelope_v2"
 

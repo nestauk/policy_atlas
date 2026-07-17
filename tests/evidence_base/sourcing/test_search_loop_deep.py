@@ -17,6 +17,7 @@ from sqlalchemy.engine import Connection
 from policy_atlas.core import events
 from policy_atlas.core.inference import StubEchoProvider
 from policy_atlas.core.schema import (
+    evidence_scope,
     project_source_snapshot,
     search_coverage_record,
     source_screening_result,
@@ -1172,6 +1173,177 @@ def test_run_deep_rounds_target_reached_stop_finalises_latest_row(
     assert rows[0].stop_condition == "target_reached"
     assert summary["stop_condition"] == "target_reached"
     assert summary["overlay_applied"] is False
+
+
+def test_run_deep_rounds_target_override_honoured(conn: Connection) -> None:
+    """D5 search.target: a lower override stops the loop the as-built default would not.
+
+    Only 5 confident-relevant docs are seeded — well below
+    TARGET_CONFIDENT_RELEVANT (20) — so the as-built default would not stop
+    on "target_reached" here; passing target=5 does.
+    """
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    override_target = 5
+    for index in range(override_target):
+        _seed_screened_source(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            scope_id=scope_id,
+            title=f"Override relevant {index}",
+            confidence=CONFIDENT_FLOOR,
+        )
+    acquire_round, screen_round, coverage_run_ids = _scripted_round_runner(
+        conn,
+        project_id=project_id,
+        scope_id=scope_id,
+        docs_screened=[0],
+        new_confident=[0],
+        coverage_start=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+    summary = run_deep_rounds(
+        conn,
+        project_id=project_id,
+        scope_id=scope_id,
+        acquire_round=acquire_round,
+        screen_round=screen_round,
+        start_round=2,
+        clock=_fixed_clock([0.0, 0.0, 1.0, 1.0]),
+        target=override_target,
+    )
+
+    rows = _coverage_rows(conn, project_id)
+    assert len(rows) == 1
+    assert coverage_run_ids == [rows[0].acquired_by_run_id]
+    assert rows[0].stop_condition == "target_reached"
+    assert summary["stop_condition"] == "target_reached"
+    assert summary["target_confident_relevant"] == override_target
+    assert summary["overlay_applied"] is False
+
+
+def test_run_deep_rounds_default_target_is_as_built_constant(conn: Connection) -> None:
+    """Absent target ≡ as-built: run_deep_rounds' default equals TARGET_CONFIDENT_RELEVANT."""
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    for index in range(TARGET_CONFIDENT_RELEVANT):
+        _seed_screened_source(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            scope_id=scope_id,
+            title=f"Default target relevant {index}",
+            confidence=CONFIDENT_FLOOR,
+        )
+    acquire_round, screen_round, _coverage_run_ids = _scripted_round_runner(
+        conn,
+        project_id=project_id,
+        scope_id=scope_id,
+        docs_screened=[0],
+        new_confident=[0],
+        coverage_start=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+    summary = run_deep_rounds(
+        conn,
+        project_id=project_id,
+        scope_id=scope_id,
+        acquire_round=acquire_round,
+        screen_round=screen_round,
+        start_round=2,
+        clock=_fixed_clock([0.0, 0.0, 1.0, 1.0]),
+    )
+
+    assert summary["stop_condition"] == "target_reached"
+    assert summary["target_confident_relevant"] == TARGET_CONFIDENT_RELEVANT
+
+
+# --- B1 search.guidance: query generation + provenance echo ---
+
+
+def test_search_guidance_flows_to_query_generation_and_provenance(conn: Connection) -> None:
+    """B1 behavioural + isolation: search.guidance reaches query GENERATION
+    (QueriesPayload) and is echoed verbatim onto
+    search_coverage_record.scope_filters — never rewriting evidence_scope
+    itself (run_search takes an in-memory AcquireContext, never the row)."""
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    intent = "Evaluate home energy retrofit grants."
+    guidance = ["prioritise UK policy evaluations", "avoid clinical literature"]
+    generation = ScriptedGenerationBackend(queries=[_wire_queries(["home energy retrofit"])])
+    openalex = ScriptedBackend(scripts={"search": [[oa_record("g1")]]})
+    overton = ScriptedBackend(name="overton", scripts={"search": [[ov_record("g1")]]})
+
+    run_search(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        context=AcquireContext(
+            scope_id=scope_id, intent=intent, context={"search": {"guidance": guidance}}
+        ),
+        backends=[openalex, overton],
+        generation_backend=generation,
+    )
+
+    assert generation.query_payloads[0].guidance == guidance
+
+    scope_filters = conn.execute(
+        select(search_coverage_record.c.scope_filters)
+        .where(search_coverage_record.c.project_id == project_id)
+        .where(search_coverage_record.c.evidence_scope_id == scope_id)
+    ).scalar_one()
+    assert scope_filters["guidance"] == guidance
+
+
+def test_search_guidance_absent_leaves_scope_filters_without_guidance_key(
+    conn: Connection,
+) -> None:
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    generation = ScriptedGenerationBackend(queries=[_wire_queries(["home energy retrofit"])])
+    openalex = ScriptedBackend(scripts={"search": [[oa_record("g2")]]})
+    overton = ScriptedBackend(name="overton", scripts={"search": [[ov_record("g2")]]})
+
+    run_search(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        context=_context(scope_id),
+        backends=[openalex, overton],
+        generation_backend=generation,
+    )
+
+    assert generation.query_payloads[0].guidance is None
+    scope_filters = conn.execute(
+        select(search_coverage_record.c.scope_filters)
+        .where(search_coverage_record.c.project_id == project_id)
+        .where(search_coverage_record.c.evidence_scope_id == scope_id)
+    ).scalar_one()
+    assert "guidance" not in scope_filters
+
+
+def test_search_guidance_leaves_evidence_scope_row_unchanged(conn: Connection) -> None:
+    """Isolation (mirrors the 017 screen-criteria precedent): a harness run
+    over an acquire component carrying search.guidance never rewrites the
+    evidence_scope row it read from."""
+    project_id, run_id = seed_project_and_run(conn)
+    directive = {"search": {"guidance": ["prioritise UK policy evaluations"]}}
+    scope_id = seed_scope(conn, project_id, context=directive)
+
+    config = compile(Plan(component="acquire", evidence_scope_id=scope_id))
+    events.append(conn, project_id=project_id, run_id=run_id, event_type="run.started", payload={})
+    events.append(
+        conn, project_id=project_id, run_id=run_id, event_type="plan.compiled", payload={}
+    )
+    run_harness(
+        conn, config=config, project_id=project_id, run_id=run_id, provider=StubEchoProvider()
+    )
+
+    row = conn.execute(
+        select(evidence_scope).where(evidence_scope.c.evidence_scope_id == scope_id)
+    ).one()
+    assert dict(row.context) == directive
 
 
 def test_run_deep_rounds_short_circuit_overlay_below_target(

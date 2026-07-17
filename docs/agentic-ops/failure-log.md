@@ -605,3 +605,40 @@ brief. Clean-tree discipline is the real control; the brief line is belt-and-bra
 
 **Rule:** never launch a write-capable codex job with uncommitted work in the tree —
 commit first, always.
+
+## 2026-07-16 — Parallel subagents in one shared checkout corrupted each other's suite evidence (task 024 build)
+
+**What happened:** Two build agents (Tasks 4/5 window) ran full-suite gates in the
+same working tree while the other was mid-edit; each saw the other's half-written
+files, so "suite green" claims from that window were unreliable and had to be re-run.
+The same hazard recurred at review time as transient shared-test-DB deadlocks when
+concurrent fix agents ran pytest simultaneously.
+
+**Root cause:** File-level mandates ("only edit X, Y") isolate *edits* but not
+*evidence* — a full-suite run reads the whole tree and the shared DB regardless.
+
+**Fix that worked (review stack, same slice):** file-disjoint mandates + each agent
+runs only its scoped tests; exactly one actor (the lead) runs the full gate, after
+all agents land. For genuinely parallel full-suite needs, per-agent worktrees are
+the honest tool.
+
+**Rule:** a subagent's full-suite claim is only evidence if nothing else was
+writing to the tree/DB during the run — scope agents to their own test files and
+reserve the full gate for the lead, or give each agent a worktree.
+
+## 2026-07-16 — Shared test DB state breaks migration-roundtrip tests two ways (task 024 build)
+
+**What happened:** Twice during the build (and once at review), migration
+roundtrip tests failed on downgrade check-constraint re-adds because interrupted
+runs had left orphaned project rows; separately, a roundtrip test that seeded via
+shared helpers broke when a helper later gained a new column that doesn't exist at
+the downgraded revision.
+
+**Root cause:** (a) `delete_project_data` lagging new FK-bearing tables
+(`capability_run`, `orchestration_plan` were both missing at some point) so
+interrupted tests leak rows the downgrade then trips over; (b) seeding
+pre-migration shapes through post-migration helpers.
+
+**Rule:** every new FK-bearing table lands in `delete_project_data` in the same
+phase as its migration; migration-roundtrip tests seed pre-migration shapes
+inline, never via shared helpers.

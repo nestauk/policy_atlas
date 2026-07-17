@@ -548,7 +548,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   are deliberately separate traces (B2 record), session-correlated — consider
   one conversation-root trace per orchestrate process with turn spans, or
   accept the session view as the grouping. Bounded telemetry rider; the
-  capability-run entity seam (§ Select) remains the structural home.
+  capability-run entity (§ Select) — **DISCHARGED task 024** — is now the
+  structural home; the trace-grouping work itself (turn-span consolidation)
+  remains open.
 
 - **EB artefact composition — LANDED with revised ownership (task 013, ADRs 0009 + 0010).**
   Synthesise (not the orchestrator) composes the one EB artefact at the run terminus —
@@ -645,10 +647,15 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   component), so its `embed:batchN` observations mint their own root traces — resolves
   with the upload audit-event seam below, which gives uploads their own observability
   surface.
-- **Steering modes / landscape→synthesis steer-point pause** — plan-as-object machinery;
-  the payload it relays (the structured landscape summary in `component.completed`) ships
-  now (contract decision 8). The deepening-selection steer-point's read surface followed
-  in task 010 (see the Select section).
+- **Steering modes / landscape→synthesis steer-point pause — DISCHARGED (task 017 shipped
+  the modes; task 024, 2026-07-16 shipped this exact pause).** The payload this entry
+  flagged (the structured landscape summary in `component.completed`) was always going
+  to ship (contract decision 8); the pause built on it is now P4 in 024's steer-point
+  lattice ("the synthesis shape", post-group/pre-synthesise, which subsumes the
+  post-characterise/landscape crossing when characterise is composed) — see the
+  "Re-grouping / steering UX" entry (§ Group). The deepening-selection steer-point's
+  read surface followed in task 010, then the pause itself in 017, then full
+  enrichment in 024 (see the Select section).
 - **Dual-view coverage** — corpus-view vs evidence-view distributions need the
   source/evidence policy object (contract decision 9); v3.0 ships single-view with the
   explicit `base` ladder and **no absence claims** (test-asserted).
@@ -669,13 +676,18 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Select (task 010 seams)
 
-- **Deepening-selection steer-point pause** — the mode-governed pause (Frequent/Moderate/
-  Minimal routing, escalation UX) is plan-as-object machinery; its **read surface shipped in
-  010**: the bidirectional rationale (always logged) and the computed trigger flags —
-  `large_stratum_excluded`, `priority_stratum_excluded` (the hardest: a user-nominated
-  stratum with zero selections), `must_include_conflict`, `thin_base` (honestly
-  stub-constant until the LLM screen tool lands), `thin_full_text` (extraction-shaping).
-  The pause slice reads these flags; no new signal computation needed.
+- **Deepening-selection steer-point pause — DISCHARGED (task 017; enriched task 024,
+  2026-07-16).** The mode-governed pause itself shipped in 017 as the *only* live
+  steer point in the system (the single-steer-point limitation this entry
+  originally described). 024's P3 ("deepening selection") enriches it in full:
+  the trigger set gains S0; the payload gains a **selection preview** (top
+  selected docs with strata/scores/reasons + notable exclusions); options gain
+  extraction profiles (ICF), re-extract refresh (D3), strata scoping (D6) and
+  doc exclusion (D7) alongside the five original options; combined free-text
+  asks compile through the router into one confirmed multi-lever delta. Original
+  read surface (bidirectional rationale + trigger flags — `large_stratum_excluded`,
+  `priority_stratum_excluded`, `must_include_conflict`, `thin_base`, `thin_full_text`,
+  as recorded at task 010) is unchanged and still the trigger substrate.
 - **Corpus-conditioned selection budget (owner, 2026-07-11, 018 review conversation)** —
   `ANALYSIS_DEPTH_TABLE`'s `selection_budget: 25` at deep is a plan-pinned cost CEILING
   (allocation fills up to it, capped by eligible capacity), not a quality judgment.
@@ -705,10 +717,18 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Cross-encoder relevance models (Cohere-class, available on Bedrock)** — they score
   query-relevance, not purpose-fit: recorded at the **`retrieve` seam** (retrieval's
   rerank upgrade), deliberately not select's.
-- **Capability-run entity** — a durable run spanning components (today one run = one
-  component execution; the chain order lives only in `skeleton.py`, the agent's stand-in).
-  The recorded Langfuse detached-trace warts (009's executor threads; 010's `rank:batch`
-  generation spans) are early symptoms of this gap; fix belongs here, not per-component.
+- **Capability-run entity — DISCHARGED (task 024, decision 2, 2026-07-16).** The
+  `capability_run` table shipped: `capability_run_id` · `project_id` ·
+  `evidence_scope_id` · `capability` · `plan_id`+`plan_version` at approval ·
+  `status` (running/succeeded/degraded/failed/aborted) · `session_id` (nullable,
+  the 025 anchor) · `started_at`/`ended_at`, plus nullable `runs.capability_run_id`
+  (composite FK). The runner opens/threads/closes the walk row across every
+  component execution in a run — the "one run = one component execution" gap
+  this entry described is closed. Deliberately not modelled: composition fields,
+  artefact back-refs (derivable), turn tables (still 025). The recorded Langfuse
+  detached-trace warts (009's executor threads; 010's `rank:batch` generation
+  spans) are unaffected by this entity alone — those need actual trace-grouping
+  work (§ Characterise, "Langfuse trace grouping").
 - **Policy soft-prior tilt** — integration shape recorded, not deferred-blind: when the
   source/evidence policy object lands, it **compiles into directive boosts**
   (provenance-stamped as policy-sourced), becoming one more directive author beside the
@@ -928,9 +948,13 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   carry per-kind member counts. The design property 012 shipped is now machinery.
   What remains deferred rides the EB-internals ICF entry (ICF facets, UNION view —
   Slice C).
-- **Re-grouping / steering UX** — a different facet is simply a new run with a different
-  directive (shipped semantics); mode-governed steer-points around grouping (pause,
-  re-group, facet-switch UX) are plan-as-object machinery at the standing steering seam.
+- **Re-grouping / steering UX — DISCHARGED (task 024, 2026-07-16).** A different facet
+  is still simply a new run with a different directive (shipped semantics,
+  unchanged). The mode-governed pause around grouping is now P4 ("the synthesis
+  shape", post-group/pre-synthesise): triggers from grouping per-facet flags;
+  options include only-these-themes / section edits, evidence-emphasis boosts,
+  re-group coarser/finer (D8 `grouping.granularity`), re-group with guidance
+  (B3 `grouping.guidance`), or as-proposed — routed through `propose_synthesis_plan`.
 - **Facet-theme promotion** (012 contract rev 1.2) — canonical/queryable facet groupings
   for downstream capability agents. The data-model's staged ladder: run-local (shipped —
   rung 1) → project-scoped persistent → graph datastore, gated on an
@@ -995,8 +1019,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   `propose_synthesis_plan` (no artefact minted, no rows written) + the deterministic
   fail-closed `compile_synthesis_directive` — an external caller collects the user's
   response out-of-band and submits the compiled directive on a later invocation.
-  Remaining seam: **mode-governed pause UX** (plan-as-object runtime pausing) stays
-  deferred.
+  Remaining seam **mode-governed pause UX — DISCHARGED (task 024, 2026-07-16)**: this
+  is P4 in the 024 steer-point lattice, live in-run (Moderate always pauses here);
+  see the "Re-grouping / steering UX" entry above.
 - **Selection prior at standard depth — DISCHARGED (task 019, owner
   amendment).** Select now runs at standard (plan-pinned budget 15); synthesise
   references it via `deepest_successful_reference`; prior + origin accounting
@@ -1149,7 +1174,12 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   `facet:gNN` ids, per-facet residuals/`groups_unsectioned`, one `fk_synr_grouping`
   untouched (ADR 0018). The GENERAL fan-in seam — (a) multi-reference consumers beyond
   grouping and (b) the capability-run entity + compile surface — stays deferred as
-  described above.
+  described above. **Update (task 024, 2026-07-16):** (b) the capability-run
+  entity itself is now **DISCHARGED** (decision 2, see the Select-section entry
+  above); its compile surface (a durable object expressing "this capability run
+  = characterise ×1, group ×2, synthesise ×1") is not built — the walk row
+  records identity/status, not composition. (a) multi-reference consumers
+  beyond grouping stays open exactly as described.
 - **Artefact capability-discriminator + versioning grain** — `synthesis_result` is the
   run-scoped roll-up pointing at its artefact; future capabilities mint artefacts into
   the same 001 substrate with their own roll-ups. The discriminator column and the
@@ -1220,7 +1250,12 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   artefact). Its drop-in seam is `runner.py::leg_directive(plan, step,
   upstream_state)` — v1 returns the composer's directive delta unchanged. Own
   slice, recommended post-eval (directive quality is unmeasurable before
-  evals). Contract rev 2c, user + lead converged.
+  evals). Contract rev 2c, user + lead converged. **Still open after task 024
+  (2026-07-16)** — the agent itself stays post-eval as pinned, but 024 built
+  its walk-forward sockets (author-blind compile, `authored_by`/`decided_by`
+  attribution, the authoring-seam protocol at the orchestrator watch + the
+  `leg_directive` slot) so arrival is a backend swap; see the "EB-expert
+  capability agent" entry in the Steering surface section below.
 - **Plan-field ↔ chat-turn provenance** — v1 persists the approved plan
   object (`orchestration_plan` rows), not per-field conversation
   back-references; the planning transcript is ephemeral CLI state. The
@@ -1237,12 +1272,23 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   consensus (rev 2.4b): checkpoint state serialization + an **idempotency
   key persisted before any interruption** so a resumed action runs exactly
   once.
-- **Steering conversational half** — narration voice (the demo's second
-  posture) · `clarify`/`escalate` parking on durable signals ·
-  `agent_judgement_routed` residual events (require runtime agent
-  discretion the deterministic runner lacks) · free-text steering →
-  replanning · mid-run mode *suppression* rules. All stay out of 017 by
-  contract (Out-of-scope); check-in content stays deterministic renders.
+- **Steering conversational half — PARTIALLY DISCHARGED (task 024, 2026-07-16).**
+  Originally: narration voice (the demo's second posture) · `clarify`/`escalate`
+  parking on durable signals · `agent_judgement_routed` residual events
+  (require runtime agent discretion the deterministic runner lacks) · free-text
+  steering → replanning · mid-run mode *suppression* rules. All stayed out of
+  017 by contract (Out-of-scope); check-in content stayed deterministic renders.
+  024 resolves three of these: **`agent_judgement_routed` residual events** ship
+  in full (the orchestrator watch emits them for every triage/decision/authoring
+  verdict, `decided_by: user | orchestrator | standing_default` attributed) ·
+  **`clarify`/`escalate` parking on durable signals** ships as the watch's
+  bias-to-escalate rule over the persisted trigger floor, event-backed · **free-text
+  steering** ships as the router (fan-out compile across not-yet-run components,
+  partial-compile-with-honest-refusal, confirm-before-apply) — but **not
+  replanning**: the router never recomposes the chain (adds/removes components
+  mid-run), which stays its own deferred surface (see "Free-text replanning" in
+  the Steering surface section below). **Narration voice** and **mid-run mode
+  *suppression* rules** are untouched and stay open.
 - **Runner-visible token-usage aggregate** — as-built, every LLM backend
   discards `_usage` after Langfuse tracing, so 017's dev summary log
   carries wall-clocks only; per-component tokens are read in Langfuse. A
@@ -1426,3 +1472,208 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   makes the hoist import-neutral; the cost is tooling paths only (CI working-directory,
   Docker contexts, CDK references, doc links). Do it in the slice that brings the
   frontend in, not before.
+- **Per-query source provenance (demo carry-back, 2026-07-15)** — the search fan-out is
+  already fully audited at the query grain (`search.executed` events persist query text,
+  backend, filters, origin and result count), but `source.acquired` /
+  `project_source_snapshot` never record *which query surfaced the source*. Two
+  consequences: per-query relevance ("this query surfaced 12 sources, 5 screened
+  relevant") is underivable, and any user-facing search-audit surface can only attribute
+  relevance per backend. Fix is in acquire: stamp acquired sources with the surfacing
+  query/queries (a set — multi-query dedupe means one source can arrive via several).
+  Pays off for search-loop tuning and for the demo/web-app search cards.
+
+## Steering surface (task 024 seams)
+
+Recorded per the annex's "Still OUT, even in the big slice" list
+(`docs/tasks/024-steering-surface/steerability-refinement.md`) plus seams the
+build itself surfaced. 024 shipped the P1–P4 steer-point lattice (search
+exception · evidence-base coverage · deepening selection · the synthesis
+shape), the four delegation-posture modes + decider dial, the orchestrator
+watch (triage/decide/route, two-tier information model), the router (free-text
+→ fan-out compile), guidance channels B1/B3/B5, structured keys
+D1/D3/D5/D6/D7/D8/D9, and the two re-run modes (additive/replacement) as
+first-class vocabulary. What follows is what it deliberately left out.
+
+- **B4 global synthesis guidance — HELD (2026-07-16).** Global writing-intent
+  steering ("write for a technical audience", "keep it plain-language") was
+  scoped as a guidance channel symmetric with B1/B3/B5, then held at owner
+  review: it risks two overlapping voice levers fighting each other ahead of
+  the audience-framing pair design (see `target-users.md` memory). Global
+  writing intents route through the shipped per-section `focus` fan-out +
+  evidence-emphasis boosts meanwhile. Demand meter: refusal events on
+  global-voice free-text asks (the router's honest-remainder mechanism) —
+  a spike is the trigger to design the pair together.
+- **Directive-level tag-boost vocabulary (D4) — dropped to a named seam
+  (2026-07-16).** Narrows the retrieval-boost-v2 seam recorded above (§ Live
+  search / depth-graded loop) rather than replacing it: the open tag layer is
+  disparate at live scale (the tag-consolidation trigger, § Characterise,
+  records exactly this fragmentation), so an exact-match boost over a
+  fragmented vocabulary would boost a sliver and silently distort retrieval.
+  The closed-vocabulary cases users actually want are already boostable
+  columns (`primary_evidence_type`, appraisal tiers). The boost grammar keeps
+  *accepting* tags (built, clamped, `unmatched_boosts` stays honest) but
+  nothing advertises or authors them; the router steers tag-ish intents to
+  type/tier boosts instead. Seam: tag boosts return after tag consolidation +
+  hybrid matching over the open layer.
+- **Vetting steer of any kind + judge steering — FULLY OUT (owner, 2026-07-16).**
+  Integrity surfaces: users must not instruct their own verifier. No binary,
+  no retry action, no dial on the vetter or the grounding judge this slice —
+  vetter/judge behaviour stays entirely fixed. `vetting_failed` spikes remain
+  a floor *trigger only*: the user is told and steers other levers in
+  response, never the vetter itself.
+- **Classify steering — OUT (2026-07-16).** Classify is factual typing (closed
+  9-value list + provider priors, § LLM screen + classify); the substantive
+  intent behind a classify-shaped ask lands downstream in the appraisal
+  rubric (D1, shipped this slice) rather than as a classify-time steer.
+- **Dual-view coverage / the source-evidence policy object — carried forward
+  unchanged (2026-07-16).** Still the 017-decision-9 deferral (§ Characterise,
+  "Dual-view coverage" above): a data-model design of its own, not steering
+  machinery. The "policy unmeetable above-bar" trigger stays parked with it;
+  024's trigger floor does not include it.
+- **Mid-component steering** (between deep-search rounds, between synthesis
+  sections) **— OUT (2026-07-16).** Requires the durable-resume engine
+  (§ Orchestrator task-017 seams, "Resume-engine design requirement"); the
+  boundary-only pause model holds. 024's segment re-entry generalises the
+  *boundary* re-run (bounded forward re-walk, one cycle per boundary), never
+  an in-flight pause mid-component.
+- **Free-text replanning — OUT (2026-07-16).** The 024 router compiles free
+  text into deltas across not-yet-run components, but never recomposes the
+  chain (adds/removes components mid-run beyond the existing nudge
+  mechanics). Planner re-entry is its own surface; the nudge + mode change
+  remain the only composition levers. The watch inherits the same limit by
+  construction — it adjusts within the composed chain, never recomposes it.
+- **Query-set pre-approval — OUT (2026-07-16).** Approving the generated
+  query set before it executes needs an in-component pause (query generation
+  happens inside acquire's own run). The iterative equivalent shipped
+  instead: B1 `search.guidance` in, executed queries visible at P1/P2
+  (`search.executed` events), targeted additive re-search after via P2's
+  segment re-entry.
+- **The EB-expert capability agent — still post-eval (2026-07-16); three
+  sockets shipped.** Cross-refs the entry above (§ Orchestrator task-017
+  seams). 024 builds the walk-forward sockets so the eventual arrival is a
+  backend swap, not surgery: (1) author-blind compile — already the design
+  for every channel/key; (2) `authored_by`/`decided_by` attribution on every
+  steering event — the history projection is unchanged when the author
+  changes; (3) the authoring seam as a protocol — "boundary state + intent →
+  suggested responses / decision" — the orchestrator watch implements it
+  today; post-eval the EB-expert plugs in behind it at the runner's existing
+  `leg_directive` slot. Authority order is fixed regardless of author: user >
+  declared rules > orchestrator.
+- **Tier-1 (routine-boundary) triage tooling — deferred (2026-07-16).**
+  Bounded read-only tool pulls (`lookup`, `query_findings`, cap ~4) ship at
+  decision points (P1–P4 + watch escalations — tier 2); tooling for tier-1
+  push-only triage stays out — cost explodes for little value at routine-
+  boundary volume. Insufficient-context escalations (bias-to-escalate after
+  the cap) are the demand meter; a spike there is the trigger to reconsider.
+- **Transcript persistence / turn tables — re-homed to 025 (owner,
+  2026-07-16).** 024 ships the anchors only: `session_id` on `capability_run`
+  (nullable), verbatim `user_text` on every steering event. Provider-side
+  conversation state (OpenAI Responses, Bedrock sessions) stays forbidden —
+  the record lives in our store (018 standing constraint; audit/FOI/
+  portability). 025's co-pilot Q&A needs persisted per-user sessions
+  ("multiple persisted sessions; browse previous ones") — the transcript
+  companion store (per-user/per-project turn table, session/`capability_run`
+  linkage, window-plus-recall context assembly) lands there.
+- **Build-discovered seams (024 build, 2026-07-16)** — surfaced mid-build,
+  not pre-registered in the annex:
+  - **Live DB-backed read executors for watch deliberation** — the runner
+    passes `read_tools=None` at both fallback-deliberation call sites
+    (`runner.py:3243`, `runner.py:3626`); the tier-2 `lookup`/`query_findings`
+    tool loop is wired but has no live executor behind it yet. Escalation
+    volume (insufficient-context bias-to-escalate) is the demand meter for
+    building one.
+  - **Segment-reentry re-presentation boundary runs unwatched** — the
+    one-cycle re-presentation after an additive segment re-entry
+    (`_run_plan_segment_reentry`, `runner.py:2982`) calls
+    `_handle_after_component_boundary` without an `orchestrator` argument
+    (defaults `None`); that specific re-presentation is structural-floor-only,
+    no watch judgement. Named, not yet closed.
+  - **D3 repeat-refresh fingerprint collision** — the refresh-tagged
+    fingerprint (`extraction.refresh`) is deterministic, so a second identical
+    refresh on the same class collides with the first and is a no-op rather
+    than a fresh re-extract. Supersession-style plumbing (mirroring the
+    `screen_generation` pattern) is the fix if a second refresh is ever wanted.
+  - **Pending-select fine keys — overlay-carried since the review stack
+    (2026-07-16).** The build shipped these rejected fail-closed at P2; the
+    review stack found the compile grammar accepted them while the plan
+    mapper raised post-confirmation (MAJOR, fixed in-stack): `select` is now
+    in `_MIXED_COMMIT_LAYER_KEYS` (plan-mappable `budget`; commit-layer
+    `strata_scope`/`exclude_ids`/`weight_emphasis`/`must_include_ids`/
+    `boosts`/`priority_strata` overlay to the run).
+  - **P2 `stage2_toggle` omitted** — turning stage-2 full-text screening
+    on/off mid-run is a chain-composition change the plan grammar can't
+    express (composition is fixed at plan-compile time); recorded, not built.
+  - **Per-dropped-stratum preview titles need the theme-membership join** —
+    P3's selection preview can name counts for a dropped stratum but not
+    human-readable theme names without joining through group's
+    theme-membership table; `p3_bundle` surfaces names+counts+notable digests
+    where the join is cheap, digests-only where it isn't.
+  - ~~Mixed-grammar overlay for select~~ — **discharged by the review stack
+    (2026-07-16)**: select joined the mixed-grammar split (see the
+    pending-select entry above).
+  - **Deliberation `needs_tool` structured field is primary** — the watch's
+    fallback tool-call loop reads the structured `needs_tool`/`needs_arguments`
+    wire fields (`orchestrator_backend.py:578`, `orchestrator_prompt.py:229`)
+    first; the legacy JSON-in-`needs` free-text fallback is retained for
+    backward parse tolerance, not the primary path.
+
+- **Review-stack seams (024 step 7, 2026-07-16)** — surfaced by the review
+  lanes, adjudicated as deferrals (each has a reason; fixes applied in-stack
+  are NOT listed here — see verification.md § Review findings):
+  - **Live router compile robustness** — in the pinned live runs ~3 of 6
+    free-text steers mis-compiled (malformed `acquire` delta on an
+    expressible P2 additive re-search; a P4 sections edit mis-labelled
+    `replacement`); every failure was caught fail-closed (refusal, no
+    invalid apply) but compile quality is below the surface's ambition.
+    The delta render at the confirm gate (review fix) is the mitigation;
+    router prompt iteration belongs to the eval slice, where compile
+    fidelity can be measured, not vibed.
+  - **Classify/appraise collapse triggers are not generation-scoped** —
+    after a criteria re-screen demotes docs at a new generation, their old
+    classification/appraisal rows still count in the trigger denominators
+    (`steering_triggers.py:233,296` read the result tables directly). ADR
+    0022 names re-classify/re-appraise generation-awareness as future work;
+    the honest fix is a join through `effective_screen_rows` when those
+    components gain generation semantics.
+  - **Re-screen quorum-failure falls back to the prior generation's verdict
+    unflagged** — `effective_screen_rows` excludes `failed`, so a doc whose
+    gen-N re-screen failed silently keeps its gen-N−1 verdict: a criteria
+    mix inside one effective set with no marker. Needs a flag class (or a
+    bundle note) when effective rows span generations.
+  - **Router-reachable `screen_full` re-screen is untested** — the fixed P2
+    catalog never emits `{"stage": 2, "rescreen": true}` but a router
+    replacement fragment can; the same-generation stage-2 collision then
+    halts the whole batch loudly (`ScreenSupersessionError`, by design —
+    the reason now persists on the `component.failed` event, review fix).
+    Pin a test + decide the partial-batch semantics if this path is ever
+    advertised.
+  - **Structural consolidation sweep (post-merge slice candidate)** — the
+    review confirmed 12 duplication/altitude sites that stay correct today
+    but must be edited in lockstep: the attempt/retry loop ×3
+    (`runner.py:792/2532/2796`), apply-path state reconstruction ×3
+    (`runner.py:2324/2399/2643`), the before/after boundary-handler twins
+    (`runner.py:1027/1216`), the segment-reentry runner twins
+    (`runner.py:2919/3036`), quorum trigger stage blocks
+    (`steering_triggers.py:399`), segment-reentry compile duplication
+    (`steering.py:1186`), the replacement-validation ladder vs
+    `REPLACEMENT_RERUN_CONTEXT_KEYS` (+ the diverging noun table,
+    `steering.py:1561-1599/1266`), `_reference_kwargs` vs
+    `REPLACEMENT_RERUNS` (`runner.py:4094`), the `floor_triggers` dispatch
+    ladder (`steering_triggers.py:573`), `selection_run_id` bespoke
+    threading, `_doc_metadata` title fallback ×3, and per-boundary double
+    `engine.connect()`. Deferred as one refactor slice rather than churning
+    a 19k-line surface mid-review; the fresh grammar/behaviour tests make
+    the later refactor safe.
+  - **Event-payload display strings persist NUL-scrubbed only** — the full
+    control/format-char defence lives at the CLI output seam
+    (`_strip_control`, now incl. Cf); the 025 web renderer must scrub on
+    render or the persistence layer should adopt `sanitize_prompt_field`
+    for model-authored display strings (security-lane recommendation).
+  - **Watch `choose_option` id never resolved against the canonical menu**
+    — a delta-less `choose_option` silently proceeds; grammar fencing makes
+    it safe, but resolving the id (or renaming the event action) would make
+    provenance more truthful (security-lane recommendation).
+  - **CLI re-prints the stale check-in line on every re-presentation** —
+    cosmetic duplicate "component: succeeded" lines in the pause loop
+    (visible in the live transcripts); tidy with the next CLI-surface
+    slice.

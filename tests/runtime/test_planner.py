@@ -43,7 +43,9 @@ def _plan_from_draft(draft: PlanDraftWire) -> OrchestrationPlan:
 
 
 def test_planner_prompt_version_pinned() -> None:
-    assert PLANNER_PROMPT_VERSION == "planner_v5"
+    # task 024: the planning moment of the orchestrator_v1 family succeeds
+    # the pinned planner_v5 (contract decision 10, review m4).
+    assert PLANNER_PROMPT_VERSION == "orchestrator_v1_planning"
 
 
 def test_stub_first_turn_asks_shape_question_with_three_suggestions() -> None:

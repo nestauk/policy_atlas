@@ -258,6 +258,7 @@ class TracedThemeGroupingBackend:
         intent: str,
         min_themes: int,
         max_themes: int,
+        guidance: list[str] | None = None,
     ) -> UsageResult[list[Theme]]:
         """Discover themes and trace full generation I/O.
 
@@ -266,6 +267,8 @@ class TracedThemeGroupingBackend:
             intent: Evidence-scope intent.
             min_themes: Requested minimum theme count.
             max_themes: Requested maximum theme count.
+            guidance: B5 ``characterise.guidance``, forwarded to the wrapped
+                backend unchanged.
 
         Returns:
             Themes and token usage returned by the wrapped backend.
@@ -276,6 +279,7 @@ class TracedThemeGroupingBackend:
                 intent=intent,
                 min_themes=min_themes,
                 max_themes=max_themes,
+                guidance=guidance,
             )
             span.update(
                 input={"intent": intent, "records": list(docs)},

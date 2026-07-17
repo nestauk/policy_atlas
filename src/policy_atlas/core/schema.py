@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — twenty-seven tables plus one read view.
+"""SQLAlchemy Core table metadata — twenty-eight tables plus one read view.
 
 No deferred columns (no block/artefact summary, no same_content_as, no lineage key).
 """
@@ -93,8 +93,20 @@ runs = Table(
     Column("status", Text, nullable=False),  # running → succeeded/failed
     Column("started_at", DateTime(timezone=True), nullable=False),
     Column("ended_at", DateTime(timezone=True), nullable=True),
+    # NULLABLE — resolved when this run executes within a capability_run walk;
+    # the composite FK below binds only once it's set (MATCH SIMPLE, per
+    # synthesis_result's optional-reference precedent).
+    Column("capability_run_id", UUID(as_uuid=True), nullable=True),
     # Composite unique so event_log can FK on (run_id, project_id) and prevent cross-project events.
     UniqueConstraint("run_id", "project_id", name="uq_runs_run_project"),
+    # Cross-project FK guard, per the synthesis-result/orchestration-plan
+    # precedent: NULL capability_run_id skips the check (MATCH SIMPLE), so the
+    # guard binds only once a run is actually attributed to a walk.
+    ForeignKeyConstraint(
+        ["capability_run_id", "project_id"],
+        ["capability_run.capability_run_id", "capability_run.project_id"],
+        name="fk_runs_capability_run_project",
+    ),
     # Deferred: persisting plan/config on the run (compiled config travels in plan.compiled event)
 )
 
@@ -242,6 +254,10 @@ source_screening_result = Table(
     # a READ rule (the effective-screen helper), never a storage rule: stage-1 rows
     # are never mutated by a stage-2 pass.
     Column("screen_stage", Integer, nullable=False, server_default="1"),
+    # Generation supersession (task 024 decision 7b): criteria-changed re-screen
+    # writes fresh rows at generation = max+1; old rows are never mutated. The
+    # effective-screen read rule orders generation DESC, stage DESC.
+    Column("screen_generation", Integer, nullable=False, server_default="0"),
     Column("screened_at", DateTime(timezone=True), nullable=False),
     # Cross-project FK guards: all three parents must share the same project_id
     ForeignKeyConstraint(
@@ -262,12 +278,16 @@ source_screening_result = Table(
         ["runs.run_id", "runs.project_id"],
         name="fk_ssr_run_project",
     ),
-    # Partial unique (task 014, replacing the uq_ssr_scope_source constraint):
-    # at most one NON-FAILED row per (scope, source, stage) — failed rows are
-    # attempt history and never block retry (the 011 extraction-memo precedent).
+    # Partial unique (task 014, replacing the uq_ssr_scope_source constraint;
+    # widened task 024 decision 7b to admit generation supersession): at most
+    # one NON-FAILED row per (scope, source, stage, generation) — failed rows
+    # are attempt history and never block retry (the 011 extraction-memo
+    # precedent); a re-screen's fresh generation coexists with prior
+    # generations rather than colliding with them.
     Index(
         "uq_ssr_scope_source_stage",
         "evidence_scope_id", "project_source_snapshot_id", "screen_stage",
+        "screen_generation",
         unique=True,
         postgresql_where=text("status != 'failed'"),
     ),
@@ -285,6 +305,7 @@ source_screening_result = Table(
         name="ck_ssr_basis",
     ),
     CheckConstraint("screen_stage IN (1, 2)", name="ck_ssr_stage"),
+    CheckConstraint("screen_generation >= 0", name="ck_ssr_generation_nonneg"),
     CheckConstraint(
         "screen_decision_confidence IS NULL"
         " OR (screen_decision_confidence >= 0.0 AND screen_decision_confidence <= 1.0)",
@@ -1040,4 +1061,42 @@ orchestration_plan = Table(
         name="ck_oplan_status",
     ),
     CheckConstraint("jsonb_typeof(payload) = 'object'", name="ck_oplan_payload_object"),
+)
+
+# --- Capability run (task 024) ---
+#
+# The steering-surface walk entity (contract decision 2): one row per
+# orchestrated capability walk (v1: 'evidence_base' only), carrying the
+# approved plan identity at walk open and the walk's terminal status.
+# `runs.capability_run_id` (nullable, MATCH SIMPLE) attributes each
+# component run to the walk it executed within. Deliberately not modelled:
+# composition fields, artefact back-refs (derivable), turn tables (025).
+
+capability_run = Table(
+    "capability_run",
+    metadata,
+    Column("capability_run_id", UUID(as_uuid=True), primary_key=True),
+    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
+    Column("capability", Text, nullable=False),
+    # The approved plan identity at walk open.
+    Column("plan_id", UUID(as_uuid=True), nullable=False),
+    Column("plan_version", Integer, nullable=False),
+    Column("status", Text, nullable=False),  # running|succeeded|degraded|failed|aborted
+    Column("session_id", UUID(as_uuid=True), nullable=True),
+    Column("started_at", DateTime(timezone=True), nullable=False),
+    Column("ended_at", DateTime(timezone=True), nullable=True),
+    # Cross-project FK guard, per the selection-result precedent.
+    ForeignKeyConstraint(
+        ["evidence_scope_id", "project_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
+        name="fk_capr_scope_project",
+    ),
+    # Composite-FK target for runs.capability_run_id.
+    UniqueConstraint("capability_run_id", "project_id", name="uq_capr_id_project"),
+    CheckConstraint("capability IN ('evidence_base')", name="ck_capr_capability"),
+    CheckConstraint(
+        "status IN ('running', 'succeeded', 'degraded', 'failed', 'aborted')",
+        name="ck_capr_status",
+    ),
 )

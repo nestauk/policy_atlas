@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from policy_atlas.core.schema import DIRECTIVE_STRING_MAX
 from policy_atlas.evidence_base.sourcing.country_filters import (
     ISO_3166_ALPHA2,
     expand_tier1,
@@ -17,6 +18,9 @@ from policy_atlas.evidence_base.sourcing.country_filters import (
 )
 from policy_atlas.evidence_base.sourcing.search_loop import (
     ROUND_CAP,
+    SEARCH_TARGET_MAX,
+    SEARCH_TARGET_MIN,
+    TARGET_CONFIDENT_RELEVANT,
     SearchDirectiveError,
     StopDecision,
     _filter_variants,
@@ -31,7 +35,7 @@ from policy_atlas.runtime.run_spec import Config, Plan, compile
 
 
 def test_parse_search_directive_absent() -> None:
-    assert parse_search_directive({}) == ("rapid", None)
+    assert parse_search_directive({}) == ("rapid", None, None, None)
 
 
 def test_parse_search_directive_unknown_key() -> None:
@@ -50,16 +54,94 @@ def test_parse_search_directive_bad_depth() -> None:
 
 
 def test_parse_search_directive_depth_deep_ok() -> None:
-    assert parse_search_directive({"search": {"depth": "deep"}}) == ("deep", None)
+    assert parse_search_directive({"search": {"depth": "deep"}}) == ("deep", None, None, None)
 
 
 def test_parse_search_directive_depth_standard_ok() -> None:
-    assert parse_search_directive({"search": {"depth": "standard"}}) == ("standard", None)
+    assert parse_search_directive({"search": {"depth": "standard"}}) == (
+        "standard", None, None, None,
+    )
 
 
 def test_parse_search_directive_null_filters_rejected() -> None:
     with pytest.raises(SearchDirectiveError):
         parse_search_directive({"search": {"filters": None}})
+
+
+# --- D5 search.target: fail-closed matrix ---
+
+
+@pytest.mark.parametrize("target", [SEARCH_TARGET_MIN, 20, SEARCH_TARGET_MAX])
+def test_parse_search_directive_accepts_valid_target(target: int) -> None:
+    assert parse_search_directive({"search": {"target": target}}) == ("rapid", None, target, None)
+
+
+@pytest.mark.parametrize(
+    "target",
+    [SEARCH_TARGET_MIN - 1, SEARCH_TARGET_MAX + 1, 0, -5],
+)
+def test_parse_search_directive_rejects_out_of_range_target(target: int) -> None:
+    # Out-of-range values are refused, never silently clamped (honest refusal).
+    with pytest.raises(SearchDirectiveError):
+        parse_search_directive({"search": {"target": target}})
+
+
+@pytest.mark.parametrize("target", [20.5, "20", True, None, [20]])
+def test_parse_search_directive_rejects_malformed_target_type(target: object) -> None:
+    with pytest.raises(SearchDirectiveError):
+        parse_search_directive({"search": {"target": target}})
+
+
+# --- B1 search.guidance: fail-closed matrix ---
+
+
+def test_parse_search_directive_guidance_absent_is_none() -> None:
+    assert parse_search_directive({"search": {"depth": "deep"}}) == ("deep", None, None, None)
+
+
+@pytest.mark.parametrize(
+    "guidance",
+    [
+        ["prioritise UK policy evaluations"],
+        ["prioritise UK policy evaluations", "avoid clinical literature"],
+        ["a", "b", "c", "d", "e"],
+    ],
+)
+def test_parse_search_directive_accepts_valid_guidance(guidance: list[str]) -> None:
+    assert parse_search_directive({"search": {"guidance": guidance}}) == (
+        "rapid", None, None, guidance,
+    )
+
+
+@pytest.mark.parametrize(
+    "guidance",
+    [
+        [],
+        ["a", "b", "c", "d", "e", "f"],
+        "not a list",
+        [123],
+        [""],
+        ["   "],
+        [None],
+        ["x" * (DIRECTIVE_STRING_MAX + 1)],
+        ["contains\x00control"],
+        ["contains\x07bell"],
+    ],
+)
+def test_parse_search_directive_rejects_malformed_guidance(guidance: object) -> None:
+    with pytest.raises(SearchDirectiveError):
+        parse_search_directive({"search": {"guidance": guidance}})
+
+
+def test_parse_search_directive_guidance_at_max_chars_accepted() -> None:
+    guidance = ["x" * DIRECTIVE_STRING_MAX]
+    assert parse_search_directive({"search": {"guidance": guidance}})[3] == guidance
+
+
+def test_parse_search_directive_guidance_combines_with_other_keys() -> None:
+    assert parse_search_directive(
+        {"search": {"depth": "deep", "target": 30, "guidance": ["prioritise UK evidence"]}}
+    ) == ("deep", None, 30, ["prioritise UK evidence"])
 
 
 # --- validate_scope_filters + to_wire_params: full valid example ---
@@ -401,3 +483,47 @@ def test_deep_stop_custom_round_cap() -> None:
         round_cap=2,
     )
     assert decision == StopDecision(True, "budget_exhausted")
+
+
+# --- D5 search.target: evaluate_deep_stop override ---
+
+
+def test_deep_stop_default_target_is_as_built_constant() -> None:
+    """Absent target ≡ as-built: default param equals TARGET_CONFIDENT_RELEVANT."""
+    decision = evaluate_deep_stop(
+        round_index=1,
+        confident_relevant=TARGET_CONFIDENT_RELEVANT,
+        new_confident_relevant=TARGET_CONFIDENT_RELEVANT,
+        docs_screened_this_round=100,
+        wall_clock_breached=False,
+    )
+    assert decision == StopDecision(True, "target_reached")
+
+
+def test_deep_stop_custom_target_honours_lower_override() -> None:
+    # Below the as-built target, but the D5 override of 10 is reached.
+    decision = evaluate_deep_stop(
+        round_index=1,
+        confident_relevant=10,
+        new_confident_relevant=10,
+        docs_screened_this_round=100,
+        wall_clock_breached=False,
+        target=10,
+    )
+    assert decision == StopDecision(True, "target_reached")
+
+
+def test_deep_stop_custom_target_not_yet_reached() -> None:
+    # confident_relevant (15) is below the as-built default (20) but WOULD
+    # trip the as-built target; a raised override (40) means it hasn't
+    # stopped on the target check, honouring the override rather than the
+    # module constant.
+    decision = evaluate_deep_stop(
+        round_index=1,
+        confident_relevant=15,
+        new_confident_relevant=15,
+        docs_screened_this_round=100,
+        wall_clock_breached=False,
+        target=40,
+    )
+    assert decision == StopDecision(False, None)

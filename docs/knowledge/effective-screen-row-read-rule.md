@@ -1,22 +1,29 @@
 ---
 type: Invariant
 title: Every screening consumer resolves the effective row — including write paths
-description: A doc can hold several screening rows (stages, failed retries); the effective result is the highest-stage non-failed row, read via screen.effective_screen_rows(). The rule binds write paths too — any component whose rows imply "this doc is in" (classify, appraise) must join through it, not just the audit counts.
-tags: [screening, stage-2, effective-row, reader-sweep, appraise, invariant]
-timestamp: 2026-07-08
+description: A doc can hold several screening rows (stages, generations, failed retries); the effective result is the highest-generation-then-highest-stage non-failed row, read via screen.effective_screen_rows(). The rule binds write paths too — any component whose rows imply "this doc is in" (classify, appraise) must join through it, not just the audit counts.
+tags: [screening, stage-2, effective-row, screen-generation, reader-sweep, appraise, invariant]
+timestamp: 2026-07-16
 ---
 
 # Rule
 
 Since task 014 a document can legitimately hold multiple `source_screening_result`
 rows per scope: one per stage (1 = envelope, 2 = full-text confirmation) plus any
-number of `status='failed'` retry-history rows (`uq_ssr_scope_source_stage` is
-partial, excluding failed). **No consumer may join `status='relevant'` raw.** The
-effective result — highest-stage non-failed row — comes from
-`screen.effective_screen_rows()`; select reads it wholesale (status + confidence +
-`screen_stage` carried into the rationale). The one deliberate exception is
-`ingest_full_text`, which reads stage-1 inline: demoted docs *stay* fetch-eligible
-by design (the demotion needed the text; the text stays ingested).
+number of `status='failed'` retry-history rows. Task 024 (ADR 0022) added a third
+axis: `screen_generation` — a criteria-changed re-screen writes fresh rows at
+`generation = max+1`, prior rows immutable (`uq_ssr_scope_source_stage` is partial
+on scope/doc/stage/generation, excluding failed). **No consumer may join
+`status='relevant'` raw.** The effective result — **highest generation first, then
+highest stage, non-failed** — comes from `screen.effective_screen_rows()`;
+stage-1→stage-2 flow and demote-only hold *within* a generation. Select reads it
+wholesale (status + confidence + `screen_stage` carried into the rationale). The
+one deliberate exception is `ingest_full_text`, which reads stage-1 inline: demoted
+docs *stay* fetch-eligible by design (the demotion needed the text; the text stays
+ingested). Known edge (deferred): a failed gen-N re-screen row is excluded, so that
+doc silently keeps its gen-N−1 verdict — an unflagged criteria mix; and
+classification/appraisal rows are not generation-aware yet (their collapse
+triggers can read a stale picture post-re-screen).
 
 The rule binds **write paths, not just counts**: any component that inserts rows
 implying "this doc is in the corpus" must prove an effective-relevant row first —

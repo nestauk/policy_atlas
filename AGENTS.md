@@ -22,27 +22,35 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `023-codebase-health` (design in progress,
-2026-07-14). A behaviour-preserving pre-eval cleanup slice built
-from the owner-adjudicated whole-codebase review
-(`docs/tasks/023-codebase-health/review-findings.md` — six review
-lanes + a lead naming/structure re-sweep, all findings adjudicated
-2026-07-14): dead-code cuts (~830 lines + the adjudicated echo-chain
-cut), IOF/ICF naming symmetry (iof_/icf_ module pairs), the
-capability-aware package regroup (`runtime/` ·
-`evidence_base/{sourcing,assess,corpus,extract,group,synthesis}` ·
-`core/` — owner-named, monorepo/CDK-aware), embeddings.py client/usage
-split, test pre-hardening (string-path patch sites, country-filter
-fail-closed rows, search-generation wire test), docs truth (README
-rewrite, prompt-pin corrections), the three approved dependency
-edits (declare lxml+pymupdf, raise stale floors, prune
-[tool.pyright]), three adopted wall-clock optimisations (group
-assignment concurrency, appraise bulk insert, sumprod cosine), and
-**skeleton retirement** — `orchestrate` (no-key stub mode, scripted
-console) is the standardised smoke + live-check vehicle from this
-slice on. Tier 3 (deps hard gate). Design and build run in the
-review conversation by owner decision; the review stack runs
-fresh.
+Implementation — task `024-steering-surface` (**design COMPLETE
+2026-07-16**: contract + plan owner-approved, both adversarial reviews
+adjudicated, ADRs 0020–0023 committed — **build opens in a fresh
+conversation with `task-cycle-build`**, phases 0–7 per plan.md; schema
+gate = capability_run + screen_generation). **The steering slice — state-of-the-art human-in-the-loop
+(owner direction; deliberately large, no splitting).** Organising
+principle: every decision surfaces in the durable record; the mode
+moves the *decider* (user ↔ orchestrator), never visibility. Strands:
+(1) durable steering record — steering events on `event_log` + the
+`capability_run` walk entity (the one approved schema addition) + the
+`steering_history` projection (front-end rebuilds the decision
+history from Postgres alone); (2) **one orchestrator, three moments**
+(planning turn · free-text router · boundary watch) behind one seam +
+`orchestrator_v1` prompt family — router: prose → confirmed
+multi-stage bounded deltas; watch: routes/decides per the decider
+dial within the full user surface, authors run-specific options,
+fail-safe to the deterministic floor; (3) the **steer-point lattice**
+P1 (search exception) · P2 (pre-select evidence-base coverage) · P3
+(deepening-selection, enriched + preview) · P4 (synthesis shape) over
+**widened grammars** (channels B1/B3/B5 + B2′ finding-relevance
+annotator; keys D1/D3/D5–D9) with additive-vs-replacement re-run
+modes first-class; (4) modes renamed to delegation postures;
+Unattended = discretion-is-the-mode with planner-authored standing
+instructions. Design record: `docs/tasks/024-steering-surface/`
+`steerability-refinement.md` (annex, binds the contract) +
+`steer-point-study.md`. Tier 3 (runtime egress + schema +
+prompt-bearing surfaces). Build sizing ~3–3.5× the original rev 3
+scope. Sequenced after 024: **025 co-pilot Q&A + the per-user
+transcript store** (owner, 2026-07-16); then the eval slice.
 
 Tasks `001-walking-skeleton` through `022-synthesis-refinement` are
 complete (merged) — the EB chain runs end-to-end live behind the

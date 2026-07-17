@@ -672,7 +672,7 @@ def test_stage2_no_rescue_invariant_blocks_stage1_excludes(conn: Connection) -> 
     )
 
     with pytest.raises(RuntimeError, match="requires a relevant stage-1 row"):
-        _assert_stage1_relevant(conn, scope_id=scope_id, pss_id=pss_id)
+        _assert_stage1_relevant(conn, scope_id=scope_id, pss_id=pss_id, generation=0)
 
     summary = screen_sources(
         conn,

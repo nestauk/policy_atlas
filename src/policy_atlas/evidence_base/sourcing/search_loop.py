@@ -20,8 +20,9 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.embeddings import EmbeddingBackend
-from policy_atlas.core.prompt_fields import metadata_dict
+from policy_atlas.core.prompt_fields import metadata_dict, parse_guidance_channel
 from policy_atlas.core.schema import (
+    DIRECTIVE_STRING_MAX,
     event_log,
     project_source_snapshot,
     search_coverage_record,
@@ -90,6 +91,12 @@ REFORMULATE_CALL_CAP = 4
 SNOWBALL_CALL_CAP = 6
 SUGGEST_CALL_CAP = 6
 DIVERSITY_CALL_MIN = 1
+
+# D5 (024 steering surface): user-directed override of TARGET_CONFIDENT_RELEVANT,
+# clamped to this accepted range. Out-of-range values are refused, never
+# silently clamped (honest refusal — see parse_search_directive).
+SEARCH_TARGET_MIN = 5
+SEARCH_TARGET_MAX = 60
 
 
 class DepthConstants(TypedDict):
@@ -545,26 +552,32 @@ def overton_wire_params(filters: dict[str, Any] | None) -> dict[str, str]:
     return params
 
 
-def parse_search_directive(context: dict[str, Any]) -> tuple[SearchDepth, Any | None]:
+def parse_search_directive(
+    context: dict[str, Any],
+) -> tuple[SearchDepth, Any | None, int | None, list[str] | None]:
     """Parse ``context["search"]`` using the fail-closed directive grammar.
 
     Args:
         context: Evidence-scope context JSON object.
 
     Returns:
-        ``(depth, raw_filters)``. Absent directive defaults to rapid depth and
-        no filters.
+        ``(depth, raw_filters, target, guidance)``. Absent directive defaults
+        to rapid depth, no filters, no target override and no guidance (all
+        ``None``).
 
     Raises:
-        SearchDirectiveError: If the directive has an unknown key or malformed
-            depth value.
+        SearchDirectiveError: If the directive has an unknown key, a malformed
+            depth value, a ``target`` outside ``[SEARCH_TARGET_MIN,
+            SEARCH_TARGET_MAX]`` (out-of-range values are refused, never
+            silently clamped), or a malformed ``guidance`` channel (B1: 1-5
+            non-empty, bounded, control-character-free strings).
     """
     raw = context.get("search")
     if raw is None:
-        return "rapid", None
+        return "rapid", None, None, None
     if not isinstance(raw, dict):
         raise SearchDirectiveError("search directive must be an object")
-    unknown = set(raw) - {"depth", "filters"}
+    unknown = set(raw) - {"depth", "filters", "target", "guidance"}
     if unknown:
         raise SearchDirectiveError("search directive contains unknown keys")
     depth: SearchDepth = "rapid"
@@ -577,7 +590,23 @@ def parse_search_directive(context: dict[str, Any]) -> tuple[SearchDepth, Any | 
         depth = raw_depth
     if "filters" in raw and raw["filters"] is None:
         raise SearchDirectiveError("search directive filters must be an object")
-    return depth, raw.get("filters")
+    target: int | None = None
+    if "target" in raw:
+        raw_target = raw["target"]
+        if isinstance(raw_target, bool) or not isinstance(raw_target, int):
+            raise SearchDirectiveError("search directive target must be an integer")
+        if raw_target < SEARCH_TARGET_MIN or raw_target > SEARCH_TARGET_MAX:
+            raise SearchDirectiveError(
+                f"search directive target must be between {SEARCH_TARGET_MIN} "
+                f"and {SEARCH_TARGET_MAX}"
+            )
+        target = raw_target
+    guidance: list[str] | None = None
+    if "guidance" in raw:
+        guidance = parse_guidance_channel(
+            raw["guidance"], error=SearchDirectiveError, max_chars=DIRECTIVE_STRING_MAX
+        )
+    return depth, raw.get("filters"), target, guidance
 
 
 def _object_block(raw: Any, *, label: str) -> dict[str, Any]:
@@ -875,6 +904,7 @@ def evaluate_deep_stop(
     docs_screened_this_round: int,
     wall_clock_breached: bool,
     round_cap: int = ROUND_CAP,
+    target: int = TARGET_CONFIDENT_RELEVANT,
 ) -> StopDecision:
     """Evaluate deep-loop stopping without touching the database.
 
@@ -885,11 +915,13 @@ def evaluate_deep_stop(
         docs_screened_this_round: Stage-1 docs screened this round.
         wall_clock_breached: Whether the deep wall-clock budget was exceeded.
         round_cap: Maximum round index before the budget backstop fires.
+        target: Confident-relevant target (D5 ``search.target`` override, or
+            ``TARGET_CONFIDENT_RELEVANT`` when absent).
 
     Returns:
         Stop decision with the raw stop condition, if any.
     """
-    if confident_relevant >= TARGET_CONFIDENT_RELEVANT:
+    if confident_relevant >= target:
         return StopDecision(True, "target_reached")
     if round_index >= 2 and (
         docs_screened_this_round == 0
@@ -1213,7 +1245,7 @@ def run_search(
         SearchDirectiveError: If the search directive or filters are malformed.
         RuntimeError: If generation fails.
     """
-    depth, raw_filters = parse_search_directive(context.context)
+    depth, raw_filters, search_target, guidance = parse_search_directive(context.context)
     constants = DEPTH_CONSTANTS[depth]
     backend_names = [backend.name for backend in backends]
     validated_filters = validate_scope_filters(raw_filters, backend_names=backend_names)
@@ -1405,6 +1437,7 @@ def run_search(
                 round_index=round_index,
                 positive=positive_exemplars,
                 negative=negative_exemplars,
+                guidance=guidance,
             )
         )
         usage_totals.add(usage)
@@ -1694,7 +1727,9 @@ def run_search(
                     if stop_all:
                         break
     else:
-        wire, usage = generation_backend.generate_queries(QueriesPayload(intent=context.intent))
+        wire, usage = generation_backend.generate_queries(
+            QueriesPayload(intent=context.intent, guidance=guidance)
+        )
         usage_totals.add(usage)
         generation_calls = 1
         queries, overton_paraphrases = validated_queries(wire)
@@ -1783,10 +1818,18 @@ def run_search(
         depth=depth,
         scope_wire_params=scope_wire_params,
         wall_clock_breached=wall_clock_breached,
+        search_guidance=guidance,
     )
     counts["search"] = {
         "depth": depth,
         "round_index": round_index,
+        # D5 (024 steering surface): executed TARGET_CONFIDENT_RELEVANT override,
+        # echoed here regardless of depth — the deep loop's own stop-target
+        # bookkeeping (run_deep_rounds / evaluate_deep_stop) is a separate,
+        # not-yet-wired continuation driver this only threads a value into.
+        "target_confident_relevant": (
+            search_target if search_target is not None else TARGET_CONFIDENT_RELEVANT
+        ),
         "queries_executed": {
             name: sum(1 for call in executed_calls if call.backend_name == name)
             for name in backend_names
@@ -1820,6 +1863,7 @@ def run_deep_rounds(
     screen_round: Callable[[], dict[str, Any]],
     start_round: int = 2,
     clock: Callable[[], float] = time.monotonic,
+    target: int = TARGET_CONFIDENT_RELEVANT,
 ) -> dict[str, Any]:
     """Run skeleton-sequenced deep acquire/screen rounds to a stop.
 
@@ -1834,11 +1878,14 @@ def run_deep_rounds(
         start_round: First deep continuation round. Defaults to round 2 because
             round 1 is the already-screened rapid leg.
         clock: Monotonic clock dependency for deterministic tests.
+        target: Confident-relevant target (D5 ``search.target`` override, or
+            ``TARGET_CONFIDENT_RELEVANT`` when absent — byte-identical to
+            as-built when unset).
 
     Returns:
         Deep-loop summary containing per-round costs, final stop condition,
-        final confident-relevant count, wall-clock seconds and suggest-arm
-        quality counters.
+        final confident-relevant count, wall-clock seconds, the executed
+        target and suggest-arm quality counters.
 
     Raises:
         RuntimeError: If a screen payload does not include the stage-1
@@ -1864,7 +1911,7 @@ def run_deep_rounds(
                 project_id=project_id,
                 scope_id=scope_id,
                 stop_condition="budget_exhausted",
-                below_target=prior_confident < TARGET_CONFIDENT_RELEVANT,
+                below_target=prior_confident < target,
             )
             overlay_applied = final_stop_condition != "budget_exhausted"
             break
@@ -1903,6 +1950,7 @@ def run_deep_rounds(
             docs_screened_this_round=docs_screened,
             wall_clock_breached=wall_clock_breached,
             round_cap=DEPTH_CONSTANTS["deep"]["round_cap"],
+            target=target,
         )
         if decision.stop:
             if decision.stop_condition is None:
@@ -1912,7 +1960,7 @@ def run_deep_rounds(
                 project_id=project_id,
                 scope_id=scope_id,
                 stop_condition=decision.stop_condition,
-                below_target=confident < TARGET_CONFIDENT_RELEVANT,
+                below_target=confident < target,
             )
             overlay_applied = final_stop_condition != decision.stop_condition
             prior_confident = confident
@@ -1937,6 +1985,7 @@ def run_deep_rounds(
         "confident_relevant": prior_confident,
         "wall_clock_s": wall_clock_s,
         "overlay_applied": overlay_applied,
+        "target_confident_relevant": target,
         "suggest": {
             "acquired_pss": suggest_pss_ids,
             "acquired": len(suggest_pss_ids),
