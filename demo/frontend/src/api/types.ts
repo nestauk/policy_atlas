@@ -256,7 +256,7 @@ export type DemoEvent =
         triggers: CheckinTrigger[]
       }
     }
-  | { type: 'checkin.resolved'; data: { checkin_id: string; reply: string } }
+  | { type: 'checkin.resolved'; data: { checkin_id: string; reply: string; params?: CheckinParams } }
   | { type: 'artefact.skeleton'; data: { sections: { title: string; focus: string; role: string }[] } }
   | { type: 'artefact.section_started'; data: { index: number; title: string } }
   | { type: 'artefact.section_completed'; data: { index: number; title: string; content: string } }

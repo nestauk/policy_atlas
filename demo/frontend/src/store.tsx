@@ -203,7 +203,10 @@ function onEvent(state: State, ev: DemoEvent): State {
       }
     }
     case 'checkin.resolved':
-      return reduce(state, { type: 'checkin.answered', checkinId: ev.data.checkin_id, reply: ev.data.reply })
+      return reduce(state, {
+        type: 'checkin.answered', checkinId: ev.data.checkin_id,
+        reply: ev.data.reply, params: ev.data.params,
+      })
     case 'stage.started': {
       const { stage, stage_label, stage_blurb } = ev.data
       const known = state.stages[stage]

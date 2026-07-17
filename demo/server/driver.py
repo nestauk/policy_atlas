@@ -317,6 +317,9 @@ class AnalysisDriver:
     def answer_checkin(self, checkin_id: str, reply: str,
                        params: dict[str, Any] | None = None) -> None:
         self._checkin_replies[checkin_id] = {"reply": reply, "params": params or {}}
+        # into the backlog too, so a reload/reconnect replays the card resolved
+        self.bus.emit("checkin.resolved", {"checkin_id": checkin_id, "reply": reply,
+                                           "params": params or {}})
         self._checkin_event.set()
 
     # -- internals --
@@ -454,6 +457,8 @@ class AnalysisDriver:
             self.paused = False
         answer = self._checkin_replies.pop(checkin_id, None)
         if answer is None:
+            self.bus.emit("checkin.resolved", {"checkin_id": checkin_id,
+                                               "reply": "continue", "params": {}})
             self.bus.emit("narration", {"text": "No answer in time — carrying on as planned."})
             return Continue()
         return self._map_reply(point, answer["reply"], answer["params"])
@@ -486,6 +491,9 @@ class AnalysisDriver:
         finally:
             self.paused = False
         answer = self._checkin_replies.pop(checkin_id, None)
+        if answer is None:
+            self.bus.emit("checkin.resolved", {"checkin_id": checkin_id,
+                                               "reply": "cancel", "params": {}})
         confirmed = answer is not None and answer["reply"] == "apply"
         if not confirmed:
             self.bus.emit("narration", {"text": "Not applied — the plan stands "
