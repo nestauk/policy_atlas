@@ -715,6 +715,21 @@ export const mockApi: DemoApi = {
     s.project.name = name
     return { project_id: id }
   },
+  async updateProject(id, patch) {
+    await delay()
+    const s = states.get(id)
+    const row = s?.project ?? projects.find((p) => p.project_id === id)
+    if (row) {
+      if (patch.name?.trim()) row.name = patch.name.trim()
+      if (patch.question !== undefined) row.question = patch.question.trim()
+    }
+  },
+  async deleteProject(id) {
+    await delay()
+    states.delete(id)
+    const i = projects.findIndex((p) => p.project_id === id)
+    if (i >= 0) projects.splice(i, 1)
+  },
   async chat(id, message) {
     const s = state(id)
     emit(s, { type: 'user.message', data: { text: message } })

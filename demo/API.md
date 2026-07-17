@@ -36,6 +36,15 @@ honest explanation to `reply` and `ready` stays false.
 Writes the approved plan row and starts the real runner in the background
 (400 if the plan hasn't validated ready). Progress arrives on the SSE stream.
 
+### `PATCH /api/projects/{id}` `{name?, question?}` → `{ok: true}`
+Rename a project and/or edit its question line (the card description). A blank
+`name` is ignored; a user-typed name is never auto-replaced by plan-derived titles.
+
+### `DELETE /api/projects/{id}` → `{ok: true}`
+Remove the project from the demo registry (409 while its analysis is running;
+404 if unknown). Registry-only: the project's Postgres rows remain, invisible
+to the demo.
+
 ### `POST /api/projects/{id}/checkin/{checkin_id}` `{reply, params?}` → `{ok: true}`
 Answer a pending steering pause. `reply` is an option **id** from the `checkin` event.
 For `requires_user_input` options, `params` carries the fill-in:

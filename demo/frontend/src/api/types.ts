@@ -299,6 +299,8 @@ export type CheckinParams =
 export interface DemoApi {
   listProjects(): Promise<Project[]>
   createProject(name: string): Promise<{ project_id: string }>
+  updateProject(projectId: string, patch: { name?: string; question?: string }): Promise<void>
+  deleteProject(projectId: string): Promise<void>
   chat(projectId: string, message: string): Promise<{ reply: string; plan: Plan; suggestions: string[] }>
   start(projectId: string): Promise<void>
   answerCheckin(projectId: string, checkinId: string, reply: string, params?: CheckinParams): Promise<void>

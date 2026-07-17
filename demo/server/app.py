@@ -216,6 +216,39 @@ def create_project(body: ProjectIn) -> dict[str, str]:
     return {"project_id": project_id}
 
 
+class ProjectPatch(BaseModel):
+    name: str | None = None
+    question: str | None = None
+
+
+@app.patch("/api/projects/{project_id}")
+def update_project(project_id: str, body: ProjectPatch) -> dict[str, Any]:
+    """Rename a project and/or edit its question line (the card description)."""
+    state = _state(project_id)
+    if body.name is not None and body.name.strip():
+        state.name = body.name.strip()
+        state.auto_named = False  # a user-typed name is never auto-replaced
+    if body.question is not None:
+        state.question = body.question.strip()
+    _save_sidecar()
+    return {"ok": True}
+
+
+@app.delete("/api/projects/{project_id}")
+def delete_project(project_id: str) -> dict[str, Any]:
+    """Remove a project from the demo registry (sidecar).
+
+    ponytail: registry-only delete — the project's Postgres rows stay (orphaned,
+    invisible to the demo). Cascade-delete the durable record if disk matters.
+    """
+    state = _state(project_id)
+    if state.driver is not None and state.driver.running:
+        raise HTTPException(409, "analysis is running — stop it before deleting")
+    del PROJECTS[project_id]
+    _save_sidecar()
+    return {"ok": True}
+
+
 def _state(project_id: str) -> ProjectState:
     state = PROJECTS.get(project_id)
     if state is None:

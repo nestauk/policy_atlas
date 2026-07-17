@@ -19,9 +19,20 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   return res.json() as Promise<T>
 }
 
+async function send(path: string, method: 'PATCH' | 'DELETE', body?: unknown): Promise<void> {
+  const res = await fetch(`/api${path}`, {
+    method,
+    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`${res.status} ${path}`)
+}
+
 export const liveApi: DemoApi = {
   listProjects: () => get('/projects'),
   createProject: (name) => post('/projects', { name }),
+  updateProject: (id, patch) => send(`/projects/${id}`, 'PATCH', patch),
+  deleteProject: (id) => send(`/projects/${id}`, 'DELETE'),
   chat: (id, message) => post(`/projects/${id}/chat`, { message }),
   start: async (id) => {
     await post(`/projects/${id}/start`)
