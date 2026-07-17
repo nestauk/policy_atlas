@@ -92,7 +92,24 @@ function CheckinBlock({ msg }: { msg: ThreadMsg }) {
     void answerCheckin(c.checkin_id, optionId, params)
   }
 
-  const answeredLabel = c.reply ? (c.options.find((o) => o.id === c.reply)?.label ?? c.reply) : ''
+  // The resolved card keeps the chosen response fully visible: the option's
+  // label + description, the typed prose for free text, and any fill-in params.
+  const chosen = c.reply ? c.options.find((o) => o.id === c.reply) : undefined
+  const rp = (c.replyParams ?? {}) as {
+    text?: string; budget?: number; mode?: string; strata?: string[]; docs?: string[]
+  }
+  const answeredLabel =
+    c.reply === 'free_text' ? 'In your own words' : (chosen?.label ?? c.reply ?? '')
+  const answeredDetail =
+    c.reply === 'free_text'
+      ? (rp.text ? `“${rp.text}”` : '')
+      : [
+          chosen?.description ?? '',
+          rp.budget != null ? `Budget → ${rp.budget}` : '',
+          rp.mode ? `Mode → ${rp.mode}` : '',
+          rp.strata?.length ? `Clusters: ${rp.strata.join(', ')}` : '',
+          rp.docs?.length ? `Documents: ${rp.docs.join(', ')}` : '',
+        ].filter(Boolean).join(' · ')
 
   return (
     <div className="anim-glow border-l-[3px] border-orange bg-yellow-tint p-5">
@@ -111,8 +128,16 @@ function CheckinBlock({ msg }: { msg: ThreadMsg }) {
         </div>
       )}
       {c.resolved ? (
-        <div className="mt-3 flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-green-text">
-          <Dot tone="done" /> Answered{answeredLabel ? ` — ${answeredLabel}` : ''}
+        <div className="mt-3">
+          <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-green-text">
+            <Dot tone="done" /> Answered
+          </div>
+          {answeredLabel && (
+            <div className="mt-2 max-w-[52ch] border-l-2 border-line-2 bg-white px-3 py-2">
+              <p className="text-[13px] font-bold text-navy">{answeredLabel}</p>
+              {answeredDetail && <p className="mt-0.5 text-[12px] text-grey">{answeredDetail}</p>}
+            </div>
+          )}
         </div>
       ) : (
         <div className="mt-4 flex flex-col items-start gap-3">

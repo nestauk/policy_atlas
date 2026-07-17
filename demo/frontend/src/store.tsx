@@ -26,6 +26,7 @@ export interface ThreadMsg {
     triggers: CheckinTrigger[]
     resolved: boolean
     reply?: string
+    replyParams?: CheckinParams
   }
 }
 
@@ -90,7 +91,7 @@ type Action =
   | { type: 'reset' }
   | { type: 'user.sent'; text: string }
   | { type: 'thinking'; on: boolean }
-  | { type: 'checkin.answered'; checkinId: string; reply: string }
+  | { type: 'checkin.answered'; checkinId: string; reply: string; params?: CheckinParams }
   | { type: 'data'; key: 'funnel' | 'landscape' | 'groups' | 'coverage' | 'plan'; value: unknown }
 
 function progressLine(d: ProgressData): string | null {
@@ -135,7 +136,7 @@ function reduce(state: State, action: Action): State {
         paused: false,
         thread: state.thread.map((m) =>
           m.checkin?.checkin_id === action.checkinId
-            ? { ...m, checkin: { ...m.checkin, resolved: true, reply: action.reply } }
+            ? { ...m, checkin: { ...m.checkin, resolved: true, reply: action.reply, replyParams: action.params } }
             : m,
         ),
       }
@@ -345,7 +346,7 @@ export function ProjectProvider({ projectId, children }: { projectId: string; ch
   }, [])
 
   const answerCheckin = useCallback(async (checkinId: string, reply: string, params?: CheckinParams) => {
-    dispatch({ type: 'checkin.answered', checkinId, reply })
+    dispatch({ type: 'checkin.answered', checkinId, reply, params })
     await api.answerCheckin(idRef.current, checkinId, reply, params)
   }, [])
 
