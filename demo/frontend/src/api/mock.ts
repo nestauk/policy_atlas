@@ -558,6 +558,8 @@ function script(): Step[] {
             { id: 'strongest_evidence', label: 'Deepen on the strongest evidence', description: 'Widen the shortlist toward the highest-appraised sources.', requires_user_input: false },
             { id: 'most_relevant', label: 'Deepen on the most relevant', description: 'Widen the shortlist toward the most relevant matches.', requires_user_input: false },
             { id: 'adjust_budget', label: 'Adjust the shortlist budget', description: 'Change how many sources go forward for close reading.', requires_user_input: true },
+            { id: 'authored_0', label: 'Deepen the food-environment cluster (14 sources, none shortlisted)', description: 'The largest excluded cluster directly addresses your question.', requires_user_input: false, suggested: true },
+            { id: 'change_mode', label: 'Change how often I check in', description: 'Switch the steering mode for the rest of the run.', requires_user_input: true },
             { id: 'abort', label: 'Stop here', description: 'End the run now; keep everything completed so far.', requires_user_input: false },
           ],
           triggers: [{ trigger: 'excluded_large_stratum', detail: { facet: 'intervention', group: 'food environment', excluded: 14 } }],

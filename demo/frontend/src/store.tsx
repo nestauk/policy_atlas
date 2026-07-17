@@ -20,7 +20,7 @@ export interface ThreadMsg {
   text: string
   checkin?: {
     checkin_id: string
-    kind: 'steer_point' | 'check_in'
+    kind: 'steer_point' | 'check_in' | 'confirm'
     render: string
     options: CheckinOption[]
     triggers: CheckinTrigger[]

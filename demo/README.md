@@ -13,6 +13,12 @@ no contract docs; the API contract is `API.md`.
 > Still demo-only glue, kept by explicit decision: LLM narration + check-in prose,
 > the SSE bus + structlog→SSE bridge + `leg_directive` step-start shim, stage labels,
 > and the gpt-5.5-synthesis / facet-cap-400 monkeypatches.
+>
+> **024 steering surface wired in (2026-07-17):** runs pass the real
+> `OpenAIOrchestratorBackend` — the watch authors run-specific suggestions at the
+> four lattice steer points, free-text steering compiles through the router behind
+> the confirm gate (nothing applies unconfirmed), the steering mode can be changed
+> mid-run, and the Decision Log renders the durable steering record from `event_log`.
 
 ## Run it
 

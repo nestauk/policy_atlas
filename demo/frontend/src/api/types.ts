@@ -228,6 +228,7 @@ export interface CheckinOption {
   label: string
   description: string
   requires_user_input: boolean
+  suggested?: boolean // watch-authored, attributed to the orchestrator
 }
 
 export interface CheckinTrigger {
@@ -248,7 +249,7 @@ export type DemoEvent =
       type: 'checkin'
       data: {
         checkin_id: string
-        kind: 'steer_point' | 'check_in'
+        kind: 'steer_point' | 'check_in' | 'confirm'
         text: string
         render: string
         options: CheckinOption[]
@@ -276,7 +277,11 @@ export const EVENT_TYPES: DemoEvent['type'][] = [
   'checkin.resolved', 'analysis.completed', 'analysis.failed', 'analysis.aborted',
 ]
 
-export type CheckinParams = { budget?: number } | { strata?: string[]; docs?: string[] }
+export type CheckinParams =
+  | { budget?: number }
+  | { strata?: string[]; docs?: string[] }
+  | { text?: string } // free-text steering, compiled by the 024 router
+  | { mode?: string } // steering-mode change
 
 export interface DemoApi {
   listProjects(): Promise<Project[]>

@@ -85,6 +85,7 @@ function CheckinBlock({ msg }: { msg: ThreadMsg }) {
   const [budget, setBudget] = useState('')
   const [strata, setStrata] = useState('')
   const [docs, setDocs] = useState('')
+  const [freeText, setFreeText] = useState('')
 
   const submit = (optionId: string, params?: CheckinParams) => {
     setOpenInput(null)
@@ -95,8 +96,13 @@ function CheckinBlock({ msg }: { msg: ThreadMsg }) {
 
   return (
     <div className="anim-glow border-l-[3px] border-orange bg-yellow-tint p-5">
-      <PaneH className="mb-2">Check-in</PaneH>
+      <PaneH className="mb-2">{c.kind === 'confirm' ? 'Confirm steering' : 'Check-in'}</PaneH>
       <p className="max-w-[52ch] text-[13.5px] leading-relaxed text-navy">{msg.text}</p>
+      {c.kind === 'confirm' && c.render && (
+        <pre className="mt-2 max-h-64 max-w-[52ch] overflow-auto whitespace-pre-wrap border hairline bg-white p-3 text-[12px] leading-relaxed text-navy">
+          {c.render}
+        </pre>
+      )}
       {!c.resolved && c.triggers.length > 0 && (
         <div className="mt-2 space-y-1">
           {c.triggers.map((t, i) => (
@@ -112,8 +118,13 @@ function CheckinBlock({ msg }: { msg: ThreadMsg }) {
         <div className="mt-4 flex flex-col items-start gap-3">
           {c.options.map((opt) => (
             <div key={opt.id} className="w-full max-w-[52ch]">
+              {opt.suggested && (
+                <p className="mb-0.5 text-[10.5px] font-bold uppercase tracking-wide text-blue">
+                  Suggested by the orchestrator
+                </p>
+              )}
               <button
-                className={opt.id === 'abort' ? 'btn btn--ghost' : opt.id === 'continue' ? 'btn' : 'btn btn--sec'}
+                className={opt.id === 'abort' ? 'btn btn--ghost' : opt.id === 'continue' || opt.id === 'apply' ? 'btn' : 'btn btn--sec'}
                 title={opt.description}
                 onClick={() => (opt.requires_user_input ? setOpenInput(openInput === opt.id ? null : opt.id) : submit(opt.id))}
               >
@@ -161,13 +172,46 @@ function CheckinBlock({ msg }: { msg: ThreadMsg }) {
                   </button>
                 </div>
               )}
+              {opt.requires_user_input && openInput === opt.id && opt.id === 'change_mode' && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {MODES.map((m) => (
+                    <button key={m} className="btn btn--sec !py-1 !text-[12px]" onClick={() => submit(opt.id, { mode: m })}>
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
+          {c.kind !== 'confirm' && (
+            <div className="w-full max-w-[52ch] border-t hairline pt-3">
+              <p className="mb-1.5 text-[11.5px] text-grey">
+                Or steer in your own words — you'll see exactly what it means before anything applies.
+              </p>
+              <div className="flex items-end gap-2">
+                <textarea
+                  className="min-h-[56px] flex-1 border hairline px-2 py-1.5 text-[13px] leading-relaxed text-navy outline-none focus:border-blue"
+                  placeholder="e.g. Drop anything before 2015, and add a section on costs"
+                  value={freeText}
+                  onChange={(e) => setFreeText(e.target.value)}
+                />
+                <button
+                  className="btn btn--sec !py-1 !text-[12px]"
+                  disabled={!freeText.trim()}
+                  onClick={() => submit('free_text', { text: freeText.trim() })}
+                >
+                  Steer
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
   )
 }
+
+const MODES = ['frequent', 'moderate', 'minimal', 'unattended'] as const
 
 function SuggestionChips() {
   const { state, sendChat } = useProject()

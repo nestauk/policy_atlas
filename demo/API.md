@@ -41,8 +41,16 @@ Answer a pending steering pause. `reply` is an option **id** from the `checkin` 
 For `requires_user_input` options, `params` carries the fill-in:
 - `adjust_budget` → `{budget: <int>}`
 - `deepen_clusters` → `{strata: [<cluster id>...], docs: [<doc id>...]}`
-Answers are FUNCTIONAL: they map to real steering responses (Continue / Adjust —
-which re-runs the shortlist with the new directive — / Abort).
+- `change_mode` → `{mode: "frequent"|"moderate"|"minimal"|"unattended"}`
+Two replies are not option ids:
+- `free_text` → `{text: <prose>}` — the 024 router compiles the prose into bounded
+  directive deltas; the server then emits a `kind: "confirm"` checkin showing the
+  compiled fan-out (`render`), answered with `apply` or `cancel`. Nothing applies
+  unconfirmed.
+- `authored_<i>` — picks the i-th watch-authored suggestion (`suggested: true`
+  options); applies its component-targeted delta with orchestrator attribution.
+Answers are FUNCTIONAL: they map to real steering responses (Continue / Adjust /
+FreeText / Abort) and land in the durable steering record (`event_log`).
 
 ### Read models (poll after each `stage.completed`, or on view mount)
 - `GET /api/projects/{id}/plan` → Plan shape
@@ -78,15 +86,19 @@ first (so refresh mid-run rebuilds state), then live events follow.
   because its prerequisite failed)
 - `narration` `{text, suggestions?}` — orchestrator speaking in the thread (markdown);
   planning-turn replays carry the turn's suggestion chips
-- `checkin` `{checkin_id, kind: "steer_point"|"check_in", text, render, options, triggers}`
+- `checkin` `{checkin_id, kind: "steer_point"|"check_in"|"confirm", text, render, options, triggers}`
   — analysis paused awaiting the user. `text` is the LLM-prose wrap (demo glue);
   `render` is the deterministic steering render (the content of record). `options` is
-  `[{id, label, description, requires_user_input}]` — ALWAYS server-supplied, never
-  invent options client-side. At the deepening-selection steer point the ids are the
-  017 intent vocabulary (`deepen_clusters`, `strongest_evidence`, `most_relevant`,
-  `adjust_budget`) plus `continue` and `abort`; a plain check-in offers
-  `continue`/`abort` only. `triggers` lists fired steer-point triggers
-  `[{trigger, detail}]` (e.g. `excluded_large_stratum`).
+  `[{id, label, description, requires_user_input, suggested?}]` — ALWAYS
+  server-supplied, never invent options client-side. Steer points are the 024
+  lattice (`search_exception`, `evidence_base_coverage`, `deepening_selection`,
+  `synthesis_shape`); each carries its canonical option ids plus, when the watch
+  authored run-specific suggestions, `authored_<i>` options flagged
+  `suggested: true`. Every pause also offers `continue`, `change_mode`, `abort`,
+  and free-text steering (see the checkin POST). `kind: "confirm"` is the router
+  confirm gate: `render` holds the compiled fan-out, options are `apply`/`cancel`.
+  `triggers` lists fired steer-point triggers `[{trigger, detail}]`
+  (e.g. `excluded_large_stratum`).
 - `analysis.completed` `{status: "succeeded"|"degraded", collation}` — `collation` is the
   runner's flagged-event render (failures/retries/skips), shown honestly on completion
 - `analysis.failed` `{stage, message, collation?}` · `analysis.aborted` `{collation}`

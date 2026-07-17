@@ -27,8 +27,9 @@ from policy_atlas.runtime import runner
 from policy_atlas.core.db import get_engine
 from policy_atlas.runtime.orchestrate import _live_planner_and_backends, _route_option_delta
 from policy_atlas.runtime.orchestration_plan import OrchestrationPlan
+from policy_atlas.runtime.orchestrator_backend import OpenAIOrchestratorBackend
 from policy_atlas.core.schema import evidence_scope, orchestration_plan, project
-from policy_atlas.runtime.steering import Abort, Adjust, Continue, SteeringResponse
+from policy_atlas.runtime.steering import Abort, Adjust, Continue, FreeText, SteeringResponse
 
 log = structlog.get_logger()
 
@@ -202,6 +203,9 @@ class DemoSSEIO:
     def pause(self, point: dict[str, Any], render: str) -> SteeringResponse:
         return self._driver.pause(point, render)
 
+    def confirm(self, render: str) -> bool:
+        return self._driver.confirm(render)
+
 
 class AnalysisDriver:
     """Runs one approved orchestration plan for one project, in a background thread."""
@@ -262,6 +266,10 @@ class AnalysisDriver:
                 plan_row_id=plan_row_id,
                 backends=backends,
                 io=DemoSSEIO(self),
+                session_id=uuid.uuid4(),
+                # the 024 watch/router: run-specific authored options at pauses,
+                # free-text steering compiled into bounded deltas
+                orchestrator=OpenAIOrchestratorBackend(langfuse_client=langfuse_client),
             )
             if outcome.status == "failed":
                 self.failed = outcome.collation_render
@@ -338,18 +346,26 @@ class AnalysisDriver:
         options = [{"id": "continue", "label": "Continue",
                     "description": "Carry on as planned.", "requires_user_input": False}]
         for option in point.get("options") or []:
-            if option["id"] == "as_proposed":
-                continue  # semantically identical to the leading Continue
+            # frame options the demo renders itself; as_proposed ≡ Continue
+            if option["id"] in ("continue", "change_mode", "abort", "as_proposed"):
+                continue
             # the frontend only collects input for the two options below; a
             # requires-input option it can't fill would be a dead button —
-            # those details are best given in prose (the 024 router surface,
-            # which the demo doesn't wire up)
+            # those details are best given as free text (the router compiles them)
             if option["requires_user_input"] and option["id"] not in (
                 "adjust_budget", "deepen_clusters",
             ):
                 continue
             options.append({k: option[k] for k in
                             ("id", "label", "description", "requires_user_input")})
+        # watch-authored run-specific suggestions, attributed (024 discipline iv)
+        for i, authored in enumerate(point.get("authored_options") or []):
+            options.append({"id": f"authored_{i}", "label": str(authored.get("label", "")),
+                            "description": str(authored.get("why", "")),
+                            "requires_user_input": False, "suggested": True})
+        options.append({"id": "change_mode", "label": "Change how often I check in",
+                        "description": "Switch the steering mode for the rest of the run.",
+                        "requires_user_input": True})
         options.append({"id": "abort", "label": "Stop the analysis",
                         "description": "End the run cleanly; everything done so far is kept.",
                         "requires_user_input": False})
@@ -368,6 +384,40 @@ class AnalysisDriver:
             return Continue()
         return self._map_reply(point, answer["reply"], answer["params"])
 
+    def confirm(self, render: str) -> bool:
+        """The 024 confirm gate: nothing a compile produces applies unconfirmed.
+
+        Covers router fan-outs from free text and orchestrator-authored
+        replacement re-runs — the rendered changes go out as a checkin with
+        apply/cancel; only an explicit apply returns True.
+        """
+        checkin_id = str(uuid.uuid4())
+        options = [
+            {"id": "apply", "label": "Apply this steering",
+             "description": "Apply the changes exactly as shown.",
+             "requires_user_input": False},
+            {"id": "cancel", "label": "Don't apply",
+             "description": "Nothing changes — pick an option or rephrase.",
+             "requires_user_input": False},
+        ]
+        self._checkin_event.clear()
+        self.paused = True
+        self.bus.emit("checkin", {
+            "checkin_id": checkin_id, "kind": "confirm",
+            "text": "Here is what your instruction compiles to — apply it?",
+            "render": render, "options": options, "triggers": [],
+        })
+        try:
+            self._checkin_event.wait(timeout=self.CHECKIN_TIMEOUT_S)
+        finally:
+            self.paused = False
+        answer = self._checkin_replies.pop(checkin_id, None)
+        confirmed = answer is not None and answer["reply"] == "apply"
+        if not confirmed:
+            self.bus.emit("narration", {"text": "Not applied — the plan stands "
+                                        "as it was."})
+        return confirmed
+
     def _map_reply(
         self, point: dict[str, Any], reply: str, params: dict[str, Any]
     ) -> SteeringResponse:
@@ -375,6 +425,35 @@ class AnalysisDriver:
             self.bus.emit("narration", {"text": "Stopping the analysis — everything "
                                         "done so far is kept."})
             return Abort()
+        if reply == "free_text":
+            text = str(params.get("text") or "").strip()
+            if not text:
+                return Continue()
+            self.bus.emit("narration", {"text": "Compiling your instruction into "
+                                        "bounded changes — I'll show you what it "
+                                        "means before anything applies."})
+            return FreeText(text)
+        if reply == "change_mode":
+            mode = str(params.get("mode") or "")
+            if mode not in ("frequent", "moderate", "minimal", "unattended"):
+                self.bus.emit("narration", {"text": "That mode didn't parse — "
+                                            "carrying on unchanged."})
+                return Continue()
+            self.bus.emit("narration", {"text": f"Steering mode is now {mode}."})
+            return Adjust(new_mode=mode)
+        if reply.startswith("authored_"):
+            authored = point.get("authored_options") or []
+            try:
+                option = authored[int(reply.removeprefix("authored_"))]
+            except (ValueError, IndexError):
+                return Continue()
+            component = option.get("component")
+            delta = option.get("delta") or {}
+            if not isinstance(component, str) or not component or not delta:
+                return Continue()
+            self.bus.emit("narration", {"text": f"Noted — {str(option.get('label', '')).lower()}."})
+            # user decided, orchestrator authored — attribution rides the event
+            return Adjust(directive_deltas={component: delta}, authored_by="orchestrator")
         by_id = {o["id"]: o for o in point.get("options") or []}
         option = by_id.get(reply)
         if reply == "continue" or option is None or option["id"] == "as_proposed":
