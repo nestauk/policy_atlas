@@ -1299,11 +1299,13 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Component-name rename `screen`→`screen_abstract` / `screen_stage2`→`screen_full`
   — DISCHARGED (task 019).** Renamed, with a one-time data migration
   `b7f3d9a2c5e1` (owner decision 3); no read-side alias.
-- **Direct plan editing on the plan pane** (user, 2026-07-10) — editing the proposed
-  plan directly (not only conversationally), with edits synced back to the planner
-  conversation and a confirm-changes step before the run button arms. Web-app-slice
-  feature: it needs the durable plan surface + a plan-patch grammar and the planner's
-  acknowledgement turn. The conversational half stays the only editing path until then.
+- **Direct plan editing on the plan pane** (user, 2026-07-10; **re-deferred past 025 —
+  owner, 2026-07-20**) — editing the proposed plan directly (not only conversationally),
+  with edits synced back to the planner conversation and a confirm-changes step before
+  the run button arms. Considered for 025-web-app-foundation and deliberately held:
+  conversational editing is demo-validated and sufficient for v1; the plan-patch grammar
+  + the planner's acknowledgement turn are their own design surface. The conversational
+  half stays the only editing path until then.
 
 ## Data model / evidence
 

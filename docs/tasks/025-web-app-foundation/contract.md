@@ -25,8 +25,11 @@
 > a UI fence + confirm-gate delta render load-bearing · honest
 > interruption semantics (no resume engine — live-check pin corrected:
 > the durable record survives a restart, the walk does not) ·
-> share/export + confidence badge made explicit in Out · 🟡 direct
-> plan-pane editing re-deferred + 🟡 upload UI out (both owner calls).
+> share/export + confidence badge made explicit in Out · direct
+> plan-pane editing re-deferred + upload UI out (**owner-settled
+> 2026-07-20**) · B2′ relevance-emphasis clarified as in-scope steering
+> (distinct from the vetter/judge fence, ADR 0023) + findings read
+> model carries the priority|normal marks.
 > rev 1: initial draft.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
@@ -93,8 +96,12 @@ seams; one schema generates both ends of the contract.** Seven strands:
    pending, at its chain position. The UI renders **only
    server-supplied steering options** (demo rule, kept) and must not
    expose or tease the steer classes deferred.md rules OUT (vetting/
-   judge steering, mid-component pause, free-text replanning, query-set
-   pre-approval); the router confirm gate renders the compiled deltas
+   judge steering — i.e. dialling the verifier; **distinct from the B2′
+   relevance-emphasis channel, which is in-scope steering**: it
+   annotates post-vetting survivors `priority | normal` and never
+   instructs the vetter, ADR 0023 — mid-component pause, free-text
+   replanning, query-set pre-approval); the router confirm gate renders
+   the compiled deltas
    (the 024 review's fidelity mitigation — load-bearing, since ~half of
    live free-text steers mis-compiled before it).
 5. **Durable event transport.** SSE per project with backlog replay
@@ -177,7 +184,10 @@ PR landing:
   models rewritten over the real schema (the demo's `readmodels.py` is
   evidence, not source; the chunk-context read model carries the
   **citation-context character clamp** windowed around the cited span —
-  discharges the 008 seam's named web-app consumer), auth dependency
+  discharges the 008 seam's named web-app consumer; the findings read
+  model surfaces the run-scoped B2′ relevance marks — `priority |
+  normal` — when the run carries them, and the P4 check-in render's
+  priority-counts-per-group passes through), auth dependency
   (JWT verification + dev issuer), lifecycle semantics, the startup
   **orphan-run sweep** (in-flight runs marked `interrupted`), OpenAPI
   export command.
@@ -307,14 +317,14 @@ Interface decisions binding strand 2, reviewable at this gate
   read-only/public links (deferred.md + handoff §7.3); the artefact
   confidence badge (§7.2 — descriptive language only); the run resume
   engine (017 seam — interruption is honest, not recoverable);
-  🟡 **direct plan-pane editing** (deferred.md labels it
-  "web-app-slice feature" — recommend **re-deferring**: conversational
-  plan editing is demo-validated and sufficient for v1; the plan-patch
-  grammar + planner acknowledgement turn it needs is its own design
-  surface); 🟡 **document upload UI** (recommend **out**: search
-  supplies the corpus in v1; a real upload surface brings file
-  handling, its own audit events + observable processing per the 009
-  seam, and an untrusted-input security surface — own slice).
+  **direct plan-pane editing** (re-deferred — owner, 2026-07-20:
+  conversational plan editing is demo-validated and sufficient for v1;
+  the plan-patch grammar + planner acknowledgement turn it needs is its
+  own design surface; deferred.md entry re-tagged); **document upload
+  UI** (out — owner, 2026-07-20: search supplies the corpus in v1; a
+  real upload surface brings file handling, its own audit events +
+  observable processing per the 009 seam, and an untrusted-input
+  security surface — own slice).
 - The `demo-live-run` branch itself stays untouched and unmerged; after
   this slice it is historical evidence only.
 
