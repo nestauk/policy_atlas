@@ -11,7 +11,13 @@
 > simultaneous pending check-ins are impossible backend-side); +
 > RETRO.md reframed as point-in-time evidence with a plan-phase
 > reconciliation sweep (owner, 2026-07-20: RETRO is out of date —
-> much was attended to in 019–024).
+> much was attended to in 019–024); + frontend-architecture fold-ins
+> (owner-supplied external notes, 2026-07-20): TanStack Query on the
+> deps list, React version 🟡 to the plan gate, URL-addressable UI
+> state pinned. Rejected from the same notes with reasons: offline/
+> sync-engine (server-authoritative product), xstate (lifecycle state
+> machine is server-side), Cloudflare/Vercel (AWS is pinned), full
+> design system (component primitives suffice).
 > rev 1: initial draft.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
@@ -108,7 +114,11 @@ seams; one schema generates both ends of the contract.** Seven strands:
    019–024 behaviour** (code wins on conflict): locked vocabulary,
    labels never raw numbers, data-driven surfaces (hide, never fake),
    one shared dossier, motion budget with `prefers-reduced-motion`. The
-   store consumes only the generated client + SSE replay.
+   store consumes only the generated client + SSE replay. **UI state
+   that names a thing is URL-addressable**: the source dossier, active
+   view, and filters live in the route/search params (typed), so a
+   dossier or filtered view is deep-linkable and refresh-safe —
+   library choice (router loaders vs nuqs) at plan time.
 
 ## Deliverable
 
@@ -255,8 +265,14 @@ may be re-decided silently mid-build:
   (recommend `pyjwt` + `cryptography`), `httpx` already present;
   SSE via Starlette natively (no `sse-starlette` unless needed).
 - **Dependencies (Node — new ecosystem):** the demo-validated stack
-  pinned above + `openapi-typescript` (client gen), `vitest`,
+  pinned above + `@tanstack/react-query` (server-state layer over the
+  generated client for read models — fetching/caching/invalidation on
+  `stage.completed`; the event-sourced reducer remains only for SSE
+  run/thread state) + `openapi-typescript` (client gen), `vitest`,
   `@playwright/test`. Package manager: **npm** (demo precedent).
+  🟡 React version is a **plan-gate decision**: 19 + compiler
+  (drops manual memoisation) vs the demo's 18 — the demo validated the
+  views, not the version; recharts/router compat is the plan-time check.
 - **CI:** monorepo path updates + frontend lane + drift check.
 - **Public interface:** the `/api/v1` surface itself — documented in
   `web-api.md`; additive-only evolution intent.
