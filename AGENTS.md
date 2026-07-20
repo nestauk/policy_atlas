@@ -27,7 +27,7 @@ progress, 2026-07-20**: contract drafted, awaiting owner approval).
 **The web-app foundation slice — production API + frontend in one
 consolidated slice (owner direction, 2026-07-20), replacing the
 throwaway `demo-live-run` stack.** Strands: (1) monorepo hoist —
-Python project → `backend/`, new `front-end/`, `infra/` reserved
+Python project → `backend/`, new `frontend/`, `infra/` reserved
 (pinned deferred.md decision; import-neutral, tooling paths only);
 (2) production API in `policy_atlas/api/` — schema-first (Pydantic →
 OpenAPI → generated TS client, drift-checked in CI), REST + SSE with

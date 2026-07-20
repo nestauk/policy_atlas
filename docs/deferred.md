@@ -1464,8 +1464,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   an HTML parser is a silent behaviour change on hostile input; (2) `FixtureFetcher`'s
   manifest-basename traversal guard is an `assert` (vanishes under `python -O`) —
   dev/test-only surface today, should become a `ValueError`.
-- **Monorepo hoist: `backend/` (owner layout intent, 2026-07-14)** — when the frontend
-  is pulled into this repo it lands at `front-end/`, the CDK at `infra/` (the reason
+- **Monorepo hoist: `backend/` (owner layout intent, 2026-07-14; amended 2026-07-20:
+  `frontend/`, no dash — being discharged by 025-web-app-foundation)** — when the frontend
+  is pulled into this repo it lands at `frontend/`, the CDK at `infra/` (the reason
   023's shared-layer package is `core/`, not `infra/` — ADR 0019). At that point the
   whole Python project (pyproject.toml, src/, tests/, alembic/, Makefile) hoists into
   `backend/` as a sibling. The `policy_atlas` import name is untouched — src-layout

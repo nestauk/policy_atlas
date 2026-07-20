@@ -45,3 +45,7 @@ Slice-specific:
         the check-in content of record is the deterministic render.
 16. [ ] **Accessibility floor:** keyboard-operable check-in card + dossier;
         `prefers-reduced-motion` honoured; no horizontal body scroll at target widths.
+17. [ ] **API consistency (contract § API design pins):** single error envelope +
+        pinned status mapping on every route; unbounded list endpoints paginated;
+        snake_case JSON throughout; SSE/check-in variants are generated discriminated
+        unions (no hand-rolled event types); no verbs in resource paths.

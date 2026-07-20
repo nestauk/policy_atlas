@@ -1,6 +1,11 @@
 # Task contract: 025-web-app-foundation
 
-> **Status:** drafted (rev 1, 2026-07-20) — awaiting owner approval.
+> **Status:** drafted (rev 2, 2026-07-20) — awaiting owner approval.
+> rev 2: `frontend/` (no dash — owner amendment superseding the
+> deferred.md `front-end/` spelling) + § API design pins added after an
+> `api-and-interface-design` pass (error envelope, pagination,
+> resource-oriented run/check-in shapes, typed SSE variants).
+> rev 1: initial draft.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
 > ADR: _due (Tier 4) — API architecture + auth seam + hoist; number at step 4_.
@@ -29,7 +34,7 @@ seams; one schema generates both ends of the contract.** Seven strands:
 
 1. **Monorepo hoist.** The Python project (pyproject.toml, src/, tests/,
    alembic/, Makefile) hoists to `backend/`; the new frontend lands at
-   `front-end/`; `infra/` is reserved for the CDK (pinned owner layout
+   `frontend/`; `infra/` is reserved for the CDK (pinned owner layout
    intent, deferred.md 2026-07-14 — "do it in the slice that brings the
    frontend in"). Import-neutral (`policy_atlas` name unchanged);
    the cost is tooling paths only (CI, Docker contexts, doc links).
@@ -78,7 +83,7 @@ seams; one schema generates both ends of the contract.** Seven strands:
    🟡 No `users` table in 025: verified claims are the identity; a
    profile table is a 026+ seam (co-pilot transcript store will need
    per-user rows and can bring it).
-7. **The frontend.** `front-end/` on the demo-validated stack (React 18,
+7. **The frontend.** `frontend/` on the demo-validated stack (React 18,
    TypeScript strict, Vite, Tailwind, recharts, react-router) and the
    demo-validated views: landing (project cards incl. paused state),
    planning conversation (plan disclosure, suggestion chips), workspace
@@ -95,11 +100,11 @@ seams; one schema generates both ends of the contract.** Seven strands:
 
 PR landing:
 
-- The hoist: `backend/` (whole Python project) + `front-end/` scaffold +
+- The hoist: `backend/` (whole Python project) + `frontend/` scaffold +
   `infra/.gitkeep`; CI, Docker, Makefile and doc paths updated; full
   suite green post-hoist.
-- `policy_atlas/api/`: FastAPI app — routers (projects, chat/plan,
-  start, check-ins, read models, SSE), Pydantic contract models, read
+- `policy_atlas/api/`: FastAPI app — routers (projects, planning turns,
+  runs, check-ins, read models, SSE), Pydantic contract models, read
   models rewritten over the real schema (the demo's `readmodels.py` is
   evidence, not source), auth dependency (JWT verification + dev
   issuer), lifecycle semantics, OpenAPI export command.
@@ -110,7 +115,7 @@ PR landing:
   tick channel; documented event vocabulary (successor to `demo/API.md`
   § SSE, committed as `docs/specs/system/web-api.md` — new system spec,
   the API's living intent).
-- `front-end/` app: the views above, generated-client store with
+- `frontend/` app: the views above, generated-client store with
   idempotent replay rebuild, mock mode implementing the same generated
   interface, Playwright journey test (mock mode) + unit tests (vitest).
 - `make verify` extended: frontend typecheck · lint · test · build +
@@ -122,6 +127,51 @@ PR landing:
 - ADR (API architecture + auth seam + hoist + delete semantics) +
   spec flow-back (`web-api.md` new; product.md untouched) + deferred.md
   seams + `verification.md` with the pinned live check.
+
+## API design pins
+
+Interface decisions binding strand 2, reviewable at this gate
+(`api-and-interface-design` pass, 2026-07-20):
+
+- **Resource-oriented, no verbs in URLs.** The demo's action endpoints
+  are re-shaped: *runs are resources* — `POST /projects/{id}/runs`
+  replaces `/start` (a run row is created; 409 while one is active) and
+  aligns the API with `capability_run` as the walk identity, so
+  multi-run/multi-question is a listing change, not a reshape. Planning
+  turns are a sub-resource (`POST /projects/{id}/planning-turns`
+  replaces `/chat`). A check-in answer is created as its response
+  sub-resource (`POST .../check-ins/{id}/response`, one per check-in —
+  409 on double-answer).
+- **One error envelope.** Every non-2xx returns
+  `{error: {code, message, details?}}` — machine-readable `code`,
+  human-readable `message`; mapping pinned: 400 malformed · 401
+  unauthenticated · 403 cross-user · 404 unknown/archived · 409
+  conflict (run active, already answered) · 422 validation (Pydantic
+  detail in `details`) · 500 opaque (never leaks internals). Never
+  mixed shapes; error *text* is not contract, `code` is.
+- **Pagination from day one** on unbounded lists (evidence ~200+,
+  findings ~400+ at real scale; projects, decisions): one envelope
+  `{data, pagination: {page, page_size, total_items}}`, filters as
+  query params. Bounded structural reads (plan, funnel, landscape,
+  artefact) stay whole-object.
+- **Partial updates.** `PATCH` semantics everywhere (rename = PATCH
+  with only `name`); archive is idempotent.
+- **One naming convention.** snake_case JSON end-to-end (Pydantic-native;
+  deliberate deviation from camelCase-on-the-wire — one convention,
+  zero rename middleware, matches the existing event vocabulary);
+  plural-noun paths; string-literal lower_snake enums.
+- **Typed variants.** SSE event types and check-in kinds are
+  discriminated unions in the same contract source (Pydantic tagged
+  unions exported into the OpenAPI components), so the generated client
+  narrows on `type`/`kind` — hand-rolled event typing is a rubric
+  failure.
+- **Hyrum hygiene.** Internal component names appear only as the pinned
+  stable `stage` keys (contract vocabulary); labels/blurbs are
+  server-supplied presentation and may change; nothing else internal
+  (module names, model ids, raw payload keys) is observable.
+- **Additive evolution, one version.** `/api/v1` is a namespace, not
+  versioning machinery: new fields optional, removals via deprecation
+  in `web-api.md` — no parallel-version support.
 
 ## Read first
 
@@ -183,7 +233,7 @@ may be re-decided silently mid-build:
 - **CI:** monorepo path updates + frontend lane + drift check.
 - **Public interface:** the `/api/v1` surface itself — documented in
   `web-api.md`; additive-only evolution intent.
-- **Scaffold:** the hoist + `front-end/`.
+- **Scaffold:** the hoist + `frontend/`.
 - **Egress:** none new — the API serves the existing chain; product
   egress (search/model) is unchanged and stays behind approved seams.
 - The API layer must not import demo code; `demo/` never merges.
