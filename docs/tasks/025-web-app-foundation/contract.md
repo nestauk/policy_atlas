@@ -4,7 +4,11 @@
 > rev 2: `frontend/` (no dash — owner amendment superseding the
 > deferred.md `front-end/` spelling) + § API design pins added after an
 > `api-and-interface-design` pass (error envelope, pagination,
-> resource-oriented run/check-in shapes, typed SSE variants).
+> resource-oriented run/check-in shapes, typed SSE variants); +
+> pending-vs-history check-in invariant (owner observation: demo
+> check-ins burst on replay — root cause is the demo store rendering
+> replayed pauses as fresh arrivals; the runner blocks per pause, so
+> simultaneous pending check-ins are impossible backend-side).
 > rev 1: initial draft.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
@@ -62,7 +66,13 @@ seams; one schema generates both ends of the contract.** Seven strands:
    `steering_history`, never from transport memory. The check-in
    *content of record* is the deterministic steering render; the demo's
    LLM prose wrap (`text`) is dropped — no new prompt surfaces in this
-   slice (🟡 see Model route).
+   slice (🟡 see Model route). **Pending is derived, arrival is live**
+   (owner observation, 2026-07-20 — demo check-ins burst on replay):
+   pending = a `steering.pause` without its decision, at most one per
+   active run by construction (the runner blocks); replayed pauses that
+   have decisions render as time/stage-anchored *history*, never as
+   newly-pending cards — only the current blocking pause presents as
+   pending, at its chain position.
 5. **Durable event transport.** SSE per project with backlog replay
    served from `event_log` (+ run/plan state), not an in-memory bus; the
    frontend store rebuilds idempotently from replay alone (demo-proven
@@ -121,7 +131,10 @@ PR landing:
 - `make verify` extended: frontend typecheck · lint · test · build +
   OpenAPI/client drift check; CI updated for the monorepo layout.
 - Tests: SSE replay idempotence (restart simulation), steering
-  check-in round-trip through the real seam, project lifecycle
+  check-in round-trip through the real seam, **resolved-pause replay
+  (a decided pause never re-presents as pending; pending endpoint
+  returns exactly the current blocking pause or nothing)**, project
+  lifecycle
   (rename persists; archive hides + retains; 409 while running),
   authz fail-closed (401/403 incl. cross-user), migration up/down.
 - ADR (API architecture + auth seam + hoist + delete semantics) +
