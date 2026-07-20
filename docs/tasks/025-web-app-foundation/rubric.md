@@ -1,0 +1,47 @@
+# Rubric: 025-web-app-foundation
+
+Core completion criteria. The task is **done only if every box holds** — otherwise it is
+in progress, not done.
+
+1. [ ] Implementation satisfies [contract.md](contract.md).
+2. [ ] `make verify` passes from the hoisted layout (backend + frontend + drift check);
+       declared manual/browser checks pass; the pinned live check ran as specified
+       (including the mid-run server restart) and is narrated in verification.md.
+3. [ ] No approval-gated change snuck in unapproved — schema beyond the `project`
+       migration, auth shape, deps beyond the approved lists, CI, public interfaces,
+       scaffold (see the contract).
+4. [ ] No generated files edited by hand — the TypeScript client is generated only;
+       the drift check proves it (mutating a contract model fails the gate).
+5. [ ] No tests deleted, skipped or weakened without written justification.
+6. [ ] Verification evidence recorded ([verification.md](verification.md)).
+7. [ ] Known gaps and deferred seams listed (component-progress protocol, hard purge,
+       users/profile table, comments/versioning surfaces, narration → docs/deferred.md).
+8. [ ] Tier-4 review stack ran: contract verifier · code review · security-auditor lane
+       (auth/JWT/CORS/SSE) · adversarial (contract + plan + code) · human deep review —
+       findings adjudicated in [verification.md](verification.md).
+
+Slice-specific:
+
+9.  [ ] **One schema, two ends:** every frontend API call goes through the generated
+        client; the mock implements the same generated interface; no hand-maintained
+        parallel types.
+10. [ ] **Durable-record-only reads:** pending check-ins, decision history, and all
+        read models are served from Postgres; killing the API server mid-run loses no
+        state the UI needs (replay test + live check).
+11. [ ] **Real backend semantics:** rename persists to the `project` row; archive
+        hides from listings while retaining all rows; no registry sidecar exists;
+        answers to check-ins land in the durable steering record via the real seam.
+12. [ ] **Auth fail-closed:** every data route rejects unauthenticated (401) and
+        cross-user (403) access — proven by the authz test matrix; dev issuer is
+        visibly non-production; Cognito cutover requires config only (documented).
+13. [ ] **Hoist is import-neutral:** `policy_atlas` import name unchanged; full
+        backend suite green post-hoist; CI/Docker/doc paths updated (grep-verified,
+        no stale `src/` references).
+14. [ ] **RETRO §2 product decisions hold in the UI:** locked vocabulary (component
+        names never rendered; labels from the server), appraisal labels never raw
+        scores, data-driven surfaces hide rather than fake, annotation layer renders
+        in the prose, one shared source dossier.
+15. [ ] **No new prompt surfaces:** diff over `runtime/` prompt families is empty;
+        the check-in content of record is the deterministic render.
+16. [ ] **Accessibility floor:** keyboard-operable check-in card + dossier;
+        `prefers-reduced-motion` honoured; no horizontal body scroll at target widths.

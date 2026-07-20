@@ -22,50 +22,51 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `024-steering-surface` (**design COMPLETE
-2026-07-16**: contract + plan owner-approved, both adversarial reviews
-adjudicated, ADRs 0020–0023 committed — **build opens in a fresh
-conversation with `task-cycle-build`**, phases 0–7 per plan.md; schema
-gate = capability_run + screen_generation). **The steering slice — state-of-the-art human-in-the-loop
-(owner direction; deliberately large, no splitting).** Organising
-principle: every decision surfaces in the durable record; the mode
-moves the *decider* (user ↔ orchestrator), never visibility. Strands:
-(1) durable steering record — steering events on `event_log` + the
-`capability_run` walk entity (the one approved schema addition) + the
-`steering_history` projection (front-end rebuilds the decision
-history from Postgres alone); (2) **one orchestrator, three moments**
-(planning turn · free-text router · boundary watch) behind one seam +
-`orchestrator_v1` prompt family — router: prose → confirmed
-multi-stage bounded deltas; watch: routes/decides per the decider
-dial within the full user surface, authors run-specific options,
-fail-safe to the deterministic floor; (3) the **steer-point lattice**
-P1 (search exception) · P2 (pre-select evidence-base coverage) · P3
-(deepening-selection, enriched + preview) · P4 (synthesis shape) over
-**widened grammars** (channels B1/B3/B5 + B2′ finding-relevance
-annotator; keys D1/D3/D5–D9) with additive-vs-replacement re-run
-modes first-class; (4) modes renamed to delegation postures;
-Unattended = discretion-is-the-mode with planner-authored standing
-instructions. Design record: `docs/tasks/024-steering-surface/`
-`steerability-refinement.md` (annex, binds the contract) +
-`steer-point-study.md`. Tier 3 (runtime egress + schema +
-prompt-bearing surfaces). Build sizing ~3–3.5× the original rev 3
-scope. Sequenced after 024: **025 co-pilot Q&A + the per-user
-transcript store** (owner, 2026-07-16); then the eval slice.
+Implementation — task `025-web-app-foundation` (**design step 1 in
+progress, 2026-07-20**: contract drafted, awaiting owner approval).
+**The web-app foundation slice — production API + frontend in one
+consolidated slice (owner direction, 2026-07-20), replacing the
+throwaway `demo-live-run` stack.** Strands: (1) monorepo hoist —
+Python project → `backend/`, new `front-end/`, `infra/` reserved
+(pinned deferred.md decision; import-neutral, tooling paths only);
+(2) production API in `policy_atlas/api/` — schema-first (Pydantic →
+OpenAPI → generated TS client, drift-checked in CI), REST + SSE with
+durable backlog replay from `event_log` (the demo's in-memory bus
+dies); (3) project lifecycle done properly — schema migration (name,
+question, lifecycle status, soft-delete, nullable owner) so
+rename/delete are real backend semantics, `projects.json` sidecar
+dies; (4) steering/check-ins on the durable substrate — pending
+check-ins + decision history served from Postgres (`steering_history`,
+024), answers through the real steering seam; (5) auth seam shaped
+for **AWS Cognito** (owner pin, 2026-07-20) — OIDC/JWT verification
+at the API boundary + user-identity threading, dev issuer locally;
+Cognito itself lands with the CDK `infra/` slice, not here; (6)
+frontend on the demo-validated stack (React 18 + TS strict + Vite +
+Tailwind) and views, locked user-facing vocabulary, idempotent
+SSE-replay store. Required design inputs: `demo/API.md` +
+`demo/RETRO.md` §§2–3 (on `demo-live-run`). Tier 4 (scaffold +
+public API + schema + auth + deps + CI). Sequenced after 025:
+**026 co-pilot Q&A + the per-user transcript store**; then the eval
+slice.
 
-Tasks `001-walking-skeleton` through `022-synthesis-refinement` are
+Tasks `001-walking-skeleton` through `024-steering-surface` are
 complete (merged) — the EB chain runs end-to-end live behind the
-thin v1 orchestrator with prose-first synthesis output shape v2
-(ADR 0015), select at standard depth, fail-closed country
-filters/groups, IOF schema v2 (ADR 0016), the ICF second finding
-schema + kind-typed `query_findings` + kind-spanning membership
-bridge (ADR 0017), multi-facet grouping on the shared two-stage
-clustering engine + the 022 cost/surface work (ADR 0018, −49%
-synthesis cost), and the pinned prompt surfaces (`planner_v5`,
-`extract_iof_v7` + vetter, `extract_icf_v2` + vetter,
-`synthesise_section_v7` (v6 frozen as the cost-harness baseline),
-`synthesise_sections_v2`). 018 trailing lanes: **C4 demo surface**
-(codex lane, throwaway `demo-live-run` branch — never merges) and
-**D2 rehearsal** (owner-scheduled). After 023: the eval slice
+024 steering surface (one orchestrator, three moments: planning turn ·
+free-text router · boundary watch; steer-point lattice P1–P4; durable
+steering record on `event_log` + `capability_run` + the
+`steering_history` projection; ADRs 0020–0023), with prose-first
+synthesis output shape v2 (ADR 0015), select at standard depth,
+fail-closed country filters/groups, IOF schema v2 (ADR 0016), the ICF
+second finding schema + kind-typed `query_findings` + kind-spanning
+membership bridge (ADR 0017), multi-facet grouping on the shared
+two-stage clustering engine + the 022 cost/surface work (ADR 0018,
+−49% synthesis cost), and the pinned prompt surfaces
+(`orchestrator_v1` family, `extract_iof_v7` + vetter, `extract_icf_v2`
++ vetter, `synthesise_section_v7` (v6 frozen as the cost-harness
+baseline), `synthesise_sections_v2`). 018 trailing lane: **D2
+rehearsal** (owner-scheduled); the `demo-live-run` branch (C4 demo
+surface) stays throwaway — never merges — and is superseded by this
+slice as evidence. After 025: 026 co-pilot Q&A, then the eval slice
 (cost as a first-class axis), then Bedrock, then the workspace
 cluster. All other seams remain deferred (`docs/deferred.md`).
 
