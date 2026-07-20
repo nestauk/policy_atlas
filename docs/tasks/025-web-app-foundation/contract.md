@@ -134,8 +134,15 @@ seams; one schema generates both ends of the contract.** Seven strands:
    wins on conflict. 🟡 **Fonts:** Averta/Zosia are licensed, not
    web-free — web-deployment licensing needs comms confirmation; until
    then the documented fallback stack ships (Mulish/Manrope + geometric
-   display) and the tracked font binaries question (assets.md flag,
-   2026-06-22) is resolved at this gate, not silently inherited.
+   display). **Settled (owner, 2026-07-20):** the org holds the
+   licences; the binaries live in the repo untracked (verified:
+   gitignored since the assets.md flag — that flag is stale) and are
+   **never committed** (open-source repo). The frontend loads them via
+   `@font-face` when present locally and must render correctly on the
+   fallback stack when absent (fresh clones, CI). Secure delivery of
+   the licensed fonts to the deployed webapp without exposing them is
+   **deferred to the infra slice** (deferred.md entry ships with this
+   slice).
 
 ## Deliverable
 

@@ -15,7 +15,8 @@ in progress, not done.
 5. [ ] No tests deleted, skipped or weakened without written justification.
 6. [ ] Verification evidence recorded ([verification.md](verification.md)).
 7. [ ] Known gaps and deferred seams listed (component-progress protocol, hard purge,
-       users/profile table, comments/versioning surfaces, narration → docs/deferred.md).
+       users/profile table, comments/versioning surfaces, narration, secure licensed-font
+       delivery at deployment → docs/deferred.md).
 8. [ ] Tier-4 review stack ran: contract verifier · code review · security-auditor lane
        (auth/JWT/CORS/SSE) · adversarial (contract + plan + code) · human deep review —
        findings adjudicated in [verification.md](verification.md).
