@@ -29,7 +29,14 @@
 > plan-pane editing re-deferred + upload UI out (**owner-settled
 > 2026-07-20**) · B2′ relevance-emphasis clarified as in-scope steering
 > (distinct from the vetter/judge fence, ADR 0023) + findings read
-> model carries the priority|normal marks.
+> model carries the priority|normal marks. Also considered and
+> rejected (owner question, 2026-07-20): **Astryx** (Meta's design
+> system, beta v0.1.6) — pre-1.0 API under a Tier-4 foundation,
+> StyleX collides with the pinned Tailwind stack, Nesta's distinctive
+> brand components need custom work regardless, and the app-specific
+> surfaces (annotation spans, check-in cards, dossier) exist in no
+> library; revisit at the workspace-cluster slice if the owned
+> primitive set sprawls or a second app appears.
 > rev 1: initial draft.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
