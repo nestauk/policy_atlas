@@ -8,7 +8,10 @@
 > pending-vs-history check-in invariant (owner observation: demo
 > check-ins burst on replay — root cause is the demo store rendering
 > replayed pauses as fresh arrivals; the runner blocks per pause, so
-> simultaneous pending check-ins are impossible backend-side).
+> simultaneous pending check-ins are impossible backend-side); +
+> RETRO.md reframed as point-in-time evidence with a plan-phase
+> reconciliation sweep (owner, 2026-07-20: RETRO is out of date —
+> much was attended to in 019–024).
 > rev 1: initial draft.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
@@ -101,10 +104,11 @@ seams; one schema generates both ends of the contract.** Seven strands:
    confirm-gate rendering), evidence base/artefact (annotation layer IN
    the prose, citation hover→click ladder, source dossier slide-over),
    findings, sources, decision log, landscape charts. The RETRO §2
-   product decisions are **binding**: locked vocabulary, labels never
-   raw numbers, data-driven surfaces (hide, never fake), one shared
-   dossier, motion budget with `prefers-reduced-motion`. The store
-   consumes only the generated client + SSE replay.
+   product decisions are **binding unless superseded by as-built
+   019–024 behaviour** (code wins on conflict): locked vocabulary,
+   labels never raw numbers, data-driven surfaces (hide, never fake),
+   one shared dossier, motion budget with `prefers-reduced-motion`. The
+   store consumes only the generated client + SSE replay.
 
 ## Deliverable
 
@@ -188,9 +192,19 @@ Interface decisions binding strand 2, reviewable at this gate
 
 ## Read first
 
-- `demo/API.md` and `demo/RETRO.md` §§2–4 (branch `origin/demo-live-run`)
-  — the validated contract shape, binding product decisions, and the
-  contract-discipline lessons this slice exists to answer.
+- `demo/API.md` and `demo/RETRO.md` (branch `origin/demo-live-run`) —
+  **read as point-in-time evidence (2026-07-09/10, pre-019–024), not as
+  a to-do list** (owner, 2026-07-20: much of it has since been attended
+  to — e.g. depth gating → 019, extraction prompt rules → 020's
+  `extract_iof_v7`, synthesis voice → 022's `synthesise_section_v7`,
+  facet-cap scale → 022's clustering engine, steering vocabulary → 024).
+  §2 (product/UX decisions) is the validated UX baseline, read against
+  the as-built 024 surfaces — code wins on conflict. §3's
+  contract-discipline lesson (schema-first) stands. §§4–5 engineering
+  observations are historical: **the plan includes a RETRO
+  reconciliation sweep** classifying every item as discharged (naming
+  the slice) · still-open (in this slice or deferred.md) · superseded —
+  nothing from RETRO enters the build unverified against dev.
 - [product.md](../../specs/product.md) — the workspace boundary; the EB
   journey the UI serves; progressive disclosure.
 - [execution-orchestration.md](../../specs/system/execution-orchestration.md)
