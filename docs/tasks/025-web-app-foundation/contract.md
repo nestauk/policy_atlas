@@ -118,7 +118,24 @@ seams; one schema generates both ends of the contract.** Seven strands:
    that names a thing is URL-addressable**: the source dossier, active
    view, and filters live in the route/search params (typed), so a
    dossier or filtered view is deep-linkable and refresh-safe —
-   library choice (router loaders vs nuqs) at plan time.
+   library choice (router loaders vs nuqs) at plan time. **Design
+   sources are two layers** (owner, 2026-07-20): the *brand layer* is
+   the comms-team shared component library (Figma; distilled in-repo as
+   `docs/specs/sources/evidence-base-ux/nesta-brand-tokens.md` +
+   `hifi.css`) → Tailwind theme tokens (palette, type hierarchy, the
+   0-radius/45°-cutout button language, nav states); the *app layer* is
+   a small owned set of component primitives (chips, cards, drawer,
+   check-in card, table rows, state grammar) built in-slice as ordinary
+   code — **no standalone design-system package**. The wireframe pack
+   (`evidence-base-wireframes.html` + screenshots + the handoff's §7
+   locked decisions) is design reference under the same point-in-time
+   rule as RETRO.md: the handoff predates 019–024 (e.g. Quick/Deep is
+   superseded by the two-axis effort/depth gradation) — as-built code
+   wins on conflict. 🟡 **Fonts:** Averta/Zosia are licensed, not
+   web-free — web-deployment licensing needs comms confirmation; until
+   then the documented fallback stack ships (Mulish/Manrope + geometric
+   display) and the tracked font binaries question (assets.md flag,
+   2026-06-22) is resolved at this gate, not silently inherited.
 
 ## Deliverable
 
@@ -222,6 +239,10 @@ Interface decisions binding strand 2, reviewable at this gate
 - [data-model.md](../../specs/system/data-model.md) + `core/schema.py` —
   the real tables the read models project (note: `project` is bare
   today: `project_id` + `created_at` only).
+- `docs/specs/sources/evidence-base-ux/` — the wireframe pack: handoff
+  (§7 locked decisions), brand tokens, `hifi.css`, 11 screenshots —
+  point-in-time design reference (see strand 7 caveat); the comms
+  Figma shared component library is its upstream (access via owner).
 - 024's `steering_history` projection + steering event vocabulary
   (`docs/tasks/024-steering-surface/` + the as-built code — code wins).
 - deferred.md entries: monorepo hoist (2026-07-14) · per-query source
