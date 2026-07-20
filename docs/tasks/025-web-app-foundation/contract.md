@@ -18,6 +18,15 @@
 > sync-engine (server-authoritative product), xstate (lifecycle state
 > machine is server-side), Cloudflare/Vercel (AWS is pinned), full
 > design system (component primitives suffice).
+> Deferred.md sweep fold-ins (2026-07-20, full-file sweep): DB-level
+> one-active-run dispatch guard (008 pre-registered) · citation-context
+> clamp on chunk-context (008, named web-app consumer) · display-string
+> scrub at render (024 security lane, named 025) · steering OUT-list as
+> a UI fence + confirm-gate delta render load-bearing · honest
+> interruption semantics (no resume engine — live-check pin corrected:
+> the durable record survives a restart, the walk does not) ·
+> share/export + confidence badge made explicit in Out · 🟡 direct
+> plan-pane editing re-deferred + 🟡 upload UI out (both owner calls).
 > rev 1: initial draft.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
@@ -81,12 +90,24 @@ seams; one schema generates both ends of the contract.** Seven strands:
    active run by construction (the runner blocks); replayed pauses that
    have decisions render as time/stage-anchored *history*, never as
    newly-pending cards — only the current blocking pause presents as
-   pending, at its chain position.
+   pending, at its chain position. The UI renders **only
+   server-supplied steering options** (demo rule, kept) and must not
+   expose or tease the steer classes deferred.md rules OUT (vetting/
+   judge steering, mid-component pause, free-text replanning, query-set
+   pre-approval); the router confirm gate renders the compiled deltas
+   (the 024 review's fidelity mitigation — load-bearing, since ~half of
+   live free-text steers mis-compiled before it).
 5. **Durable event transport.** SSE per project with backlog replay
    served from `event_log` (+ run/plan state), not an in-memory bus; the
    frontend store rebuilds idempotently from replay alone (demo-proven
    resilience model, now on the durable substrate — survives server
-   restart mid-run *including* a pending check-in). Liveness ticks that
+   restart mid-run *including* a pending check-in). **Honest
+   interruption, no resume engine** (the resume engine stays deferred —
+   017 seam): runs execute in-process; a server death mid-run kills the
+   walk, so on startup an orphan sweep marks in-flight runs (including
+   blocked-at-a-pause) as `interrupted` in the durable record; the UI
+   renders interruption honestly and offers a fresh run — it never
+   pretends a dead walk is resumable. Liveness ticks that
    have no durable home (search/fetch progress) flow on a clearly
    labelled ephemeral channel — best-effort, never state-bearing. 🟡 A
    fully *designed* component-progress protocol (RETRO §4) is out; this
@@ -154,8 +175,12 @@ PR landing:
 - `policy_atlas/api/`: FastAPI app — routers (projects, planning turns,
   runs, check-ins, read models, SSE), Pydantic contract models, read
   models rewritten over the real schema (the demo's `readmodels.py` is
-  evidence, not source), auth dependency (JWT verification + dev
-  issuer), lifecycle semantics, OpenAPI export command.
+  evidence, not source; the chunk-context read model carries the
+  **citation-context character clamp** windowed around the cited span —
+  discharges the 008 seam's named web-app consumer), auth dependency
+  (JWT verification + dev issuer), lifecycle semantics, the startup
+  **orphan-run sweep** (in-flight runs marked `interrupted`), OpenAPI
+  export command.
 - Generated TypeScript client + the drift check wired into `make verify`
   / CI (regenerate → diff → fail on mismatch).
 - Alembic migration for the `project` lifecycle columns (+ downgrade).
@@ -192,7 +217,12 @@ Interface decisions binding strand 2, reviewable at this gate
   turns are a sub-resource (`POST /projects/{id}/planning-turns`
   replaces `/chat`). A check-in answer is created as its response
   sub-resource (`POST .../check-ins/{id}/response`, one per check-in —
-  409 on double-answer).
+  409 on double-answer). **One active run per project is enforced in
+  Postgres at dispatch** (partial unique index or advisory lock —
+  mechanism at plan time), not in app memory — the API's 409 is backed
+  by the DB guard. Discharges the pre-registered 008 seam
+  (deferred.md "Concurrent-run write guard", named for the web-app /
+  durable-execution slice).
 - **One error envelope.** Every non-2xx returns
   `{error: {code, message, details?}}` — machine-readable `code`,
   human-readable `message`; mapping pinned: 400 malformed · 401
@@ -273,7 +303,18 @@ Interface decisions binding strand 2, reviewable at this gate
   existing `project.question` field); RBAC/artefact-scoped visibility
   and per-item sensitivity (deferred per product.md); LLM narration
   prose and any new prompt surface; hard-delete/purge; the designed
-  component-progress protocol (seam recorded).
+  component-progress protocol (seam recorded); share/export CTAs and
+  read-only/public links (deferred.md + handoff §7.3); the artefact
+  confidence badge (§7.2 — descriptive language only); the run resume
+  engine (017 seam — interruption is honest, not recoverable);
+  🟡 **direct plan-pane editing** (deferred.md labels it
+  "web-app-slice feature" — recommend **re-deferring**: conversational
+  plan editing is demo-validated and sufficient for v1; the plan-patch
+  grammar + planner acknowledgement turn it needs is its own design
+  surface); 🟡 **document upload UI** (recommend **out**: search
+  supplies the corpus in v1; a real upload surface brings file
+  handling, its own audit events + observable processing per the 009
+  seam, and an untrusted-input security surface — own slice).
 - The `demo-live-run` branch itself stays untouched and unmerged; after
   this slice it is historical evidence only.
 
@@ -322,6 +363,13 @@ may be re-decided silently mid-build:
 - No secrets in the frontend bundle or its env files; CORS locked to the
   app origin; dev issuer keys are dev-only artifacts, never committed
   private keys with production semantics.
+- **Model-authored display strings are untrusted at render** (024
+  security-lane recommendation naming 025): event-payload display
+  strings persist NUL-scrubbed only — the web renderer must scrub
+  control/format characters on render (or the persistence layer adopts
+  `sanitize_prompt_field`; choice at plan time), and React's default
+  escaping is relied on — no `dangerouslySetInnerHTML` on any
+  model-authored or source-derived string.
 
 ## Model route
 
@@ -365,9 +413,12 @@ Report the blocker; don't push through.
   planning conversation (2–3 turns) → start (rapid/standard effort) →
   answer one check-in in the UI (incl. one free-text steer through the
   confirm gate) → **kill and restart the API server mid-run** → UI
-  rebuilds from replay and the pending state survives → completion →
+  rebuilds from replay, the interrupted walk is marked and rendered
+  honestly (orphan sweep — the durable record survives; the walk does
+  not, there is no resume engine) → start a fresh run → completion →
   artefact renders with annotation layer + dossier → rename → archive →
-  landing reflects both. Estimated wall ≈ 15–25 min. **No full live
+  landing reflects both. Estimated wall ≈ 20–30 min (two runs, one
+  interrupted). **No full live
   deep-run e2e** — the suite's stub full-chain test covers chain
   integrity. Playwright mock-mode journey covers the UI flows that the
   live pin doesn't exercise.
