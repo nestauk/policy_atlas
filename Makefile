@@ -1,11 +1,11 @@
-.PHONY: setup test test-fast typecheck lint build verify verify-fast okf-validate audit
+.PHONY: setup test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths
 
-# Tests run against a dedicated database on the same local container, so committing
-# tests can't pollute the dev DB. Override for a different host/DB.
-TEST_DATABASE_URL ?= postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas_test
+# Root orchestrator (025 A.2 monorepo hoist): the Python project lives in
+# backend/; this Makefile owns the shared db service + the root-level gates
+# (OKF conformance, cross-tree path audit) and delegates everything else so
+# every pre-hoist target name keeps working unchanged from repo root.
 
 setup:
-	uv sync
 	docker compose up -d db
 	@echo "Waiting for Postgres to be healthy..."
 	@until docker compose exec db pg_isready -U policy_atlas -q; do sleep 1; done
@@ -14,56 +14,46 @@ setup:
 		"SELECT 1 FROM pg_database WHERE datname='policy_atlas_test'" | grep -q 1 \
 		|| docker compose exec -T db createdb -U policy_atlas policy_atlas_test
 	@echo "Test DB ready (policy_atlas_test)."
-	uv run alembic upgrade head
+	$(MAKE) -C backend setup
 
 test:
-	DATABASE_URL="$(TEST_DATABASE_URL)" uv run pytest
+	$(MAKE) -C backend test
 
-# Inner-loop convenience: everything except the ingest integration tests (~11 real
-# document-ingest runs, minutes). Full `make test` / `make verify` remain the gate.
 test-fast:
-	DATABASE_URL="$(TEST_DATABASE_URL)" uv run pytest --ignore=tests/test_ingest_full_text.py
+	$(MAKE) -C backend test-fast
 
 typecheck:
-	uv run mypy src tests
+	$(MAKE) -C backend typecheck
 
 lint:
-	uv run ruff check src tests
+	$(MAKE) -C backend lint
 
 build:
-	uv build
+	$(MAKE) -C backend build
 
 okf-validate:
-	uv run python scripts/okf_validate.py
+	uv run --project backend python scripts/okf_validate.py
 
-# Dependency-vulnerability audit (016 contract rev 2.2): PyPA/OSV advisories over
-# the locked dependency set. Audits the synced environment (= the uv.lock closure;
-# the editable first-party project is the one expected skip) rather than an
-# exported requirements file: pip-audit's `-r` mode builds a throwaway venv via
-# ensurepip, which SIGABRTs under uv-managed CPython on macOS — environment mode
-# audits the same pinned set with no venv, identically local and CI.
-# Ignore-list policy: an accepted advisory is an explicit `--ignore-vuln <ID>`
-# argument here, each carrying an adjacent comment justifying it. Currently none.
+# Dependency-vulnerability audit (016 contract rev 2.2) — delegates to backend,
+# where the locked dependency set actually lives.
 audit:
-	uv run --with pip-audit pip-audit --skip-editable --progress-spinner=off
+	$(MAKE) -C backend audit
+
+# Cross-tree path audit (025 A.2): fails if a tracked file references a
+# hoisted backend/ path as repo-root-relative instead of backend/-relative.
+audit-paths:
+	uv run --project backend python scripts/audit_paths.py
 
 verify:
 	@if ! docker compose exec db pg_isready -U policy_atlas -q 2>/dev/null; then \
 		echo "ERROR: Postgres is not running. Run 'make setup' first." >&2; exit 1; \
 	fi
 	$(MAKE) okf-validate
-	$(MAKE) test
-	$(MAKE) typecheck
-	$(MAKE) lint
-	$(MAKE) build
+	$(MAKE) -C backend verify
+	$(MAKE) audit-paths
 
 # Intermediate phase-commit gate (011 retro): test-fast + typecheck + lint.
 # Full `make verify` remains mandatory at the build-open baseline, any phase
 # touching schema or ingest-adjacent code, and the step-6 exit.
 verify-fast:
-	@if ! docker compose exec db pg_isready -U policy_atlas -q 2>/dev/null; then \
-		echo "ERROR: Postgres is not running. Run 'make setup' first." >&2; exit 1; \
-	fi
-	$(MAKE) test-fast
-	$(MAKE) typecheck
-	$(MAKE) lint
+	$(MAKE) -C backend verify-fast

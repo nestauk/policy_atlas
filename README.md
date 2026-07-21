@@ -14,22 +14,25 @@ in [`docs/tasks/`](docs/tasks/).
 ## Layout
 
 ```
-src/policy_atlas/
-  runtime/         orchestrator CLI, capability runner, LangGraph harness,
-                   planner, steering, run-spec compile
-  evidence_base/   the EB capability
-    sourcing/      search backends + loop, acquisition, full-text ingest
-    assess/        screening, classification, appraisal
-    corpus/        characterise, select, ranking, theme grouping
-    extract/       Intervention, outcome and context findings extraction, vetters, quote verification
-    group/         multi-facet grouping over extracted findings
-    synthesis/     artefact composition, section generation loop, grounding judge
-  core/            schema, db, events, logging, tracing, usage, model-client
-                   plumbing, embeddings
-alembic/           database migrations
-tests/             mirrors the src tree; conftest runs migrations once per session;
-                   tests/data/ holds all fixtures (full-text corpus + sanitized
-                   provider records)
+backend/                     Python project (import-neutral hoist, task 025 A.2)
+backend/src/policy_atlas/
+  runtime/                   orchestrator CLI, capability runner, LangGraph harness,
+                             planner, steering, run-spec compile
+  evidence_base/             the EB capability
+    sourcing/                search backends + loop, acquisition, full-text ingest
+    assess/                  screening, classification, appraisal
+    corpus/                  characterise, select, ranking, theme grouping
+    extract/                 Intervention, outcome and context findings extraction, vetters, quote verification
+    group/                   multi-facet grouping over extracted findings
+    synthesis/               artefact composition, section generation loop, grounding judge
+  core/                      schema, db, events, logging, tracing, usage, model-client
+                             plumbing, embeddings
+backend/alembic/             database migrations
+backend/tests/               mirrors the src tree; conftest runs migrations once per session;
+                             backend/tests/data/ holds all fixtures (full-text corpus +
+                             sanitized provider records)
+frontend/                    web app (scaffold lands task 025 phase F)
+infra/                       CDK (reserved)
 docs/              specs, ADRs, task records, knowledge base, agentic-ops
 ```
 
@@ -49,7 +52,7 @@ make verify-fast          # inner-loop variant (skips the slow ingest suite)
 The orchestrator CLI is the product entry point:
 
 ```sh
-uv run python -m policy_atlas.runtime.orchestrate
+uv run --project backend python -m policy_atlas.runtime.orchestrate
 ```
 
 ## Licence

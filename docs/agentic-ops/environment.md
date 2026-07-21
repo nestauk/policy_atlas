@@ -89,7 +89,7 @@ Update it when the setup changes, not before.
 ## Setup commands
 
 ```
-cp .env.example .env     # provides DATABASE_URL (see Local env vars)
+cp backend/.env.example backend/.env     # provides DATABASE_URL (see Local env vars)
 make setup               # uv sync -> compose up db -> wait -> create policy_atlas_test -> alembic upgrade head
 make verify              # test (against policy_atlas_test) -> typecheck -> lint -> build (pre-checks the DB is up)
 ```

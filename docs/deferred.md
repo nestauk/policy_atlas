@@ -1467,14 +1467,14 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   manifest-basename traversal guard is an `assert` (vanishes under `python -O`) —
   dev/test-only surface today, should become a `ValueError`.
 - **Monorepo hoist: `backend/` (owner layout intent, 2026-07-14; amended 2026-07-20:
-  `frontend/`, no dash — being discharged by 025-web-app-foundation)** — when the frontend
-  is pulled into this repo it lands at `frontend/`, the CDK at `infra/` (the reason
-  023's shared-layer package is `core/`, not `infra/` — ADR 0019). At that point the
-  whole Python project (pyproject.toml, src/, tests/, alembic/, Makefile) hoists into
-  `backend/` as a sibling. The `policy_atlas` import name is untouched — src-layout
-  makes the hoist import-neutral; the cost is tooling paths only (CI working-directory,
-  Docker contexts, CDK references, doc links). Do it in the slice that brings the
-  frontend in, not before.
+  `frontend/`, no dash — DISCHARGED, 025-web-app-foundation A.2, 2026-07-21).** The
+  frontend lands at `frontend/`, the CDK will land at `infra/` (the reason 023's
+  shared-layer package is `core/`, not `infra/` — ADR 0019). The whole Python project
+  (`backend/pyproject.toml`, `backend/src/`, `backend/tests/`, `backend/alembic/`,
+  `backend/Makefile`) has hoisted into `backend/` as a sibling of `frontend/` and
+  `infra/`. The `policy_atlas` import name is untouched — src-layout made the hoist
+  import-neutral; the cost was tooling paths only (CI working-directory, Docker
+  contexts, CDK references, doc links).
 - **Per-query source provenance (demo carry-back, 2026-07-15)** — the search fan-out is
   already fully audited at the query grain (`search.executed` events persist query text,
   backend, filters, origin and result count), but `source.acquired` /

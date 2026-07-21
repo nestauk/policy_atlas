@@ -9,7 +9,7 @@ fixture: real field names, nesting and nullability patterns; fabricated values.
 Leak-guard markers: every DOI gets the reserved fake prefix ``10.99999/``,
 every URL lands on ``example.org`` (test-enforced).
 
-Usage: uv run python scripts/record_openalex_fixtures.py
+Usage: uv run --project backend python scripts/record_openalex_fixtures.py
 (``OPENALEX_API_KEY`` optional — OpenAlex works keyless.)
 """
 
@@ -34,7 +34,12 @@ TIMEOUT_S = 30
 SANITIZER_VERSION = "v2"
 RAW_PATH = Path(__file__).parent / "recordings" / "openalex_raw.json"
 FIXTURE_PATH = (
-    Path(__file__).parent.parent / "tests" / "data" / "provider_records" / "openalex_works.json"
+    Path(__file__).parent.parent
+    / "backend"
+    / "tests"
+    / "data"
+    / "provider_records"
+    / "openalex_works.json"
 )
 
 
