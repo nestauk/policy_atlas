@@ -72,6 +72,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/artefact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Artefact
+         * @description Return the latest persisted synthesis artefact or a shaped absence.
+         */
+        get: operations["artefact_api_v1_projects__project_id__artefact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/check-ins": {
         parameters: {
             query?: never;
@@ -112,6 +132,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/citations/{citation_key}/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Chunk Context
+         * @description Return a clamped context window for an artefact citation id.
+         */
+        get: operations["chunk_context_api_v1_projects__project_id__citations__citation_key__context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Coverage
+         * @description Return the composed latest search coverage statement.
+         */
+        get: operations["coverage_api_v1_projects__project_id__coverage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Decisions
+         * @description Return the allowlisted audit and steering decision history.
+         */
+        get: operations["decisions_api_v1_projects__project_id__decisions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/events": {
         parameters: {
             query?: never;
@@ -124,6 +204,106 @@ export interface paths {
          * @description Stream an owner-scoped durable replay followed by a non-blocking live tail.
          */
         get: operations["stream_events_api_v1_projects__project_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Evidence
+         * @description Return a bounded page from the evidence status ladder.
+         */
+        get: operations["evidence_api_v1_projects__project_id__evidence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/findings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Findings
+         * @description Return a bounded page of IOF and ICF findings.
+         */
+        get: operations["findings_api_v1_projects__project_id__findings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/funnel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Funnel
+         * @description Return the durable acquisition-to-citation funnel.
+         */
+        get: operations["funnel_api_v1_projects__project_id__funnel_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Groups
+         * @description Return the latest grouping facets and residual counts.
+         */
+        get: operations["groups_api_v1_projects__project_id__groups_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/landscape": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Landscape
+         * @description Return screened-in-only landscape distributions.
+         */
+        get: operations["landscape_api_v1_projects__project_id__landscape_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -273,6 +453,51 @@ export interface components {
              * @enum {string}
              */
             kind: "abort";
+        };
+        /**
+         * ArtefactOut
+         * @description The `artefact` read model — the synthesised evidence base.
+         *
+         *     Args:
+         *         title: Artefact title.
+         *         question: The evidence question the artefact answers.
+         *         coverage_snapshot: Embedded coverage snapshot.
+         *         sections: Artefact sections, in final page order.
+         *         references: Numbered reference list.
+         */
+        ArtefactOut: {
+            coverage_snapshot: components["schemas"]["CoverageSnapshotOut"];
+            /** Question */
+            question: string;
+            /** References */
+            references?: components["schemas"]["ReferenceOut"][];
+            /** Sections */
+            sections?: components["schemas"]["SectionOut"][];
+            /** Title */
+            title: string;
+        };
+        /**
+         * BlockOut
+         * @description One prose block within an artefact section.
+         *
+         *     Args:
+         *         block_id: The block's identity.
+         *         prose: The block's final persisted prose.
+         *         claims: Span-anchored claim annotations over `prose`.
+         *         gaps: Named coverage gaps surfaced for this block.
+         */
+        BlockOut: {
+            /**
+             * Block Id
+             * Format: uuid
+             */
+            block_id: string;
+            /** Claims */
+            claims?: components["schemas"]["ClaimOut"][];
+            /** Gaps */
+            gaps?: string[];
+            /** Prose */
+            prose: string;
         };
         /**
          * CheckInOption
@@ -443,6 +668,90 @@ export interface components {
             type: "checkin.resolved";
         };
         /**
+         * ChunkContextOut
+         * @description The chunk-context read model for a cited span (the 008 seam).
+         *
+         *     Args:
+         *         context: Context text, clamped to a character window around the
+         *             cited span.
+         *         span_start: Start offset of the clamped context.
+         *         span_end: End offset of the clamped context.
+         *         clamped: Whether the window was clamped (hit a chunk boundary).
+         */
+        ChunkContextOut: {
+            /** Clamped */
+            clamped: boolean;
+            /** Context */
+            context: string;
+            /** Span End */
+            span_end: number;
+            /** Span Start */
+            span_start: number;
+        };
+        /**
+         * CitationOut
+         * @description One citation attached to a citation-type claim.
+         *
+         *     Args:
+         *         citation_id: Durable citation identity — the key for the
+         *             chunk-context endpoint (`GET .../citations/{citation_id}/context`).
+         *         n: Reference number (matches a `ReferenceOut.n`).
+         *         source_title: Cited source's title.
+         *         quote: The quoted span from the source.
+         *         grounding_tier: Optional grounding-judge tier label.
+         *         appraisal_label: Optional appraisal label.
+         */
+        CitationOut: {
+            /** Appraisal Label */
+            appraisal_label?: string | null;
+            /**
+             * Citation Id
+             * Format: uuid
+             */
+            citation_id: string;
+            /** Grounding Tier */
+            grounding_tier?: string | null;
+            /** N */
+            n: number;
+            /** Quote */
+            quote: string;
+            /** Source Title */
+            source_title: string;
+        };
+        /**
+         * ClaimOut
+         * @description One span-anchored claim annotation within a block.
+         *
+         *     Args:
+         *         claim_id: The claim's identity.
+         *         claim_type: Annotation type.
+         *         text: The spanned text.
+         *         span: Character offsets `[start, end]` into the block's `prose`, or
+         *             `None`.
+         *         citations: Citations attached to this claim (citation-type only).
+         */
+        ClaimOut: {
+            /** Citations */
+            citations?: components["schemas"]["CitationOut"][];
+            /**
+             * Claim Id
+             * Format: uuid
+             */
+            claim_id: string;
+            /**
+             * Claim Type
+             * @enum {string}
+             */
+            claim_type: "citation" | "gap" | "reasoning" | "pattern" | "theme" | "unspanned_assertion";
+            /** Span */
+            span?: [
+                number,
+                number
+            ] | null;
+            /** Text */
+            text: string;
+        };
+        /**
          * CountryGroupDraft
          * @description Draft mirror of the runtime `CountryGroup`.
          *
@@ -468,6 +777,184 @@ export interface components {
              * @default null
              */
             label: string | null;
+        };
+        /**
+         * CoverageOut
+         * @description The `coverage` read model — the composed one-line coverage sentence.
+         *
+         *     Args:
+         *         sentence: The composed coverage sentence (stop condition + adequacy).
+         *         base: Structured basis the sentence was composed from.
+         */
+        CoverageOut: {
+            /** Base */
+            base?: {
+                [key: string]: unknown;
+            };
+            /** Sentence */
+            sentence: string;
+        };
+        /**
+         * CoverageSnapshotOut
+         * @description The artefact's embedded coverage snapshot.
+         *
+         *     Args:
+         *         source_count: Number of sources underlying the artefact.
+         *         study_types: Counts by study type.
+         *         year_range: Inclusive `[min_year, max_year]`, or `None`.
+         *         included: Number of sources included.
+         *         screened_out: Number of sources screened out.
+         */
+        CoverageSnapshotOut: {
+            /** Included */
+            included?: number | null;
+            /** Screened Out */
+            screened_out?: number | null;
+            /** Source Count */
+            source_count?: number | null;
+            /** Study Types */
+            study_types?: {
+                [key: string]: number;
+            };
+            /** Year Range */
+            year_range?: [
+                number,
+                number
+            ] | null;
+        };
+        /**
+         * DecisionOut
+         * @description One entry in the paginated decision log.
+         *
+         *     Args:
+         *         sequence: The underlying event's `event_log` sequence.
+         *         occurred_at: When the decision was recorded.
+         *         kind: Decision kind.
+         *         summary: Human-readable summary of the decision.
+         *         decided_by: Who decided, when known.
+         *         detail: Optional structured detail.
+         */
+        DecisionOut: {
+            /** Decided By */
+            decided_by?: ("user" | "orchestrator" | "standing_default") | null;
+            /** Detail */
+            detail?: {
+                [key: string]: unknown;
+            } | null;
+            /** Kind */
+            kind: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Sequence */
+            sequence: number;
+            /** Summary */
+            summary: string;
+        };
+        /**
+         * EvidenceItemOut
+         * @description One row of the paginated evidence/source list.
+         *
+         *     Args:
+         *         source_id: The source's identity.
+         *         title: Source title.
+         *         year: Publication year, or `None` if unknown.
+         *         venue: Publication venue, or `None` if unknown.
+         *         origin: Acquisition backend.
+         *         status: Position on the evidence status ladder.
+         *         status_reason: Optional human-readable reason for the current status
+         *             (e.g. why screened out).
+         *         evidence_type: Optional evidence type label.
+         *         appraisal_tier: Optional appraisal tier label.
+         *         cited: Whether this source is cited in the artefact.
+         *         url: Optional source URL.
+         */
+        EvidenceItemOut: {
+            /** Appraisal Tier */
+            appraisal_tier?: string | null;
+            /** Cited */
+            cited: boolean;
+            /** Evidence Type */
+            evidence_type?: string | null;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "OpenAlex" | "Overton" | "Uploaded";
+            /**
+             * Source Id
+             * Format: uuid
+             */
+            source_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "found" | "screened_out" | "relevant" | "not_selected" | "selected" | "read_in_full" | "findings_extracted" | "cited" | "unavailable";
+            /** Status Reason */
+            status_reason?: string | null;
+            /** Title */
+            title: string;
+            /** Url */
+            url?: string | null;
+            /** Venue */
+            venue?: string | null;
+            /** Year */
+            year?: number | null;
+        };
+        /**
+         * FacetGroupsOut
+         * @description Groups produced for one grouping facet.
+         *
+         *     Args:
+         *         facet: Grouping facet name.
+         *         groups: Groups within the facet.
+         *         ungrouped: Number of members not placed in any group.
+         */
+        FacetGroupsOut: {
+            /** Facet */
+            facet: string;
+            /** Groups */
+            groups?: components["schemas"]["GroupOut"][];
+            /** Ungrouped */
+            ungrouped: number;
+        };
+        /**
+         * FindingOut
+         * @description One row of the paginated findings list.
+         *
+         *     Args:
+         *         finding_id: The finding's identity.
+         *         statement: The finding's text/claim statement.
+         *         source_id: Identity of the source the finding was extracted from.
+         *         source_title: Title of that source.
+         *         profile: Extraction profile the finding came from.
+         *         relevance: Run-scoped B2' relevance mark, when the run has them.
+         */
+        FindingOut: {
+            /**
+             * Finding Id
+             * Format: uuid
+             */
+            finding_id: string;
+            /**
+             * Profile
+             * @enum {string}
+             */
+            profile: "iof" | "icf";
+            /** Relevance */
+            relevance?: ("priority" | "normal") | null;
+            /**
+             * Source Id
+             * Format: uuid
+             */
+            source_id: string;
+            /** Source Title */
+            source_title: string;
+            /** Statement */
+            statement: string;
         };
         /**
          * FreeTextCompileOut
@@ -523,10 +1010,99 @@ export interface components {
             /** Text */
             text: string;
         };
+        /**
+         * FunnelOut
+         * @description The acquisition-to-citation funnel counts.
+         *
+         *     Args:
+         *         found: Total acquired.
+         *         relevant: Passed abstract screening.
+         *         screened_out: Excluded at screening.
+         *         quality_checked: Passed appraisal.
+         *         read_in_full: Full text ingested.
+         *         selected: Passed selection.
+         *         findings: Findings extracted.
+         *         cited: Cited in the artefact.
+         *
+         *     Any field is `None` before its stage has run — the funnel spans the
+         *     full flow, unlike the screened-in-only `landscape`.
+         */
+        FunnelOut: {
+            /** Cited */
+            cited?: number | null;
+            /** Findings */
+            findings?: number | null;
+            /** Found */
+            found?: number | null;
+            /** Quality Checked */
+            quality_checked?: number | null;
+            /** Read In Full */
+            read_in_full?: number | null;
+            /** Relevant */
+            relevant?: number | null;
+            /** Screened Out */
+            screened_out?: number | null;
+            /** Selected */
+            selected?: number | null;
+        };
+        /**
+         * GroupOut
+         * @description One group within a grouping facet.
+         *
+         *     Args:
+         *         label: Group label.
+         *         description: Short group description.
+         *         size: Number of members in the group.
+         */
+        GroupOut: {
+            /** Description */
+            description: string;
+            /** Label */
+            label: string;
+            /** Size */
+            size: number;
+        };
+        /**
+         * GroupsOut
+         * @description The `groups` read model.
+         *
+         *     Args:
+         *         facets: Per-facet group listings.
+         */
+        GroupsOut: {
+            /** Facets */
+            facets?: components["schemas"]["FacetGroupsOut"][];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * LandscapeOut
+         * @description Distributions over the screened-in set only (never the found count).
+         *
+         *     Args:
+         *         evidence_types: Counts by evidence type label.
+         *         years: Counts by publication year.
+         *         themes: Landscape themes.
+         *         geographies: Optional counts by geography label.
+         */
+        LandscapeOut: {
+            /** Evidence Types */
+            evidence_types?: {
+                [key: string]: number;
+            };
+            /** Geographies */
+            geographies?: {
+                [key: string]: number;
+            } | null;
+            /** Themes */
+            themes?: components["schemas"]["ThemeOut"][];
+            /** Years */
+            years?: {
+                [key: string]: number;
+            };
         };
         /**
          * LatestRun
@@ -602,6 +1178,24 @@ export interface components {
             page_size: number;
             /** Total Items */
             total_items: number;
+        };
+        /** Page[DecisionOut] */
+        Page_DecisionOut_: {
+            /** Data */
+            data: components["schemas"]["DecisionOut"][];
+            pagination: components["schemas"]["PageMeta"];
+        };
+        /** Page[EvidenceItemOut] */
+        Page_EvidenceItemOut_: {
+            /** Data */
+            data: components["schemas"]["EvidenceItemOut"][];
+            pagination: components["schemas"]["PageMeta"];
+        };
+        /** Page[FindingOut] */
+        Page_FindingOut_: {
+            /** Data */
+            data: components["schemas"]["FindingOut"][];
+            pagination: components["schemas"]["PageMeta"];
         };
         /** Page[ProjectOut] */
         Page_ProjectOut_: {
@@ -928,6 +1522,29 @@ export interface components {
             type: "project.updated";
         };
         /**
+         * ReferenceOut
+         * @description One numbered reference in the artefact's reference list.
+         *
+         *     Args:
+         *         n: Reference number.
+         *         title: Reference title.
+         *         year: Publication year, or `None` if unknown.
+         *         venue: Publication venue, or `None` if unknown.
+         *         url: Optional reference URL.
+         */
+        ReferenceOut: {
+            /** N */
+            n: number;
+            /** Title */
+            title: string;
+            /** Url */
+            url?: string | null;
+            /** Venue */
+            venue?: string | null;
+            /** Year */
+            year?: number | null;
+        };
+        /**
          * RunCreate
          * @description Inbound body for `POST /api/v1/projects/{id}/runs`.
          *
@@ -1045,6 +1662,26 @@ export interface components {
              */
             publisher_country: string | null;
         };
+        /**
+         * SectionOut
+         * @description One artefact section.
+         *
+         *     Args:
+         *         title: Section title.
+         *         role: Section role (determines page position).
+         *         blocks: The section's prose blocks, in order.
+         */
+        SectionOut: {
+            /** Blocks */
+            blocks?: components["schemas"]["BlockOut"][];
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "key_findings" | "standard" | "conclusions";
+            /** Title */
+            title: string;
+        };
         SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["ProjectUpdatedFrame"] | components["schemas"]["TickFrame"];
         /**
          * StageCompletedFrame
@@ -1135,6 +1772,23 @@ export interface components {
              * @enum {string}
              */
             type: "stage.started";
+        };
+        /**
+         * ThemeOut
+         * @description One landscape theme.
+         *
+         *     Args:
+         *         name: Theme name.
+         *         size: Number of items in the theme.
+         *         description: Short theme description.
+         */
+        ThemeOut: {
+            /** Description */
+            description: string;
+            /** Name */
+            name: string;
+            /** Size */
+            size: number;
         };
         /**
          * TickFrame
@@ -1353,6 +2007,37 @@ export interface operations {
             };
         };
     };
+    artefact_api_v1_projects__project_id__artefact_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtefactOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_check_ins_api_v1_projects__project_id__check_ins_get: {
         parameters: {
             query?: {
@@ -1422,6 +2107,103 @@ export interface operations {
             };
         };
     };
+    chunk_context_api_v1_projects__project_id__citations__citation_key__context_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                citation_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChunkContextOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    coverage_api_v1_projects__project_id__coverage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decisions_api_v1_projects__project_id__decisions_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_DecisionOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     stream_events_api_v1_projects__project_id__events_get: {
         parameters: {
             query?: {
@@ -1442,6 +2224,167 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    evidence_api_v1_projects__project_id__evidence_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_EvidenceItemOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    findings_api_v1_projects__project_id__findings_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_FindingOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    funnel_api_v1_projects__project_id__funnel_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunnelOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    groups_api_v1_projects__project_id__groups_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    landscape_api_v1_projects__project_id__landscape_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LandscapeOut"];
                 };
             };
             /** @description Validation Error */

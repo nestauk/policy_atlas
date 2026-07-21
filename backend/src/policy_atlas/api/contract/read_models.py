@@ -215,6 +215,8 @@ class CitationOut(BaseModel):
     """One citation attached to a citation-type claim.
 
     Args:
+        citation_id: Durable citation identity — the key for the
+            chunk-context endpoint (`GET .../citations/{citation_id}/context`).
         n: Reference number (matches a `ReferenceOut.n`).
         source_title: Cited source's title.
         quote: The quoted span from the source.
@@ -222,6 +224,7 @@ class CitationOut(BaseModel):
         appraisal_label: Optional appraisal label.
     """
 
+    citation_id: uuid.UUID
     n: int
     source_title: str
     quote: str

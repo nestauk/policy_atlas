@@ -17,6 +17,77 @@
         "title": "AbortResponse",
         "type": "object"
       },
+      "ArtefactOut": {
+        "description": "The `artefact` read model \u2014 the synthesised evidence base.\n\nArgs:\n    title: Artefact title.\n    question: The evidence question the artefact answers.\n    coverage_snapshot: Embedded coverage snapshot.\n    sections: Artefact sections, in final page order.\n    references: Numbered reference list.",
+        "properties": {
+          "coverage_snapshot": {
+            "$ref": "#/components/schemas/CoverageSnapshotOut"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceOut"
+            },
+            "title": "References",
+            "type": "array"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/SectionOut"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "question",
+          "coverage_snapshot"
+        ],
+        "title": "ArtefactOut",
+        "type": "object"
+      },
+      "BlockOut": {
+        "description": "One prose block within an artefact section.\n\nArgs:\n    block_id: The block's identity.\n    prose: The block's final persisted prose.\n    claims: Span-anchored claim annotations over `prose`.\n    gaps: Named coverage gaps surfaced for this block.",
+        "properties": {
+          "block_id": {
+            "format": "uuid",
+            "title": "Block Id",
+            "type": "string"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimOut"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "gaps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Gaps",
+            "type": "array"
+          },
+          "prose": {
+            "title": "Prose",
+            "type": "string"
+          }
+        },
+        "required": [
+          "block_id",
+          "prose"
+        ],
+        "title": "BlockOut",
+        "type": "object"
+      },
       "CheckInOption": {
         "description": "One server-supplied option offered at a check-in.\n\nArgs:\n    id: Canonical or authored option id.\n    label: Short user-visible option label.\n    description: Longer user-visible option description.\n    requires_user_input: Whether picking this option requires an\n        additional `params` fill-in on the response.\n    suggested: Whether the server highlights this as the suggested pick.",
         "properties": {
@@ -288,6 +359,148 @@
         "title": "CheckinResolvedFrame",
         "type": "object"
       },
+      "ChunkContextOut": {
+        "description": "The chunk-context read model for a cited span (the 008 seam).\n\nArgs:\n    context: Context text, clamped to a character window around the\n        cited span.\n    span_start: Start offset of the clamped context.\n    span_end: End offset of the clamped context.\n    clamped: Whether the window was clamped (hit a chunk boundary).",
+        "properties": {
+          "clamped": {
+            "title": "Clamped",
+            "type": "boolean"
+          },
+          "context": {
+            "title": "Context",
+            "type": "string"
+          },
+          "span_end": {
+            "title": "Span End",
+            "type": "integer"
+          },
+          "span_start": {
+            "title": "Span Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "context",
+          "span_start",
+          "span_end",
+          "clamped"
+        ],
+        "title": "ChunkContextOut",
+        "type": "object"
+      },
+      "CitationOut": {
+        "description": "One citation attached to a citation-type claim.\n\nArgs:\n    citation_id: Durable citation identity \u2014 the key for the\n        chunk-context endpoint (`GET .../citations/{citation_id}/context`).\n    n: Reference number (matches a `ReferenceOut.n`).\n    source_title: Cited source's title.\n    quote: The quoted span from the source.\n    grounding_tier: Optional grounding-judge tier label.\n    appraisal_label: Optional appraisal label.",
+        "properties": {
+          "appraisal_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appraisal Label"
+          },
+          "citation_id": {
+            "format": "uuid",
+            "title": "Citation Id",
+            "type": "string"
+          },
+          "grounding_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grounding Tier"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          },
+          "source_title": {
+            "title": "Source Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "citation_id",
+          "n",
+          "source_title",
+          "quote"
+        ],
+        "title": "CitationOut",
+        "type": "object"
+      },
+      "ClaimOut": {
+        "description": "One span-anchored claim annotation within a block.\n\nArgs:\n    claim_id: The claim's identity.\n    claim_type: Annotation type.\n    text: The spanned text.\n    span: Character offsets `[start, end]` into the block's `prose`, or\n        `None`.\n    citations: Citations attached to this claim (citation-type only).",
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/CitationOut"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "claim_id": {
+            "format": "uuid",
+            "title": "Claim Id",
+            "type": "string"
+          },
+          "claim_type": {
+            "enum": [
+              "citation",
+              "gap",
+              "reasoning",
+              "pattern",
+              "theme",
+              "unspanned_assertion"
+            ],
+            "title": "Claim Type",
+            "type": "string"
+          },
+          "span": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim_id",
+          "claim_type",
+          "text"
+        ],
+        "title": "ClaimOut",
+        "type": "object"
+      },
       "CountryGroupDraft": {
         "description": "Draft mirror of the runtime `CountryGroup`.\n\nArgs:\n    label: Pinned Tier-1 label, or a user/planner label for an explicit\n        Tier-2 country list. `None` while undecided.\n    countries: Explicit ISO-3166 alpha-2 country list for Tier-2 groups.\n    authorship: Provenance of the group membership, when settled.",
         "properties": {
@@ -337,6 +550,349 @@
           }
         },
         "title": "CountryGroupDraft",
+        "type": "object"
+      },
+      "CoverageOut": {
+        "description": "The `coverage` read model \u2014 the composed one-line coverage sentence.\n\nArgs:\n    sentence: The composed coverage sentence (stop condition + adequacy).\n    base: Structured basis the sentence was composed from.",
+        "properties": {
+          "base": {
+            "additionalProperties": true,
+            "title": "Base",
+            "type": "object"
+          },
+          "sentence": {
+            "title": "Sentence",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sentence"
+        ],
+        "title": "CoverageOut",
+        "type": "object"
+      },
+      "CoverageSnapshotOut": {
+        "description": "The artefact's embedded coverage snapshot.\n\nArgs:\n    source_count: Number of sources underlying the artefact.\n    study_types: Counts by study type.\n    year_range: Inclusive `[min_year, max_year]`, or `None`.\n    included: Number of sources included.\n    screened_out: Number of sources screened out.",
+        "properties": {
+          "included": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Included"
+          },
+          "screened_out": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screened Out"
+          },
+          "source_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Count"
+          },
+          "study_types": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Study Types",
+            "type": "object"
+          },
+          "year_range": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year Range"
+          }
+        },
+        "title": "CoverageSnapshotOut",
+        "type": "object"
+      },
+      "DecisionOut": {
+        "description": "One entry in the paginated decision log.\n\nArgs:\n    sequence: The underlying event's `event_log` sequence.\n    occurred_at: When the decision was recorded.\n    kind: Decision kind.\n    summary: Human-readable summary of the decision.\n    decided_by: Who decided, when known.\n    detail: Optional structured detail.",
+        "properties": {
+          "decided_by": {
+            "anyOf": [
+              {
+                "enum": [
+                  "user",
+                  "orchestrator",
+                  "standing_default"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "occurred_at",
+          "kind",
+          "summary"
+        ],
+        "title": "DecisionOut",
+        "type": "object"
+      },
+      "EvidenceItemOut": {
+        "description": "One row of the paginated evidence/source list.\n\nArgs:\n    source_id: The source's identity.\n    title: Source title.\n    year: Publication year, or `None` if unknown.\n    venue: Publication venue, or `None` if unknown.\n    origin: Acquisition backend.\n    status: Position on the evidence status ladder.\n    status_reason: Optional human-readable reason for the current status\n        (e.g. why screened out).\n    evidence_type: Optional evidence type label.\n    appraisal_tier: Optional appraisal tier label.\n    cited: Whether this source is cited in the artefact.\n    url: Optional source URL.",
+        "properties": {
+          "appraisal_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appraisal Tier"
+          },
+          "cited": {
+            "title": "Cited",
+            "type": "boolean"
+          },
+          "evidence_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Type"
+          },
+          "origin": {
+            "enum": [
+              "OpenAlex",
+              "Overton",
+              "Uploaded"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "found",
+              "screened_out",
+              "relevant",
+              "not_selected",
+              "selected",
+              "read_in_full",
+              "findings_extracted",
+              "cited",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "status_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Reason"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "source_id",
+          "title",
+          "origin",
+          "status",
+          "cited"
+        ],
+        "title": "EvidenceItemOut",
+        "type": "object"
+      },
+      "FacetGroupsOut": {
+        "description": "Groups produced for one grouping facet.\n\nArgs:\n    facet: Grouping facet name.\n    groups: Groups within the facet.\n    ungrouped: Number of members not placed in any group.",
+        "properties": {
+          "facet": {
+            "title": "Facet",
+            "type": "string"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/GroupOut"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "ungrouped": {
+            "title": "Ungrouped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "facet",
+          "ungrouped"
+        ],
+        "title": "FacetGroupsOut",
+        "type": "object"
+      },
+      "FindingOut": {
+        "description": "One row of the paginated findings list.\n\nArgs:\n    finding_id: The finding's identity.\n    statement: The finding's text/claim statement.\n    source_id: Identity of the source the finding was extracted from.\n    source_title: Title of that source.\n    profile: Extraction profile the finding came from.\n    relevance: Run-scoped B2' relevance mark, when the run has them.",
+        "properties": {
+          "finding_id": {
+            "format": "uuid",
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "profile": {
+            "enum": [
+              "iof",
+              "icf"
+            ],
+            "title": "Profile",
+            "type": "string"
+          },
+          "relevance": {
+            "anyOf": [
+              {
+                "enum": [
+                  "priority",
+                  "normal"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_title": {
+            "title": "Source Title",
+            "type": "string"
+          },
+          "statement": {
+            "title": "Statement",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finding_id",
+          "statement",
+          "source_id",
+          "source_title",
+          "profile"
+        ],
+        "title": "FindingOut",
         "type": "object"
       },
       "FreeTextCompileOut": {
@@ -406,6 +962,139 @@
         "title": "FreeTextResponse",
         "type": "object"
       },
+      "FunnelOut": {
+        "description": "The acquisition-to-citation funnel counts.\n\nArgs:\n    found: Total acquired.\n    relevant: Passed abstract screening.\n    screened_out: Excluded at screening.\n    quality_checked: Passed appraisal.\n    read_in_full: Full text ingested.\n    selected: Passed selection.\n    findings: Findings extracted.\n    cited: Cited in the artefact.\n\nAny field is `None` before its stage has run \u2014 the funnel spans the\nfull flow, unlike the screened-in-only `landscape`.",
+        "properties": {
+          "cited": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cited"
+          },
+          "findings": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Findings"
+          },
+          "found": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Found"
+          },
+          "quality_checked": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Checked"
+          },
+          "read_in_full": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read In Full"
+          },
+          "relevant": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevant"
+          },
+          "screened_out": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screened Out"
+          },
+          "selected": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected"
+          }
+        },
+        "title": "FunnelOut",
+        "type": "object"
+      },
+      "GroupOut": {
+        "description": "One group within a grouping facet.\n\nArgs:\n    label: Group label.\n    description: Short group description.\n    size: Number of members in the group.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "label",
+          "description",
+          "size"
+        ],
+        "title": "GroupOut",
+        "type": "object"
+      },
+      "GroupsOut": {
+        "description": "The `groups` read model.\n\nArgs:\n    facets: Per-facet group listings.",
+        "properties": {
+          "facets": {
+            "items": {
+              "$ref": "#/components/schemas/FacetGroupsOut"
+            },
+            "title": "Facets",
+            "type": "array"
+          }
+        },
+        "title": "GroupsOut",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -417,6 +1106,48 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LandscapeOut": {
+        "description": "Distributions over the screened-in set only (never the found count).\n\nArgs:\n    evidence_types: Counts by evidence type label.\n    years: Counts by publication year.\n    themes: Landscape themes.\n    geographies: Optional counts by geography label.",
+        "properties": {
+          "evidence_types": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Evidence Types",
+            "type": "object"
+          },
+          "geographies": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Geographies"
+          },
+          "themes": {
+            "items": {
+              "$ref": "#/components/schemas/ThemeOut"
+            },
+            "title": "Themes",
+            "type": "array"
+          },
+          "years": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Years",
+            "type": "object"
+          }
+        },
+        "title": "LandscapeOut",
         "type": "object"
       },
       "LatestRun": {
@@ -526,6 +1257,66 @@
           "total_items"
         ],
         "title": "PageMeta",
+        "type": "object"
+      },
+      "Page_DecisionOut_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/DecisionOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "title": "Page[DecisionOut]",
+        "type": "object"
+      },
+      "Page_EvidenceItemOut_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceItemOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "title": "Page[EvidenceItemOut]",
+        "type": "object"
+      },
+      "Page_FindingOut_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/FindingOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "title": "Page[FindingOut]",
         "type": "object"
       },
       "Page_ProjectOut_": {
@@ -1148,6 +1939,58 @@
         "title": "ProjectUpdatedFrame",
         "type": "object"
       },
+      "ReferenceOut": {
+        "description": "One numbered reference in the artefact's reference list.\n\nArgs:\n    n: Reference number.\n    title: Reference title.\n    year: Publication year, or `None` if unknown.\n    venue: Publication venue, or `None` if unknown.\n    url: Optional reference URL.",
+        "properties": {
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "n",
+          "title"
+        ],
+        "title": "ReferenceOut",
+        "type": "object"
+      },
       "RunCreate": {
         "additionalProperties": false,
         "description": "Inbound body for `POST /api/v1/projects/{id}/runs`.\n\nThe run is created from the project's current approved-ready plan; the\nrequest body carries no fields. `extra=\"forbid\"` rejects any body at\nall beyond `{}`.",
@@ -1332,6 +2175,37 @@
           }
         },
         "title": "ScopeConstraintsDraft",
+        "type": "object"
+      },
+      "SectionOut": {
+        "description": "One artefact section.\n\nArgs:\n    title: Section title.\n    role: Section role (determines page position).\n    blocks: The section's prose blocks, in order.",
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/BlockOut"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "role": {
+            "enum": [
+              "key_findings",
+              "standard",
+              "conclusions"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "role"
+        ],
+        "title": "SectionOut",
         "type": "object"
       },
       "SseFrame": {
@@ -1562,6 +2436,30 @@
           "blurb"
         ],
         "title": "StageStartedFrame",
+        "type": "object"
+      },
+      "ThemeOut": {
+        "description": "One landscape theme.\n\nArgs:\n    name: Theme name.\n    size: Number of items in the theme.\n    description: Short theme description.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "size",
+          "description"
+        ],
+        "title": "ThemeOut",
         "type": "object"
       },
       "TickFrame": {
@@ -1950,6 +2848,55 @@
         ]
       }
     },
+    "/api/v1/projects/{project_id}/artefact": {
+      "get": {
+        "description": "Return the latest persisted synthesis artefact or a shaped absence.",
+        "operationId": "artefact_api_v1_projects__project_id__artefact_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtefactOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Artefact",
+        "tags": [
+          "read-models"
+        ]
+      }
+    },
     "/api/v1/projects/{project_id}/check-ins": {
       "get": {
         "description": "Return a latest pending card or the durable steering history projection.",
@@ -2109,6 +3056,186 @@
         ]
       }
     },
+    "/api/v1/projects/{project_id}/citations/{citation_key}/context": {
+      "get": {
+        "description": "Return a clamped context window for an artefact citation id.",
+        "operationId": "chunk_context_api_v1_projects__project_id__citations__citation_key__context_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "citation_key",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Citation Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkContextOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Chunk Context",
+        "tags": [
+          "read-models"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/coverage": {
+      "get": {
+        "description": "Return the composed latest search coverage statement.",
+        "operationId": "coverage_api_v1_projects__project_id__coverage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Coverage",
+        "tags": [
+          "read-models"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/decisions": {
+      "get": {
+        "description": "Return the allowlisted audit and steering decision history.",
+        "operationId": "decisions_api_v1_projects__project_id__decisions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_DecisionOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Decisions",
+        "tags": [
+          "read-models"
+        ]
+      }
+    },
     "/api/v1/projects/{project_id}/events": {
       "get": {
         "description": "Stream an owner-scoped durable replay followed by a non-blocking live tail.",
@@ -2164,6 +3291,297 @@
         "summary": "Stream Events",
         "tags": [
           "events"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/evidence": {
+      "get": {
+        "description": "Return a bounded page from the evidence status ladder.",
+        "operationId": "evidence_api_v1_projects__project_id__evidence_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_EvidenceItemOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Evidence",
+        "tags": [
+          "read-models"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/findings": {
+      "get": {
+        "description": "Return a bounded page of IOF and ICF findings.",
+        "operationId": "findings_api_v1_projects__project_id__findings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_FindingOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Findings",
+        "tags": [
+          "read-models"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/funnel": {
+      "get": {
+        "description": "Return the durable acquisition-to-citation funnel.",
+        "operationId": "funnel_api_v1_projects__project_id__funnel_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FunnelOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Funnel",
+        "tags": [
+          "read-models"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/groups": {
+      "get": {
+        "description": "Return the latest grouping facets and residual counts.",
+        "operationId": "groups_api_v1_projects__project_id__groups_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Groups",
+        "tags": [
+          "read-models"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/landscape": {
+      "get": {
+        "description": "Return screened-in-only landscape distributions.",
+        "operationId": "landscape_api_v1_projects__project_id__landscape_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LandscapeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Landscape",
+        "tags": [
+          "read-models"
         ]
       }
     },

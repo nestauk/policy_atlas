@@ -1,0 +1,334 @@
+import { describe, expect, it } from "vitest";
+
+import type { SseFrame } from "../api/sseFrame";
+import { reduceRunStreamFrame } from "./reducer";
+import { createInitialRunStreamState } from "./types";
+import type { CheckInOut, PlanDraft, RunStreamState } from "./types";
+
+const PROJECT_RUN_ID = "11111111-1111-1111-1111-111111111111";
+const CHECK_IN_ID = "22222222-2222-2222-2222-222222222222";
+
+/** Minimal-but-complete draft plan (every field is a required, nullable
+ *  key on the generated `PlanDraft` type — only `steps` is optional). */
+function planDraft(overrides: Partial<PlanDraft> = {}): PlanDraft {
+  return {
+    analysis_depth: null,
+    assumptions: null,
+    backend_scope: null,
+    component_rationale: null,
+    components: null,
+    expected_artefact_shape: null,
+    extract_profiles: null,
+    grouping_facets: null,
+    question: null,
+    ready: true,
+    scope_constraints: null,
+    scoping_notes: null,
+    screening_criteria: null,
+    search_effort: null,
+    steering_mode: null,
+    time_band: null,
+    title: null,
+    ...overrides,
+  };
+}
+
+function checkIn(overrides: Partial<CheckInOut> = {}): CheckInOut {
+  return {
+    boundary: "after_component",
+    check_in_id: CHECK_IN_ID,
+    component: "screen",
+    created_at: "2026-07-21T10:00:00Z",
+    kind: "pause",
+    options: [],
+    render: "Screening paused for review.",
+    rerun_component: null,
+    segment_reentry_allowed: false,
+    sequence: 3,
+    stage: "screen",
+    status: "pending",
+    triggers: [],
+    ...overrides,
+  };
+}
+
+/** A short, realistic frame stream: run open, one stage lifecycle, a
+ *  check-in pause + resolution, a plan supersession, a lifecycle rename,
+ *  and the run finishing. Sequences are contiguous 1..7. */
+function sampleFrames(): SseFrame[] {
+  return [
+    {
+      type: "run.status",
+      capability_run_id: PROJECT_RUN_ID,
+      status: "running",
+      occurred_at: "2026-07-21T10:00:00Z",
+      sequence: 1,
+    },
+    {
+      type: "stage.started",
+      stage: "acquire",
+      label: "Acquiring sources",
+      blurb: "Searching academic and grey-lit backends.",
+      occurred_at: "2026-07-21T10:00:01Z",
+      sequence: 2,
+    },
+    {
+      type: "stage.completed",
+      stage: "acquire",
+      label: "Acquiring sources",
+      summary: { found: 42 },
+      seconds: 12,
+      occurred_at: "2026-07-21T10:00:13Z",
+      sequence: 3,
+    },
+    {
+      type: "checkin.pending",
+      check_in: checkIn({ sequence: 4 }),
+      occurred_at: "2026-07-21T10:00:14Z",
+      sequence: 4,
+    },
+    {
+      type: "checkin.resolved",
+      check_in_id: CHECK_IN_ID,
+      response: { kind: "option", option_id: "continue" },
+      decided_by: "user",
+      occurred_at: "2026-07-21T10:00:20Z",
+      sequence: 5,
+    },
+    {
+      type: "plan.updated",
+      plan: planDraft(),
+      version: 2,
+      occurred_at: "2026-07-21T10:00:21Z",
+      sequence: 6,
+    },
+    {
+      type: "run.status",
+      capability_run_id: PROJECT_RUN_ID,
+      status: "succeeded",
+      occurred_at: "2026-07-21T10:05:00Z",
+      sequence: 7,
+    },
+  ];
+}
+
+function fold(state: RunStreamState, frames: SseFrame[]): RunStreamState {
+  return frames.reduce(reduceRunStreamFrame, state);
+}
+
+describe("reduceRunStreamFrame — replay idempotence", () => {
+  it("applying the same frame stream twice leaves state unchanged after the first pass", () => {
+    const frames = sampleFrames();
+    const afterOnce = fold(createInitialRunStreamState(), frames);
+    const afterTwice = fold(afterOnce, frames);
+    expect(afterTwice).toEqual(afterOnce);
+  });
+
+  it("resuming from a mid-stream cursor with overlapping re-delivery matches a full fold", () => {
+    const frames = sampleFrames();
+    const fullFold = fold(createInitialRunStreamState(), frames);
+
+    // Simulate a reconnect after sequence 3: the client has this snapshot...
+    const atCursor3 = fold(createInitialRunStreamState(), frames.slice(0, 3));
+    // ...and the resumed stream (over-cautiously) redelivers frames 1-3
+    // before continuing with 4-7, exactly as an at-least-once backlog
+    // replay might.
+    const resumed = fold(atCursor3, frames);
+
+    expect(resumed).toEqual(fullFold);
+  });
+});
+
+describe("reduceRunStreamFrame — check-in pending/resolved lifecycle", () => {
+  it("checkin.pending sets pendingCheckIn; its checkin.resolved clears it into decisions", () => {
+    const pending = reduceRunStreamFrame(createInitialRunStreamState(), {
+      type: "checkin.pending",
+      check_in: checkIn(),
+      occurred_at: "2026-07-21T10:00:14Z",
+      sequence: 1,
+    });
+    expect(pending.pendingCheckIn?.check_in_id).toBe(CHECK_IN_ID);
+    expect(pending.decisions).toHaveLength(0);
+
+    const resolved = reduceRunStreamFrame(pending, {
+      type: "checkin.resolved",
+      check_in_id: CHECK_IN_ID,
+      response: { kind: "option", option_id: "continue" },
+      decided_by: "user",
+      occurred_at: "2026-07-21T10:00:20Z",
+      sequence: 2,
+    });
+
+    expect(resolved.pendingCheckIn).toBeNull();
+    expect(resolved.decisions).toEqual([
+      {
+        checkInId: CHECK_IN_ID,
+        response: { kind: "option", option_id: "continue" },
+        decidedBy: "user",
+        occurredAt: "2026-07-21T10:00:20Z",
+        sequence: 2,
+      },
+    ]);
+  });
+
+  it("a resolved frame for a different check-in leaves an unrelated pending card alone", () => {
+    const pending = reduceRunStreamFrame(createInitialRunStreamState(), {
+      type: "checkin.pending",
+      check_in: checkIn({ check_in_id: "other-check-in" }),
+      occurred_at: "2026-07-21T10:00:14Z",
+      sequence: 1,
+    });
+
+    const resolved = reduceRunStreamFrame(pending, {
+      type: "checkin.resolved",
+      check_in_id: CHECK_IN_ID,
+      response: { kind: "abort" },
+      decided_by: "standing_default",
+      occurred_at: "2026-07-21T10:00:20Z",
+      sequence: 2,
+    });
+
+    expect(resolved.pendingCheckIn?.check_in_id).toBe("other-check-in");
+    expect(resolved.decisions).toHaveLength(1);
+  });
+});
+
+describe("reduceRunStreamFrame — tick transience", () => {
+  it("updates only the transient liveness slice and never touches lastSequence", () => {
+    const base = fold(createInitialRunStreamState(), sampleFrames());
+
+    const withTick = reduceRunStreamFrame(base, {
+      type: "tick",
+      note: "Still screening batch 4 of 9...",
+      stage: "screen",
+      occurred_at: "2026-07-21T10:02:00Z",
+      ephemeral: true,
+    });
+
+    expect(withTick.liveness.screen).toEqual({
+      note: "Still screening batch 4 of 9...",
+      occurredAt: "2026-07-21T10:02:00Z",
+    });
+    expect(withTick.lastSequence).toBe(base.lastSequence);
+    expect({ ...withTick, liveness: {} }).toEqual({ ...base, liveness: {} });
+  });
+
+  it("a stage-less tick lands under the global liveness key", () => {
+    const withTick = reduceRunStreamFrame(createInitialRunStreamState(), {
+      type: "tick",
+      note: "Warming up...",
+      stage: null,
+      occurred_at: "2026-07-21T10:00:00Z",
+      ephemeral: true,
+    });
+
+    expect(withTick.liveness._global).toEqual({
+      note: "Warming up...",
+      occurredAt: "2026-07-21T10:00:00Z",
+    });
+  });
+
+  it("repeated ticks for the same stage overwrite (last note wins), never accumulate", () => {
+    let state = createInitialRunStreamState();
+    state = reduceRunStreamFrame(state, {
+      type: "tick",
+      note: "First note",
+      stage: "extract",
+      occurred_at: "2026-07-21T10:00:00Z",
+      ephemeral: true,
+    });
+    state = reduceRunStreamFrame(state, {
+      type: "tick",
+      note: "Second note",
+      stage: "extract",
+      occurred_at: "2026-07-21T10:00:05Z",
+      ephemeral: true,
+    });
+
+    expect(Object.keys(state.liveness)).toEqual(["extract"]);
+    expect(state.liveness.extract.note).toBe("Second note");
+  });
+});
+
+describe("reduceRunStreamFrame — stage lifecycle", () => {
+  it("stage.completed updates the matching started entry in place rather than appending", () => {
+    const started = reduceRunStreamFrame(createInitialRunStreamState(), {
+      type: "stage.started",
+      stage: "screen",
+      label: "Screening",
+      blurb: "Applying inclusion criteria.",
+      occurred_at: "2026-07-21T10:00:00Z",
+      sequence: 1,
+    });
+    const completed = reduceRunStreamFrame(started, {
+      type: "stage.completed",
+      stage: "screen",
+      label: "Screening",
+      summary: { included: 10 },
+      seconds: 5,
+      occurred_at: "2026-07-21T10:00:05Z",
+      sequence: 2,
+    });
+
+    expect(completed.stages).toHaveLength(1);
+    expect(completed.stages[0]).toEqual({
+      stage: "screen",
+      label: "Screening",
+      status: "completed",
+      summary: { included: 10 },
+      seconds: 5,
+    });
+  });
+
+  it("stage.failed with skipped=true records status skipped and carries the reason", () => {
+    const started = reduceRunStreamFrame(createInitialRunStreamState(), {
+      type: "stage.started",
+      stage: "group",
+      label: "Grouping",
+      blurb: "Clustering findings.",
+      occurred_at: "2026-07-21T10:00:00Z",
+      sequence: 1,
+    });
+    const skipped = reduceRunStreamFrame(started, {
+      type: "stage.failed",
+      stage: "group",
+      label: "Grouping",
+      reason: "insufficient findings to cluster",
+      skipped: true,
+      occurred_at: "2026-07-21T10:00:02Z",
+      sequence: 2,
+    });
+
+    expect(skipped.stages[0].status).toBe("skipped");
+    expect(skipped.stages[0].summary).toEqual({ reason: "insufficient findings to cluster" });
+  });
+});
+
+describe("reduceRunStreamFrame — project.updated partial merge", () => {
+  it("merges only the fields the event actually touched", () => {
+    let state = createInitialRunStreamState();
+    state = reduceRunStreamFrame(state, {
+      type: "project.updated",
+      name: "Original name",
+      question: "Original question",
+      status: "active",
+      occurred_at: "2026-07-21T09:00:00Z",
+      sequence: 1,
+    });
+    // A rename-only event: question/status are `null` (not touched), not cleared.
+    state = reduceRunStreamFrame(state, {
+      type: "project.updated",
+      name: "Renamed",
+      question: null,
+      status: null,
+      occurred_at: "2026-07-21T09:05:00Z",
+      sequence: 2,
+    });
+
+    expect(state.project).toEqual({
+      name: "Renamed",
+      question: "Original question",
+      status: "active",
+    });
+  });
+});
