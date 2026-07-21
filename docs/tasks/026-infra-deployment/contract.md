@@ -59,13 +59,13 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
    it's cheap and the copy is smaller than the removal — cut it only if the plan shows
    nothing consumes it.)
 
-   🟡 **v3 deploys its own parallel network** (own VPC, fck-nat, ALB, cert), rather
-   than importing v2's live shared ALB: sharing would mean modifying the live v2
-   NetworkStack (SNI cert for the v3 domain, listener-priority coordination) from this
-   repo — cross-repo coupling to a stack scheduled for retirement, touching what's
-   serving v2 users. Cost of the parallel month: roughly one extra ALB + one fck-nat
-   instance (~$20–40/mo). Clean retirement: v2's stacks destroy wholesale later.
-   Devops may veto at the plan gate if they'd rather share.
+   **Settled (owner, 2026-07-21): v3 deploys its own parallel network** (own VPC,
+   fck-nat, ALB, cert), rather than importing v2's live shared ALB: sharing would mean
+   modifying the live v2 NetworkStack (SNI cert for the v3 domain, listener-priority
+   coordination) from this repo — cross-repo coupling to a stack scheduled for
+   retirement, touching what's serving v2 users. Cost of the parallel month: roughly
+   one extra ALB + one fck-nat instance (~$20–40/mo). Clean retirement: v2's stacks
+   destroy wholesale later.
 3. **DatabaseStack** — copy, then **delete the Supabase self-host apparatus wholesale**:
    Supabase Studio + postgres-meta service, PostgREST + nginx sidecar, the
    JWT-generation Lambda (including the vendored PyJWT tree, ~7.5k lines), the
@@ -205,7 +205,7 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
 
 1. **Account:** same AWS account as v2; **v2 stays live alongside for ~1 month** while
    users migrate, then retires. Consequences: the namespacing constraint above, and the
-   🟡 parallel-network lean (scope item 2).
+   parallel-network decision, settled (scope item 2).
 2. **Domain: `v3.policyatlas.uk`** — frontend at the apex, API at
    `api.v3.policyatlas.uk`, wildcard cert `*.v3.policyatlas.uk` + apex SAN.
    **Precondition (devops):** a Route53 hosted zone `v3.policyatlas.uk` exists before
