@@ -72,7 +72,13 @@
 > is deliberately non-quality-bearing per plan-as-contract +
 > product.md) — now enforced by a continuation context-parity test;
 > quality-bearing state found only in walk memory = stop-condition
-> finding.
+> finding. Component-primitives decision (owner question, 2026-07-21):
+> app-layer primitives split visual-identity (hand-built from brand
+> tokens) vs behaviour-bearing (shadcn-style copy-in over Radix
+> headless primitives, Tailwind-skinned) — owned code either way, no
+> component-library dependency; MUI/Chakra/Mantine/daisyUI rejected
+> with reasons in the design-sources pin; deps list gains scoped
+> `@radix-ui/*` + cva/tailwind-merge.
 > rev 1: initial draft.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
@@ -252,9 +258,20 @@ seams; one schema generates both ends of the contract.** Seven strands:
    `docs/specs/sources/evidence-base-ux/nesta-brand-tokens.md` +
    `hifi.css`) → Tailwind theme tokens (palette, type hierarchy, the
    0-radius/45°-cutout button language, nav states); the *app layer* is
-   a small owned set of component primitives (chips, cards, drawer,
-   check-in card, table rows, state grammar) built in-slice as ordinary
-   code — **no standalone design-system package**. The wireframe pack
+   a small owned set of component primitives built in-slice as ordinary
+   code — **no standalone design-system package** — in two kinds
+   (owner direction, 2026-07-21): **visual-identity components**
+   (45°-cutout buttons, chips, cards, nav) hand-built from the brand
+   tokens/`hifi.css` — no library shares Nesta's language; and
+   **behaviour-bearing components** (dossier sheet/dialog,
+   tooltip/popover for the citation ladder, dropdowns, tabs, toasts)
+   built **shadcn-style: component source copied into the repo over
+   Radix headless primitives**, Tailwind-skinned with our tokens —
+   owned code with library-grade keyboard/focus/ARIA behaviour (the
+   rubric's accessibility floor rides on these). shadcn is a dev-time
+   generator, not a runtime dependency. MUI/Chakra/Mantine rejected
+   (second styling system + brand fight); daisyUI rejected (styles
+   without behaviour — the inverse of what we lack). The wireframe pack
    (`evidence-base-wireframes.html` + screenshots + the handoff's §7
    locked decisions) is design reference under the same point-in-time
    rule as RETRO.md: the handoff predates 019–024 (e.g. Quick/Deep is
@@ -465,7 +482,11 @@ may be re-decided silently mid-build:
   pinned above + `@tanstack/react-query` (server-state layer over the
   generated client for read models — fetching/caching/invalidation on
   `stage.completed`; the event-sourced reducer remains only for SSE
-  run/thread state) + `openapi-typescript` (client gen), `vitest`,
+  run/thread state) + **per-primitive `@radix-ui/*` packages with
+  `class-variance-authority`/`tailwind-merge`** (headless behaviour
+  under the shadcn-style copied-in components — exact primitive list
+  at plan time, scoped to components actually built) +
+  `openapi-typescript` (client gen), `vitest`,
   `@playwright/test`. Package manager: **npm** (demo precedent).
   🟡 React version is a **plan-gate decision**: 19 + compiler
   (drops manual memoisation) vs the demo's 18 — the demo validated the
