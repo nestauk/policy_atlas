@@ -23,7 +23,8 @@
 
 # Current phase
 Implementation — task `026-infra-deployment` (design phase: contract
-drafted, awaiting owner approval). The slice ports v2's CDK infra
+APPROVED 2026-07-21 with all 15 adversarial findings adjudicated; plan
+drafted, at its adversarial-review + owner gate). The slice ports v2's CDK infra
 (`../discovery_policy_atlas/infra` — three stacks: network · database ·
 app) into `infra/` with a **copy-first, targeted-edits** discipline:
 v2 files are copied and diffed, never rewritten. Deltas from v2:
