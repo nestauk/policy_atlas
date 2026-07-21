@@ -168,7 +168,13 @@ seams; one schema generates both ends of the contract.** Seven strands:
    `interrupted`; **parked runs survive restarts by construction**.
    Continuation dispatch competes for worker capacity like any walk
    (answers are always accepted; execution may queue briefly at the
-   bound). **Context parity is a tested property, not an assumption**
+   bound). Continuation dispatch is a **preserved seam**: broker-backed
+   workers (Celery/RQ) stay out of this slice — boundary durability is
+   Postgres's job, not the task runner's; separate workers would
+   re-open the deferred cross-process tail/unblock seam; broker infra
+   belongs to the infra slice — but parked segments are queue-shaped,
+   so workers slot in behind this seam later without a reshape
+   (digest §4, updated). **Context parity is a tested property, not an assumption**
    (owner question, 2026-07-21): the orchestrator context (watch/
    router) composed at any boundary of a continuation walk must be
    identical to what the unbroken walk would have composed — possible

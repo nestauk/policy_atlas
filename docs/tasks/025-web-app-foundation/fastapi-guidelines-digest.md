@@ -347,9 +347,19 @@ conflict with pinned architecture.
 - **API keys / `X-API-Key` (p.50, p.55 Q10).** No machine-to-machine
   callers in this slice.
 - **Celery / RQ / broker-backed workers (p.65–66, p.69 Q3).** Deliberately
-  out — the contract chose in-process + honest interruption; the durable
-  resume engine is the deferred 017 seam. Apply the job-pattern *shape*, not
-  the worker infrastructure (see 2).
+  out. *(Updated 2026-07-21 after the contract's parked-pauses revision —
+  the original "contract chose the lossy path" framing is superseded.)*
+  Boundary durability now comes from Postgres (parking + per-component
+  commits), not from where the task runs; a broker wouldn't close the
+  remaining mid-component gap (a crashed Celery task also restarts from the
+  task's start — that's the deferred 017 resume seam either way); separate
+  worker processes would immediately need the deferred cross-process
+  live-tail/unblocking seam (LISTEN/NOTIFY); and the broker is new
+  infra-dependency weight belonging to the infra/CDK slice. Continuation
+  dispatch is the preserved seam — walk segments are queue-shaped, so
+  broker workers slot in behind it later if scale demands. Apply the
+  job-pattern *shape* (create → id → out-of-band progress), not the worker
+  infrastructure (see 2).
 - **WebSockets (p.67, p.69 Q5).** Run progress is one-way server push → SSE
   is correct; the PDF agrees most such needs are SSE-shaped. No bidirectional
   channel here.
