@@ -88,10 +88,17 @@ machine-verifiable done), `fast-worker` (mechanical/spec transcription),
   + transactional emission tests. **[FULL VERIFY — mandatory: schema class]**
 
 ### Phase C — runner: parking + continuation (3–4 days; the hard core)
-- T C.1 `lead`: continuation reducer seam design from the annex — module
-  layout, function signatures, event payload additions (any gap-closing
-  fields the annex names), parity-test harness shape. *Lead: seam design +
-  the annex adjudication is judgment.*
+- T C.1 `lead`: continuation reducer seam design from the annex — **annex
+  verdict adjudicated: 16/16 fields reconstructable, NO stop-condition gap;
+  the watch header/digest are already composed from the durable record
+  as-built (direct parity evidence).** Design binds: reducer =
+  `runtime/continuation_state.py` (pure read-only peer of
+  `steering_history.py`, scoped by capability_run_id, ordered by
+  event_log.sequence); `run_plan` gains `resume_from`; gap G1 closed
+  (steering.pause payload gains `segment_reentry_allowed` +
+  `rerun_component`); gap G2 taken (a `run.parked` event snapshots
+  flagged_events + step_outcomes — read-back beats re-derivation for
+  collation parity). *Lead: seam design + annex adjudication is judgment.*
 - T C.2 `codex`: implement the reducer + `WalkParked` disposition + 
   `continue_plan` re-entry against the parity harness. Done = parity test
   green across the full pinned surface (header/digest/bundles/options/
