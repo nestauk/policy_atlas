@@ -82,6 +82,10 @@ make -C backend dev       # uvicorn --reload on :8000
 curl http://localhost:8000/healthz   # => {"status": "ok"}
 ```
 
+The API composes **stub** planner/search backends by default and goes live
+when `OPENAI_API_KEY` is set; `PA_BACKEND_MODE=live|stub|auto` makes the
+posture explicit (see `backend/.env.example`).
+
 **4. Frontend dev server** (from `frontend/`; installs once with `pnpm install`):
 
 ```sh
@@ -104,8 +108,10 @@ VITE_MOCK=1 pnpm dev                    # or just `pnpm e2e` below, which starts
 pnpm e2e                                # runs playwright test against a VITE_MOCK=1 dev server
 ```
 
-`pnpm e2e` starts (and reuses, if already running) its own `VITE_MOCK=1` dev
-server — you don't need to leave one running from the line above.
+`pnpm e2e` starts its own `VITE_MOCK=1` dev server — but it will **reuse any
+dev server already on :5173, including a plain (non-mock) one**, and every
+spec then fails at the sign-in panel. If you had `pnpm dev` running for step
+4, stop it before `pnpm e2e`.
 
 ## Running the orchestrator CLI
 
