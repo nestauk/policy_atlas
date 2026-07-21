@@ -103,9 +103,16 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
      runs degrade to slower, never to wrong. Horizontal scale-out (a second
      instance) remains forbidden until the cross-instance seam lands.
    - **Frontend:** v2's Next.js server container does not port. **Settled (owner,
-     2026-07-21): nginx container serving the Vite `dist/` behind the shared ALB** —
-     maximum reuse of the copied listener-rule/Fargate/Route53 pattern; one hosting
-     idiom for both services.
+     2026-07-21, superseding the earlier nginx lean): S3 + CloudFront.** Private
+     bucket + Origin Access Control, distribution with the SPA fallback
+     (403/404 → `/index.html`), Route53 alias at the apex (`v3.policyatlas.uk`);
+     the ALB serves only the API. Frontend deploy = `vite build` (VITE_* baked at
+     build time) → `aws s3 sync` → invalidation — no container, no service, no
+     image build. Named wrinkle: the CloudFront ACM cert must live in us-east-1
+     (small cross-region cert arrangement in CDK; the ALB's regional wildcard cert
+     still covers `api.v3.policyatlas.uk`). Rationale: a static SPA needs no
+     compute; v2's Next.js-server precedent never transferred, so nginx would have
+     been fresh work plus a permanent running task to serve files.
    - Cognito envs → frontend build args (`VITE_OIDC_AUTHORITY`, client id, redirect) —
      config-only, no frontend code changes expected.
 5. **Cognito** (new — no v2 precedent, the one genuinely fresh CDK surface): user pool +
@@ -190,7 +197,8 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
    Domains stay in the committed examples (public by nature via DNS); the account ID
    (and any IP whitelists) live only in the gitignored real configs, which deploy
    docs tell the operator to copy from the templates and fill.
-5. **Frontend hosting: nginx-on-Fargate** (scope item 4).
+5. **Frontend hosting: S3 + CloudFront** (owner, 2026-07-21 — revised from the earlier
+   nginx-on-Fargate call; scope item 4 has the shape and rationale).
 
 ## Public / private boundary
 
