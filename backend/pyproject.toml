@@ -53,7 +53,8 @@ dependencies = [
     "fastapi>=0.121,<1",
     "uvicorn>=0.34,<1",
     "pyjwt>=2.10,<3",
-    "cryptography>=44,<48",
+    # >=48.0.1: GHSA-537c-gmf6-5ccf in 47.0.0 (caught by the CI audit gate, PR #32)
+    "cryptography>=48.0.1,<49",
 ]
 
 [build-system]

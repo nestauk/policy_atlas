@@ -8,6 +8,7 @@ source text, credentials or unredacted traces.
 | Command | Result | Notes |
 |---|---:|---|
 | `make verify` (FULL, step-6 exit) | pass | okf-validate · backend test (1875 + ingest suite) · mypy strict (221+ files) · ruff · build · audit-paths · prompt-guard · font-guard · drift-check · frontend typecheck/lint/vitest(50)/build |
+| `make audit` (CI catch, post-PR) | pass | pip-audit flagged GHSA-537c-gmf6-5ccf in cryptography 47.0.0 (new 025 dep); bumped to 48.0.1 (constraint was <48); full API suite 103/103 green on the new major |
 | `make verify` (FULL, step-7 exit after the review fix wave) | pass | 1923 backend tests · mypy strict (232 files) · ruff · okf-validate (92 concepts) · drift-check (client regenerated for pagination) · frontend typecheck/lint/vitest(57)/build; `pnpm e2e` 4/4 on a fresh mock server |
 | `make verify` at phase gates | pass | T0.1 baseline · A.3 (hoist) · B.3 (schema) · C.4 (runner core) · E.2 (ingest-adjacent) · H.4 — each green before its commit |
 | `make verify-fast` at intermediate commits | pass | per the plan's binding gate map (D.4, F.1, G.3 verify-fast) |
