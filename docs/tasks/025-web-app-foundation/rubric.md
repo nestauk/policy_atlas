@@ -28,7 +28,10 @@ Slice-specific:
         parallel types.
 10. [ ] **Durable-record-only reads:** pending check-ins, decision history, and all
         read models are served from Postgres; killing the API server mid-run loses no
-        state the UI needs (replay test + live check).
+        state the UI needs (replay test + live check). **Parked pauses hold no process
+        state:** a run paused at a check-in survives a server restart and its answer
+        dispatches a boundary continuation walk that completes (proven in the live
+        check); only mid-execution deaths mark `interrupted`.
 11. [ ] **Real backend semantics:** rename persists to the `project` row; archive
         hides from listings while retaining all rows; no registry sidecar exists;
         answers to check-ins land in the durable steering record via the real seam.
@@ -53,7 +56,8 @@ Slice-specific:
         unions (no hand-rolled event types); no verbs in resource paths.
 18. [ ] **Concurrent users, different projects:** two overlapping runs on two projects
         (distinct users) complete without cross-talk (SSE, steering, read models);
-        the concurrent-run bound counts paused walks and at-bound dispatch 409s;
+        the concurrent-run bound counts executing walks only (parked runs hold no
+        slot) and at-bound new-run dispatch 409s;
         the plan's chain thread-safety audit ran and its findings are recorded;
         no per-run config via module globals anywhere in the API path.
 19. [ ] **Pre-registered deferred.md discharges hold:** one-active-run-per-project

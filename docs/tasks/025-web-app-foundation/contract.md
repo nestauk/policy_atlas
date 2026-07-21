@@ -54,6 +54,18 @@
 > process-local with honest draft loss (transcripts are 026) ·
 > shared-rate-limit fairness recorded as v1 non-goal · two-user/
 > two-project leg added to the live check + rubric item 18.
+> **Parked pauses** (owner challenge, 2026-07-21 — pauses last minutes
+> to days; holding a thread is wrong): blocking-pause model replaced —
+> attended pauses park the walk (thread ends, durable `paused`
+> status); the answer dispatches a boundary continuation walk
+> rehydrated from the durable record (NOT the deferred resume engine —
+> mid-component checkpointing stays out; 024 segment re-entry is the
+> precedent). Parked runs survive restarts by construction;
+> interruption honesty now covers executing walks only; run bound
+> counts executing walks only. Live check restructured (restart while
+> A parked + B executing; answer after restart; continuation
+> completes). Build sizing note: adds runner continuation machinery —
+> named, accepted.
 > rev 1: initial draft.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
@@ -132,13 +144,24 @@ seams; one schema generates both ends of the contract.** Seven strands:
    served from `event_log` (+ run/plan state), not an in-memory bus; the
    frontend store rebuilds idempotently from replay alone (demo-proven
    resilience model, now on the durable substrate — survives server
-   restart mid-run *including* a pending check-in). **Honest
-   interruption, no resume engine** (the resume engine stays deferred —
-   017 seam): runs execute in-process; a server death mid-run kills the
-   walk, so on startup an orphan sweep marks in-flight runs (including
-   blocked-at-a-pause) as `interrupted` in the durable record; the UI
-   renders interruption honestly and offers a fresh run — it never
-   pretends a dead walk is resumable. **Runs never execute on the event
+   restart mid-run *including* a pending check-in). **Parked pauses,
+   no held threads** (owner, 2026-07-21 — a pause can last minutes to
+   days; the delegation postures are designed for the user going
+   away): at an attended pause the walk **parks** — the worker thread
+   ends, the run's durable status becomes `paused`, nothing in-process
+   holds it. The check-in answer dispatches a **boundary continuation
+   walk** that rehydrates from the durable record (per-component
+   commits + the 024 steering record make the component boundary a
+   natural checkpoint; 024's segment re-entry is the mechanical
+   precedent) and proceeds from the next component. This is *not* the
+   deferred resume engine — mid-component checkpointing stays out
+   (017 seam); a walk killed mid-component is still interrupted, never
+   resumed. **Honest interruption** applies to executing walks only:
+   on startup the orphan sweep marks runs that died mid-execution
+   `interrupted`; **parked runs survive restarts by construction**.
+   Continuation dispatch competes for worker capacity like any walk
+   (answers are always accepted; execution may queue briefly at the
+   bound). **Runs never execute on the event
    loop** (digest §1.2 — a blocking walk would starve SSE, health and
    every other project): the run executes in offloaded worker
    threads/executors; the plan pins the mechanism and a concurrent-run
@@ -156,9 +179,10 @@ seams; one schema generates both ends of the contract.** Seven strands:
    one-walk-at-a-time; shared clients/caches/tracing contexts audited,
    and per-run config is parameter-passed, never module-global (the
    demo's monkeypatch pattern is banned); (b) the concurrent-run bound
-   **counts paused walks** (a blocked check-in holds its worker slot)
-   and at-bound run dispatch returns an honest 409 capacity envelope —
-   queueing is deferred; (c) **planning-conversation state is
+   counts **executing** walks only — parked runs hold no slot (see the
+   parked-pauses pin) — and at-bound *new-run* dispatch returns an
+   honest 409 capacity envelope (continuations queue on the executor
+   instead); broader queueing is deferred; (c) **planning-conversation state is
    process-local per project** — the approved plan object persists
    durably, an in-flight draft conversation is lost on restart honestly
    (transcript persistence is 026); (d) provider rate limits are shared
@@ -485,22 +509,24 @@ Report the blocker; don't push through.
   steering round-trip · lifecycle semantics · authz fail-closed ·
   migration up/down. No AI-judge evals in this slice.
 - **Live-check pin (contract-time, per failure-log 2026-07-08):** one
-  scoped live run driven through the real browser UI — create project →
-  planning conversation (2–3 turns) → start (rapid/standard effort) →
-  answer one check-in in the UI (incl. one free-text steer through the
-  confirm gate) → **while the run is executing, probe API
-  responsiveness** (health + a read model answer promptly — the
-  off-loop execution pin, digest §1.2) → **start a second run on a
-  second project (second dev-issuer user) while the first is live** —
-  both streams progress without cross-talk, and each user's request
-  for the other's project returns 404 → **kill and restart the API
-  server mid-run** → UI
-  rebuilds from replay, the interrupted walk is marked and rendered
-  honestly (orphan sweep — the durable record survives; the walk does
-  not, there is no resume engine) → start a fresh run → completion →
-  artefact renders with annotation layer + dossier → rename → archive →
-  landing reflects both. Estimated wall ≈ 20–30 min (two runs, one
-  interrupted). **No full live
+  scoped live session driven through the real browser UI — create
+  project → planning conversation (2–3 turns) → start (rapid/standard
+  effort) → **while the run is executing, probe API responsiveness**
+  (health + a read model answer promptly — the off-loop execution pin,
+  digest §1.2) → **start a second run on a second project (second
+  dev-issuer user) while the first is live** — both streams progress
+  without cross-talk, and each user's request for the other's project
+  returns 404 → project A reaches a check-in and **parks** (run
+  status `paused`, no executing walk) → **kill and restart the API
+  server while A is parked and B is executing** → UI rebuilds from
+  replay; **A's pending check-in survives the restart** (parked runs
+  hold no process state); **B is marked `interrupted` honestly**
+  (orphan sweep) → answer A's check-in post-restart (incl. one
+  free-text steer through the confirm gate) → the **boundary
+  continuation walk** dispatches and A completes → artefact renders
+  with annotation layer + dossier → rename → archive → landing
+  reflects all states. Estimated wall ≈ 20–30 min (two runs: one
+  parked-then-completed, one interrupted). **No full live
   deep-run e2e** — the suite's stub full-chain test covers chain
   integrity. Playwright mock-mode journey covers the UI flows that the
   live pin doesn't exercise.
