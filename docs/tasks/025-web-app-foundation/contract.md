@@ -301,7 +301,10 @@ seams; one schema generates both ends of the contract.** Seven strands:
    🟡 No `users` table in 025: verified claims are the identity; a
    profile table is a 026+ seam (co-pilot transcript store will need
    per-user rows and can bring it).
-7. **The frontend.** `frontend/` on the demo-validated stack (React 18,
+7. **The frontend.** `frontend/` on the demo-validated stack (React —
+   version resolved at the plan gate: **19 + compiler**; charts on
+   **recharts 3.x**, superseding the demo's 2.15 by owner challenge
+   2026-07-21,
    TypeScript strict, Vite, Tailwind, recharts, react-router) and the
    demo-validated views: landing (project cards incl. paused state),
    planning conversation (plan disclosure, suggestion chips), workspace

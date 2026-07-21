@@ -42,12 +42,15 @@
    auth/, ui/{brand,radix}/, views/, routes.tsx (URL-addressable dossier/
    filters). Mock implements the generated interface.
 9. **React 19 + compiler — DECIDED at this gate** (contract 🟡 discharged):
-   recharts 2.15.x marks React 19 compatible (demo already pinned ^2.15);
-   known `react-is` override documented (recharts #4558 / shadcn React-19
-   guide); react-router 6.28+, TanStack Query v5, Radix all compatible.
-   G-phase toolchain target is deterministic: React 19 + compiler enabled;
-   any incompatibility discovered is a stop-condition report, not a silent
-   fallback.
+   react-router 6.28+, TanStack Query v5, Radix all React-19 compatible.
+   **Charts: recharts 3.x (latest, 3.9 line)** — owner challenge 2026-07-21:
+   the demo's 2.15 pin is not inherited; 3.x is the current major (state
+   management rewritten, native React 19 peers, active), still the
+   practical default per 2026 surveys; alternatives (visx/nivo/echarts)
+   over-serve our funnel + distribution needs. Views are rewritten against
+   generated types anyway, so no migration burden — demo chart *semantics*
+   carry, not code. Toolchain target deterministic; any incompatibility is
+   a stop-condition report, not a silent fallback.
 10. **Design tokens:** Tailwind theme from `nesta-brand-tokens.md` +
     `hifi.css`; `@font-face` + `font-display: swap` + fallback stack; CI
     font-binary guard in `make verify`.
@@ -178,24 +181,25 @@ against the built app.
 ### Phase G — frontend foundation (2 days)
 - G.1 `lead`: Tailwind theme from brand tokens + cutout button + chip.
   *Brand-defining surface.*
-- G.2 `fast-worker`: remaining primitives (cards, nav, radix copy-ins:
-  sheet/tooltip/popover/tabs/toast) — DoD: each with a component test
-  (render + keyboard interaction) and themed states.
+- G.2 `lead` (owner routing, 2026-07-21 — see § Executor routing note):
+  remaining primitives (cards, nav, radix copy-ins: sheet/tooltip/popover/
+  tabs/toast) — each with a component test (render + keyboard interaction)
+  and themed states.
 - G.3 `codex`: OIDC adapter + dev-issuer flow + refresh + fetch-stream SSE
   client (cursor reconnect) + mid-run expiry test + TanStack Query setup +
   event-sourced reducer with replay-idempotence unit tests.
   **[verify-fast]**
 
 ### Phase H — views (3–4 days)
-- H.1 `fast-worker`: landing, sources, decision log, charts — brief carries
-  the **per-view RETRO §2 acceptance checklist** (lead-authored from the
-  annex: 35/65 shrink, sticky timeline, status-ladder dossier fields,
+- H.1 `lead` (owner routing): landing, sources, decision log, charts
+  (recharts 3.x) — against the **per-view RETRO §2 acceptance checklist**
+  (35/65 shrink, sticky timeline, status-ladder dossier fields,
   publication-country wording, labels-not-scores, hide-never-fake; **no
   FWCI field** — no backing data).
-- H.2 `codex`: planning conversation (chips, plan disclosure, **draft-loss
-  /eviction state rendered honestly**), run timeline (stage cards, activity
-  feed, ephemeral ticks), check-in card (024 confirm-gate delta render,
-  parked/pending states).
+- H.2 `lead` (owner routing): planning conversation (chips, plan
+  disclosure, **draft-loss/eviction state rendered honestly**), run
+  timeline (stage cards, activity feed, ephemeral ticks), check-in card
+  (024 confirm-gate delta render, parked/pending states).
 - H.3 `lead`: artefact/evidence-base view — annotation layer, citation
   hover→click ladder, dossier content. *Core reading surface.*
 - H.4 `codex` (moved from fast-worker): state/error matrix implementation
@@ -212,6 +216,19 @@ against the built app.
 - I.3 `lead`: verification.md; `web-api.md` spec; deferred.md entries;
   **ADRs 0024/0025 status→Accepted with owner sign-off date, included in
   the PR**; AGENTS.md phase note. **[FULL — step-6 exit]**
+
+## Executor routing note (owner direction, 2026-07-21)
+
+The owner routed the frontend **product surfaces to the lead** — primitives
+(G.1/G.2) and all views (H.1–H.3) — on capability grounds (frontend
+taste/implementation quality; Fable-class lead). This is a plan-gate
+routing decision, not a mid-build re-route; the delegation-default burden
+is discharged by owner direction. Still delegated (genuinely non-taste):
+F.0 scaffold (fast-worker), G.3 OIDC/SSE/store plumbing (codex), H.4
+state/error/scrub implementation per the codified matrix (codex), I.1
+acceptance mechanics (fast-worker). Consequence: G–H serialize through the
+lead — Phase H is lead-bound 3–4 days; wall-clock grows for product-surface
+quality, accepted.
 
 ## Sizing (corrected per adversarial finding 15)
 
