@@ -27,11 +27,16 @@ step 6, 2026-07-21** — phases 0–I built and committed on
 `task/025-web-app-foundation`; `make verify` fully green from the hoisted
 monorepo layout (backend suite + mypy strict + ruff + build + audit-paths +
 prompt-guard + font-guard + drift-check + frontend
-typecheck/lint/vitest/build); `verification.md` complete. **One
-outstanding build item: the pinned I.2 live check** — prepared but blocked
-on moving the repo-root `.env` (real API keys) to `backend/.env`, which
-the agent permission system cannot do; script + parameters in
-verification.md. **Next: the review stack runs in a FRESH conversation
+typecheck/lint/vitest/build); `verification.md` complete. **The pinned
+I.2 live check RAN 2026-07-21** (~52 min, real browser UI, two dev-issuer
+users, restart while parked∧executing, confirm-gate steer, boundary
+continuation to a succeeded artefact, rename/archive truth) — narrated log
+in docs/tasks/025-web-app-foundation/live-check-log.md; it caught and
+fixed five integration gaps (stub-defaulting API deps, double /api client
+prefix, dict plan-row in confirm-apply, the unwrapped screen directive
+validation branch, missing continuation.claimed SSE frame) plus a test
+hermeticity hardening (conftest key scrub + side-effect-free alembic env
+loading). **Next: the review stack runs in a FRESH conversation
 with `task-cycle-review`** (Tier 4: contract-verifier · /code-review
 medium per review-economy pins · security-auditor lane · codex
 adversarial · live-trace lane · human deep review) — the build
