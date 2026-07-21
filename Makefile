@@ -1,4 +1,4 @@
-.PHONY: setup test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard frontend-install openapi-sync drift-check font-guard frontend-verify
+.PHONY: setup test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test
 
 # Root orchestrator (025 A.2 monorepo hoist): the Python project lives in
 # backend/; this Makefile owns the shared db service + the root-level gates
@@ -104,12 +104,25 @@ font-guard:
 frontend-verify:
 	cd frontend && pnpm typecheck && pnpm lint && pnpm test && pnpm build
 
+# Thin browser smoke against the real local API: fresh dev-issuer credentials,
+# real Postgres, real CORS/base URL/auth transport, and the API SSE stream.
+# The script owns process lifecycle and leaves its temporary issuer material
+# behind only for the duration of the command.
+fe-api-smoke:
+	bash scripts/fe_api_smoke.sh
+
+# Verifies deploy.sh's production VITE_* refusal directly once D.1 lands.
+# It deliberately reports a clear skip while that documented interface is absent.
+deploy-build-guard-test:
+	bash scripts/test_deploy_build_guard.sh
+
 verify:
 	@if ! docker compose exec db pg_isready -U policy_atlas -q 2>/dev/null; then \
 		echo "ERROR: Postgres is not running. Run 'make setup' first." >&2; exit 1; \
 	fi
 	$(MAKE) okf-validate
 	$(MAKE) -C backend verify
+	$(MAKE) -C infra test
 	$(MAKE) audit-paths
 	$(MAKE) prompt-guard
 	$(MAKE) font-guard
