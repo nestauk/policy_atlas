@@ -146,6 +146,16 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
    guard** (deferred.md ← 025 security lane): the frontend deploy refuses to build/ship
    a production bundle without the OIDC authority set (a silent dev-token-panel bundle
    is a posture smell, not a bypass — the API still verifies RS256).
+
+   Also documents the **developer DB access path**: local dev stays on docker-compose
+   Postgres untouched; direct Aurora access from a laptop is an SSM port-forward tunnel
+   through the fck-nat instance (no bastion, no inbound ports, IAM-gated; credentials
+   from Secrets Manager) — the inspection replacement for v2's deleted Supabase Studio.
+   **Warning documented alongside it:** a locally booted API pointed at Aurora is a
+   second instance sharing the DB — the orphan sweep has no ownership lease, so it
+   would interrupt the staging service's executing walks (and vice versa). Tunnel for
+   psql/inspection: always fine. Local API against Aurora: only with the staging
+   service stopped.
 8. **Verify wiring** — infra unit tests (v2 `tests/` pattern: synthesized-template
    assertions) runnable locally and in `make verify` (CI change — approval requested at
    this gate as part of this contract). Plus the **FE↔real-API smoke** (deferred.md ←
