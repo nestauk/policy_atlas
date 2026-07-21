@@ -1,6 +1,10 @@
 # Task contract: 025-web-app-foundation
 
-> **Status:** drafted (rev 2, 2026-07-20) — awaiting owner approval.
+> **Status:** approved. Contract approved (before planning):
+> **2026-07-21 · owner** ("Approved, run the adversarial review") —
+> contract-stage adversarial lane runs next (codex-rescue; findings
+> adjudicated by the lead; material changes reopen the gate).
+> Plan approved (before implementation): _pending_.
 > rev 2: `frontend/` (no dash — owner amendment superseding the
 > deferred.md `front-end/` spelling) + § API design pins added after an
 > `api-and-interface-design` pass (error envelope, pagination,
