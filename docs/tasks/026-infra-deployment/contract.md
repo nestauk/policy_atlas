@@ -218,10 +218,17 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
    parallel-network decision, settled (scope item 2).
 2. **Domain: `v3.policyatlas.uk`** — frontend at the apex, API at
    `api.v3.policyatlas.uk`, wildcard cert `*.v3.policyatlas.uk` + apex SAN.
-   **Precondition (devops):** a Route53 hosted zone `v3.policyatlas.uk` exists before
-   deploy (the stack looks it up, never creates it). After v2 retires, moving to
-   `staging.policyatlas.uk` is a config-only redeploy (cert + A records + frontend
-   rebuild for the API URL) — deliberately not pre-built.
+   **Precondition (devops) — partially met 2026-07-21:** the Route53 hosted zone
+   exists (ID `Z01892791CHCGSTKW3NR`; the stack looks it up by name, never creates
+   it), which unblocks all authoring/synth/tests. The **parent NS delegation is
+   pending** (parent `policyatlas.uk` is on GoDaddy nameservers; devops adds the v3
+   NS records "tomorrow" ≈ 2026-07-22). Delegation gates the **first `cdk deploy`**:
+   both DNS-validated ACM certs (ALB regional wildcard + CloudFront us-east-1) wait
+   for public resolution of their validation CNAMEs and hang without it. Pre-deploy
+   check in the deploy docs: `dig NS v3.policyatlas.uk +short` must return the
+   Route53 nameservers. After v2 retires, moving to `staging.policyatlas.uk` is a
+   config-only redeploy (cert + A records + frontend rebuild for the API URL) —
+   deliberately not pre-built.
 3. **Cognito confirmed** as the IdP. No federation/SSO in scope.
 4. **Config JSONs committed, v2-style** (owner final call, 2026-07-21, rolling back
    the same-day gitignore amendment). The repo is public; the owner accepts the named
