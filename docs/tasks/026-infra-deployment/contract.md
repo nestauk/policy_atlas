@@ -119,6 +119,17 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
    SPA app client (code + PKCE), hosted UI domain, outputs wired to the API's
    issuer/JWKS/audience envs and the frontend build args. Smallest pool that satisfies
    the API's RS256/JWKS verification; no federation, no custom attributes, no triggers.
+   Two pins (owner-scoped auth stays as 025 built it — ownership is the token `sub`,
+   no user table):
+   - **Self-signup disabled** — users are operator-created (console/CLI) for the
+     migration window; no signup UI, no verification flows. Signup policy is the
+     workspace-cluster slice's question.
+   - **`RemovalPolicy.RETAIN` on the user pool** — recreating the pool would mint new
+     `sub`s for every user and silently orphan their owner-scoped projects; the pool
+     is as deletion-protected as the database.
+   User tables, profiles, organisation management: **out** — the workspace-cluster
+   slice (already sequenced); nothing in this slice's product reads them, and Cognito
+   needs none of them to deliver login + per-user isolation.
 6. **Licensed font delivery** (deferred.md, owner 2026-07-21): private S3 bucket;
    deploy-time injection of Averta/Zosia into the frontend build (fetched into
    `frontend/public/fonts/` before `vite build` by the deploy script). Binaries never
@@ -149,6 +160,9 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
   reveals an app bug, it's a finding to log (or a stop condition if blocking), not a
   silent in-slice fix beyond trivial config.
 - Multi-region, WAF, custom dashboards/alarms beyond what copies from v2 (log groups).
+- **User tables, profiles, organisation management, self-signup** — workspace-cluster
+  slice (scope item 5 has the rationale; ownership stays token-`sub`-scoped as 025
+  built it, no schema change).
 - Co-pilot Q&A + transcript store — **re-sequenced to 027+** (owner, 2026-07-21; this
   slice took the 026 number).
 
