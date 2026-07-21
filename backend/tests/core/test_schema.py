@@ -53,7 +53,11 @@ def test_all_fourteen_tables_exist(conn: Connection) -> None:
 def test_event_log_unique_project_sequence(conn: Connection) -> None:
     pid = uuid.uuid4()
     rid = uuid.uuid4()
-    conn.execute(project.insert().values(project_id=pid, created_at=now()))
+    conn.execute(
+        project.insert().values(
+            project_id=pid, created_at=now(), name="Test project", status="active", updated_at=now()
+        )
+    )
     conn.execute(runs.insert().values(
         run_id=rid, project_id=pid, status="running", started_at=now()
     ))
@@ -87,7 +91,11 @@ def test_block_version_defaults_to_one(conn: Connection) -> None:
     pid = uuid.uuid4()
     aid = uuid.uuid4()
     bid = uuid.uuid4()
-    conn.execute(project.insert().values(project_id=pid, created_at=now()))
+    conn.execute(
+        project.insert().values(
+            project_id=pid, created_at=now(), name="Test project", status="active", updated_at=now()
+        )
+    )
     conn.execute(artefact.insert().values(
         artefact_id=aid, project_id=pid, title="t", created_at=now()
     ))
@@ -103,7 +111,11 @@ def test_annotation_composite_fk_rejects_mismatch(conn: Connection) -> None:
     pid = uuid.uuid4()
     aid = uuid.uuid4()
     bid = uuid.uuid4()
-    conn.execute(project.insert().values(project_id=pid, created_at=now()))
+    conn.execute(
+        project.insert().values(
+            project_id=pid, created_at=now(), name="Test project", status="active", updated_at=now()
+        )
+    )
     conn.execute(artefact.insert().values(
         artefact_id=aid, project_id=pid, title="t", created_at=now()
     ))
@@ -155,7 +167,11 @@ def test_citation_chunk_fk_fails_with_phantom_chunk_id(conn: Connection) -> None
     aid = uuid.uuid4()
     bid = uuid.uuid4()
     uid = uuid.uuid4()
-    conn.execute(project.insert().values(project_id=pid, created_at=now()))
+    conn.execute(
+        project.insert().values(
+            project_id=pid, created_at=now(), name="Test project", status="active", updated_at=now()
+        )
+    )
     conn.execute(artefact.insert().values(
         artefact_id=aid, project_id=pid, title="t", created_at=now()
     ))
@@ -206,7 +222,11 @@ def test_project_source_snapshot_unique_constraint(conn: Connection) -> None:
     """(project_id, source_snapshot_id) must be unique in project_source_snapshot."""
     pid = uuid.uuid4()
     sid, _ = _seed_snapshot(conn)
-    conn.execute(project.insert().values(project_id=pid, created_at=now()))
+    conn.execute(
+        project.insert().values(
+            project_id=pid, created_at=now(), name="Test project", status="active", updated_at=now()
+        )
+    )
     conn.execute(project_source_snapshot.insert().values(
         project_source_snapshot_id=uuid.uuid4(), project_id=pid, source_snapshot_id=sid,
         origin="uploaded", run_id=None, ingested_at=now(),

@@ -561,11 +561,22 @@ def seed_screening_result(
 
 
 def seed_project_and_run(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:
-    """Insert a project + running run; return (project_id, run_id)."""
+    """Insert a project + running run; return (project_id, run_id).
+
+    Revision-aware: migration roundtrip tests call this at downgraded
+    revisions where the 025 lifecycle columns don't exist yet, so the
+    lifecycle values are included only when the live table carries them.
+    """
+    from sqlalchemy import inspect
+
     from policy_atlas.core.schema import project
 
     pid = uuid.uuid4()
-    conn.execute(project.insert().values(project_id=pid, created_at=now()))
+    values: dict[str, object] = {"project_id": pid, "created_at": now()}
+    live_columns = {col["name"] for col in inspect(conn).get_columns("project")}
+    if "name" in live_columns:
+        values.update(name="Test project", status="active", updated_at=now())
+    conn.execute(project.insert().values(**values))
     return pid, seed_run(conn, pid)
 
 

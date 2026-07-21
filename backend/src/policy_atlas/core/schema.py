@@ -30,6 +30,17 @@ project = Table(
     metadata,
     Column("project_id", UUID(as_uuid=True), primary_key=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("name", Text, nullable=False),
+    Column("question", Text, nullable=True),
+    Column("status", Text, nullable=False),  # active|archived
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    Column("archived_at", DateTime(timezone=True), nullable=True),
+    Column("owner_user_id", Text, nullable=True),
+    CheckConstraint("status IN ('active', 'archived')", name="ck_project_status"),
+    CheckConstraint(
+        "(status = 'archived') = (archived_at IS NOT NULL)",
+        name="ck_project_archived_at",
+    ),
 )
 
 artefact = Table(
@@ -114,7 +125,9 @@ event_log = Table(
     "event_log",
     metadata,
     Column("event_id", UUID(as_uuid=True), primary_key=True),
-    Column("run_id", UUID(as_uuid=True), nullable=False),
+    # Nullable for project lifecycle audit events; steering events retain their
+    # own non-null attachment invariant at their emission seam.
+    Column("run_id", UUID(as_uuid=True), nullable=True),
     Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
     Column("sequence", BigInteger, nullable=False),
     Column("event_type", Text, nullable=False),
@@ -1082,7 +1095,11 @@ capability_run = Table(
     # The approved plan identity at walk open.
     Column("plan_id", UUID(as_uuid=True), nullable=False),
     Column("plan_version", Integer, nullable=False),
-    Column("status", Text, nullable=False),  # running|succeeded|degraded|failed|aborted
+    Column(
+        "status",
+        Text,
+        nullable=False,
+    ),  # running|paused → succeeded/degraded/failed/aborted/interrupted
     Column("session_id", UUID(as_uuid=True), nullable=True),
     Column("started_at", DateTime(timezone=True), nullable=False),
     Column("ended_at", DateTime(timezone=True), nullable=True),
@@ -1096,7 +1113,8 @@ capability_run = Table(
     UniqueConstraint("capability_run_id", "project_id", name="uq_capr_id_project"),
     CheckConstraint("capability IN ('evidence_base')", name="ck_capr_capability"),
     CheckConstraint(
-        "status IN ('running', 'succeeded', 'degraded', 'failed', 'aborted')",
+        "status IN ('running', 'paused', 'succeeded', 'degraded', 'failed', "
+        "'aborted', 'interrupted')",
         name="ck_capr_status",
     ),
 )

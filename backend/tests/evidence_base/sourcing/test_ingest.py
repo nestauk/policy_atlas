@@ -16,7 +16,11 @@ _CHUNKS = list(get_source("syn-001").chunks)
 
 def _seed_project(conn: Connection) -> uuid.UUID:
     pid = uuid.uuid4()
-    conn.execute(project.insert().values(project_id=pid, created_at=now()))
+    conn.execute(
+        project.insert().values(
+            project_id=pid, created_at=now(), name="Test project", status="active", updated_at=now()
+        )
+    )
     return pid
 
 

@@ -865,7 +865,18 @@ def _write_plan_row(
     plan_id = uuid.uuid4()
     now = _now()
     with engine.begin() as conn:
-        conn.execute(project.insert().values(project_id=project_id, created_at=now))
+        conn.execute(
+            project.insert().values(
+                project_id=project_id,
+                created_at=now,
+                name=plan.title,
+                question=plan.question,
+                status="active",
+                updated_at=now,
+                archived_at=None,
+                owner_user_id=None,
+            )
+        )
         conn.execute(
             evidence_scope.insert().values(
                 evidence_scope_id=scope_id,

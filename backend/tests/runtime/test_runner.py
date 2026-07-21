@@ -178,7 +178,15 @@ def _seed_project(
     project_id = uuid.uuid4()
     scope_id = uuid.uuid4()
     with engine.begin() as conn:
-        conn.execute(project.insert().values(project_id=project_id, created_at=now()))
+        conn.execute(
+            project.insert().values(
+                project_id=project_id,
+                created_at=now(),
+                name="Test project",
+                status="active",
+                updated_at=now(),
+            )
+        )
         _seed_source_with_finding(
             conn,
             project_id=project_id,

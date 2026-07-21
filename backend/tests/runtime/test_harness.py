@@ -175,7 +175,15 @@ def test_configure_logging_json_chain_renders_exc_info(
 def test_run_project_mismatch_raises_before_write(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
     other_pid = uuid.uuid4()
-    conn.execute(project.insert().values(project_id=other_pid, created_at=now()))
+    conn.execute(
+        project.insert().values(
+            project_id=other_pid,
+            created_at=now(),
+            name="Test project",
+            status="active",
+            updated_at=now(),
+        )
+    )
     config = compile(Plan(component="acquire", evidence_scope_id=uuid.uuid4()))
 
     with pytest.raises(ValueError, match="belongs to project"):
@@ -428,7 +436,11 @@ def test_failure_evidence_survives_commit(engine: Engine) -> None:
     rid = uuid.uuid4()
     try:
         with engine.begin() as conn:
-            conn.execute(project.insert().values(project_id=pid, created_at=now()))
+            conn.execute(
+        project.insert().values(
+            project_id=pid, created_at=now(), name="Test project", status="active", updated_at=now()
+        )
+    )
             conn.execute(runs.insert().values(
                 run_id=rid_screen, project_id=pid, status="running", started_at=now()
             ))

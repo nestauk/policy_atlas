@@ -6,7 +6,7 @@ Separate from LangGraph execution checkpoints (audit plane ≠ telemetry plane).
 # ponytail: app-side max+1 safe under serial single-writer (v3.0 model);
 #            DB trigger / REVOKE is the deferred hardening path.
 # Cross-project contamination is enforced by the DB composite FK
-# event_log(run_id, project_id) → runs(run_id, project_id).
+# event_log(run_id, project_id) → runs(run_id, project_id) when run_id is set.
 """
 
 import uuid
@@ -24,7 +24,7 @@ def append(
     conn: Connection,
     *,
     project_id: uuid.UUID,
-    run_id: uuid.UUID,
+    run_id: uuid.UUID | None,
     event_type: str,
     payload: dict[str, Any],
 ) -> uuid.UUID:
@@ -38,7 +38,8 @@ def append(
     Args:
         conn: Open database connection.
         project_id: Project the event belongs to; scopes the sequence counter.
-        run_id: Run the event belongs to.
+        run_id: Run the event belongs to, or ``None`` for a project lifecycle
+            audit event.
         event_type: Event name (e.g. ``"run.started"``).
         payload: JSON-serialisable event body.
 
