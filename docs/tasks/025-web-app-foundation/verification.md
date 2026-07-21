@@ -8,6 +8,7 @@ source text, credentials or unredacted traces.
 | Command | Result | Notes |
 |---|---:|---|
 | `make verify` (FULL, step-6 exit) | pass | okf-validate · backend test (1875 + ingest suite) · mypy strict (221+ files) · ruff · build · audit-paths · prompt-guard · font-guard · drift-check · frontend typecheck/lint/vitest(50)/build |
+| `make verify` (FULL, step-7 exit after the review fix wave) | pass | 1923 backend tests · mypy strict (232 files) · ruff · okf-validate (92 concepts) · drift-check (client regenerated for pagination) · frontend typecheck/lint/vitest(57)/build; `pnpm e2e` 4/4 on a fresh mock server |
 | `make verify` at phase gates | pass | T0.1 baseline · A.3 (hoist) · B.3 (schema) · C.4 (runner core) · E.2 (ingest-adjacent) · H.4 — each green before its commit |
 | `make verify-fast` at intermediate commits | pass | per the plan's binding gate map (D.4, F.1, G.3 verify-fast) |
 | `make drift-check` mutation proof | pass | scratch field added to `ProjectOut` → gate FAILED with a clean diff naming `make openapi-sync`; reverted → green |
@@ -248,13 +249,16 @@ worker posture (cross-instance is a named seam).
 
 ## Known unverified items
 
-- **The pinned live check (I.2)** — blocked on the `.env` move (above).
-  Everything it exercises has deterministic coverage, but the contract
-  bought a live session and it has not run yet.
 - Real-Cognito verification is config-only by design and conformance-tested
   against two asymmetric issuers, but no actual Cognito pool exists until
   the infra slice.
-- The review stack (step 7+) has not run — this file ends at step 6.
+- The review-stack fixes (§ Review findings below) have deterministic
+  coverage but have not been re-exercised in a second live browser session;
+  the pinned live check (I.2) ran against the pre-review build.
+
+*(Stale-section fix, step 7: this section previously still said the live
+check was blocked — it ran 2026-07-21 as narrated above; the contradiction
+was itself a review finding.)*
 
 ## Public safety
 
@@ -269,6 +273,204 @@ Adjudication items: the flagged deviations above, esp. the gate expansion,
 the durable-event additions, and the universal-floor validation. Per-angle
 diff scoping: exclude `frontend/src/api/gen/**`, `frontend/openapi.json`,
 `frontend/pnpm-lock.yaml`, `backend/uv.lock` from review diffs.
+
+## Review findings (step 7, 2026-07-21 — fresh conversation, lead-adjudicated)
+
+**Lanes run (Tier 4):** contract-verifier (pinned Opus, all 19 rubric items +
+verification/ADR-vs-code) · code review ×2 scoped passes (backend; frontend —
+the `/code-review medium` substitute: the command is not invocable in this
+harness session, so the sanctioned `code-reviewer` agent ran as the Claude
+half, per-surface-scoped with generated/lock/data/`docs/tasks` files excluded)
+· security-auditor (auth/JWT/BOLA/SSE/injection/supply-chain/secrets) ·
+**codex adversarial** (family-heterogeneous half — credits were live again,
+superseding the 2026-07-16 exhaustion; job task-mruhezri-fpcxsw) · a
+deep-reasoner adversarial pass (dispatched before codex availability was
+known; kept as a supplementary same-family read — its findings proved
+non-redundant) · lead trace-content review of live-check-log.md + the five
+live fixes (none fake-done; the steering fix routes to the refusal path and
+was proven live). `make verify` was green before any lane dispatched.
+
+**Economy:** ~740K reasoning-class + ~490K fast-worker tokens. The
+reasoning-class figure is ~3× the routine-slice pin — driver: Tier-4 baseline
+(5 lanes) over a 21.5K-line seven-strand diff, plus the double adversarial
+lane. Fast-worker stayed inside its 500K pin. Recorded for the standing
+review-economy retro (this is the fourth slice running over).
+
+**Headline: 19 MAJOR/critical-class findings, all verified against the code
+by the lead before adoption; ~25 minors.** Convergent across independent
+lanes (high-confidence by the stack's own rule): park/phantom-pending
+(deep-reasoner + codex), abort-invisible-to-SSE (deep-reasoner + codex),
+sequence-allocator race (backend lane + codex), zombie-`running` on executor
+exception (backend lane + codex), `href` scheme gap (frontend + security
+lanes), stage-vocabulary leak (contract-verifier + frontend scrub note).
+Unique catches justifying each lane: codex — drainer-runs-on-stub-backends,
+plan-lineage cross-contamination, same-sequence SSE frame drop, option-params
+shape, archive-dispatch race; contract-verifier — the locked-vocabulary leak
++ the `event_log.run_id` gate-expansion audit; security — JWKS negative-cache
+DoS + conformance under-coverage; backend lane — SSE idle full-log re-read +
+the boot-bricking sweep `LookupError`; frontend lane — the 401-retry
+consumed-body clone + unkeyed CheckInCard; deep-reasoner — the
+claim→execute unrecoverable window + `_live()` posture.
+
+### Adopted and fixed (all gate-checked; frontend 57/57 vitest, backend suites green)
+
+Continuation protocol (the slice's hard core — six findings fixed together):
+1. Startup sweep three-way classification: claimed-but-unexecuted walks are
+   **re-executed, never interrupted** (adv-M1; contract's answer-durability
+   promise now covers the claim→execute window); running-with-no-attachment
+   is interrupted with a null attachment instead of raising inside the
+   lifespan (backend-M3 — previously **bricked every subsequent boot**);
+   post-claim progress detection errs toward interruption (never re-runs a
+   committed component).
+2. The lifespan drainer now composes the same key-driven backends + `ParkIO`
+   + orchestrator as the request path (codex-1 — it previously redispatched
+   real continuations onto deterministic stubs with NullIO auto-continuing
+   every pause); `execute_continuation`'s backends/io are now required
+   parameters so the stub fallback is unreachable from any production seam.
+3. Pending check-ins require the walk to actually be `paused` (adv-M2/
+   codex-3 — a death between pause-emit and park no longer renders a phantom
+   card whose answer 404s). The pause-emit/park two-transaction window itself
+   is accepted residual: a death inside it is a genuine mid-execution death
+   and now presents honestly end-to-end.
+4. Every executor catch-block marks the walk interrupted best-effort
+   (backend-I1/codex-7 — no more permanently-`running` zombies holding the
+   project's run slot until the next restart).
+5. Plan lineage (codex-2): planning turns now 409 `run_active` while a walk
+   is running or parked — steering is the sanctioned mid-run plan channel,
+   and the fence makes the reducer's latest-approved plan selection provably
+   the walk's own lineage (amendments supersede within it). Adjudicated as
+   the minimal sound resolution; per-walk plan custody plumbing declined as
+   unneeded under the fence.
+6. API abort now mirrors the runner path (adv-M5/codex-5): plan →
+   `abandoned` and `run.finished{status:aborted}` in the same transaction —
+   an aborted run no longer renders as "Paused" forever in the store.
+
+Transport/store:
+7. `events.append` allocates under a SAVEPOINT retry (backend-M2/codex-6 —
+   the two 025 writer families collide instead of failing a rename or a
+   component commit; misordering remains impossible; two-writer barrier test).
+8. SSE idle polls no longer re-read the whole project log per client per
+   0.4s (backend-M1); the decided-pause context fetches decision events only.
+9. The store accepts equal-sequence distinct-type frames (codex-4 — one
+   decision's `checkin.resolved` no longer permanently swallows its
+   `plan.updated` twin) and resets stage/liveness state on a new run id
+   (codex-10).
+10. The 401-retry middleware clones requests before the body is consumed
+    (frontend-critical-1 — bodied POST/PATCH retries after token expiry
+    previously threw; now tested with a bodied retry). `CheckInCard` is
+    keyed by `check_in_id` (frontend-critical-2 — confirm state can no
+    longer carry across check-ins at the 024 fidelity surface).
+
+Product pins / API surface:
+11. Locked vocabulary (contract-verifier MAJOR-1): `CheckInOut.stage` now
+    carries the public stage key (shared `stage_vocabulary` module); the
+    card renders the server-supplied stage *label* (hides the chip when
+    unknown — hide, never fake) and scrubs it.
+12. Option parameters (codex-8): change_mode renders a mode select posting
+    `{new_mode}`; other input-requiring options route into the free-text
+    compile→confirm-gate flow instead of posting a malformed `{value}` delta.
+13. Runs + check-ins lists paginated in the standard envelope (rubric 17,
+    contract-verifier minor-3), regenerated through the drift gate.
+14. Explicit backend-mode posture (adv-M4): `PA_BACKEND_MODE=live|stub|auto`
+    — `live` fails loud without the core key, `stub` pins stubs on keyed
+    boxes, boot logs missing search keys instead of degrading silently.
+15. Archive consults the in-process dispatch reservation (codex-9); planner
+    LLM calls moved outside the row-lock transaction (backend-I2 — a slow
+    turn no longer stalls run creation process-wide, and a failed turn no
+    longer leaves a dangling user message, m4); dispatch await 2s→10s
+    (backend-I3); fan-out rerun decisions record post-amendment plan
+    identity (backend-m1); router 400/422 details reach the user while 404
+    stays deliberately generic for BOLA byte-identity (backend-m2); lost
+    confirm tokens are an actionable 409 `confirm_expired`, not an opaque
+    404 (backend-m3).
+16. Frontend error surfaces wired: real 409 code vocabulary, view-level
+    `isError` branches (no more fake-empty on 500), `ReauthRedirect` on
+    persistent 401; `safeHref` http(s) allowlist on source URLs (convergent
+    frontend+security); scrub uniformity on the remaining server strings;
+    SourcesView page clamp + filter-scope honesty; SSE project-switch race
+    guard; stable `AuthApi` across silent renewals (no more full replay per
+    token lifetime); per-turn `client_turn_id` (idempotency key now works);
+    `connecting` initial connection state; recharts route lazy-loaded
+    (bundle warning gone); dead code deleted (`usePrefersReducedMotion`,
+    `InlineConflictNotice`, `ServerErrorToast`).
+17. Security hardening: JWKS negative cache (30s TTL, rotation test intact);
+    unauthenticated + byte-identical-404 conformance sweeps now derive from
+    the live route table (22 + 13 routes, all clean — a future route missing
+    auth or ownership fails CI by construction); `nosniff` + HSTS headers.
+18. Reducer snapshot hardening: `completed_components` is snapshot-read-back
+    (G2 pattern, adv-m4) with derived fallback; new parity case interleaves
+    canonical and free-text overlays on one component (adv-m5), asserting
+    sequence-order folding is observable.
+
+**Deliberate test changes (rubric item 5 justification):** two
+`test_continuation_protocol` tests pinned the discarded interrupt-on-claim
+behaviour; they were rewritten to assert the adopted recovery semantics and
+a new companion test pins the interrupt path for genuine post-claim
+progress. Two list assertions updated for the pagination envelope. The
+extract write-order golden flaked AGAIN under the post-review suite (the
+build's `(created_at, ctid)` hardening still tied on equal timestamps and
+scrambled within the tie) — reworked to observe insertion order **at the
+write seam** via a cursor-event capture, removing the physical-order
+dependence entirely; the assertion itself is unchanged and strictly
+stronger. Nothing else was weakened; the backend lane's rename-aware sweep
+found no weakened tests in the build either. (Process note: the first
+post-fix e2e run failed spuriously — Playwright's `reuseExistingServer`
+silently reused a leftover non-mock dev server from the morning's live
+check; 4/4 green on a fresh server.)
+
+### Declined / deferred (with reasons)
+
+- **NULL-owner backfill (backend-I4):** contract-pinned intent ("pre-existing
+  rows … intentionally inaccessible; documented DB-level recovery") — a
+  clarifying note added to the migration docstring only.
+- **`event_log.run_id` nullable gate expansion:** disclosed, owner-approved
+  mid-build via AskUserQuestion; the repo cannot prove the approval — named
+  as the **top step-9 human-review confirmation item** (contract-verifier).
+- **Park pause-emit/park atomicity:** narrow fixes adopted (finding 3 above);
+  full single-transaction parking would move the pause emit inside the park
+  path shared with the CLI blocking mode — declined as a runner reshape
+  disproportionate to a window that now fails honest.
+- **Sweep instance-ownership lease (adv-M3):** correct at the pinned
+  one-instance posture; recorded as a hard deploy invariant
+  (hard-kill-old-before-boot-new) in deferred.md alongside the existing
+  SIGTERM/executor note — the lease belongs to the LISTEN/NOTIFY seam
+  (infra slice).
+- **Automated FE↔real-API integration net (adv-M6):** recorded as a known
+  risk + deferred.md entry (thin real-HTTP smoke in CI); not buildable
+  inside this review phase.
+- **Refusal-wrap centralization (adv-m2):** declined — all seven (nine
+  as-built) branches are individually wrapped; a parametrized test now pins
+  every branch to the refusal path, which is the property that matters.
+- **Prompt-guard filename scoping (contract-verifier minor-4):** declined —
+  the guard covers the established prompt family by content hash;
+  whole-repo LLM-string detection is a different tool. Noted.
+- **`_dispatching` process-memory window (contract-verifier minor-2):**
+  accepted under the pinned single-process posture (same posture as the
+  reservation itself); the archive-race fix narrows its blast radius.
+- **decisions `detail` allowlist (minor-7) / `VITE_OIDC_AUTHORITY` prod
+  build guard (security-info):** deferred — latent-only today; the second
+  rides the infra slice's deploy checklist (deferred.md).
+- Cosmetic live-check review items already recorded (ingest under acquire
+  label; rename/archive UI controls; `CitationOut.source_id`) → deferred.md
+  in step 8; `source_id` is small but touches the contract — next-slice
+  material rather than review-phase scope creep.
+
+**Step-8 knowledge adjudication (2026-07-21):** authored from BOTH the
+build candidates below and the stack's findings — 10 new concepts + 1
+amendment (`event-log-sequence.md`), all written against the as-built code,
+`make okf-validate` clean: startup-recovery-classifies-never-discards ·
+run-status-transitions-emit-run-events · plan-lineage-by-fencing-not-custody
+· observe-order-at-the-write-seam · structural-parity-uuid-canonicalisation
+· tests-are-zero-egress-scrub-keys · column-churn-migrations-need-scratch-db
+· mock-fetch-blindness · frontend-supply-chain-pnpm ·
+vite8-react-compiler-wiring. Folded: run.parked-attachment invariant + G2
+read-back (into the parity/recovery concepts); pnpm/corepack/vitest-glob
+quirks (into the supply-chain concept). Declined with reasons: codex
+sandbox/serial-task constraints (agentic-ops lane, recorded in this file's
+provenance notes); dev-issuer two-provider seam (spec layer owns it,
+web-api.md); HTML `content`-attr prop collision (transient library quirk,
+recorded below); schema-aware test seeding (already encoded in
+tests/helpers as-built — the code is the record).
 
 Knowledge candidates (raw, per the 014 rule — step 8 authors
 `docs/knowledge/` from these against the final code):

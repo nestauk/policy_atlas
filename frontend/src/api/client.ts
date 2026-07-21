@@ -14,7 +14,7 @@ const DEFAULT_BASE_URL = "";
  * Build a typed `openapi-fetch` client bound to the generated `paths`.
  *
  * @param baseUrl - API base URL. Defaults to `VITE_API_BASE_URL`, falling
- *   back to `/api` in its absence.
+ *   back to same-origin ("") in its absence.
  * @returns An `openapi-fetch` client whose request/response shapes are
  *   inferred from the generated OpenAPI types — one schema drives both ends.
  */
@@ -29,7 +29,7 @@ export function createApiClient(baseUrl: string = import.meta.env.VITE_API_BASE_
  *
  * @param auth - The active `AuthApi` (from `useAuth()`).
  * @param baseUrl - API base URL. Defaults to `VITE_API_BASE_URL`, falling
- *   back to `/api` in its absence.
+ *   back to same-origin ("") in its absence.
  */
 export function createAuthedApiClient(
   auth: AuthApi,

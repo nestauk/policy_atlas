@@ -32,20 +32,30 @@ export function useRunStream(projectId: string): RunStreamState {
   }
 
   useEffect(() => {
+    // Guards against a frame from THIS effect's connection landing after
+    // its cleanup has run but before the closure is torn down — without
+    // this, such a frame would fold into the next project's already-reset
+    // state (a stale-connection race at the project-switch boundary).
+    let closed = false;
+
     const connection = connectEventStream({
       projectId,
       getAccessToken: (forceRefresh) => auth.getAccessToken(forceRefresh),
       onUnauthenticated: () => auth.onUnauthenticated(),
       onConnected: () => {
+        if (closed) return;
         setState((previous) => ({ ...previous, connectionStatus: "connected" }));
       },
       onDisconnected: () => {
+        if (closed) return;
         setState((previous) => ({ ...previous, connectionStatus: "reconnecting" }));
       },
       onError: () => {
+        if (closed) return;
         setState((previous) => ({ ...previous, connectionStatus: "reconnecting" }));
       },
       onFrame: (frame) => {
+        if (closed) return;
         setState((previous) => reduceRunStreamFrame(previous, frame));
         if (frame.type === "stage.completed" || frame.type === "run.status") {
           void queryClient.invalidateQueries({
@@ -55,7 +65,10 @@ export function useRunStream(projectId: string): RunStreamState {
       },
     });
 
-    return () => connection.close();
+    return () => {
+      closed = true;
+      connection.close();
+    };
   }, [projectId, auth, queryClient]);
 
   return state;

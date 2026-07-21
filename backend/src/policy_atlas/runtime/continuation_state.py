@@ -121,6 +121,11 @@ def build(
         ).one_or_none()
         if cap_row is None:
             raise LookupError(f"capability run {capability_run_id} does not exist")
+        # Latest-approved is the walk's own lineage BY CONSTRUCTION, not by
+        # accident (review finding codex-2, 2026-07-21): steering amendments
+        # supersede within the walk's lineage, and the planning router 409s
+        # any turn while a walk is running or parked — so no unrelated plan
+        # can become latest-approved between park and continuation.
         plan_row = conn.execute(
             select(orchestration_plan)
             .where(orchestration_plan.c.project_id == project_id)
@@ -193,7 +198,15 @@ def build(
     attempted_runs = {
         registry: row["run_id"] for registry, (_, row) in latest_registry.items()
     }
-    completed_components = {outcome.component for outcome in outcomes}
+    # Read back from the park snapshot (G2 pattern), never re-derive: this set
+    # drives remaining_steps — what re-executes after the park. The derived
+    # fallback covers snapshots written before the field existed (adv-m4).
+    snapshot_completed = snapshot.get("completed_components")
+    completed_components = (
+        set(snapshot_completed)
+        if isinstance(snapshot_completed, list)
+        else {outcome.component for outcome in outcomes}
+    )
     blocked_discretionary: dict[str, str] = {}
     for component, (started, row) in latest_component.items():
         if component not in DISCRETIONARY_REQUIREMENTS:

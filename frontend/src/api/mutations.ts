@@ -65,17 +65,20 @@ export function useArchiveProject(projectId: string) {
   });
 }
 
-/** `POST .../planning-turns` — one real planner turn (client-minted turn id). */
+/** `POST .../planning-turns` — one real planner turn. `clientTurnId` is
+ *  minted by the caller per logical turn (one per submitted message, not
+ *  per send attempt) so that retrying the same submission reuses the id
+ *  rather than minting a fresh one the server would treat as a new turn. */
 export function usePlanningTurn(projectId: string) {
   const client = useApiClient();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (message: string) => {
+    mutationFn: async (input: { message: string; clientTurnId: string }) => {
       const { data, error, response } = await client.POST(
         "/api/v1/projects/{project_id}/planning-turns",
         {
           params: { path: { project_id: projectId } },
-          body: { message, client_turn_id: crypto.randomUUID() },
+          body: { message: input.message, client_turn_id: input.clientTurnId },
         },
       );
       if (data === undefined) raise(error, response.status);

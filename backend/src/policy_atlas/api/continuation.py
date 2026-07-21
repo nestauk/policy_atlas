@@ -51,6 +51,14 @@ _COMPILE_CACHE: OrderedDict[str, _PendingCompilation] = OrderedDict()
 _COMPILE_CACHE_LOCK = threading.Lock()
 
 
+class ConfirmTokenExpiredError(Exception):
+    """A free-text confirm token was lost to restart/eviction — recompile to proceed.
+
+    Distinct from ``LookupError`` so the router can surface the recovery action
+    (409 ``confirm_expired``) instead of an opaque 404 (review finding m3).
+    """
+
+
 class AlreadyAnsweredError(Exception):
     """Raised when a check-in already has a durable decision."""
 
@@ -111,10 +119,16 @@ class SweepReport:
     Args:
         interrupted_capability_run_ids: Running walks honestly marked interrupted.
         redispatch: Unclaimed parked continuations, ordered for dispatch.
+        reexecute: Walks whose continuation was claimed but never made component
+            progress before the process died — the claim is durable, the walk sat
+            at a clean boundary, so the sweep re-executes rather than interrupts
+            (review finding, 2026-07-21: interrupting here discarded a
+            just-answered multi-day park).
     """
 
     interrupted_capability_run_ids: tuple[uuid.UUID, ...]
     redispatch: tuple[ClaimedContinuation, ...]
+    reexecute: tuple[ClaimedContinuation, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -306,13 +320,16 @@ def confirm_free_text(
         ``None`` when discarded, otherwise the committed answer result.
 
     Raises:
-        LookupError: If the token was lost on restart/eviction or has a different scope.
+        ConfirmTokenExpiredError: If the token was lost on restart/eviction.
+        LookupError: If the token has a different scope.
         AlreadyAnsweredError: If another answer resolved the pause first.
         InvalidResponseError: If the compilation contains no applicable fragment.
     """
     pending = _take_compilation(confirm_token)
     if pending is None:
-        raise LookupError("free-text confirmation is unavailable; compile again")
+        raise ConfirmTokenExpiredError(
+            "the compiled preview is no longer available - compile the request again"
+        )
     if pending.project_id != project_id or pending.check_in_id != check_in_id:
         raise LookupError("free-text confirmation does not belong to this check-in")
     if not apply:
@@ -415,19 +432,24 @@ def execute_continuation(
     *,
     project_id: uuid.UUID,
     capability_run_id: uuid.UUID,
-    backends: Any = None,
-    io: Any = None,
+    backends: Any,
+    io: Any,
     discretion_hook: Any = None,
     orchestrator: OrchestratorBackend | None = None,
 ) -> RunPlanOutcome:
     """Rebuild and execute an already-claimed parked continuation.
 
+    ``backends`` and ``io`` are deliberately required (review finding codex-1,
+    2026-07-21): a ``None`` default fell through to ``run_plan``'s stub bundle
+    and ``NullIO`` — the startup drainer redispatched real continuations onto
+    deterministic stubs that auto-continued every subsequent pause.
+
     Args:
         engine: Database engine.
         project_id: Project owning the walk.
         capability_run_id: Claimed walk to resume.
-        backends: Optional runner component backends.
-        io: Optional runner IO seam.
+        backends: Runner component backends (the caller decides live vs stub).
+        io: Runner IO seam (``ParkIO()`` on every API/drainer path).
         discretion_hook: Optional runner discretion hook.
         orchestrator: Optional router/watch backend.
 
@@ -467,16 +489,66 @@ def execute_continuation(
     )
 
 
+def mark_interrupted_best_effort(
+    engine: Engine, *, project_id: uuid.UUID, capability_run_id: uuid.UUID
+) -> None:
+    """Terminally mark a walk whose executor raised outside runner handling.
+
+    Called from executor catch-blocks (review finding I1/codex-7, 2026-07-21):
+    an exception between claim/dispatch commit and runner-owned status handling
+    left the walk ``running`` forever with no thread. Best-effort by design —
+    a failure here is logged and the startup sweep remains the backstop.
+    """
+    try:
+        with engine.begin() as conn:
+            project_lock(conn, project_id)
+            updated = conn.execute(
+                update(capability_run)
+                .where(capability_run.c.project_id == project_id)
+                .where(capability_run.c.capability_run_id == capability_run_id)
+                .where(capability_run.c.status == "running")
+                .values(status="interrupted", ended_at=datetime.now(UTC))
+            )
+            if updated.rowcount:
+                events.append(
+                    conn,
+                    project_id=project_id,
+                    run_id=_latest_attachment(
+                        conn, project_id=project_id, capability_run_id=capability_run_id
+                    ),
+                    event_type="run.interrupted",
+                    payload={"capability_run_id": str(capability_run_id)},
+                )
+    except Exception:
+        log.exception(
+            "continuation.interrupt_mark_failed",
+            project_id=str(project_id),
+            capability_run_id=str(capability_run_id),
+        )
+
+
 def startup_sweep(engine: Engine) -> SweepReport:
-    """Mark orphaned running walks interrupted and find redispatchable parks.
+    """Recover walk state after a process death (idempotent, fires per boot).
+
+    Classifies every ``running`` walk three ways (review findings, 2026-07-21):
+
+    - claimed continuation with **no component progress** after the claim → the
+      walk sat at a clean boundary with the full durable record intact; it is
+      returned for direct re-execution, never interrupted;
+    - anything else ``running`` → died mid-execution → honestly ``interrupted``.
+      A walk with **no event attachment at all** (death between ``run.opened``
+      and the first component) is interrupted with a null attachment rather
+      than failing the sweep — raising here bricked every subsequent API boot.
 
     Args:
         engine: Database engine.
 
     Returns:
-        Interrupted walks and unclaimed parked continuations in deterministic order.
+        Interrupted walks, unclaimed parked continuations, and claimed-but-
+        unexecuted continuations, each in deterministic order.
     """
     interrupted: list[uuid.UUID] = []
+    reexecute: list[ClaimedContinuation] = []
     with engine.begin() as conn:
         running = conn.execute(
             select(capability_run)
@@ -485,13 +557,25 @@ def startup_sweep(engine: Engine) -> SweepReport:
         ).mappings().all()
         for cap in running:
             project_lock(conn, cap["project_id"])
+            claim = _claimed_without_progress(
+                conn,
+                project_id=cap["project_id"],
+                capability_run_id=cap["capability_run_id"],
+            )
+            if claim is not None:
+                reexecute.append(claim)
+                continue
             attachment = _latest_attachment(
                 conn,
                 project_id=cap["project_id"],
                 capability_run_id=cap["capability_run_id"],
             )
             if attachment is None:
-                raise LookupError("running capability run has no event attachment")
+                log.warning(
+                    "continuation.sweep_orphan_without_attachment",
+                    project_id=str(cap["project_id"]),
+                    capability_run_id=str(cap["capability_run_id"]),
+                )
             conn.execute(
                 update(capability_run)
                 .where(capability_run.c.capability_run_id == cap["capability_run_id"])
@@ -508,7 +592,50 @@ def startup_sweep(engine: Engine) -> SweepReport:
             interrupted.append(cap["capability_run_id"])
 
         redispatch = _redispatchable_requests(conn)
-    return SweepReport(tuple(interrupted), tuple(redispatch))
+    return SweepReport(tuple(interrupted), tuple(redispatch), tuple(reexecute))
+
+
+def _claimed_without_progress(
+    conn: Connection, *, project_id: uuid.UUID, capability_run_id: uuid.UUID
+) -> ClaimedContinuation | None:
+    """Return the walk's claimed continuation if nothing executed after the claim.
+
+    The claim commits ``status=running`` in the request thread before the
+    executor takes over, so a death in that window leaves a fully recoverable
+    walk. "Progress" is any run-attached non-continuation event after the
+    claim: component emissions (``run.started`` …) carry no
+    ``capability_run_id`` in their payload, but they always carry a ``run_id``
+    attachment, and one active walk per project means any such event after the
+    claim belongs to this walk's execution. Missing real progress here would
+    silently re-run an already-committed component — err toward interruption.
+    """
+    rows = events.read(conn, project_id)
+    claim_row: dict[str, Any] | None = None
+    for row in rows:
+        if (
+            row["event_type"] == "continuation.claimed"
+            and _payload_uuid(row["payload"], "capability_run_id") == capability_run_id
+        ):
+            claim_row = row
+    if claim_row is None:
+        return None
+    for row in rows:
+        if (
+            row["sequence"] > claim_row["sequence"]
+            and not str(row["event_type"]).startswith("continuation.")
+            and row["run_id"] is not None
+        ):
+            return None
+    requested_event_id = _payload_uuid(claim_row["payload"], "requested_event_id")
+    decision_event_id = _payload_uuid(claim_row["payload"], "decision_event_id")
+    if requested_event_id is None or decision_event_id is None:
+        return None
+    return ClaimedContinuation(
+        project_id=project_id,
+        capability_run_id=capability_run_id,
+        requested_event_id=requested_event_id,
+        decision_event_id=decision_event_id,
+    )
 
 
 def _pending_pause(
@@ -677,15 +804,36 @@ def _persist_abort(
     state: Any,
     actor: str,
 ) -> AnswerResult:
-    """Record an abort and terminally mark the parked capability run."""
+    """Record an abort and terminally mark the parked capability run.
+
+    Mirrors the runner's in-process ``_abort_and_record`` semantics (review
+    finding, 2026-07-21): the plan flips to ``abandoned`` in the same
+    transaction, and a ``run.finished`` event carries the terminal status so
+    SSE replay and the live store see the walk end — without it the workspace
+    showed an aborted run as still paused forever.
+    """
     decision_id = _append_decision(
         conn, project_id=project_id, pause=pause, state=state, response="abort", action=None
     )
+    if state.plan_row_id is not None:
+        conn.execute(
+            orchestration_plan.update()
+            .where(orchestration_plan.c.plan_id == state.plan_row_id)
+            .where(orchestration_plan.c.project_id == project_id)
+            .values(status="abandoned")
+        )
     conn.execute(
         update(capability_run)
         .where(capability_run.c.project_id == project_id)
         .where(capability_run.c.capability_run_id == pause.capability_run_id)
         .values(status="aborted", ended_at=datetime.now(UTC))
+    )
+    events.append(
+        conn,
+        project_id=project_id,
+        run_id=pause.run_id,
+        event_type="run.finished",
+        payload={"capability_run_id": str(pause.capability_run_id), "status": "aborted"},
     )
     log.info("continuation.aborted", project_id=str(project_id), actor=actor)
     return AnswerResult(pause.capability_run_id, decision_id, False)
@@ -742,11 +890,14 @@ def _persist_fanout(
                 component=rerun.component,
                 directive=directive,
             )
+            # current_state, not state: after a preceding adjustment fragment the
+            # decision must record the post-amendment plan identity or SSE derives
+            # the wrong plan.updated version (review finding m1, 2026-07-21).
             decision_id = _append_decision(
                 conn,
                 project_id=project_id,
                 pause=pause,
-                state=state,
+                state=current_state,
                 response="adjust",
                 action=action,
                 user_text=user_text,
@@ -768,7 +919,7 @@ def _persist_fanout(
                 conn,
                 project_id=project_id,
                 pause=pause,
-                state=state,
+                state=current_state,
                 response="adjust",
                 action=action,
                 user_text=user_text,

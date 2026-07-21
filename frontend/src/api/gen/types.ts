@@ -102,6 +102,9 @@ export interface paths {
         /**
          * List Check Ins
          * @description Return a latest pending card or the durable steering history projection.
+         *
+         *     Paginated (rubric item 17 — check-ins accumulate over a project's life);
+         *     the pending view is at most one card by construction.
          */
         get: operations["list_check_ins_api_v1_projects__project_id__check_ins_get"];
         put?: never;
@@ -361,7 +364,7 @@ export interface paths {
         };
         /**
          * List Runs
-         * @description List a project's walks from newest to oldest.
+         * @description List a project's walks from newest to oldest (paginated — runs accumulate).
          */
         get: operations["list_runs_api_v1_projects__project_id__runs_get"];
         put?: never;
@@ -1179,6 +1182,12 @@ export interface components {
             /** Total Items */
             total_items: number;
         };
+        /** Page[CheckInOut] */
+        Page_CheckInOut_: {
+            /** Data */
+            data: components["schemas"]["CheckInOut"][];
+            pagination: components["schemas"]["PageMeta"];
+        };
         /** Page[DecisionOut] */
         Page_DecisionOut_: {
             /** Data */
@@ -1201,6 +1210,12 @@ export interface components {
         Page_ProjectOut_: {
             /** Data */
             data: components["schemas"]["ProjectOut"][];
+            pagination: components["schemas"]["PageMeta"];
+        };
+        /** Page[RunOut] */
+        Page_RunOut_: {
+            /** Data */
+            data: components["schemas"]["RunOut"][];
             pagination: components["schemas"]["PageMeta"];
         };
         /**
@@ -2042,6 +2057,8 @@ export interface operations {
         parameters: {
             query?: {
                 status?: "pending" | "all";
+                page?: number;
+                page_size?: number;
             };
             header?: never;
             path: {
@@ -2057,7 +2074,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CheckInOut"][];
+                    "application/json": components["schemas"]["Page_CheckInOut_"];
                 };
             };
             /** @description Validation Error */
@@ -2466,7 +2483,10 @@ export interface operations {
     };
     list_runs_api_v1_projects__project_id__runs_get: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
             header?: never;
             path: {
                 project_id: string;
@@ -2481,7 +2501,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunOut"][];
+                    "application/json": components["schemas"]["Page_RunOut_"];
                 };
             };
             /** @description Validation Error */

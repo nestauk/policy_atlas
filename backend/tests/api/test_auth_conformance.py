@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated, Any, cast
 
+import httpx
 import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -22,7 +23,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api.app import create_app
-from policy_atlas.api.auth import AuthenticatedUser, get_current_user
+from policy_atlas.api.auth import AuthenticatedUser, JwksProvider, get_current_user
 from policy_atlas.api.dev_issuer import init, mint_token
 from policy_atlas.api.settings import Settings
 
@@ -106,6 +107,32 @@ def test_key_rotation_refreshes_file_jwks(engine: Engine, issuer_a: tuple[Path, 
         app.state.authenticator.jwks.refresh()
         _assert_unauthenticated(client.get("/probe", headers=_authorization(token_a1)))
         assert client.get("/probe", headers=_authorization(token_a2)).status_code == 200
+
+
+def test_unknown_kid_is_negatively_cached_after_one_refresh(
+    engine: Engine, issuer_a: tuple[Path, Settings]
+) -> None:
+    """A replayed bogus kid triggers exactly one refresh, not one per lookup."""
+    del engine
+    _, settings = issuer_a
+    with httpx.Client() as client:
+        provider = JwksProvider(settings, client)
+        fetch_calls = 0
+        original_read_jwks = provider._read_jwks
+
+        def counting_jwks_source() -> dict[str, Any]:
+            nonlocal fetch_calls
+            fetch_calls += 1
+            return original_read_jwks()
+
+        provider._read_jwks = counting_jwks_source  # type: ignore[method-assign]
+
+        with pytest.raises(KeyError):
+            provider.get_key("bogus-kid")
+        with pytest.raises(KeyError):
+            provider.get_key("bogus-kid")
+
+        assert fetch_calls == 1
 
 
 def test_missing_and_malformed_authorization_are_unauthenticated(

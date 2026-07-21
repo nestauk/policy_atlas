@@ -465,7 +465,11 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Concurrent-run write guard** — **DISCHARGED (task 025)**: the API enforces at most one
   active run per project in Postgres at dispatch (`SELECT … FOR UPDATE` on the project row,
   `policy_atlas.api.locks.project_lock`); the same primitive serialises check-in answers and
-  continuation claims. Original note: eligibility selection takes no row locks and final writes
+  continuation claims. *Review amendment (2026-07-21):* the one residual same-project race —
+  the walk executor and a project-locked API mutation (rename) are two unserialized writer
+  families sharing the `max+1` event-sequence allocator — was found by the 025 review stack
+  and closed with a SAVEPOINT-retry in `events.append` (collision → re-read, never a failed
+  component commit; misordering remains impossible). Original note: eligibility selection takes no row locks and final writes
   are unconditional, so two simultaneous ingest runs over **one scope** could interleave
   (mirrors 007's concurrent-run dedup note; Codex adversarial finding, task 008). Scoped
   precisely (user question, 2026-07-05): the load-bearing invariant is **at most one active
@@ -1720,3 +1724,27 @@ first-class vocabulary. What follows is what it deliberately left out.
   `owner_user_id NULL` and are intentionally inaccessible via the strictly owner-scoped
   API (the dev DB's two live-run projects are the known case). Recovery is a documented
   manual UPDATE at the DB; an admin/ownership-claim surface is deliberately unbuilt.
+- **Deploy invariant: stop-old-before-boot-new** (025 review, adv-M3 + live-check SIGTERM
+  lesson, 2026-07-21) — the startup orphan sweep has no instance-ownership lease, and
+  default SIGTERM lets the walk executor keep running through a graceful drain. Until the
+  cross-instance seam lands (lease riding LISTEN/NOTIFY work), deploys MUST hard-kill the
+  old process before booting the new one, or the sweep/live-walk race interrupts healthy
+  runs. Recorded in web-api.md § Deployment posture; the infra slice's deploy scripts own
+  enforcing it.
+- **`CitationOut.source_id`** (025 live check, 2026-07-21) — the citation→dossier join is
+  title-keyed; a locator-fallback title misses the evidence row (honest empty state).
+  Adding `source_id` to `CitationOut` is small but a contract change (regen + views);
+  next API-touching slice.
+- **Rename/archive controls in the UI** (025 live check) — the PATCH/archive mutations
+  exist, are authz-tested and envelope-conformant; no view exposes them yet. Ingest also
+  presents under the acquire stage label ("Searching sources" while reading documents) —
+  both are workspace-surface polish for the next frontend-touching slice.
+- **Automated FE↔real-API smoke** (025 review, adv-M6) — mock mode intercepts fetch, so
+  transport/auth/base-URL/error-mapping integration is structurally invisible to the
+  Playwright journey (all five live-check integration bugs were in that layer). A thin
+  CI job — real HTTP + dev-issuer auth + SSE against stub backends — closes the gap;
+  belongs with the CI work in the infra slice.
+- **Production build guard for `VITE_OIDC_AUTHORITY`** (025 security lane, info) — a
+  production bundle built without the OIDC authority silently ships the dev token panel
+  (backend still verifies RS256; not a bypass, but a posture smell). A build-time
+  refusal (or explicit dev opt-in flag) rides the infra slice's deploy checklist.

@@ -19,7 +19,7 @@ import uuid
 from typing import Any, cast
 
 import pytest
-from sqlalchemy import func, literal_column, select, update
+from sqlalchemy import event, func, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
@@ -1157,40 +1157,54 @@ def test_parallel_vs_serial_same_write_order(
     conn: Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Serial (MAX_CONCURRENT_EXTRACT=1) and default-parallel runs write the same finding order."""
-    project_default, run_default = seed_project_and_run(conn)
-    scope_default = seed_scope(conn, project_default)
-    _seed_determinism_fixture(conn, project_default, run_default, scope_default)
-    summary_default, _ = _run(conn, project_default, scope_default, run_default)
+    # Insertion order is the property under test (writes happen in
+    # selected-set order in the parent, regardless of fan-out completion
+    # order). It is observed AT THE WRITE SEAM: the table has no
+    # insertion-order column, and every storage-side reconstruction tried so
+    # far was physical-order-fragile — plain ctid scrambled under page reuse
+    # (025 build flake), and the (created_at, ctid) hardening still tied on
+    # equal timestamps and scrambled within the tie (025 review-stack
+    # recurrence). A cursor-event capture is deterministic by construction.
+    captured: list[tuple[str, str]] = []
 
-    monkeypatch.setattr(extract, "MAX_CONCURRENT_EXTRACT", 1)
-    project_serial, run_serial = seed_project_and_run(conn)
-    scope_serial = seed_scope(conn, project_serial)
-    _seed_determinism_fixture(conn, project_serial, run_serial, scope_serial)
-    summary_serial, _ = _run(conn, project_serial, scope_serial, run_serial)
+    @event.listens_for(conn, "before_cursor_execute")
+    def _capture(
+        _conn: Connection,
+        _cursor: Any,
+        statement: str,
+        parameters: Any,
+        _context: Any,
+        executemany: bool,
+    ) -> None:
+        if 'INSERT INTO intervention_outcome_finding' not in statement:
+            return
+        rows = parameters if executemany else [parameters]
+        for row in rows:
+            if isinstance(row, dict) and "intervention" in row and "outcome" in row:
+                captured.append((row["intervention"], row["outcome"]))
+
+    try:
+        project_default, run_default = seed_project_and_run(conn)
+        scope_default = seed_scope(conn, project_default)
+        _seed_determinism_fixture(conn, project_default, run_default, scope_default)
+        captured.clear()
+        summary_default, _ = _run(conn, project_default, scope_default, run_default)
+        default_order = list(captured)
+
+        monkeypatch.setattr(extract, "MAX_CONCURRENT_EXTRACT", 1)
+        project_serial, run_serial = seed_project_and_run(conn)
+        scope_serial = seed_scope(conn, project_serial)
+        _seed_determinism_fixture(conn, project_serial, run_serial, scope_serial)
+        captured.clear()
+        summary_serial, _ = _run(conn, project_serial, scope_serial, run_serial)
+        serial_order = list(captured)
+    finally:
+        event.remove(conn, "before_cursor_execute", _capture)
 
     assert summary_default["counts"] == summary_serial["counts"]
-
-    def _ordered_pairs(project_id: uuid.UUID) -> list[tuple[str, str]]:
-        # Insertion order is the property under test (writes happen in
-        # selected-set order in the parent, regardless of fan-out completion
-        # order). Order by created_at first — plain ctid is physical order,
-        # which page reuse scrambles once the shared test DB has seen enough
-        # churn (task 025 surfaced this as a full-suite-only flake); ctid
-        # remains only as the within-timestamp tiebreak, where contiguous
-        # same-transaction inserts keep it faithful.
-        rows = conn.execute(
-            select(
-                intervention_outcome_finding.c.intervention,
-                intervention_outcome_finding.c.outcome,
-            )
-            .where(intervention_outcome_finding.c.project_id == project_id)
-            .order_by(intervention_outcome_finding.c.created_at, literal_column("ctid"))
-        ).fetchall()
-        return [(r.intervention, r.outcome) for r in rows]
-
     expected = [("peer mentoring", "retention"), ("community outreach", "vaccination uptake")]
-    assert _ordered_pairs(project_default) == expected
-    assert _ordered_pairs(project_serial) == expected
+    assert default_order == expected
+    assert serial_order == expected
 
 
 # --- 13. Delete-order integrity ---------------------------------------------------

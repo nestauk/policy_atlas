@@ -60,9 +60,9 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/decisions`)) return json(page(mockDecisions));
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/artefact`)) return json(mockArtefact);
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/coverage`)) return json(mockCoverage);
-  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/check-ins`)) return json([mockCheckIn]);
+  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/check-ins`)) return json(page([mockCheckIn]));
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/runs`)) {
-    return json([{ capability_run_id: MOCK_RUN_ID, project_id: MOCK_PROJECT_ID, plan_id: "90000000-0000-4000-8000-000000000001", plan_version: 3, status: "running", started_at: "2026-07-21T09:30:00Z", ended_at: null }]);
+    return json(page([{ capability_run_id: MOCK_RUN_ID, project_id: MOCK_PROJECT_ID, plan_id: "90000000-0000-4000-8000-000000000001", plan_version: 3, status: "running", started_at: "2026-07-21T09:30:00Z", ended_at: null }]));
   }
   return json({ detail: "Mock endpoint not found" }, 404);
 }

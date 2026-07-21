@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { usePlanningTurn, useStartRun } from "../../api/mutations";
 import type { components } from "../../api/gen/types";
+import { conflictSentences, isConflictCode } from "../../lib/errors";
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
 import { Chip } from "../../ui/brand/Chip";
@@ -101,26 +102,31 @@ export function PlanningPane({ projectId }: { projectId: string }) {
     if (trimmed.length === 0 || turn.isPending) return;
     setThread((current) => [...current, { role: "user", text: trimmed }]);
     setMessage("");
-    turn.mutate(trimmed, {
-      onSuccess: (result) => {
-        setThread((current) => [...current, { role: "planner", text: result.reply }]);
-        setPlan(result.plan);
-        setSuggestions(result.suggestions ?? []);
-      },
-      onError: (error) => {
-        const code = (error as { code?: string }).code;
-        setThread((current) => [
-          ...current,
-          {
-            role: "planner",
-            text:
-              code === "planning_turn_in_progress"
-                ? "A planning turn is already in progress — give it a moment, then try again."
+    // Minted once per logical turn (this submission), not per send
+    // attempt — a retry of this same submission reuses the id.
+    const clientTurnId = crypto.randomUUID();
+    turn.mutate(
+      { message: trimmed, clientTurnId },
+      {
+        onSuccess: (result) => {
+          setThread((current) => [...current, { role: "planner", text: result.reply }]);
+          setPlan(result.plan);
+          setSuggestions(result.suggestions ?? []);
+        },
+        onError: (error) => {
+          const code = (error as { code?: string }).code;
+          setThread((current) => [
+            ...current,
+            {
+              role: "planner",
+              text: isConflictCode(code)
+                ? conflictSentences[code]
                 : "That turn couldn't be processed. Your draft so far is unchanged — try again.",
-          },
-        ]);
+            },
+          ]);
+        },
       },
-    });
+    );
   };
 
   return (
@@ -207,11 +213,9 @@ export function PlanningPane({ projectId }: { projectId: string }) {
                   onError: (error) => {
                     const code = (error as { code?: string }).code;
                     setStartNotice(
-                      code === "run_active"
-                        ? "An analysis is already active on this project."
-                        : code === "capacity"
-                          ? "The server is at capacity — try again shortly."
-                          : "The analysis couldn't start. Try again.",
+                      isConflictCode(code)
+                        ? conflictSentences[code]
+                        : "The analysis couldn't start. Try again.",
                     );
                   },
                 });

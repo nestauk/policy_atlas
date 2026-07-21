@@ -81,6 +81,44 @@ describe("createAuthMiddleware", () => {
     expect(result).toBe(originalResponse);
   });
 
+  it("retries a POST with its JSON body intact after a 401, even though the sent request's body was already consumed", async () => {
+    const getAccessToken = vi.fn(async (force?: boolean) => (force ? "token-b" : "token-a"));
+    const middleware = createAuthMiddleware(makeAuth({ getAccessToken }));
+
+    const originalRequest = new Request("https://api.example/x", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hello: "world" }),
+    });
+
+    const afterOnRequest = await middleware.onRequest?.(callbackParams(originalRequest));
+    const sentRequest = (afterOnRequest as Request | undefined) ?? originalRequest;
+
+    // Simulate the real `fetch(sentRequest, ...)` call openapi-fetch makes
+    // before `onResponse` ever runs — it consumes the body stream. A naive
+    // `request.clone()` inside `onResponse` throws TypeError once that's
+    // happened; this is the exact bug the pristine-clone stash fixes.
+    await sentRequest.text();
+
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 200 }));
+
+    const originalResponse = new Response(null, { status: 401 });
+    const result = await middleware.onResponse?.({
+      ...callbackParams(sentRequest),
+      response: originalResponse,
+    });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const retriedRequest = fetchSpy.mock.calls[0][0] as Request;
+    expect(retriedRequest.headers.get("Authorization")).toBe("Bearer token-b");
+    await expect(retriedRequest.text()).resolves.toBe(JSON.stringify({ hello: "world" }));
+    expect((result as Response).status).toBe(200);
+
+    fetchSpy.mockRestore();
+  });
+
   it("passes non-401 responses through untouched", async () => {
     const middleware = createAuthMiddleware(makeAuth());
     const request = new Request("https://api.example/x");

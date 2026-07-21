@@ -16,6 +16,7 @@ from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
+from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.core.schema import event_log
 
@@ -30,10 +31,11 @@ def append(
 ) -> uuid.UUID:
     """Append one event to a project's log and return its ID.
 
-    Assigns ``sequence = max+1`` per project. **Assumes a single writer per project**
-    (the v3.0 serial model, ADR 0001 §6): concurrent appenders would read the same max and
-    collide on the ``(project_id, sequence)`` unique constraint — a hard ``IntegrityError``,
-    never silent misordering. A concurrency-safe allocator is a registered deferred seam.
+    Assigns ``sequence = max+1`` per project with a bounded SAVEPOINT retry on
+    collision: since 025 the walk executor and the API's project-locked
+    mutations are two unserialized writer families, so concurrent appenders can
+    read the same max — the ``(project_id, sequence)`` unique constraint turns
+    that into an ``IntegrityError`` we retry, never silent misordering.
 
     Args:
         conn: Open database connection.
@@ -46,27 +48,39 @@ def append(
     Returns:
         The new event's ``event_id``.
     """
-    seq_result = conn.execute(
-        select(func.coalesce(func.max(event_log.c.sequence), 0)).where(
-            event_log.c.project_id == project_id
-        )
-    )
-    current_max = seq_result.scalar_one()
-    sequence = current_max + 1
-
+    # Two writer families exist per project since 025 (the walk executor and
+    # API mutations under the project row lock), so the max+1 read can race —
+    # retry the insert under a SAVEPOINT so an (project_id, sequence) collision
+    # re-reads instead of poisoning the caller's transaction or failing a
+    # component commit (review finding, 2026-07-21). Collisions stay hard
+    # errors after the bounded retries; misordering remains impossible.
     event_id = uuid.uuid4()
-    conn.execute(
-        event_log.insert().values(
-            event_id=event_id,
-            run_id=run_id,
-            project_id=project_id,
-            sequence=sequence,
-            event_type=event_type,
-            occurred_at=datetime.now(UTC),
-            payload=payload,
-        )
-    )
-    return event_id
+    for attempt in range(5):
+        current_max = conn.execute(
+            select(func.coalesce(func.max(event_log.c.sequence), 0)).where(
+                event_log.c.project_id == project_id
+            )
+        ).scalar_one()
+        savepoint = conn.begin_nested()
+        try:
+            conn.execute(
+                event_log.insert().values(
+                    event_id=event_id,
+                    run_id=run_id,
+                    project_id=project_id,
+                    sequence=current_max + 1,
+                    event_type=event_type,
+                    occurred_at=datetime.now(UTC),
+                    payload=payload,
+                )
+            )
+            savepoint.commit()
+            return event_id
+        except IntegrityError:
+            savepoint.rollback()
+            if attempt == 4:
+                raise
+    raise AssertionError("unreachable")  # pragma: no cover
 
 
 def read(

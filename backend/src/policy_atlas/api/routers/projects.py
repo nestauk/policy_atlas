@@ -140,6 +140,13 @@ def archive_project_route(
     ).scalar_one_or_none()
     if latest in {"running", "paused"}:
         raise ApiConflict("run_active", "the latest run is still active")
+    # A run admitted but not yet inserted is invisible to the row check above —
+    # consult the in-process dispatch reservation or archive can win that window
+    # and the run executes against a hidden project (review finding codex-9).
+    from policy_atlas.api.routers.runs import dispatch_reserved
+
+    if dispatch_reserved(project_id):
+        raise ApiConflict("run_active", "the latest run is still active")
     archive_project(conn, project_id, user.user_id)
     refreshed = conn.execute(
         select(project).where(project.c.project_id == project_id)

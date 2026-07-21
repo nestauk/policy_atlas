@@ -24,7 +24,7 @@ from policy_atlas.api.contract import (
 )
 from policy_atlas.api.deps import get_current_user, get_engine, get_planner_backend
 from policy_atlas.api.routers._common import owned_project
-from policy_atlas.core.schema import orchestration_plan
+from policy_atlas.core.schema import capability_run, orchestration_plan
 from policy_atlas.runtime.orchestrate import build_plan, persist_approved_plan
 from policy_atlas.runtime.orchestration_plan import OrchestrationPlan, compose
 from policy_atlas.runtime.planner import PlannerBackend
@@ -121,38 +121,68 @@ def create_planning_turn(
         existing = session.results.get(payload.client_turn_id)
         if existing is not None:
             return existing
-        with engine.begin() as conn:
-            owned_project(conn, project_id=project_id, user_id=user.user_id, for_update=True)
-            session.turns.append({"role": "user", "text": payload.message})
+        # Authz + run-state gate in a short read transaction. Planning turns
+        # 409 while a walk is running or parked (adjudicated review decision
+        # codex-2, 2026-07-21): steering is the sanctioned mid-run plan
+        # channel, and fencing approvals here is what makes the continuation
+        # reducer's latest-approved plan selection provably the walk's own
+        # lineage (amendments supersede within it).
+        with engine.connect() as conn:
+            owned_project(conn, project_id=project_id, user_id=user.user_id)
+            active = conn.execute(
+                select(capability_run.c.status)
+                .where(capability_run.c.project_id == project_id)
+                .where(capability_run.c.status.in_(("running", "paused")))
+                .limit(1)
+            ).scalar_one_or_none()
+        if active is not None:
+            raise ApiConflict(
+                "run_active",
+                "finish or stop the current run before replanning; "
+                "use the run's check-ins to steer it",
+            )
+        # The planner call runs OUTSIDE any transaction: holding the project
+        # row lock (and a pool connection) across a live LLM call blocked every
+        # mutation on the project — and via the global dispatch lock, run
+        # creation process-wide (review finding I2, 2026-07-21).
+        session.turns.append({"role": "user", "text": payload.message})
+        try:
             turn = planner.plan_turn(
                 session.turns,
                 session.previous_draft,
                 session_id=session.session_id,
             )
-            session.turns.append({"role": "planner", "text": turn.reply})
-            session.previous_draft = turn.plan_draft.model_dump()
-            ready = turn.ready
-            approved: OrchestrationPlan | None = None
-            if ready:
-                try:
-                    approved = build_plan(turn.plan_draft)
-                except ValidationError:
-                    ready = False
-            draft = _draft_from_plan(approved) if approved is not None else _draft_from_wire(
-                turn.plan_draft, ready=ready
-            )
-            if approved is not None:
+        except Exception:
+            # A failed turn must not leave the dangling user message feeding
+            # the planner duplicate turns on retry (review finding m4).
+            session.turns.pop()
+            raise
+        session.turns.append({"role": "planner", "text": turn.reply})
+        session.previous_draft = turn.plan_draft.model_dump()
+        ready = turn.ready
+        approved: OrchestrationPlan | None = None
+        if ready:
+            try:
+                approved = build_plan(turn.plan_draft)
+            except ValidationError:
+                ready = False
+        draft = _draft_from_plan(approved) if approved is not None else _draft_from_wire(
+            turn.plan_draft, ready=ready
+        )
+        if approved is not None:
+            with engine.begin() as conn:
+                owned_project(conn, project_id=project_id, user_id=user.user_id, for_update=True)
                 persist_approved_plan(conn, project_id=project_id, plan=approved)
-            result = PlanningTurnOut(
-                reply=turn.reply,
-                plan=draft,
-                suggestions=turn.suggested_answers or [],
-            )
-            session.draft = draft
-            session.results[payload.client_turn_id] = result
-            while len(session.results) > PLAN_SESSION_CACHE_MAX:
-                session.results.popitem(last=False)
-            return result
+        result = PlanningTurnOut(
+            reply=turn.reply,
+            plan=draft,
+            suggestions=turn.suggested_answers or [],
+        )
+        session.draft = draft
+        session.results[payload.client_turn_id] = result
+        while len(session.results) > PLAN_SESSION_CACHE_MAX:
+            session.results.popitem(last=False)
+        return result
     finally:
         session.lock.release()
 

@@ -35,9 +35,21 @@ from policy_atlas.api.deps import get_current_user, get_engine, get_settings
 from policy_atlas.api.routers._common import owned_project
 from policy_atlas.api.routers.planning import _draft_from_plan
 from policy_atlas.api.settings import Settings
+
+# Shared with the check-in read model — one vocabulary, one leak surface.
+from policy_atlas.api.stage_vocabulary import (
+    STAGE_PRESENTATION as _STAGE_PRESENTATION,
+)
+from policy_atlas.api.stage_vocabulary import (
+    presentation as _presentation,
+)
+from policy_atlas.api.stage_vocabulary import (
+    stage_for_payload as _stage,
+)
+from policy_atlas.core import events
 from policy_atlas.core.liveness import Tick, tick_hub
 from policy_atlas.core.schema import event_log, orchestration_plan
-from policy_atlas.runtime.orchestration_plan import OrchestrationPlan, registry_component_for
+from policy_atlas.runtime.orchestration_plan import OrchestrationPlan
 
 log = structlog.get_logger()
 
@@ -46,50 +58,6 @@ router = APIRouter(
     tags=["events"],
     dependencies=[Depends(get_current_user)],
 )
-
-# The live demo's validated presentation vocabulary, collapsed onto the nine
-# public stage keys. ``ingest_full_text`` belongs to source acquisition because
-# its registry name has no separate public key in the pinned contract.
-_STAGE_PRESENTATION: dict[StageKey, tuple[str, str]] = {
-    "acquire": ("Searching sources", "Queries out to academic and policy databases."),
-    "screen": ("Screening for relevance", "Every title and abstract, against your question."),
-    "classify": ("Sorting by evidence type", "Each source is labelled by its evidence type."),
-    "appraise": ("Appraising quality", "How much weight each source can bear."),
-    "characterise": ("Mapping the landscape", "What the evidence covers, and where it is thin."),
-    "select": ("Shortlisting", "The strongest, most varied set for close reading."),
-    "extract": ("Extracting findings", "Each claim is pulled out with its exact quote."),
-    "group": ("Grouping findings", "Findings that answer the same question, together."),
-    "synthesise": ("Writing the evidence base", "Cited, checked, ready to challenge."),
-}
-_STAGE_BY_REGISTRY: dict[str, StageKey] = {
-    "acquire": "acquire",
-    "screen": "screen",
-    "classify": "classify",
-    "appraise": "appraise",
-    "ingest_full_text": "acquire",
-    "characterise": "characterise",
-    "select": "select",
-    "extract": "extract",
-    "group": "group",
-    "synthesise": "synthesise",
-}
-
-
-def _stage(payload: dict[str, Any]) -> StageKey | None:
-    """Map a composed or registry component name onto a public stage key."""
-    component = payload.get("component")
-    if not isinstance(component, str):
-        return None
-    registry_component = payload.get("registry_component")
-    if not isinstance(registry_component, str):
-        registry_component = registry_component_for(component)
-    return _STAGE_BY_REGISTRY.get(registry_component)
-
-
-def _presentation(stage: StageKey) -> tuple[str, str]:
-    """Return the server-owned label and blurb for a public stage."""
-    return _STAGE_PRESENTATION[stage]
-
 
 def _snapshot(
     engine: Engine,
@@ -150,10 +118,25 @@ def _map_rows(
 ) -> list[dict[str, Any]]:
     """Map allowlisted durable event rows to validated public frame models."""
     all_rows = list(rows)
-    all_events = _event_rows(conn, project_id=project_id, after=0, through=through)
+    if not all_rows:
+        return []
+    # The full-history context exists solely for the decided-pause check, so
+    # fetch it only when this batch carries a pause, and fetch decisions only.
+    # The previous unconditional after=0 read re-scanned the whole project log
+    # (large JSONB payloads included) every poll interval per client, even
+    # when idle (review finding backend-M1, 2026-07-21).
+    decision_events: list[dict[str, Any]] = []
+    if any(row["event_type"] == "steering.pause" for row in all_rows):
+        decision_events = [
+            row
+            for row in events.read(conn, project_id, event_types=["steering.decision"])
+            if through is None or row["sequence"] <= through
+        ]
     frames: list[dict[str, Any]] = []
     for row in all_rows:
-        frames.extend(_frames_for_row(conn, project_id=project_id, row=row, all_events=all_events))
+        frames.extend(
+            _frames_for_row(conn, project_id=project_id, row=row, all_events=decision_events)
+        )
     return frames
 
 

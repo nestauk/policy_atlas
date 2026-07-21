@@ -1,9 +1,11 @@
 import { useParams } from "react-router";
 
 import { useDecisions } from "../api/queries";
+import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { Card } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
+import { ReauthRedirect } from "../ui/feedback";
 
 const KIND_TONE: Record<string, "default" | "blue" | "soft" | "green" | "yellow" | "red"> = {
   "steering.decision": "blue",
@@ -31,6 +33,22 @@ export function DecisionsView() {
           ))}
         </div>
       )}
+
+      {decisions.isError &&
+        (errorCode(decisions.error) === "unauthenticated" ? (
+          <ReauthRedirect />
+        ) : (
+          <Card role="alert" className="p-8 text-center text-[13px] text-navy">
+            The decision log couldn't be loaded.{" "}
+            <button
+              type="button"
+              className="cursor-pointer font-bold text-blue hover:underline"
+              onClick={() => void decisions.refetch()}
+            >
+              Retry
+            </button>
+          </Card>
+        ))}
 
       {decisions.data !== undefined && decisions.data.data.length === 0 && (
         <Card role="status" className="p-8 text-center text-[13px] text-grey">

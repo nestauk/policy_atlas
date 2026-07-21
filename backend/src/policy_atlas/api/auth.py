@@ -20,6 +20,11 @@ log = structlog.get_logger()
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
+# How long an unknown kid is remembered as missing-after-refresh before a
+# repeat lookup is allowed to trigger another refresh. Bounds outbound JWKS
+# fetches an unauthenticated caller can force by replaying a bogus kid.
+_NEGATIVE_CACHE_TTL_SECONDS = 30.0
+
 
 @dataclass(frozen=True, slots=True)
 class AuthenticatedUser:
@@ -46,9 +51,15 @@ class JwksProvider:
         self._client = client
         self._keys: dict[str, Any] = {}
         self._expires_at = 0.0
+        self._missing_since: dict[str, float] = {}
 
     def get_key(self, kid: str) -> Any:
         """Return a public key, refreshing once when the kid is unknown.
+
+        An unknown kid still missing right after a refresh is negatively
+        cached for `_NEGATIVE_CACHE_TTL_SECONDS`: a repeat lookup within that
+        window raises immediately without triggering another refresh, so a
+        replayed bogus kid cannot force unbounded outbound JWKS fetches.
 
         Args:
             kid: Key identifier carried by the JWT header.
@@ -57,19 +68,34 @@ class JwksProvider:
             A PyJWT-compatible RSA public key.
 
         Raises:
-            KeyError: If the key is absent after refresh.
+            KeyError: If the key is absent after refresh, or still negatively
+                cached as missing from a recent refresh.
             ValueError: If the JWKS is malformed.
             httpx.HTTPError: If remote JWKS retrieval fails.
         """
+        refreshed = False
         if time.monotonic() >= self._expires_at:
             self.refresh()
+            refreshed = True
         key = self._keys.get(kid)
-        if key is None:
+        if key is not None:
+            self._missing_since.pop(kid, None)
+            return key
+        if not refreshed:
+            missing_at = self._missing_since.get(kid)
+            still_negatively_cached = (
+                missing_at is not None
+                and time.monotonic() - missing_at < _NEGATIVE_CACHE_TTL_SECONDS
+            )
+            if still_negatively_cached:
+                raise KeyError(kid)
             self.refresh()
             key = self._keys.get(kid)
-        if key is None:
-            raise KeyError(kid)
-        return key
+            if key is not None:
+                self._missing_since.pop(kid, None)
+                return key
+        self._missing_since[kid] = time.monotonic()
+        raise KeyError(kid)
 
     def refresh(self) -> None:
         """Refresh the cached JWKS from its configured local or remote source."""

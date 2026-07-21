@@ -10,12 +10,14 @@ segments, snake_case properties, no leaked internal names), and a
 from __future__ import annotations
 
 import re
+import tempfile
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
+from fastapi.routing import APIRoute
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api.app import create_app
@@ -24,6 +26,10 @@ from policy_atlas.api.dev_issuer import init
 from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import capability_run, evidence_scope
 from tests.api.resource_support import api_client, create_project
+
+# Routes that intentionally sit outside the bearer-token boundary: process
+# liveness/readiness probes, checked before any orchestration or auth I/O.
+_UNAUTHENTICATED_ALLOWLIST = frozenset({"/healthz", "/readyz"})
 
 # --- Pagination conformance --------------------------------------------------
 
@@ -71,28 +77,105 @@ def test_pagination_rejects_page_size_over_the_server_cap(tmp_path: Path) -> Non
 
 # --- Error-envelope conformance ----------------------------------------------
 
-_UNAUTHENTICATED_CASES: tuple[tuple[str, str, dict[str, Any] | None], ...] = (
-    ("GET", "/api/v1/projects", None),
-    ("GET", "/api/v1/projects/{project_id}", None),
-    ("GET", "/api/v1/projects/{project_id}/runs", None),
-    ("GET", "/api/v1/projects/{project_id}/check-ins", None),
-    ("POST", "/api/v1/projects/{project_id}/planning-turns", {}),
-)
+
+def _flatten_api_routes(routes: Any) -> list[APIRoute]:
+    """Recursively flatten `app.routes` into leaf `APIRoute`s.
+
+    This FastAPI version represents an included router as a lazy
+    `_IncludedRouter` wrapper rather than inlining its routes directly into
+    `app.routes`, so a plain `isinstance(route, APIRoute)` filter over
+    `app.routes` silently sees zero routes. Duck-type on `original_router`
+    (rather than importing the private `_IncludedRouter` class) to recurse
+    into it regardless of FastAPI's internal representation.
+    """
+    flattened: list[APIRoute] = []
+    for route in routes:
+        if isinstance(route, APIRoute):
+            flattened.append(route)
+            continue
+        original_router = getattr(route, "original_router", None)
+        if original_router is not None:
+            flattened.extend(_flatten_api_routes(original_router.routes))
+    return flattened
+
+
+def _api_v1_route_cases() -> list[tuple[str, str]]:
+    """Every (method, path-template) pair for real `/api/v1` routes.
+
+    Built once, at import time, straight off the live FastAPI route table
+    (`app.routes`) rather than a hand-maintained list, so a future route
+    that forgets `get_current_user` fails the sweep below instead of
+    silently shipping unauthenticated. No lifespan runs and no DB is
+    touched: `create_app` only needs a filesystem JWKS key pair to build.
+    """
+    with tempfile.TemporaryDirectory(prefix="policy-atlas-route-sweep-") as tmp_dir:
+        key_dir = Path(tmp_dir) / "issuer"
+        settings = Settings(
+            "http://dev-issuer.local",
+            "route-sweep-conformance-test",
+            None,
+            init(key_dir),
+            "http://app.example.test",
+            "postgresql+psycopg://unused/unused",
+        )
+        app = create_app(settings=settings)
+        cases: list[tuple[str, str]] = []
+        for route in _flatten_api_routes(app.routes):
+            if not route.path.startswith("/api/v1") or route.path in _UNAUTHENTICATED_ALLOWLIST:
+                continue
+            for method in sorted((route.methods or set()) - {"HEAD", "OPTIONS"}):
+                cases.append((method, route.path))
+        return cases
+
+
+def _fill_path_params(path_template: str) -> str:
+    """Replace every `{param}` segment in a route path with a dummy UUID."""
+    return re.sub(r"\{[^}]+\}", lambda _: str(uuid.uuid4()), path_template)
+
+
+def _fill_non_project_path_params(path_template: str) -> str:
+    """Replace every path param except `{project_id}` with a dummy UUID.
+
+    Leaves the `{project_id}` placeholder intact so the caller can format it
+    separately with an absent-vs-cross-owner project id.
+    """
+
+    def _replace(match: re.Match[str]) -> str:
+        token = match.group(0)
+        return token if token == "{project_id}" else str(uuid.uuid4())
+
+    return re.sub(r"\{[^}]+\}", _replace, path_template)
+
+
+_UNAUTHENTICATED_CASES = _api_v1_route_cases()
+
+_PROJECT_SCOPED_GET_CASES = [
+    (method, path)
+    for method, path in _UNAUTHENTICATED_CASES
+    if method == "GET" and "{project_id}" in path
+]
 
 
 @pytest.mark.parametrize(
-    "method,path_template,json_body",
+    "method,path_template",
     _UNAUTHENTICATED_CASES,
-    ids=[case[1] for case in _UNAUTHENTICATED_CASES],
+    ids=[f"{method} {path}" for method, path in _UNAUTHENTICATED_CASES],
 )
-def test_every_router_prefix_is_unauthenticated_without_a_token(
-    tmp_path: Path, method: str, path_template: str, json_body: dict[str, Any] | None
+def test_every_api_v1_route_is_unauthenticated_without_a_token(
+    tmp_path: Path, method: str, path_template: str
 ) -> None:
-    """Every data route gives the same 401 envelope shape and bearer challenge."""
+    """Every real `/api/v1` route gives the same 401 envelope and bearer challenge.
+
+    Bodies are `{}` for routes that expect one: 401 must win before any
+    request-body validation runs.
+    """
+    path = _fill_path_params(path_template)
+    json_body: dict[str, Any] | None = {} if method in {"POST", "PATCH", "PUT", "DELETE"} else None
     with api_client(tmp_path) as (client, _owner, _other):
-        path = path_template.format(project_id=uuid.uuid4())
         response = client.request(method, path, json=json_body)
-        assert response.status_code == 401
+        assert response.status_code == 401, (
+            f"{method} {path_template} did not 401: {response.status_code} {response.text}"
+        )
         assert response.headers["WWW-Authenticate"] == "Bearer"
         body = response.json()
         assert set(body) == {"error"}
@@ -100,18 +183,33 @@ def test_every_router_prefix_is_unauthenticated_without_a_token(
         assert body["error"]["code"] == "unauthenticated"
 
 
-def test_not_found_is_byte_identical_for_absent_and_cross_owner_projects(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    "path_template",
+    [path for _, path in _PROJECT_SCOPED_GET_CASES],
+    ids=[path for _, path in _PROJECT_SCOPED_GET_CASES],
+)
+def test_project_scoped_get_routes_hide_ownership_with_byte_identical_404(
+    tmp_path: Path, path_template: str
 ) -> None:
-    """404 `not_found` hides ownership: unknown and other-owned bodies match exactly."""
+    """404 `not_found` hides ownership on every project-scoped GET route.
+
+    Non-GET routes under `/api/v1/projects/{project_id}...` are skipped here
+    (see `_PROJECT_SCOPED_GET_CASES`): their absent/foreign-project 404s are
+    covered by mutation-path tests elsewhere (e.g. the archive conflict test
+    below), not by this byte-identical read sweep.
+    """
+    templated = _fill_non_project_path_params(path_template)
     with api_client(tmp_path) as (client, owner, other):
         project_id = create_project(client, owner)
 
-        never_existed = client.get(f"/api/v1/projects/{uuid.uuid4()}", headers=other)
-        cross_owner = client.get(f"/api/v1/projects/{project_id}", headers=other)
+        never_existed = client.get(templated.format(project_id=uuid.uuid4()), headers=other)
+        cross_owner = client.get(templated.format(project_id=project_id), headers=other)
 
-        assert never_existed.status_code == cross_owner.status_code == 404
-        assert never_existed.content == cross_owner.content
+        assert never_existed.status_code == cross_owner.status_code == 404, (
+            f"{path_template}: expected 404/404, got "
+            f"{never_existed.status_code}/{cross_owner.status_code}"
+        )
+        assert never_existed.content == cross_owner.content, path_template
         assert never_existed.json()["error"]["code"] == "not_found"
 
 
@@ -195,7 +293,8 @@ def _built_openapi_schema(tmp_path: Path) -> dict[str, Any]:
         "http://app.example.test",
         "postgresql+psycopg://unused/unused",
     )
-    return create_app(settings=settings).openapi()
+    document: dict[str, Any] = create_app(settings=settings).openapi()
+    return document
 
 
 def test_path_segments_are_lower_snake_or_params(tmp_path: Path) -> None:

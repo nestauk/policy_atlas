@@ -87,6 +87,17 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
     )
     _install_exception_handlers(app)
 
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next: Any) -> Any:
+        """Defense-in-depth response headers on the JSON API (review finding)."""
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        # Ignored by browsers over plain HTTP (dev); load-bearing behind TLS.
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=63072000; includeSubDomains"
+        )
+        return response
+
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
         """Report process liveness without touching external dependencies."""
@@ -99,6 +110,8 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
             with request.app.state.engine.connect() as conn:
                 conn.exec_driver_sql("SELECT 1")
         except SQLAlchemyError:
+            # Mapped to code "unavailable" by the envelope handler — a DB-down
+            # readiness probe is not an "internal server error" (finding m8).
             raise HTTPException(status_code=503, detail="database is unavailable") from None
         return {"status": "ok"}
 
@@ -140,6 +153,9 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
         app.state.http_client = http_client
         app.state.authenticator = JwtAuthenticator(settings, http_client)
         try:
+            from policy_atlas.api.deps import warn_on_partial_live_keys
+
+            warn_on_partial_live_keys()
             report = continuation.startup_sweep(engine)
             for candidate in report.redispatch:
                 executor.submit(
@@ -147,6 +163,17 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
                     engine,
                     candidate.project_id,
                     candidate.capability_run_id,
+                    claim_first=True,
+                )
+            for candidate in report.reexecute:
+                # Already claimed before the previous process died, never
+                # executed — execute directly, the claim is durable.
+                executor.submit(
+                    _claim_and_execute,
+                    engine,
+                    candidate.project_id,
+                    candidate.capability_run_id,
+                    claim_first=False,
                 )
             yield
         finally:
@@ -157,25 +184,44 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
     return lifespan
 
 
-def _claim_and_execute(engine: Engine, project_id: Any, capability_run_id: Any) -> None:
-    """Claim one durable continuation then execute it in a walk executor worker."""
+def _claim_and_execute(
+    engine: Engine, project_id: Any, capability_run_id: Any, *, claim_first: bool
+) -> None:
+    """Claim (unless pre-claimed) and execute one durable continuation.
+
+    Builds the SAME key-driven backends as the request path (review finding
+    codex-1, 2026-07-21: the drainer previously fell through to run_plan's stub
+    bundle and NullIO — a redispatched real continuation executed against
+    deterministic stubs and auto-continued every subsequent pause).
+    """
+    from policy_atlas.api.deps import get_orchestrator_backend, get_runner_backends
+    from policy_atlas.api.run_io import ParkIO
+
     try:
-        claim = continuation.claim_continuation(
+        if claim_first:
+            claim = continuation.claim_continuation(
+                engine,
+                project_id=project_id,
+                capability_run_id=capability_run_id,
+            )
+            if claim is None:
+                return
+        continuation.execute_continuation(
             engine,
             project_id=project_id,
             capability_run_id=capability_run_id,
+            backends=get_runner_backends(),
+            io=ParkIO(),
+            orchestrator=get_orchestrator_backend(),
         )
-        if claim is not None:
-            continuation.execute_continuation(
-                engine,
-                project_id=claim.project_id,
-                capability_run_id=claim.capability_run_id,
-            )
     except Exception:
         log.exception(
             "continuation.startup_dispatch_failed",
             project_id=str(project_id),
             capability_run_id=str(capability_run_id),
+        )
+        continuation.mark_interrupted_best_effort(
+            engine, project_id=project_id, capability_run_id=capability_run_id
         )
 
 
@@ -201,11 +247,19 @@ def _install_exception_handlers(app: FastAPI) -> None:
                 headers={"WWW-Authenticate": "Bearer"},
             )
         if exc.status_code == 404:
+            # Deliberately generic: cross-owner and absent must stay
+            # byte-identical (BOLA pin) — never pass router detail through.
             return _error_response(404, "not_found", "resource not found")
+        # Router-authored 400/422 details are user-actionable ("change_mode
+        # requires a supported new_mode") — surfacing them was the point of
+        # raising with a message (review finding m2, 2026-07-21).
+        detail = exc.detail if isinstance(exc.detail, str) and exc.detail else None
         if exc.status_code == 400:
-            return _error_response(400, "malformed", "malformed request")
+            return _error_response(400, "malformed", detail or "malformed request")
         if exc.status_code == 422:
-            return _error_response(422, "validation_error", "request validation failed")
+            return _error_response(422, "validation_error", detail or "request validation failed")
+        if exc.status_code == 503:
+            return _error_response(503, "unavailable", detail or "service unavailable")
         return _error_response(exc.status_code, "internal", "internal server error")
 
     @app.exception_handler(Exception)

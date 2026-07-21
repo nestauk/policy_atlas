@@ -139,6 +139,165 @@ describe("reduceRunStreamFrame — replay idempotence", () => {
   });
 });
 
+describe("reduceRunStreamFrame — equal-sequence distinct-type frames", () => {
+  /** One durable steering decision can emit `checkin.resolved` AND
+   *  `plan.updated` at the SAME sequence — both must apply, not just
+   *  the first. */
+  function sharedSequenceFrames(): SseFrame[] {
+    return [
+      {
+        type: "run.status",
+        capability_run_id: PROJECT_RUN_ID,
+        status: "running",
+        occurred_at: "2026-07-21T10:00:00Z",
+        sequence: 1,
+      },
+      {
+        type: "checkin.resolved",
+        check_in_id: CHECK_IN_ID,
+        response: { kind: "option", option_id: "continue" },
+        decided_by: "user",
+        occurred_at: "2026-07-21T10:00:20Z",
+        sequence: 2,
+      },
+      {
+        type: "plan.updated",
+        plan: planDraft(),
+        version: 2,
+        occurred_at: "2026-07-21T10:00:20Z",
+        sequence: 2,
+      },
+    ];
+  }
+
+  it("applies both same-sequence frames once each", () => {
+    const state = fold(createInitialRunStreamState(), sharedSequenceFrames());
+    expect(state.decisions).toHaveLength(1);
+    expect(state.plan).toEqual({ version: 2, plan: planDraft() });
+    expect(state.lastSequence).toBe(2);
+  });
+
+  it("a full replay of the shared-sequence stream is still idempotent", () => {
+    const frames = sharedSequenceFrames();
+    const once = fold(createInitialRunStreamState(), frames);
+    const twice = fold(once, frames);
+    expect(twice).toEqual(once);
+
+    // Redelivery landing mid-way through the shared sequence: only the
+    // `checkin.resolved` half was seen before the resumed stream (over-
+    // cautiously) replays the whole thing.
+    const atCursor = fold(createInitialRunStreamState(), frames.slice(0, 2));
+    const resumed = fold(atCursor, frames);
+    expect(resumed).toEqual(once);
+  });
+});
+
+describe("reduceRunStreamFrame — new-run reset", () => {
+  it("a running run.status frame for a different run resets stages and liveness", () => {
+    let state = createInitialRunStreamState();
+    state = reduceRunStreamFrame(state, {
+      type: "run.status",
+      capability_run_id: PROJECT_RUN_ID,
+      status: "running",
+      occurred_at: "2026-07-21T10:00:00Z",
+      sequence: 1,
+    });
+    state = reduceRunStreamFrame(state, {
+      type: "stage.started",
+      stage: "acquire",
+      label: "Acquiring sources",
+      blurb: "Searching.",
+      occurred_at: "2026-07-21T10:00:01Z",
+      sequence: 2,
+    });
+    state = reduceRunStreamFrame(state, {
+      type: "tick",
+      note: "Still working...",
+      stage: "acquire",
+      occurred_at: "2026-07-21T10:00:02Z",
+      ephemeral: true,
+    });
+    // The run is interrupted before finishing.
+    state = reduceRunStreamFrame(state, {
+      type: "run.status",
+      capability_run_id: PROJECT_RUN_ID,
+      status: "interrupted",
+      occurred_at: "2026-07-21T10:00:03Z",
+      sequence: 3,
+    });
+    expect(state.stages).toHaveLength(1);
+
+    const OTHER_RUN_ID = "33333333-3333-3333-3333-333333333333";
+    state = reduceRunStreamFrame(state, {
+      type: "run.status",
+      capability_run_id: OTHER_RUN_ID,
+      status: "running",
+      occurred_at: "2026-07-21T10:05:00Z",
+      sequence: 4,
+    });
+
+    expect(state.stages).toEqual([]);
+    expect(state.liveness).toEqual({});
+    expect(state.run).toEqual({ id: OTHER_RUN_ID, status: "running" });
+    // The interrupted run's status is still recorded in the `runs` map.
+    expect(state.runs[PROJECT_RUN_ID]).toBe("interrupted");
+  });
+
+  it("the interrupted run's stages don't survive into the next run's timeline after replay", () => {
+    const OTHER_RUN_ID = "33333333-3333-3333-3333-333333333333";
+    const frames: SseFrame[] = [
+      {
+        type: "run.status",
+        capability_run_id: PROJECT_RUN_ID,
+        status: "running",
+        occurred_at: "2026-07-21T10:00:00Z",
+        sequence: 1,
+      },
+      {
+        type: "stage.started",
+        stage: "acquire",
+        label: "Acquiring sources",
+        blurb: "Searching.",
+        occurred_at: "2026-07-21T10:00:01Z",
+        sequence: 2,
+      },
+      {
+        type: "run.status",
+        capability_run_id: PROJECT_RUN_ID,
+        status: "interrupted",
+        occurred_at: "2026-07-21T10:00:03Z",
+        sequence: 3,
+      },
+      {
+        type: "run.status",
+        capability_run_id: OTHER_RUN_ID,
+        status: "running",
+        occurred_at: "2026-07-21T10:05:00Z",
+        sequence: 4,
+      },
+      {
+        type: "stage.started",
+        stage: "acquire",
+        label: "Acquiring sources",
+        blurb: "Searching again.",
+        occurred_at: "2026-07-21T10:05:01Z",
+        sequence: 5,
+      },
+    ];
+
+    const once = fold(createInitialRunStreamState(), frames);
+    expect(once.stages).toHaveLength(1);
+    expect(once.stages[0].blurb).toBe("Searching again.");
+
+    const twice = fold(once, frames);
+    expect(twice).toEqual(once);
+
+    const atCursor = fold(createInitialRunStreamState(), frames.slice(0, 3));
+    const resumed = fold(atCursor, frames);
+    expect(resumed).toEqual(once);
+  });
+});
+
 describe("reduceRunStreamFrame — check-in pending/resolved lifecycle", () => {
   it("checkin.pending sets pendingCheckIn; its checkin.resolved clears it into decisions", () => {
     const pending = reduceRunStreamFrame(createInitialRunStreamState(), {

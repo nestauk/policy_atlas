@@ -77,7 +77,7 @@ export function RunPane({
               <Card className="px-3.5 py-2.5">
                 <div className="flex items-center gap-2.5">
                   <StatusDot tone={stageDot(entry.status)} />
-                  <span className="text-[13px] font-bold text-navy">{entry.label}</span>
+                  <span className="text-[13px] font-bold text-navy">{scrub(entry.label)}</span>
                   {entry.status === "skipped" && <Chip tone="soft">Skipped</Chip>}
                   {entry.status === "failed" && <Chip tone="red">Failed</Chip>}
                   {typeof entry.seconds === "number" && entry.status === "completed" && (
@@ -89,7 +89,7 @@ export function RunPane({
                 {entry.status === "started" &&
                   entry.blurb !== undefined &&
                   entry.blurb.length > 0 && (
-                    <p className="mt-1 pl-[18px] text-[12px] text-grey">{entry.blurb}</p>
+                    <p className="mt-1 pl-[18px] text-[12px] text-grey">{scrub(entry.blurb)}</p>
                   )}
                 {summarySentence(entry) !== null && (
                   <p className="mt-1 pl-[18px] text-[12px] text-grey">
@@ -102,7 +102,12 @@ export function RunPane({
         </ol>
 
         {stream.pendingCheckIn !== null && (
-          <CheckInCard projectId={projectId} checkIn={stream.pendingCheckIn} />
+          <CheckInCard
+            key={stream.pendingCheckIn.check_in_id}
+            projectId={projectId}
+            checkIn={stream.pendingCheckIn}
+            stages={stream.stages}
+          />
         )}
 
         {runStatus === "running" && liveNotes.length > 0 && (

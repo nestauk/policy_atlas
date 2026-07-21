@@ -1,6 +1,7 @@
 import { Outlet, useParams } from "react-router";
 
 import { useProject } from "../api/queries";
+import { scrub } from "../lib/scrub";
 import { NavBar, NavItem, NavLogo } from "../ui/brand/Nav";
 import { ToastProvider } from "../ui/radix/Toast";
 import { TooltipProvider } from "../ui/radix/Tooltip";
@@ -24,7 +25,7 @@ export function AppShell() {
                   <span aria-hidden="true" className="text-line-2">
                     /
                   </span>
-                  <span className="truncate font-semibold text-navy">{project.data.name}</span>
+                  <span className="truncate font-semibold text-navy">{scrub(project.data.name)}</span>
                 </span>
               )}
             </div>

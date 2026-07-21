@@ -922,3 +922,88 @@ def test_failed_then_successful_rerun_parity_clears_stale_discretion_block(
         assert "characterise" not in blocked
     finally:
         _cleanup(engine, project_id)
+
+
+def test_interleaved_canonical_and_freetext_overlays_fold_in_sequence_order(
+    engine: Engine,
+) -> None:
+    """A canonical adjust and a confirmed free-text fragment on the SAME component
+    fold in durable sequence order — the one merge shape the original five parity
+    cases never interleaved (review finding adv-m5, 2026-07-21)."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan(steering_mode="frequent")
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        parked = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=_BoundaryParkIO("acquire"),
+        )
+        assert parked.capability_run_id is not None
+        state = build(engine, project_id=project_id, capability_run_id=parked.capability_run_id)
+        canonical_delta = {"characterise": {"guidance": ["prioritise rural coverage"]}}
+        fragment_delta = {"guidance": ["then contrast urban areas"]}
+
+        def _decision_payload(action: dict[str, Any]) -> dict[str, Any]:
+            return {
+                **steering_events.base_payload(
+                    capability_run_id=state.capability_run_id,
+                    plan_id=state.plan_id,
+                    plan_version=state.plan_version,
+                    boundary="after_component",
+                    component="acquire",
+                ),
+                "decided_by": "user",
+                "authored_by": "user",
+                "response": "adjust",
+                "confirmed": True,
+                "rerun_mode": None,
+                "interpreted_action": action,
+            }
+
+        with engine.begin() as conn:
+            events.append(
+                conn,
+                project_id=project_id,
+                run_id=state.most_recent_attempted_run_id,
+                event_type=steering_events.STEERING_DECISION,
+                payload=_decision_payload({"directive_deltas": canonical_delta}),
+            )
+            events.append(
+                conn,
+                project_id=project_id,
+                run_id=state.most_recent_attempted_run_id,
+                event_type=steering_events.STEERING_DECISION,
+                payload=_decision_payload(
+                    {
+                        "compiled": [
+                            {
+                                "fragment_text": "then contrast urban areas",
+                                "kind": "plan_adjustment",
+                                "component": "characterise",
+                                "delta": fragment_delta,
+                                "rerun_mode": None,
+                            }
+                        ],
+                        "refused": [],
+                        "summary": "",
+                    }
+                ),
+            )
+        rebuilt = build(engine, project_id=project_id, capability_run_id=state.capability_run_id)
+        expected = runner_module._extend_overlays({}, canonical_delta)
+        expected = runner_module._extend_overlays(expected, {"characterise": fragment_delta})
+        assert rebuilt.pending_overlays == expected
+        # Order must be observable: folding the other way is a different overlay.
+        reversed_fold = runner_module._extend_overlays({}, {"characterise": fragment_delta})
+        reversed_fold = runner_module._extend_overlays(reversed_fold, canonical_delta)
+        assert rebuilt.pending_overlays != reversed_fold
+    finally:
+        _cleanup(engine, project_id)

@@ -1259,6 +1259,26 @@
         "title": "PageMeta",
         "type": "object"
       },
+      "Page_CheckInOut_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/CheckInOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "title": "Page[CheckInOut]",
+        "type": "object"
+      },
       "Page_DecisionOut_": {
         "properties": {
           "data": {
@@ -1337,6 +1357,26 @@
           "pagination"
         ],
         "title": "Page[ProjectOut]",
+        "type": "object"
+      },
+      "Page_RunOut_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/RunOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "title": "Page[RunOut]",
         "type": "object"
       },
       "PlanDraft": {
@@ -2899,7 +2939,7 @@
     },
     "/api/v1/projects/{project_id}/check-ins": {
       "get": {
-        "description": "Return a latest pending card or the durable steering history projection.",
+        "description": "Return a latest pending card or the durable steering history projection.\n\nPaginated (rubric item 17 \u2014 check-ins accumulate over a project's life);\nthe pending view is at most one card by construction.",
         "operationId": "list_check_ins_api_v1_projects__project_id__check_ins_get",
         "parameters": [
           {
@@ -2925,6 +2965,29 @@
               "title": "Status",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -2932,11 +2995,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/CheckInOut"
-                  },
-                  "title": "Response List Check Ins Api V1 Projects  Project Id  Check Ins Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/Page_CheckInOut_"
                 }
               }
             },
@@ -3695,7 +3754,7 @@
     },
     "/api/v1/projects/{project_id}/runs": {
       "get": {
-        "description": "List a project's walks from newest to oldest.",
+        "description": "List a project's walks from newest to oldest (paginated \u2014 runs accumulate).",
         "operationId": "list_runs_api_v1_projects__project_id__runs_get",
         "parameters": [
           {
@@ -3707,6 +3766,29 @@
               "title": "Project Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -3714,11 +3796,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/RunOut"
-                  },
-                  "title": "Response List Runs Api V1 Projects  Project Id  Runs Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/Page_RunOut_"
                 }
               }
             },

@@ -80,6 +80,10 @@ artefact, groups) are whole-object.
   planner turn. `client_turn_id` (UUID, caller-minted) makes double-submit
   idempotent (the same turn is returned, not re-run). A concurrent turn on
   the same project → 409 `planning_turn_in_progress` (per-project lock).
+  A turn while the project's walk is running or parked → 409 `run_active`:
+  steering is the sanctioned mid-run plan channel, and the fence guarantees
+  the latest-approved plan is always the active walk's own lineage
+  (review adjudication, 2026-07-21).
   The draft `plan` mirrors `OrchestrationPlan` field-by-field with every
   field optional while drafting + `steps[]` + `ready`; planner session
   state is process-local and bounded — an in-flight draft conversation is
@@ -94,17 +98,20 @@ artefact, groups) are whole-object.
   the per-project Postgres row lock: a second active run → 409
   `run_active`; at the executing-walk bound → 409 `capacity` (parked runs
   hold no slot). 400 if no approved-ready plan.
-- `GET /api/v1/projects/{id}/runs` → list (newest first);
+- `GET /api/v1/projects/{id}/runs` → paginated list (newest first;
+  standard `{data, pagination}` envelope — runs accumulate);
   `GET .../runs/{run_id}` → one. Status ∈ `running | paused | succeeded |
   degraded | failed | aborted | interrupted`.
 
 ### Check-ins (steering)
 
 - `GET /api/v1/projects/{id}/check-ins?status=pending` — **pending is
-  derived**: the `steering.pause` of the latest run without its decision;
-  at most one by construction. Decided pauses are history
-  (`?status=all`, served from the `steering_history` projection, never
-  transport memory). A check-in carries: `check_in_id` (the pause event
+  derived AND answerable**: the `steering.pause` of the latest run without
+  its decision, and only while that walk's status is `paused` (a walk the
+  orphan sweep interrupted never presents an unanswerable card); at most
+  one by construction. Decided pauses are history (`?status=all`, paginated
+  in the standard envelope, served from the `steering_history` projection,
+  never transport memory). A check-in carries: `check_in_id` (the pause event
   id), `kind`, `boundary`, `component`, `stage`, the deterministic
   `render` (content of record — there is no LLM prose wrap), server-
   supplied `options[]` (`{id, label, description, requires_user_input,
@@ -121,7 +128,11 @@ artefact, groups) are whole-object.
     before this gate).
   - `{"kind": "free_text_confirm", "confirm_token": ..., "apply": bool}`
     → applies (or discards) the compiled deltas as the decision.
-  - `{"kind": "abort"}`.
+  - `{"kind": "abort"}` — mirrors the runner's in-process abort: the plan
+    flips to `abandoned` and a `run.finished{status: aborted}` event commits
+    in the same transaction, so SSE/replay see the terminal transition.
+  A confirm token lost to restart/eviction → 409 `confirm_expired`
+  (recompile to proceed).
   The answer and its `continuation.requested` event commit in one
   transaction; the parked run's **boundary continuation walk** dispatches
   after commit (answers are always accepted; execution may queue at the
@@ -182,9 +193,23 @@ One API instance, one worker process: pause-unblocking and the live tail
 are process-local; durable replay covers reconstruction, not cross-instance
 live delivery. Cross-instance steering/live-tail (LISTEN/NOTIFY or pub-sub)
 is a recorded deferred seam for the infra slice. Startup: orphan sweep
-(executing walks that died → `interrupted`; parked runs untouched), then
-the continuation drainer (requested-but-unclaimed continuations
-redispatch).
+(executing walks that died → `interrupted`; claimed-but-unexecuted
+continuations re-execute — the claim window is recoverable; parked runs
+untouched; a running walk with no event attachment is interrupted, never a
+boot failure), then the continuation drainer (requested-but-unclaimed
+continuations redispatch with the same key-driven backends as the request
+path).
+
+**Hard deploy invariant (review adjudication, 2026-07-21):** the sweep has
+no instance-ownership lease, so deploys must fully stop the old process
+(hard-kill — default SIGTERM lets the walk executor drain-run) **before**
+booting the new one; overlapping instances would interrupt each other's
+live walks. The lease belongs to the cross-instance seam (infra slice).
+
+**Backend mode:** `PA_BACKEND_MODE=live|stub|auto` (default `auto` =
+`OPENAI_API_KEY` presence). `live` without the core key fails boot loudly;
+missing search keys in live mode are warned at startup (coverage degrades
+honestly, never silently).
 
 ## Deprecations
 

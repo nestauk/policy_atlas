@@ -59,10 +59,18 @@ export interface StageLiveness {
 export const GLOBAL_LIVENESS_KEY = "_global";
 
 export interface RunStreamState {
-  /** Current transport state for the SSE feedback surface. */
-  connectionStatus: "connected" | "reconnecting";
+  /** Current transport state for the SSE feedback surface. `"connecting"`
+   *  is the pre-first-connection state (never shown as a reconnect banner);
+   *  `"reconnecting"` is a lapsed live connection. */
+  connectionStatus: "connecting" | "connected" | "reconnecting";
   /** Highest applied frame `sequence` — the replay-idempotence gate. */
   lastSequence: number;
+  /** Frame `type`s already applied at `lastSequence` — lets two frames that
+   *  share a sequence (one durable event emitting both, e.g.
+   *  `checkin.resolved` + `plan.updated`) each apply once instead of the
+   *  second being dropped by the sequence gate. Reset whenever the
+   *  sequence advances. */
+  appliedTypesAtLastSequence: string[];
   run: RunRef | null;
   runs: Record<string, RunStatus>;
   stages: StageEntry[];
@@ -78,8 +86,9 @@ export interface RunStreamState {
 
 export function createInitialRunStreamState(): RunStreamState {
   return {
-    connectionStatus: "reconnecting",
+    connectionStatus: "connecting",
     lastSequence: 0,
+    appliedTypesAtLastSequence: [],
     run: null,
     runs: {},
     stages: [],

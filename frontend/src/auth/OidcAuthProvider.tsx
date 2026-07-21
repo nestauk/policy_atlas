@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 import {
   AuthProvider as OidcLibProvider,
@@ -48,40 +48,49 @@ export function OidcAuthProvider({ children }: { children: ReactNode }) {
 function OidcAuthAdapter({ children }: { children: ReactNode }) {
   const oidc = useOidcLibAuth();
 
-  const getAccessToken = useCallback(
-    async (forceRefresh?: boolean) => {
-      if (forceRefresh) {
-        try {
-          const refreshed = await oidc.signinSilent();
-          return refreshed?.access_token ?? null;
-        } catch {
-          return null;
-        }
+  // `react-oidc-context`'s `oidc` object gets a new identity on every
+  // silent renewal, even when nothing user-visible changed. Reading it
+  // through a ref inside otherwise-stable callbacks keeps `getAccessToken`
+  // etc. (and therefore the `AuthApi` object built below) from changing
+  // identity on every renewal — consumers like `useRunStream` key effects
+  // on the `AuthApi` reference and would otherwise reconnect needlessly.
+  const oidcRef = useRef(oidc);
+  useEffect(() => {
+    oidcRef.current = oidc;
+  });
+
+  const getAccessToken = useCallback(async (forceRefresh?: boolean) => {
+    if (forceRefresh) {
+      try {
+        const refreshed = await oidcRef.current.signinSilent();
+        return refreshed?.access_token ?? null;
+      } catch {
+        return null;
       }
-      return oidc.user?.access_token ?? null;
-    },
-    [oidc],
-  );
+    }
+    return oidcRef.current.user?.access_token ?? null;
+  }, []);
 
   const signIn = useCallback(() => {
-    void oidc.signinRedirect();
-  }, [oidc]);
+    void oidcRef.current.signinRedirect();
+  }, []);
 
   const signOut = useCallback(() => {
-    void oidc.signoutRedirect();
-  }, [oidc]);
+    void oidcRef.current.signoutRedirect();
+  }, []);
 
   const onUnauthenticated = useCallback(() => {
     const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     sessionStorage.setItem(AUTH_RETURN_TO_KEY, returnTo);
-    void oidc.signinRedirect();
-  }, [oidc]);
+    void oidcRef.current.signinRedirect();
+  }, []);
 
   const status: AuthStatus = oidc.isLoading
     ? "loading"
     : oidc.isAuthenticated
       ? "authenticated"
       : "unauthenticated";
+  const sub = oidc.user?.profile.sub;
 
   const value: AuthApi = useMemo(
     () => ({
@@ -89,10 +98,10 @@ function OidcAuthAdapter({ children }: { children: ReactNode }) {
       signIn,
       signOut,
       onUnauthenticated,
-      user: oidc.user?.profile.sub ? { sub: oidc.user.profile.sub } : null,
+      user: sub ? { sub } : null,
       status,
     }),
-    [getAccessToken, signIn, signOut, onUnauthenticated, oidc.user, status],
+    [getAccessToken, signIn, signOut, onUnauthenticated, sub, status],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

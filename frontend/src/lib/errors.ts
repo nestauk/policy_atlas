@@ -1,13 +1,43 @@
-/** Machine-readable conflict conditions surfaced by the API. */
-export type ConflictCode = "run_active" | "capacity" | "turn_in_progress" | "answered";
+/** Machine-readable conflict conditions surfaced by the API (the real
+ *  `ApiConflict` codes raised by the backend — see `runs.py`,
+ *  `planning.py`, `check_ins.py`). */
+export type ConflictCode = "run_active" | "capacity" | "planning_turn_in_progress" | "already_answered";
 
-/** Human-readable, trigger-local conflict copy. */
+/** Human-readable, trigger-local conflict copy — the one place this
+ *  copy lives; call sites wire it in rather than inlining their own. */
 export const conflictSentences: Record<ConflictCode, string> = {
   run_active: "A run is already active for this project. Refresh to see its current progress.",
   capacity: "This run cannot start yet because the workspace is at capacity. Try again shortly.",
-  turn_in_progress: "That planning turn is still being prepared. Refresh to see the completed turn.",
-  answered: "This check-in has already been answered. Refresh to see the recorded decision.",
+  planning_turn_in_progress: "That planning turn is still being prepared. Refresh to see the completed turn.",
+  already_answered: "This check-in has already been answered. Refresh to see the recorded decision.",
 };
+
+/**
+ * Type guard: does `code` name one of the API's known conflict codes?
+ *
+ * Args:
+ *   code: A `error.code` value pulled off a thrown query/mutation error.
+ *
+ * Returns:
+ *   Whether `code` is a key of `conflictSentences`.
+ */
+export function isConflictCode(code: string | undefined | null): code is ConflictCode {
+  return code !== undefined && code !== null && code in conflictSentences;
+}
+
+/**
+ * Extract the API's machine-readable error `code` from a thrown
+ * query/mutation error envelope (`{ error: { code, message } }`).
+ *
+ * Args:
+ *   error: The `error` thrown by a query or mutation function.
+ *
+ * Returns:
+ *   The envelope's `code`, or `undefined` if the shape doesn't match.
+ */
+export function errorCode(error: unknown): string | undefined {
+  return (error as { error?: { code?: string } } | null | undefined)?.error?.code;
+}
 
 /** Field-indexed messages suitable for input-adjacent rendering. */
 export type FieldErrorMap = Record<string, string[]>;

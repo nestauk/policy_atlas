@@ -4,9 +4,12 @@ import { useParams, useSearchParams } from "react-router";
 import type { components } from "../api/gen/types";
 import { useApiClient, useArtefact, useCoverage, useEvidence } from "../api/queries";
 import { useQuery } from "@tanstack/react-query";
+import { errorCode } from "../lib/errors";
+import { safeHref } from "../lib/safeHref";
 import { scrub } from "../lib/scrub";
 import { Card } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
+import { ReauthRedirect } from "../ui/feedback";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { Tooltip } from "../ui/radix/Tooltip";
@@ -296,9 +299,16 @@ function SourceDossier({
               <div>
                 <dt className="font-semibold text-grey">Link</dt>
                 <dd className="mt-0.5 break-all">
-                  <a href={source.url} target="_blank" rel="noreferrer">
-                    {source.url}
-                  </a>
+                  {(() => {
+                    const href = safeHref(source.url);
+                    return href !== undefined ? (
+                      <a href={href} target="_blank" rel="noreferrer">
+                        {scrub(href)}
+                      </a>
+                    ) : (
+                      <span>{scrub(source.url)}</span>
+                    );
+                  })()}
                 </dd>
               </div>
             )}
@@ -346,6 +356,30 @@ export function ArtefactView() {
         ))}
       </main>
     );
+  }
+
+  if (artefact.isError) {
+    const code = errorCode(artefact.error);
+    if (code === "unauthenticated") return <ReauthRedirect />;
+    // `not_found` is the server's honest shape for "no artefact yet" (the
+    // read model returns 404 rather than an Optional-with-null body) —
+    // that is the expected empty state, not a failure to surface.
+    if (code !== "not_found") {
+      return (
+        <main className="mx-auto max-w-3xl px-6 py-10">
+          <Card role="alert" className="p-8 text-center text-[13px] text-navy">
+            The evidence base couldn't be loaded.{" "}
+            <button
+              type="button"
+              className="cursor-pointer font-bold text-blue hover:underline"
+              onClick={() => void artefact.refetch()}
+            >
+              Retry
+            </button>
+          </Card>
+        </main>
+      );
+    }
   }
 
   if (artefact.isError || artefact.data === undefined) {

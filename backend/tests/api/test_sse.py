@@ -536,7 +536,7 @@ def test_sse_parked_pending_then_resolved_history(engine: Engine, tmp_path: Path
                     f"/api/v1/projects/{project_id}/check-ins", headers=api.owner_headers
                 )
                 assert response.status_code == 200
-                assert response.json() == []
+                assert response.json()["data"] == []
         finally:
             _cleanup(engine, project_id)
 

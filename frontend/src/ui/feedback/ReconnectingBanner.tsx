@@ -1,8 +1,17 @@
 import { useEffect, useState } from "react";
 
-/** Live-stream disconnect signal, with a stale-data warning after 30 seconds. */
-export function ReconnectingBanner({ connectionStatus }: { connectionStatus: "connected" | "reconnecting" }) {
-  if (connectionStatus === "connected") return null;
+import type { RunStreamState } from "../../store/types";
+
+/** Live-stream disconnect signal, with a stale-data warning after 30
+ *  seconds. Only a lapsed connection (`"reconnecting"`) shows the banner —
+ *  the initial `"connecting"` state (before the first connection ever
+ *  succeeds) is not a reconnect and stays silent. */
+export function ReconnectingBanner({
+  connectionStatus,
+}: {
+  connectionStatus: RunStreamState["connectionStatus"];
+}) {
+  if (connectionStatus !== "reconnecting") return null;
   return <ReconnectingContent />;
 }
 

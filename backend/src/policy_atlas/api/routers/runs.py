@@ -9,13 +9,14 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, select
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import RunCreate, RunOut
+from policy_atlas.api.contract.common import PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX, Page, PageMeta
 from policy_atlas.api.deps import (
     get_current_user,
     get_engine,
@@ -40,6 +41,19 @@ router = APIRouter(
 
 _dispatch_lock = threading.Lock()
 _dispatching_projects: set[uuid.UUID] = set()
+
+
+def dispatch_reserved(project_id: uuid.UUID) -> bool:
+    """Whether a run admission for the project is in its pre-insert window.
+
+    The reservation lives in process memory between run admission and the
+    executor's capability-run insert; archive must consult it or it can win
+    that window and archive a project whose run then executes hidden (review
+    finding codex-9, 2026-07-21). Sound under the pinned one-instance posture —
+    the same posture the reservation itself relies on.
+    """
+    with _dispatch_lock:
+        return project_id in _dispatching_projects
 
 
 def _dispatch_run(
@@ -76,7 +90,11 @@ def _await_new_run(
     existing_ids: set[uuid.UUID],
 ) -> RunOut:
     """Wait briefly for the executor's runtime-owned capability-run insertion."""
-    deadline = time.monotonic() + 2.0
+    # 10s, not 2s: with both executor workers momentarily busy the submitted
+    # dispatch can queue past 2s, turning a successful launch into a client 500
+    # (review finding I3, 2026-07-21). The walk still starts either way; the
+    # longer window keeps the response truthful for the transient case.
+    deadline = time.monotonic() + 10.0
     while time.monotonic() < deadline:
         with engine.connect() as conn:
             rows = conn.execute(
@@ -155,21 +173,33 @@ def create_run(
     return created
 
 
-@router.get("/{project_id}/runs", response_model=list[RunOut])
+@router.get("/{project_id}/runs", response_model=Page[RunOut])
 def list_runs(
     project_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
-) -> list[RunOut]:
-    """List a project's walks from newest to oldest."""
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
+) -> Page[RunOut]:
+    """List a project's walks from newest to oldest (paginated — runs accumulate)."""
     with engine.connect() as conn:
         owned_project(conn, project_id=project_id, user_id=user.user_id)
+        total = conn.execute(
+            select(func.count())
+            .select_from(capability_run)
+            .where(capability_run.c.project_id == project_id)
+        ).scalar_one()
         rows = conn.execute(
             select(capability_run)
             .where(capability_run.c.project_id == project_id)
             .order_by(capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
         ).mappings().all()
-    return [run_out(row) for row in rows]
+    return Page(
+        data=[run_out(row) for row in rows],
+        pagination=PageMeta(page=page, page_size=page_size, total_items=int(total)),
+    )
 
 
 @router.get("/{project_id}/runs/{run_id}", response_model=RunOut)

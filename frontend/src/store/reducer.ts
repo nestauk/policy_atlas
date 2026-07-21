@@ -4,12 +4,19 @@ import { GLOBAL_LIVENESS_KEY, type ResolvedDecision, type RunStreamState, type S
 /**
  * Pure reducer over the SSE frame stream — no framework, no side effects.
  *
- * Replay-idempotent: every frame except `tick` carries a `sequence`, and
- * any frame with `sequence <= state.lastSequence` is dropped unchanged.
- * That makes folding the same frame stream twice, or resuming the fold
- * from any mid-stream cursor, produce the same final state. `tick` frames
- * are the deliberate exception: they carry no `sequence` at all, update
- * only the transient `liveness` slice, and never advance `lastSequence`.
+ * Replay-idempotent: every frame except `tick` carries a `sequence`. A
+ * frame with `sequence < state.lastSequence` is a stale re-delivery and is
+ * dropped unchanged. One durable event can emit more than one frame
+ * *type* at the same sequence (e.g. `checkin.resolved` + `plan.updated`
+ * from one steering decision) — those must each apply once, so a frame
+ * with `sequence === state.lastSequence` is dropped only if its `type` is
+ * already recorded in `appliedTypesAtLastSequence` for that sequence.
+ * That set resets whenever the sequence actually advances. Together this
+ * makes folding the same frame stream twice, or resuming the fold from
+ * any mid-stream cursor (however the redelivery is sliced), produce the
+ * same final state. `tick` frames are the deliberate exception: they
+ * carry no `sequence` at all, update only the transient `liveness` slice,
+ * and never advance `lastSequence`.
  */
 export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): RunStreamState {
   if (frame.type === "tick") {
@@ -20,19 +27,37 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
     };
   }
 
-  if (frame.sequence <= state.lastSequence) {
-    return state; // already applied — idempotent drop
+  if (frame.sequence < state.lastSequence) {
+    return state; // a stale re-delivery — idempotent drop
+  }
+  if (frame.sequence === state.lastSequence && state.appliedTypesAtLastSequence.includes(frame.type)) {
+    return state; // this exact frame type already applied at this sequence
   }
 
-  const base: RunStreamState = { ...state, lastSequence: frame.sequence };
+  const sequenceAdvanced = frame.sequence > state.lastSequence;
+  const base: RunStreamState = {
+    ...state,
+    lastSequence: frame.sequence,
+    appliedTypesAtLastSequence: sequenceAdvanced
+      ? [frame.type]
+      : [...state.appliedTypesAtLastSequence, frame.type],
+  };
 
   switch (frame.type) {
-    case "run.status":
+    case "run.status": {
+      // A `run.status(running)` for a different run than the one the store
+      // currently tracks is a fresh walk — its timeline must not inherit
+      // the previous (possibly interrupted) run's stage entries or liveness.
+      const previousRunId = base.run?.id;
+      const isNewRun = frame.status === "running" && frame.capability_run_id !== previousRunId;
       return {
         ...base,
         run: { id: frame.capability_run_id, status: frame.status },
         runs: { ...base.runs, [frame.capability_run_id]: frame.status },
+        stages: isNewRun ? [] : base.stages,
+        liveness: isNewRun ? {} : base.liveness,
       };
+    }
 
     case "stage.started":
       return {

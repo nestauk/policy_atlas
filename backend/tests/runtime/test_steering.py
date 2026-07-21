@@ -492,6 +492,39 @@ def test_characterise_directive_delta_validates_and_is_exempt_from_plan_round_tr
     assert characterise_step.directive_delta == {}  # confirmed: no plan field carries it
 
 
+# --- Every directive branch of _validate_directive_delta must refuse, never crash ---
+
+
+@pytest.mark.parametrize(
+    ("component", "delta"),
+    [
+        ("acquire", {"search": "boom"}),
+        ("screen_abstract", {"screening": "boom"}),
+        ("screen_full", {"screening": "boom"}),
+        ("select", {"selection": "boom"}),
+        ("extract", {"extraction": "boom"}),
+        ("group", {"grouping": "boom"}),
+        ("appraise", {"appraisal": "boom"}),
+        ("characterise", {"characterise": "boom"}),
+        ("synthesise", {"synthesis": "boom"}),
+    ],
+)
+def test_every_directive_branch_maps_errors_to_refusal(
+    component: str, delta: dict[str, Any]
+) -> None:
+    """Every component branch wraps its parser's type error as a refusal.
+
+    A string where each branch's parser requires a mapping used to reach an
+    unwrapped exception in at least one branch (the screen_abstract/
+    screen_full live-check finding, 2026-07-21) — the fix was to wrap every
+    branch's parser call, not just that one. This pins the fix as complete
+    across every branch _validate_directive_delta actually dispatches on,
+    not only the ones the fix touched.
+    """
+    with pytest.raises(SteeringAdjustmentError):
+        _validate_directive_delta(component, delta, backend_scope="both")
+
+
 def test_pause_points_compile_pinned_for_all_modes() -> None:
     # deep depth: "select" must be present for the after-select pause points.
     plan = _base_plan(search_effort="standard", analysis_depth="deep")

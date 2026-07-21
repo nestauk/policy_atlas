@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from policy_atlas.api.contract import CheckInOption, CheckInOut, CheckInTrigger
+from policy_atlas.api.stage_vocabulary import stage_for_payload
 
 
 def _render(payload: dict[str, Any]) -> str:
@@ -50,7 +51,11 @@ def _check_in(row: dict[str, Any], *, decided: bool) -> CheckInOut:
         kind=str(payload.get("kind") or "check_in"),
         boundary=boundary,
         component=payload.get("component") if isinstance(payload.get("component"), str) else None,
-        stage=payload.get("component") if isinstance(payload.get("component"), str) else None,
+        # The public presentation key, never the raw component name — the raw
+        # name leaked internal vocabulary onto the check-in card (review
+        # finding MAJOR-1, 2026-07-21; the field's contract always said
+        # "presentation stage key").
+        stage=stage_for_payload(payload),
         render=_render(payload),
         options=options,
         triggers=triggers,

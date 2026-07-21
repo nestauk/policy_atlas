@@ -7,6 +7,7 @@ from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from typing import cast
 
+import structlog
 from fastapi import Request
 from sqlalchemy.engine import Connection, Engine
 
@@ -22,10 +23,47 @@ from policy_atlas.runtime.orchestrator_backend import (
 from policy_atlas.runtime.planner import PlannerBackend, StubPlannerBackend
 from policy_atlas.runtime.runner import RunnerBackends
 
+log = structlog.get_logger()
+
+
+#: Product-egress keys a fully-live deployment is expected to carry; missing
+#: entries degrade coverage silently (the pinned live check ran with
+#: OVERTON_API_KEY absent and produced an honest-but-thin evidence base).
+_LIVE_SEARCH_KEYS = ("OVERTON_API_KEY", "OPENALEX_API_KEY")
+
 
 def _live() -> bool:
-    """Key presence is live intent — the same switch `orchestrate` uses."""
+    """Whether API seams compose live provider backends.
+
+    ``PA_BACKEND_MODE`` makes the posture explicit (review finding adv-M4,
+    2026-07-21): ``live`` demands the core key and fails loud without it,
+    ``stub`` pins stubs even on a keyed box (demos, load tests, scans),
+    and the default ``auto`` preserves the key-presence switch that
+    ``orchestrate`` uses.
+    """
+    mode = os.environ.get("PA_BACKEND_MODE", "auto").strip().lower()
+    if mode == "stub":
+        return False
+    if mode == "live":
+        if not os.environ.get("OPENAI_API_KEY"):
+            raise RuntimeError(
+                "PA_BACKEND_MODE=live requires OPENAI_API_KEY to be configured"
+            )
+        return True
     return bool(os.environ.get("OPENAI_API_KEY"))
+
+
+def warn_on_partial_live_keys() -> None:
+    """Log loudly at boot when live mode runs with an incomplete search key set."""
+    if not _live():
+        return
+    missing = [key for key in _LIVE_SEARCH_KEYS if not os.environ.get(key)]
+    if missing:
+        log.warning(
+            "api.live_backends_missing_search_keys",
+            missing=missing,
+            consequence="searches degrade to the keyed subset; coverage will be thin",
+        )
 
 
 def get_settings(request: Request) -> Settings:

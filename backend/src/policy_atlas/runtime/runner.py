@@ -688,6 +688,11 @@ def _run_plan_impl(
             project_id=project_id,
             step_outcomes=step_outcomes,
             flagged_events=flagged_events,
+            # Snapshot, don't let the reducer re-derive: completed_components
+            # drives remaining_steps (what re-executes after a park) — it gets
+            # the same read-back treatment as step_outcomes/flagged_events
+            # (G2 pattern; review finding adv-m4, 2026-07-21).
+            completed_components=completed_components,
         )
 
     if resume_from is not None and resume_decision is not None:
@@ -1236,14 +1241,14 @@ def run_plan(
         capability_run_id = park_context["capability_run_id"]
         step_outcomes = park_context["step_outcomes"]
         flagged_events = park_context["flagged_events"]
-        attachment_run_id = _park_capability_run(
+        _park_capability_run(
             engine,
             project_id=project_id,
             capability_run_id=capability_run_id,
             step_outcomes=step_outcomes,
             flagged_events=flagged_events,
+            completed_components=sorted(park_context.get("completed_components", ())),
         )
-        del attachment_run_id
         return RunPlanOutcome(
             status="paused",
             steps=step_outcomes,
@@ -1259,6 +1264,7 @@ def _park_capability_run(
     capability_run_id: uuid.UUID,
     step_outcomes: list[RunStepOutcome],
     flagged_events: list[dict[str, Any]],
+    completed_components: list[str],
 ) -> uuid.UUID:
     """Atomically mark a parked walk and snapshot parity-sensitive state."""
     with engine.begin() as conn:
@@ -1294,6 +1300,7 @@ def _park_capability_run(
                 "capability_run_id": str(capability_run_id),
                 "flagged_events": flagged_events,
                 "step_outcomes": [_serialise_step_outcome(outcome) for outcome in step_outcomes],
+                "completed_components": completed_components,
             },
         )
     if not isinstance(attachment_run_id, uuid.UUID):
