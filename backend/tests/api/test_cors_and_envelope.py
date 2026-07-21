@@ -37,7 +37,7 @@ def test_cors_health_validation_and_opaque_errors(engine: Engine, tmp_path: Path
         "http://app.example.test",
         os.environ["DATABASE_URL"],
     )
-    token = mint_token("user", settings.oidc_issuer, settings.oidc_audience, 60, key_dir)
+    token = mint_token("user", settings.oidc_issuer, settings.oidc_client_id, 60, key_dir)
     headers = {"Authorization": f"Bearer {token}"}
 
     with _client(settings) as client:

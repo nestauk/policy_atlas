@@ -243,9 +243,9 @@ async def _api_session(
         sse_poll_interval_seconds=0.01,
         sse_heartbeat_seconds=heartbeat_seconds,
     )
-    owner = mint_token(owner_id, settings.oidc_issuer, settings.oidc_audience, 60, key_dir)
+    owner = mint_token(owner_id, settings.oidc_issuer, settings.oidc_client_id, 60, key_dir)
     other = mint_token(
-        f"other-{uuid.uuid4()}", settings.oidc_issuer, settings.oidc_audience, 60, key_dir
+        f"other-{uuid.uuid4()}", settings.oidc_issuer, settings.oidc_client_id, 60, key_dir
     )
     app = create_app(settings=settings)
     async with app.router.lifespan_context(app), httpx.AsyncClient(

@@ -65,7 +65,7 @@ def build_settings(tmp_dir: Path) -> Settings:
     key_dir = tmp_dir / "openapi-export-issuer"
     return Settings(
         oidc_issuer="http://dev-issuer.local",
-        oidc_audience="openapi-export",
+        oidc_client_id="openapi-export",
         oidc_jwks_url=None,
         oidc_jwks_path=init(key_dir),
         app_origin="http://app.example.test",

@@ -57,7 +57,7 @@ def init(key_dir: Path, *, kid: str = DEFAULT_KID) -> Path:
 def mint_token(
     sub: str,
     issuer: str,
-    audience: str,
+    client_id: str,
     ttl: int,
     key_dir: Path,
     *,
@@ -68,7 +68,7 @@ def mint_token(
     Args:
         sub: Subject claim to encode.
         issuer: Non-production issuer claim to encode.
-        audience: Audience claim to encode.
+        client_id: Client identifier claim to encode.
         ttl: Token lifetime in seconds.
         key_dir: Directory previously initialized with :func:`init`.
         kid: Signing key identifier.
@@ -80,8 +80,8 @@ def mint_token(
         ValueError: If required claims are blank or the TTL is invalid.
         FileNotFoundError: If the selected development private key does not exist.
     """
-    if not sub or not issuer or not audience:
-        raise ValueError("sub, issuer and audience must not be empty")
+    if not sub or not issuer or not client_id:
+        raise ValueError("sub, issuer and client_id must not be empty")
     if ttl < 1:
         raise ValueError("ttl must be positive")
     private_key = cast(
@@ -92,7 +92,14 @@ def mint_token(
     )
     now = int(time.time())
     return jwt.encode(
-        {"sub": sub, "iss": issuer, "aud": audience, "iat": now, "exp": now + ttl},
+        {
+            "sub": sub,
+            "iss": issuer,
+            "client_id": client_id,
+            "token_use": "access",
+            "iat": now,
+            "exp": now + ttl,
+        },
         private_key,
         algorithm="RS256",
         headers={"kid": kid},
@@ -117,7 +124,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     mint_parser.add_argument("--dir", type=Path, required=True)
     mint_parser.add_argument("--sub", required=True)
     mint_parser.add_argument("--issuer", default=DEFAULT_ISSUER)
-    mint_parser.add_argument("--audience", required=True)
+    mint_parser.add_argument("--client-id", required=True)
     mint_parser.add_argument("--ttl", type=int, default=3600)
     mint_parser.add_argument("--kid", default=DEFAULT_KID)
     args = parser.parse_args(argv)
@@ -128,7 +135,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     token = mint_token(
         args.sub,
         args.issuer,
-        args.audience,
+        args.client_id,
         args.ttl,
         args.dir,
         kid=args.kid,

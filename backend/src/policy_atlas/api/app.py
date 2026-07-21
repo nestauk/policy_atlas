@@ -142,7 +142,12 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        engine = create_engine(settings.database_url, pool_pre_ping=True)
+        engine = create_engine(
+            settings.database_url,
+            pool_pre_ping=True,
+            pool_size=settings.db_pool_size,
+            max_overflow=settings.db_max_overflow,
+        )
         executor = ThreadPoolExecutor(
             max_workers=settings.run_executor_max,
             thread_name_prefix="policy-atlas-walk",
