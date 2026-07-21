@@ -3,11 +3,11 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in
 [docs/specs/](../../specs/index.md).
 
-> **Status:** approved 2026-07-21 (owner) → **REOPENED same day** after the
-> contract-stage adversarial review (15 findings adjudicated in, see
-> [adversarial-review-contract.md](adversarial-review-contract.md)) — one material
-> amendment (F1: a small gated auth.py change replaces the "API verification code
-> untouched" promise) needs owner re-approval ·
+> **Status:** approved 2026-07-21 (owner); contract-stage adversarial review same day
+> (15 findings adjudicated in, see
+> [adversarial-review-contract.md](adversarial-review-contract.md)); the material
+> F1 gate was re-decided by the owner same day (auth congruence ruling — resolved
+> decision 7) ·
 > Plan approved (before implementation): _pending_ · ADR: expected (Tier 4 — deployment
 > architecture + rollback plan).
 
@@ -151,16 +151,27 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
    build args. Smallest pool that satisfies the API's RS256/JWKS verification; no
    federation, no custom attributes, no triggers.
 
-   **Gated auth amendment (adversarial F1 — supersedes "API verification code
-   untouched"):** Cognito *access* tokens carry `client_id`, not `aud`, so
-   `auth.py`'s unconditional audience validation rejects every Cognito token. The
-   smallest honest fix, per AWS's own verification guidance: a targeted `auth.py`
-   edit accepting an access token whose `client_id` claim equals the configured
-   audience when `aud` is absent (issuer + signature + exp checks unchanged; dev
-   issuer unaffected — it mints `aud` tokens). Auth hard gate: owner approval
-   required; the security lane reviews this edit specifically. Alternatives
-   rejected: sending ID tokens as API credentials (weaker semantics, frontend code
-   change), a pre-token-generation Lambda trigger (heavier, violates "no triggers").
+   **Gated auth amendment (adversarial F1, reshaped by owner adjudication
+   2026-07-21 — supersedes "API verification code untouched"):** Cognito *access*
+   tokens carry `client_id` + `token_use: "access"`, not `aud`, so `auth.py`'s
+   generic-OIDC audience validation rejects every real Cognito token (025's dev
+   issuer mints `aud` tokens, which is why nothing caught it). **Owner ruling:
+   Cognito is THE auth provider — the verifier becomes natively congruent with
+   Cognito access-token semantics rather than patching Cognito in as a fallback.**
+   Two targeted edits, one semantic:
+   - `auth.py`: validate `token_use == "access"` and `client_id` == the configured
+     client id (issuer / RS256 signature / exp / sub checks unchanged); the generic
+     `aud` check is removed, not kept as an alternate path.
+   - `dev_issuer.py` (+ mint CLI): reshaped to mint Cognito-shaped access tokens
+     (`client_id`, `token_use`, same claims layout) — the local dev implementation
+     stays, as a faithful Cognito imitation, so dev and prod exercise ONE
+     verification path with no fallbacks.
+   Config: the audience env now carries the app client id; whether it keeps the
+   `OIDC_AUDIENCE` name or is renamed (e.g. `OIDC_CLIENT_ID`) is a plan-gate call.
+   Auth hard gate: the security lane reviews these edits specifically. Alternatives
+   rejected: `client_id`-fallback-on-missing-`aud` (two dialects, dev≠prod
+   semantics — owner), ID-tokens-as-credentials (weaker semantics, frontend
+   change), pre-token-generation trigger (heavier, violates "no triggers").
    Two pins (owner-scoped auth stays as 025 built it — ownership is the token `sub`,
    no user table):
    - **Self-signup disabled** — users are operator-created (console/CLI) for the
@@ -225,9 +236,12 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
 - **CI/CD deploy automation** (pipelines deploying on merge) — deploys stay operator-run
   `cdk deploy`, as in v2.
 - Supabase/PostgREST/Studio in any form; Clerk in any form.
-- Backend/frontend application code changes beyond config/env plumbing. If the deploy
-  reveals an app bug, it's a finding to log (or a stop condition if blocking), not a
-  silent in-slice fix beyond trivial config.
+- Backend/frontend application code changes beyond config/env plumbing — with exactly
+  two contracted exceptions: the gated auth congruence edits (`auth.py` +
+  `dev_issuer.py`, scope item 5 / resolved decision 7) and the explicit engine pool
+  sizing (§ capacity & concurrency). If the deploy reveals any other app bug, it's a
+  finding to log (or a stop condition if blocking), not a silent in-slice fix beyond
+  trivial config.
 - Multi-region, WAF, custom dashboards/alarms beyond what copies from v2 (log groups).
 - **User tables, profiles, organisation management, self-signup** — workspace-cluster
   slice (scope item 5 has the rationale; ownership stays token-`sub`-scoped as 025
@@ -293,6 +307,13 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
    in the file.
 5. **Frontend hosting: S3 + CloudFront** (owner, 2026-07-21 — revised from the earlier
    nginx-on-Fargate call; scope item 4 has the shape and rationale).
+6. **Region: `eu-west-2`** (owner, 2026-07-21) — all stacks and config JSONs; the one
+   exception is the CloudFront ACM certificate, which AWS requires in `us-east-1`
+   (already named in scope item 4).
+7. **Auth congruence** (owner, 2026-07-21, adjudicating adversarial F1): the API
+   verifier speaks Cognito access-token semantics natively; the dev issuer is
+   reshaped into a faithful Cognito imitation for local work — one verification
+   path, no fallback dialects (scope item 5 has the exact edits).
 
 ## Public / private boundary
 

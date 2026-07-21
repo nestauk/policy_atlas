@@ -7,7 +7,7 @@ FNN` in place.
 
 | # | Sev | Finding (compressed) | Disposition |
 |---|-----|----------------------|-------------|
-| F1 | BLOCKER | Cognito access tokens carry `client_id`, not `aud`; `auth.py` unconditionally validates `aud` → every Cognito token rejected; "config-only auth" promise false | **Material — reopens owner gate.** Gated `auth.py` amendment added (accept `client_id`-as-audience when `aud` absent, per AWS verification guidance); ID-token-as-credential and pre-token trigger rejected |
+| F1 | BLOCKER | Cognito access tokens carry `client_id`, not `aud`; `auth.py` unconditionally validates `aud` → every Cognito token rejected; "config-only auth" promise false | **Material — owner adjudicated 2026-07-21:** full congruence, not a fallback — verifier natively validates Cognito access-token semantics (`token_use` + `client_id`; generic `aud` check removed) and the dev issuer is reshaped to mint Cognito-shaped tokens (one verification path, dev == prod). Lead's original fallback proposal, ID-token-as-credential, and pre-token trigger all rejected |
 | F2 | BLOCKER | v2 `Vpc.from_lookup` has no name filter; two VPCs in the account → v3 resources can bind to v2's VPC | Folded: `vpc_name` filter added to the namespacing constraint's systematic edit list |
 | F3 | BLOCKER | Deleting `load_secret` removes the only composer of the single `DATABASE_URL` both API and Alembic require | Folded: `load_secret` moved delete→keep (it was mis-sorted; it is DB plumbing, not Supabase). Targeted edit: SQLAlchemy/psycopg3 URL format |
 | F4 | BLOCKER | SSM tunnel contradicts rubric 13 (Aurora ingress restricted to API+migration SGs) | Folded: rubric 13 now names the fck-nat tunnel ingress as deliberate |
