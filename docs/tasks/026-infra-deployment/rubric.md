@@ -12,9 +12,10 @@ The task is **done only if every box holds** — otherwise it is in progress, no
        plan.
 4. [ ] No generated files or secrets edited by hand; no secret value, account credential
        or font binary in the repo or the CDK asset tree. Config JSONs are committed
-       v2-style (resolved decision 4, owner call — account IDs/domains OK); no IP
-       allowlist or similar operationally sensitive value committed (the residual
-       guard).
+       **without** the `aws_account_id` field (resolved decision 4: account ID is
+       env-injected; `cdk.context.json` gitignored); no real account ID, IP allowlist
+       or similar operationally sensitive value in any committed file or verification
+       evidence.
 5. [ ] No tests deleted, skipped or weakened without written justification.
 6. [ ] Verification evidence recorded ([verification.md](verification.md)), including the
        **per-file port map** (v2 source → v3 path · verbatim / targeted-edit / deleted /

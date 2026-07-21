@@ -296,15 +296,19 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
    config-only redeploy (cert + A records + frontend rebuild for the API URL) —
    deliberately not pre-built.
 3. **Cognito confirmed** as the IdP. No federation/SSO in scope.
-4. **Config JSONs committed, v2-style** (owner final call, 2026-07-21, rolling back
-   the same-day gitignore amendment). The repo is public; the owner accepts the named
-   caveat — an AWS account ID is an identifier, not a credential, though publishing
-   it mildly aids targeted enumeration/phishing and cannot later be unpublished from
-   git history. Secrets stay in Secrets Manager, never in config. Residual guard: if
-   an IP allowlist or any similar operationally sensitive value ever enters these
-   configs, that value (not the whole file) goes behind an env var or gitignored
-   overlay — committing identifiers is the decision, not committing whatever lands
-   in the file.
+4. **Config JSONs committed minus the account ID; account ID env-injected** (owner
+   final call, 2026-07-21, third revision — supersedes both full-commit and
+   gitignore-with-templates). The JSONs stay committed and reviewable (domains,
+   instance sizes, capacity values), but the `aws_account_id` field is removed and
+   `app.py` reads the account from the environment (targeted edit; CDK's native
+   `CDK_DEFAULT_ACCOUNT` pattern). Locally: operator export / untracked `.env`.
+   When a CI deploy pipeline lands in a later slice, a GitHub Actions variable feeds
+   the same env var unchanged (the owner's original intent, parked until it has a
+   consumer — this slice keeps deploys operator-run). **Companion pin:**
+   `cdk.context.json` is gitignored — CDK caches `from_lookup` results there
+   including the account ID; the cost is lookups re-running per machine. Residual
+   guard unchanged: secrets stay in Secrets Manager; IP allowlists or similar never
+   enter committed config.
 5. **Frontend hosting: S3 + CloudFront** (owner, 2026-07-21 — revised from the earlier
    nginx-on-Fargate call; scope item 4 has the shape and rationale).
 6. **Region: `eu-west-2`** (owner, 2026-07-21) — all stacks and config JSONs; the one
@@ -318,12 +322,13 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
 ## Public / private boundary
 
 **The repo is public (open source).** Committable: CDK code, the `*_config.json`
-files (resolved decision 4 — committed v2-style, account IDs + domains included by
-owner call), deploy docs, synthesized-template tests. Private (never committed): AWS
-credentials, Secrets Manager values, font binaries, IP allowlists or similar
-operationally sensitive values (decision 4's residual guard). Deploy logs/screenshots
-in verification.md never show secret values or session tokens; account IDs need no
-scrubbing.
+files with the `aws_account_id` field removed (resolved decision 4 — account ID is
+env-injected), deploy docs, synthesized-template tests. Private (never committed):
+the AWS account ID (env var / untracked `.env`), `cdk.context.json` (caches the
+account ID via `from_lookup`), AWS credentials, Secrets Manager values, font
+binaries, IP allowlists or similar operationally sensitive values. Deploy
+logs/screenshots in verification.md are scrubbed of the account ID and never show
+secret values or session tokens.
 
 ## Model route
 
@@ -386,8 +391,8 @@ to need code changes for Cognito after all) · turn/token budget spent.
 
 In [verification.md](verification.md): per-file port map (v2 source → v3 path ·
 copied-verbatim / targeted-edit / deleted / new — the copy-first discipline made
-auditable), `make verify` + synth output, deploy transcript (no secret values or
-session tokens; account IDs fine per decision 4), smoke
+auditable), `make verify` + synth output, deploy transcript (account ID scrubbed per
+decision 4; no secret values or session tokens), smoke
 narrative with screenshots, deploy-invariant ECS event evidence, known gaps.
 
 ## Risk tier & review focus
