@@ -65,7 +65,14 @@
 > counts executing walks only. Live check restructured (restart while
 > A parked + B executing; answer after restart; continuation
 > completes). Build sizing note: adds runner continuation machinery —
-> named, accepted.
+> named, accepted. Context-parity pin (owner question, 2026-07-21 —
+> does parking pre-026 lose orchestrator context?): no by design
+> (orchestrator context is composed per moment from the durable
+> record; 018 forbids provider-side sessions; ephemeral planner prose
+> is deliberately non-quality-bearing per plan-as-contract +
+> product.md) — now enforced by a continuation context-parity test;
+> quality-bearing state found only in walk memory = stop-condition
+> finding.
 > rev 1: initial draft.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
@@ -161,7 +168,20 @@ seams; one schema generates both ends of the contract.** Seven strands:
    `interrupted`; **parked runs survive restarts by construction**.
    Continuation dispatch competes for worker capacity like any walk
    (answers are always accepted; execution may queue briefly at the
-   bound). **Runs never execute on the event
+   bound). **Context parity is a tested property, not an assumption**
+   (owner question, 2026-07-21): the orchestrator context (watch/
+   router) composed at any boundary of a continuation walk must be
+   identical to what the unbroken walk would have composed — possible
+   because orchestrator context is already composed from the durable
+   record per moment (018: provider-side conversation state forbidden;
+   024: steering state rebuilds from Postgres alone), never from live
+   process memory. A parity test asserts it (unbroken vs
+   parked-and-continued walk, identical composed context modulo
+   timestamps). Anything quality-bearing found living only in walk
+   memory during the build is a **stop-condition finding** (it would
+   violate plan-as-contract and "project memory is structured state,
+   not a transcript" — product.md), not something to quietly stuff
+   into the continuation. **Runs never execute on the event
    loop** (digest §1.2 — a blocking walk would starve SSE, health and
    every other project): the run executes in offloaded worker
    threads/executors; the plan pins the mechanism and a concurrent-run
@@ -278,7 +298,9 @@ PR landing:
 - `make verify` extended: frontend typecheck · lint · test · build +
   OpenAPI/client drift check; CI updated for the monorepo layout.
 - Tests: SSE replay idempotence (restart simulation), steering
-  check-in round-trip through the real seam, **resolved-pause replay
+  check-in round-trip through the real seam, **continuation context
+  parity (unbroken walk vs parked-and-continued walk compose identical
+  orchestrator context)**, **resolved-pause replay
   (a decided pause never re-presents as pending; pending endpoint
   returns exactly the current blocking pause or nothing)**, project
   lifecycle
