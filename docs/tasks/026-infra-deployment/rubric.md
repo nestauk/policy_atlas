@@ -20,8 +20,9 @@ The task is **done only if every box holds** — otherwise it is in progress, no
        **per-file port map** (v2 source → v3 path · verbatim / targeted-edit / deleted /
        new).
 7. [ ] Known gaps and deferred seams listed — the cross-instance steering/live-tail seam
-       stays open in [docs/deferred.md](../../deferred.md); the licensed-font-delivery and
-       deploy-invariant-enforcement items are closed there.
+       stays open in [docs/deferred.md](../../deferred.md); four items are closed there:
+       licensed font delivery · deploy-invariant enforcement · FE↔real-API smoke
+       (adv-M6) · `VITE_OIDC_AUTHORITY` production build guard.
 8. [ ] Required review stack ran for Tier 4 (contract verifier · code review ·
        security-auditor lane · codex adversarial · human deep review), or skipped with
        written justification — findings in [verification.md](verification.md).

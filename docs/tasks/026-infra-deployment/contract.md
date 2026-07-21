@@ -139,10 +139,17 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
    operational caveats of the one-instance posture: **deploys interrupt executing
    runs** (hard-kill → sweep marks them `interrupted` on next boot; deploy in quiet
    windows), and a crash means a brief outage until ECS restarts the task (the sweep
-   recovers state cleanly).
+   recovers state cleanly). Includes the **`VITE_OIDC_AUTHORITY` production build
+   guard** (deferred.md ← 025 security lane): the frontend deploy refuses to build/ship
+   a production bundle without the OIDC authority set (a silent dev-token-panel bundle
+   is a posture smell, not a bypass — the API still verifies RS256).
 8. **Verify wiring** — infra unit tests (v2 `tests/` pattern: synthesized-template
    assertions) runnable locally and in `make verify` (CI change — approval requested at
-   this gate as part of this contract).
+   this gate as part of this contract). Plus the **FE↔real-API smoke** (deferred.md ←
+   025 adv-M6, earmarked for this slice's CI work): a thin job driving the built
+   frontend over real HTTP with dev-issuer auth + SSE against stub backends — the
+   transport/auth/base-URL/error-mapping layer that mock mode makes invisible to the
+   Playwright journey (where all five 025 live-check integration bugs lived).
 9. Housekeeping carry from 025 close-out: `docs/agentic-ops/readiness.md` L24 updated to
    "001–025 merged" (done on this branch).
 
@@ -239,7 +246,8 @@ OpenAI route; unchanged.)
 - **Model only what behaves** — no speculative infra (no idle queues, no pre-built
   scale-out, no unused parameters "for later").
 - Leave deferred seams as seams in [docs/deferred.md](../../deferred.md) — this slice
-  closes "licensed font delivery" and the deploy-invariant enforcement line, and leaves
+  closes four items: "licensed font delivery", the deploy-invariant enforcement line,
+  the FE↔real-API smoke (adv-M6), and the `VITE_OIDC_AUTHORITY` build guard; it leaves
   the cross-instance seam explicitly open.
 
 ## Stop conditions
@@ -253,6 +261,8 @@ to need code changes for Cognito after all) · turn/token budget spent.
 
 - `make verify` green, including the new infra test target (synthesized-template
   assertions for all three stacks; no AWS credentials required to run them).
+- FE↔real-API smoke green (real HTTP + dev-issuer + SSE against stub backends), and the
+  production build guard demonstrably refuses a bundle without `VITE_OIDC_AUTHORITY`.
 - `cdk synth` clean for all three stacks against the dev env config.
 - **Live check (contract-time pin, scoped):** one real deploy to the approved dev/staging
   environment, then one cheap full-chain smoke through the deployed system — Cognito
