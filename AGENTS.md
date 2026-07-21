@@ -29,7 +29,9 @@ drafted, at its adversarial-review + owner gate). The slice ports v2's CDK infra
 app) into `infra/` with a **copy-first, targeted-edits** discipline:
 v2 files are copied and diffed, never rewritten. Deltas from v2:
 the Supabase self-host apparatus (Studio, postgres-meta,
-PostgREST+nginx, JWT/load-secret Lambdas) is deleted not ported;
+PostgREST+nginx, the JWT-generation Lambda) is deleted not ported
+(the `load_secret` DB-URL-composing Lambda is KEPT, targeted-edited
+— contract F3);
 auth infra is new (Cognito user pool feeding the API's OIDC/JWKS
 envs); the frontend is a static Vite SPA, not a Next.js service;
 migrations run via Alembic; the deploy encodes the
