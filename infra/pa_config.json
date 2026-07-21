@@ -1,0 +1,15 @@
+{
+    "staging": {
+        "aws_region": "eu-west-2",
+        "policy_atlas_config": {
+            "domain_name": "v3.policyatlas.uk",
+            "backend_subdomain": "api",
+            "backend": {
+                "cpu": 2048,
+                "memory_limit_mib": 8192,
+                "internal_port": 8000,
+                "secret_name": "policy_atlas_v3/app"
+            }
+        }
+    }
+}

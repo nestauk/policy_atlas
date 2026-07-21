@@ -34,3 +34,7 @@ scripts/recordings/
 node_modules/
 .vite/
 *.tsbuildinfo
+
+# Task 026: CDK context cache (account-scoped lookups) and synth output
+cdk.context.json
+infra/cdk.out/
