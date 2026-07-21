@@ -14,7 +14,12 @@
 > RE-APPROVED 2026-07-21 · owner** ("Happy to agree with those gates")
 > — capability_run status migration + openapi-fetch + frontend OIDC
 > adapter are in the approved scope. Contract FINAL for planning.
-> Plan approved (before implementation): _pending_.
+> Plan approved (before implementation): **2026-07-21 · owner** (rev 2
+> + owner amendments: recharts 3.x, lead-built frontend surfaces,
+> pnpm; incl. the G3/G4 runner-behaviour delta authorisation) ·
+> ADRs: **0024** (web-app architecture) + **0025** (parked pauses &
+> boundary continuation), Accepted 2026-07-21. **DESIGN PHASE
+> COMPLETE — build opens fresh with `task-cycle-build`.**
 > rev 2: `frontend/` (no dash — owner amendment superseding the
 > deferred.md `front-end/` spelling) + § API design pins added after an
 > `api-and-interface-design` pass (error envelope, pagination,

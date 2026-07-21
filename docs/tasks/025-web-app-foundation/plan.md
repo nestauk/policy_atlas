@@ -1,9 +1,14 @@
 # Implementation plan: 025-web-app-foundation
 
-> **Status:** rev 2, 2026-07-21 — plan-phase adversarial review DONE
-> (codex, job task-mrtylb43-q9xxdv; 13 MAJOR + 3 minor, **16/16
-> adjudicated in**, incl. three reducer-annex refutations — see annex
-> addendum). 🛑 awaiting owner approval (with ADRs 0024/0025).
+> **Status:** **APPROVED — 2026-07-21 · owner** ("Approved, close out
+> the design phase and hand off to the build"), as rev 2 + owner
+> amendments (recharts 3.x · frontend product surfaces → lead · pnpm).
+> Plan-phase adversarial review DONE (codex, job task-mrtylb43-q9xxdv;
+> 13 MAJOR + 3 minor, **16/16 adjudicated in**, incl. three
+> reducer-annex refutations — see annex addendum). ADRs 0024/0025
+> Accepted same date. **Build opens in a fresh conversation with
+> `task-cycle-build`** — re-ground from: contract.md · this plan · the
+> three annexes · the digest; run `make verify` first (Phase 0).
 > Contract: [contract.md](contract.md) (final). Annexes:
 > [continuation-state-reducer.md](continuation-state-reducer.md) (+ § Adversarial
 > addendum — G3/G4/G5), [retro-reconciliation.md](retro-reconciliation.md),

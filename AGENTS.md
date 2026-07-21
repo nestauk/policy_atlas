@@ -22,8 +22,14 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `025-web-app-foundation` (**design step 1 in
-progress, 2026-07-20**: contract drafted, awaiting owner approval).
+Implementation — task `025-web-app-foundation` (**design COMPLETE
+2026-07-21**: contract approved + adversarially adjudicated (codex,
+20/20), plan rev 2 approved with executor marks (frontend product
+surfaces lead-built, owner routing), ADRs 0024–0025 Accepted —
+**build opens in a fresh conversation with `task-cycle-build`**,
+phases 0–I per plan.md; approved schema gate = project lifecycle
+migration + capability_run status migration; one authorised
+runner-behaviour delta = G3/G4 mutation-semantics unification).
 **The web-app foundation slice — production API + frontend in one
 consolidated slice (owner direction, 2026-07-20), replacing the
 throwaway `demo-live-run` stack.** Strands: (1) monorepo hoist —

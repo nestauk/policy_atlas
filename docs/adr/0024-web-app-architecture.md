@@ -1,7 +1,6 @@
 # ADR 0024 — Web-app foundation: schema-first API, durable transport, Cognito-shaped auth, monorepo hoist
 
-**Status:** Proposed — accepted at the 025 plan gate (owner sign-off date
-recorded there). Contract: `docs/tasks/025-web-app-foundation/contract.md`
+**Status:** Accepted — 2026-07-21 (owner; 025 plan gate, "Approved, close out the design phase"). Contract: `docs/tasks/025-web-app-foundation/contract.md`
 (approved + adversarially adjudicated 2026-07-21).
 
 ## Context
@@ -57,10 +56,15 @@ Cognito for auth (owner, 2026-07-20), landing only when CDK `infra/` exists.
 7. **Serialization primitive:** per-project row lock (`SELECT … FOR UPDATE`)
    guards run dispatch (one active run per project), check-in answers
    (double-answer → one decision + one 409), and continuation claims.
-8. **Frontend stack:** React (19 + compiler pending the pinned compat spike,
-   else 18), Vite, TS strict, Tailwind themed from the Nesta brand tokens,
-   TanStack Query over the generated client + an event-sourced SSE reducer,
-   URL-addressable dossier/filters, npm. Component primitives: visual-identity
+8. **Frontend stack:** React 19 + compiler (decided at the plan gate),
+   Vite, TS strict, Tailwind themed from the Nesta brand tokens, recharts
+   3.x (demo's 2.15 deliberately not inherited), TanStack Query over the
+   generated client + an event-sourced SSE reducer, URL-addressable
+   dossier/filters. Package manager **pnpm 10+** (owner, 2026-07-21):
+   corepack-pinned; install scripts blocked by default with a reviewed
+   allowlist; `minimumReleaseAge` ≥ 24 h; `blockExoticSubdeps` — the
+   supply-chain posture is configuration, not hygiene. Frontend product
+   surfaces are lead-built (owner routing). Component primitives: visual-identity
    components hand-built; behaviour-bearing components shadcn-style copied-in
    over Radix. No component-library or design-system dependency (Astryx,
    MUI, Chakra, Mantine, daisyUI considered and rejected — contract rev

@@ -1,7 +1,6 @@
 # ADR 0025 — Parked pauses and boundary continuation
 
-**Status:** Proposed — accepted at the 025 plan gate (owner sign-off date
-recorded there). Contract: `docs/tasks/025-web-app-foundation/contract.md`.
+**Status:** Accepted — 2026-07-21 (owner; 025 plan gate, "Approved, close out the design phase"). Contract: `docs/tasks/025-web-app-foundation/contract.md`.
 Annex: `docs/tasks/025-web-app-foundation/continuation-state-reducer.md`.
 
 ## Context
