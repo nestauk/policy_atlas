@@ -247,3 +247,42 @@ assertions on the 16 fields catch drift before it reaches a surface. Any
 quality-bearing value that the reducer cannot source — surfacing as a parity
 diff that no JSONB addition closes — is the **stop-condition finding** the
 contract names. None found in this as-built pass.
+
+---
+
+## Adversarial addendum (2026-07-21, plan-stage codex review — adjudicated by the lead)
+
+The review **refuted the clean "16/16, no gap" verdict** on three fields;
+adjudications binding C.1/C.2:
+
+- **G3 — `attempted_runs` (finding 6):** replacement-rerun and segment
+  re-entry paths never update the map (`runner.py:2791` signature carries no
+  `attempted_runs`; `runner.py:3086` updates only its local id) while the
+  ordinary loop does (`runner.py:856`). A latest-durable-attempt reducer
+  would therefore *diverge from the as-built in-memory map* — and class-9
+  discretion reads it. Adjudication: **unify the runner's mutation semantics**
+  (rerun/segment paths update the map like the ordinary loop) — a named,
+  plan-gate-approved runner-behaviour delta with regression tests exercising
+  class-9 triggers after both paths.
+- **G4 — `successful_runs` / `blocked_discretionary` (finding 7):** the
+  annex's "latest succeeded run" rule retains an older success after a newer
+  failed rerun, contradicting the as-built pop (`runner.py:2877`); rerun
+  success does not clear an existing block (`runner.py:2867`). Adjudication:
+  reducer rule = **latest overall attempt, included iff that attempt
+  succeeded**; the stale-block semantics get a deliberate C.1 code-read
+  adjudication (clear-on-success unless intent shows otherwise), pinned and
+  named either way; parity cases: failed-then-successful rerun, segment
+  re-entry.
+- **G5 — overlay event shapes (finding 8):** confirmed free-text fan-out
+  stores deltas under `compiled[].delta` (`steering.py:1061`, overridden at
+  `runner.py:2154/2173`), not `interpreted_action.directive_deltas`. A
+  literal replay of the annex's rule silently loses confirmed free-text
+  overlays. Adjudication: the reducer folds **both** decision shapes,
+  restricted to `kind == plan_adjustment`; parity case: free-text
+  multi-fragment overlay.
+
+The review confirmed G1/G2 as genuine and the watch header/digest purity
+evidence as sound. Verdict after addendum: still **no stop-condition gap**
+(every field has a durable source), but exact parity requires the G3/G4
+semantic unifications above — reconstruction rules must mirror unified
+semantics, not naive latest-status reads.

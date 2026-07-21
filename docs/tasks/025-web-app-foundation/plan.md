@@ -1,243 +1,267 @@
 # Implementation plan: 025-web-app-foundation
 
-> **Status:** drafted 2026-07-21 — plan-phase adversarial review pending, then 🛑 owner.
-> Contract: [contract.md](contract.md) (approved + adversarially adjudicated, gates
-> re-approved 2026-07-21). Annexes: [continuation-state-reducer.md](continuation-state-reducer.md)
-> (walk-loop field → durable source mapping; **binds Phase C**),
-> [retro-reconciliation.md](retro-reconciliation.md) (RETRO §§2–5 classification),
-> [fastapi-guidelines-digest.md](fastapi-guidelines-digest.md) (§2 binds plan, §3 build).
-> Tier 4 → this plan requires owner approval; rollback plan in § Rollback.
+> **Status:** rev 2, 2026-07-21 — plan-phase adversarial review DONE
+> (codex, job task-mrtylb43-q9xxdv; 13 MAJOR + 3 minor, **16/16
+> adjudicated in**, incl. three reducer-annex refutations — see annex
+> addendum). 🛑 awaiting owner approval (with ADRs 0024/0025).
+> Contract: [contract.md](contract.md) (final). Annexes:
+> [continuation-state-reducer.md](continuation-state-reducer.md) (+ § Adversarial
+> addendum — G3/G4/G5), [retro-reconciliation.md](retro-reconciliation.md),
+> [fastapi-guidelines-digest.md](fastapi-guidelines-digest.md).
+> Tier 4 → owner-approved plan + ADR + rollback required.
 
 ## Implementation pins (lead-designed; briefs reference, don't re-derive)
 
 1. **Build order is substrate-out:** hoist → migrations → runner parking →
-   API → codegen → frontend. The frontend is never built against an unpinned
-   contract; the API is never built against an unparked runner.
-2. **The API package** is `policy_atlas/api/` (routers/, contract/ (Pydantic
-   models), auth.py, sse.py, readmodels/, lifecycle.py, continuation.py,
-   app.py). Routers stay thin; every handler is `async def`; runner work goes
-   through the offload executor (never the loop — digest §1.2/§2); DB access
-   uses short sync sessions via `run_in_executor` wrappers consistent with the
-   existing engine (no async-driver migration this slice — digest §2 "pick one
-   and be consistent").
-3. **The per-project serialization primitive** is `SELECT … FOR UPDATE` on the
-   `project` row, wrapped in one helper; run dispatch, check-in answers, and
-   continuation claims all take it. No other locking vocabulary.
-4. **Parking is a runner seam, not a rewrite:** `run_plan` gains a pause
-   disposition — `block` (CLI, unchanged behaviour) or `park` (API) — behind
-   the existing `OrchestratorIO` seam. Parking raises/returns a structured
-   `WalkParked` outcome carrying the boundary position; the continuation
-   entrypoint `continue_plan(project_id, capability_run_id, decision)`
-   rebuilds walk state via the **continuation reducer** (annex) and re-enters
-   the walk loop at the recorded boundary. CLI behaviour is byte-identical.
-5. **Continuation protocol:** answer + `continuation.requested` event in one
-   transaction (under the project lock) → executor task claims
-   (`continuation.claimed`) → executes → terminal event. Startup drainer:
-   scan for requested-without-claimed (or claimed-by-dead-boot-id), redispatch.
-   Orphan sweep (executing walks of a dead process → `interrupted`) runs in
-   the same startup hook, ordered: sweep first, then drain.
-6. **SSE:** one endpoint per project; fetch-stream client with bearer auth;
-   server reads backlog to a snapshotted max sequence and tails from
-   sequence+1 in the same consistent view; 15s heartbeat comments;
-   `try/finally` cleanup; `X-Accel-Buffering: no`. Ephemeral ticks ride the
-   same stream with `ephemeral: true` payloads, never persisted.
-7. **Contract source of truth:** Pydantic models in `api/contract/` →
-   `make openapi` exports the document → `npm run gen` produces types +
-   openapi-fetch client into `frontend/src/api/gen/` (committed) →
-   `make drift-check` regenerates and fails on diff. Discriminated unions:
-   SSE event + check-in models registered as named components (digest §3).
-8. **Frontend layout:** `frontend/src/` → `api/gen/` (generated, never edited),
-   `api/` (client wrapper + SSE stream), `store/` (TanStack Query setup + the
-   event-sourced run reducer), `auth/` (OIDC adapter + dev-issuer flow),
-   `ui/` (primitives: brand/ hand-built + radix/ copied-in), `views/`,
-   `routes.tsx` (URL-addressable dossier/filters). Mock mode implements the
-   generated client interface; fixture shapes generated from the same OpenAPI
-   examples where possible.
-9. **Design tokens:** `tailwind.config` theme from `nesta-brand-tokens.md` +
-   `hifi.css` custom properties; fonts via `@font-face` with `font-display:
-   swap` + fallback stack; CI font-binary guard in `make verify`.
-10. **No new prompt surfaces** — a content-hash pin test over the prompt
-    families guards it (rename-aware, rubric 15).
+   API → frontend scaffold → codegen → frontend foundation → views. The
+   frontend is never built against an unpinned contract; the API is never
+   built against an unparked runner.
+2. **API package** `policy_atlas/api/` (routers/, contract/, auth.py, sse.py,
+   readmodels/, lifecycle.py, continuation.py, app.py). Handlers `async def`;
+   runner work via the offload executor; DB via short sync sessions in
+   executor wrappers (no async-driver migration — digest §2).
+3. **Per-project serialization primitive:** `SELECT … FOR UPDATE` on the
+   `project` row in one helper; run dispatch, check-in answers, continuation
+   claims all take it.
+4. **Parking is a runner seam:** pause disposition `block` (CLI, byte-
+   identical, pin-tested) vs `park` (API) behind `OrchestratorIO`;
+   `WalkParked` outcome; `continue_plan(...)` re-enters via the continuation
+   reducer (`runtime/continuation_state.py`, read-only, event-sequence
+   ordered; `run_plan(resume_from=…)`).
+5. **Continuation protocol:** answer + `continuation.requested` in one
+   transaction → atomic claim → execute; startup order: orphan sweep, then
+   drainer. Crash tests both sides of claim.
+6. **SSE:** per-project; fetch-stream bearer auth; snapshotted-sequence
+   backlog + tail from sequence+1 (atomic cutoff); 15s heartbeats;
+   `try/finally`; `X-Accel-Buffering: no`; ephemeral ticks flagged, never
+   persisted; **credentials never in URLs**.
+7. **Contract source of truth:** Pydantic → `make openapi` → `npm run gen`
+   (openapi-typescript types + openapi-fetch client) → committed →
+   `make drift-check` in verify/CI. Discriminated unions as named components.
+8. **Frontend layout:** `frontend/src/` → api/gen (generated), api/, store/,
+   auth/, ui/{brand,radix}/, views/, routes.tsx (URL-addressable dossier/
+   filters). Mock implements the generated interface.
+9. **React 19 + compiler — DECIDED at this gate** (contract 🟡 discharged):
+   recharts 2.15.x marks React 19 compatible (demo already pinned ^2.15);
+   known `react-is` override documented (recharts #4558 / shadcn React-19
+   guide); react-router 6.28+, TanStack Query v5, Radix all compatible.
+   G-phase toolchain target is deterministic: React 19 + compiler enabled;
+   any incompatibility discovered is a stop-condition report, not a silent
+   fallback.
+10. **Design tokens:** Tailwind theme from `nesta-brand-tokens.md` +
+    `hifi.css`; `@font-face` + `font-display: swap` + fallback stack; CI
+    font-binary guard in `make verify`.
+11. **Security build items (not review topics):** CORS explicit origin list
+    (app origin only) with tests (D.2); centralized display-string scrub
+    utility + adversarial Unicode/control-char tests + an ESLint ban on
+    `dangerouslySetInnerHTML` (H.4); prompt-family content-hash guard script
+    wired into `make verify` (C.4).
+12. **No new prompt surfaces** — enforced by the hash guard (pin 11).
+
+## State/error surface matrix (contract-required plan artefact)
+
+Error classes, one coherent surface each: **401-expired** → OIDC re-auth
+redirect preserving route · **404/archived** → not-found view (owner-
+indistinguishable) · **409 run-active / 409 capacity / 409 turn-in-progress /
+409 answered** → inline notice on the triggering control, state refetched ·
+**422** → field-anchored errors from envelope `details` · **500** → toast +
+retry, never a white screen · **SSE disconnected** → "reconnecting" banner,
+cursor resume, stale badge after 30s · **interrupted run** → timeline
+terminal card + "start fresh run" CTA. Per-view states: every view ships
+loading (skeleton), empty (honest absence copy), and partial-data (render
+what read models return; hide, never fake). Rubric item 19 checks this table
+against the built app.
+
+## Contract-test matrix (every contract-named test → one task)
+
+| Contract-named test | Task |
+|---|---|
+| SSE replay idempotence (restart sim) | E.1 |
+| Backlog→tail race-injected + reconnect cursor | E.1 |
+| Resolved-pause replay (exact pending cardinality) | E.1 |
+| Steering round-trip through the real seam | C.3 |
+| Double-answer barrier (1 decision + 1×409) | C.3 |
+| Continuation crash tests (both claim sides) + drainer redispatch | C.3 |
+| Orphan-sweep double-boot idempotence | C.3 |
+| Continuation context parity (full pinned surface incl. failed-then-
+  successful rerun, segment re-entry, free-text multi-fragment) | C.2 |
+| CLI blocking-path byte-identical pins | C.4 |
+| Prompt-family hash guard | C.4 |
+| Thread-safety audit (two concurrent stub walks, **both complete**, SSE +
+  read-model isolation asserted) | C.4 |
+| Stub full-chain integrity (existing test stays green) | every full gate |
+| Migration up/down populated-DB + backfill + downgrade mappings | B.2 |
+| Lifecycle: rename persists · archive hides+retains+idempotent · 409
+  while running · audit events transactional | B.3/D.3 |
+| Authz matrix (401; cross-owner 404 indistinguishable) | D.2 |
+| Provider conformance (2 issuers, key rotation) | D.2 |
+| CORS origin-list tests | D.2 |
+| Planner: turn lock 409 · client-turn-id idempotence · bounded cache
+  eviction | D.3 |
+| Pagination cap + envelope conformance | D.4 |
+| Drift check (mutate model → gate fails) | F.1 |
+| Mid-run token expiry → refresh → reconnect, no loss | G.3 |
+| Store replay idempotence (unit) | G.3 |
+| Scrub adversarial Unicode/control chars | H.4 |
+| Playwright mock journey · clean-clone acceptance | I.1 |
 
 ## Tasks
 
-Executor legend: `lead` (justified), `codex` (judgment-bearing execution,
-machine-verifiable done), `fast-worker` (mechanical/spec transcription),
-`deep-reasoner` (analysis). Verify gates per § Gate consolidation.
-
 ### Phase 0 — baseline (½ day)
-- T0.1 `lead` (inline; one command): build-open `make verify` on the branch
-  base — never build on red. **[FULL VERIFY — mandatory class]**
+- T0.1 `lead` inline: `make verify` on branch base. **[FULL — mandatory]**
 
 ### Phase A — monorepo hoist (1 day)
-- T A.1 `lead`: layout + tooling map (what moves where; CI/Docker/Makefile/doc
-  path list). *Lead: seam design — the map is the brief for A.2.*
-- T A.2 `fast-worker`: execute the hoist per map (git mv python project →
-  `backend/`, scaffold `frontend/` placeholder + `infra/.gitkeep`, patch
-  Makefile/CI/Docker/docs paths, root-relative-path audit script).
-- T A.3 `fast-worker`: post-hoist sweep — allowlisted path audit green.
-  **[FULL VERIFY — mandatory: scaffold class]**
+- A.1 `lead`: layout + tooling map (the brief for A.2). *Seam design.*
+- A.2 `fast-worker`: execute per map; `frontend/` placeholder; path audit
+  script (root-relative, allowlisted).
+- A.3 `fast-worker`: audit green. **[FULL — scaffold]**
 
 ### Phase B — schema migrations (1 day)
-- T B.1 `lead`: both migrations designed (project columns + backfill SQL;
-  capability_run status constraint) — *lead: schema is a hard gate; design
-  only, transcription below.*
-- T B.2 `codex`: implement migrations + up/down tests incl. populated-DB
-  fixture (pre-025 rows, paused rows on downgrade) + backfill assertions.
-- T B.3 `fast-worker`: lifecycle audit events (`project.renamed`/`.archived`)
-  + transactional emission tests. **[FULL VERIFY — mandatory: schema class]**
+- B.1 `lead`: both migrations designed. **Downgrade mappings pinned here:**
+  `paused → aborted`, `interrupted → failed`, `ended_at` backfilled to the
+  downgrade timestamp where NULL; mappings asserted row-by-row in B.2's
+  tests; continuation/park events remain inert in event_log (harmless by
+  construction). *Schema is a hard gate.*
+- B.2 `codex`: implement + up/down tests (populated pre-025 fixture, paused
+  rows on downgrade, backfill assertions, exact downgrade transformations).
+- B.3 `codex`: transactional lifecycle audit events + tests (moved from
+  fast-worker — transaction semantics are judgment). **[FULL — schema]**
 
-### Phase C — runner: parking + continuation (3–4 days; the hard core)
-- T C.1 `lead`: continuation reducer seam design from the annex — **annex
-  verdict adjudicated: 16/16 fields reconstructable, NO stop-condition gap;
-  the watch header/digest are already composed from the durable record
-  as-built (direct parity evidence).** Design binds: reducer =
-  `runtime/continuation_state.py` (pure read-only peer of
-  `steering_history.py`, scoped by capability_run_id, ordered by
-  event_log.sequence); `run_plan` gains `resume_from`; gap G1 closed
-  (steering.pause payload gains `segment_reentry_allowed` +
-  `rerun_component`); gap G2 taken (a `run.parked` event snapshots
-  flagged_events + step_outcomes — read-back beats re-derivation for
-  collation parity). *Lead: seam design + annex adjudication is judgment.*
-- T C.2 `codex`: implement the reducer + `WalkParked` disposition + 
-  `continue_plan` re-entry against the parity harness. Done = parity test
-  green across the full pinned surface (header/digest/bundles/options/
-  router/references/overlays/collation).
-- T C.3 `codex`: continuation protocol (requested/claimed events, executor
-  dispatch, startup drainer + orphan sweep ordering) + crash tests both
-  sides of claim + double-answer barrier test.
-- T C.4 `fast-worker`: CLI blocking-path pin tests (byte-identical behaviour)
-  + thread-safety audit checklist execution per C.1's list (shared clients/
-  caches/tracing under two concurrent stub walks; module-global config scan).
-  **[FULL VERIFY — mandatory: runner core + event vocabulary]**
+### Phase C — runner: parking + continuation (4–5 days; the hard core)
+- C.1 `lead`: reducer seam design binding the annex **+ its adversarial
+  addendum**. Adjudications pinned: **G3** `attempted_runs` threading —
+  unify runner mutation semantics (rerun + segment paths update the map as
+  the ordinary loop does; **named runner-behaviour delta, approved at this
+  plan gate**); **G4** `successful_runs` = latest overall attempt iff
+  succeeded; stale-block-on-rerun-success adjudicated in C.1 from the code
+  (clear-on-success unless a read shows intent; either way pinned + named);
+  **G5** overlay reducer folds BOTH decision shapes (`interpreted_action.
+  directive_deltas` and fan-out `compiled[].delta`), `kind ==
+  plan_adjustment` only. G1 payload fields + G2 `run.parked` snapshot as
+  annexed. C.1 **emits the thread-safety audit checklist artefact**
+  (C.4's brief). *Seam design + semantic adjudication.*
+- C.2 `codex`: reducer + `WalkParked` + `continue_plan` vs the parity
+  harness (full surface; the three new parity cases from G3–G5).
+- C.3 `codex`: continuation protocol + crash/barrier/round-trip/orphan-
+  idempotence tests per matrix.
+- C.4 `fast-worker`: CLI pins · prompt-hash guard script into `make verify` ·
+  thread-safety audit per C.1's checklist (both-complete + isolation
+  assertions). **[FULL — runner core]**
 
 ### Phase D — API core (2–3 days)
-- T D.1 `lead`: contract models package skeleton + error envelope +
-  the API's public shapes (one pass, all routers' request/response models) —
-  *lead: the public interface is the slice's taste-bearing seam.*
-- T D.2 `codex`: auth — JWT verification dependency (iss/aud/exp/JWKS,
-  alg pinned), dev issuer, provider-conformance suite (two asymmetric
-  issuers + key rotation), authz matrix tests (401; cross-owner 404
-  indistinguishable-from-absent).
-- T D.3 `codex`: projects + runs + check-ins routers — lifecycle semantics,
-  run dispatch under the project lock (409 active / 409 capacity),
-  check-in response → continuation.requested, planning-turns router with
-  turn lock + process-local sessions + `409 planning_turn_in_progress`.
-- T D.4 `fast-worker`: pagination envelope + page_size cap + snake_case
-  conventions sweep + envelope conformance tests across all routers.
-  **[verify-fast]**
+- D.1 `lead`: contract models package + error envelope + all public shapes.
+  *Public interface = taste-bearing seam.*
+- D.2 `codex`: auth (JWT verify, dev issuer, conformance suite, authz
+  matrix) + **CORS explicit-origin config + tests**.
+- D.3 `codex`: projects/runs/check-ins/planning-turns routers — lifecycle,
+  lock-guarded dispatch, continuation.requested emission, turn lock +
+  **client-turn-id idempotence + bounded session cache with eviction
+  tests**.
+- D.4 `fast-worker`: pagination/envelope/naming conformance sweep + tests.
+  **[verify-fast — no schema/ingest contact]**
 
 ### Phase E — SSE + read models (2 days)
-- T E.1 `codex`: SSE endpoint per pin 6 + backlog→tail race-injected test +
-  reconnect-cursor test + pending-vs-history invariant tests. Includes the
-  search/fetch liveness signals for the ephemeral tick channel — the demo's
-  4 `search_live.py` log lines are confirmed NOT on dev (retro-reconciliation
-  annex): add them (or a designed equivalent) as the tick source.
-- T E.2 `fast-worker`: read models over the real schema (demo readmodels.py
-  as evidence): funnel, landscape, groups, evidence (+status ladder),
-  findings (+B2′ priority marks), sources dossier (+citation-context clamp),
-  decisions (steering_history-backed), coverage (composed sentence), plan,
-  artefact (+annotation spans). Each with a golden test against seeded rows.
-  **[verify-fast]**
+- E.1 `codex`: SSE per pin 6 + race/reconnect/pending-vs-history tests +
+  the liveness tick source (`search_live.py` signals or designed
+  equivalent — **ingest-adjacent**).
+- E.2 `codex` (moved from fast-worker — provenance honesty, citation clamp,
+  priority semantics, coverage composition are judgment): read models with
+  golden tests against seeded rows. **[FULL — ingest-adjacent (E.1)]**
 
-### Phase F — contract codegen (½ day)
-- T F.1 `codex`: OpenAPI export command, named-component registration for
-  discriminated unions, `npm run gen` (openapi-typescript + openapi-fetch),
-  drift check wired into `make verify` + CI. Done = mutating a Pydantic
-  model fails the gate. **[verify-fast]**
+### Phase F — frontend scaffold + codegen (1 day)
+- F.0 `fast-worker`: Vite + TS strict + Tailwind + npm scaffold; React 19 +
+  compiler per pin 9 (`react-is` override if npm requires).
+- F.1 `codex`: OpenAPI export + named-component unions + `npm run gen`
+  (types + openapi-fetch) + drift check into verify/CI. Done = model
+  mutation fails gate. **[verify-fast]**
 
 ### Phase G — frontend foundation (2 days)
-- T G.1 `fast-worker`: Vite + TS strict + Tailwind scaffold per pin 8/9;
-  React version decision executes here (**plan gate decision: React 19 +
-  compiler, recharts/router compat verified in a spike commit first;
-  fall back to 18 if the spike fails — record either way**).
-- T G.2 `lead`: Tailwind theme from brand tokens + the two visual-identity
-  primitives that define the language (cutout button, chip) — *lead:
-  taste-bearing brand surface.*
-- T G.3 `fast-worker`: remaining primitives (cards, nav, radix/ copy-ins:
-  sheet, tooltip, popover, tabs, toast) skinned to the theme.
-- T G.4 `codex`: OIDC adapter + dev-issuer login flow + token refresh +
-  fetch-stream SSE client with reconnect cursor + mid-run expiry test;
-  TanStack Query setup + the event-sourced run reducer (replay idempotence
-  unit tests). **[verify-fast]**
+- G.1 `lead`: Tailwind theme from brand tokens + cutout button + chip.
+  *Brand-defining surface.*
+- G.2 `fast-worker`: remaining primitives (cards, nav, radix copy-ins:
+  sheet/tooltip/popover/tabs/toast) — DoD: each with a component test
+  (render + keyboard interaction) and themed states.
+- G.3 `codex`: OIDC adapter + dev-issuer flow + refresh + fetch-stream SSE
+  client (cursor reconnect) + mid-run expiry test + TanStack Query setup +
+  event-sourced reducer with replay-idempotence unit tests.
+  **[verify-fast]**
 
 ### Phase H — views (3–4 days)
-- T H.1 `fast-worker`: landing, sources, decision log, charts (demo-validated
-  transcription against generated types + RETRO §2 holds per annex).
-  **Dossier: no FWCI field** — retro-reconciliation confirmed it has no
-  backing data (still a queued 018 seam); render only fields the read
-  models actually serve (data-driven surfaces: hide, never fake).
-- T H.2 `codex`: planning conversation (chips, plan disclosure), workspace
-  run timeline (stage cards, activity feed, ephemeral ticks), check-in card
-  incl. 024 confirm-gate delta render + parked/pending states.
-- T H.3 `lead`: artefact/evidence-base view — annotation layer in prose,
-  citation hover→click ladder, dossier slide-over content design — *lead:
-  the product's core reading surface; taste + provenance-honesty judgment.*
-- T H.4 `fast-worker`: state/error matrix implementation (per-view loading/
-  empty/partial + the seven error surfaces) + `prefers-reduced-motion` +
-  keyboard flows. **[FULL VERIFY]**
+- H.1 `fast-worker`: landing, sources, decision log, charts — brief carries
+  the **per-view RETRO §2 acceptance checklist** (lead-authored from the
+  annex: 35/65 shrink, sticky timeline, status-ladder dossier fields,
+  publication-country wording, labels-not-scores, hide-never-fake; **no
+  FWCI field** — no backing data).
+- H.2 `codex`: planning conversation (chips, plan disclosure, **draft-loss
+  /eviction state rendered honestly**), run timeline (stage cards, activity
+  feed, ephemeral ticks), check-in card (024 confirm-gate delta render,
+  parked/pending states).
+- H.3 `lead`: artefact/evidence-base view — annotation layer, citation
+  hover→click ladder, dossier content. *Core reading surface.*
+- H.4 `codex` (moved from fast-worker): state/error matrix implementation
+  per the plan table + centralized scrub + adversarial tests + ESLint
+  `dangerouslySetInnerHTML` ban + `prefers-reduced-motion` + keyboard
+  flows. **[FULL]**
 
 ### Phase I — acceptance (1–2 days)
-- T I.1 `fast-worker`: Playwright mock-mode journey; clean-clone acceptance
-  script (README-driven: setup → migrate → dev issuer → both dev servers →
-  mock mode).
-- T I.2 `lead`: the pinned live check (browser-driven, two users/projects,
-  park + restart + continuation + interrupt legs) — *lead: adjudicates live
-  evidence; contract-pinned parameters.*
-- T I.3 `lead`: verification.md complete; spec flow-back (`web-api.md` new
-  system spec); deferred.md entries (cross-instance seam, font delivery,
-  broker seam, non-goals); AGENTS.md phase note. **[FULL VERIFY — step-6
-  exit, mandatory]**
+- I.1 `fast-worker`: Playwright mock journey; clean-clone acceptance —
+  **pass = a fresh clone reaches (a) both dev servers up, (b) dev-issuer
+  login, (c) mock-mode journey green, following README only, ≤ 30 min,
+  documented commands exit 0**.
+- I.2 `lead`: the pinned live check (§ below). *Live evidence adjudication.*
+- I.3 `lead`: verification.md; `web-api.md` spec; deferred.md entries;
+  **ADRs 0024/0025 status→Accepted with owner sign-off date, included in
+  the PR**; AGENTS.md phase note. **[FULL — step-6 exit]**
 
-## Sizing
+## Sizing (corrected per adversarial finding 15)
 
-Comparable to 024 (± — the runner core C is smaller than 024's lattice, the
-frontend H is larger than anything prior). Estimate 14–18 build days across
-executors; review stack should budget to the large-slice reality flagged in
-the standing retro note (022/023/024 ran ~3× the routine pins) rather than
-pretend otherwise.
+Phase arithmetic: 0.5+1+1+4–5+2–3+2+1+2+3–4+1–2 = **18–22 executor-days**,
+plus integration/rework contingency (~20%) → plan for ~22–26. Review stack
+budgets to the large-slice reality (022/023/024 ran ~3× routine pins) — this
+is a 4–6× slice; say so at the review gate rather than discover it.
 
-## Live-check script (contract-pinned parameters)
+## Live-check script (contract-pinned + finding 16 parameters)
 
-Per contract § Acceptance: A = standard/Frequent, B = rapid/Unattended;
-responsiveness < 2 s during dual execution; restart while A parked ∧ B
-executing; A answered post-restart → continuation completes; B interrupted
-honestly; rename/archive; landing truth. Wall time recorded as observation.
+Fixture scale: project A = the pinned finance-ministries-class question at
+**standard effort / Frequent** (expected found corpus 50–150; parks at P2/P3);
+project B = a distinct pinned question, **rapid / Unattended**, launched when
+A's SSE shows `screen_abstract` executing. Probes during dual execution:
+`GET /healthz` + `GET /api/v1/projects/{A}/funnel`, each < 2 s. Cross-owner:
+user B `GET /api/v1/projects/{A}` → 404. Restart while A parked ∧ B
+executing. Post-restart: A's pending card renders; answer includes one
+free-text steer through the confirm-gate delta render; continuation
+completes; B interrupted honestly with fresh-run CTA. A's artefact renders
+annotation layer + dossier (citation click → context clamp visible). Rename →
+archive → landing truth. **Overall timeout 60 min** (abort + report as
+blocker beyond it); wall time recorded as observation.
 
 ## Gate consolidation summary
 
-Full `make verify`: T0.1 (baseline) · A.3 (scaffold) · B.3 (schema) · C.4
-(runner core) · H.4 (pre-acceptance) · I.3 (step-6 exit). All other phase
-exits gate on `make verify-fast` — D/E/F/G touch no schema and no existing
-runner behaviour (new files + API package), argued per failure-log 2026-07-08
-gate-consolidation rule.
+FULL `make verify`: T0.1 · A.3 (scaffold) · B.3 (schema) · C.4 (runner core)
+· E.2 exit (**E.1 is ingest-adjacent** — finding 11) · H.4 · I.3 (step-6
+exit). verify-fast: D.4, F.1, G.3 (no schema/ingest contact; new files +
+API package only).
 
-## De-scope levers (pre-authorised order, owner stop-conditions apply)
+## De-scope levers (pre-authorised order)
 
-1. Charts view (H.1 partial) — landing/evidence unaffected.
-2. Decision-log expandable detail rows — list view stays.
-3. Playwright journey depth (keep smoke, drop breadth).
-4. Dossier secondary panes (tags/citing-claims) — status ladder + abstract stay.
-Never de-scoped: parking/continuation correctness, auth, drift check,
-annotation layer, state/error matrix.
+1. Charts view · 2. Decision-log expandable detail · 3. Playwright breadth
+(keep smoke) · 4. Dossier secondary panes. **Never:** parking/continuation
+correctness, auth, drift check, annotation layer, state/error matrix.
 
-## Rollback (Tier 4 requirement)
+## Rollback (Tier 4)
 
-- The slice merges as one squash; revert restores the pre-hoist tree
-  (hoist is pure `git mv` + path edits — revert-clean).
-- Both migrations carry tested downgrades (incl. paused-rows disposition on
-  downgrade: continuation events remain inert in event_log, harmless).
-- The frontend + API are additive packages; no existing consumer changes
-  except the runner parking seam, which is disposition-gated (CLI `block`
-  path pin-tested byte-identical).
+One squash; revert restores pre-hoist tree (pure `git mv` + path edits).
+Migrations carry tested downgrades with pinned status mappings
+(paused→aborted, interrupted→failed; events inert). Frontend + API additive;
+the runner parking seam is disposition-gated with CLI pins; the G3/G4
+mutation-semantics unification is the one approved runner-behaviour delta —
+regression-tested, named in verification.md.
 
 ## Review-stack sizing (conversation C)
 
-Tier 4: contract-verifier · /code-review medium (scoped angles: runner
-parking/continuation, auth boundary, SSE race, migrations, API contract,
-frontend store, views a11y) · security-auditor lane (auth/JWT/CORS/SSE/
-scrubbing) · codex adversarial (family heterogeneity available again) ·
-live-trace content lane (024 precedent: confirm-gate fidelity in the real
-UI) · human deep review. Diff will be large (new frontend tree) — per-angle
-diff scoping per review-economy memory; exclude generated client +
-package-lock from review diffs.
+Tier 4: contract-verifier · /code-review medium (angles: runner parking/
+continuation + reducer, auth boundary, SSE race, migrations, API contract,
+frontend store, views a11y, scrub/security) · security-auditor lane ·
+codex adversarial · live-trace content lane (024 precedent) · human deep
+review. Exclude generated client + lockfiles from review diffs; per-angle
+diff scoping per review-economy pins.
