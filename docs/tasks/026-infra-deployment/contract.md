@@ -182,18 +182,25 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
    `staging.policyatlas.uk` is a config-only redeploy (cert + A records + frontend
    rebuild for the API URL) — deliberately not pre-built.
 3. **Cognito confirmed** as the IdP. No federation/SSO in scope.
-4. **Config JSONs committed, v2-style** (account IDs + domains are identifiers, not
-   credentials; secrets stay in Secrets Manager; matches v2 precedent and devops
-   practice). Recorded caveat: if the repo is ever open-sourced, the account ID is in
-   git history and needs a history rewrite, not just a deletion — revisit then.
+4. **Config JSONs gitignored; `*_config.example.json` templates committed** (owner
+   amendment, 2026-07-21: **the repo is already open source and stays so** — v2's
+   commit-the-config precedent came from a private repo and does not transfer). An
+   AWS account ID is an identifier, not a credential, but publishing it invites
+   targeted enumeration/phishing and can never be unpublished from git history.
+   Domains stay in the committed examples (public by nature via DNS); the account ID
+   (and any IP whitelists) live only in the gitignored real configs, which deploy
+   docs tell the operator to copy from the templates and fill.
 5. **Frontend hosting: nginx-on-Fargate** (scope item 4).
 
 ## Public / private boundary
 
-Committable: CDK code, config JSONs (resolved decision 4 — committed v2-style), deploy
-docs, synthesized-template tests. Private (never committed): AWS credentials, Secrets
-Manager values, font binaries. Deploy logs/screenshots in verification.md need no
-account-ID scrubbing (decision 4), but never show secret values or session tokens.
+**The repo is public (open source).** Committable: CDK code, `*_config.example.json`
+templates (domains OK; placeholder account IDs), deploy docs, synthesized-template
+tests. Private (never committed): the filled `*_config.json` files (gitignored — real
+account ID, any IP whitelists), AWS credentials, Secrets Manager values, font binaries,
+`cdk.context.json` if it embeds account specifics. Deploy logs/screenshots in
+verification.md are scrubbed of the account ID and never show secret values or
+session tokens.
 
 ## Model route
 
@@ -241,7 +248,8 @@ to need code changes for Cognito after all) · turn/token budget spent.
 
 In [verification.md](verification.md): per-file port map (v2 source → v3 path ·
 copied-verbatim / targeted-edit / deleted / new — the copy-first discipline made
-auditable), `make verify` + synth output, deploy transcript (no secret values), smoke
+auditable), `make verify` + synth output, deploy transcript (account ID scrubbed — the
+repo is public), smoke
 narrative with screenshots, deploy-invariant ECS event evidence, known gaps.
 
 ## Risk tier & review focus
