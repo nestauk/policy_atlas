@@ -15,6 +15,7 @@
 from aws_cdk import (
     Stack,
     Duration,
+    RemovalPolicy,
     aws_ec2 as ec2,
     aws_ecs as ecs,
     aws_ecr as ecr,
@@ -25,13 +26,19 @@ from aws_cdk import (
     aws_ssm as ssm,
     aws_route53 as r53,
     aws_route53_targets as r53_targets,
+    aws_s3 as s3,
+    aws_cloudfront as cloudfront,
+    aws_cloudfront_origins as cloudfront_origins,
+    aws_certificatemanager as acm,
     aws_cloudwatch as cloudwatch,
     aws_logs as logs,
 )
+from infra.cognito_auth import CognitoAuth
 
 
 class PolicyAtlasStack(Stack):
-    def __init__(self, scope: Stack, id: str, pa_config: dict, env_name: str, **kwargs) -> None:
+    def __init__(self, scope: Stack, id: str, pa_config: dict,
+                 certificate: acm.ICertificate, env_name: str, **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
 
         pa_app_config = pa_config["policy_atlas_config"]
@@ -96,6 +103,20 @@ class PolicyAtlasStack(Stack):
             allow_all_outbound=False
         )
 
+        migration_sg_id = ssm.StringParameter.value_for_string_parameter(self,
+            parameter_name="/policy_atlas_v3/deploy/migration_sg_id"
+        )
+        # Fargate task definitions do not carry security groups; deploy.sh uses
+        # this imported ID when it supplies awsvpcConfiguration to run-task.
+        ec2.SecurityGroup.from_security_group_id(
+            self, "MigrationTaskSG", security_group_id=migration_sg_id,
+            allow_all_outbound=False,
+        )
+
+        app_secret = secretsmanager.Secret.from_secret_name_v2(
+            self, "AppSecret", secret_name=be_config["secret_name"]
+        )
+
         shared_log_group = logs.LogGroup(self, "PolicyAtlasLogGroup",
             log_group_name="/policy_atlas_v3/application",
             retention=logs.RetentionDays.ONE_MONTH,
@@ -124,6 +145,11 @@ class PolicyAtlasStack(Stack):
 
         # --- Backend ---
 
+        auth = CognitoAuth(self, "CognitoAuth")
+        backend_image = ecs.ContainerImage.from_asset("../backend",
+            platform=ecr_assets.Platform.LINUX_AMD64,
+        )
+
         be_task_def = ecs.FargateTaskDefinition(self, "PolicyAtlasBackendTaskDef",
             cpu=be_config["cpu"],
             memory_limit_mib=be_config["memory_limit_mib"],
@@ -131,19 +157,31 @@ class PolicyAtlasStack(Stack):
         )
 
         be_task_def.add_container("policy-atlas-backend-container",
-            image=ecs.ContainerImage.from_asset("../backend",
-                platform=ecr_assets.Platform.LINUX_AMD64,
-            ),
+            image=backend_image,
             cpu=be_config["cpu"],
             memory_limit_mib=be_config["memory_limit_mib"],
             logging=ecs.LogDrivers.aws_logs(stream_prefix="PolicyAtlasBackend",
                                             log_group=shared_log_group),
             environment={
+                "OIDC_ISSUER": auth.issuer,
+                "OIDC_JWKS_URL": auth.jwks_url,
+                "OIDC_CLIENT_ID": auth.client_id_value,
+                "APP_ORIGIN": f"https://{domain_name}",
+                "PA_BACKEND_MODE": "live",
+                "RUN_EXECUTOR_MAX": str(be_config["run_executor_max"]),
+                "DB_POOL_SIZE": str(be_config["db_pool_size"]),
+                "DB_MAX_OVERFLOW": str(be_config["db_max_overflow"]),
                 "LOG_LEVEL": "INFO",
             },
             secrets={
-                # B.3 completes the full application env/secret map.
                 "DATABASE_URL": ecs.Secret.from_secrets_manager(db_secret, field="db_connection_string"),
+                "OPENAI_API_KEY": ecs.Secret.from_secrets_manager(app_secret, field="OPENAI_API_KEY"),
+                "OPENALEX_EMAIL": ecs.Secret.from_secrets_manager(app_secret, field="OPENALEX_EMAIL"),
+                "OPENALEX_API_KEY": ecs.Secret.from_secrets_manager(app_secret, field="OPENALEX_API_KEY"),
+                "OVERTON_API_KEY": ecs.Secret.from_secrets_manager(app_secret, field="OVERTON_API_KEY"),
+                "LANGFUSE_PUBLIC_KEY": ecs.Secret.from_secrets_manager(app_secret, field="LANGFUSE_PUBLIC_KEY"),
+                "LANGFUSE_SECRET_KEY": ecs.Secret.from_secrets_manager(app_secret, field="LANGFUSE_SECRET_KEY"),
+                "LANGFUSE_BASE_URL": ecs.Secret.from_secrets_manager(app_secret, field="LANGFUSE_BASE_URL"),
             },
             port_mappings=[ecs.PortMapping(
                 container_port=be_config["internal_port"],
@@ -153,6 +191,26 @@ class PolicyAtlasStack(Stack):
         )
 
         db_secret.grant_read(be_task_def.task_role)
+        app_secret.grant_read(be_task_def.task_role)
+
+        migration_task_def = ecs.FargateTaskDefinition(
+            self, "PolicyAtlasMigrationTaskDef",
+            cpu=512,
+            memory_limit_mib=1024,
+            family="policy-atlas-v3-migrate",
+        )
+        migration_task_def.add_container("policy-atlas-migration-container",
+            image=backend_image,
+            command=["alembic", "upgrade", "head"],
+            logging=ecs.LogDrivers.aws_logs(stream_prefix="Migrate",
+                                            log_group=shared_log_group),
+            secrets={
+                "DATABASE_URL": ecs.Secret.from_secrets_manager(
+                    db_secret, field="db_connection_string"
+                ),
+            },
+        )
+        db_secret.grant_read(migration_task_def.task_role)
 
         be_service = ecs.FargateService(self, "PolicyAtlasBackendService",
             cluster=cluster,
@@ -203,6 +261,61 @@ class PolicyAtlasStack(Stack):
         # Frontend DNS (apex A record) moves to CloudFront in Phase B — no
         # frontend ARecord here.
 
+        # --- Cognito auth and static SPA delivery ---
+
+        frontend_bucket = s3.Bucket(self, "FrontendBucket",
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+        )
+        fonts_bucket = s3.Bucket(self, "FontsBucket",
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            removal_policy=RemovalPolicy.DESTROY,
+        )
+
+        index_html_cache_policy = cloudfront.CachePolicy(self, "IndexHtmlCachePolicy",
+            default_ttl=Duration.seconds(60),
+            min_ttl=Duration.seconds(0),
+            max_ttl=Duration.seconds(60),
+        )
+        frontend_origin = cloudfront_origins.S3BucketOrigin.with_origin_access_control(
+            frontend_bucket,
+        )
+        distribution = cloudfront.Distribution(self, "FrontendDistribution",
+            default_behavior=cloudfront.BehaviorOptions(
+                origin=frontend_origin,
+                cache_policy=cloudfront.CachePolicy.CACHING_OPTIMIZED,
+            ),
+            additional_behaviors={
+                "/index.html": cloudfront.BehaviorOptions(
+                    origin=frontend_origin,
+                    cache_policy=index_html_cache_policy,
+                ),
+            },
+            certificate=certificate,
+            domain_names=[domain_name],
+            default_root_object="index.html",
+            error_responses=[
+                cloudfront.ErrorResponse(
+                    http_status=403,
+                    response_http_status=200,
+                    response_page_path="/index.html",
+                ),
+                cloudfront.ErrorResponse(
+                    http_status=404,
+                    response_http_status=200,
+                    response_page_path="/index.html",
+                ),
+            ],
+        )
+
+        r53.ARecord(self, "FrontendARecord",
+            zone=hosted_zone,
+            target=r53.RecordTarget.from_alias(r53_targets.CloudFrontTarget(distribution)),
+        )
+        r53.AaaaRecord(self, "FrontendAaaaRecord",
+            zone=hosted_zone,
+            target=r53.RecordTarget.from_alias(r53_targets.CloudFrontTarget(distribution)),
+        )
+
         # --- Deploy SSM exports (consumed by scripts/deploy.sh, D.1) ---
         ssm.StringParameter(self, "PrivateSubnetIdsParameter",
             parameter_name="/policy_atlas_v3/deploy/private_subnet_ids",
@@ -215,6 +328,22 @@ class PolicyAtlasStack(Stack):
             string_value=cluster.cluster_arn
         )
 
-        # Phase B (B.3): /policy_atlas_v3/deploy/migration_task_def_arn is
-        # exported here once the one-shot ECS Alembic migration task definition
-        # is added to this stack.
+        ssm.StringParameter(self, "MigrationTaskDefArnParameter",
+            parameter_name="/policy_atlas_v3/deploy/migration_task_def_arn",
+            string_value=migration_task_def.task_definition_arn,
+        )
+
+        ssm.StringParameter(self, "FrontendBucketNameParameter",
+            parameter_name="/policy_atlas_v3/deploy/frontend_bucket_name",
+            string_value=frontend_bucket.bucket_name,
+        )
+
+        ssm.StringParameter(self, "FontsBucketNameParameter",
+            parameter_name="/policy_atlas_v3/deploy/fonts_bucket_name",
+            string_value=fonts_bucket.bucket_name,
+        )
+
+        ssm.StringParameter(self, "DistributionIdParameter",
+            parameter_name="/policy_atlas_v3/deploy/distribution_id",
+            string_value=distribution.distribution_id,
+        )

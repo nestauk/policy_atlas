@@ -1,0 +1,97 @@
+"""Cognito resources for the Policy Atlas v3 single-page application."""
+
+from aws_cdk import Stack, RemovalPolicy, aws_cognito as cognito, aws_ssm as ssm
+from constructs import Construct
+
+
+class CognitoAuth(Construct):
+    """Create the operator-managed Cognito user pool and SPA client.
+
+    Args:
+        scope: Construct scope in which to define the authentication resources.
+        construct_id: Construct identifier.
+    """
+
+    def __init__(self, scope: Construct, construct_id: str) -> None:
+        super().__init__(scope, construct_id)
+
+        self.user_pool = cognito.UserPool(
+            self,
+            "UserPool",
+            self_sign_up_enabled=False,
+            sign_in_aliases=cognito.SignInAliases(email=True),
+            auto_verify=cognito.AutoVerifiedAttrs(email=True),
+            account_recovery=cognito.AccountRecovery.EMAIL_ONLY,
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+
+        self.client = cognito.UserPoolClient(
+            self,
+            "SpaClient",
+            user_pool=self.user_pool,
+            generate_secret=False,
+            o_auth=cognito.OAuthSettings(
+                flows=cognito.OAuthFlows(authorization_code_grant=True),
+                scopes=[
+                    cognito.OAuthScope.OPENID,
+                    cognito.OAuthScope.EMAIL,
+                    cognito.OAuthScope.PROFILE,
+                ],
+                callback_urls=[
+                    "https://v3.policyatlas.uk",
+                    "https://v3.policyatlas.uk/",
+                ],
+                logout_urls=[
+                    "https://v3.policyatlas.uk",
+                    "https://v3.policyatlas.uk/",
+                ],
+            ),
+        )
+
+        self.domain = cognito.UserPoolDomain(
+            self,
+            "HostedUiDomain",
+            user_pool=self.user_pool,
+            cognito_domain=cognito.CognitoDomainOptions(
+                domain_prefix="policy-atlas-v3",
+            ),
+        )
+
+        self.issuer = (
+            f"https://cognito-idp.{Stack.of(self).region}.amazonaws.com/"
+            f"{self.user_pool.user_pool_id}"
+        )
+        self.jwks_url = f"{self.issuer}/.well-known/jwks.json"
+        self.client_id_value = self.client.user_pool_client_id
+        self.hosted_domain = self.domain.base_url()
+
+        ssm.StringParameter(
+            self,
+            "UserPoolIdParameter",
+            parameter_name="/policy_atlas_v3/auth/user_pool_id",
+            string_value=self.user_pool.user_pool_id,
+        )
+        ssm.StringParameter(
+            self,
+            "IssuerParameter",
+            parameter_name="/policy_atlas_v3/auth/issuer",
+            string_value=self.issuer,
+        )
+        ssm.StringParameter(
+            self,
+            "JwksUrlParameter",
+            parameter_name="/policy_atlas_v3/auth/jwks_url",
+            string_value=self.jwks_url,
+        )
+        ssm.StringParameter(
+            self,
+            "ClientIdParameter",
+            parameter_name="/policy_atlas_v3/auth/client_id",
+            string_value=self.client_id_value,
+        )
+        ssm.StringParameter(
+            self,
+            "HostedDomainParameter",
+            parameter_name="/policy_atlas_v3/auth/hosted_domain",
+            string_value=self.hosted_domain,
+        )

@@ -5,6 +5,7 @@ import aws_cdk as cdk
 from aws_cdk import Environment
 
 from infra.database_stack import DatabaseStack
+from infra.cert_stack import PaV3CertStack
 from infra.policy_atlas_stack import PolicyAtlasStack
 from infra.network_stack import NetworkStack
 
@@ -63,6 +64,19 @@ NetworkStack(app, "PaV3NetworkStack", network_config=network_config, env=net_env
              aws_region=network_config['aws_region'], env_name=env_name)
 
 if stage == "all":
+    cert_env = Environment(
+        account=account,
+        region="us-east-1",
+    )
+
+    cert_stack = PaV3CertStack(
+        app,
+        "PaV3CertStack",
+        network_config=network_config,
+        env=cert_env,
+        cross_region_references=True,
+    )
+
     db_env = Environment(
         account=account,
         region=db_config['aws_region']
@@ -75,10 +89,14 @@ if stage == "all":
         region=pa_config['aws_region']
     )
 
-    PolicyAtlasStack(app, "PaV3AppStack", pa_config=pa_config, env=pa_env, env_name=env_name)
-
-    # Phase B (B.2): PaV3CertStack (us-east-1, cross_region_references=True) will be
-    # added here for the CloudFront cert. Not built in A.2 — network/database/app
-    # stacks only.
+    PolicyAtlasStack(
+        app,
+        "PaV3AppStack",
+        pa_config=pa_config,
+        certificate=cert_stack.certificate,
+        env=pa_env,
+        env_name=env_name,
+        cross_region_references=True,
+    )
 
 app.synth()

@@ -11,6 +11,7 @@
 # is the NAT Gateway. fck-nat is equally as effective, but significantly cheaper.
 from aws_cdk import (
     Stack,
+    Duration,
     aws_ec2 as ec2,
     aws_iam as iam,
     aws_ssm as ssm,
@@ -90,6 +91,8 @@ class NetworkStack(Stack):
             internet_facing=True,
             security_group=shared_alb_sg,
             load_balancer_name="pa-v3-alb",
+            # Keep connections alive for at least four SSE heartbeat intervals.
+            idle_timeout=Duration.seconds(120),
         )
 
         # Wildcard certificate covers *.{public_domain} + the apex.
