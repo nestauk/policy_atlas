@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in
 [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted. Contract approved (before planning): _pending_ ·
+> **Status:** approved. Contract approved (before planning): 2026-07-21 · owner ·
 > Plan approved (before implementation): _pending_ · ADR: expected (Tier 4 — deployment
 > architecture + rollback plan).
 
