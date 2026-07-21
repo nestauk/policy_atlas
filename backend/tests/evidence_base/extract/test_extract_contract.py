@@ -1171,17 +1171,20 @@ def test_parallel_vs_serial_same_write_order(
     assert summary_default["counts"] == summary_serial["counts"]
 
     def _ordered_pairs(project_id: uuid.UUID) -> list[tuple[str, str]]:
-        # Rows are inserted sequentially within one transaction with no
-        # concurrent writers, so physical (ctid) order reflects insertion
-        # order — the property under test (writes happen in selected-set
-        # order in the parent, regardless of fan-out completion order).
+        # Insertion order is the property under test (writes happen in
+        # selected-set order in the parent, regardless of fan-out completion
+        # order). Order by created_at first — plain ctid is physical order,
+        # which page reuse scrambles once the shared test DB has seen enough
+        # churn (task 025 surfaced this as a full-suite-only flake); ctid
+        # remains only as the within-timestamp tiebreak, where contiguous
+        # same-transaction inserts keep it faithful.
         rows = conn.execute(
             select(
                 intervention_outcome_finding.c.intervention,
                 intervention_outcome_finding.c.outcome,
             )
             .where(intervention_outcome_finding.c.project_id == project_id)
-            .order_by(literal_column("ctid"))
+            .order_by(intervention_outcome_finding.c.created_at, literal_column("ctid"))
         ).fetchall()
         return [(r.intervention, r.outcome) for r in rows]
 

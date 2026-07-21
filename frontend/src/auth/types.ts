@@ -34,6 +34,9 @@ export interface AuthApi {
   signIn(): void | Promise<void>;
   /** End the session and clear any locally held token. */
   signOut(): void | Promise<void>;
+  /** Start re-authentication after an expired session, retaining the current
+   * route when the identity provider redirects back to the application. */
+  onUnauthenticated(): void | Promise<void>;
   /** The signed-in subject, or `null` when signed out. */
   user: AuthUser | null;
   /** Current session status. */

@@ -26,9 +26,22 @@ export default tseslint.config(
       // own diagnostics, which is a different (complementary) check.
       ...reactHooks.configs["recommended-latest"].rules,
       ...reactCompiler.configs.recommended.rules,
-      // Extended later (task 025 build phase) with the project-wide
-      // no-restricted-syntax ban list — kept lean for the F.0 scaffold.
-      "no-restricted-syntax": "off",
+      // Model-authored and source-derived content is always rendered as text.
+      // There is no safe exception for raw HTML in application source.
+      "no-restricted-properties": [
+        "error",
+        {
+          property: "dangerouslySetInnerHTML",
+          message: "Raw HTML is forbidden in src; render text through scrub() instead.",
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']",
+          message: "Raw HTML is forbidden in src; render text through scrub() instead.",
+        },
+      ],
     },
   },
 );

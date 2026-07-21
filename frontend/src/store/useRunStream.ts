@@ -35,6 +35,16 @@ export function useRunStream(projectId: string): RunStreamState {
     const connection = connectEventStream({
       projectId,
       getAccessToken: (forceRefresh) => auth.getAccessToken(forceRefresh),
+      onUnauthenticated: () => auth.onUnauthenticated(),
+      onConnected: () => {
+        setState((previous) => ({ ...previous, connectionStatus: "connected" }));
+      },
+      onDisconnected: () => {
+        setState((previous) => ({ ...previous, connectionStatus: "reconnecting" }));
+      },
+      onError: () => {
+        setState((previous) => ({ ...previous, connectionStatus: "reconnecting" }));
+      },
       onFrame: (frame) => {
         setState((previous) => reduceRunStreamFrame(previous, frame));
         if (frame.type === "stage.completed" || frame.type === "run.status") {

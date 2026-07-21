@@ -36,7 +36,7 @@ interface PageQuery {
 }
 
 /** One authed `openapi-fetch` client per active `AuthApi` identity. */
-function useApiClient() {
+export function useApiClient() {
   const auth = useAuth();
   return useMemo(() => createAuthedApiClient(auth), [auth]);
 }
@@ -196,6 +196,39 @@ export function useArtefact(projectId: string) {
     queryKey: queryKeys.artefact(projectId),
     queryFn: async () => {
       const { data, error } = await client.GET("/api/v1/projects/{project_id}/artefact", {
+        params: { path: { project_id: projectId } },
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: Boolean(projectId),
+  });
+}
+
+/** `GET /api/v1/projects/{project_id}/coverage` — the composed one-line
+ *  coverage sentence (stop condition + adequacy), carrying its base. */
+export function useCoverage(projectId: string) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: [...queryKeys.projectRoot(projectId), "coverage"] as const,
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/projects/{project_id}/coverage", {
+        params: { path: { project_id: projectId } },
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: Boolean(projectId),
+  });
+}
+
+/** `GET /api/v1/projects/{project_id}/groups` — grouping facets. */
+export function useGroups(projectId: string) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: [...queryKeys.projectRoot(projectId), "groups"] as const,
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/projects/{project_id}/groups", {
         params: { path: { project_id: projectId } },
       });
       if (error) throw error;

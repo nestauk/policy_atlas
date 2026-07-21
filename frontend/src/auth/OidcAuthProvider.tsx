@@ -8,6 +8,8 @@ import {
 import { AuthContext } from "./AuthContext";
 import type { AuthApi, AuthStatus } from "./types";
 
+const AUTH_RETURN_TO_KEY = "policy-atlas.auth-return-to";
+
 /**
  * Active when `VITE_OIDC_AUTHORITY` is set. Wraps `react-oidc-context`
  * (authorization code flow + silent refresh) behind the same `AuthApi`
@@ -32,7 +34,9 @@ export function OidcAuthProvider({ children }: { children: ReactNode }) {
       redirect_uri={redirectUri}
       onSigninCallback={() => {
         // Strip the `code`/`state` query params the redirect leaves behind.
-        window.history.replaceState({}, document.title, window.location.pathname);
+        const returnTo = sessionStorage.getItem(AUTH_RETURN_TO_KEY);
+        sessionStorage.removeItem(AUTH_RETURN_TO_KEY);
+        window.history.replaceState({}, document.title, returnTo ?? window.location.pathname);
       }}
     >
       <OidcAuthAdapter>{children}</OidcAuthAdapter>
@@ -67,6 +71,12 @@ function OidcAuthAdapter({ children }: { children: ReactNode }) {
     void oidc.signoutRedirect();
   }, [oidc]);
 
+  const onUnauthenticated = useCallback(() => {
+    const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    sessionStorage.setItem(AUTH_RETURN_TO_KEY, returnTo);
+    void oidc.signinRedirect();
+  }, [oidc]);
+
   const status: AuthStatus = oidc.isLoading
     ? "loading"
     : oidc.isAuthenticated
@@ -78,10 +88,11 @@ function OidcAuthAdapter({ children }: { children: ReactNode }) {
       getAccessToken,
       signIn,
       signOut,
+      onUnauthenticated,
       user: oidc.user?.profile.sub ? { sub: oidc.user.profile.sub } : null,
       status,
     }),
-    [getAccessToken, signIn, signOut, oidc.user, status],
+    [getAccessToken, signIn, signOut, onUnauthenticated, oidc.user, status],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

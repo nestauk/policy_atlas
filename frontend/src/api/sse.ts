@@ -21,6 +21,10 @@ export interface ConnectEventStreamOptions {
   onFrame: (frame: SseFrame) => void;
   /** Called once if a 401 survives a forced-refresh retry — the stream stops. */
   onUnauthenticated?: () => void;
+  /** Called after the server accepts an SSE connection. */
+  onConnected?: () => void;
+  /** Called when an accepted stream ends and a reconnect is about to start. */
+  onDisconnected?: () => void;
   /** Called for connection/stream errors that trigger a backoff-and-retry. */
   onError?: (error: unknown) => void;
   /** External abort signal (in addition to the `close()` returned below). */
@@ -58,6 +62,8 @@ export function connectEventStream(options: ConnectEventStreamOptions): EventStr
     onFrame,
     onUnauthenticated,
     onError,
+    onConnected,
+    onDisconnected,
     fetchImpl = fetch,
     sleepImpl = defaultSleep,
     minBackoffMs = MIN_BACKOFF_MS,
@@ -99,6 +105,7 @@ export function connectEventStream(options: ConnectEventStreamOptions): EventStr
       throw new Error(`SSE connect failed with status ${response.status}`);
     }
 
+    onConnected?.();
     cursor = await consumeEventStream(response.body, cursor, onFrame, controller.signal);
     return "stream-ended";
   }
@@ -112,6 +119,7 @@ export function connectEventStream(options: ConnectEventStreamOptions): EventStr
           onUnauthenticated?.();
           return;
         }
+        onDisconnected?.();
         attempt = 0; // a full connect+stream cycle succeeded — reset backoff
       } catch (error) {
         if (controller.signal.aborted) return;

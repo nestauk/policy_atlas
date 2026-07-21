@@ -1,12 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import App from "./App";
 
 describe("App", () => {
-  it("renders the Policy Atlas landing heading", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("renders the project landing heading", () => {
+    vi.stubEnv("VITE_DEV_TOKEN", "test-token");
     render(<App />);
     expect(
-      screen.getByRole("heading", { name: "Policy Atlas" }),
+      screen.getByRole("heading", { name: "Your evidence projects" }),
     ).toBeInTheDocument();
   });
 });

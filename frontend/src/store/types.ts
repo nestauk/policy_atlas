@@ -59,6 +59,8 @@ export interface StageLiveness {
 export const GLOBAL_LIVENESS_KEY = "_global";
 
 export interface RunStreamState {
+  /** Current transport state for the SSE feedback surface. */
+  connectionStatus: "connected" | "reconnecting";
   /** Highest applied frame `sequence` — the replay-idempotence gate. */
   lastSequence: number;
   run: RunRef | null;
@@ -76,6 +78,7 @@ export interface RunStreamState {
 
 export function createInitialRunStreamState(): RunStreamState {
   return {
+    connectionStatus: "reconnecting",
     lastSequence: 0,
     run: null,
     runs: {},

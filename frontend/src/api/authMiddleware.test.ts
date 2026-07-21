@@ -11,6 +11,7 @@ function makeAuth(overrides: Partial<AuthApi> = {}): AuthApi {
     user: { sub: "user-1" },
     status: "authenticated",
     ...overrides,
+    onUnauthenticated: overrides.onUnauthenticated ?? vi.fn(),
   };
 }
 

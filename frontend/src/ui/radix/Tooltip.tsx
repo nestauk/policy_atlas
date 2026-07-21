@@ -15,7 +15,8 @@ export function Tooltip({
   children,
   className,
   ...props
-}: ComponentPropsWithoutRef<typeof TooltipPrimitive.Content> & {
+}: Omit<ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>, "content"> & {
+  // Omit the native HTML `content` string attribute — ours is a ReactNode.
   content: ReactNode;
   children: ReactNode;
 }) {

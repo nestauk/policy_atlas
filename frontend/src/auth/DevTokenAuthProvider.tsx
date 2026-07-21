@@ -35,6 +35,10 @@ export function DevTokenAuthProvider({ children }: { children: ReactNode }) {
     signOut();
   }, [signOut]);
 
+  // Dev auth does not redirect away from the SPA, so clearing the token keeps
+  // the current route while returning the user to the visible token panel.
+  const onUnauthenticated = signIn;
+
   // `AuthApi.getAccessToken` accepts a `forceRefresh` flag for shape parity
   // with the OIDC provider, but the dev issuer has no live refresh endpoint
   // to call — a human re-minting and re-pasting a token is the only
@@ -50,8 +54,8 @@ export function DevTokenAuthProvider({ children }: { children: ReactNode }) {
   const status: AuthStatus = token ? "authenticated" : "unauthenticated";
 
   const value: AuthApi = useMemo(
-    () => ({ getAccessToken, signIn, signOut, user, status }),
-    [getAccessToken, signIn, signOut, user, status],
+    () => ({ getAccessToken, signIn, signOut, onUnauthenticated, user, status }),
+    [getAccessToken, signIn, signOut, onUnauthenticated, user, status],
   );
 
   return (

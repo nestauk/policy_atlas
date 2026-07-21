@@ -1,4 +1,4 @@
-.PHONY: setup test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard frontend-install openapi-sync drift-check
+.PHONY: setup test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard frontend-install openapi-sync drift-check font-guard frontend-verify
 
 # Root orchestrator (025 A.2 monorepo hoist): the Python project lives in
 # backend/; this Makefile owns the shared db service + the root-level gates
@@ -88,6 +88,22 @@ drift-check:
 	rm -f "$$tmp_types"
 	@echo "drift-check: OK"
 
+# Font-binary guard (task 025, contract strand 7): Averta/Zosia are licensed
+# for the web app but their binaries must NEVER be committed to this
+# open-source repo — locally they live untracked and load via @font-face;
+# everything must render on the fallback stack without them. Catches an
+# accidental `git add -f`.
+font-guard:
+	@if git ls-files | grep -E '\.(woff2?|otf|ttf|eot)$$'; then \
+		echo "ERROR: font binaries must never be committed (licensed assets)." >&2; exit 1; \
+	fi
+	@echo "font-guard: no font binaries tracked"
+
+# The frontend gate lane (task 025 H): typecheck · lint · vitest · build.
+# Requires frontend/node_modules (make frontend-install).
+frontend-verify:
+	cd frontend && pnpm typecheck && pnpm lint && pnpm test && pnpm build
+
 verify:
 	@if ! docker compose exec db pg_isready -U policy_atlas -q 2>/dev/null; then \
 		echo "ERROR: Postgres is not running. Run 'make setup' first." >&2; exit 1; \
@@ -96,7 +112,9 @@ verify:
 	$(MAKE) -C backend verify
 	$(MAKE) audit-paths
 	$(MAKE) prompt-guard
+	$(MAKE) font-guard
 	$(MAKE) drift-check
+	$(MAKE) frontend-verify
 
 # Intermediate phase-commit gate (011 retro): test-fast + typecheck + lint.
 # Full `make verify` remains mandatory at the build-open baseline, any phase
