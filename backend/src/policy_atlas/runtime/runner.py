@@ -50,6 +50,7 @@ from policy_atlas.evidence_base.synthesis.synthesis_backend import (
 )
 from policy_atlas.evidence_base.synthesis.synthesise import SynthesiseContext
 from policy_atlas.runtime import steering_events
+from policy_atlas.runtime.continuation_state import ContinuationState, ResumeDecision
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.orchestration_plan import (
     SPINE,
@@ -190,8 +191,16 @@ REPLACEMENT_RERUNS: dict[str, _ReplacementRerun] = {
 # the assess segment has run; P4 does not — select/extract/group all ran).
 _REPLACEMENT_SCOPED = frozenset({"select", "extract", "group"})
 
-RunPlanStatus = Literal["succeeded", "degraded", "failed", "aborted"]
+RunPlanStatus = Literal["succeeded", "degraded", "failed", "aborted", "paused"]
 StepStatus = Literal["succeeded", "failed", "skipped"]
+
+
+class WalkParked(Exception):
+    """Raised by a park-disposition IO at an attended pause.
+
+    The walk thread ends; the durable pause record carries the boundary and an
+    answer dispatches a boundary continuation walk.
+    """
 
 
 @dataclass
@@ -552,7 +561,7 @@ def _extend_overlays(
     return overlays
 
 
-def run_plan(
+def _run_plan_impl(
     engine: Engine,
     *,
     project_id: uuid.UUID,
@@ -566,6 +575,9 @@ def run_plan(
     session_id: uuid.UUID | None = None,
     discretion_hook: DiscretionHook | None = None,
     orchestrator: OrchestratorBackend | None = None,
+    resume_from: ContinuationState | None = None,
+    resume_decision: ResumeDecision | None = None,
+    park_context: dict[str, Any] | None = None,
 ) -> RunPlanOutcome:
     """Execute an approved orchestration plan with per-component commits.
 
@@ -609,29 +621,60 @@ def run_plan(
         discretion = build_watch_discretion_hook(orchestrator, session_id=session_id)
     else:
         discretion = _deterministic_discretion_floor
-    capability_run_id = uuid.uuid4()
-    _open_capability_run(
-        engine,
-        capability_run_id=capability_run_id,
-        project_id=project_id,
-        evidence_scope_id=evidence_scope_id,
-        plan_id=plan_id,
-        plan_version=plan_version,
-        session_id=session_id,
-    )
-    initial_chain = compose(plan)
-    steering_state = _SteeringState(
-        plan=plan,
-        plan_id=plan_id,
-        plan_version=plan_version,
-        plan_row_id=plan_row_id,
-        chain=initial_chain,
-        pause_points=pause_points(plan.steering_mode, initial_chain),
-    )
-    remaining_steps = list(initial_chain.steps)
-    step_outcomes: list[RunStepOutcome] = []
-    flagged_events: list[dict[str, Any]] = []
-    successful_runs: dict[str, uuid.UUID] = {}
+    if resume_from is None:
+        capability_run_id = uuid.uuid4()
+        _open_capability_run(
+            engine,
+            capability_run_id=capability_run_id,
+            project_id=project_id,
+            evidence_scope_id=evidence_scope_id,
+            plan_id=plan_id,
+            plan_version=plan_version,
+            session_id=session_id,
+        )
+        initial_chain = compose(plan)
+        steering_state = _SteeringState(
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=plan_version,
+            plan_row_id=plan_row_id,
+            chain=initial_chain,
+            pause_points=pause_points(plan.steering_mode, initial_chain),
+        )
+        remaining_steps = list(initial_chain.steps)
+        step_outcomes: list[RunStepOutcome] = []
+        flagged_events: list[dict[str, Any]] = []
+        successful_runs: dict[str, uuid.UUID] = {}
+        attempted_runs: dict[str, uuid.UUID] = {}
+        blocked_discretionary: dict[str, str] = {}
+        completed_components: set[str] = set()
+        last_check_in_payload: dict[str, Any] | None = None
+        most_recent_attempted_run_id: uuid.UUID | None = None
+    else:
+        capability_run_id = resume_from.capability_run_id
+        session_id = resume_from.session_id
+        steering_state = _SteeringState(
+            plan=resume_from.plan,
+            plan_id=resume_from.plan_id,
+            plan_version=resume_from.plan_version,
+            plan_row_id=resume_from.plan_row_id,
+            chain=resume_from.chain,
+            pause_points=resume_from.pause_points,
+            pending_overlays=resume_from.pending_overlays,
+        )
+        step_outcomes = list(resume_from.step_outcomes)
+        flagged_events = list(resume_from.flagged_events)
+        successful_runs = dict(resume_from.successful_runs)
+        attempted_runs = dict(resume_from.attempted_runs)
+        blocked_discretionary = dict(resume_from.blocked_discretionary)
+        completed_components = set(resume_from.completed_components)
+        last_check_in_payload = resume_from.last_check_in_payload
+        most_recent_attempted_run_id = resume_from.most_recent_attempted_run_id
+        remaining_steps = _remaining_steps(
+            steering_state.chain, completed_components=completed_components
+        )
+        if resume_decision is None:
+            raise ValueError("resume_decision is required with resume_from")
     # The most-recent ATTEMPTED run id per registry component, INCLUDING failed
     # attempts (FIX 1): un-blinds class 9 (downstream_capability_reduced), which
     # scans the walk's attempted run ids for component.failed/skipped events — a
@@ -639,11 +682,72 @@ def run_plan(
     # floor would otherwise never see it. Keyed by registry component so the floor
     # readers' ``run_ids["screen"]`` etc. resolve (screen_abstract/screen_full both
     # register as ``"screen"``).
-    attempted_runs: dict[str, uuid.UUID] = {}
-    blocked_discretionary: dict[str, str] = {}
-    completed_components: set[str] = set()
-    last_check_in_payload: dict[str, Any] | None = None
-    most_recent_attempted_run_id: uuid.UUID | None = None
+    if park_context is not None:
+        park_context.update(
+            capability_run_id=capability_run_id,
+            project_id=project_id,
+            step_outcomes=step_outcomes,
+            flagged_events=flagged_events,
+        )
+
+    if resume_from is not None and resume_decision is not None:
+        if resume_decision.response == "rerun":
+            if resume_decision.component is None or resume_decision.directive_delta is None:
+                raise ValueError("rerun continuation requires component and directive_delta")
+            last_check_in_payload, most_recent_attempted_run_id = _run_component_rerun(
+                engine, io_sink, project_id=project_id, evidence_scope_id=evidence_scope_id,
+                state=steering_state, component=resume_decision.component,
+                directive_delta=resume_decision.directive_delta, backends=backend_bundle,
+                session_id=session_id, successful_runs=successful_runs,
+                attempted_runs=attempted_runs, blocked_discretionary=blocked_discretionary,
+                step_outcomes=step_outcomes, flagged_events=flagged_events,
+                capability_run_id=capability_run_id,
+            )
+        elif resume_decision.response == "segment_reentry":
+            if (
+                resume_decision.component is None
+                or resume_decision.segment_start is None
+                or resume_decision.directive_deltas is None
+                or resume_decision.boundary is None
+            ):
+                raise ValueError("segment continuation requires its complete boundary payload")
+            boundary_step = next(
+                step for step in steering_state.chain.steps
+                if step.component == resume_decision.component
+            )
+            segment_reentry = {
+                "segment_start": resume_decision.segment_start,
+                "boundary_component": resume_decision.component,
+                "directive_deltas": resume_decision.directive_deltas,
+            }
+            if resume_decision.boundary == "after_component":
+                segment_result = _run_plan_segment_reentry(
+                    engine, io_sink, project_id=project_id, evidence_scope_id=evidence_scope_id,
+                    boundary_step=boundary_step, segment_reentry=segment_reentry,
+                    state=steering_state, backends=backend_bundle, session_id=session_id,
+                    successful_runs=successful_runs, attempted_runs=attempted_runs,
+                    blocked_discretionary=blocked_discretionary,
+                    completed_components=completed_components, step_outcomes=step_outcomes,
+                    flagged_events=flagged_events, capability_run_id=capability_run_id,
+                )
+            else:
+                segment_result = _run_plan_before_segment_reentry(
+                    engine, io_sink, project_id=project_id, evidence_scope_id=evidence_scope_id,
+                    boundary_step=boundary_step, segment_reentry=segment_reentry,
+                    state=steering_state, backends=backend_bundle, session_id=session_id,
+                    successful_runs=successful_runs, attempted_runs=attempted_runs,
+                    blocked_discretionary=blocked_discretionary,
+                    completed_components=completed_components, step_outcomes=step_outcomes,
+                    flagged_events=flagged_events, capability_run_id=capability_run_id,
+                    orchestrator=orchestrator, discretion_hook=discretion,
+                )
+            steering_state = segment_result.state
+            last_check_in_payload = segment_result.last_check_in_payload
+            most_recent_attempted_run_id = segment_result.most_recent_attempted_run_id
+            if segment_result.run_status is not None:
+                return _finish_run(engine, step_outcomes, flagged_events,
+                    status=segment_result.run_status, capability_run_id=capability_run_id,
+                    project_id=project_id)
 
     while remaining_steps:
         step = remaining_steps.pop(0)
@@ -696,6 +800,7 @@ def run_plan(
                     backends=backend_bundle,
                     session_id=session_id,
                     successful_runs=successful_runs,
+                    attempted_runs=attempted_runs,
                     blocked_discretionary=blocked_discretionary,
                     step_outcomes=step_outcomes,
                     flagged_events=flagged_events,
@@ -713,6 +818,7 @@ def run_plan(
                     backends=backend_bundle,
                     session_id=session_id,
                     successful_runs=successful_runs,
+                    attempted_runs=attempted_runs,
                     blocked_discretionary=blocked_discretionary,
                     completed_components=completed_components,
                     step_outcomes=step_outcomes,
@@ -930,6 +1036,7 @@ def run_plan(
                     backends=backend_bundle,
                     session_id=session_id,
                     successful_runs=successful_runs,
+                    attempted_runs=attempted_runs,
                     blocked_discretionary=blocked_discretionary,
                     step_outcomes=step_outcomes,
                     flagged_events=flagged_events,
@@ -947,6 +1054,7 @@ def run_plan(
                     backends=backend_bundle,
                     session_id=session_id,
                     successful_runs=successful_runs,
+                    attempted_runs=attempted_runs,
                     blocked_discretionary=blocked_discretionary,
                     completed_components=completed_components,
                     step_outcomes=step_outcomes,
@@ -1061,6 +1169,150 @@ def run_plan(
         capability_run_id=capability_run_id,
         project_id=project_id,
     )
+
+
+def run_plan(
+    engine: Engine,
+    *,
+    project_id: uuid.UUID,
+    evidence_scope_id: uuid.UUID,
+    plan: OrchestrationPlan,
+    plan_id: uuid.UUID,
+    plan_version: int,
+    plan_row_id: uuid.UUID | None = None,
+    backends: RunnerBackends | None = None,
+    io: CheckInIO | None = None,
+    session_id: uuid.UUID | None = None,
+    discretion_hook: DiscretionHook | None = None,
+    orchestrator: OrchestratorBackend | None = None,
+    resume_from: ContinuationState | None = None,
+    resume_decision: ResumeDecision | None = None,
+) -> RunPlanOutcome:
+    """Execute or resume an approved orchestration-plan walk.
+
+    A park-disposition IO raises :class:`WalkParked`. This single boundary
+    converts that control flow into the durable paused state and snapshot; the
+    normal blocking CLI path never raises and is otherwise unchanged.
+
+    Args:
+        engine: SQLAlchemy engine used by the walk.
+        project_id: Owning project.
+        evidence_scope_id: Evidence scope executed by components.
+        plan: Approved plan for a new walk (ignored for durable resume state).
+        plan_id: Current plan id for a new walk.
+        plan_version: Current plan version for a new walk.
+        plan_row_id: Current plan row for amendment persistence.
+        backends: Optional component backend seams.
+        io: Optional check-in and pause IO seam.
+        session_id: Optional tracing session id.
+        discretion_hook: Optional unattended discretion seam.
+        orchestrator: Optional watch backend.
+        resume_from: Durable state of a previously parked capability run.
+        resume_decision: Persisted answer to apply before resuming.
+
+    Returns:
+        The completed, aborted, or parked plan outcome.
+    """
+    park_context: dict[str, Any] = {}
+    try:
+        return _run_plan_impl(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=evidence_scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=plan_version,
+            plan_row_id=plan_row_id,
+            backends=backends,
+            io=io,
+            session_id=session_id,
+            discretion_hook=discretion_hook,
+            orchestrator=orchestrator,
+            resume_from=resume_from,
+            resume_decision=resume_decision,
+            park_context=park_context,
+        )
+    except WalkParked:
+        capability_run_id = park_context["capability_run_id"]
+        step_outcomes = park_context["step_outcomes"]
+        flagged_events = park_context["flagged_events"]
+        attachment_run_id = _park_capability_run(
+            engine,
+            project_id=project_id,
+            capability_run_id=capability_run_id,
+            step_outcomes=step_outcomes,
+            flagged_events=flagged_events,
+        )
+        del attachment_run_id
+        return RunPlanOutcome(
+            status="paused",
+            steps=step_outcomes,
+            flagged_events=flagged_events,
+            capability_run_id=capability_run_id,
+        )
+
+
+def _park_capability_run(
+    engine: Engine,
+    *,
+    project_id: uuid.UUID,
+    capability_run_id: uuid.UUID,
+    step_outcomes: list[RunStepOutcome],
+    flagged_events: list[dict[str, Any]],
+) -> uuid.UUID:
+    """Atomically mark a parked walk and snapshot parity-sensitive state."""
+    with engine.begin() as conn:
+        pause_rows = conn.execute(
+            select(event_log)
+            .where(event_log.c.project_id == project_id)
+            .where(event_log.c.event_type == steering_events.STEERING_PAUSE)
+            .order_by(event_log.c.sequence.desc())
+        )
+        attachment_run_id = next(
+            (
+                row.run_id
+                for row in pause_rows
+                if isinstance(row.payload, dict)
+                and row.payload.get("capability_run_id") == str(capability_run_id)
+            ),
+            None,
+        )
+        if attachment_run_id is None:
+            raise AssertionError("parked walk has no attached steering.pause event")
+        conn.execute(
+            capability_run.update()
+            .where(capability_run.c.capability_run_id == capability_run_id)
+            .where(capability_run.c.project_id == project_id)
+            .values(status="paused")
+        )
+        events.append(
+            conn,
+            project_id=project_id,
+            run_id=attachment_run_id,
+            event_type="run.parked",
+            payload={
+                "capability_run_id": str(capability_run_id),
+                "flagged_events": flagged_events,
+                "step_outcomes": [_serialise_step_outcome(outcome) for outcome in step_outcomes],
+            },
+        )
+    if not isinstance(attachment_run_id, uuid.UUID):
+        raise AssertionError("parked pause attachment must be a UUID")
+    return attachment_run_id
+
+
+def _serialise_step_outcome(outcome: RunStepOutcome) -> dict[str, Any]:
+    """Return the JSONB representation of a step outcome snapshot."""
+    return {
+        "component": outcome.component,
+        "run_id": str(outcome.run_id) if outcome.run_id is not None else None,
+        "status": outcome.status,
+        "wall_clock_s": outcome.wall_clock_s,
+        "retried": outcome.retried,
+        "skipped": outcome.skipped,
+        "reason": outcome.reason,
+        "attempt_run_ids": [str(run_id) for run_id in outcome.attempt_run_ids],
+    }
 
 
 def _handle_after_component_boundary(
@@ -1715,6 +1967,8 @@ def _handle_pause(
         options=options,
         bundle=bundle,
         triggers=triggers,
+        rerun_component=rerun_component,
+        segment_reentry_allowed=segment_reentry_allowed,
         authored_options=authored_options,
     )
     base = steering_events.base_payload(
@@ -2413,6 +2667,8 @@ def _pause_payload(
     options: list[dict[str, Any]] | None = None,
     bundle: dict[str, Any] | None = None,
     triggers: list[dict[str, Any]] | None = None,
+    rerun_component: str | None = None,
+    segment_reentry_allowed: bool = False,
     authored_options: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Assemble the pause payload for a lattice or generic-floor boundary.
@@ -2429,6 +2685,8 @@ def _pause_payload(
         "kind": "check_in",
         "boundary": point.boundary,
         "component": point.component,
+        "rerun_component": rerun_component,
+        "segment_reentry_allowed": segment_reentry_allowed,
     }
     if steer_point_name is not None:
         payload["kind"] = "steer_point"
@@ -2804,6 +3062,7 @@ def _run_component_rerun(
     step_outcomes: list[RunStepOutcome],
     flagged_events: list[dict[str, Any]],
     capability_run_id: uuid.UUID,
+    attempted_runs: dict[str, uuid.UUID] | None = None,
 ) -> tuple[dict[str, Any], uuid.UUID]:
     """Re-run a component after a replacement-rerun steer with a new directive.
 
@@ -2862,10 +3121,13 @@ def _run_component_rerun(
             )
 
     final_attempt = attempts[-1]
+    if attempted_runs is not None:
+        attempted_runs[registry_component_for(component)] = final_attempt.run_id
     retried = len(attempts) > 1
     attempt_run_ids = [attempt.run_id for attempt in attempts]
     if final_attempt.status == "succeeded":
         successful_runs[component] = final_attempt.run_id
+        blocked_discretionary.pop(component, None)
         outcome = RunStepOutcome(
             component=component,
             run_id=final_attempt.run_id,
@@ -3044,6 +3306,7 @@ def _run_segment_reentry(
     step_outcomes: list[RunStepOutcome],
     flagged_events: list[dict[str, Any]],
     capability_run_id: uuid.UUID,
+    attempted_runs: dict[str, uuid.UUID] | None = None,
 ) -> _SegmentReentryResult:
     """Re-walk a bounded additive segment, then signal whether to re-enter the boundary.
 
@@ -3127,10 +3390,13 @@ def _run_segment_reentry(
                 )
 
         final_attempt = attempts[-1]
+        if attempted_runs is not None:
+            attempted_runs[registry_component_for(component)] = final_attempt.run_id
         retried = len(attempts) > 1
         attempt_run_ids = [attempt.run_id for attempt in attempts]
         if final_attempt.status == "succeeded":
             successful_runs[component] = final_attempt.run_id
+            blocked_discretionary.pop(component, None)
             outcome = RunStepOutcome(
                 component=component,
                 run_id=final_attempt.run_id,
@@ -3232,6 +3498,7 @@ def _run_plan_segment_reentry(
     backends: RunnerBackends,
     session_id: uuid.UUID | None,
     successful_runs: dict[str, uuid.UUID],
+    attempted_runs: dict[str, uuid.UUID],
     blocked_discretionary: dict[str, str],
     completed_components: set[str],
     step_outcomes: list[RunStepOutcome],
@@ -3259,6 +3526,7 @@ def _run_plan_segment_reentry(
         backends=backends,
         session_id=session_id,
         successful_runs=successful_runs,
+        attempted_runs=attempted_runs,
         blocked_discretionary=blocked_discretionary,
         completed_components=completed_components,
         step_outcomes=step_outcomes,
@@ -3324,6 +3592,7 @@ def _run_plan_segment_reentry(
             backends=backends,
             session_id=session_id,
             successful_runs=successful_runs,
+            attempted_runs=attempted_runs,
             blocked_discretionary=blocked_discretionary,
             step_outcomes=step_outcomes,
             flagged_events=flagged_events,
@@ -3349,6 +3618,7 @@ def _run_plan_before_segment_reentry(
     backends: RunnerBackends,
     session_id: uuid.UUID | None,
     successful_runs: dict[str, uuid.UUID],
+    attempted_runs: dict[str, uuid.UUID],
     blocked_discretionary: dict[str, str],
     completed_components: set[str],
     step_outcomes: list[RunStepOutcome],
@@ -3379,6 +3649,7 @@ def _run_plan_before_segment_reentry(
         backends=backends,
         session_id=session_id,
         successful_runs=successful_runs,
+        attempted_runs=attempted_runs,
         blocked_discretionary=blocked_discretionary,
         completed_components=completed_components,
         step_outcomes=step_outcomes,
@@ -3442,6 +3713,7 @@ def _run_plan_before_segment_reentry(
             backends=backends,
             session_id=session_id,
             successful_runs=successful_runs,
+            attempted_runs=attempted_runs,
             blocked_discretionary=blocked_discretionary,
             step_outcomes=step_outcomes,
             flagged_events=flagged_events,

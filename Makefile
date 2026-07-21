@@ -1,4 +1,4 @@
-.PHONY: setup test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths
+.PHONY: setup test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard
 
 # Root orchestrator (025 A.2 monorepo hoist): the Python project lives in
 # backend/; this Makefile owns the shared db service + the root-level gates
@@ -44,6 +44,12 @@ audit:
 audit-paths:
 	uv run --project backend python scripts/audit_paths.py
 
+# Prompt-family content-hash guard (task 025 C.4): fails if any prompt-bearing
+# module drifted from its committed hash (scripts/prompt_hashes.json) — prompt
+# surfaces change only as named, deliberate slice work.
+prompt-guard:
+	uv run --project backend python scripts/prompt_hash_guard.py
+
 verify:
 	@if ! docker compose exec db pg_isready -U policy_atlas -q 2>/dev/null; then \
 		echo "ERROR: Postgres is not running. Run 'make setup' first." >&2; exit 1; \
@@ -51,6 +57,7 @@ verify:
 	$(MAKE) okf-validate
 	$(MAKE) -C backend verify
 	$(MAKE) audit-paths
+	$(MAKE) prompt-guard
 
 # Intermediate phase-commit gate (011 retro): test-fast + typecheck + lint.
 # Full `make verify` remains mandatory at the build-open baseline, any phase

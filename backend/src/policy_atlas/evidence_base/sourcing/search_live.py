@@ -8,6 +8,7 @@ and polite-pool mailto values are excluded from cache structures.
 
 import os
 import re
+import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable, Iterable
@@ -81,6 +82,7 @@ _CACHE_CREDENTIAL_PARAMS = frozenset({"api_key", "mailto"})
 _DEFAULT_SEARCH_CACHE_TTL_S = 3600.0
 _SEARCH_CACHE_MAX_ENTRIES = 512
 _SEARCH_CACHE: OrderedDict[_SearchCacheKey, tuple[float, Any]] = OrderedDict()
+_SEARCH_CACHE_LOCK = threading.Lock()
 _DEFAULT_MAX_RESULTS = 50
 _OPENALEX_MAX_PER_PAGE = 200
 _OVERTON_PAGE_SIZE = 50
@@ -752,22 +754,26 @@ def _search_cache_key(url: str, params: dict[str, str]) -> _SearchCacheKey:
 
 
 def _search_cache_get(key: _SearchCacheKey, *, ttl_s: float) -> Any | None:
-    cached = _SEARCH_CACHE.get(key)
-    if cached is None:
-        return None
-    cached_at, payload = cached
-    if _monotonic() - cached_at >= ttl_s:
-        del _SEARCH_CACHE[key]
-        return None
-    _SEARCH_CACHE.move_to_end(key)
-    return deepcopy(payload)
+    # Lock + pop: concurrent walks (task 025) can race the TTL check-then-delete;
+    # an unlocked `del` here raised KeyError when two threads expired the same entry.
+    with _SEARCH_CACHE_LOCK:
+        cached = _SEARCH_CACHE.get(key)
+        if cached is None:
+            return None
+        cached_at, payload = cached
+        if _monotonic() - cached_at >= ttl_s:
+            _SEARCH_CACHE.pop(key, None)
+            return None
+        _SEARCH_CACHE.move_to_end(key)
+        return deepcopy(payload)
 
 
 def _search_cache_set(key: _SearchCacheKey, payload: Any) -> None:
-    _SEARCH_CACHE[key] = (_monotonic(), deepcopy(payload))
-    _SEARCH_CACHE.move_to_end(key)
-    while len(_SEARCH_CACHE) > _SEARCH_CACHE_MAX_ENTRIES:
-        _SEARCH_CACHE.popitem(last=False)
+    with _SEARCH_CACHE_LOCK:
+        _SEARCH_CACHE[key] = (_monotonic(), deepcopy(payload))
+        _SEARCH_CACHE.move_to_end(key)
+        while len(_SEARCH_CACHE) > _SEARCH_CACHE_MAX_ENTRIES:
+            _SEARCH_CACHE.popitem(last=False)
 
 
 def _cacheable_payload(data: Any) -> bool:
