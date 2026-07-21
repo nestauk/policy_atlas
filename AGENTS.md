@@ -22,9 +22,17 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `026-infra-deployment` (design phase: contract
-APPROVED 2026-07-21 with all 15 adversarial findings adjudicated; plan
-drafted, at its adversarial-review + owner gate). The slice ports v2's CDK infra
+Implementation — task `026-infra-deployment` (**DESIGN PHASE COMPLETE
+2026-07-21**: contract approved (15 contract-stage adversarial findings
+adjudicated), plan rev 2 approved (19 plan-stage findings adjudicated),
+ADR 0026 Accepted. **The build opens in a FRESH conversation with
+`task-cycle-build`** — re-ground from contract.md · plan.md rev 2 (its
+17 pins are binding) · port-map discipline; run `make verify` first
+(Phase 0). Key build facts: staged first-deploy bootstrap (network
+stack alone first, `-c stage=network`); `desired_count=0` is
+template-pinned (deploy script owns scale-to-1 after migrations); NS
+delegation for `v3.policyatlas.uk` lands ~2026-07-22 and gates Phase E
+only.) The slice ports v2's CDK infra
 (`../discovery_policy_atlas/infra` — three stacks: network · database ·
 app) into `infra/` with a **copy-first, targeted-edits** discipline:
 v2 files are copied and diffed, never rewritten. Deltas from v2:

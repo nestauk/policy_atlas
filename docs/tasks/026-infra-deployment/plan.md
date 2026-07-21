@@ -1,8 +1,10 @@
 # Implementation plan: 026-infra-deployment
 
-> **Status:** DRAFTED rev 2 — plan-phase adversarial review DONE (codex; 3 BLOCKER +
-> 14 MAJOR + 2 MINOR, **19/19 adjudicated in** — see
-> [adversarial-review-plan.md](adversarial-review-plan.md)). **At the owner 🛑.**
+> **Status:** **APPROVED — 2026-07-21 · owner** ("Plan approved, draft the ADR and
+> close out the design phase"), as rev 2. Plan-phase adversarial review DONE
+> (codex; 3 BLOCKER + 14 MAJOR + 2 MINOR, **19/19 adjudicated in** — see
+> [adversarial-review-plan.md](adversarial-review-plan.md)). ADR 0026 Accepted
+> same date.
 > Contract: [contract.md](contract.md) (approved 2026-07-21; none of the plan
 > findings contradict it — they are plan-internal reworks).
 > Tier 4 → owner-approved plan + ADR + rollback required. ADR drafted at plan

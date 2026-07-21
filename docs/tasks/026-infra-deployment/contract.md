@@ -8,8 +8,8 @@ One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); spe
 > [adversarial-review-contract.md](adversarial-review-contract.md)); the material
 > F1 gate was re-decided by the owner same day (auth congruence ruling — resolved
 > decision 7) ·
-> Plan approved (before implementation): _pending_ · ADR: expected (Tier 4 — deployment
-> architecture + rollback plan).
+> Plan approved (before implementation): 2026-07-21 · owner (plan.md rev 2) ·
+> ADR: 0026 (Accepted 2026-07-21).
 
 ## Goal
 
