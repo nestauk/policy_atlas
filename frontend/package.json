@@ -13,6 +13,7 @@
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
+    "e2e": "playwright test",
     "gen": "openapi-typescript openapi.json -o src/api/gen/types.ts",
     "preview": "vite preview"
   },

@@ -1,4 +1,4 @@
-.PHONY: setup test test-fast typecheck lint build verify verify-fast okf-validate audit openapi
+.PHONY: setup dev test test-fast typecheck lint build verify verify-fast okf-validate audit openapi
 
 # Tests run against a dedicated database on the same local container, so committing
 # tests can't pollute the dev DB. Override for a different host/DB.
@@ -9,6 +9,15 @@ TEST_DATABASE_URL ?= postgresql+psycopg://policy_atlas:policy_atlas@localhost:54
 setup:
 	uv sync
 	uv run alembic upgrade head
+
+# Local dev API server (task 025 I.1 clean-clone acceptance). Reads its
+# configuration from the environment (see `.env.example`) — export the
+# required OIDC_*/APP_ORIGIN/DATABASE_URL vars first, or run via a tool
+# that loads `.env` for you. Requires the dev-issuer bootstrap
+# (`uv run python -m policy_atlas.api.dev_issuer init --dir .dev-issuer`)
+# so `OIDC_JWKS_PATH` names an existing file.
+dev:
+	uv run uvicorn policy_atlas.api.app:create_app --factory --reload --port 8000
 
 test:
 	DATABASE_URL="$(TEST_DATABASE_URL)" uv run pytest

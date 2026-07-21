@@ -7,12 +7,15 @@ the new run-less lifecycle audit rows before ``event_log.run_id`` becomes
 NOT NULL again.
 """
 
+import os
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from alembic import command
-from sqlalchemy import inspect, select, update
+from sqlalchemy import create_engine, inspect, select, text, update
 from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.engine.url import make_url
 
 from policy_atlas.core.schema import (
     capability_run,
@@ -22,7 +25,6 @@ from policy_atlas.core.schema import (
     project,
 )
 from tests.conftest import _alembic_cfg
-from tests.helpers import delete_project_data
 
 PRE_025_REVISION = "a3c6f9e2b7d4"
 
@@ -64,8 +66,27 @@ def _seed_capability_run(
     return capability_run_id
 
 
-def test_025_migrations_roundtrip_with_populated_predecessor(engine: Engine) -> None:
-    """Backfill, exact downgrade mappings, and a second clean upgrade all work."""
+def test_025_migrations_roundtrip_with_populated_predecessor(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Backfill, exact downgrade mappings, and a second clean upgrade all work.
+
+    Runs against a per-test SCRATCH database, never the shared test DB: each
+    add/drop-column cycle permanently consumes tuple-descriptor slots
+    (Postgres counts dropped columns toward its 1600-column table limit), and
+    walking six `project` columns up and down on the shared DB every suite
+    run exhausted that limit in practice. The scratch DB is created from the
+    shared engine, migrated from zero, and dropped afterwards.
+    """
+    shared = engine
+    base_url = make_url(os.environ["DATABASE_URL"])
+    scratch_name = f"{base_url.database}_migr_{uuid.uuid4().hex[:8]}"
+    with shared.connect().execution_options(isolation_level="AUTOCOMMIT") as admin:
+        admin.execute(text(f'CREATE DATABASE "{scratch_name}"'))
+    scratch_url = base_url.set(database=scratch_name)
+    monkeypatch.setenv("DATABASE_URL", scratch_url.render_as_string(hide_password=False))
+    engine = create_engine(scratch_url)
+
     cfg = _alembic_cfg()
     plan_project_id = uuid.uuid4()
     planless_project_id = uuid.uuid4()
@@ -74,7 +95,7 @@ def test_025_migrations_roundtrip_with_populated_predecessor(engine: Engine) -> 
     interrupted_run_id: uuid.UUID | None = None
     legacy_run_ids: dict[str, uuid.UUID] = {}
 
-    command.downgrade(cfg, PRE_025_REVISION)
+    command.upgrade(cfg, PRE_025_REVISION)
     connection = engine.connect()
     transaction = connection.begin()
     try:
@@ -265,12 +286,6 @@ def test_025_migrations_roundtrip_with_populated_predecessor(engine: Engine) -> 
             transaction.rollback()
             connection.close()
     finally:
-        command.upgrade(cfg, "head")
-        connection = engine.connect()
-        transaction = connection.begin()
-        try:
-            delete_project_data(connection, plan_project_id)
-            delete_project_data(connection, planless_project_id)
-            transaction.commit()
-        finally:
-            connection.close()
+        engine.dispose()
+        with shared.connect().execution_options(isolation_level="AUTOCOMMIT") as admin:
+            admin.execute(text(f'DROP DATABASE IF EXISTS "{scratch_name}" WITH (FORCE)'))

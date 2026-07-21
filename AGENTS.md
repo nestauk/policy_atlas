@@ -22,38 +22,34 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `025-web-app-foundation` (**design COMPLETE
-2026-07-21**: contract approved + adversarially adjudicated (codex,
-20/20), plan rev 2 approved with executor marks (frontend product
-surfaces lead-built, owner routing), ADRs 0024–0025 Accepted —
-**build opens in a fresh conversation with `task-cycle-build`**,
-phases 0–I per plan.md; approved schema gate = project lifecycle
-migration + capability_run status migration; one authorised
-runner-behaviour delta = G3/G4 mutation-semantics unification).
-**The web-app foundation slice — production API + frontend in one
-consolidated slice (owner direction, 2026-07-20), replacing the
-throwaway `demo-live-run` stack.** Strands: (1) monorepo hoist —
-Python project → `backend/`, new `frontend/`, `infra/` reserved
-(pinned deferred.md decision; import-neutral, tooling paths only);
-(2) production API in `policy_atlas/api/` — schema-first (Pydantic →
-OpenAPI → generated TS client, drift-checked in CI), REST + SSE with
-durable backlog replay from `event_log` (the demo's in-memory bus
-dies); (3) project lifecycle done properly — schema migration (name,
-question, lifecycle status, soft-delete, nullable owner) so
-rename/delete are real backend semantics, `projects.json` sidecar
-dies; (4) steering/check-ins on the durable substrate — pending
-check-ins + decision history served from Postgres (`steering_history`,
-024), answers through the real steering seam; (5) auth seam shaped
-for **AWS Cognito** (owner pin, 2026-07-20) — OIDC/JWT verification
-at the API boundary + user-identity threading, dev issuer locally;
-Cognito itself lands with the CDK `infra/` slice, not here; (6)
-frontend on the demo-validated stack (React 18 + TS strict + Vite +
-Tailwind) and views, locked user-facing vocabulary, idempotent
-SSE-replay store. Required design inputs: `demo/API.md` +
-`demo/RETRO.md` §§2–3 (on `demo-live-run`). Tier 4 (scaffold +
-public API + schema + auth + deps + CI). Sequenced after 025:
-**026 co-pilot Q&A + the per-user transcript store**; then the eval
-slice.
+Implementation — task `025-web-app-foundation` (**BUILD COMPLETE through
+step 6, 2026-07-21** — phases 0–I built and committed on
+`task/025-web-app-foundation`; `make verify` fully green from the hoisted
+monorepo layout (backend suite + mypy strict + ruff + build + audit-paths +
+prompt-guard + font-guard + drift-check + frontend
+typecheck/lint/vitest/build); `verification.md` complete. **One
+outstanding build item: the pinned I.2 live check** — prepared but blocked
+on moving the repo-root `.env` (real API keys) to `backend/.env`, which
+the agent permission system cannot do; script + parameters in
+verification.md. **Next: the review stack runs in a FRESH conversation
+with `task-cycle-review`** (Tier 4: contract-verifier · /code-review
+medium per review-economy pins · security-auditor lane · codex
+adversarial · live-trace lane · human deep review) — the build
+conversation must not adjudicate its own findings. As-built highlights:
+monorepo hoist (`backend/` + `frontend/` + `infra/`); two approved
+migrations **plus an owner-approved build-time gate expansion
+(`event_log.run_id` nullable, 2026-07-21)**; runner parking + boundary
+continuation (WalkParked, `continuation_state` reducer with G1–G5,
+`run_plan(resume_from)`, answer→claim→drainer protocol, parity harness);
+schema-first API (`policy_atlas.api`) with RS256/JWKS auth + dev issuer,
+BOLA-opaque 404s, error envelope, SSE replay+tail from `event_log`, read
+models incl. the chunk-context clamp; React 19 + pnpm frontend on the
+Nesta brand layer with the demo-validated views, replay-idempotent store,
+mock mode + Playwright journey. New durable events (run.parked class):
+`run.opened` / `run.finished` / `plan.approved` / pause `render`
+persisted. Spec: `docs/specs/system/web-api.md` (new). Sequenced after
+025: **026 co-pilot Q&A + the per-user transcript store**; then the eval
+slice.)
 
 Tasks `001-walking-skeleton` through `024-steering-surface` are
 complete (merged) — the EB chain runs end-to-end live behind the
