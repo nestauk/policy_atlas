@@ -58,6 +58,14 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
    edits: naming/domain config only. (Cloud Map served PostgREST in v2; it stays because
    it's cheap and the copy is smaller than the removal — cut it only if the plan shows
    nothing consumes it.)
+
+   🟡 **v3 deploys its own parallel network** (own VPC, fck-nat, ALB, cert), rather
+   than importing v2's live shared ALB: sharing would mean modifying the live v2
+   NetworkStack (SNI cert for the v3 domain, listener-priority coordination) from this
+   repo — cross-repo coupling to a stack scheduled for retirement, touching what's
+   serving v2 users. Cost of the parallel month: roughly one extra ALB + one fck-nat
+   instance (~$20–40/mo). Clean retirement: v2's stacks destroy wholesale later.
+   Devops may veto at the plan gate if they'd rather share.
 3. **DatabaseStack** — copy, then **delete the Supabase self-host apparatus wholesale**:
    Supabase Studio + postgres-meta service, PostgREST + nginx sidecar, the
    JWT-generation Lambda (including the vendored PyJWT tree, ~7.5k lines), the
@@ -94,11 +102,10 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
      (deferred.md § per-run provider-rate-limit fairness) — at full concurrency
      runs degrade to slower, never to wrong. Horizontal scale-out (a second
      instance) remains forbidden until the cross-instance seam lands.
-   - **Frontend:** v2's Next.js server container does not port. 🟡 leaning: nginx
-     container serving the Vite `dist/` behind the same shared ALB (maximum reuse of the
-     copied listener-rule/Fargate/Route53 pattern; one hosting idiom for both services).
-     Alternative: S3 + CloudFront (more moving parts to write fresh, breaks the
-     copy-first grain). Owner may override at the contract gate.
+   - **Frontend:** v2's Next.js server container does not port. **Settled (owner,
+     2026-07-21): nginx container serving the Vite `dist/` behind the shared ALB** —
+     maximum reuse of the copied listener-rule/Fargate/Route53 pattern; one hosting
+     idiom for both services.
    - Cognito envs → frontend build args (`VITE_OIDC_AUTHORITY`, client id, redirect) —
      config-only, no frontend code changes expected.
 5. **Cognito** (new — no v2 precedent, the one genuinely fresh CDK surface): user pool +
@@ -141,7 +148,8 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
 ## Constraints & approval gates
 
 - **Production config** — the whole slice is one; this contract is the approval vehicle.
-  🛑 **before any `cdk deploy`**: target AWS account/env confirmed by the owner.
+  Target account/env confirmed (resolved decision 1). 🛑 **no `cdk deploy` before the
+  plan is approved** — the first deploy is a build-phase step, never a design-phase one.
 - **Auth/tenancy** — Cognito user pool is new auth infra: gate. Pool config named in the
   plan and reviewed there; the API's verification code is untouched.
 - **Dependencies** — `infra/requirements*.txt` (aws-cdk-lib, constructs, cdk-fck-nat)
@@ -153,31 +161,39 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
   providers under the already-approved controls; Cognito/JWKS is auth plumbing.
 - **Secrets** — application secrets are provisioned manually in Secrets Manager (v2
   pattern) and referenced by name; never in code, config JSONs, or CDK context.
-- **Naming/collision constraint** — depends on ❓1 below: if the target account also
-  hosts a live v2, every copied fixed name (SSM `/policy_atlas/*`, cluster/service/ALB
-  names, log groups) collides and must be namespaced — a systematic targeted edit the
-  plan must sequence first, not ad-hoc renames.
+- **Naming/collision constraint** — the target account hosts live v2 during the
+  migration window, so every copied fixed name collides and must be namespaced: SSM
+  prefix (`/policy_atlas/*` → `/policy_atlas_v3/*`), VPC/ALB/target-group names, ECS
+  cluster/service/task-family names, Aurora `cluster_identifier` + instance
+  identifiers, log-group names. A **systematic targeted edit the plan sequences
+  first**, not ad-hoc renames. (The Cloud Map namespace derives from the domain and
+  diverges automatically.) v2 resources are read-only from this repo — no v3 stack
+  may import, modify, or attach to a v2-managed resource.
 
-## Open questions (owner, at this gate)
+## Resolved decisions (owner, 2026-07-21)
 
-1. ❓ **Target account/VPC:** fresh account, or the v2 account? Does v2 stay live
-   alongside? (Decides the namespacing edit above, and whether NetworkStack deploys at
-   all or v3 imports v2's existing SSM-exported network.)
-2. ❓ **Domain:** v3's public domain / subdomains (v2 pattern:
-   `*.staging.policyatlas.uk` wildcard + per-service subdomains).
-3. ❓ **Cognito confirmed** as the IdP (the API is Cognito-shaped by 025 design; any
-   org SSO/federation requirement changes the pool scope).
-4. ❓ **Config JSONs committable?** v2 commits account IDs + domains in
-   `*_config.json`. Repo is AGPL and may go public — commit as v2 does, or gitignore
-   with committed `*.example` templates?
-5. 🟡 **Frontend hosting** — leaning nginx-on-Fargate (above); confirm or override.
+1. **Account:** same AWS account as v2; **v2 stays live alongside for ~1 month** while
+   users migrate, then retires. Consequences: the namespacing constraint above, and the
+   🟡 parallel-network lean (scope item 2).
+2. **Domain: `v3.policyatlas.uk`** — frontend at the apex, API at
+   `api.v3.policyatlas.uk`, wildcard cert `*.v3.policyatlas.uk` + apex SAN.
+   **Precondition (devops):** a Route53 hosted zone `v3.policyatlas.uk` exists before
+   deploy (the stack looks it up, never creates it). After v2 retires, moving to
+   `staging.policyatlas.uk` is a config-only redeploy (cert + A records + frontend
+   rebuild for the API URL) — deliberately not pre-built.
+3. **Cognito confirmed** as the IdP. No federation/SSO in scope.
+4. **Config JSONs committed, v2-style** (account IDs + domains are identifiers, not
+   credentials; secrets stay in Secrets Manager; matches v2 precedent and devops
+   practice). Recorded caveat: if the repo is ever open-sourced, the account ID is in
+   git history and needs a history rewrite, not just a deletion — revisit then.
+5. **Frontend hosting: nginx-on-Fargate** (scope item 4).
 
 ## Public / private boundary
 
-Committable: CDK code, config templates, deploy docs, synthesized-template tests.
-Private (never committed): AWS credentials, Secrets Manager values, font binaries,
-`cdk.context.json` if it embeds account specifics (❓4 governs config JSONs). Deploy
-logs/screenshots in verification.md scrubbed of account IDs if ❓4 resolves private.
+Committable: CDK code, config JSONs (resolved decision 4 — committed v2-style), deploy
+docs, synthesized-template tests. Private (never committed): AWS credentials, Secrets
+Manager values, font binaries. Deploy logs/screenshots in verification.md need no
+account-ID scrubbing (decision 4), but never show secret values or session tokens.
 
 ## Model route
 
@@ -225,7 +241,7 @@ to need code changes for Cognito after all) · turn/token budget spent.
 
 In [verification.md](verification.md): per-file port map (v2 source → v3 path ·
 copied-verbatim / targeted-edit / deleted / new — the copy-first discipline made
-auditable), `make verify` + synth output, deploy transcript (scrubbed per ❓4), smoke
+auditable), `make verify` + synth output, deploy transcript (no secret values), smoke
 narrative with screenshots, deploy-invariant ECS event evidence, known gaps.
 
 ## Risk tier & review focus

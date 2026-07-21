@@ -11,8 +11,8 @@ The task is **done only if every box holds** — otherwise it is in progress, no
        before the account/env 🛑 cleared; Cognito pool config was named in the approved
        plan.
 4. [ ] No generated files or secrets edited by hand; no secret value, account credential
-       or font binary in the repo, the CDK asset tree, or committed config (❓4 resolution
-       honoured).
+       or font binary in the repo, the CDK asset tree, or committed config (config JSONs
+       are committed v2-style per resolved decision 4 — identifiers only, no secrets).
 5. [ ] No tests deleted, skipped or weakened without written justification.
 6. [ ] Verification evidence recorded ([verification.md](verification.md)), including the
        **per-file port map** (v2 source → v3 path · verbatim / targeted-edit / deleted /
