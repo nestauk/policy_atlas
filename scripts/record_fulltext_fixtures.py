@@ -5,7 +5,7 @@ edge-case documents with PyMuPDF, writes the committed fixture manifest, and
 runs fixture self-checks. This script is never imported by ``policy_atlas``.
 
 Usage:
-    uv run python scripts/record_fulltext_fixtures.py
+    uv run --project backend python scripts/record_fulltext_fixtures.py
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ from typing import Any
 import fitz
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT_DIR = ROOT / "tests" / "data" / "fulltext"
-MANIFEST_PATH = ROOT / "tests" / "data" / "fulltext_manifest.json"
+OUT_DIR = ROOT / "backend" / "tests" / "data" / "fulltext"
+MANIFEST_PATH = ROOT / "backend" / "tests" / "data" / "fulltext_manifest.json"
 RECORDED_AT = "2026-07-05"
 TIMEOUT_S = 90
 MAX_TOTAL_BYTES = 26_000_000

@@ -11,7 +11,7 @@ string-or-list authors/topics, two-level document identity); fabricated values.
 Leak-guard markers: every DOI gets the reserved fake prefix ``10.99999/``,
 every URL lands on ``example.org`` (test-enforced).
 
-Usage: uv run --env-file .env python scripts/record_overton_fixtures.py
+Usage: uv run --project backend --env-file backend/.env python scripts/record_overton_fixtures.py
 (``OVERTON_API_KEY`` required; read from the environment, never committed.)
 """
 
@@ -35,7 +35,12 @@ TIMEOUT_S = 30
 SANITIZER_VERSION = "v2"
 RAW_PATH = Path(__file__).parent / "recordings" / "overton_raw.json"
 FIXTURE_PATH = (
-    Path(__file__).parent.parent / "tests" / "data" / "provider_records" / "overton_documents.json"
+    Path(__file__).parent.parent
+    / "backend"
+    / "tests"
+    / "data"
+    / "provider_records"
+    / "overton_documents.json"
 )
 
 # Free-text fields carrying the document's (or provider-LLM's) words — always fabricated.
@@ -106,7 +111,10 @@ def _sanitize(obj: object, key: str | None = None, parent: str | None = None) ->
 def _fetch() -> dict:
     api_key = os.environ.get("OVERTON_API_KEY")
     if not api_key:
-        raise SystemExit("OVERTON_API_KEY not set (run via: uv run --env-file .env …)")
+        raise SystemExit(
+            "OVERTON_API_KEY not set (run via: uv run --project backend "
+            "--env-file backend/.env …)"
+        )
     params = {"squery": QUERY, "format": "json", "api_key": api_key}
     url = "https://app.overton.io/documents.php?" + urllib.parse.urlencode(params)
     # Rate limit: max 1 call/second — this recorder makes exactly one call.

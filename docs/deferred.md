@@ -462,7 +462,14 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   `search_live` duplicate the retryable-status set and retry-once/backoff shape; their
   control flows differ enough (status-outcome objects vs exception-only) that unification
   waits for a third live client to prove the seam.
-- **Concurrent-run write guard** — eligibility selection takes no row locks and final writes
+- **Concurrent-run write guard** — **DISCHARGED (task 025)**: the API enforces at most one
+  active run per project in Postgres at dispatch (`SELECT … FOR UPDATE` on the project row,
+  `policy_atlas.api.locks.project_lock`); the same primitive serialises check-in answers and
+  continuation claims. *Review amendment (2026-07-21):* the one residual same-project race —
+  the walk executor and a project-locked API mutation (rename) are two unserialized writer
+  families sharing the `max+1` event-sequence allocator — was found by the 025 review stack
+  and closed with a SAVEPOINT-retry in `events.append` (collision → re-read, never a failed
+  component commit; misordering remains impossible). Original note: eligibility selection takes no row locks and final writes
   are unconditional, so two simultaneous ingest runs over **one scope** could interleave
   (mirrors 007's concurrent-run dedup note; Codex adversarial finding, task 008). Scoped
   precisely (user question, 2026-07-05): the load-bearing invariant is **at most one active
@@ -501,8 +508,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   carry offsets — the natural anchor). Two named consumers: (a) the grounding-judge envelope
   (`synthesis_envelope_v1` carries cited chunks' full frozen text, no clamp — a deliberate
   013 plan call; changing judge input is prompt-bearing and eval-sensitive, so it lands with
-  eval coverage, not as a rider); (b) future read surfaces (context/dossier views — the
-  web-app slice). Cheaper mitigation than (and complementary to) the docling escalation
+  eval coverage, not as a rider); (b) **DISCHARGED (task 025)** — the web API's chunk-context read model
+  (`GET …/citations/{id}/context`) clamps to an 800-char window each side of the cited
+  span (consumer (a), the judge envelope, remains deferred with eval coverage). Cheaper mitigation than (and complementary to) the docling escalation
   above. Trigger: live corpora making collapsed chunks common, or judge token-cost
   observations. **022 adjudication (agenda B, owner, 2026-07-14): the JUDGE envelope
   stays UNCLAMPED** (every envelope change forces a re-baseline); the tool-return half
@@ -1299,11 +1307,13 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Component-name rename `screen`→`screen_abstract` / `screen_stage2`→`screen_full`
   — DISCHARGED (task 019).** Renamed, with a one-time data migration
   `b7f3d9a2c5e1` (owner decision 3); no read-side alias.
-- **Direct plan editing on the plan pane** (user, 2026-07-10) — editing the proposed
-  plan directly (not only conversationally), with edits synced back to the planner
-  conversation and a confirm-changes step before the run button arms. Web-app-slice
-  feature: it needs the durable plan surface + a plan-patch grammar and the planner's
-  acknowledgement turn. The conversational half stays the only editing path until then.
+- **Direct plan editing on the plan pane** (user, 2026-07-10; **re-deferred past 025 —
+  owner, 2026-07-20**) — editing the proposed plan directly (not only conversationally),
+  with edits synced back to the planner conversation and a confirm-changes step before
+  the run button arms. Considered for 025-web-app-foundation and deliberately held:
+  conversational editing is demo-validated and sufficient for v1; the plan-patch grammar
+  + the planner's acknowledgement turn are their own design surface. The conversational
+  half stays the only editing path until then.
 
 ## Data model / evidence
 
@@ -1464,14 +1474,15 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   an HTML parser is a silent behaviour change on hostile input; (2) `FixtureFetcher`'s
   manifest-basename traversal guard is an `assert` (vanishes under `python -O`) —
   dev/test-only surface today, should become a `ValueError`.
-- **Monorepo hoist: `backend/` (owner layout intent, 2026-07-14)** — when the frontend
-  is pulled into this repo it lands at `front-end/`, the CDK at `infra/` (the reason
-  023's shared-layer package is `core/`, not `infra/` — ADR 0019). At that point the
-  whole Python project (pyproject.toml, src/, tests/, alembic/, Makefile) hoists into
-  `backend/` as a sibling. The `policy_atlas` import name is untouched — src-layout
-  makes the hoist import-neutral; the cost is tooling paths only (CI working-directory,
-  Docker contexts, CDK references, doc links). Do it in the slice that brings the
-  frontend in, not before.
+- **Monorepo hoist: `backend/` (owner layout intent, 2026-07-14; amended 2026-07-20:
+  `frontend/`, no dash — DISCHARGED, 025-web-app-foundation A.2, 2026-07-21).** The
+  frontend lands at `frontend/`, the CDK will land at `infra/` (the reason 023's
+  shared-layer package is `core/`, not `infra/` — ADR 0019). The whole Python project
+  (`backend/pyproject.toml`, `backend/src/`, `backend/tests/`, `backend/alembic/`,
+  `backend/Makefile`) has hoisted into `backend/` as a sibling of `frontend/` and
+  `infra/`. The `policy_atlas` import name is untouched — src-layout made the hoist
+  import-neutral; the cost was tooling paths only (CI working-directory, Docker
+  contexts, CDK references, doc links).
 - **Per-query source provenance (demo carry-back, 2026-07-15)** — the search fan-out is
   already fully audited at the query grain (`search.executed` events persist query text,
   backend, filters, origin and result count), but `source.acquired` /
@@ -1677,3 +1688,63 @@ first-class vocabulary. What follows is what it deliberately left out.
     cosmetic duplicate "component: succeeded" lines in the pause loop
     (visible in the live transcripts); tidy with the next CLI-surface
     slice.
+
+## Web app (task 025 seams)
+
+- **Cross-instance steering & live tail** (025 contract, digest §1.3) — the deployment
+  posture is one API instance / one worker process: pause-unblocking, the live SSE tail
+  and the ephemeral tick channel are process-local; durable replay covers reconstruction,
+  not cross-instance live delivery. Scale-out needs Postgres LISTEN/NOTIFY (or pub-sub)
+  for tail fan-out and answer delivery — the infra/CDK slice's seam. The continuation
+  dispatch path is deliberately queue-shaped so broker-backed workers (Celery/RQ) slot in
+  behind it later without a reshape.
+- **Designed component-progress protocol** (RETRO §4.10, 025 contract 🟡) — 025 ships
+  stage-grain durable events plus a minimal ephemeral tick channel
+  (`policy_atlas.core.liveness`, best-effort publish points in the search/fetch
+  transports). A *designed* per-component progress protocol (typed progress shapes,
+  coverage of every component, durable where warranted) is still open.
+- **Licensed font delivery for the deployed web app** (owner + comms, 2026-07-21) —
+  Averta/Zosia are licensed for the web app; binaries are never committed (CI font-guard).
+  Locally they load from an untracked `frontend/public/fonts/`. The deployed app needs a
+  delivery mechanism outside the repo (private bucket injected at build/deploy time) —
+  pure mechanics for the infra slice; no licensing question remains.
+- **Cursor pagination migration path** (025 API pins) — offset + `total_items` is the
+  deliberate v1 shape at per-project scale; if cross-project or unbounded-growth listings
+  appear, add an opaque `cursor` param alongside (additive, never a breaking reshape).
+- **Hard purge** (025 contract 🟡) — delete = idempotent archive (rows retained per the
+  audit/FOI/portability constraint). A real purge (rows, snapshots, event history) is its
+  own gated seam.
+- **Per-run provider-rate-limit fairness** (owner, 2026-07-21) — provider limits are
+  shared across concurrent runs; the executing-walk bound is the v1 fairness mitigation.
+  Recorded non-goal until real contention shows up.
+- **Plan-field↔turn provenance** (025 adversarial finding 7) — ephemeral planner prose is
+  not execution-bearing for continuation, but which conversation turn produced which plan
+  field remains an acknowledged loss until the transcript store (026) / workspace-cluster.
+- **NULL-owner pre-025 projects** (migration b5f1a3d7e9c2) — rows predating ownership keep
+  `owner_user_id NULL` and are intentionally inaccessible via the strictly owner-scoped
+  API (the dev DB's two live-run projects are the known case). Recovery is a documented
+  manual UPDATE at the DB; an admin/ownership-claim surface is deliberately unbuilt.
+- **Deploy invariant: stop-old-before-boot-new** (025 review, adv-M3 + live-check SIGTERM
+  lesson, 2026-07-21) — the startup orphan sweep has no instance-ownership lease, and
+  default SIGTERM lets the walk executor keep running through a graceful drain. Until the
+  cross-instance seam lands (lease riding LISTEN/NOTIFY work), deploys MUST hard-kill the
+  old process before booting the new one, or the sweep/live-walk race interrupts healthy
+  runs. Recorded in web-api.md § Deployment posture; the infra slice's deploy scripts own
+  enforcing it.
+- **`CitationOut.source_id`** (025 live check, 2026-07-21) — the citation→dossier join is
+  title-keyed; a locator-fallback title misses the evidence row (honest empty state).
+  Adding `source_id` to `CitationOut` is small but a contract change (regen + views);
+  next API-touching slice.
+- **Rename/archive controls in the UI** (025 live check) — the PATCH/archive mutations
+  exist, are authz-tested and envelope-conformant; no view exposes them yet. Ingest also
+  presents under the acquire stage label ("Searching sources" while reading documents) —
+  both are workspace-surface polish for the next frontend-touching slice.
+- **Automated FE↔real-API smoke** (025 review, adv-M6) — mock mode intercepts fetch, so
+  transport/auth/base-URL/error-mapping integration is structurally invisible to the
+  Playwright journey (all five live-check integration bugs were in that layer). A thin
+  CI job — real HTTP + dev-issuer auth + SSE against stub backends — closes the gap;
+  belongs with the CI work in the infra slice.
+- **Production build guard for `VITE_OIDC_AUTHORITY`** (025 security lane, info) — a
+  production bundle built without the OIDC authority silently ships the dev token panel
+  (backend still verifies RS256; not a bypass, but a posture smell). A build-time
+  refusal (or explicit dev opt-in flag) rides the infra slice's deploy checklist.

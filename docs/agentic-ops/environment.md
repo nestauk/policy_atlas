@@ -1,7 +1,8 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–024 — backend only; setup unchanged since 002; task 007 adds two dev-time
+stands (tasks 001–025 — 025 hoists the Python project to `backend/` and adds the `frontend/`
+web app; setup unchanged since 002 *within* `backend/`; task 007 adds two dev-time
 fixture-recorder scripts needing `OVERTON_API_KEY`/optional OpenAlex vars in `.env` — see
 `.env.example`; task 008 adds parsing deps (pymupdf/pymupdf4llm/trafilatura — arrive via
 `make setup`/`uv sync`) and a keyless dev-time recorder using system `curl`; task 009 adds
@@ -66,9 +67,19 @@ orchestrator's three moments (planning · router · watch; the same `OPENAI_API_
 flag makes them live), one schema migration rides it (`a3c6f9e2b7d4`,
 `capability_run` + `screen_generation` — the dev-DB `alembic upgrade head` gotcha
 below applies), and free-text steering at every pause runs through the confirm gate
-(stubbed + scripted in the suite).
+(stubbed + scripted in the suite);
+task 025 hoists everything Python into `backend/` (import name unchanged; the root
+Makefile orchestrates), adds `frontend/` (Node 24+/pnpm 10+ — install pnpm standalone,
+corepack is gone from Node 25; `pnpm install`, `pnpm dev`, mock mode via `VITE_MOCK=1`),
+adds `fastapi`/`uvicorn`/`pyjwt` (via `uv sync`), two schema migrations
+(`b5f1a3d7e9c2` project lifecycle + `c6e2b4f8a1d3` capability_run statuses — the dev-DB
+upgrade gotcha below applies), the dev-issuer CLI for local JWTs (README quickstart;
+keys land gitignored), API env vars in `backend/.env` (`OIDC_*`, `APP_ORIGIN`,
+`DATABASE_URL`; loaded by `make -C backend dev` via `uv run --env-file`, deliberately
+NOT by the test suite), and `PA_BACKEND_MODE=live|stub|auto` (auto = key presence;
+live fails loud without `OPENAI_API_KEY`, warns on missing search keys).
 `make verify` and the test suite need none of them — stub backends + socket-deny keep
-the suite egress-free. One suite runner at a time: concurrent `make verify` runs
+the suite egress-free (conftest scrubs product-egress keys a keyed `.env` may carry). One suite runner at a time: concurrent `make verify` runs
 contend on the shared test DB and flake (018 note).
 Gotcha (bit the 012 live check): after pulling a schema-bearing slice, run
 `uv run alembic upgrade head` against the **dev** DB — only the test DB migrates itself
@@ -89,7 +100,7 @@ Update it when the setup changes, not before.
 ## Setup commands
 
 ```
-cp .env.example .env     # provides DATABASE_URL (see Local env vars)
+cp backend/.env.example backend/.env     # provides DATABASE_URL (see Local env vars)
 make setup               # uv sync -> compose up db -> wait -> create policy_atlas_test -> alembic upgrade head
 make verify              # test (against policy_atlas_test) -> typecheck -> lint -> build (pre-checks the DB is up)
 ```

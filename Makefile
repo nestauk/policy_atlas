@@ -1,11 +1,11 @@
-.PHONY: setup test test-fast typecheck lint build verify verify-fast okf-validate audit
+.PHONY: setup test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard frontend-install openapi-sync drift-check font-guard frontend-verify
 
-# Tests run against a dedicated database on the same local container, so committing
-# tests can't pollute the dev DB. Override for a different host/DB.
-TEST_DATABASE_URL ?= postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas_test
+# Root orchestrator (025 A.2 monorepo hoist): the Python project lives in
+# backend/; this Makefile owns the shared db service + the root-level gates
+# (OKF conformance, cross-tree path audit) and delegates everything else so
+# every pre-hoist target name keeps working unchanged from repo root.
 
 setup:
-	uv sync
 	docker compose up -d db
 	@echo "Waiting for Postgres to be healthy..."
 	@until docker compose exec db pg_isready -U policy_atlas -q; do sleep 1; done
@@ -14,56 +14,110 @@ setup:
 		"SELECT 1 FROM pg_database WHERE datname='policy_atlas_test'" | grep -q 1 \
 		|| docker compose exec -T db createdb -U policy_atlas policy_atlas_test
 	@echo "Test DB ready (policy_atlas_test)."
-	uv run alembic upgrade head
+	$(MAKE) -C backend setup
 
 test:
-	DATABASE_URL="$(TEST_DATABASE_URL)" uv run pytest
+	$(MAKE) -C backend test
 
-# Inner-loop convenience: everything except the ingest integration tests (~11 real
-# document-ingest runs, minutes). Full `make test` / `make verify` remain the gate.
 test-fast:
-	DATABASE_URL="$(TEST_DATABASE_URL)" uv run pytest --ignore=tests/test_ingest_full_text.py
+	$(MAKE) -C backend test-fast
 
 typecheck:
-	uv run mypy src tests
+	$(MAKE) -C backend typecheck
 
 lint:
-	uv run ruff check src tests
+	$(MAKE) -C backend lint
 
 build:
-	uv build
+	$(MAKE) -C backend build
 
 okf-validate:
-	uv run python scripts/okf_validate.py
+	uv run --project backend python scripts/okf_validate.py
 
-# Dependency-vulnerability audit (016 contract rev 2.2): PyPA/OSV advisories over
-# the locked dependency set. Audits the synced environment (= the uv.lock closure;
-# the editable first-party project is the one expected skip) rather than an
-# exported requirements file: pip-audit's `-r` mode builds a throwaway venv via
-# ensurepip, which SIGABRTs under uv-managed CPython on macOS — environment mode
-# audits the same pinned set with no venv, identically local and CI.
-# Ignore-list policy: an accepted advisory is an explicit `--ignore-vuln <ID>`
-# argument here, each carrying an adjacent comment justifying it. Currently none.
+# Dependency-vulnerability audit (016 contract rev 2.2) — delegates to backend,
+# where the locked dependency set actually lives.
 audit:
-	uv run --with pip-audit pip-audit --skip-editable --progress-spinner=off
+	$(MAKE) -C backend audit
+
+# Cross-tree path audit (025 A.2): fails if a tracked file references a
+# hoisted backend/ path as repo-root-relative instead of backend/-relative.
+audit-paths:
+	uv run --project backend python scripts/audit_paths.py
+
+# Prompt-family content-hash guard (task 025 C.4): fails if any prompt-bearing
+# module drifted from its committed hash (scripts/prompt_hashes.json) — prompt
+# surfaces change only as named, deliberate slice work.
+prompt-guard:
+	uv run --project backend python scripts/prompt_hash_guard.py
+
+# Installs frontend dependencies from the committed lockfile (task 025 F.1).
+# A prerequisite for drift-check (and any other frontend gate) in CI, where
+# node_modules doesn't already exist; separated from drift-check itself so
+# CI can cache/install once and reuse it across steps.
+frontend-install:
+	cd frontend && pnpm install --frozen-lockfile
+
+# Regenerates both committed schema-first artifacts from the Pydantic
+# contract (task 025 F.1): the OpenAPI document, then the TypeScript types
+# generated from it. Run this whenever `make drift-check` fails.
+openapi-sync:
+	$(MAKE) -C backend openapi
+	cd frontend && pnpm run gen
+
+# Schema-first drift gate (task 025 F.1): one schema generates both API
+# ends, so this fails the build the moment either committed artifact
+# (frontend/openapi.json, frontend/src/api/gen/types.ts) stops matching what
+# the backend contract actually produces. Requires frontend/node_modules
+# (`make frontend-install`).
+drift-check:
+	@tmp_openapi=$$(mktemp) && \
+	uv run --project backend python -m policy_atlas.api.export_openapi "$$tmp_openapi" && \
+	if ! diff -u frontend/openapi.json "$$tmp_openapi"; then \
+		echo "ERROR: frontend/openapi.json is stale relative to the backend contract." >&2; \
+		echo "Run 'make openapi-sync' to regenerate it, then commit the result." >&2; \
+		rm -f "$$tmp_openapi"; exit 1; \
+	fi; \
+	rm -f "$$tmp_openapi"
+	@tmp_types=$$(mktemp) && \
+	(cd frontend && pnpm exec openapi-typescript openapi.json -o "$$tmp_types") && \
+	if ! diff -u frontend/src/api/gen/types.ts "$$tmp_types"; then \
+		echo "ERROR: frontend/src/api/gen/types.ts is stale relative to frontend/openapi.json." >&2; \
+		echo "Run 'make openapi-sync' to regenerate it, then commit the result." >&2; \
+		rm -f "$$tmp_types"; exit 1; \
+	fi; \
+	rm -f "$$tmp_types"
+	@echo "drift-check: OK"
+
+# Font-binary guard (task 025, contract strand 7): Averta/Zosia are licensed
+# for the web app but their binaries must NEVER be committed to this
+# open-source repo — locally they live untracked and load via @font-face;
+# everything must render on the fallback stack without them. Catches an
+# accidental `git add -f`.
+font-guard:
+	@if git ls-files | grep -E '\.(woff2?|otf|ttf|eot)$$'; then \
+		echo "ERROR: font binaries must never be committed (licensed assets)." >&2; exit 1; \
+	fi
+	@echo "font-guard: no font binaries tracked"
+
+# The frontend gate lane (task 025 H): typecheck · lint · vitest · build.
+# Requires frontend/node_modules (make frontend-install).
+frontend-verify:
+	cd frontend && pnpm typecheck && pnpm lint && pnpm test && pnpm build
 
 verify:
 	@if ! docker compose exec db pg_isready -U policy_atlas -q 2>/dev/null; then \
 		echo "ERROR: Postgres is not running. Run 'make setup' first." >&2; exit 1; \
 	fi
 	$(MAKE) okf-validate
-	$(MAKE) test
-	$(MAKE) typecheck
-	$(MAKE) lint
-	$(MAKE) build
+	$(MAKE) -C backend verify
+	$(MAKE) audit-paths
+	$(MAKE) prompt-guard
+	$(MAKE) font-guard
+	$(MAKE) drift-check
+	$(MAKE) frontend-verify
 
 # Intermediate phase-commit gate (011 retro): test-fast + typecheck + lint.
 # Full `make verify` remains mandatory at the build-open baseline, any phase
 # touching schema or ingest-adjacent code, and the step-6 exit.
 verify-fast:
-	@if ! docker compose exec db pg_isready -U policy_atlas -q 2>/dev/null; then \
-		echo "ERROR: Postgres is not running. Run 'make setup' first." >&2; exit 1; \
-	fi
-	$(MAKE) test-fast
-	$(MAKE) typecheck
-	$(MAKE) lint
+	$(MAKE) -C backend verify-fast

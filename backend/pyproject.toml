@@ -1,0 +1,98 @@
+[project]
+name = "policy-atlas"
+version = "0.1.0"
+description = "Policy Atlas v3.0 backend"
+license = "AGPL-3.0-only"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+dependencies = [
+    # Floors raised to the locked majors in task 023 (approved dependency edit):
+    # the old floors were a full major behind the lock, so a clean re-resolve
+    # without uv.lock could legally land on incompatible pre-1.x/older lines.
+    "langgraph>=1",
+    "pydantic>=2",
+    "sqlalchemy>=2",
+    "psycopg[binary]>=3",
+    "alembic>=1.14",
+    "structlog>=26",
+    "python-dotenv>=1.2.2",
+    # <1: the 1.x line hard-depends on pymupdf-layout/onnxruntime — the ML stack the
+    # approved dependency gate excludes (contract decision 5; that tier is the docling seam)
+    # >=0.3.4: the determinism source-patch in ingest_full_text targets 0.3.4's
+    # column_boxes source; older floors would let a lock regen land on unpatched code
+    "pymupdf4llm>=0.3.4,<1",
+    # Task 023 (approved dependency edit, declaration-only promotions — the httpx/
+    # httpcore precedent): both are directly imported by ingest_full_text (lxml.html,
+    # pymupdf) but previously arrived only as transitives of trafilatura/pymupdf4llm;
+    # declaring them guards a lock regen dropping them. Zero new packages. NB pymupdf
+    # is AGPL-3.0/Artifex dual-licensed — compatible, this repo is AGPL-3.0-only.
+    "lxml>=6",
+    "pymupdf>=1.28",
+    "trafilatura>=2",
+    # Task 009 (approved gated change 2): embeddings + structured generation, one SDK
+    # >=2.44: what the live check actually ran; <3: a major bump on the
+    # product-egress SDK must be a deliberate change, not a lock regen
+    "openai>=2.44,<3",
+    # Task 009: trace backbone — env-driven, no-op without LANGFUSE_* keys
+    # >=4.13: what the live check actually ran; <5: full-I/O trace exporter, same rule as openai
+    "langfuse>=4.13,<5",
+    # Task 015 (approved gated change 4, declaration-only promotion): live search
+    # transport. Already a pinned transitive of the openai SDK — declaring it guards
+    # against a future SDK release dropping it silently at lock regen. Zero new packages.
+    "httpx>=0.28,<1",
+    # Task 016 (plan rev 2, blocker finding 5): the live fetcher's pinned-IP connect
+    # is a custom httpcore NetworkBackend — a direct import, so the same
+    # declaration-only promotion as httpx above (015 rev-3.13 precedent): already a
+    # pinned transitive of httpx; declaring it guards a lock regen. Zero new packages.
+    "httpcore>=1,<2",
+    # Task 025 (approved dependency gate): the production web API. fastapi/uvicorn
+    # serve /api/v1 (SSE via Starlette natively — no sse-starlette, per contract);
+    # pyjwt+cryptography verify OIDC RS256 bearer tokens against the issuer JWKS
+    # (Cognito-shaped; dev issuer is a local keypair). Ceilings on all four: the
+    # API boundary and token verification must never move majors on a lock regen.
+    "fastapi>=0.121,<1",
+    "uvicorn>=0.34,<1",
+    "pyjwt>=2.10,<3",
+    # >=48.0.1: GHSA-537c-gmf6-5ccf in 47.0.0 (caught by the CI audit gate, PR #32)
+    "cryptography>=48.0.1,<49",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/policy_atlas"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Task 019 item 7b (approved gated change 4): suite-wide network denial via
+# pytest-socket, replacing the per-test socket-deny monkeypatch guards from
+# tasks 008/009/010. The test DB is postgres on localhost TCP; allow-hosts
+# covers loopback in both address families plus the unix-socket path.
+addopts = "-v --disable-socket --allow-hosts=127.0.0.1,::1,localhost --allow-unix-socket"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src", "tests"]
+
+[tool.ruff]
+src = ["src", "tests"]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[dependency-groups]
+dev = [
+    # pytest/mypy floors raised to locked majors in task 023 (same rationale as the
+    # runtime floors above); [tool.pyright] pruned in the same slice — no consumer
+    # (mypy strict in `make verify` is the single type gate).
+    "pytest>=9",
+    "mypy>=2",
+    "ruff>=0.4",
+    "types-psycopg2",
+    "pytest-socket>=0.8.0",
+]
+

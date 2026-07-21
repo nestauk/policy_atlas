@@ -1,0 +1,3990 @@
+{
+  "components": {
+    "schemas": {
+      "AbortResponse": {
+        "additionalProperties": false,
+        "description": "Response aborting the run at this check-in.\n\nArgs:\n    kind: Discriminator.",
+        "properties": {
+          "kind": {
+            "const": "abort",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "AbortResponse",
+        "type": "object"
+      },
+      "ArtefactOut": {
+        "description": "The `artefact` read model \u2014 the synthesised evidence base.\n\nArgs:\n    title: Artefact title.\n    question: The evidence question the artefact answers.\n    coverage_snapshot: Embedded coverage snapshot.\n    sections: Artefact sections, in final page order.\n    references: Numbered reference list.",
+        "properties": {
+          "coverage_snapshot": {
+            "$ref": "#/components/schemas/CoverageSnapshotOut"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceOut"
+            },
+            "title": "References",
+            "type": "array"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/SectionOut"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "question",
+          "coverage_snapshot"
+        ],
+        "title": "ArtefactOut",
+        "type": "object"
+      },
+      "BlockOut": {
+        "description": "One prose block within an artefact section.\n\nArgs:\n    block_id: The block's identity.\n    prose: The block's final persisted prose.\n    claims: Span-anchored claim annotations over `prose`.\n    gaps: Named coverage gaps surfaced for this block.",
+        "properties": {
+          "block_id": {
+            "format": "uuid",
+            "title": "Block Id",
+            "type": "string"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimOut"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "gaps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Gaps",
+            "type": "array"
+          },
+          "prose": {
+            "title": "Prose",
+            "type": "string"
+          }
+        },
+        "required": [
+          "block_id",
+          "prose"
+        ],
+        "title": "BlockOut",
+        "type": "object"
+      },
+      "CheckInOption": {
+        "description": "One server-supplied option offered at a check-in.\n\nArgs:\n    id: Canonical or authored option id.\n    label: Short user-visible option label.\n    description: Longer user-visible option description.\n    requires_user_input: Whether picking this option requires an\n        additional `params` fill-in on the response.\n    suggested: Whether the server highlights this as the suggested pick.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "requires_user_input": {
+            "title": "Requires User Input",
+            "type": "boolean"
+          },
+          "suggested": {
+            "default": false,
+            "title": "Suggested",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "description",
+          "requires_user_input"
+        ],
+        "title": "CheckInOption",
+        "type": "object"
+      },
+      "CheckInOut": {
+        "description": "A pending or decided steering check-in.\n\nArgs:\n    check_in_id: The pause event id.\n    kind: Check-in kind.\n    boundary: Which side of the component boundary the pause sits at.\n    component: Composed-chain component the pause concerns, or `None`.\n    stage: Presentation stage key for the pause, or `None`.\n    render: The deterministic render \u2014 content of record; there is no\n        LLM prose wrap.\n    options: Server-supplied options. The client must never invent\n        options.\n    triggers: Fired floor triggers, if any.\n    segment_reentry_allowed: Whether an additive segment re-entry is\n        available at this boundary.\n    rerun_component: Component a replacement re-run would target, or\n        `None` if unavailable.\n    status: Whether the check-in is still pending or already decided.\n    created_at: When the pause was recorded.\n    sequence: The pause event's `event_log` sequence.",
+        "properties": {
+          "boundary": {
+            "enum": [
+              "after_component",
+              "before_component"
+            ],
+            "title": "Boundary",
+            "type": "string"
+          },
+          "check_in_id": {
+            "format": "uuid",
+            "title": "Check In Id",
+            "type": "string"
+          },
+          "component": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Component"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/CheckInOption"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "render": {
+            "title": "Render",
+            "type": "string"
+          },
+          "rerun_component": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Rerun Component"
+          },
+          "segment_reentry_allowed": {
+            "title": "Segment Reentry Allowed",
+            "type": "boolean"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Stage"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "decided"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "triggers": {
+            "items": {
+              "$ref": "#/components/schemas/CheckInTrigger"
+            },
+            "title": "Triggers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "check_in_id",
+          "kind",
+          "boundary",
+          "render",
+          "segment_reentry_allowed",
+          "status",
+          "created_at",
+          "sequence"
+        ],
+        "title": "CheckInOut",
+        "type": "object"
+      },
+      "CheckInResponse": {
+        "discriminator": {
+          "mapping": {
+            "abort": "#/components/schemas/AbortResponse",
+            "free_text": "#/components/schemas/FreeTextResponse",
+            "free_text_confirm": "#/components/schemas/FreeTextConfirmResponse",
+            "option": "#/components/schemas/OptionResponse"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/OptionResponse"
+          },
+          {
+            "$ref": "#/components/schemas/FreeTextResponse"
+          },
+          {
+            "$ref": "#/components/schemas/FreeTextConfirmResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AbortResponse"
+          }
+        ]
+      },
+      "CheckInTrigger": {
+        "description": "One fired floor trigger reported alongside a check-in.\n\nArgs:\n    trigger: Trigger name (e.g. `excluded_large_stratum`).\n    detail: Trigger-specific detail payload.",
+        "properties": {
+          "detail": {
+            "default": null,
+            "title": "Detail"
+          },
+          "trigger": {
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trigger"
+        ],
+        "title": "CheckInTrigger",
+        "type": "object"
+      },
+      "CheckinPendingFrame": {
+        "description": "A `steering.pause` \u2014 the full check-in resource.",
+        "properties": {
+          "check_in": {
+            "$ref": "#/components/schemas/CheckInOut"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "type": {
+            "const": "checkin.pending",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "occurred_at",
+          "type",
+          "check_in"
+        ],
+        "title": "CheckinPendingFrame",
+        "type": "object"
+      },
+      "CheckinResolvedFrame": {
+        "description": "A `steering.decision` resolving a prior pending check-in.",
+        "properties": {
+          "check_in_id": {
+            "format": "uuid",
+            "title": "Check In Id",
+            "type": "string"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "enum": [
+                  "user",
+                  "orchestrator",
+                  "standing_default"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Decided By"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "response": {
+            "additionalProperties": true,
+            "title": "Response",
+            "type": "object"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "type": {
+            "const": "checkin.resolved",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "occurred_at",
+          "type",
+          "check_in_id",
+          "response"
+        ],
+        "title": "CheckinResolvedFrame",
+        "type": "object"
+      },
+      "ChunkContextOut": {
+        "description": "The chunk-context read model for a cited span (the 008 seam).\n\nArgs:\n    context: Context text, clamped to a character window around the\n        cited span.\n    span_start: Start offset of the clamped context.\n    span_end: End offset of the clamped context.\n    clamped: Whether the window was clamped (hit a chunk boundary).",
+        "properties": {
+          "clamped": {
+            "title": "Clamped",
+            "type": "boolean"
+          },
+          "context": {
+            "title": "Context",
+            "type": "string"
+          },
+          "span_end": {
+            "title": "Span End",
+            "type": "integer"
+          },
+          "span_start": {
+            "title": "Span Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "context",
+          "span_start",
+          "span_end",
+          "clamped"
+        ],
+        "title": "ChunkContextOut",
+        "type": "object"
+      },
+      "CitationOut": {
+        "description": "One citation attached to a citation-type claim.\n\nArgs:\n    citation_id: Durable citation identity \u2014 the key for the\n        chunk-context endpoint (`GET .../citations/{citation_id}/context`).\n    n: Reference number (matches a `ReferenceOut.n`).\n    source_title: Cited source's title.\n    quote: The quoted span from the source.\n    grounding_tier: Optional grounding-judge tier label.\n    appraisal_label: Optional appraisal label.",
+        "properties": {
+          "appraisal_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appraisal Label"
+          },
+          "citation_id": {
+            "format": "uuid",
+            "title": "Citation Id",
+            "type": "string"
+          },
+          "grounding_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grounding Tier"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          },
+          "source_title": {
+            "title": "Source Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "citation_id",
+          "n",
+          "source_title",
+          "quote"
+        ],
+        "title": "CitationOut",
+        "type": "object"
+      },
+      "ClaimOut": {
+        "description": "One span-anchored claim annotation within a block.\n\nArgs:\n    claim_id: The claim's identity.\n    claim_type: Annotation type.\n    text: The spanned text.\n    span: Character offsets `[start, end]` into the block's `prose`, or\n        `None`.\n    citations: Citations attached to this claim (citation-type only).",
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/CitationOut"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "claim_id": {
+            "format": "uuid",
+            "title": "Claim Id",
+            "type": "string"
+          },
+          "claim_type": {
+            "enum": [
+              "citation",
+              "gap",
+              "reasoning",
+              "pattern",
+              "theme",
+              "unspanned_assertion"
+            ],
+            "title": "Claim Type",
+            "type": "string"
+          },
+          "span": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim_id",
+          "claim_type",
+          "text"
+        ],
+        "title": "ClaimOut",
+        "type": "object"
+      },
+      "CountryGroupDraft": {
+        "description": "Draft mirror of the runtime `CountryGroup`.\n\nArgs:\n    label: Pinned Tier-1 label, or a user/planner label for an explicit\n        Tier-2 country list. `None` while undecided.\n    countries: Explicit ISO-3166 alpha-2 country list for Tier-2 groups.\n    authorship: Provenance of the group membership, when settled.",
+        "properties": {
+          "authorship": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pinned-table",
+                  "planner-proposed",
+                  "user-amended"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Authorship"
+          },
+          "countries": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Countries"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Label"
+          }
+        },
+        "title": "CountryGroupDraft",
+        "type": "object"
+      },
+      "CoverageOut": {
+        "description": "The `coverage` read model \u2014 the composed one-line coverage sentence.\n\nArgs:\n    sentence: The composed coverage sentence (stop condition + adequacy).\n    base: Structured basis the sentence was composed from.",
+        "properties": {
+          "base": {
+            "additionalProperties": true,
+            "title": "Base",
+            "type": "object"
+          },
+          "sentence": {
+            "title": "Sentence",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sentence"
+        ],
+        "title": "CoverageOut",
+        "type": "object"
+      },
+      "CoverageSnapshotOut": {
+        "description": "The artefact's embedded coverage snapshot.\n\nArgs:\n    source_count: Number of sources underlying the artefact.\n    study_types: Counts by study type.\n    year_range: Inclusive `[min_year, max_year]`, or `None`.\n    included: Number of sources included.\n    screened_out: Number of sources screened out.",
+        "properties": {
+          "included": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Included"
+          },
+          "screened_out": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screened Out"
+          },
+          "source_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Count"
+          },
+          "study_types": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Study Types",
+            "type": "object"
+          },
+          "year_range": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year Range"
+          }
+        },
+        "title": "CoverageSnapshotOut",
+        "type": "object"
+      },
+      "DecisionOut": {
+        "description": "One entry in the paginated decision log.\n\nArgs:\n    sequence: The underlying event's `event_log` sequence.\n    occurred_at: When the decision was recorded.\n    kind: Decision kind.\n    summary: Human-readable summary of the decision.\n    decided_by: Who decided, when known.\n    detail: Optional structured detail.",
+        "properties": {
+          "decided_by": {
+            "anyOf": [
+              {
+                "enum": [
+                  "user",
+                  "orchestrator",
+                  "standing_default"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "occurred_at",
+          "kind",
+          "summary"
+        ],
+        "title": "DecisionOut",
+        "type": "object"
+      },
+      "EvidenceItemOut": {
+        "description": "One row of the paginated evidence/source list.\n\nArgs:\n    source_id: The source's identity.\n    title: Source title.\n    year: Publication year, or `None` if unknown.\n    venue: Publication venue, or `None` if unknown.\n    origin: Acquisition backend.\n    status: Position on the evidence status ladder.\n    status_reason: Optional human-readable reason for the current status\n        (e.g. why screened out).\n    evidence_type: Optional evidence type label.\n    appraisal_tier: Optional appraisal tier label.\n    cited: Whether this source is cited in the artefact.\n    url: Optional source URL.",
+        "properties": {
+          "appraisal_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appraisal Tier"
+          },
+          "cited": {
+            "title": "Cited",
+            "type": "boolean"
+          },
+          "evidence_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Type"
+          },
+          "origin": {
+            "enum": [
+              "OpenAlex",
+              "Overton",
+              "Uploaded"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "found",
+              "screened_out",
+              "relevant",
+              "not_selected",
+              "selected",
+              "read_in_full",
+              "findings_extracted",
+              "cited",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "status_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Reason"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "source_id",
+          "title",
+          "origin",
+          "status",
+          "cited"
+        ],
+        "title": "EvidenceItemOut",
+        "type": "object"
+      },
+      "FacetGroupsOut": {
+        "description": "Groups produced for one grouping facet.\n\nArgs:\n    facet: Grouping facet name.\n    groups: Groups within the facet.\n    ungrouped: Number of members not placed in any group.",
+        "properties": {
+          "facet": {
+            "title": "Facet",
+            "type": "string"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/GroupOut"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "ungrouped": {
+            "title": "Ungrouped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "facet",
+          "ungrouped"
+        ],
+        "title": "FacetGroupsOut",
+        "type": "object"
+      },
+      "FindingOut": {
+        "description": "One row of the paginated findings list.\n\nArgs:\n    finding_id: The finding's identity.\n    statement: The finding's text/claim statement.\n    source_id: Identity of the source the finding was extracted from.\n    source_title: Title of that source.\n    profile: Extraction profile the finding came from.\n    relevance: Run-scoped B2' relevance mark, when the run has them.",
+        "properties": {
+          "finding_id": {
+            "format": "uuid",
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "profile": {
+            "enum": [
+              "iof",
+              "icf"
+            ],
+            "title": "Profile",
+            "type": "string"
+          },
+          "relevance": {
+            "anyOf": [
+              {
+                "enum": [
+                  "priority",
+                  "normal"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_title": {
+            "title": "Source Title",
+            "type": "string"
+          },
+          "statement": {
+            "title": "Statement",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finding_id",
+          "statement",
+          "source_id",
+          "source_title",
+          "profile"
+        ],
+        "title": "FindingOut",
+        "type": "object"
+      },
+      "FreeTextCompileOut": {
+        "description": "The 202 body returned for a `free_text` check-in response.\n\nArgs:\n    render: The compiled fan-out render \u2014 the confirm-gate content of\n        record. Nothing applies until confirmed.\n    confirm_token: Opaque token the client echoes back in a\n        `free_text_confirm` response.",
+        "properties": {
+          "confirm_token": {
+            "title": "Confirm Token",
+            "type": "string"
+          },
+          "render": {
+            "title": "Render",
+            "type": "string"
+          }
+        },
+        "required": [
+          "render",
+          "confirm_token"
+        ],
+        "title": "FreeTextCompileOut",
+        "type": "object"
+      },
+      "FreeTextConfirmResponse": {
+        "additionalProperties": false,
+        "description": "Response confirming or discarding a compiled free-text fan-out.\n\nArgs:\n    kind: Discriminator.\n    confirm_token: Token threading this confirm back to its compile\n        (`FreeTextCompileOut.confirm_token`).\n    apply: `True` to apply the compiled deltas, `False` to discard them.",
+        "properties": {
+          "apply": {
+            "title": "Apply",
+            "type": "boolean"
+          },
+          "confirm_token": {
+            "title": "Confirm Token",
+            "type": "string"
+          },
+          "kind": {
+            "const": "free_text_confirm",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "confirm_token",
+          "apply"
+        ],
+        "title": "FreeTextConfirmResponse",
+        "type": "object"
+      },
+      "FreeTextResponse": {
+        "additionalProperties": false,
+        "description": "Response supplying free text for the router to compile.\n\nArgs:\n    kind: Discriminator.\n    text: The user's free-text steer.",
+        "properties": {
+          "kind": {
+            "const": "free_text",
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "text"
+        ],
+        "title": "FreeTextResponse",
+        "type": "object"
+      },
+      "FunnelOut": {
+        "description": "The acquisition-to-citation funnel counts.\n\nArgs:\n    found: Total acquired.\n    relevant: Passed abstract screening.\n    screened_out: Excluded at screening.\n    quality_checked: Passed appraisal.\n    read_in_full: Full text ingested.\n    selected: Passed selection.\n    findings: Findings extracted.\n    cited: Cited in the artefact.\n\nAny field is `None` before its stage has run \u2014 the funnel spans the\nfull flow, unlike the screened-in-only `landscape`.",
+        "properties": {
+          "cited": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cited"
+          },
+          "findings": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Findings"
+          },
+          "found": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Found"
+          },
+          "quality_checked": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Checked"
+          },
+          "read_in_full": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read In Full"
+          },
+          "relevant": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevant"
+          },
+          "screened_out": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screened Out"
+          },
+          "selected": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected"
+          }
+        },
+        "title": "FunnelOut",
+        "type": "object"
+      },
+      "GroupOut": {
+        "description": "One group within a grouping facet.\n\nArgs:\n    label: Group label.\n    description: Short group description.\n    size: Number of members in the group.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "label",
+          "description",
+          "size"
+        ],
+        "title": "GroupOut",
+        "type": "object"
+      },
+      "GroupsOut": {
+        "description": "The `groups` read model.\n\nArgs:\n    facets: Per-facet group listings.",
+        "properties": {
+          "facets": {
+            "items": {
+              "$ref": "#/components/schemas/FacetGroupsOut"
+            },
+            "title": "Facets",
+            "type": "array"
+          }
+        },
+        "title": "GroupsOut",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LandscapeOut": {
+        "description": "Distributions over the screened-in set only (never the found count).\n\nArgs:\n    evidence_types: Counts by evidence type label.\n    years: Counts by publication year.\n    themes: Landscape themes.\n    geographies: Optional counts by geography label.",
+        "properties": {
+          "evidence_types": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Evidence Types",
+            "type": "object"
+          },
+          "geographies": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Geographies"
+          },
+          "themes": {
+            "items": {
+              "$ref": "#/components/schemas/ThemeOut"
+            },
+            "title": "Themes",
+            "type": "array"
+          },
+          "years": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Years",
+            "type": "object"
+          }
+        },
+        "title": "LandscapeOut",
+        "type": "object"
+      },
+      "LatestRun": {
+        "description": "The derived latest-run read model carried on a project.\n\nArgs:\n    capability_run_id: Identity of the project's most recent run.\n    status: That run's current status.\n    started_at: When that run started executing.\n    ended_at: When that run reached a terminal status, or `None` while\n        still running or paused.",
+        "properties": {
+          "capability_run_id": {
+            "format": "uuid",
+            "title": "Capability Run Id",
+            "type": "string"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "paused",
+              "succeeded",
+              "degraded",
+              "failed",
+              "aborted",
+              "interrupted"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capability_run_id",
+          "status",
+          "started_at"
+        ],
+        "title": "LatestRun",
+        "type": "object"
+      },
+      "OptionResponse": {
+        "additionalProperties": false,
+        "description": "Response picking a canonical or authored option.\n\nArgs:\n    kind: Discriminator.\n    option_id: The picked option's id.\n    params: Fill-in for `requires_user_input` options. The spec does\n        not name per-option param shapes, so this stays a constrained\n        free-form mapping rather than a per-option union.",
+        "properties": {
+          "kind": {
+            "const": "option",
+            "title": "Kind",
+            "type": "string"
+          },
+          "option_id": {
+            "title": "Option Id",
+            "type": "string"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Params"
+          }
+        },
+        "required": [
+          "kind",
+          "option_id"
+        ],
+        "title": "OptionResponse",
+        "type": "object"
+      },
+      "PageMeta": {
+        "description": "Pagination metadata attached to a paginated list response.\n\nArgs:\n    page: 1-indexed page number returned.\n    page_size: Number of items requested per page (server-capped at\n        `PAGE_SIZE_MAX`).\n    total_items: Total number of items across all pages.",
+        "properties": {
+          "page": {
+            "minimum": 1.0,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total_items": {
+            "minimum": 0.0,
+            "title": "Total Items",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page",
+          "page_size",
+          "total_items"
+        ],
+        "title": "PageMeta",
+        "type": "object"
+      },
+      "Page_CheckInOut_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/CheckInOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "title": "Page[CheckInOut]",
+        "type": "object"
+      },
+      "Page_DecisionOut_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/DecisionOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "title": "Page[DecisionOut]",
+        "type": "object"
+      },
+      "Page_EvidenceItemOut_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceItemOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "title": "Page[EvidenceItemOut]",
+        "type": "object"
+      },
+      "Page_FindingOut_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/FindingOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "title": "Page[FindingOut]",
+        "type": "object"
+      },
+      "Page_ProjectOut_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "title": "Page[ProjectOut]",
+        "type": "object"
+      },
+      "Page_RunOut_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/RunOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "title": "Page[RunOut]",
+        "type": "object"
+      },
+      "PlanDraft": {
+        "description": "Draft or approved orchestration plan, as surfaced to the client.\n\nMirrors the runtime `OrchestrationPlan` field-by-field. Every field\nexcept `steps`/`ready` may be `None`/absent while drafting.\n\nArgs:\n    title: Short user-visible title for the run.\n    question: Refined evidence question.\n    scoping_notes: User-expressed scoping notes.\n    screening_criteria: Visible inclusion/exclusion criteria for screening.\n    backend_scope: Search backend scope.\n    scope_constraints: Optional recency and publisher-geography constraints.\n    search_effort: Acquisition effort rung.\n    analysis_depth: Analysis component and budget rung.\n    components: Discretionary orchestration components only.\n    component_rationale: Visible intent-fit rationale keyed by\n        discretionary component.\n    grouping_facets: Optional grouping facets, valid only when `group`\n        runs.\n    extract_profiles: Optional finding profile short names, valid only\n        when `extract` runs.\n    steering_mode: Steering mode for the run.\n    assumptions: Visible assumptions and open guesses.\n    expected_artefact_shape: Deterministic forecast derived from components.\n    time_band: Deterministic wall-clock band derived from the two axes.\n    steps: The composed chain, presentation-labelled, in execution order.\n    ready: Whether the draft has validated fail-closed into an\n        executable plan.",
+        "properties": {
+          "analysis_depth": {
+            "anyOf": [
+              {
+                "enum": [
+                  "landscape",
+                  "standard",
+                  "deep"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Analysis Depth"
+          },
+          "assumptions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Assumptions"
+          },
+          "backend_scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "academic_only",
+                  "grey_lit_only",
+                  "both"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Backend Scope"
+          },
+          "component_rationale": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Component Rationale"
+          },
+          "components": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "characterise",
+                    "screen_full",
+                    "select",
+                    "extract",
+                    "group"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Components"
+          },
+          "expected_artefact_shape": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Expected Artefact Shape"
+          },
+          "extract_profiles": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "iof",
+                    "icf"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Extract Profiles"
+          },
+          "grouping_facets": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "intervention",
+                    "outcome",
+                    "population",
+                    "barrier_theme",
+                    "enabler_theme",
+                    "mechanism_theme"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Grouping Facets"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Question"
+          },
+          "ready": {
+            "default": false,
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "scope_constraints": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScopeConstraintsDraft"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "scoping_notes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Scoping Notes"
+          },
+          "screening_criteria": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Screening Criteria"
+          },
+          "search_effort": {
+            "anyOf": [
+              {
+                "enum": [
+                  "rapid",
+                  "standard",
+                  "deep"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Search Effort"
+          },
+          "steering_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "frequent",
+                  "moderate",
+                  "minimal",
+                  "unattended"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Steering Mode"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/PlanStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "time_band": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Time Band"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Title"
+          }
+        },
+        "title": "PlanDraft",
+        "type": "object"
+      },
+      "PlanOut": {
+        "description": "Response body for `GET /api/v1/projects/{id}/plan`.\n\nArgs:\n    plan: The current plan (draft or approved).\n    version: Plan row version.\n    status: Plan status (e.g. `draft`, `approved`).",
+        "properties": {
+          "plan": {
+            "$ref": "#/components/schemas/PlanDraft"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "plan",
+          "version",
+          "status"
+        ],
+        "title": "PlanOut",
+        "type": "object"
+      },
+      "PlanStep": {
+        "description": "One user-visible step in the composed chain, for progress display.\n\nArgs:\n    label: Short user-visible step label (presentation; may change).\n    blurb: Longer user-visible step description (presentation; may\n        change).\n    stage: Composed-chain stage name the step corresponds to.",
+        "properties": {
+          "blurb": {
+            "title": "Blurb",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "blurb",
+          "stage"
+        ],
+        "title": "PlanStep",
+        "type": "object"
+      },
+      "PlanUpdatedFrame": {
+        "description": "A plan row supersession (new draft turn, or approval).",
+        "properties": {
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanDraft"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "type": {
+            "const": "plan.updated",
+            "title": "Type",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sequence",
+          "occurred_at",
+          "type",
+          "plan",
+          "version"
+        ],
+        "title": "PlanUpdatedFrame",
+        "type": "object"
+      },
+      "PlanningTurnCreate": {
+        "additionalProperties": false,
+        "description": "Inbound body for `POST /api/v1/projects/{id}/planning-turns`.\n\nArgs:\n    message: The user's chat message for this planner turn.\n    client_turn_id: Caller-minted UUID making double-submit idempotent \u2014\n        resubmitting the same `client_turn_id` returns the same turn\n        rather than re-running the planner.",
+        "properties": {
+          "client_turn_id": {
+            "format": "uuid",
+            "title": "Client Turn Id",
+            "type": "string"
+          },
+          "message": {
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "client_turn_id"
+        ],
+        "title": "PlanningTurnCreate",
+        "type": "object"
+      },
+      "PlanningTurnOut": {
+        "description": "Response body for one planner turn.\n\nArgs:\n    reply: The planner's conversational reply for this turn.\n    plan: The full current draft plan.\n    suggestions: The planner's suggested answers to its clarifying\n        question, rendered as tappable quick replies. Empty when none.",
+        "properties": {
+          "plan": {
+            "$ref": "#/components/schemas/PlanDraft"
+          },
+          "reply": {
+            "title": "Reply",
+            "type": "string"
+          },
+          "suggestions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reply",
+          "plan"
+        ],
+        "title": "PlanningTurnOut",
+        "type": "object"
+      },
+      "ProjectCreate": {
+        "additionalProperties": false,
+        "description": "Inbound body for `POST /api/v1/projects`.\n\nArgs:\n    name: Project display name, 1-200 characters. Outer whitespace is\n        stripped before the length constraint is applied\n        (`str_strip_whitespace`).\n    question: Optional initial evidence question.",
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ProjectCreate",
+        "type": "object"
+      },
+      "ProjectOut": {
+        "description": "A project resource.\n\nArgs:\n    project_id: The project's identity.\n    name: Current display name.\n    question: Current evidence question, or `None` if not yet set.\n    status: Lifecycle status (`active` unless archived; no hard delete).\n    created_at: When the project was created.\n    updated_at: When the project row was last written.\n    archived_at: When the project was archived, or `None` if active.\n    latest_run: The derived latest-run read model, or `None` before any\n        run has been created.",
+        "properties": {
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "latest_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LatestRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "archived"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "name",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ProjectOut",
+        "type": "object"
+      },
+      "ProjectUpdate": {
+        "additionalProperties": false,
+        "description": "Inbound body for `PATCH /api/v1/projects/{id}` (partial update).\n\nArgs:\n    name: New display name, when renaming. Omit to leave unchanged.\n    question: New evidence question, when changing it. Omit to leave\n        unchanged.",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          }
+        },
+        "title": "ProjectUpdate",
+        "type": "object"
+      },
+      "ProjectUpdatedFrame": {
+        "description": "A lifecycle audit event (rename, archive).",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Question"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "active",
+                  "archived"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "type": {
+            "const": "project.updated",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "occurred_at",
+          "type"
+        ],
+        "title": "ProjectUpdatedFrame",
+        "type": "object"
+      },
+      "ReferenceOut": {
+        "description": "One numbered reference in the artefact's reference list.\n\nArgs:\n    n: Reference number.\n    title: Reference title.\n    year: Publication year, or `None` if unknown.\n    venue: Publication venue, or `None` if unknown.\n    url: Optional reference URL.",
+        "properties": {
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "n",
+          "title"
+        ],
+        "title": "ReferenceOut",
+        "type": "object"
+      },
+      "RunCreate": {
+        "additionalProperties": false,
+        "description": "Inbound body for `POST /api/v1/projects/{id}/runs`.\n\nThe run is created from the project's current approved-ready plan; the\nrequest body carries no fields. `extra=\"forbid\"` rejects any body at\nall beyond `{}`.",
+        "properties": {},
+        "title": "RunCreate",
+        "type": "object"
+      },
+      "RunOut": {
+        "description": "A capability run resource.\n\nArgs:\n    capability_run_id: The run's identity.\n    project_id: Owning project.\n    plan_id: Identity of the plan the run executes.\n    plan_version: Plan version current at run creation.\n    status: Current run status.\n    started_at: When the run started executing.\n    ended_at: When the run reached a terminal status, or `None` while\n        still running or paused.",
+        "properties": {
+          "capability_run_id": {
+            "format": "uuid",
+            "title": "Capability Run Id",
+            "type": "string"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "plan_id": {
+            "format": "uuid",
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "plan_version": {
+            "title": "Plan Version",
+            "type": "integer"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "paused",
+              "succeeded",
+              "degraded",
+              "failed",
+              "aborted",
+              "interrupted"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capability_run_id",
+          "project_id",
+          "plan_id",
+          "plan_version",
+          "status",
+          "started_at"
+        ],
+        "title": "RunOut",
+        "type": "object"
+      },
+      "RunStatusFrame": {
+        "description": "Walk open/park/finish/interrupt.",
+        "properties": {
+          "capability_run_id": {
+            "format": "uuid",
+            "title": "Capability Run Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "paused",
+              "succeeded",
+              "degraded",
+              "failed",
+              "aborted",
+              "interrupted"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "type": {
+            "const": "run.status",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "occurred_at",
+          "type",
+          "capability_run_id",
+          "status"
+        ],
+        "title": "RunStatusFrame",
+        "type": "object"
+      },
+      "ScopeConstraintsDraft": {
+        "description": "Draft mirror of the runtime `ScopeConstraints`.\n\nArgs:\n    published_after: Optional lower publication-date bound (`YYYY-MM-DD`).\n    published_before: Optional upper publication-date bound (`YYYY-MM-DD`).\n    publisher_country: Optional Overton publisher-country filter.\n    author_affiliation_countries: Optional OpenAlex author-affiliation\n        country filter (2-letter alpha codes).\n    country_group: Optional named group applied to both search backends.",
+        "properties": {
+          "author_affiliation_countries": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Author Affiliation Countries"
+          },
+          "country_group": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CountryGroupDraft"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "published_after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Published After"
+          },
+          "published_before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Published Before"
+          },
+          "publisher_country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Publisher Country"
+          }
+        },
+        "title": "ScopeConstraintsDraft",
+        "type": "object"
+      },
+      "SectionOut": {
+        "description": "One artefact section.\n\nArgs:\n    title: Section title.\n    role: Section role (determines page position).\n    blocks: The section's prose blocks, in order.",
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/BlockOut"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "role": {
+            "enum": [
+              "key_findings",
+              "standard",
+              "conclusions"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "role"
+        ],
+        "title": "SectionOut",
+        "type": "object"
+      },
+      "SseFrame": {
+        "discriminator": {
+          "mapping": {
+            "checkin.pending": "#/components/schemas/CheckinPendingFrame",
+            "checkin.resolved": "#/components/schemas/CheckinResolvedFrame",
+            "plan.updated": "#/components/schemas/PlanUpdatedFrame",
+            "project.updated": "#/components/schemas/ProjectUpdatedFrame",
+            "run.status": "#/components/schemas/RunStatusFrame",
+            "stage.completed": "#/components/schemas/StageCompletedFrame",
+            "stage.failed": "#/components/schemas/StageFailedFrame",
+            "stage.started": "#/components/schemas/StageStartedFrame",
+            "tick": "#/components/schemas/TickFrame"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/RunStatusFrame"
+          },
+          {
+            "$ref": "#/components/schemas/StageStartedFrame"
+          },
+          {
+            "$ref": "#/components/schemas/StageCompletedFrame"
+          },
+          {
+            "$ref": "#/components/schemas/StageFailedFrame"
+          },
+          {
+            "$ref": "#/components/schemas/CheckinPendingFrame"
+          },
+          {
+            "$ref": "#/components/schemas/CheckinResolvedFrame"
+          },
+          {
+            "$ref": "#/components/schemas/PlanUpdatedFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ProjectUpdatedFrame"
+          },
+          {
+            "$ref": "#/components/schemas/TickFrame"
+          }
+        ]
+      },
+      "StageCompletedFrame": {
+        "description": "A component reached its terminal (successful) outcome.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Seconds"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "stage": {
+            "enum": [
+              "acquire",
+              "screen",
+              "classify",
+              "appraise",
+              "characterise",
+              "select",
+              "extract",
+              "group",
+              "synthesise"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "summary": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "Summary",
+            "type": "object"
+          },
+          "type": {
+            "const": "stage.completed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "occurred_at",
+          "type",
+          "stage",
+          "label"
+        ],
+        "title": "StageCompletedFrame",
+        "type": "object"
+      },
+      "StageFailedFrame": {
+        "description": "A component failed or was skipped.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "boolean"
+          },
+          "stage": {
+            "enum": [
+              "acquire",
+              "screen",
+              "classify",
+              "appraise",
+              "characterise",
+              "select",
+              "extract",
+              "group",
+              "synthesise"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "type": {
+            "const": "stage.failed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "occurred_at",
+          "type",
+          "stage",
+          "label",
+          "reason",
+          "skipped"
+        ],
+        "title": "StageFailedFrame",
+        "type": "object"
+      },
+      "StageStartedFrame": {
+        "description": "A component run started.",
+        "properties": {
+          "blurb": {
+            "title": "Blurb",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "stage": {
+            "enum": [
+              "acquire",
+              "screen",
+              "classify",
+              "appraise",
+              "characterise",
+              "select",
+              "extract",
+              "group",
+              "synthesise"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "type": {
+            "const": "stage.started",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "occurred_at",
+          "type",
+          "stage",
+          "label",
+          "blurb"
+        ],
+        "title": "StageStartedFrame",
+        "type": "object"
+      },
+      "ThemeOut": {
+        "description": "One landscape theme.\n\nArgs:\n    name: Theme name.\n    size: Number of items in the theme.\n    description: Short theme description.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "size",
+          "description"
+        ],
+        "title": "ThemeOut",
+        "type": "object"
+      },
+      "TickFrame": {
+        "description": "Ephemeral heartbeat/progress-note frame.\n\nNever persisted, never state-bearing, carries no `id:` line \u2014 so it has\nno `sequence` field at all (unlike every other frame type).",
+        "properties": {
+          "ephemeral": {
+            "const": true,
+            "default": true,
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "enum": [
+                  "acquire",
+                  "screen",
+                  "classify",
+                  "appraise",
+                  "characterise",
+                  "select",
+                  "extract",
+                  "group",
+                  "synthesise"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Stage"
+          },
+          "type": {
+            "const": "tick",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "note",
+          "occurred_at"
+        ],
+        "title": "TickFrame",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "Policy Atlas API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/projects": {
+      "get": {
+        "description": "List the authenticated user's projects with derived latest-run state.",
+        "operationId": "list_projects_api_v1_projects_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "active",
+              "enum": [
+                "active",
+                "archived",
+                "all"
+              ],
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_ProjectOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Projects",
+        "tags": [
+          "projects"
+        ]
+      },
+      "post": {
+        "description": "Create one active project owned by the authenticated subject.",
+        "operationId": "create_project_api_v1_projects_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}": {
+      "get": {
+        "description": "Return one active project when it belongs to the caller.",
+        "operationId": "get_project_api_v1_projects__project_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Project",
+        "tags": [
+          "projects"
+        ]
+      },
+      "patch": {
+        "description": "Apply the supplied project fields without changing omitted fields.",
+        "operationId": "update_project_api_v1_projects__project_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/archive": {
+      "post": {
+        "description": "Soft-delete a project unless its latest walk is active or parked.",
+        "operationId": "archive_project_route_api_v1_projects__project_id__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Archive Project Route",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/artefact": {
+      "get": {
+        "description": "Return the latest persisted synthesis artefact or a shaped absence.",
+        "operationId": "artefact_api_v1_projects__project_id__artefact_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtefactOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Artefact",
+        "tags": [
+          "read-models"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/check-ins": {
+      "get": {
+        "description": "Return a latest pending card or the durable steering history projection.\n\nPaginated (rubric item 17 \u2014 check-ins accumulate over a project's life);\nthe pending view is at most one card by construction.",
+        "operationId": "list_check_ins_api_v1_projects__project_id__check_ins_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "pending",
+              "enum": [
+                "pending",
+                "all"
+              ],
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_CheckInOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Check Ins",
+        "tags": [
+          "check-ins"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/check-ins/{check_in_id}/response": {
+      "post": {
+        "description": "Compile or durably answer one check-in, dispatching continuations after commit.",
+        "operationId": "respond_to_check_in_api_v1_projects__project_id__check_ins__check_in_id__response_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "check_in_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Check In Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "discriminator": {
+                  "mapping": {
+                    "abort": "#/components/schemas/AbortResponse",
+                    "free_text": "#/components/schemas/FreeTextResponse",
+                    "free_text_confirm": "#/components/schemas/FreeTextConfirmResponse",
+                    "option": "#/components/schemas/OptionResponse"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/OptionResponse"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FreeTextResponse"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FreeTextConfirmResponse"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AbortResponse"
+                  }
+                ],
+                "title": "Response"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FreeTextCompileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Respond To Check In",
+        "tags": [
+          "check-ins"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/citations/{citation_key}/context": {
+      "get": {
+        "description": "Return a clamped context window for an artefact citation id.",
+        "operationId": "chunk_context_api_v1_projects__project_id__citations__citation_key__context_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "citation_key",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Citation Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkContextOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Chunk Context",
+        "tags": [
+          "read-models"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/coverage": {
+      "get": {
+        "description": "Return the composed latest search coverage statement.",
+        "operationId": "coverage_api_v1_projects__project_id__coverage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Coverage",
+        "tags": [
+          "read-models"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/decisions": {
+      "get": {
+        "description": "Return the allowlisted audit and steering decision history.",
+        "operationId": "decisions_api_v1_projects__project_id__decisions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_DecisionOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Decisions",
+        "tags": [
+          "read-models"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/events": {
+      "get": {
+        "description": "Stream an owner-scoped durable replay followed by a non-blocking live tail.",
+        "operationId": "stream_events_api_v1_projects__project_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Cursor",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stream Events",
+        "tags": [
+          "events"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/evidence": {
+      "get": {
+        "description": "Return a bounded page from the evidence status ladder.",
+        "operationId": "evidence_api_v1_projects__project_id__evidence_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_EvidenceItemOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Evidence",
+        "tags": [
+          "read-models"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/findings": {
+      "get": {
+        "description": "Return a bounded page of IOF and ICF findings.",
+        "operationId": "findings_api_v1_projects__project_id__findings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_FindingOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Findings",
+        "tags": [
+          "read-models"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/funnel": {
+      "get": {
+        "description": "Return the durable acquisition-to-citation funnel.",
+        "operationId": "funnel_api_v1_projects__project_id__funnel_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FunnelOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Funnel",
+        "tags": [
+          "read-models"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/groups": {
+      "get": {
+        "description": "Return the latest grouping facets and residual counts.",
+        "operationId": "groups_api_v1_projects__project_id__groups_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Groups",
+        "tags": [
+          "read-models"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/landscape": {
+      "get": {
+        "description": "Return screened-in-only landscape distributions.",
+        "operationId": "landscape_api_v1_projects__project_id__landscape_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LandscapeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Landscape",
+        "tags": [
+          "read-models"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/plan": {
+      "get": {
+        "description": "Return the durable approved plan or the surviving local draft session.",
+        "operationId": "get_plan_api_v1_projects__project_id__plan_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Plan",
+        "tags": [
+          "planning"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/planning-turns": {
+      "post": {
+        "description": "Advance one project's real planner conversation once per client turn id.",
+        "operationId": "create_planning_turn_api_v1_projects__project_id__planning_turns_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanningTurnCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanningTurnOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Planning Turn",
+        "tags": [
+          "planning"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/runs": {
+      "get": {
+        "description": "List a project's walks from newest to oldest (paginated \u2014 runs accumulate).",
+        "operationId": "list_runs_api_v1_projects__project_id__runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_RunOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Runs",
+        "tags": [
+          "runs"
+        ]
+      },
+      "post": {
+        "description": "Dispatch an approved plan off the request path and return its walk row.",
+        "operationId": "create_run_api_v1_projects__project_id__runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Run",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/runs/{run_id}": {
+      "get": {
+        "description": "Return one owned project's capability run, or the opaque 404.",
+        "operationId": "get_run_api_v1_projects__project_id__runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Run",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/healthz": {
+      "get": {
+        "description": "Report process liveness without touching external dependencies.",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Healthz Healthz Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Healthz"
+      }
+    },
+    "/readyz": {
+      "get": {
+        "description": "Report readiness after verifying the database connection is usable.",
+        "operationId": "readyz_readyz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Readyz Readyz Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Readyz"
+      }
+    }
+  }
+}

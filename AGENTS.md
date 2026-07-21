@@ -22,50 +22,58 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `024-steering-surface` (**design COMPLETE
-2026-07-16**: contract + plan owner-approved, both adversarial reviews
-adjudicated, ADRs 0020–0023 committed — **build opens in a fresh
-conversation with `task-cycle-build`**, phases 0–7 per plan.md; schema
-gate = capability_run + screen_generation). **The steering slice — state-of-the-art human-in-the-loop
-(owner direction; deliberately large, no splitting).** Organising
-principle: every decision surfaces in the durable record; the mode
-moves the *decider* (user ↔ orchestrator), never visibility. Strands:
-(1) durable steering record — steering events on `event_log` + the
-`capability_run` walk entity (the one approved schema addition) + the
-`steering_history` projection (front-end rebuilds the decision
-history from Postgres alone); (2) **one orchestrator, three moments**
-(planning turn · free-text router · boundary watch) behind one seam +
-`orchestrator_v1` prompt family — router: prose → confirmed
-multi-stage bounded deltas; watch: routes/decides per the decider
-dial within the full user surface, authors run-specific options,
-fail-safe to the deterministic floor; (3) the **steer-point lattice**
-P1 (search exception) · P2 (pre-select evidence-base coverage) · P3
-(deepening-selection, enriched + preview) · P4 (synthesis shape) over
-**widened grammars** (channels B1/B3/B5 + B2′ finding-relevance
-annotator; keys D1/D3/D5–D9) with additive-vs-replacement re-run
-modes first-class; (4) modes renamed to delegation postures;
-Unattended = discretion-is-the-mode with planner-authored standing
-instructions. Design record: `docs/tasks/024-steering-surface/`
-`steerability-refinement.md` (annex, binds the contract) +
-`steer-point-study.md`. Tier 3 (runtime egress + schema +
-prompt-bearing surfaces). Build sizing ~3–3.5× the original rev 3
-scope. Sequenced after 024: **025 co-pilot Q&A + the per-user
-transcript store** (owner, 2026-07-16); then the eval slice.
+Implementation — task `025-web-app-foundation` (**BUILD COMPLETE through
+step 6, 2026-07-21** — phases 0–I built and committed on
+`task/025-web-app-foundation`; `make verify` fully green from the hoisted
+monorepo layout (backend suite + mypy strict + ruff + build + audit-paths +
+prompt-guard + font-guard + drift-check + frontend
+typecheck/lint/vitest/build); `verification.md` complete. **The pinned
+I.2 live check RAN 2026-07-21** (~52 min, real browser UI, two dev-issuer
+users, restart while parked∧executing, confirm-gate steer, boundary
+continuation to a succeeded artefact, rename/archive truth) — narrated log
+in docs/tasks/025-web-app-foundation/live-check-log.md; it caught and
+fixed five integration gaps (stub-defaulting API deps, double /api client
+prefix, dict plan-row in confirm-apply, the unwrapped screen directive
+validation branch, missing continuation.claimed SSE frame) plus a test
+hermeticity hardening (conftest key scrub + side-effect-free alembic env
+loading). **Next: the review stack runs in a FRESH conversation
+with `task-cycle-review`** (Tier 4: contract-verifier · /code-review
+medium per review-economy pins · security-auditor lane · codex
+adversarial · live-trace lane · human deep review) — the build
+conversation must not adjudicate its own findings. As-built highlights:
+monorepo hoist (`backend/` + `frontend/` + `infra/`); two approved
+migrations **plus an owner-approved build-time gate expansion
+(`event_log.run_id` nullable, 2026-07-21)**; runner parking + boundary
+continuation (WalkParked, `continuation_state` reducer with G1–G5,
+`run_plan(resume_from)`, answer→claim→drainer protocol, parity harness);
+schema-first API (`policy_atlas.api`) with RS256/JWKS auth + dev issuer,
+BOLA-opaque 404s, error envelope, SSE replay+tail from `event_log`, read
+models incl. the chunk-context clamp; React 19 + pnpm frontend on the
+Nesta brand layer with the demo-validated views, replay-idempotent store,
+mock mode + Playwright journey. New durable events (run.parked class):
+`run.opened` / `run.finished` / `plan.approved` / pause `render`
+persisted. Spec: `docs/specs/system/web-api.md` (new). Sequenced after
+025: **026 co-pilot Q&A + the per-user transcript store**; then the eval
+slice.)
 
-Tasks `001-walking-skeleton` through `022-synthesis-refinement` are
+Tasks `001-walking-skeleton` through `024-steering-surface` are
 complete (merged) — the EB chain runs end-to-end live behind the
-thin v1 orchestrator with prose-first synthesis output shape v2
-(ADR 0015), select at standard depth, fail-closed country
-filters/groups, IOF schema v2 (ADR 0016), the ICF second finding
-schema + kind-typed `query_findings` + kind-spanning membership
-bridge (ADR 0017), multi-facet grouping on the shared two-stage
-clustering engine + the 022 cost/surface work (ADR 0018, −49%
-synthesis cost), and the pinned prompt surfaces (`planner_v5`,
-`extract_iof_v7` + vetter, `extract_icf_v2` + vetter,
-`synthesise_section_v7` (v6 frozen as the cost-harness baseline),
-`synthesise_sections_v2`). 018 trailing lanes: **C4 demo surface**
-(codex lane, throwaway `demo-live-run` branch — never merges) and
-**D2 rehearsal** (owner-scheduled). After 023: the eval slice
+024 steering surface (one orchestrator, three moments: planning turn ·
+free-text router · boundary watch; steer-point lattice P1–P4; durable
+steering record on `event_log` + `capability_run` + the
+`steering_history` projection; ADRs 0020–0023), with prose-first
+synthesis output shape v2 (ADR 0015), select at standard depth,
+fail-closed country filters/groups, IOF schema v2 (ADR 0016), the ICF
+second finding schema + kind-typed `query_findings` + kind-spanning
+membership bridge (ADR 0017), multi-facet grouping on the shared
+two-stage clustering engine + the 022 cost/surface work (ADR 0018,
+−49% synthesis cost), and the pinned prompt surfaces
+(`orchestrator_v1` family, `extract_iof_v7` + vetter, `extract_icf_v2`
++ vetter, `synthesise_section_v7` (v6 frozen as the cost-harness
+baseline), `synthesise_sections_v2`). 018 trailing lane: **D2
+rehearsal** (owner-scheduled); the `demo-live-run` branch (C4 demo
+surface) stays throwaway — never merges — and is superseded by this
+slice as evidence. After 025: 026 co-pilot Q&A, then the eval slice
 (cost as a first-class axis), then Bedrock, then the workspace
 cluster. All other seams remain deferred (`docs/deferred.md`).
 

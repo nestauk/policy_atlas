@@ -12,12 +12,28 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Raised from 15 (task 025 F.1): the frontend install + drift-check
+    # (regenerate OpenAPI + TS types, diff against committed artifacts) adds
+    # real wall-clock on top of the existing backend gate.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: cp .env.example .env
+      # pnpm before setup-node: setup-node's built-in `cache: pnpm` needs the
+      # pnpm binary on PATH first. Version comes from frontend/package.json's
+      # `packageManager` field (corepack-pinned, task 025 owner decision) so
+      # there is exactly one place pnpm's version is declared.
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: cp backend/.env.example backend/.env
       - run: make setup
+      - run: make frontend-install
       - run: make verify
 
   # Dependency-vulnerability audit (016 contract rev 2.2) — independent job so
