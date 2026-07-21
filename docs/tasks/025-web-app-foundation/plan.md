@@ -122,7 +122,10 @@ machine-verifiable done), `fast-worker` (mechanical/spec transcription),
 
 ### Phase E — SSE + read models (2 days)
 - T E.1 `codex`: SSE endpoint per pin 6 + backlog→tail race-injected test +
-  reconnect-cursor test + pending-vs-history invariant tests.
+  reconnect-cursor test + pending-vs-history invariant tests. Includes the
+  search/fetch liveness signals for the ephemeral tick channel — the demo's
+  4 `search_live.py` log lines are confirmed NOT on dev (retro-reconciliation
+  annex): add them (or a designed equivalent) as the tick source.
 - T E.2 `fast-worker`: read models over the real schema (demo readmodels.py
   as evidence): funnel, landscape, groups, evidence (+status ladder),
   findings (+B2′ priority marks), sources dossier (+citation-context clamp),
@@ -154,6 +157,9 @@ machine-verifiable done), `fast-worker` (mechanical/spec transcription),
 ### Phase H — views (3–4 days)
 - T H.1 `fast-worker`: landing, sources, decision log, charts (demo-validated
   transcription against generated types + RETRO §2 holds per annex).
+  **Dossier: no FWCI field** — retro-reconciliation confirmed it has no
+  backing data (still a queued 018 seam); render only fields the read
+  models actually serve (data-driven surfaces: hide, never fake).
 - T H.2 `codex`: planning conversation (chips, plan disclosure), workspace
   run timeline (stage cards, activity feed, ephemeral ticks), check-in card
   incl. 024 confirm-gate delta render + parked/pending states.
