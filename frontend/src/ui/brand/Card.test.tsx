@@ -1,0 +1,49 @@
+import { render, screen } from "@testing-library/react";
+import { createMemoryRouter, RouterProvider } from "react-router";
+import { describe, expect, it } from "vitest";
+
+import { Card, Divider, PaneHeading, StatusDot } from "./Card";
+import { NavBar, NavItem, NavLogo } from "./Nav";
+
+describe("Card family", () => {
+  it("renders surface, heading, divider and status dot with a text label", () => {
+    render(
+      <Card>
+        <PaneHeading>Sources</PaneHeading>
+        <Divider />
+        <p>
+          <StatusDot tone="paused" /> Paused — waiting on your input
+        </p>
+      </Card>,
+    );
+    expect(screen.getByText("Sources")).toBeInTheDocument();
+    expect(screen.getByText(/Paused — waiting on your input/)).toBeInTheDocument();
+  });
+});
+
+describe("Nav", () => {
+  it("marks the active route with the growing underline", () => {
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/",
+          element: (
+            <NavBar>
+              <NavLogo />
+              <div>
+                <NavItem to="/">Workspace</NavItem>
+                <NavItem to="/sources">Sources</NavItem>
+              </div>
+            </NavBar>
+          ),
+        },
+      ],
+      { initialEntries: ["/"] },
+    );
+    render(<RouterProvider router={router} />);
+    const active = screen.getByRole("link", { name: "Workspace" });
+    const inactive = screen.getByRole("link", { name: "Sources" });
+    expect(active.className).toContain("nav-underline-on");
+    expect(inactive.className).not.toContain("nav-underline-on");
+  });
+});

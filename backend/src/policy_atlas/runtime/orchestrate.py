@@ -26,10 +26,11 @@ from typing import Any, Literal, Protocol, cast
 
 import structlog
 from pydantic import ValidationError
+from sqlalchemy import func
 from sqlalchemy import select as sa_select
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.core import tracing
+from policy_atlas.core import events, tracing
 from policy_atlas.core.db import get_engine
 from policy_atlas.core.embeddings import EmbeddingBackend, OpenAIEmbeddingBackend
 from policy_atlas.core.fixtures import get_source
@@ -597,7 +598,7 @@ def _default_country_group_authorship(raw_group: object) -> CountryGroupAuthorsh
     return "planner-proposed"
 
 
-def _build_plan(
+def build_plan(
     draft: PlanDraftWire,
     *,
     country_group_authorship: CountryGroupAuthorship | None = None,
@@ -649,6 +650,11 @@ def _build_plan(
                 except (TypeError, ValueError):
                     rule["delta"] = raw
     return OrchestrationPlan.model_validate(data)
+
+
+# Kept as a compatibility alias for the established CLI/test seam. New API
+# callers use the named public helper above rather than copying its validation.
+_build_plan = build_plan
 
 
 def _render_draft(draft: PlanDraftWire) -> str:
@@ -843,6 +849,68 @@ def _seed_stub_corpus(engine: Engine, project_id: uuid.UUID) -> None:
             )
 
 
+def persist_approved_plan(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    plan: OrchestrationPlan,
+) -> tuple[uuid.UUID, uuid.UUID]:
+    """Persist an approved plan and its execution scope for an existing project.
+
+    Args:
+        conn: Open transaction that owns the project and plan writes.
+        project_id: Existing project receiving the approved plan.
+        plan: Validated plan approved by the caller.
+
+    Returns:
+        The new ``(evidence_scope_id, plan_id)`` pair.
+    """
+    scope_id = uuid.uuid4()
+    plan_id = uuid.uuid4()
+    now = _now()
+    latest_version = conn.execute(
+        sa_select(func.coalesce(func.max(orchestration_plan.c.version), 0)).where(
+            orchestration_plan.c.project_id == project_id
+        )
+    ).scalar_one()
+    conn.execute(
+        orchestration_plan.update()
+        .where(orchestration_plan.c.project_id == project_id)
+        .where(orchestration_plan.c.status == "approved")
+        .values(status="superseded")
+    )
+    conn.execute(
+        evidence_scope.insert().values(
+            evidence_scope_id=scope_id,
+            project_id=project_id,
+            intent=plan.question,
+            context={},
+            created_at=now,
+        )
+    )
+    conn.execute(
+        orchestration_plan.insert().values(
+            plan_id=plan_id,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            version=int(latest_version) + 1,
+            status="approved",
+            payload=plan.model_dump(mode="json"),
+            created_at=now,
+            created_by="user",
+            approved_at=now,
+        )
+    )
+    events.append(
+        conn,
+        project_id=project_id,
+        run_id=None,
+        event_type="plan.approved",
+        payload={"plan_id": str(plan_id), "version": int(latest_version) + 1},
+    )
+    return scope_id, plan_id
+
+
 def _write_plan_row(
     engine: Engine,
     *,
@@ -877,28 +945,7 @@ def _write_plan_row(
                 owner_user_id=None,
             )
         )
-        conn.execute(
-            evidence_scope.insert().values(
-                evidence_scope_id=scope_id,
-                project_id=project_id,
-                intent=plan.question,
-                context={},
-                created_at=now,
-            )
-        )
-        conn.execute(
-            orchestration_plan.insert().values(
-                plan_id=plan_id,
-                project_id=project_id,
-                evidence_scope_id=scope_id,
-                version=1,
-                status="approved",
-                payload=plan.model_dump(mode="json"),
-                created_at=now,
-                created_by="user",
-                approved_at=now,
-            )
-        )
+        scope_id, plan_id = persist_approved_plan(conn, project_id=project_id, plan=plan)
     return project_id, scope_id, plan_id
 
 
@@ -949,7 +996,7 @@ def _plan_conversation(
             continue
 
         try:
-            plan = _build_plan(
+            plan = build_plan(
                 turn.plan_draft,
                 country_group_authorship=assigned_country_group_authorship,
             )

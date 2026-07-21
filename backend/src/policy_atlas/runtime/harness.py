@@ -19,6 +19,7 @@ from sqlalchemy.engine import Connection
 from policy_atlas.core import events
 from policy_atlas.core.embeddings import EmbeddingBackend, StubEmbeddingBackend
 from policy_atlas.core.inference import InferenceProvider
+from policy_atlas.core.liveness import project_liveness
 from policy_atlas.core.schema import evidence_scope, runs
 from policy_atlas.evidence_base.assess.appraise import AppraiseContext, appraise_sources
 from policy_atlas.evidence_base.assess.classification_backend import (
@@ -776,7 +777,7 @@ def run_harness(
     # run_harness call dispatches to exactly one node (routed by config.component),
     # and it's the direct caller of node-level log events (e.g. component.started)
     # that today never carry project_id/run_id.
-    with structlog.contextvars.bound_contextvars(
+    with project_liveness(project_id), structlog.contextvars.bound_contextvars(
         project_id=str(project_id), run_id=str(run_id), component=config.component,
     ):
         final: HarnessState = graph.invoke(initial)

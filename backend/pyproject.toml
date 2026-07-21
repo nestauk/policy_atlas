@@ -45,6 +45,15 @@ dependencies = [
     # declaration-only promotion as httpx above (015 rev-3.13 precedent): already a
     # pinned transitive of httpx; declaring it guards a lock regen. Zero new packages.
     "httpcore>=1,<2",
+    # Task 025 (approved dependency gate): the production web API. fastapi/uvicorn
+    # serve /api/v1 (SSE via Starlette natively — no sse-starlette, per contract);
+    # pyjwt+cryptography verify OIDC RS256 bearer tokens against the issuer JWKS
+    # (Cognito-shaped; dev issuer is a local keypair). Ceilings on all four: the
+    # API boundary and token verification must never move majors on a lock regen.
+    "fastapi>=0.121,<1",
+    "uvicorn>=0.34,<1",
+    "pyjwt>=2.10,<3",
+    "cryptography>=44,<48",
 ]
 
 [build-system]

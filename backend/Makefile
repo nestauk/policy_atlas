@@ -1,4 +1,4 @@
-.PHONY: setup test test-fast typecheck lint build verify verify-fast okf-validate audit
+.PHONY: setup test test-fast typecheck lint build verify verify-fast okf-validate audit openapi
 
 # Tests run against a dedicated database on the same local container, so committing
 # tests can't pollute the dev DB. Override for a different host/DB.
@@ -26,6 +26,14 @@ lint:
 
 build:
 	uv build
+
+# Schema-first OpenAPI export (task 025 F.1): the Pydantic contract package
+# (`policy_atlas.api.contract`) is the sole source of truth; this is the one
+# place the document is generated from it. The frontend's generated TS
+# client is regenerated from this file's output (`make openapi-sync` at
+# root); `make drift-check` at root fails CI if it goes stale.
+openapi:
+	uv run python -m policy_atlas.api.export_openapi ../frontend/openapi.json
 
 # Dependency-vulnerability audit (016 contract rev 2.2): PyPA/OSV advisories over
 # the locked dependency set. Audits the synced environment (= the uv.lock closure;

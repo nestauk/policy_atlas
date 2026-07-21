@@ -19,6 +19,7 @@ from urllib.parse import parse_qsl, urlparse
 import httpx
 import structlog
 
+from policy_atlas.core.liveness import publish_current_tick
 from policy_atlas.evidence_base.sourcing.acquire import BackendCaps
 
 log = structlog.get_logger()
@@ -183,6 +184,7 @@ class _TransportMixin:
         overton_retry_wait: bool = False,
     ) -> Any:
         host = _host_from_url(url)
+        publish_current_tick(stage="acquire", note="Searching a source database.")
         cache_ttl_s = _search_cache_ttl_s()
         cache_key = _search_cache_key(url, params) if cache_ttl_s > 0 else None
         if cache_key is not None:
@@ -221,6 +223,7 @@ class _TransportMixin:
 
             if cache_key is not None and _cacheable_payload(data):
                 _search_cache_set(cache_key, data)
+            publish_current_tick(stage="acquire", note="Search results received.")
             return data
 
 

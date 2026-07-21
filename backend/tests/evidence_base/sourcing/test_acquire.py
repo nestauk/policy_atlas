@@ -1067,19 +1067,24 @@ def test_acquire_module_has_no_http_client() -> None:
 
     Task 015 extension (contract decision 1): ``search_live.py`` is a
     sanctioned HTTP home; task 016 extension (contract decision 1, the same
-    pattern): ``fetch_live.py`` is the other. Every other module stays
-    HTTP-import-free (``urllib.parse`` is pure URL parsing, not a client, and
-    stays allowed), ``acquire.py`` must never import its live module, and
-    ``ingest_full_text.py`` must never import ``fetch_live`` — fixture
-    defaults stay zero-egress by construction.
+    pattern): ``fetch_live.py`` is the other. Task 025 extension (auth
+    strand): ``api/auth.py`` fetches the OIDC issuer's JWKS (RS256
+    verification is the contract-approved auth boundary) and ``api/app.py``
+    owns the process-singleton HTTP client in the lifespan — both are
+    auth-plane egress to the identity provider, never search/model egress.
+    Every other module stays HTTP-import-free (``urllib.parse`` is pure URL
+    parsing, not a client, and stays allowed), ``acquire.py`` must never
+    import its live module, and ``ingest_full_text.py`` must never import
+    ``fetch_live`` — fixture defaults stay zero-egress by construction.
     """
     src_dir = Path(__file__).resolve().parents[3] / "src" / "policy_atlas"
     forbidden = re.compile(
         r"^\s*(import|from)\s+(urllib(?!\.parse\b)|requests|httpx|aiohttp|http\.client|socket)\b",
         re.MULTILINE,
     )
+    api_http_homes = (src_dir / "api" / "auth.py", src_dir / "api" / "app.py")
     for module in src_dir.rglob("*.py"):
-        if module.name in ("search_live.py", "fetch_live.py"):
+        if module.name in ("search_live.py", "fetch_live.py") or module in api_http_homes:
             continue
         assert not forbidden.search(module.read_text()), f"HTTP client import in {module}"
 

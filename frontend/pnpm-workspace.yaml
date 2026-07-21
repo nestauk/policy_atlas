@@ -1,0 +1,34 @@
+packages:
+  - "."
+
+# --- Supply-chain security config (task 025 owner decision) ---
+# pnpm 10+ blocks all dependency install scripts (preinstall/install/postinstall) by
+# default. We keep that default and only allow scripts for packages that have been
+# reviewed and are known to need a native/build step.
+#
+# Verified empty as of this scaffold (checked every package.json under
+# node_modules/.pnpm for pre/postinstall/install scripts — none found).
+# This stack's native binaries (esbuild, @tailwindcss/oxide, lightningcss) ship
+# as platform-specific optionalDependencies, not install scripts, so nothing
+# needs allow-listing yet. Before adding an entry: confirm the package actually
+# has a script pnpm is blocking (`pnpm install` prints "Ignored build scripts"
+# for it), read what the script does, and document WHY here.
+onlyBuiltDependencies: []
+
+# Refuse to install a package version published in the last 24h. This gives the
+# ecosystem a window to catch and unpublish compromised releases (a common supply
+# chain attack vector is publishing a malicious version and having it installed
+# within minutes). Deliberate override path: if a just-published version is
+# genuinely needed before the window elapses, add it explicitly to
+# `minimumReleaseAgeExclude` (per-package) rather than lowering this globally.
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude: []
+
+# Reject "exotic" subdependencies (git/tarball/local-path deps buried inside the
+# dependency graph rather than pinned in our own package.json) — these bypass
+# normal registry provenance checks. Supported as of pnpm 10+ (confirmed present
+# in the installed pnpm 11.15.1 build).
+blockExoticSubdeps: true
+
+# Strict node_modules is pnpm's default (no phantom-dependency hoisting) — do NOT
+# set shamefully-hoist: true.

@@ -1980,12 +1980,15 @@ def _handle_pause(
     )
     # One pause event per presentation; the re-prompt loop below marks each
     # rejected retry with steering.rejected rather than a fresh pause.
+    # The deterministic render rides the payload verbatim (task 025): it is the
+    # check-in content of record, and the web API must serve exactly what the
+    # runner presented — never a re-derivation.
     steering_events.emit_standalone(
         engine,
         project_id=project_id,
         run_id=event_run_id,
         event_type=steering_events.STEERING_PAUSE,
-        payload={**base, **pause_payload},
+        payload={**base, **pause_payload, "render": render},
     )
     current_render = render
     while True:
@@ -4649,6 +4652,17 @@ def _open_capability_run(
                 started_at=datetime.now(UTC),
             )
         )
+        events.append(
+            conn,
+            project_id=project_id,
+            run_id=None,
+            event_type="run.opened",
+            payload={
+                "capability_run_id": str(capability_run_id),
+                "plan_id": str(plan_id),
+                "plan_version": plan_version,
+            },
+        )
 
 
 def _finish_run(
@@ -4666,6 +4680,13 @@ def _finish_run(
             .where(capability_run.c.capability_run_id == capability_run_id)
             .where(capability_run.c.project_id == project_id)
             .values(status=status, ended_at=datetime.now(UTC))
+        )
+        events.append(
+            conn,
+            project_id=project_id,
+            run_id=None,
+            event_type="run.finished",
+            payload={"capability_run_id": str(capability_run_id), "status": status},
         )
     collation = render_collation(flagged_events)
     log.info("runner.collation", render=collation)

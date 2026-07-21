@@ -1,4 +1,4 @@
-.PHONY: setup test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard
+.PHONY: setup test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard frontend-install openapi-sync drift-check
 
 # Root orchestrator (025 A.2 monorepo hoist): the Python project lives in
 # backend/; this Makefile owns the shared db service + the root-level gates
@@ -50,6 +50,44 @@ audit-paths:
 prompt-guard:
 	uv run --project backend python scripts/prompt_hash_guard.py
 
+# Installs frontend dependencies from the committed lockfile (task 025 F.1).
+# A prerequisite for drift-check (and any other frontend gate) in CI, where
+# node_modules doesn't already exist; separated from drift-check itself so
+# CI can cache/install once and reuse it across steps.
+frontend-install:
+	cd frontend && pnpm install --frozen-lockfile
+
+# Regenerates both committed schema-first artifacts from the Pydantic
+# contract (task 025 F.1): the OpenAPI document, then the TypeScript types
+# generated from it. Run this whenever `make drift-check` fails.
+openapi-sync:
+	$(MAKE) -C backend openapi
+	cd frontend && pnpm run gen
+
+# Schema-first drift gate (task 025 F.1): one schema generates both API
+# ends, so this fails the build the moment either committed artifact
+# (frontend/openapi.json, frontend/src/api/gen/types.ts) stops matching what
+# the backend contract actually produces. Requires frontend/node_modules
+# (`make frontend-install`).
+drift-check:
+	@tmp_openapi=$$(mktemp) && \
+	uv run --project backend python -m policy_atlas.api.export_openapi "$$tmp_openapi" && \
+	if ! diff -u frontend/openapi.json "$$tmp_openapi"; then \
+		echo "ERROR: frontend/openapi.json is stale relative to the backend contract." >&2; \
+		echo "Run 'make openapi-sync' to regenerate it, then commit the result." >&2; \
+		rm -f "$$tmp_openapi"; exit 1; \
+	fi; \
+	rm -f "$$tmp_openapi"
+	@tmp_types=$$(mktemp) && \
+	(cd frontend && pnpm exec openapi-typescript openapi.json -o "$$tmp_types") && \
+	if ! diff -u frontend/src/api/gen/types.ts "$$tmp_types"; then \
+		echo "ERROR: frontend/src/api/gen/types.ts is stale relative to frontend/openapi.json." >&2; \
+		echo "Run 'make openapi-sync' to regenerate it, then commit the result." >&2; \
+		rm -f "$$tmp_types"; exit 1; \
+	fi; \
+	rm -f "$$tmp_types"
+	@echo "drift-check: OK"
+
 verify:
 	@if ! docker compose exec db pg_isready -U policy_atlas -q 2>/dev/null; then \
 		echo "ERROR: Postgres is not running. Run 'make setup' first." >&2; exit 1; \
@@ -58,6 +96,7 @@ verify:
 	$(MAKE) -C backend verify
 	$(MAKE) audit-paths
 	$(MAKE) prompt-guard
+	$(MAKE) drift-check
 
 # Intermediate phase-commit gate (011 retro): test-fast + typecheck + lint.
 # Full `make verify` remains mandatory at the build-open baseline, any phase

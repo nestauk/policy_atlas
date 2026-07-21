@@ -19,6 +19,7 @@ import httpcore
 import httpx
 import structlog
 
+from policy_atlas.core.liveness import publish_current_tick
 from policy_atlas.evidence_base.sourcing.ingest_full_text import (
     DocumentFetcher,
     FetchResult,
@@ -312,14 +313,26 @@ class LiveDocumentFetcher:
             type, or ``FetchResult(status="error")`` with a reason code.
         """
         cache_key = _strip_fragment(url)
+        publish_current_tick(stage="acquire", note="Fetching a source in full.")
         try:
-            return self._fetch_deduped(cache_key)
+            result = self._fetch_deduped(cache_key)
+            note = (
+                "Read a source in full."
+                if result.status == "ok"
+                else "A source could not be fetched — recorded."
+            )
+            publish_current_tick(
+                stage="acquire",
+                note=note,
+            )
+            return result
         except Exception as exc:
             log.warning(
                 "fetch_live.unexpected",
                 url=_redact_url(cache_key),
                 exc_type=type(exc).__name__,
             )
+            publish_current_tick(stage="acquire", note="A source could not be fetched — recorded.")
             return FetchResult(status="error", error="fetch_error")
 
     def release_body(self, n_bytes: int) -> None:
@@ -763,5 +776,3 @@ def select_document_fetcher(live: bool) -> DocumentFetcher:
         assert fetcher.mode == "live"
         return fetcher
     return FixtureFetcher()
-
-

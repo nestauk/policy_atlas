@@ -1,0 +1,143 @@
+@import "tailwindcss";
+
+/*
+ * Nesta brand layer (task 025 G.1) — distilled from
+ * docs/specs/sources/evidence-base-ux/nesta-brand-tokens.md + hifi.css.
+ * Electric blue is the hero colour; 0px radius everywhere; the 45° cut
+ * corner is the signature button language (see the cutout utility below).
+ *
+ * Fonts: Averta and Zosia Display are licensed for the web app but their
+ * binaries are NEVER committed to this open-source repo (CI guards this).
+ * When present locally under /fonts they load via @font-face; otherwise
+ * everything renders on the fallback stack (Manrope body, Archivo display).
+ */
+
+@font-face {
+  font-family: "Zosia Display";
+  src: url("/fonts/Zosia-Display.woff2") format("woff2");
+  font-weight: 400 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Averta";
+  src: url("/fonts/Averta-Light.otf") format("opentype");
+  font-weight: 300;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Averta";
+  src: url("/fonts/Averta-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Averta";
+  src: url("/fonts/Averta-Semibold.otf") format("opentype");
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Averta";
+  src: url("/fonts/Averta-Bold.otf") format("opentype");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Averta";
+  src: url("/fonts/Averta-ExtraBold.otf") format("opentype");
+  font-weight: 800;
+  font-display: swap;
+}
+
+@theme {
+  /* type */
+  --font-sans: "Averta", "Manrope", "Mulish", system-ui, sans-serif;
+  --font-display: "Zosia Display", "Archivo", "Averta", system-ui, sans-serif;
+
+  /* Nesta core palette */
+  --color-blue: #0000ff; /* hero — one hero colour per layout */
+  --color-navy: #0f294a; /* structural text */
+  --color-grey: #646363; /* secondary text (AAA on white) */
+  --color-ink: #1c1c1e;
+  --color-line: #e4e4e7;
+  --color-line-2: #d3d3d8;
+  --color-ground: #f4f4f5; /* app background */
+  --color-paper: #ffffff;
+  --color-paper-2: #fafafa;
+
+  --color-green: #18a48c;
+  --color-red: #eb003b;
+  --color-orange: #ff6e47;
+  --color-yellow: #fdb633;
+  --color-purple: #9a1bbe;
+  --color-aqua: #97d9e3;
+  --color-violet: #a59bee;
+  --color-pink: #f6a4b7;
+  --color-sand: #d2c9c0;
+
+  /* tints (gradient steps ~20) */
+  --color-blue-tint: #ececff;
+  --color-blue-tint-2: #f5f5ff;
+  --color-green-tint: #e7f5f2;
+  --color-yellow-tint: #fff6e3;
+  --color-red-tint: #fde8ed;
+
+  /* Nesta = 0 radius, everywhere */
+  --radius-none: 0px;
+}
+
+/* The Nesta signature: 0 radius with a 45° cut top-right corner.
+   --cut is overridable per size (buttons use 10px, small buttons 8px). */
+@utility cutout {
+  --cut: 10px;
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% 100%,
+    0 100%
+  );
+}
+@utility cutout-sm {
+  --cut: 8px;
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% 100%,
+    0 100%
+  );
+}
+
+/* Growing-underline nav state (brand token: current page fills its
+   container width with a Nesta-blue underline). */
+@utility nav-underline {
+  padding-bottom: 3px;
+  border-bottom: 2px solid transparent;
+}
+@utility nav-underline-on {
+  border-bottom-color: var(--color-blue);
+}
+
+@layer base {
+  html {
+    scrollbar-gutter: stable;
+  }
+  body {
+    background: var(--color-ground);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Motion budget: everything quiets under prefers-reduced-motion. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
