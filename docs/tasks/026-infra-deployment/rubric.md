@@ -39,3 +39,7 @@ Slice-specific:
         config-only changes.
 13. [ ] Aurora reachable only from the API service SG (and the migration runner); no
         ingress rules ported for deleted v2 services.
+14. [ ] **Capacity ceiling encoded:** `RUN_EXECUTOR_MAX=10`, explicit SQLAlchemy pool
+        sizing, and Fargate CPU/memory sized together for 10 concurrent runs (contract
+        § capacity & concurrency); the provider-rate-limit caveat and deploy-window
+        caveat documented in `DEPLOYMENT.md`.

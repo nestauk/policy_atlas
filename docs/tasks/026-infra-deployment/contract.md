@@ -78,6 +78,22 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
      (`min_healthy_percent=0`, `max_healthy_percent=100`) and a short container
      `stop_timeout` so SIGTERM never becomes a long drain-run
      (web-api.md § Deployment posture hard invariant; deferred.md adv-M3).
+
+     **Capacity & concurrency (owner requirement, 2026-07-21): one instance ≠ one
+     run.** Multi-user concurrency is in-process: the run executor
+     (`RUN_EXECUTOR_MAX`, `api/settings.py`) bounds concurrent walks; project-row
+     locks isolate users; SSE/steering are process-local by design. Target ceiling:
+     **10 concurrent runs**. Three settings are sized together for that ceiling as
+     named plan-time decisions: `RUN_EXECUTOR_MAX=10` · SQLAlchemy engine pool
+     (`app.py` currently ships defaults — pool 5 + overflow 10, which 10 walk
+     threads plus request traffic would exhaust; explicit `pool_size`/
+     `max_overflow` required, likely a small settings addition) · Fargate task
+     CPU/memory (one adequately sized task, not v2's fleet-of-small-tasks values —
+     each executing walk holds ~100 docs of text mid-extraction). Named caveat, not
+     a blocker: OpenAI rate limits are shared across all concurrent runs
+     (deferred.md § per-run provider-rate-limit fairness) — at full concurrency
+     runs degrade to slower, never to wrong. Horizontal scale-out (a second
+     instance) remains forbidden until the cross-instance seam lands.
    - **Frontend:** v2's Next.js server container does not port. 🟡 leaning: nginx
      container serving the Vite `dist/` behind the same shared ALB (maximum reuse of the
      copied listener-rule/Fargate/Route53 pattern; one hosting idiom for both services).
@@ -94,7 +110,11 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
    `frontend/public/fonts/` before `vite build` by the deploy script). Binaries never
    enter the repo or the CDK asset tree in committable form (CI font-guard stays green).
 7. **Deploy scripts + docs** — `DEPLOYMENT.md` ported and corrected; scripts own the
-   deploy-invariant enforcement and migration invocation ordering.
+   deploy-invariant enforcement and migration invocation ordering. Documents the
+   operational caveats of the one-instance posture: **deploys interrupt executing
+   runs** (hard-kill → sweep marks them `interrupted` on next boot; deploy in quiet
+   windows), and a crash means a brief outage until ECS restarts the task (the sweep
+   recovers state cleanly).
 8. **Verify wiring** — infra unit tests (v2 `tests/` pattern: synthesized-template
    assertions) runnable locally and in `make verify` (CI change — approval requested at
    this gate as part of this contract).
