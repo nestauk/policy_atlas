@@ -35,7 +35,7 @@
    backlog + tail from sequence+1 (atomic cutoff); 15s heartbeats;
    `try/finally`; `X-Accel-Buffering: no`; ephemeral ticks flagged, never
    persisted; **credentials never in URLs**.
-7. **Contract source of truth:** Pydantic → `make openapi` → `npm run gen`
+7. **Contract source of truth:** Pydantic → `make openapi` → `pnpm gen`
    (openapi-typescript types + openapi-fetch client) → committed →
    `make drift-check` in verify/CI. Discriminated unions as named components.
 8. **Frontend layout:** `frontend/src/` → api/gen (generated), api/, store/,
@@ -172,9 +172,9 @@ against the built app.
   golden tests against seeded rows. **[FULL — ingest-adjacent (E.1)]**
 
 ### Phase F — frontend scaffold + codegen (1 day)
-- F.0 `fast-worker`: Vite + TS strict + Tailwind + npm scaffold; React 19 +
-  compiler per pin 9 (`react-is` override if npm requires).
-- F.1 `codex`: OpenAPI export + named-component unions + `npm run gen`
+- F.0 `fast-worker`: Vite + TS strict + Tailwind + pnpm scaffold (corepack-pinned, security config per contract deps pin); React 19 +
+  compiler per pin 9 (`react-is` override if the resolver requires).
+- F.1 `codex`: OpenAPI export + named-component unions + `pnpm gen`
   (types + openapi-fetch) + drift check into verify/CI. Done = model
   mutation fails gate. **[verify-fast]**
 

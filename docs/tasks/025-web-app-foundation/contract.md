@@ -633,7 +633,14 @@ may be re-decided silently mid-build:
   own browser login/token acquisition/refresh/logout —
   `oidc-client-ts` or `react-oidc-context`, picked at plan time,
   driven by the dev issuer now and Cognito config later) + `vitest`,
-  `@playwright/test`. Package manager: **npm** (demo precedent).
+  `@playwright/test`. Package manager: **pnpm 10+** (owner decision
+  2026-07-21, superseding the npm demo precedent on supply-chain
+  grounds), pinned via corepack `packageManager`, configured:
+  dependency install scripts blocked by default with a reviewed
+  per-package allowlist (a security-lane artifact) ·
+  `minimumReleaseAge` ≥ 24 h with a documented deliberate-override
+  path · `blockExoticSubdeps: true` · strict node_modules (no
+  phantom deps).
   🟡 React version is a **plan-gate decision**: 19 + compiler
   (drops manual memoisation) vs the demo's 18 — the demo validated the
   views, not the version; recharts/router compat is the plan-time check.
