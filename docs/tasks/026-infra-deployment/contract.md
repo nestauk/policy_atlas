@@ -189,26 +189,27 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
    `staging.policyatlas.uk` is a config-only redeploy (cert + A records + frontend
    rebuild for the API URL) — deliberately not pre-built.
 3. **Cognito confirmed** as the IdP. No federation/SSO in scope.
-4. **Config JSONs gitignored; `*_config.example.json` templates committed** (owner
-   amendment, 2026-07-21: **the repo is already open source and stays so** — v2's
-   commit-the-config precedent came from a private repo and does not transfer). An
-   AWS account ID is an identifier, not a credential, but publishing it invites
-   targeted enumeration/phishing and can never be unpublished from git history.
-   Domains stay in the committed examples (public by nature via DNS); the account ID
-   (and any IP whitelists) live only in the gitignored real configs, which deploy
-   docs tell the operator to copy from the templates and fill.
+4. **Config JSONs committed, v2-style** (owner final call, 2026-07-21, rolling back
+   the same-day gitignore amendment). The repo is public; the owner accepts the named
+   caveat — an AWS account ID is an identifier, not a credential, though publishing
+   it mildly aids targeted enumeration/phishing and cannot later be unpublished from
+   git history. Secrets stay in Secrets Manager, never in config. Residual guard: if
+   an IP allowlist or any similar operationally sensitive value ever enters these
+   configs, that value (not the whole file) goes behind an env var or gitignored
+   overlay — committing identifiers is the decision, not committing whatever lands
+   in the file.
 5. **Frontend hosting: S3 + CloudFront** (owner, 2026-07-21 — revised from the earlier
    nginx-on-Fargate call; scope item 4 has the shape and rationale).
 
 ## Public / private boundary
 
-**The repo is public (open source).** Committable: CDK code, `*_config.example.json`
-templates (domains OK; placeholder account IDs), deploy docs, synthesized-template
-tests. Private (never committed): the filled `*_config.json` files (gitignored — real
-account ID, any IP whitelists), AWS credentials, Secrets Manager values, font binaries,
-`cdk.context.json` if it embeds account specifics. Deploy logs/screenshots in
-verification.md are scrubbed of the account ID and never show secret values or
-session tokens.
+**The repo is public (open source).** Committable: CDK code, the `*_config.json`
+files (resolved decision 4 — committed v2-style, account IDs + domains included by
+owner call), deploy docs, synthesized-template tests. Private (never committed): AWS
+credentials, Secrets Manager values, font binaries, IP allowlists or similar
+operationally sensitive values (decision 4's residual guard). Deploy logs/screenshots
+in verification.md never show secret values or session tokens; account IDs need no
+scrubbing.
 
 ## Model route
 
@@ -256,8 +257,8 @@ to need code changes for Cognito after all) · turn/token budget spent.
 
 In [verification.md](verification.md): per-file port map (v2 source → v3 path ·
 copied-verbatim / targeted-edit / deleted / new — the copy-first discipline made
-auditable), `make verify` + synth output, deploy transcript (account ID scrubbed — the
-repo is public), smoke
+auditable), `make verify` + synth output, deploy transcript (no secret values or
+session tokens; account IDs fine per decision 4), smoke
 narrative with screenshots, deploy-invariant ECS event evidence, known gaps.
 
 ## Risk tier & review focus

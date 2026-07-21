@@ -11,9 +11,10 @@ The task is **done only if every box holds** — otherwise it is in progress, no
        before the account/env 🛑 cleared; Cognito pool config was named in the approved
        plan.
 4. [ ] No generated files or secrets edited by hand; no secret value, account credential
-       or font binary in the repo or the CDK asset tree; no real AWS account ID in any
-       committed file or in verification evidence (the repo is public — resolved
-       decision 4: real config JSONs gitignored, `.example` templates committed).
+       or font binary in the repo or the CDK asset tree. Config JSONs are committed
+       v2-style (resolved decision 4, owner call — account IDs/domains OK); no IP
+       allowlist or similar operationally sensitive value committed (the residual
+       guard).
 5. [ ] No tests deleted, skipped or weakened without written justification.
 6. [ ] Verification evidence recorded ([verification.md](verification.md)), including the
        **per-file port map** (v2 source → v3 path · verbatim / targeted-edit / deleted /
