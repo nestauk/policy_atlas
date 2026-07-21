@@ -72,10 +72,13 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
    `load_secret` Lambda, and their SSM exports/SG rules. **Keep:** Aurora Postgres
    cluster (writer/readers, generated credentials secret, SG, snapshot removal policy),
    DB SSM exports. **Rework (targeted):** the migration runner — v2's Lambda copies
-   Supabase SQL files at synth time; v3 migrations are Alembic. 🟡 leaning: replace with
-   a one-shot ECS task running the backend image (`alembic upgrade head`) invoked by the
-   deploy script — the image already carries the code, deps and env; a Lambda re-bundle
-   of the backend is the larger delta. Plan decides the exact shape.
+   Supabase SQL files at synth time; v3 migrations are Alembic. **Settled (owner,
+   2026-07-21): a one-shot ECS task running the backend image** (`alembic upgrade
+   head`), invoked by the deploy script with a fail-loud wait on the task's exit code —
+   the image already carries the code, deps and env by construction; a Lambda re-bundle
+   would be a second, drift-prone packaging of the backend. v2's migration SG + Aurora
+   ingress rule port as-is; only the Lambda behind them is replaced. Sequencing lives in
+   the deploy script beside the deploy invariant: stop old task → migrate → boot new.
 4. **App stack** (v2 `policy_atlas_stack.py`) — copy the Fargate/ALB/Route53 pattern;
    targeted edits:
    - **Backend service:** v3 env/secret surface from `settings.py` (OIDC vars, DB URL
