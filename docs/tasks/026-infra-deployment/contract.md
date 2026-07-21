@@ -3,7 +3,11 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in
 [docs/specs/](../../specs/index.md).
 
-> **Status:** approved. Contract approved (before planning): 2026-07-21 · owner ·
+> **Status:** approved 2026-07-21 (owner) → **REOPENED same day** after the
+> contract-stage adversarial review (15 findings adjudicated in, see
+> [adversarial-review-contract.md](adversarial-review-contract.md)) — one material
+> amendment (F1: a small gated auth.py change replaces the "API verification code
+> untouched" promise) needs owner re-approval ·
 > Plan approved (before implementation): _pending_ · ADR: expected (Tier 4 — deployment
 > architecture + rollback plan).
 
@@ -23,7 +27,9 @@ not restructurings of what remains.
 ## Deliverable
 
 PR landing `infra/` as a working CDK app (Python), plus deploy scripts/docs, such that
-`cdk deploy` of the three stacks into the target environment produces a running system:
+**running the deploy script** (which wraps `cdk deploy` of the three stacks plus the
+imperative steps CloudFormation can't own: migration task, frontend build/sync/
+invalidation, font injection — adversarial F7) produces a running system:
 frontend served over HTTPS, API on Fargate, Aurora Postgres migrated via Alembic,
 Cognito-backed login end-to-end. Verification includes a real deploy + smoke
 (§ Acceptance checks).
@@ -55,9 +61,9 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
    `tests/` from v2; targeted edits for v3 stack names/env.
 2. **NetworkStack** — copy near-verbatim (VPC, fck-nat, shared internet-facing ALB +
    wildcard ACM cert, HTTP→HTTPS redirect, Cloud Map namespace, SSM exports). Expected
-   edits: naming/domain config only. (Cloud Map served PostgREST in v2; it stays because
-   it's cheap and the copy is smaller than the removal — cut it only if the plan shows
-   nothing consumes it.)
+   edits: naming/domain config only. **Cloud Map is cut** (adversarial F15): its only
+   as-built consumers were the deleted PostgREST registration and `SUPABASE_URL` —
+   keeping it contradicted the no-unused-infrastructure discipline.
 
    **Settled (owner, 2026-07-21): v3 deploys its own parallel network** (own VPC,
    fck-nat, ALB, cert), rather than importing v2's live shared ALB: sharing would mean
@@ -68,10 +74,15 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
    destroy wholesale later.
 3. **DatabaseStack** — copy, then **delete the Supabase self-host apparatus wholesale**:
    Supabase Studio + postgres-meta service, PostgREST + nginx sidecar, the
-   JWT-generation Lambda (including the vendored PyJWT tree, ~7.5k lines), the
-   `load_secret` Lambda, and their SSM exports/SG rules. **Keep:** Aurora Postgres
-   cluster (writer/readers, generated credentials secret, SG, snapshot removal policy),
-   DB SSM exports. **Rework (targeted):** the migration runner — v2's Lambda copies
+   JWT-generation Lambda (including the vendored PyJWT tree, ~7.5k lines), and their
+   SSM exports/SG rules. **Keep:** Aurora Postgres cluster (writer/readers, generated
+   credentials secret, SG, snapshot removal policy), DB SSM exports, **and the
+   `load_secret` Lambda + trigger** (adversarial F3 — originally mis-sorted into the
+   delete list: it is DB plumbing, not Supabase apparatus. It composes the single
+   connection-string field inside the generated RDS secret; the API and the Alembic
+   task both require one composed `DATABASE_URL`, and ECS secret injection can only
+   inject whole secrets or single JSON keys, never compose. Targeted edit: emit the
+   SQLAlchemy/psycopg3 URL format v3 expects). **Rework (targeted):** the migration runner — v2's Lambda copies
    Supabase SQL files at synth time; v3 migrations are Alembic. **Settled (owner,
    2026-07-21): a one-shot ECS task running the backend image** (`alembic upgrade
    head`), invoked by the deploy script with a fail-loud wait on the task's exit code —
@@ -81,9 +92,23 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
    the deploy script beside the deploy invariant: stop old task → migrate → boot new.
 4. **App stack** (v2 `policy_atlas_stack.py`) — copy the Fargate/ALB/Route53 pattern;
    targeted edits:
-   - **Backend service:** v3 env/secret surface from `settings.py` (OIDC vars, DB URL
-     from the cluster secret, `PA_BACKEND_MODE`, provider + Langfuse keys via Secrets
-     Manager) replacing v2's Clerk/Supabase env block. **Deployment posture is a hard
+   - **Backend image is authored in this slice** (adversarial F5 — v3 has no
+     `backend/Dockerfile`; the contract previously implied one existed): port v2's
+     Dockerfile with targeted edits (uv + src-layout install; factory entrypoint
+     `uvicorn policy_atlas.api.app:create_app --factory`) **plus a `.dockerignore`
+     excluding `.env`, dev-issuer key material, and everything gitignored** — v2's
+     bare `COPY . .` would ship a developer's live keys into the image.
+   - **Backend service:** v3 env/secret surface from `settings.py` (OIDC vars,
+     `APP_ORIGIN=https://v3.policyatlas.uk` for CORS, composed `DATABASE_URL` from
+     the cluster secret's connection-string field, `PA_BACKEND_MODE`, provider +
+     Langfuse keys via Secrets Manager) replacing v2's Clerk/Supabase env block.
+     **Health-check delta named** (adversarial F8): v2's target group probes `/`,
+     which v3 does not serve — the TG health check moves to v3's real endpoints
+     (`/healthz` / `/readyz`; plan picks which per their semantics).
+   - **Migration task placement** (adversarial F6): the one-shot Alembic task
+     definition lives in the app stack beside the ECS cluster it runs on (v2's only
+     DB-stack cluster belonged to the deleted Studio); the deploy script invokes it
+     between stop-old and boot-new, after image push. **Deployment posture is a hard
      pin:** `desired_count=1`, no autoscaling (delete v2's scale-on-CPU/memory block),
      ECS deployment config that stops the old task before starting the new
      (`min_healthy_percent=0`, `max_healthy_percent=100`) and a short container
@@ -119,9 +144,23 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
    - Cognito envs → frontend build args (`VITE_OIDC_AUTHORITY`, client id, redirect) —
      config-only, no frontend code changes expected.
 5. **Cognito** (new — no v2 precedent, the one genuinely fresh CDK surface): user pool +
-   SPA app client (code + PKCE), hosted UI domain, outputs wired to the API's
-   issuer/JWKS/audience envs and the frontend build args. Smallest pool that satisfies
-   the API's RS256/JWKS verification; no federation, no custom attributes, no triggers.
+   SPA app client (code + PKCE), hosted UI domain, **registered callback URLs and
+   allowed sign-out URLs** (adversarial F10 — Cognito requires both pre-registered;
+   the frontend defaults its callback to the site origin and invokes hosted-UI
+   sign-out), outputs wired to the API's issuer/JWKS/audience envs and the frontend
+   build args. Smallest pool that satisfies the API's RS256/JWKS verification; no
+   federation, no custom attributes, no triggers.
+
+   **Gated auth amendment (adversarial F1 — supersedes "API verification code
+   untouched"):** Cognito *access* tokens carry `client_id`, not `aud`, so
+   `auth.py`'s unconditional audience validation rejects every Cognito token. The
+   smallest honest fix, per AWS's own verification guidance: a targeted `auth.py`
+   edit accepting an access token whose `client_id` claim equals the configured
+   audience when `aud` is absent (issuer + signature + exp checks unchanged; dev
+   issuer unaffected — it mints `aud` tokens). Auth hard gate: owner approval
+   required; the security lane reviews this edit specifically. Alternatives
+   rejected: sending ID tokens as API credentials (weaker semantics, frontend code
+   change), a pre-token-generation Lambda trigger (heavier, violates "no triggers").
    Two pins (owner-scoped auth stays as 025 built it — ownership is the token `sub`,
    no user table):
    - **Self-signup disabled** — users are operator-created (console/CLI) for the
@@ -142,10 +181,20 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
    operational caveats of the one-instance posture: **deploys interrupt executing
    runs** (hard-kill → sweep marks them `interrupted` on next boot; deploy in quiet
    windows), and a crash means a brief outage until ECS restarts the task (the sweep
-   recovers state cleanly). Includes the **`VITE_OIDC_AUTHORITY` production build
-   guard** (deferred.md ← 025 security lane): the frontend deploy refuses to build/ship
-   a production bundle without the OIDC authority set (a silent dev-token-panel bundle
-   is a posture smell, not a bypass — the API still verifies RS256).
+   recovers state cleanly). Includes the **production build guard** (deferred.md ←
+   025 security lane; widened per adversarial F9): the frontend deploy refuses to
+   build/ship a production bundle unless the full required env set is present —
+   `VITE_OIDC_AUTHORITY`, `VITE_OIDC_CLIENT_ID` (the provider throws without it),
+   and `VITE_API_BASE_URL` (the client defaults to same-origin, which on CloudFront
+   serves no API) — not just the authority (a silent dev-token-panel bundle is a
+   posture smell, not a bypass — the API still verifies RS256).
+
+   The deploy docs also carry a **first-deploy preconditions checklist** (adversarial
+   F11 — NS delegation was named as if it were the only gate; it isn't): `cdk
+   bootstrap` state in the account/regions (incl. us-east-1 for the CloudFront cert),
+   the application Secrets Manager secret provisioned with its exact name and JSON
+   keys enumerated, fonts uploaded to the private bucket, at least one
+   operator-created Cognito user, and the NS-delegation `dig` check.
 
    Also documents the **developer DB access path**: local dev stays on docker-compose
    Postgres untouched; direct Aurora access from a laptop is an SSM port-forward tunnel
@@ -207,9 +256,12 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
   prefix (`/policy_atlas/*` → `/policy_atlas_v3/*`), VPC/ALB/target-group names, ECS
   cluster/service/task-family names, Aurora `cluster_identifier` + instance
   identifiers, log-group names. A **systematic targeted edit the plan sequences
-  first**, not ad-hoc renames. (The Cloud Map namespace derives from the domain and
-  diverges automatically.) v2 resources are read-only from this repo — no v3 stack
-  may import, modify, or attach to a v2-managed resource.
+  first**, not ad-hoc renames. This includes the **VPC lookups** (adversarial F2):
+  v2's `Vpc.from_lookup(..., region=...)` carries no name/tag filter, and with two
+  VPCs in the account it can silently bind v3's database and services to v2's VPC —
+  every copied lookup gains an explicit `vpc_name` filter for the v3 VPC. v2
+  resources are read-only from this repo — no v3 stack may import, modify, or attach
+  to a v2-managed resource.
 
 ## Resolved decisions (owner, 2026-07-21)
 
@@ -282,18 +334,30 @@ to need code changes for Cognito after all) · turn/token budget spent.
 - `make verify` green, including the new infra test target (synthesized-template
   assertions for all three stacks; no AWS credentials required to run them).
 - FE↔real-API smoke green (real HTTP + dev-issuer + SSE against stub backends), and the
-  production build guard demonstrably refuses a bundle without `VITE_OIDC_AUTHORITY`.
+  production build guard demonstrably refuses a bundle missing any of
+  `VITE_OIDC_AUTHORITY` / `VITE_OIDC_CLIENT_ID` / `VITE_API_BASE_URL` (adversarial F9).
 - `cdk synth` clean for all three stacks against the dev env config.
 - **Live check (contract-time pin, scoped):** one real deploy to the approved dev/staging
   environment, then one cheap full-chain smoke through the deployed system — Cognito
   login in the browser → create project → start a run → SSE progress visible → artefact
-  renders. No full live e2e re-run (025's live check already evidenced the app; this
-  slice's changed surface is the deployment, so the smoke evidences *deployment*
-  correctness: TLS/DNS, auth wiring, DB connectivity, migrations applied, fonts served).
-  Estimated wall time: deploy ~30–45 min + smoke ~15 min.
-- **Deploy-invariant check:** a second deploy over the running instance, verifying the
-  old task is fully stopped before the new one boots (ECS event order in the console/CLI)
-  and no run interruption beyond the documented sweep semantics.
+  renders → **hosted-UI logout completes and re-auth is required** (adversarial F10).
+  No full live e2e re-run (025's live check already evidenced the app; this slice's
+  changed surface is the deployment, so the smoke evidences *deployment* correctness:
+  TLS/DNS, auth wiring, DB connectivity, migrations applied, fonts served). During the
+  smoke, **observe one parked/idle SSE stream ≥ 2 minutes** (adversarial F14 — business
+  events can mask heartbeat/idle-timeout failure; the ALB idle timeout must be encoded
+  ≥ a comfortable multiple of the 15 s heartbeat, named in the stack, not left default
+  by accident). Estimated wall time: deploy ~30–45 min + smoke ~20 min.
+- **Concurrency evidence, proportionate** (adversarial F12): the smoke runs **3 short
+  runs concurrently** (not 1), plus documented arithmetic headroom for the 10-run
+  ceiling (per-walk memory × 10 < task memory; pool size vs 10 walk threads + request
+  traffic). A full 10-run live soak is deliberately not an acceptance check (cost);
+  first real multi-user usage is the soak, with the sizing knobs env-tunable.
+- **Deploy-invariant check, adversarial-grade** (adversarial F13): the second deploy
+  happens **while a (cheap) walk is executing**, verifying the old task is hard-killed
+  before the new one boots (ECS event order), the migration step runs between, and the
+  boot sweep disposes of the interrupted walk exactly per web-api.md § Deployment
+  posture (marked `interrupted`, no boot failure) — not an idle happy-path redeploy.
 - Font check: deployed frontend serves Averta/Zosia; repo and image layers contain no
   committed binaries (font-guard green).
 

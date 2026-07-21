@@ -40,9 +40,13 @@ Slice-specific:
 12. [ ] **Auth chain live end-to-end:** Cognito-issued token verified by the deployed API
         (real JWKS fetch), frontend login via the existing `OidcAuthProvider` with
         config-only changes.
-13. [ ] Aurora reachable only from the API service SG (and the migration runner); no
-        ingress rules ported for deleted v2 services.
-14. [ ] **Capacity ceiling encoded:** `RUN_EXECUTOR_MAX=10`, explicit SQLAlchemy pool
-        sizing, and Fargate CPU/memory sized together for 10 concurrent runs (contract
-        § capacity & concurrency); the provider-rate-limit caveat and deploy-window
+13. [ ] Aurora reachable only from the API service SG, the migration-runner SG, and the
+        documented SSM-tunnel path via the fck-nat instance SG (adversarial F4 — the
+        tunnel is a contracted deliverable, its ingress rule is deliberate and
+        described); no ingress rules ported for deleted v2 services.
+14. [ ] **Capacity ceiling encoded and evidenced:** `RUN_EXECUTOR_MAX=10`, explicit
+        SQLAlchemy pool sizing, and Fargate CPU/memory sized together for 10 concurrent
+        runs (contract § capacity & concurrency); evidence = the 3-concurrent-run smoke
+        plus the documented headroom arithmetic (adversarial F12 — config values alone
+        don't establish the claim); the provider-rate-limit caveat and deploy-window
         caveat documented in `DEPLOYMENT.md`.
