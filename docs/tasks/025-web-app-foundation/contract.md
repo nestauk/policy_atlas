@@ -46,7 +46,14 @@
 > **one-instance/one-worker deployment posture** pinned (process-local
 > pause/tail; LISTEN/NOTIFY cross-instance seam → deferred.md) ·
 > **server-enforced page_size cap** added (offset kept deliberately;
-> cursor recorded as the additive migration path).
+> cursor recorded as the additive migration path). Concurrent-users
+> pin (owner, 2026-07-21): per-project run guard confirmed the right
+> grain; added — chain thread-safety audit under concurrent walks as
+> a named plan task (module-global per-run config banned) · run bound
+> counts paused walks, 409 at capacity · planner sessions
+> process-local with honest draft loss (transcripts are 026) ·
+> shared-rate-limit fairness recorded as v1 non-goal · two-user/
+> two-project leg added to the live check + rubric item 18.
 > rev 1: initial draft.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
@@ -142,7 +149,22 @@ seams; one schema generates both ends of the contract.** Seven strands:
    live tail are process-local; durable replay covers reconstruction,
    not live delivery): cross-instance steering/live-tail (Postgres
    LISTEN/NOTIFY or pub-sub) is a named deferred seam for the infra
-   slice, recorded in deferred.md. Liveness ticks that
+   slice, recorded in deferred.md. **Concurrent users on different
+   projects are first-class** (owner, 2026-07-21): the run guard is
+   per-project by design, and the plan carries (a) a **thread-safety
+   audit of the chain under concurrent walks** — components were built
+   one-walk-at-a-time; shared clients/caches/tracing contexts audited,
+   and per-run config is parameter-passed, never module-global (the
+   demo's monkeypatch pattern is banned); (b) the concurrent-run bound
+   **counts paused walks** (a blocked check-in holds its worker slot)
+   and at-bound run dispatch returns an honest 409 capacity envelope —
+   queueing is deferred; (c) **planning-conversation state is
+   process-local per project** — the approved plan object persists
+   durably, an in-flight draft conversation is lost on restart honestly
+   (transcript persistence is 026); (d) provider rate limits are shared
+   across concurrent runs — the run bound is the v1 fairness
+   mitigation, per-run fairness is a recorded non-goal. Liveness ticks
+   that
    have no durable home (search/fetch progress) flow on a clearly
    labelled ephemeral channel — best-effort, never state-bearing. 🟡 A
    fully *designed* component-progress protocol (RETRO §4) is out; this
@@ -468,7 +490,10 @@ Report the blocker; don't push through.
   answer one check-in in the UI (incl. one free-text steer through the
   confirm gate) → **while the run is executing, probe API
   responsiveness** (health + a read model answer promptly — the
-  off-loop execution pin, digest §1.2) → **kill and restart the API
+  off-loop execution pin, digest §1.2) → **start a second run on a
+  second project (second dev-issuer user) while the first is live** —
+  both streams progress without cross-talk, and each user's request
+  for the other's project returns 404 → **kill and restart the API
   server mid-run** → UI
   rebuilds from replay, the interrupted walk is marked and rendered
   honestly (orphan sweep — the durable record survives; the walk does

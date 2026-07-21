@@ -51,7 +51,12 @@ Slice-specific:
         pinned status mapping on every route; unbounded list endpoints paginated;
         snake_case JSON throughout; SSE/check-in variants are generated discriminated
         unions (no hand-rolled event types); no verbs in resource paths.
-18. [ ] **Pre-registered deferred.md discharges hold:** one-active-run-per-project
+18. [ ] **Concurrent users, different projects:** two overlapping runs on two projects
+        (distinct users) complete without cross-talk (SSE, steering, read models);
+        the concurrent-run bound counts paused walks and at-bound dispatch 409s;
+        the plan's chain thread-safety audit ran and its findings are recorded;
+        no per-run config via module globals anywhere in the API path.
+19. [ ] **Pre-registered deferred.md discharges hold:** one-active-run-per-project
         enforced in Postgres at dispatch (not app memory); citation-context clamp on
         the chunk-context read model; model-authored display strings scrubbed at
         render (no `dangerouslySetInnerHTML` on model/source strings); interrupted
