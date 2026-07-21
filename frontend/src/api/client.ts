@@ -4,8 +4,11 @@ import type { AuthApi } from "../auth/types";
 import { createAuthMiddleware } from "./authMiddleware";
 import type { paths } from "./gen/types";
 
-/** Default API base URL when `VITE_API_BASE_URL` is unset (local dev proxy). */
-const DEFAULT_BASE_URL = "/api";
+/** Default API base: same-origin. The generated `paths` already carry the
+ * full `/api/v1/...` prefix, so the base is "" — the Vite dev proxy matches
+ * `/api` and forwards to the backend. `VITE_API_BASE_URL` overrides for a
+ * cross-origin API host. */
+const DEFAULT_BASE_URL = "";
 
 /**
  * Build a typed `openapi-fetch` client bound to the generated `paths`.

@@ -4,9 +4,7 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from dotenv import load_dotenv
-
-load_dotenv()
+from dotenv import dotenv_values
 from sqlalchemy import engine_from_config, pool
 
 from policy_atlas.core.schema import metadata
@@ -20,7 +18,12 @@ target_metadata = metadata
 
 
 def _get_url() -> str:
-    url = os.environ.get("DATABASE_URL")
+    # Explicit environment first; fall back to backend/.env WITHOUT mutating
+    # os.environ — a blanket load_dotenv() here re-injected a developer's live
+    # keys into the pytest process every time a fixture ran a migration,
+    # flipping key-switched code paths live under socket-deny (task 025
+    # live-check finding). dotenv_values() reads the file side-effect-free.
+    url = os.environ.get("DATABASE_URL") or dotenv_values().get("DATABASE_URL")
     if not url:
         raise RuntimeError("DATABASE_URL environment variable is not set")
     return url

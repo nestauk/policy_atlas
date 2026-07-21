@@ -170,12 +170,22 @@ def _frames_for_row(
         return []
     event_type = row["event_type"]
     persisted = _persisted_kwargs(row)
-    if event_type in {"run.opened", "run.parked", "run.interrupted", "run.finished"}:
+    if event_type in {
+        "run.opened",
+        "run.parked",
+        "run.interrupted",
+        "run.finished",
+        # The claim IS the durable paused→running transition of a boundary
+        # continuation — without this frame, replay and the live store show a
+        # continuing walk as still paused (live-check finding, 2026-07-21).
+        "continuation.claimed",
+    }:
         capability_run_id = _uuid(payload.get("capability_run_id"))
         status = {
             "run.opened": "running",
             "run.parked": "paused",
             "run.interrupted": "interrupted",
+            "continuation.claimed": "running",
         }.get(event_type, payload.get("status"))
         if capability_run_id is None or status not in {
             "running", "paused", "succeeded", "degraded", "failed", "aborted", "interrupted"

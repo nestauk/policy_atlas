@@ -909,18 +909,24 @@ def _request_continuation(
     return AnswerResult(pause.capability_run_id, decision_event_id, True)
 
 
-def _current_plan_row(conn: Connection, *, project_id: uuid.UUID, state: Any) -> Mapping[str, Any]:
-    """Read the durable plan row currently represented by continuation state."""
+def _current_plan_row(conn: Connection, *, project_id: uuid.UUID, state: Any) -> Any:
+    """Read the durable plan row currently represented by continuation state.
+
+    Returns the SQLAlchemy row itself — the steering persistence helpers
+    (`_plan_row_value`) read it by ATTRIBUTE access, exactly as the in-process
+    runner passes it; a dict here 500s the confirm-apply path (live-check
+    finding, 2026-07-21).
+    """
     if state.plan_row_id is None:
         raise LookupError("parked walk has no persisted plan row")
     row = conn.execute(
         select(orchestration_plan)
         .where(orchestration_plan.c.project_id == project_id)
         .where(orchestration_plan.c.plan_id == state.plan_row_id)
-    ).mappings().one_or_none()
+    ).one_or_none()
     if row is None:
         raise LookupError("parked walk plan row does not exist")
-    return dict(row)
+    return row
 
 
 def _with_plan(state: Any, plan: Any, plan_id: uuid.UUID, version: int) -> Any:

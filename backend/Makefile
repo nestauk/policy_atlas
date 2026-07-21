@@ -10,14 +10,13 @@ setup:
 	uv sync
 	uv run alembic upgrade head
 
-# Local dev API server (task 025 I.1 clean-clone acceptance). Reads its
-# configuration from the environment (see `.env.example`) — export the
-# required OIDC_*/APP_ORIGIN/DATABASE_URL vars first, or run via a tool
-# that loads `.env` for you. Requires the dev-issuer bootstrap
+# Local dev API server (task 025 I.1 clean-clone acceptance). Loads
+# backend/.env via `uv run --env-file` — the ONE place local env loading
+# happens (settings stays pure os.environ so tests never inherit live keys). Requires the dev-issuer bootstrap
 # (`uv run python -m policy_atlas.api.dev_issuer init --dir .dev-issuer`)
 # so `OIDC_JWKS_PATH` names an existing file.
 dev:
-	uv run uvicorn policy_atlas.api.app:create_app --factory --reload --port 8000
+	uv run --env-file .env uvicorn policy_atlas.api.app:create_app --factory --reload --port 8000
 
 test:
 	DATABASE_URL="$(TEST_DATABASE_URL)" uv run pytest

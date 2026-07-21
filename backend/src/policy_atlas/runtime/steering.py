@@ -1903,7 +1903,14 @@ def _validate_directive_delta(
         return
     if component in {"screen_abstract", "screen_full"}:
         _require_keys(component, delta, {"screening"})
-        screen_module._parse_screen_directive({"screening": delta["screening"]})
+        try:
+            screen_module._parse_screen_directive({"screening": delta["screening"]})
+        except screen_module.ScreenDirectiveError as exc:
+            # Map to the refusal path like every sibling branch — a malformed
+            # router-compiled delta must refuse honestly, never crash the
+            # compile (live-check finding, 2026-07-21: this was the one
+            # unwrapped branch of seven).
+            raise SteeringAdjustmentError(str(exc)) from exc
         return
     if component == "select":
         _require_keys(component, delta, {"selection"})

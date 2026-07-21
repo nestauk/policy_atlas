@@ -100,18 +100,78 @@ check-in answer, artefact/citation/dossier, keyboard + reduced-motion +
 cd frontend && pnpm e2e
 ```
 
-**Live check (I.2): PREPARED, NOT YET RUN — blocked on credentials.** The
-pinned two-user/two-project live session needs the real `OPENAI_API_KEY`
-(+ optional Langfuse keys). Those live in the repo-root `.env`, which the
-permission system blocks this session from reading or moving. Run
-`! mv .env backend/.env` (or copy the keys into `backend/.env`), then the
-scripted check per plan § Live-check script: project A standard/Frequent,
-project B rapid/Unattended launched at A's `screen_abstract`,
-responsiveness probes (`/healthz` + funnel < 2 s each), cross-owner 404,
-restart while A parked ∧ B executing, A's pending card survives, B
-interrupted honestly, answer incl. one free-text confirm-gate steer,
-continuation completes, artefact renders, rename → archive → landing
-truth. 60-min overall timeout; wall time recorded as observation.
+**Live check (I.2): RUN 2026-07-21, ~52 min wall (inside the 60-min pin)**
+— full narrated log with timestamps: [live-check-log.md](live-check-log.md).
+Driven through the real browser UI (Chrome) against the live backends
+(real keys, dev DB, dev-issuer auth). Every pinned step held:
+
+- Project A (green budgeting / finance ministries, standard/Frequent, two
+  real planner turns incl. a folded refinement) parked at the P1
+  after-acquire steer point (49 found, honest inadequate/error coverage —
+  one search backend unkeyed in this env).
+- Project B (second dev-issuer user, rapid/landscape/Unattended, one
+  planner turn) executing while A parked. Probes during dual activity:
+  `/healthz` 200 in 0.003 s, funnel(A) 200 in 0.037 s (pin < 2 s);
+  cross-owner 404s **byte-identical** to never-existed; second dispatch
+  409; archive-while-running 409 `run_active`.
+- **Restart while A parked ∧ B executing** (hard kill): A survived
+  (`paused`, exactly one pending check-in), B honestly `interrupted` by
+  the orphan sweep; UI rebuilt from replay with A's pending card intact.
+- Post-restart answer through the UI: free-text steer → 202 compile →
+  **confirm-gate delta render** (incl. one round showing an honest
+  refused-fragment list) → apply → `steering.decision` +
+  `continuation.requested` in one transaction → claim → **boundary
+  continuation walk** executed screen_abstract WITH the applied criteria →
+  Frequent mode parked again at the next boundary (the designed
+  park-per-boundary loop) → `change_mode → unattended` → walk ran to
+  **succeeded** (49→11 relevant→8 read in full→11 selected→8 cited).
+- Evidence base rendered: annotation layer in the prose (span-anchored
+  claims, inline citation markers, Evidence-gap chip), composed coverage
+  sentence honest, citation popover (quote + tier/appraisal labels) →
+  clamped surrounding context (the 008 seam, live) → URL-addressable
+  dossier sheet; reference-click dossier fully populated (status ladder,
+  labels never scores, origin, DOI).
+- Rename persisted; archive idempotent (200×2, exactly one
+  `project.renamed` + one `project.archived` audit event); landing hides
+  the archived project (rows retained), `?status=archived` lists it,
+  user B's landing shows `interrupted` honestly.
+
+**Five integration findings caught and fixed in place by the live check**
+(each gate-checked; none reachable by the mock/unit paths):
+1. API deps defaulted to stub planner/router and EMPTY search backends —
+   now key-driven via `orchestrate.live_planner_and_backends` (the stub
+   router would have faked the confirm gate in production).
+2. `load_settings()` never loaded `backend/.env` (house `load_dotenv()`
+   pattern added).
+3. Double `/api` prefix in the frontend client base URLs (generated paths
+   already carry `/api/v1`) — invisible to mock mode by construction.
+4. C.3 confirm-apply passed the plan row as a dict into the steering
+   persistence (attribute access) → 500; and the pre-existing 024 gap it
+   exposed: the screen branch of `_validate_directive_delta` was the one
+   of seven that didn't map its directive error into the refusal path —
+   malformed router output crashed instead of refusing honestly.
+5. The continuation claim's paused→running flip emitted no frame —
+   `continuation.claimed` now maps to `run.status: running` in SSE (a
+   continuing walk showed as still paused in the store).
+6. Test hermeticity vs a keyed `backend/.env`: `tests/conftest.py`'s
+   `load_dotenv()` plus `alembic/env.py`'s `load_dotenv()` (re-run by every
+   migration-running fixture) injected the developer's live keys into the
+   pytest process, flipping key-switched paths (the CLI pin test's
+   `orchestrate.main`) live under socket-deny. Fixed: conftest scrubs the
+   product-egress keys after loading; alembic env reads `DATABASE_URL` via
+   side-effect-free `dotenv_values()`; API settings stays pure
+   `os.environ` with `make -C backend dev` owning `.env` loading via
+   `uv run --env-file`. The suite is now green with real keys present in
+   `backend/.env` — the exact state every keyed dev machine will have.
+
+**Review items from the live check** (recorded, not fixed): citation→
+dossier join is title-keyed and misses locator-fallback titles
+(`CitationOut` should carry `source_id`); no rename/archive control in the
+views (mutations exist and are tested; actions exercised via the seam);
+ingest presents under the acquire label ("Searching sources") while
+reading documents; graceful SIGTERM lets the walk executor keep running
+during shutdown — deploys must hard-kill or the lifespan should stop the
+executor (deploy-posture note for the infra slice).
 
 ## Diff summary
 

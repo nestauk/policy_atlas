@@ -18,6 +18,22 @@ from sqlalchemy.engine import Connection, Engine
 
 load_dotenv()
 
+# The suite is zero-egress by policy (socket-deny) and every live/stub switch
+# keys off these variables — a developer's real backend/.env must never flip
+# a test onto a live code path (task 025 live-check finding: the CLI pin
+# test drove `orchestrate.main` straight into the OpenAI branch). Scrub the
+# product-egress keys the .env may carry; DATABASE_URL and friends survive.
+for _egress_key in (
+    "OPENAI_API_KEY",
+    "LANGFUSE_PUBLIC_KEY",
+    "LANGFUSE_SECRET_KEY",
+    "LANGFUSE_HOST",
+    "LANGFUSE_BASE_URL",
+    "OVERTON_API_KEY",
+    "OPENALEX_API_KEY",
+):
+    os.environ.pop(_egress_key, None)
+
 # Fixture corpus moved out of the package (contract decision 12, task 016) — point
 # FixtureFetcher's default resolution at the repo test-data home for the suite.
 os.environ.setdefault("POLICY_ATLAS_FIXTURE_CORPUS", str(Path(__file__).parent / "data"))

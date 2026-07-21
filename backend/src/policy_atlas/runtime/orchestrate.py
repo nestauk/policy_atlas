@@ -773,7 +773,7 @@ def _ask(console: ConsoleIO, question: str, suggestions: list[str] | None) -> st
     return raw
 
 
-def _live_planner_and_backends(
+def live_planner_and_backends(
     langfuse_client: Any,
 ) -> tuple[PlannerBackend, RunnerBackends]:
     """Build the live planner + full live backend set, mirroring skeleton.py.
@@ -1057,7 +1057,7 @@ def main(
     langfuse_client = tracing.get_langfuse() if live else None
     default_orchestrator: OrchestratorBackend
     if live:
-        default_planner, default_backends = _live_planner_and_backends(langfuse_client)
+        default_planner, default_backends = live_planner_and_backends(langfuse_client)
         default_orchestrator = OpenAIOrchestratorBackend(langfuse_client=langfuse_client)
     else:
         default_planner = StubPlannerBackend()

@@ -1,7 +1,8 @@
 import { narrowSseFrame, type SseFrame } from "./sseFrame";
 
-/** Default API base URL when `VITE_API_BASE_URL` is unset (local dev proxy). */
-const DEFAULT_BASE_URL = "/api";
+/** Default API base: same-origin — the events path below already carries
+ * the full /api/v1 prefix (matches the REST client convention). */
+const DEFAULT_BASE_URL = "";
 
 /** Minimum reconnect backoff, per web-api.md's fetch-stream reconnect posture. */
 const MIN_BACKOFF_MS = 1000;
@@ -11,7 +12,7 @@ const MAX_BACKOFF_MS = 30000;
 export interface ConnectEventStreamOptions {
   /** Project whose event stream to open. */
   projectId: string;
-  /** API base URL. Defaults to `VITE_API_BASE_URL`, falling back to `/api`. */
+  /** API base URL. Defaults to `VITE_API_BASE_URL`, falling back to same-origin. */
   baseUrl?: string;
   /** Starting cursor (last-seen `event_log` sequence). Defaults to 0 (full replay). */
   cursor?: number;

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from typing import cast
@@ -11,9 +12,20 @@ from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.auth import get_current_user
 from policy_atlas.api.settings import Settings
-from policy_atlas.runtime.orchestrator_backend import OrchestratorBackend, StubOrchestratorBackend
-from policy_atlas.runtime.planner import OpenAIPlannerBackend, PlannerBackend
+from policy_atlas.core import tracing
+from policy_atlas.runtime.orchestrate import live_planner_and_backends
+from policy_atlas.runtime.orchestrator_backend import (
+    OpenAIOrchestratorBackend,
+    OrchestratorBackend,
+    StubOrchestratorBackend,
+)
+from policy_atlas.runtime.planner import PlannerBackend, StubPlannerBackend
 from policy_atlas.runtime.runner import RunnerBackends
+
+
+def _live() -> bool:
+    """Key presence is live intent — the same switch `orchestrate` uses."""
+    return bool(os.environ.get("OPENAI_API_KEY"))
 
 
 def get_settings(request: Request) -> Settings:
@@ -75,32 +87,44 @@ def get_executor(request: Request) -> ThreadPoolExecutor:
 
 
 def get_planner_backend() -> PlannerBackend:
-    """Build the production planner backend at the API boundary.
+    """Build the planner backend, key-driven exactly like `orchestrate`.
 
     Returns:
-        The runtime planner implementation. Tests override this dependency with
-        a scripted backend before creating a client.
+        The live OpenAI planner (Langfuse-traced) when `OPENAI_API_KEY` is
+        configured, else the deterministic stub. Tests override this
+        dependency with a scripted backend before creating a client.
     """
-    return OpenAIPlannerBackend()
+    if _live():
+        planner, _ = live_planner_and_backends(tracing.get_langfuse())
+        return planner
+    return StubPlannerBackend()
 
 
 def get_runner_backends() -> RunnerBackends:
-    """Build the runtime runner backend bundle for a dispatched walk.
+    """Build the runner backend bundle, key-driven exactly like `orchestrate`.
 
     Returns:
-        A lazily-resolved runtime backend bundle. Tests override this seam with
+        The full live backend set (search transports, OpenAI components,
+        document fetcher, tracing) when `OPENAI_API_KEY` is configured, else
+        the egress-free harness defaults. Tests override this seam with
         deterministic component doubles.
     """
+    if _live():
+        _, backends = live_planner_and_backends(tracing.get_langfuse())
+        return backends
     return RunnerBackends()
 
 
 def get_orchestrator_backend() -> OrchestratorBackend:
-    """Return the steering-router backend used for free-text compilation.
+    """Return the steering-router/watch backend, key-driven like `orchestrate`.
 
     Returns:
-        A deterministic runtime router unless deployment composition replaces
-        this dependency with its configured backend.
+        The live OpenAI orchestrator (the 024 router/watch — free-text
+        compilation must go through the real router in live deployments) when
+        `OPENAI_API_KEY` is configured, else the deterministic stub.
     """
+    if _live():
+        return OpenAIOrchestratorBackend(langfuse_client=tracing.get_langfuse())
     return StubOrchestratorBackend()
 
 

@@ -47,6 +47,11 @@ def load_settings() -> Settings:
         RuntimeError: If required configuration is absent or mutually exclusive
             JWKS configuration is invalid.
     """
+    # Pure os.environ by design: the DEV entry point loads backend/.env via
+    # `uv run --env-file` (backend Makefile `dev` target). Loading .env here
+    # would leak a developer's live keys into every test process that builds
+    # an app (live-check finding, 2026-07-21: it flipped the CLI pin test
+    # into live mode under socket-deny).
     issuer = _required("OIDC_ISSUER")
     audience = _required("OIDC_AUDIENCE")
     app_origin = _required("APP_ORIGIN")
