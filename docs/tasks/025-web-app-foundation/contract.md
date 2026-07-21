@@ -36,7 +36,17 @@
 > brand components need custom work regardless, and the app-specific
 > surfaces (annotation spans, check-in cards, dossier) exist in no
 > library; revisit at the workspace-cluster slice if the owned
-> primitive set sprawls or a second app appears.
+> primitive set sprawls or a second app appears. FastAPI-digest
+> adjudication (2026-07-21, deep-reasoner over the owner-supplied
+> 89-page source → fastapi-guidelines-digest.md; all four §1 findings
+> accepted): cross-owner access flipped 403→**404** (BOLA — existence
+> never confirmed; 403 reserved for future role failures) · runs
+> pinned **off the event loop** (mechanism + concurrent-run bound at
+> plan time; responsiveness probe added to the live check) ·
+> **one-instance/one-worker deployment posture** pinned (process-local
+> pause/tail; LISTEN/NOTIFY cross-instance seam → deferred.md) ·
+> **server-enforced page_size cap** added (offset kept deliberately;
+> cursor recorded as the additive migration path).
 > rev 1: initial draft.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
@@ -121,7 +131,18 @@ seams; one schema generates both ends of the contract.** Seven strands:
    walk, so on startup an orphan sweep marks in-flight runs (including
    blocked-at-a-pause) as `interrupted` in the durable record; the UI
    renders interruption honestly and offers a fresh run — it never
-   pretends a dead walk is resumable. Liveness ticks that
+   pretends a dead walk is resumable. **Runs never execute on the event
+   loop** (digest §1.2 — a blocking walk would starve SSE, health and
+   every other project): the run executes in offloaded worker
+   threads/executors; the plan pins the mechanism and a concurrent-run
+   bound, and the live check probes API responsiveness mid-run. The
+   orphan sweep is idempotent and concurrency-guarded (it fires per
+   process start). **Deployment posture: one API instance, one worker
+   process, pinned for this slice** (digest §1.3 — pause-unblocking and
+   live tail are process-local; durable replay covers reconstruction,
+   not live delivery): cross-instance steering/live-tail (Postgres
+   LISTEN/NOTIFY or pub-sub) is a named deferred seam for the infra
+   slice, recorded in deferred.md. Liveness ticks that
    have no durable home (search/fetch progress) flow on a clearly
    labelled ephemeral channel — best-effort, never state-bearing. 🟡 A
    fully *designed* component-progress protocol (RETRO §4) is out; this
@@ -216,7 +237,9 @@ PR landing:
   returns exactly the current blocking pause or nothing)**, project
   lifecycle
   (rename persists; archive hides + retains; 409 while running),
-  authz fail-closed (401/403 incl. cross-user), migration up/down.
+  authz fail-closed (401 unauthenticated; cross-owner reads/writes
+  return 404, asserted indistinguishable from absent), migration
+  up/down, orphan-sweep idempotence (double boot = no double events).
 - ADR (API architecture + auth seam + hoist + delete semantics) +
   spec flow-back (`web-api.md` new; product.md untouched) + deferred.md
   seams + `verification.md` with the pinned live check.
@@ -243,15 +266,23 @@ Interface decisions binding strand 2, reviewable at this gate
 - **One error envelope.** Every non-2xx returns
   `{error: {code, message, details?}}` — machine-readable `code`,
   human-readable `message`; mapping pinned: 400 malformed · 401
-  unauthenticated · 403 cross-user · 404 unknown/archived · 409
+  unauthenticated · **404 unknown/archived/cross-owner** (another
+  user's resource is indistinguishable from absent — BOLA guidance,
+  digest §1.1; 403 is reserved for role/permission failures within an
+  owned scope, of which this slice has none) · 409
   conflict (run active, already answered) · 422 validation (Pydantic
   detail in `details`) · 500 opaque (never leaks internals). Never
   mixed shapes; error *text* is not contract, `code` is.
 - **Pagination from day one** on unbounded lists (evidence ~200+,
   findings ~400+ at real scale; projects, decisions): one envelope
   `{data, pagination: {page, page_size, total_items}}`, filters as
-  query params. Bounded structural reads (plan, funnel, landscape,
-  artefact) stay whole-object.
+  query params, and a **server-enforced `page_size` cap** (digest
+  §1.4 — an unbounded page size is a DoS vector; `Query(le=…)`, value
+  at plan time). Offset pagination is a deliberate choice at
+  per-project scale; cursor pagination is the recorded migration path
+  (additive — a `cursor` param alongside, never a breaking reshape) if
+  cross-project or unbounded-growth lists appear. Bounded structural
+  reads (plan, funnel, landscape, artefact) stay whole-object.
 - **Partial updates.** `PATCH` semantics everywhere (rename = PATCH
   with only `name`); archive is idempotent.
 - **One naming convention.** snake_case JSON end-to-end (Pydantic-native;
@@ -293,6 +324,12 @@ Interface decisions binding strand 2, reviewable at this gate
 - [data-model.md](../../specs/system/data-model.md) + `core/schema.py` —
   the real tables the read models project (note: `project` is bare
   today: `project_id` + `created_at` only).
+- [fastapi-guidelines-digest.md](fastapi-guidelines-digest.md) — the
+  89-page FastAPI/LLM best-practices source distilled for this slice
+  (owner-supplied, 2026-07-21): §2 binds at plan time, §3 at build
+  time, §4 lists guidance that must NOT be applied here; §1's four
+  contract findings are adjudicated into this contract (BOLA 404,
+  off-loop execution, single-instance posture, page-size cap).
 - `docs/specs/sources/evidence-base-ux/` — the wireframe pack: handoff
   (§7 locked decisions), brand tokens, `hifi.css`, 11 screenshots —
   point-in-time design reference (see strand 7 caveat); the comms
@@ -429,7 +466,10 @@ Report the blocker; don't push through.
   scoped live run driven through the real browser UI — create project →
   planning conversation (2–3 turns) → start (rapid/standard effort) →
   answer one check-in in the UI (incl. one free-text steer through the
-  confirm gate) → **kill and restart the API server mid-run** → UI
+  confirm gate) → **while the run is executing, probe API
+  responsiveness** (health + a read model answer promptly — the
+  off-loop execution pin, digest §1.2) → **kill and restart the API
+  server mid-run** → UI
   rebuilds from replay, the interrupted walk is marked and rendered
   honestly (orphan sweep — the durable record survives; the walk does
   not, there is no resume engine) → start a fresh run → completion →

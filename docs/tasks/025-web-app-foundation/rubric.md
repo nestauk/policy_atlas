@@ -32,8 +32,9 @@ Slice-specific:
 11. [ ] **Real backend semantics:** rename persists to the `project` row; archive
         hides from listings while retaining all rows; no registry sidecar exists;
         answers to check-ins land in the durable steering record via the real seam.
-12. [ ] **Auth fail-closed:** every data route rejects unauthenticated (401) and
-        cross-user (403) access — proven by the authz test matrix; dev issuer is
+12. [ ] **Auth fail-closed:** every data route rejects unauthenticated (401) access;
+        cross-owner access returns 404 indistinguishable from absent (BOLA) —
+        proven by the authz test matrix; dev issuer is
         visibly non-production; Cognito cutover requires config only (documented).
 13. [ ] **Hoist is import-neutral:** `policy_atlas` import name unchanged; full
         backend suite green post-hoist; CI/Docker/doc paths updated (grep-verified,
