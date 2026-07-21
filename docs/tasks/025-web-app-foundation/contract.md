@@ -10,7 +10,10 @@
 > (paused/interrupted, finding 1); (2) deps additions —
 > `openapi-fetch` (finding 14) + a frontend OIDC adapter
 > (`oidc-client-ts`/`react-oidc-context`, finding 9). All other
-> findings folded as non-material amendments.
+> findings folded as non-material amendments. **Reopened gate items
+> RE-APPROVED 2026-07-21 · owner** ("Happy to agree with those gates")
+> — capability_run status migration + openapi-fetch + frontend OIDC
+> adapter are in the approved scope. Contract FINAL for planning.
 > Plan approved (before implementation): _pending_.
 > rev 2: `frontend/` (no dash — owner amendment superseding the
 > deferred.md `front-end/` spelling) + § API design pins added after an
