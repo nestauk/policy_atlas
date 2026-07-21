@@ -1,9 +1,16 @@
 # Task contract: 025-web-app-foundation
 
-> **Status:** approved. Contract approved (before planning):
-> **2026-07-21 · owner** ("Approved, run the adversarial review") —
-> contract-stage adversarial lane runs next (codex-rescue; findings
-> adjudicated by the lead; material changes reopen the gate).
+> **Status:** approved 2026-07-21 · owner ("Approved, run the
+> adversarial review") — **adversarial lane DONE same day**
+> (codex-rescue, job task-mrtxsig7-v7s1e2, family heterogeneity
+> achieved; 13 MAJOR + 7 minor findings, ALL adjudicated in — see
+> § Adversarial adjudication addenda + rev history). **Gate REOPENED
+> on two items needing owner re-approval:** (1) schema-gate expansion
+> — the `capability_run` status-constraint migration
+> (paused/interrupted, finding 1); (2) deps additions —
+> `openapi-fetch` (finding 14) + a frontend OIDC adapter
+> (`oidc-client-ts`/`react-oidc-context`, finding 9). All other
+> findings folded as non-material amendments.
 > Plan approved (before implementation): _pending_.
 > rev 2: `frontend/` (no dash — owner amendment superseding the
 > deferred.md `front-end/` spelling) + § API design pins added after an
@@ -83,6 +90,25 @@
 > component-library dependency; MUI/Chakra/Mantine/daisyUI rejected
 > with reasons in the design-sources pin; deps list gains scoped
 > `@radix-ui/*` + cva/tailwind-merge.
+> **Adversarial adjudication (2026-07-21, codex lane, 20/20
+> accepted):** MAJORs — capability_run status migration = explicit
+> gate expansion (1) · durable continuation.requested + atomic claim +
+> startup drainer (2+17) · context parity respecified as an enumerated
+> continuation-state reducer over the walk loop's real in-memory state
+> (3) · rubric 18 vs live check reconciled (4) · per-project lock
+> serialises answers, barrier test (5) · project.status = lifecycle
+> only, run state derived (6) · fetch-based SSE auth + own cursor + no
+> query-string tokens + mid-run expiry test (8) · frontend OIDC
+> adapter dep, "config only" split backend-conformance-test /
+> frontend-config (9+20) · migration backfill + NULL-owner rows
+> intentionally inaccessible + populated-DB migration test (10) ·
+> atomic backlog→tail cutoff + race test (11) · openapi-fetch added —
+> types alone are not a client (14) · live-check parameters pinned,
+> wall time demoted to observation (19). minors — planner-prose claim
+> narrowed to not-execution-bearing (7) · transactional rename/archive
+> audit events (12) · state/error matrix + clean-clone acceptance (13)
+> · planner turn lock + 409 (15) · row lock over partial index (16) ·
+> rubric greps made rename-aware/allowlisted (18).
 > rev 1: initial draft.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
@@ -126,6 +152,22 @@ seams; one schema generates both ends of the contract.** Seven strands:
 3. **Project lifecycle done properly.** Schema migration: `project` gains
    `name`, `question`, lifecycle `status`, `updated_at`, soft-delete
    (`archived_at`), and nullable `owner_user_id` (Cognito `sub`, text).
+   **`project.status` is lifecycle only — `active | archived`**
+   (finding 6): run/walk state lives on `capability_run.status` and is
+   never cached onto the project row; the landing card's
+   running/paused/complete presentation is a read model derived from
+   the latest capability run. **Migration policy for existing rows**
+   (finding 10): expand → backfill (`name` from the approved plan's
+   title else "Untitled project", `question` from the plan,
+   `status=active`) → constrain; pre-existing rows keep
+   `owner_user_id NULL` and are **intentionally inaccessible via the
+   API** under strict per-owner scoping (documented DB-level recovery;
+   the dev DB's two live-run projects are the known case) — and the
+   migration is tested against a populated pre-025 database, not only
+   an empty one. **Rename and archive emit transactional audit
+   events** (`project.renamed` / `project.archived`, actor +
+   timestamp, same transaction as the mutation — finding 12); archive
+   is idempotent.
    Rename and delete become real API semantics against Postgres; the
    demo's `projects.json` sidecar registry has no successor. 🟡 Delete =
    **archive** (soft-delete: hidden from listings, rows retained — the
@@ -176,24 +218,40 @@ seams; one schema generates both ends of the contract.** Seven strands:
    resumed. **Honest interruption** applies to executing walks only:
    on startup the orphan sweep marks runs that died mid-execution
    `interrupted`; **parked runs survive restarts by construction**.
-   Continuation dispatch competes for worker capacity like any walk
-   (answers are always accepted; execution may queue briefly at the
-   bound). Continuation dispatch is a **preserved seam**: broker-backed
+   Continuation is **durable before it is executable** (findings 2 +
+   17): the answer and a `continuation.requested` event commit in one
+   transaction; a worker claims it atomically (the per-project lock)
+   and marks it executing; a startup **drainer** redispatches
+   requested-but-unclaimed continuations, so a crash between answer
+   and execution loses nothing — crash tests on both sides of the
+   claim are named deliverables. Answers are always accepted;
+   execution may queue at the bound. **Schema consequence, gate item
+   (finding 1):** `paused`/`interrupted` violate `capability_run`'s
+   current status check constraint — the approved schema scope
+   expands to a second migration (the `capability_run` status
+   constraint, up/down tested with paused rows present; component-run
+   disposition named in the plan). Continuation dispatch is a
+   **preserved seam**: broker-backed
    workers (Celery/RQ) stay out of this slice — boundary durability is
    Postgres's job, not the task runner's; separate workers would
    re-open the deferred cross-process tail/unblock seam; broker infra
    belongs to the infra slice — but parked segments are queue-shaped,
    so workers slot in behind this seam later without a reshape
    (digest §4, updated). **Context parity is a tested property, not an assumption**
-   (owner question, 2026-07-21): the orchestrator context (watch/
-   router) composed at any boundary of a continuation walk must be
-   identical to what the unbroken walk would have composed — possible
-   because orchestrator context is already composed from the durable
-   record per moment (018: provider-side conversation state forbidden;
-   024: steering state rebuilds from Postgres alone), never from live
-   process memory. A parity test asserts it (unbroken vs
-   parked-and-continued walk, identical composed context modulo
-   timestamps). Anything quality-bearing found living only in walk
+   (owner question, 2026-07-21; sharpened by adversarial finding 3 —
+   the walk loop carries substantial in-memory state: amended
+   plan/chain, pending overlays, successful/attempted run maps,
+   blocked discretionary components, accumulated outcomes/flags): the
+   continuation is specified as a **continuation-state reducer** — an
+   enumerated mapping of *every* walk-loop field to its durable source
+   and ordering rule, drafted at plan time from `runner.py` as-built,
+   with ambiguity handling named per field. The parity test asserts
+   identical composed context between an unbroken and a
+   parked-and-continued walk across the full surface: pause header,
+   digest, P2–P4 bundles, canonical + authored options, router
+   surface, downstream run references, overlays, and collation —
+   not an unspecified "context". The known unwatched re-presentation
+   seam (deferred.md, 024 build) is inherited, not widened. Anything quality-bearing found living only in walk
    memory during the build is a **stop-condition finding** (it would
    violate plan-as-contract and "project memory is structured state,
    not a transcript" — product.md), not something to quietly stuff
@@ -328,10 +386,16 @@ PR landing:
   interface, Playwright journey test (mock mode) + unit tests (vitest).
 - `make verify` extended: frontend typecheck · lint · test · build +
   OpenAPI/client drift check; CI updated for the monorepo layout.
-- Tests: SSE replay idempotence (restart simulation), steering
-  check-in round-trip through the real seam, **continuation context
-  parity (unbroken walk vs parked-and-continued walk compose identical
-  orchestrator context)**, **resolved-pause replay
+- Tests: SSE replay idempotence (restart simulation) + the
+  backlog→tail race-injected test, steering check-in round-trip
+  through the real seam, the double-answer barrier test (one decision
+  + one 409), continuation crash tests (both sides of the claim) +
+  startup-drainer redispatch, **continuation context
+  parity per the reducer spec (unbroken walk vs parked-and-continued
+  walk, full surface: header/digest/bundles/options/router/
+  references/overlays/collation)**, the auth provider-conformance
+  suite (two asymmetric issuers, key rotation) + mid-run token expiry,
+  **resolved-pause replay
   (a decided pause never re-presents as pending; pending endpoint
   returns exactly the current blocking pause or nothing)**, project
   lifecycle
@@ -357,10 +421,17 @@ Interface decisions binding strand 2, reviewable at this gate
   replaces `/chat`). A check-in answer is created as its response
   sub-resource (`POST .../check-ins/{id}/response`, one per check-in —
   409 on double-answer). **One active run per project is enforced in
-  Postgres at dispatch** (partial unique index or advisory lock —
-  mechanism at plan time), not in app memory — the API's 409 is backed
-  by the DB guard. Discharges the pre-registered 008 seam
-  (deferred.md "Concurrent-run write guard", named for the web-app /
+  Postgres at dispatch** via a per-project row lock (`SELECT … FOR
+  UPDATE` on the `project` row, or an advisory lock keyed on it —
+  adversarial finding 16: a partial unique index would be a second
+  schema change and a worse fit), not in app memory — the API's 409 is
+  backed by the DB guard. **The same per-project serialization
+  primitive guards check-in answers and continuation claims**
+  (finding 5: event append assumes one writer per project; two
+  simultaneous answer POSTs must yield exactly one decision + one
+  clean 409, proven by a barrier test — never a 500 or a duplicate
+  continuation). Discharges the pre-registered 008 seam (deferred.md
+  "Concurrent-run write guard", named for the web-app /
   durable-execution slice).
 - **One error envelope.** Every non-2xx returns
   `{error: {code, message, details?}}` — machine-readable `code`,
@@ -400,6 +471,57 @@ Interface decisions binding strand 2, reviewable at this gate
 - **Additive evolution, one version.** `/api/v1` is a namespace, not
   versioning machinery: new fields optional, removals via deprecation
   in `web-api.md` — no parallel-version support.
+
+## Adversarial adjudication addenda (2026-07-21 — codex lane, all 20 findings accepted)
+
+Binding amendments not woven into the sections above:
+
+- **SSE authentication (finding 8):** native `EventSource` cannot send
+  an Authorization header — the SSE client is a **fetch-based stream
+  with bearer auth**; reconnection uses our own cursor (the client
+  passes its last-seen `event_log` sequence; `Last-Event-ID` is not
+  relied on). **No tokens in query strings, ever.** No cookies are
+  used, so CSRF machinery is out of scope by construction — stated,
+  not assumed. A **mid-run token-expiry test** (expire → refresh via
+  the OIDC adapter → reconnect → no event loss) is a named
+  deliverable.
+- **Backlog→live handoff (finding 11):** the replay protocol pins an
+  atomic cutoff — backlog is read to a snapshotted max sequence and
+  the live tail subscribes from sequence+1 in the same consistent
+  view; heartbeat comments keep intermediaries from timing out;
+  generator cleanup on disconnect (`try/finally`); proxy-buffering
+  disabled at the edge. A **race-injected test** (event committed
+  during the cutoff window; reconnect mid-stream) proves no loss and
+  no duplication.
+- **Planner turn concurrency (finding 15):** planning turns take the
+  per-project lock; a second concurrent turn gets `409
+  planning_turn_in_progress`; double-submit is idempotent (client
+  turn id); the session cache is bounded and its eviction/restart
+  behaviour (draft loss, honest) is rendered in the UI.
+- **Planner-prose claim narrowed (finding 7):** ephemeral planner
+  prose is **not execution-bearing for continuation** — but
+  plan-field↔turn provenance (plan-as-object §) remains an
+  acknowledged, deferred loss until 026/workspace-cluster; the
+  contract does not claim the prose is worthless in every sense.
+- **State/error surface matrix + clean clone (finding 13):** every
+  view ships its loading / empty / partial-data states, and the app
+  ships one coherent surface for each error class (401 session
+  expired → re-auth, 404/archived, 409 capacity, 422 field errors,
+  500, SSE-disconnected/reconnecting, interrupted-run recovery) — the
+  matrix is a plan artefact and a rubric-checkable table. Clean-clone
+  acceptance: documented env vars, dev-issuer bootstrap, migrations,
+  `make setup/dev/verify` covering both `backend/` and `frontend/`,
+  mock mode — a fresh machine reaches the running app from the README
+  alone.
+- **Live-check parameters (finding 19):** project A = standard
+  effort, Frequent mode (guarantees an attended pause); project B =
+  rapid effort, Unattended (no pause; executing at restart — restart
+  fires while B's SSE shows a mid-chain stage executing).
+  Responsiveness pass condition: health + one read model each < 2 s
+  while both runs execute. Wall time is an observation, not a pass
+  criterion; the check has an overall timeout at plan-pinned fixture
+  scale. If B parks early (it should not, Unattended), the evidence
+  notes it and the restart proceeds regardless.
 
 ## Read first
 
@@ -476,8 +598,12 @@ Interface decisions binding strand 2, reviewable at this gate
 Every gate below is **named for approval at this contract's 🛑** — none
 may be re-decided silently mid-build:
 
-- **Schema:** the `project` migration (columns above). No other table
-  changes.
+- **Schema:** two migrations — (1) the `project` migration (columns +
+  backfill policy above); (2) the `capability_run` status-constraint
+  migration adding `paused`/`interrupted` (adversarial finding 1 —
+  **gate expansion, needs owner re-approval**; up/down tested with
+  paused rows). No other table changes; continuation state is
+  event-log JSONB (`continuation.requested`), zero-schema by design.
 - **Auth/tenancy:** OIDC/JWT boundary + dev issuer as described; every
   data route authenticated; ownership = `owner_user_id` scoping on
   listings and access (❓ single-tenant team visibility vs strict
@@ -494,7 +620,13 @@ may be re-decided silently mid-build:
   `class-variance-authority`/`tailwind-merge`** (headless behaviour
   under the shadcn-style copied-in components — exact primitive list
   at plan time, scoped to components actually built) +
-  `openapi-typescript` (client gen), `vitest`,
+  **`openapi-typescript` AND `openapi-fetch`** (finding 14:
+  `openapi-typescript` generates types only; `openapi-fetch` is the
+  schema-typed runtime client — together they are "the generated
+  client") + **a frontend OIDC adapter** (finding 9: something must
+  own browser login/token acquisition/refresh/logout —
+  `oidc-client-ts` or `react-oidc-context`, picked at plan time,
+  driven by the dev issuer now and Cognito config later) + `vitest`,
   `@playwright/test`. Package manager: **npm** (demo precedent).
   🟡 React version is a **plan-gate decision**: 19 + compiler
   (drops manual memoisation) vs the demo's 18 — the demo validated the

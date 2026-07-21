@@ -38,16 +38,21 @@ Slice-specific:
 12. [ ] **Auth fail-closed:** every data route rejects unauthenticated (401) access;
         cross-owner access returns 404 indistinguishable from absent (BOLA) —
         proven by the authz test matrix; dev issuer is
-        visibly non-production; Cognito cutover requires config only (documented).
+        visibly non-production; **backend Cognito-compatibility is proven by a
+        provider-conformance test** (the same auth suite runs against two asymmetric
+        JWKS issuers with Cognito-shaped claims incl. key rotation), and the frontend
+        OIDC adapter's Cognito cutover surface is config + documented.
 13. [ ] **Hoist is import-neutral:** `policy_atlas` import name unchanged; full
-        backend suite green post-hoist; CI/Docker/doc paths updated (grep-verified,
-        no stale `src/` references).
+        backend suite green post-hoist; CI/Docker/doc paths updated — checked by a
+        root-relative-path audit with an explicit allowlist (`backend/src/` is
+        legitimate; a bare grep for `src/` is not the check).
 14. [ ] **RETRO §2 product decisions hold in the UI:** locked vocabulary (component
         names never rendered; labels from the server), appraisal labels never raw
         scores, data-driven surfaces hide rather than fake, annotation layer renders
         in the prose, one shared source dossier.
-15. [ ] **No new prompt surfaces:** diff over `runtime/` prompt families is empty;
-        the check-in content of record is the deterministic render.
+15. [ ] **No new prompt surfaces:** prompt-family file content hashes are identical
+        pre/post slice (rename-aware — the hoist moves paths, so a path diff is not
+        the check); the check-in content of record is the deterministic render.
 16. [ ] **Accessibility floor:** keyboard-operable check-in card + dossier;
         `prefers-reduced-motion` honoured; no horizontal body scroll at target widths.
 17. [ ] **API consistency (contract § API design pins):** single error envelope +
@@ -55,7 +60,9 @@ Slice-specific:
         snake_case JSON throughout; SSE/check-in variants are generated discriminated
         unions (no hand-rolled event types); no verbs in resource paths.
 18. [ ] **Concurrent users, different projects:** two overlapping runs on two projects
-        (distinct users) complete without cross-talk (SSE, steering, read models);
+        (distinct users) progress concurrently without cross-talk (SSE, steering, read
+        models) — in the live check A completes and B is interrupted by the pinned
+        restart; a deterministic stub-backend test proves the both-complete case;
         the concurrent-run bound counts executing walks only (parked runs hold no
         slot) and at-bound new-run dispatch 409s;
         the plan's chain thread-safety audit ran and its findings are recorded;
