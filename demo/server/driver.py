@@ -18,6 +18,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+import sqlalchemy as sa
 import structlog
 from demo.server import orchestrator
 from demo.server.bus import EventBus
@@ -380,9 +381,23 @@ class AnalysisDriver:
         now = datetime.now(UTC)
         with engine.begin() as conn:
             if self.create_project_row:
-                conn.execute(project.insert().values(
-                    project_id=self.project_id, created_at=now,
-                ))
+                # Text SQL: the 025 lifecycle columns (name/status/updated_at,
+                # NOT NULL) exist in the DB but not in this branch's 024-era
+                # schema.py table object. Postgres name is never read back —
+                # the demo lists projects from the sidecar.
+                conn.execute(
+                    sa.text(
+                        "INSERT INTO project"
+                        " (project_id, created_at, name, question, status, updated_at)"
+                        " VALUES (:pid, :now, :name, :question, 'active', :now)"
+                    ),
+                    {
+                        "pid": self.project_id,
+                        "now": now,
+                        "name": (self.plan.question or "Untitled project")[:200],
+                        "question": self.plan.question,
+                    },
+                )
             conn.execute(evidence_scope.insert().values(
                 evidence_scope_id=scope_id,
                 project_id=self.project_id,
