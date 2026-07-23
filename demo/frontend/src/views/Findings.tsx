@@ -14,7 +14,8 @@ const STAT_LABELS: [string, string][] = [
 
 const normFacet = (f: string) => f.toLowerCase().replace(/ type$/, '').trim()
 
-export default function Findings() {
+// Embeddable body: the filter chips + findings table, without page chrome.
+export function FindingsSection() {
   const { id } = useParams<{ id: string }>()
   const [findings, setFindings] = useState<Finding[]>([])
   const [groups, setGroups] = useState<Groups | null>(null)
@@ -39,12 +40,7 @@ export default function Findings() {
   const rows = filter ? findings.filter((f) => groupOf(f) === filter) : findings
 
   return (
-    <main className="mx-auto max-w-[1180px] px-8 py-8">
-      <h1 className="font-display text-[24px] font-extrabold text-navy">Findings</h1>
-      <p className="mt-1 text-[13px] text-grey">
-        Every finding pulled from the sources — intervention, outcome, direction, and the exact words it rests on.
-      </p>
-
+    <>
       {interventionFacet && interventionFacet.groups.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-2">
           <button className={`chip ${filter === null ? 'chip--blue' : ''}`} onClick={() => setFilter(null)}>
@@ -65,7 +61,7 @@ export default function Findings() {
         </div>
       )}
 
-      <div className="mt-5 bg-white shadow-card ring-1 ring-line">
+      <div className="mt-4 bg-white shadow-card ring-1 ring-line">
         <table className="w-full text-left">
           <thead>
             <tr className="border-b hairline">
@@ -98,7 +94,7 @@ export default function Findings() {
           </tbody>
         </table>
       </div>
-    </main>
+    </>
   )
 }
 

@@ -5,7 +5,8 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { api, type DecisionEntry } from '../api'
 
-export default function DecisionLog() {
+// Embeddable body: the audit-trail list, without page chrome.
+export function DecisionLogList() {
   const { id } = useParams<{ id: string }>()
   const [entries, setEntries] = useState<DecisionEntry[]>([])
   const [open, setOpen] = useState<number | null>(null)
@@ -15,13 +16,7 @@ export default function DecisionLog() {
   }, [id])
 
   return (
-    <main className="mx-auto max-w-[860px] px-8 py-8">
-      <h1 className="font-display text-[24px] font-extrabold text-navy">Decision log</h1>
-      <p className="mt-1 text-[13px] text-grey">
-        The audit trail — every stage, count and check-in, straight from the project's event log.
-      </p>
-
-      <div className="mt-6 space-y-0 bg-white shadow-card ring-1 ring-line">
+    <div className="space-y-0 border hairline">
         {entries.map((e, i) => {
           const expandable = Object.keys(e.detail ?? {}).length > 0
           const expanded = open === i
@@ -55,7 +50,6 @@ export default function DecisionLog() {
             The log fills in as the analysis runs.
           </p>
         )}
-      </div>
-    </main>
+    </div>
   )
 }

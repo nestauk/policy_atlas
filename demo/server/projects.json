@@ -570,5 +570,537 @@
    }
   ],
   "created_at": "2026-07-10T14:50:39.214164+00:00"
+ },
+ {
+  "project_id": "21ff8ac7-35d4-401a-ac55-e3693f167132",
+  "name": "Reducing obesity in the UK",
+  "question": "What interventions, policies or services have evidence of reducing or preventing obesity in the UK, and what implementation factors affect their delivery?",
+  "plan": {
+   "title": "Reducing obesity in the UK",
+   "question": "What interventions, policies or services have evidence of reducing or preventing obesity in the UK, and what implementation factors affect their delivery?",
+   "scoping_notes": [
+    "User specified the UK.",
+    "User\u2019s stated aim is to reduce obesity.",
+    "No population, age group, intervention type or outcome priority was specified."
+   ],
+   "screening_criteria": [
+    "Include UK-based studies, evaluations, programmes or policy analyses.",
+    "Include interventions aiming to prevent or reduce obesity.",
+    "Include evidence on obesity, weight, BMI, adiposity, diet or physical activity.",
+    "Include academic and grey literature.",
+    "Include systematic reviews, evaluations and empirical studies.",
+    "Exclude opinion-only pieces without evidence.",
+    "Exclude documents not relevant to UK policy or practice."
+   ],
+   "backend_scope": "both",
+   "scope_constraints": {
+    "published_after": "2016-01-01",
+    "published_before": "2026-07-22",
+    "publisher_country": null,
+    "author_affiliation_countries": null,
+    "country_group": null
+   },
+   "search_effort": "standard",
+   "analysis_depth": "standard",
+   "components": [
+    "characterise",
+    "screen_full",
+    "select"
+   ],
+   "component_rationale": {
+    "characterise": "Included to map the range of obesity-reduction approaches, populations, settings, outcomes and evidence gaps across a broad question.",
+    "screen_full": "Included because standard analysis can afford a full-text precision check for documents that look relevant at title or abstract stage.",
+    "select": "Included to prioritise the strongest-fit and most policy-relevant documents for synthesis emphasis.",
+    "extract": "Excluded at standard depth; deep extraction would be useful if you want structured findings on effects and implementation conditions.",
+    "group": "Excluded because grouping only runs with deep extraction."
+   },
+   "steering_mode": "moderate",
+   "assumptions": [
+    "I am treating \u201creduce obesity in the UK\u201d as a broad intervention and policy effectiveness question, not a statistics lookup.",
+    "I am assuming all age groups are in scope unless you specify adults, children, or another population.",
+    "I am assuming all intervention levels are in scope: national policy, local government, NHS, schools, workplaces, communities and digital services.",
+    "I am using a roughly last-decade evidence window by default: 2016-01-01 to 2026-07-22.",
+    "I am not applying UK source-origin filters because study or programme setting is in the text; publisher/author filters could exclude non-UK-authored work about the UK."
+   ],
+   "expected_artefact_shape": "grounded answer over the screened corpus",
+   "time_band": "~10-20 min",
+   "steps": [
+    {
+     "label": "Searching sources",
+     "blurb": "Queries out to academic and policy databases",
+     "stage": "acquire"
+    },
+    {
+     "label": "Screening for relevance",
+     "blurb": "Every title and abstract, against your question",
+     "stage": "screen_abstract"
+    },
+    {
+     "label": "Sorting by evidence type",
+     "blurb": "Trial, review, evaluation \u2014 each source labelled",
+     "stage": "classify"
+    },
+    {
+     "label": "Appraising quality",
+     "blurb": "How much weight each source can bear",
+     "stage": "appraise"
+    },
+    {
+     "label": "Reading in full",
+     "blurb": "Fetching the documents; paywalls noted, not hidden",
+     "stage": "ingest_full_text"
+    },
+    {
+     "label": "Screening the full texts",
+     "blurb": "A second relevance pass, now over the documents themselves",
+     "stage": "screen_full"
+    },
+    {
+     "label": "Mapping the landscape",
+     "blurb": "What the evidence covers, and where it's thin",
+     "stage": "characterise"
+    },
+    {
+     "label": "Shortlisting",
+     "blurb": "The strongest, most varied set for close reading",
+     "stage": "select"
+    },
+    {
+     "label": "Writing the evidence base",
+     "blurb": "Cited, checked, ready to challenge",
+     "stage": "synthesise"
+    }
+   ],
+   "ready": true
+  },
+  "approved": {
+   "title": "Reducing obesity in the UK",
+   "question": "What interventions, policies or services have evidence of reducing or preventing obesity in the UK, and what implementation factors affect their delivery?",
+   "scoping_notes": [
+    "User specified the UK.",
+    "User\u2019s stated aim is to reduce obesity.",
+    "No population, age group, intervention type or outcome priority was specified."
+   ],
+   "screening_criteria": [
+    "Include UK-based studies, evaluations, programmes or policy analyses.",
+    "Include interventions aiming to prevent or reduce obesity.",
+    "Include evidence on obesity, weight, BMI, adiposity, diet or physical activity.",
+    "Include academic and grey literature.",
+    "Include systematic reviews, evaluations and empirical studies.",
+    "Exclude opinion-only pieces without evidence.",
+    "Exclude documents not relevant to UK policy or practice."
+   ],
+   "backend_scope": "both",
+   "scope_constraints": {
+    "published_after": "2016-01-01",
+    "published_before": "2026-07-22",
+    "publisher_country": null,
+    "author_affiliation_countries": null,
+    "country_group": null
+   },
+   "search_effort": "standard",
+   "analysis_depth": "standard",
+   "components": [
+    "characterise",
+    "screen_full",
+    "select"
+   ],
+   "component_rationale": {
+    "characterise": "Included to map the range of obesity-reduction approaches, populations, settings, outcomes and evidence gaps across a broad question.",
+    "screen_full": "Included because standard analysis can afford a full-text precision check for documents that look relevant at title or abstract stage.",
+    "select": "Included to prioritise the strongest-fit and most policy-relevant documents for synthesis emphasis.",
+    "extract": "Excluded at standard depth; deep extraction would be useful if you want structured findings on effects and implementation conditions.",
+    "group": "Excluded because grouping only runs with deep extraction."
+   },
+   "grouping_facets": null,
+   "extract_profiles": null,
+   "steering_mode": "moderate",
+   "steer_point_defaults": [],
+   "expected_artefact_shape": "grounded answer over the screened corpus",
+   "assumptions": [
+    "I am treating \u201creduce obesity in the UK\u201d as a broad intervention and policy effectiveness question, not a statistics lookup.",
+    "I am assuming all age groups are in scope unless you specify adults, children, or another population.",
+    "I am assuming all intervention levels are in scope: national policy, local government, NHS, schools, workplaces, communities and digital services.",
+    "I am using a roughly last-decade evidence window by default: 2016-01-01 to 2026-07-22.",
+    "I am not applying UK source-origin filters because study or programme setting is in the text; publisher/author filters could exclude non-UK-authored work about the UK."
+   ],
+   "time_band": "~10-20 min"
+  },
+  "turns": [
+   {
+    "role": "user",
+    "text": "Reduce obesity in the UK"
+   },
+   {
+    "role": "planner",
+    "text": "I\u2019ve drafted this as a broad, policy-facing evidence review on what can reduce or prevent obesity in the UK. The plan keeps the scope open across ages and intervention types, because you did not specify a subgroup or policy lever.\n\nI propose a standard run: a bounded academic and grey-literature search, screening, corpus mapping, full-text precision screening, appraisal, purposive selection of the strongest-fit documents, then synthesis. I have not applied UK publisher or author-affiliation filters, because \u201cin the UK\u201d is best handled as a screening criterion about the study or programme setting; source-origin filters could wrongly drop non-UK-published evidence about the UK.\n\nIf you approve, the run will proceed with moderate steering: it will come back at key decision points such as evidence-base coverage, document selection, and synthesis shape. You can also nudge this lighter for a quick landscape map, or deeper for detailed extraction of intervention effects and implementation barriers/enablers from selected documents."
+   },
+   {
+    "role": "user",
+    "text": "restart"
+   },
+   {
+    "role": "planner",
+    "text": "Restarted from scratch. I\u2019ve drafted this as a broad UK policy evidence review on interventions, policies and services to reduce or prevent obesity. The proposed run uses both academic and grey literature, with a standard search and standard synthesis: it will map the evidence base, full-text screen likely-relevant documents, appraise them, select the strongest-fit documents for synthesis emphasis, and then produce a policy-facing synthesis. I have not filtered by UK publisher or UK author affiliation, because those filters apply to source origin, not study setting; UK relevance is better handled during screening. If you want this lighter, I would switch to a landscape map only. If you want it deeper, I would add structured extraction of intervention effects plus implementation barriers, enablers and mechanisms from selected documents."
+   }
+  ],
+  "created_at": "2026-07-22T12:28:24.471729+00:00"
+ },
+ {
+  "project_id": "3fd8bf40-7239-424c-ae7e-a44e5d9c0cb7",
+  "name": "Structural interventions to reduce obesity in the UK",
+  "question": "What structural interventions, policies or system-level changes have evidence for reducing obesity or obesity-related risk factors in the UK, and what implementation lessons are relevant for UK policy?",
+  "plan": {
+   "title": "Structural interventions to reduce obesity in the UK",
+   "question": "What structural interventions, policies or system-level changes have evidence for reducing obesity or obesity-related risk factors in the UK, and what implementation lessons are relevant for UK policy?",
+   "scoping_notes": [
+    "User specified the UK.",
+    "User specified the aim of reducing obesity.",
+    "User now wants the evidence base focused on structural interventions.",
+    "No age group, population or setting was specified.",
+    "No outcome measure was specified beyond obesity reduction."
+   ],
+   "screening_criteria": [
+    "Include UK population or UK policy/service setting.",
+    "Include structural, policy or system-level interventions.",
+    "Include environmental, fiscal, regulatory or planning interventions.",
+    "Include institutional interventions in schools, workplaces or services.",
+    "Include obesity, BMI, weight, diet or physical activity outcomes.",
+    "Include empirical evaluations, systematic reviews or policy evidence reports.",
+    "Include implementation or economic evidence linked to obesity reduction.",
+    "Exclude individual advice-only interventions.",
+    "Exclude clinical treatment-only interventions.",
+    "Exclude documents with no UK relevance.",
+    "Exclude opinion pieces without evidence or policy analysis."
+   ],
+   "backend_scope": "both",
+   "scope_constraints": {
+    "published_after": "2016-01-01",
+    "published_before": null,
+    "publisher_country": null,
+    "author_affiliation_countries": null,
+    "country_group": null
+   },
+   "search_effort": "standard",
+   "analysis_depth": "standard",
+   "components": [
+    "characterise",
+    "screen_full",
+    "select"
+   ],
+   "component_rationale": {
+    "characterise": "Included to map the range of structural intervention types, target populations, settings, outcomes and evidence gaps.",
+    "screen_full": "Included because \u201cstructural intervention\u201d is often used inconsistently and full-text checking should improve precision.",
+    "select": "Included to prioritise the strongest-fit and most policy-relevant documents for synthesis emphasis."
+   },
+   "steering_mode": "moderate",
+   "assumptions": [
+    "I have interpreted \u201cstructural interventions\u201d as upstream policy, environmental, regulatory, fiscal, planning, institutional or system-level interventions, rather than individual advice or clinical treatment.",
+    "I have left population broad: adults, children and whole-population approaches are in scope unless you narrow it.",
+    "I propose keeping the recent evidence window from 2016 onwards; older landmark evidence may be captured through recent reviews, but not searched exhaustively.",
+    "UK is treated as the study or policy setting during screening. I am not applying publisher-country or author-affiliation filters, because those filter source origin rather than whether the study is about the UK.",
+    "This plan will not itself produce per-intervention extracted findings; moving to deep analysis would add structured extraction of effects and implementation-context findings."
+   ],
+   "expected_artefact_shape": "grounded answer over the screened corpus",
+   "time_band": "~10-20 min",
+   "steps": [
+    {
+     "label": "Searching sources",
+     "blurb": "Queries out to academic and policy databases",
+     "stage": "acquire"
+    },
+    {
+     "label": "Screening for relevance",
+     "blurb": "Every title and abstract, against your question",
+     "stage": "screen_abstract"
+    },
+    {
+     "label": "Sorting by evidence type",
+     "blurb": "Trial, review, evaluation \u2014 each source labelled",
+     "stage": "classify"
+    },
+    {
+     "label": "Appraising quality",
+     "blurb": "How much weight each source can bear",
+     "stage": "appraise"
+    },
+    {
+     "label": "Reading in full",
+     "blurb": "Fetching the documents; paywalls noted, not hidden",
+     "stage": "ingest_full_text"
+    },
+    {
+     "label": "Screening the full texts",
+     "blurb": "A second relevance pass, now over the documents themselves",
+     "stage": "screen_full"
+    },
+    {
+     "label": "Mapping the landscape",
+     "blurb": "What the evidence covers, and where it's thin",
+     "stage": "characterise"
+    },
+    {
+     "label": "Shortlisting",
+     "blurb": "The strongest, most varied set for close reading",
+     "stage": "select"
+    },
+    {
+     "label": "Writing the evidence base",
+     "blurb": "Cited, checked, ready to challenge",
+     "stage": "synthesise"
+    }
+   ],
+   "ready": true
+  },
+  "approved": {
+   "title": "Structural interventions to reduce obesity in the UK",
+   "question": "What structural interventions, policies or system-level changes have evidence for reducing obesity or obesity-related risk factors in the UK, and what implementation lessons are relevant for UK policy?",
+   "scoping_notes": [
+    "User specified the UK.",
+    "User specified the aim of reducing obesity.",
+    "User now wants the evidence base focused on structural interventions.",
+    "No age group, population or setting was specified.",
+    "No outcome measure was specified beyond obesity reduction."
+   ],
+   "screening_criteria": [
+    "Include UK population or UK policy/service setting.",
+    "Include structural, policy or system-level interventions.",
+    "Include environmental, fiscal, regulatory or planning interventions.",
+    "Include institutional interventions in schools, workplaces or services.",
+    "Include obesity, BMI, weight, diet or physical activity outcomes.",
+    "Include empirical evaluations, systematic reviews or policy evidence reports.",
+    "Include implementation or economic evidence linked to obesity reduction.",
+    "Exclude individual advice-only interventions.",
+    "Exclude clinical treatment-only interventions.",
+    "Exclude documents with no UK relevance.",
+    "Exclude opinion pieces without evidence or policy analysis."
+   ],
+   "backend_scope": "both",
+   "scope_constraints": {
+    "published_after": "2016-01-01",
+    "published_before": null,
+    "publisher_country": null,
+    "author_affiliation_countries": null,
+    "country_group": null
+   },
+   "search_effort": "standard",
+   "analysis_depth": "standard",
+   "components": [
+    "characterise",
+    "screen_full",
+    "select"
+   ],
+   "component_rationale": {
+    "characterise": "Included to map the range of structural intervention types, target populations, settings, outcomes and evidence gaps.",
+    "screen_full": "Included because \u201cstructural intervention\u201d is often used inconsistently and full-text checking should improve precision.",
+    "select": "Included to prioritise the strongest-fit and most policy-relevant documents for synthesis emphasis."
+   },
+   "grouping_facets": null,
+   "extract_profiles": null,
+   "steering_mode": "moderate",
+   "steer_point_defaults": [],
+   "expected_artefact_shape": "grounded answer over the screened corpus",
+   "assumptions": [
+    "I have interpreted \u201cstructural interventions\u201d as upstream policy, environmental, regulatory, fiscal, planning, institutional or system-level interventions, rather than individual advice or clinical treatment.",
+    "I have left population broad: adults, children and whole-population approaches are in scope unless you narrow it.",
+    "I propose keeping the recent evidence window from 2016 onwards; older landmark evidence may be captured through recent reviews, but not searched exhaustively.",
+    "UK is treated as the study or policy setting during screening. I am not applying publisher-country or author-affiliation filters, because those filter source origin rather than whether the study is about the UK.",
+    "This plan will not itself produce per-intervention extracted findings; moving to deep analysis would add structured extraction of effects and implementation-context findings."
+   ],
+   "time_band": "~10-20 min"
+  },
+  "turns": [
+   {
+    "role": "user",
+    "text": "Reduce obesity in the UK"
+   },
+   {
+    "role": "planner",
+    "text": "I\u2019ve drafted this as a broad UK policy evidence review on what can reduce obesity, with room to include both effectiveness evidence and practical implementation lessons. I\u2019m proposing both academic and grey literature, a standard search and standard analysis, with characterisation of the evidence base plus a full-text precision screen and purposive selection of the strongest-fit documents.\n\nKey assumption: \u201cUK\u201d is being used as the setting of the evidence, not the country of the publisher or authors. I therefore have not applied source-origin filters, because they could exclude non-UK-authored studies about UK policy or programmes.\n\nIf you want, you could narrow this before approval to children, adults, NHS/public health services, schools, food environments, fiscal/regulatory policy, or inequalities \u2014 but the current plan is ready as a broad starting point."
+   },
+   {
+    "role": "user",
+    "text": "Can you find information in the evidence base about structural interventions"
+   },
+   {
+    "role": "planner",
+    "text": "Yes \u2014 I\u2019ve revised the plan so the review focuses specifically on structural interventions rather than obesity interventions in general.\n\nI\u2019m treating \u201cstructural interventions\u201d as upstream policy, environmental, fiscal, regulatory, planning, institutional or system-level changes. That would include things like food and drink regulation, fiscal measures, planning and built environment changes, school or workplace system changes, public procurement, advertising restrictions, and other population-level approaches. Individual advice-only or clinical treatment-only interventions would now be excluded.\n\nThe plan remains a standard review: both academic and grey literature, a recent window from 2016 onwards, evidence screened for UK relevance, and a synthesis that maps the structural intervention evidence base and prioritises the strongest-fit documents. If you want per-intervention extraction of effects, barriers, enablers and mechanisms, we could make this a deep run instead."
+   }
+  ],
+  "created_at": "2026-07-22T12:39:10.571975+00:00"
+ },
+ {
+  "project_id": "a499c25c-687b-4e78-9a05-3548aaba314b",
+  "name": "Reducing obesity in the UK",
+  "question": "What does recent academic and grey literature say about which policies, programmes and interventions can reduce obesity in the UK, for whom, and under what delivery conditions?",
+  "plan": {
+   "title": "Reducing obesity in the UK",
+   "question": "What does recent academic and grey literature say about which policies, programmes and interventions can reduce obesity in the UK, for whom, and under what delivery conditions?",
+   "scoping_notes": [
+    "Setting: UK.",
+    "Policy aim: reduce obesity."
+   ],
+   "screening_criteria": [
+    "Include UK study or programme settings.",
+    "Include interventions, policies or programmes aiming to prevent or reduce obesity.",
+    "Include obesity, weight, diet, physical activity or purchasing outcomes.",
+    "Include empirical studies, evaluations, reviews, modelling studies and policy reports.",
+    "Exclude documents with no obesity-reduction intervention or policy focus.",
+    "Exclude opinion pieces with no evidence base."
+   ],
+   "backend_scope": "both",
+   "scope_constraints": {
+    "published_after": "2015-01-01",
+    "published_before": null,
+    "publisher_country": null,
+    "author_affiliation_countries": null,
+    "country_group": null
+   },
+   "search_effort": "standard",
+   "analysis_depth": "standard",
+   "components": [
+    "characterise",
+    "screen_full",
+    "select"
+   ],
+   "component_rationale": {
+    "characterise": "Included to map the range of obesity-reduction approaches, populations, settings and evidence gaps across the corpus.",
+    "screen_full": "Included because the broad framing is likely to retrieve documents that mention obesity but are not actually about reducing it in the UK.",
+    "select": "Included to prioritise the strongest-fit and most policy-relevant documents for synthesis emphasis.",
+    "extract": "Excluded at standard depth; deep extraction would be useful if you want intervention-by-intervention findings in more detail.",
+    "group": "Excluded because grouping extracted findings only runs with the deep extraction chain."
+   },
+   "steering_mode": "moderate",
+   "assumptions": [
+    "I have interpreted \u201cReduce obesity in the UK\u201d as a request for evidence on interventions, policies and programmes that could reduce obesity in UK populations.",
+    "No population subgroup was specified, so I would keep adults, children and whole-population approaches in scope.",
+    "No intervention type was specified, so I would include fiscal, regulatory, environmental, service-delivery, community, school, workplace and clinical/public-health approaches.",
+    "No outcomes were specified, so I would include obesity-related weight outcomes and credible intermediate outcomes such as diet, physical activity and purchasing where linked to obesity prevention.",
+    "No date window was given; I suggest focusing on evidence published from 2015 onwards, with older landmark reviews likely picked up only where recent sources cite them.",
+    "I would not apply UK publisher or author-affiliation filters: those filter source origin, not study setting, and could miss non-UK authors writing about UK interventions."
+   ],
+   "expected_artefact_shape": "grounded answer over the screened corpus",
+   "time_band": "~10-20 min",
+   "steps": [
+    {
+     "label": "Searching sources",
+     "blurb": "Queries out to academic and policy databases",
+     "stage": "acquire"
+    },
+    {
+     "label": "Screening for relevance",
+     "blurb": "Every title and abstract, against your question",
+     "stage": "screen_abstract"
+    },
+    {
+     "label": "Sorting by evidence type",
+     "blurb": "Trial, review, evaluation \u2014 each source labelled",
+     "stage": "classify"
+    },
+    {
+     "label": "Appraising quality",
+     "blurb": "How much weight each source can bear",
+     "stage": "appraise"
+    },
+    {
+     "label": "Reading in full",
+     "blurb": "Fetching the documents; paywalls noted, not hidden",
+     "stage": "ingest_full_text"
+    },
+    {
+     "label": "Screening the full texts",
+     "blurb": "A second relevance pass, now over the documents themselves",
+     "stage": "screen_full"
+    },
+    {
+     "label": "Mapping the landscape",
+     "blurb": "What the evidence covers, and where it's thin",
+     "stage": "characterise"
+    },
+    {
+     "label": "Shortlisting",
+     "blurb": "The strongest, most varied set for close reading",
+     "stage": "select"
+    },
+    {
+     "label": "Writing the evidence base",
+     "blurb": "Cited, checked, ready to challenge",
+     "stage": "synthesise"
+    }
+   ],
+   "ready": true
+  },
+  "approved": {
+   "title": "Reducing obesity in the UK",
+   "question": "What does recent academic and grey literature say about which policies, programmes and interventions can reduce obesity in the UK, for whom, and under what delivery conditions?",
+   "scoping_notes": [
+    "Setting: UK.",
+    "Policy aim: reduce obesity."
+   ],
+   "screening_criteria": [
+    "Include UK study or programme settings.",
+    "Include interventions, policies or programmes aiming to prevent or reduce obesity.",
+    "Include obesity, weight, diet, physical activity or purchasing outcomes.",
+    "Include empirical studies, evaluations, reviews, modelling studies and policy reports.",
+    "Exclude documents with no obesity-reduction intervention or policy focus.",
+    "Exclude opinion pieces with no evidence base."
+   ],
+   "backend_scope": "both",
+   "scope_constraints": {
+    "published_after": "2015-01-01",
+    "published_before": null,
+    "publisher_country": null,
+    "author_affiliation_countries": null,
+    "country_group": null
+   },
+   "search_effort": "standard",
+   "analysis_depth": "standard",
+   "components": [
+    "characterise",
+    "screen_full",
+    "select"
+   ],
+   "component_rationale": {
+    "characterise": "Included to map the range of obesity-reduction approaches, populations, settings and evidence gaps across the corpus.",
+    "screen_full": "Included because the broad framing is likely to retrieve documents that mention obesity but are not actually about reducing it in the UK.",
+    "select": "Included to prioritise the strongest-fit and most policy-relevant documents for synthesis emphasis.",
+    "extract": "Excluded at standard depth; deep extraction would be useful if you want intervention-by-intervention findings in more detail.",
+    "group": "Excluded because grouping extracted findings only runs with the deep extraction chain."
+   },
+   "grouping_facets": null,
+   "extract_profiles": null,
+   "steering_mode": "moderate",
+   "steer_point_defaults": [],
+   "expected_artefact_shape": "grounded answer over the screened corpus",
+   "assumptions": [
+    "I have interpreted \u201cReduce obesity in the UK\u201d as a request for evidence on interventions, policies and programmes that could reduce obesity in UK populations.",
+    "No population subgroup was specified, so I would keep adults, children and whole-population approaches in scope.",
+    "No intervention type was specified, so I would include fiscal, regulatory, environmental, service-delivery, community, school, workplace and clinical/public-health approaches.",
+    "No outcomes were specified, so I would include obesity-related weight outcomes and credible intermediate outcomes such as diet, physical activity and purchasing where linked to obesity prevention.",
+    "No date window was given; I suggest focusing on evidence published from 2015 onwards, with older landmark reviews likely picked up only where recent sources cite them.",
+    "I would not apply UK publisher or author-affiliation filters: those filter source origin, not study setting, and could miss non-UK authors writing about UK interventions."
+   ],
+   "time_band": "~10-20 min"
+  },
+  "turns": [
+   {
+    "role": "user",
+    "text": "Reduce obesity in the UK"
+   },
+   {
+    "role": "planner",
+    "text": "I\u2019ve drafted this as a broad UK policy evidence review: what interventions, programmes and policies can reduce obesity in the UK, including who they work for and what delivery conditions matter. I propose a standard search and standard analysis: broad enough to cover academic and grey literature, with a full-text precision screen and purposive selection of the strongest-fit documents for synthesis emphasis. The UK constraint is expressed as a screening rule for study/programme setting rather than a backend geography filter, because publisher country and author affiliation filters only capture where the source comes from, not what country the intervention is about. If you want a lighter horizon scan or a deeper intervention-by-intervention extraction, we can adjust before running."
+   }
+  ],
+  "created_at": "2026-07-22T13:31:08.556229+00:00"
+ },
+ {
+  "project_id": "74588f34-8f05-4c9b-9c8c-54233ae484b8",
+  "name": "New project about obesity",
+  "question": "",
+  "plan": null,
+  "approved": null,
+  "turns": [],
+  "created_at": "2026-07-23T14:40:14.625249+00:00"
  }
 ]

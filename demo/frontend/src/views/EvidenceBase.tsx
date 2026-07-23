@@ -18,7 +18,7 @@ import { SourceLink } from '../sourcePanel'
 import { useProject } from '../store'
 import { Dot, PaneH, SlideOver, Tip, TIER_LABEL, TIER_TEXT } from '../ui'
 
-export default function EvidenceBase() {
+export default function EvidenceBase({ embedded = false }: { embedded?: boolean } = {}) {
   const { id } = useParams<{ id: string }>()
   const { state } = useProject()
   const [artefact, setArtefact] = useState<Artefact | null>(null)
@@ -28,8 +28,10 @@ export default function EvidenceBase() {
     api.getArtefact(id!).then(setArtefact).catch(() => {})
   }, [id, state.phase])
 
+  const outerClass = embedded ? '' : 'min-h-[calc(100vh-58px)]'
+
   if (!artefact) {
-    if (state.liveSections.length > 0) return <LiveArtefact sections={state.liveSections} />
+    if (state.liveSections.length > 0) return <LiveArtefact sections={state.liveSections} embedded={embedded} />
     return (
       <div className="mx-auto max-w-[760px] px-8 py-16 text-center text-[13px] text-grey">
         The evidence base appears here once the analysis has written it.
@@ -43,7 +45,7 @@ export default function EvidenceBase() {
   const checkinResolved = state.thread.some((m) => m.checkin?.resolved)
 
   return (
-    <div className="min-h-[calc(100vh-58px)]">
+    <div className={outerClass}>
       <main className="anim-rise mx-auto max-w-[780px] bg-white px-10 py-9 shadow-card ring-1 ring-line md:my-8">
         <div className="flex items-center gap-2 text-[12.5px] text-grey">
           <Dot tone="done" /> Ready — produced by Policy Atlas
@@ -103,7 +105,9 @@ export default function EvidenceBase() {
         </section>
       </main>
 
-      <Link to={`/project/${id}`} className="btn fixed bottom-6 left-6 z-30">Ask Policy Atlas</Link>
+      {!embedded && (
+        <Link to={`/project/${id}`} className="btn fixed bottom-6 left-6 z-30">Ask Policy Atlas</Link>
+      )}
 
       <ClaimPanel claim={detail} onClose={() => setDetail(null)} projectId={id!} />
     </div>
@@ -343,9 +347,9 @@ function Highlighted({ text, quote }: { text: string; quote: string }) {
 // The artefact-in-progress: the streamed section skeleton fills in as the
 // synthesis writes each section. Citations/provenance arrive with the final
 // read model once the run commits — the prose here is the persisted prose.
-function LiveArtefact({ sections }: { sections: LiveSection[] }) {
+function LiveArtefact({ sections, embedded = false }: { sections: LiveSection[]; embedded?: boolean }) {
   return (
-    <div className="min-h-[calc(100vh-58px)]">
+    <div className={embedded ? '' : 'min-h-[calc(100vh-58px)]'}>
       <main className="anim-rise mx-auto max-w-[780px] bg-white px-10 py-9 shadow-card ring-1 ring-line md:my-8">
         <div className="flex items-center gap-2 text-[12.5px] text-grey">
           <Dot tone="progress" /> Being written now — sections appear as they are drafted

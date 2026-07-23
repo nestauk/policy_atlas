@@ -1,21 +1,22 @@
 import { Outlet, Route, Routes, useParams } from 'react-router-dom'
 import { ProjectProvider } from './store'
 import { SourcePanelProvider } from './sourcePanel'
+import { WorkspaceProvider } from './views/workspace/context'
 import { Masthead, ProjectCrumb, ProjectTabs } from './shell'
 import Landing from './views/Landing'
 import Workspace from './views/Workspace'
-import EvidenceBase from './views/EvidenceBase'
-import Findings from './views/Findings'
 import Sources from './views/Sources'
-import DecisionLog from './views/DecisionLog'
+import Chats from './views/Chats'
 
 function ProjectShell() {
   const { id } = useParams<{ id: string }>()
   return (
     <ProjectProvider projectId={id!}>
       <SourcePanelProvider projectId={id!}>
-        <Masthead crumb={<ProjectCrumb />} tabs={<ProjectTabs />} />
-        <Outlet />
+        <WorkspaceProvider>
+          <Masthead crumb={<ProjectCrumb />} tabs={<ProjectTabs />} />
+          <Outlet />
+        </WorkspaceProvider>
       </SourcePanelProvider>
     </ProjectProvider>
   )
@@ -27,10 +28,8 @@ export default function App() {
       <Route path="/" element={<Landing />} />
       <Route path="/project/:id" element={<ProjectShell />}>
         <Route index element={<Workspace />} />
-        <Route path="evidence-base" element={<EvidenceBase />} />
-        <Route path="findings" element={<Findings />} />
+        <Route path="chats" element={<Chats />} />
         <Route path="sources" element={<Sources />} />
-        <Route path="decisions" element={<DecisionLog />} />
       </Route>
     </Routes>
   )

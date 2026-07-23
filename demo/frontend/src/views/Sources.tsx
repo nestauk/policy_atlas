@@ -6,6 +6,8 @@ import { useParams } from 'react-router-dom'
 import { api, type EvidenceRow } from '../api'
 import { screenHover, SourceLink, STATUS_LABEL, STATUS_TONE } from '../sourcePanel'
 import { Dot, Tip } from '../ui'
+import { useWorkspace } from './workspace/context'
+import { citedInTitles } from './workspace/data'
 
 const INCLUDED = new Set([
   'relevant', 'not_selected', 'selected', 'read_in_full', 'findings_extracted', 'cited', 'unavailable',
@@ -15,6 +17,7 @@ type Filter = 'all' | 'included' | 'screened_out' | 'cited'
 
 export default function Sources() {
   const { id } = useParams<{ id: string }>()
+  const { artifacts } = useWorkspace()
   const [rows, setRows] = useState<EvidenceRow[]>([])
   const [filter, setFilter] = useState<Filter>('all')
 
@@ -73,7 +76,7 @@ export default function Sources() {
         <table className="w-full text-left">
           <thead>
             <tr className="border-b hairline">
-              {['Source', 'Year', 'Origin', 'Status', 'Strength', 'Cited'].map((h) => (
+              {['Source', 'Year', 'Origin', 'Status', 'Strength', 'Cited in'].map((h) => (
                 <th key={h} className="px-4 py-2.5 text-[11px] font-extrabold uppercase tracking-[.06em] text-grey">{h}</th>
               ))}
             </tr>
@@ -101,7 +104,9 @@ export default function Sources() {
                     <span className="text-[11px] font-extrabold uppercase tracking-wide text-navy">{r.appraisal_label}</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-green-text">{r.cited ? '✓' : ''}</td>
+                <td className="px-4 py-3">
+                  <CitedIn titles={citedInTitles(r.source_id, r.cited, artifacts)} />
+                </td>
               </tr>
             ))}
             {visible.length === 0 && (
@@ -115,5 +120,19 @@ export default function Sources() {
         </table>
       </div>
     </main>
+  )
+}
+
+function CitedIn({ titles }: { titles: string[] }) {
+  if (titles.length === 0) return <span className="text-navy-40">—</span>
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      <span className="text-green-text">✓</span>
+      {titles.map((t) => (
+        <Tip key={t} content={<div className="max-w-[240px] text-[12px] leading-snug text-navy">{t}</div>}>
+          <span className="chip chip--soft max-w-[150px] cursor-default truncate !py-0.5">{t}</span>
+        </Tip>
+      ))}
+    </div>
   )
 }

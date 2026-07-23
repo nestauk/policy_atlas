@@ -1,5 +1,5 @@
-// App chrome: two-tone masthead, breadcrumb, project tab nav. The Findings tab
-// only exists when extraction actually produced findings — no empty surfaces.
+// App chrome: two-tone masthead, breadcrumb, project tab nav. The workspace
+// holds the artifacts (evidence base, etc.); Sources stays a project-wide tab.
 
 import { NavLink, useParams } from 'react-router-dom'
 import { type ReactNode } from 'react'
@@ -28,10 +28,6 @@ export function Masthead({ crumb, tabs }: { crumb?: ReactNode; tabs?: ReactNode 
 
 export function ProjectTabs() {
   const { id } = useParams<{ id: string }>()
-  const { state } = useProject()
-  const hasFindings = (state.funnel?.findings ?? 0) > 0
-  const hasArtefact =
-    state.phase === 'complete' || (state.funnel?.cited ?? 0) > 0 || state.liveSections.length > 0
 
   const tab = (to: string, label: string, end = false) => (
     <NavLink
@@ -51,10 +47,8 @@ export function ProjectTabs() {
   return (
     <nav className="flex items-center gap-5" aria-label="Project">
       {tab(`/project/${id}`, 'Workspace', true)}
-      {hasArtefact && tab(`/project/${id}/evidence-base`, 'Evidence base')}
-      {hasFindings && tab(`/project/${id}/findings`, 'Findings')}
       {tab(`/project/${id}/sources`, 'Sources')}
-      {tab(`/project/${id}/decisions`, 'Decision log')}
+      {tab(`/project/${id}/chats`, 'Chats')}
     </nav>
   )
 }
