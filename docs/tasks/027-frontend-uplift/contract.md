@@ -12,7 +12,7 @@
 > two as-built claims underpinning findings 1–5 verified against
 > `planning.py`/`runner.py` by the lead). Material amendments needing owner
 > re-approval at the reopened 🛑: **(a)** strand 12 reshaped — single
-> `planning_turn` table (no thread entity, no speculative `kind`; finding
+> `planning_transcript` table (no thread entity, no speculative `kind`; finding
 > 20), two-phase persistence superseding "both sides one transaction"
 > (finding 2), durable `client_turn_id` idempotency (finding 3), enumerated
 > rehydration mapping (finding 1), run-phase-anchored ordering (finding 4);
@@ -171,8 +171,12 @@ PR landing the uplifted `frontend/src/views/**` (+ supporting `ui/` primitives,
     published, not where the studies were conducted") renders wherever that
     distribution shows.
 12. **Transcript store (backend + frontend).** The planning conversation
-    becomes durable. **Schema: one table, `planning_turn`** — one row per
-    turn: `project_id`, `client_turn_id` (unique per project — the API's
+    becomes durable. **Schema: one table, `planning_transcript`** (name
+    owner-amended from `planning_turn`, 2026-07-28 — rows are turns; the
+    table is the planning conversation's durable transcript, and
+    deliberately **not** a general chat store: co-pilot Q&A brings its own
+    thread/context model per finding 20, and may fold this table under it
+    then) — one row per turn: `project_id`, `client_turn_id` (unique per project — the API's
     idempotency guarantee becomes durable, surviving restarts, instead of
     the process-local result cache), `user_message`, `reply`, the
     `plan_draft` snapshot (JSONB), `suggestions`, turn status
@@ -243,7 +247,7 @@ PR landing the uplifted `frontend/src/views/**` (+ supporting `ui/` primitives,
     updated; the frontend narrow set, reducer and generated types extend
     accordingly.
 
-Plus: the `planning_turn` migration (+ downgrade) and endpoints with tests
+Plus: the `planning_transcript` migration (+ downgrade) and endpoints with tests
 (two-phase persistence incl. the crash-between-phases pending-turn render ·
 durable `client_turn_id` idempotency across a restart · rehydration parity
 per the enumerated mapping · transcript round-trip + pagination ·
@@ -329,7 +333,7 @@ seams recorded) · `verification.md`.
   model doesn't serve it" reopens this contract gate rather than shipping
   silently thinner.
 - **Schema (rev 2 gate, owner-directed; reshaped rev 3):** one migration
-  adding the single `planning_turn` table (strand 12), up/down tested
+  adding the single `planning_transcript` table (strand 12), up/down tested
   against a populated database (no backfill — pre-existing projects have
   zero rows); **no other table changes** — steering stays on its existing
   record, artefact streaming is event-log JSONB (zero-schema).
