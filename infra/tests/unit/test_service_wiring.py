@@ -72,9 +72,12 @@ def test_api_container_references_database_and_app_secrets_without_values():
         assert name in reference
         assert "policy_atlas_v3/app" in reference
 
-    # ECS Secret ValueFrom entries are Secrets Manager ARNs/dynamic references;
-    # none is an injected credential value in the synthesized template.
-    assert all(isinstance(reference, (str, dict)) for reference in secrets.values())
+    # ECS Secret ValueFrom entries must be Secrets Manager references (an ARN
+    # string or an Fn:: structure that mentions the secret), never an inlined
+    # literal value.
+    for reference in secrets.values():
+        rendered = json.dumps(reference)
+        assert "secretsmanager" in rendered or "Fn::" in rendered or "Ref" in rendered
 
 
 def test_migration_task_is_one_shot_and_has_only_the_database_secret():

@@ -4,7 +4,9 @@
 # have Linux wheels, so no compiler or OpenMP runtime packages are required.
 FROM python:3.12-slim AS builder
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+# Pinned minor (review finding, 026 step 7): :latest is a moving tag straight
+# into the production image build.
+COPY --from=ghcr.io/astral-sh/uv:0.9 /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 

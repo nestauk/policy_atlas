@@ -9,7 +9,7 @@ Four CloudFormation stacks:
 
 | Stack | Region | Contents |
 | --- | --- | --- |
-| `PaV3NetworkStack` | `eu-west-2` | VPC, fck-nat, shared ALB + wildcard ACM cert, Cloud Map namespace exports |
+| `PaV3NetworkStack` | `eu-west-2` | VPC, fck-nat, shared ALB + wildcard ACM cert |
 | `PaV3DatabaseStack` | `eu-west-2` | Aurora Postgres cluster, generated credentials secret, `load_secret` Lambda |
 | `PaV3AppStack` | `eu-west-2` | ECS Fargate API service + migration task, Cognito, S3 + CloudFront frontend, font bucket |
 | `PaV3CertStack` | `us-east-1` | CloudFront's ACM certificate (AWS requires this region for CloudFront certs) |
@@ -29,10 +29,13 @@ AWS Secrets Manager, referenced by name — never in code, config JSON, or CDK
 context. No IP allowlists or similar operationally sensitive values are committed
 anywhere.
 
-> `scripts/deploy.sh` did not exist at the time this document was written (a
-> parallel task authors it). The flow below describes the pinned sequence from
-> the plan; once the script lands, follow its actual mode names/output — this
-> file should be re-checked against it.
+> `scripts/deploy.sh` is the authoritative sequence — on any discrepancy between
+> this file and the script, the script wins. Modes: `bootstrap` (first deploy,
+> gates A/B) and `update` (steady state).
+>
+> **One operator at a time.** There is no deploy lock: two concurrent
+> `deploy.sh` runs can interleave migrations and scale-ups. Coordinate
+> human-to-human (deferred seam — see `docs/deferred.md`).
 
 ## 2. First-deploy preconditions (gate A)
 
@@ -111,7 +114,11 @@ synth-time context query and must not run before the VPC exists.
 
    The API service is created at `desired_count=0` — nothing serves traffic yet.
 
-3. **Gate B** (now satisfiable, since the buckets/pool exist):
+3. **Gate B** (now satisfiable, since the buckets/pool exist). On a genuinely
+   fresh account `deploy.sh bootstrap` deliberately fails loud at this gate —
+   the bucket and pool cannot be populated before they exist. Perform the two
+   actions below, then rerun `deploy.sh bootstrap` (the stack deploys are
+   no-ops on the rerun):
    - Upload font binaries to the fonts bucket (never commit them — see § 7).
    - Create at least one operator Cognito user:
 
@@ -144,19 +151,31 @@ synth-time context query and must not run before the VPC exists.
 
 ## 4. Steady-state deploys + the deploy invariant
 
-**`desired_count=0` is template-pinned, permanently.** Every `cdk deploy`
-therefore stops the API service as part of the CloudFormation update — stop-old
-is CloudFormation-enforced, not script-hoped. The steady-state order:
+**`desired_count=0` is template-pinned.** A `cdk deploy` that changes the app
+stack stops the API service as part of the CloudFormation update. **Exception
+(E.2 finding):** CloudFormation only re-asserts a template value on a *changed*
+deploy — a no-op deploy leaves the scaled-up service running, so the script
+also scales to 0 explicitly before its stop-wait. The steady-state order
+(`deploy.sh update`):
 
-1. `cdk deploy` (service → 0, new task definition registered)
-2. wait for tasks stopped
-3. migration task + fail-loud wait on exit code (`describe-tasks`)
-4. scale to 1 (`aws ecs update-service --desired-count 1` — deliberate,
+1. `cdk deploy` (new task definition registered; service → 0 if the stack changed)
+2. resolve + validate the frontend publish config (SSM exports, production
+   build guard) — fail-fast, *before* any outage-inducing step
+3. explicit scale to 0, then wait for tasks stopped
+4. migration task + fail-loud wait on exit code (`describe-tasks`)
+5. scale to 1 (`aws ecs update-service --desired-count 1` — deliberate,
    documented drift from the template until the next deploy)
-5. production build guard → fonts injection → `vite build` → `s3 sync` →
-   invalidation
+6. fonts injection → `vite build` → `s3 sync` (no `--delete`) → CloudFront
+   invalidation (waited) → pruning `s3 sync --delete`
 
 Abort at the first non-zero step.
+
+**Recovery from a failed deploy:** any failure between steps 3 and 5 leaves the
+service at desired count 0 (the outage persists — ECS cannot self-heal to a
+count the template pins at 0). Fix the cause and rerun `deploy.sh update`, or
+restore service manually with
+`aws ecs update-service --cluster policy-atlas-v3-cluster --service policy-atlas-v3-api-service --desired-count 1`
+(only if the migration step had already passed).
 
 **Operational caveats (verbatim from the contract):**
 
@@ -165,6 +184,17 @@ Abort at the first non-zero step.
   the next boot; this is not a data-loss condition.
 - A crash means a brief outage until ECS restarts the task; the sweep recovers
   state cleanly in that case too.
+- **Stale lookup context after resource replacement:** `cdk.context.json`
+  caches `Vpc.from_lookup` results (VPC/subnet IDs). If the VPC is ever
+  replaced under the same name, run `npx cdk context --reset` (or delete
+  `infra/cdk.context.json`) before the next synth — a stale cache pins
+  consumer stacks to deleted resource IDs without any error.
+- **SSM-coupled stack references resolve at deploy time only.** The app stack
+  consumes ALB/DB/SG identifiers via constant SSM parameter names. If a
+  network/database resource is replaced (new physical ID, same parameter
+  name), the app stack template is byte-identical and a `cdk deploy` of it is
+  a no-op — redeploy the app stack with a forcing change (or `--force`) after
+  any replacement of an SSM-exported resource.
 
 ## 5. Env & secret map
 
@@ -267,11 +297,19 @@ in committable form — CI's font-guard stays green.
   touches (auth congruence edit, pool sizing) — both regression-tested by the
   suites they ship with.
 - **Cloud (non-prod):** `cdk destroy PaV3AppStack PaV3DatabaseStack` — Aurora
-  takes a final snapshot via its removal policy on delete. `PaV3CertStack` /
-  `PaV3NetworkStack` destroy cleanly.
+  takes a final snapshot via its removal policy on delete. Two manual
+  preconditions: disable the cluster's deletion protection first
+  (`aws rds modify-db-cluster --db-cluster-identifier policy-atlas-v3-db-cluster --no-deletion-protection`),
+  and empty the fonts bucket (CloudFormation cannot delete a non-empty
+  bucket). `PaV3CertStack` / `PaV3NetworkStack` destroy cleanly.
 - **Cognito pool:** `RemovalPolicy.RETAIN` — deletion is owner-sign-off-only,
   never automatic, since recreating the pool mints new `sub`s and silently
-  orphans owner-scoped projects.
+  orphans owner-scoped projects. NB `RETAIN` protects the *pool and its
+  users* from stack deletion, **not** identity continuity across a
+  destroy/redeploy: a redeployed stack creates a *new* pool (new issuer, new
+  `sub`s) and the retained pool is orphaned outside CloudFormation. To keep
+  the same identities after a destroy, re-import the retained pool
+  (`cdk import`) instead of letting the redeploy mint a fresh one.
 - **Blast radius:** no rollback step can touch a v2-managed resource (v2 is
   read-only from this repo, structurally). v3 DNS records live only in the v3
   zone; worst case is the v3 domain going dark — v2 is never affected.

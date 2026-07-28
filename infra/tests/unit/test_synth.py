@@ -236,16 +236,28 @@ def test_aurora_security_group_has_only_api_migration_and_fck_nat_5432_ingress()
 
 
 def test_fck_nat_role_has_ssm_managed_instance_policy():
-    role_documents = [
-        json.dumps(resource["Properties"], sort_keys=True)
-        for _, resource in _resources(TEMPLATES["network"], "AWS::IAM::Role")
-    ]
-    assert any("AmazonSSMManagedInstanceCore" in document for document in role_documents)
+    # The fck-nat instance role is the only IAM role this stack synthesizes;
+    # pin that so the any-role check below cannot silently pass on an
+    # unrelated role if the stack grows one.
+    roles = _resources(TEMPLATES["network"], "AWS::IAM::Role")
+    assert len(roles) == 1
+    document = json.dumps(roles[0][1]["Properties"], sort_keys=True)
+    assert "AmazonSSMManagedInstanceCore" in document
 
 
 def test_aurora_cluster_is_snapshot_on_deletion():
     _, cluster = _resources(TEMPLATES["database"], "AWS::RDS::DBCluster")[0]
     assert cluster["DeletionPolicy"] == "Snapshot"
+
+
+def test_aurora_cluster_is_encrypted_guarded_and_backed_up():
+    # Review-stack hardening pins (026 step 7): encryption at rest, deletion
+    # protection, 7-day backups — template-asserted like the 5432 invariant.
+    _, cluster = _resources(TEMPLATES["database"], "AWS::RDS::DBCluster")[0]
+    properties = cluster["Properties"]
+    assert properties["StorageEncrypted"] is True
+    assert properties["DeletionProtection"] is True
+    assert properties["BackupRetentionPeriod"] == 7
 
 
 def test_vpc_lookup_context_queries_are_filtered_by_vpc_name_tag():
@@ -285,6 +297,15 @@ def test_cognito_spa_client_is_public_code_flow_with_exact_redirects():
     assert properties["AllowedOAuthScopes"] == ["openid", "email", "profile"]
     assert properties["CallbackURLs"] == urls
     assert properties["LogoutURLs"] == urls
+    # Review-stack hardening pins (026 step 7): day-scoped refresh tokens and
+    # no user-enumeration oracle.
+    assert properties["AccessTokenValidity"] == 60
+    assert properties["RefreshTokenValidity"] == 1440  # 24 h, rendered in minutes
+    assert properties["TokenValidityUnits"] == {
+        "AccessToken": "minutes",
+        "RefreshToken": "minutes",
+    }
+    assert properties["PreventUserExistenceErrors"] == "ENABLED"
 
 
 def test_cognito_hosted_ui_uses_the_fixed_prefix():
@@ -305,6 +326,17 @@ def test_cloudfront_uses_oac_with_spa_fallback_and_certificate():
         config["ViewerCertificate"]["AcmCertificateArn"]
     )
     assert all("OriginAccessControlId" in origin for origin in config["Origins"])
+    # Review-stack hardening pin (026 step 7): the managed SecurityHeadersPolicy
+    # (HSTS etc.) on the default and /index.html behaviors.
+    security_headers_policy_id = "67f7725c-6f97-4210-82d7-5512b31e9d03"
+    assert (
+        config["DefaultCacheBehavior"]["ResponseHeadersPolicyId"]
+        == security_headers_policy_id
+    )
+    assert all(
+        behavior["ResponseHeadersPolicyId"] == security_headers_policy_id
+        for behavior in config["CacheBehaviors"]
+    )
     assert {
         (response["ErrorCode"], response["ResponseCode"], response["ResponsePagePath"])
         for response in config["CustomErrorResponses"]

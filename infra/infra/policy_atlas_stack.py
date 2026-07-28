@@ -18,9 +18,7 @@ from aws_cdk import (
     RemovalPolicy,
     aws_ec2 as ec2,
     aws_ecs as ecs,
-    aws_ecr as ecr,
     aws_ecr_assets as ecr_assets,
-    aws_iam as iam,
     aws_elasticloadbalancingv2 as elbv2,
     aws_secretsmanager as secretsmanager,
     aws_ssm as ssm,
@@ -30,7 +28,6 @@ from aws_cdk import (
     aws_cloudfront as cloudfront,
     aws_cloudfront_origins as cloudfront_origins,
     aws_certificatemanager as acm,
-    aws_cloudwatch as cloudwatch,
     aws_logs as logs,
 )
 from infra.cognito_auth import CognitoAuth
@@ -101,16 +98,6 @@ class PolicyAtlasStack(Stack):
         db_security_group = ec2.SecurityGroup.from_security_group_id(
             self, "DBSecurityGroup", security_group_id=db_sg_id,
             allow_all_outbound=False
-        )
-
-        migration_sg_id = ssm.StringParameter.value_for_string_parameter(self,
-            parameter_name="/policy_atlas_v3/deploy/migration_sg_id"
-        )
-        # Fargate task definitions do not carry security groups; deploy.sh uses
-        # this imported ID when it supplies awsvpcConfiguration to run-task.
-        ec2.SecurityGroup.from_security_group_id(
-            self, "MigrationTaskSG", security_group_id=migration_sg_id,
-            allow_all_outbound=False,
         )
 
         app_secret = secretsmanager.Secret.from_secret_name_v2(
@@ -193,8 +180,10 @@ class PolicyAtlasStack(Stack):
             stop_timeout=Duration.seconds(10),
         )
 
-        db_secret.grant_read(be_task_def.task_role)
-        app_secret.grant_read(be_task_def.task_role)
+        # No task-role secret grants: ECS injects container secrets through the
+        # EXECUTION role (CDK grants it via ecs.Secret.from_secrets_manager);
+        # the app never calls Secrets Manager at runtime, so a task-role grant
+        # would only widen what a compromised process could read.
 
         migration_task_def = ecs.FargateTaskDefinition(
             self, "PolicyAtlasMigrationTaskDef",
@@ -213,7 +202,6 @@ class PolicyAtlasStack(Stack):
                 ),
             },
         )
-        db_secret.grant_read(migration_task_def.task_role)
 
         be_service = ecs.FargateService(self, "PolicyAtlasBackendService",
             cluster=cluster,
@@ -282,15 +270,20 @@ class PolicyAtlasStack(Stack):
         frontend_origin = cloudfront_origins.S3BucketOrigin.with_origin_access_control(
             frontend_bucket,
         )
+        # Review-stack hardening (026 step 7): baseline security headers (HSTS,
+        # X-Frame-Options, nosniff, referrer policy) on every response.
+        security_headers = cloudfront.ResponseHeadersPolicy.SECURITY_HEADERS
         distribution = cloudfront.Distribution(self, "FrontendDistribution",
             default_behavior=cloudfront.BehaviorOptions(
                 origin=frontend_origin,
                 cache_policy=cloudfront.CachePolicy.CACHING_OPTIMIZED,
+                response_headers_policy=security_headers,
             ),
             additional_behaviors={
                 "/index.html": cloudfront.BehaviorOptions(
                     origin=frontend_origin,
                     cache_policy=index_html_cache_policy,
+                    response_headers_policy=security_headers,
                 ),
             },
             certificate=certificate,

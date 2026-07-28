@@ -18,6 +18,9 @@
 | `bash scripts/deploy.sh bootstrap` (2026-07-28) | pass | gates A+B green; all four stacks live |
 | `bash scripts/deploy.sh update` ×3 | pass | stop→migrate→scale→publish, 4/4 PASS each |
 | `make verify` (step-6 exit @ E.4 tree) | pass | full gate, all suites |
+| `make verify` (step-7 pre-review re-run) | pass | fresh conversation, self-verify gate |
+| `make verify` (post-review-fix tree) | pass | full gate; infra suite now 29 tests (new hardening pins) |
+| `make okf-validate` (post-step-8 knowledge) | pass | 99 concepts, 0 violations |
 
 ## Checks beyond the build
 
@@ -63,8 +66,9 @@ bash scripts/deploy.sh bootstrap    # first deploy: gates A/B, 4 stacks, migrate
 bash scripts/deploy.sh update       # steady-state redeploys (ran 3×)
 ```
 
-**E.2 full-chain smoke** (Playwright/Chromium against the live system; scripts retained
-in the build session's scratchpad; screenshots ditto):
+**E.2 full-chain smoke** (Playwright/Chromium against the live system; key screenshots
+and an account-scrubbed deploy transcript in [evidence/](evidence/) — landed at step 7,
+which recovered them from the build session's scratchpad):
 cold visit → auto-redirect to Cognito hosted UI → login (operator-created smoke user) →
 project created → planner (live LLM) → run started → stage timeline streamed over
 authenticated SSE → **parked/idle stream observed 130 s with zero reconnects and no
@@ -90,9 +94,10 @@ tunnel (9 connections incl. the observer).
 
 **E.3 deploy-invariant over an executing walk** (the sign-out-fix redeploy landed while
 the leg-1 walk was executing): ECS service events show task `ff7a3948…` **stopped
-11:19:44**, drained, steady state at 0; migration PASS between; new task `4cec833a…`
-**started 11:25:59**, steady 11:26:36 — stop-before-boot at the event level. The new
-boot's sweep logged `continuation.sweep_orphan_without_attachment` (10:26:26 UTC) for
+11:19:44 BST**, drained, steady state at 0; migration PASS between; new task `4cec833a…`
+**started 11:25:59 BST**, steady 11:26:36 BST — stop-before-boot at the event level. The
+new boot's sweep logged `continuation.sweep_orphan_without_attachment` (10:26:26 UTC =
+11:26:26 BST, seconds after the new task steadied) for
 the interrupted project; the UI shows the run `Interrupted`; no boot failure
 (`/healthz`+`/readyz` 200). Bonus negative proof: a **no-change** CFN deploy does NOT
 re-assert `DesiredCount=0` — caught when a frontend-only redeploy timed out at the
@@ -161,12 +166,154 @@ approved in-session 2026-07-28):**
 
 ## Review findings
 
-(To be added by the review stack — step 7, fresh conversation.)
+Step 7 ran 2026-07-28 in a fresh conversation (adjudicator ≠ author). Lanes: contract
+verifier (pinned Opus, read-only) · security auditor · Codex adversarial (read-only
+rescue brief, family flip per the executor-provenance map) · Claude finder fan-out
+(3 fast-worker lenses: correctness line-by-line on codex-written surfaces, cross-file
+consistency, v2-delta/removed-behaviour vs `db3027a`) · live-trace content review
+(lead, Langfuse) · `make okf-validate` via `make verify` (green before and after fixes).
+
+**Process substitution (recorded):** `/code-review` is user-typed-only in the review
+session (`disable-model-invocation`), so the Claude half of the heterogeneous pair ran
+as the scoped 3-lens finder fan-out above — same angles, lens-matched pathspecs.
+**Economy:** fast-worker ≈ 330K (≤ 500K ✓); reasoning-class ≈ 260K vs the 250K
+guideline (contract-verifier ran long re-running suites + v2 diffs) — noted for the
+review-economy retro thread. Codex tokens external.
+
+**Live-trace lane (013 lesson):** E-window traces read for content, not just counts —
+the timeline matches the E.2 narrative (leg-1 walk 10:13 UTC; three concurrent runs
+from 10:28; synthesis check-in proposal 10:34; every chain terminates in synthesise).
+Run #3's failure verified **in-trace**: two `synthesise:proposal` GENERATIONs at
+10:53 UTC, level ERROR, `RateLimitError: Error code: 429 … exceeded your current
+quota` verbatim — billing exhaustion, not a code path. A completed synthesise trace
+(run `65a3948d…`) content-checked: proposal → agentic section turns with real
+`lookup`/`search_chunks` tool calls → judge (gpt-5.4-mini) tiered-grounding verdicts →
+repairs re-judged to tier_1 — validator/judge behaviour healthy on real outputs. No
+un-flagged ERROR observations in the window.
+
+**Adopted (fixed in-slice, this branch):**
+1. *Fail-fast preflight* (Claude correctness, MAJOR): the production-build guard ran
+   last, inside `publish_frontend` — a publish-config problem surfaced only after
+   stop→migrate. `resolve_frontend_publish_config` now runs before `scale_down_service`
+   (`scripts/deploy.sh`).
+2. *SPA publish race* (Codex M9): `s3 sync --delete` deleted old hashed chunks before
+   the (un-waited) invalidation propagated. Now: sync without `--delete` → invalidate →
+   `wait invalidation-completed` → pruning sync.
+3. *Aurora at-rest encryption* (security, MEDIUM — the only MEDIUM+): `storage_encrypted=True`
+   + `deletion_protection=True` + 7-day backups; template-pinned by a new synth test.
+   ⚠️ **StorageEncrypted forces cluster REPLACEMENT on the next deploy** — adopted now
+   deliberately, while the DB holds smoke data only (flagged in the PR).
+4. *Cognito client hardening* (security L3/L8): access 60 min explicit, refresh 24 h
+   (was default 30 d in sessionStorage), `prevent_user_existence_errors` — synth-pinned.
+5. *CloudFront security headers* (security L2): managed `SECURITY_HEADERS` response
+   policy on both behaviors — synth-pinned.
+6. *Supply-chain pinning* (security L5 + Codex M11, **convergent across families**):
+   `aws-cdk-lib==2.261.0`, `cdk-fck-nat==1.6.22`, `npx cdk@2.1133.0`, uv image `:0.9`.
+7. *Task-role secret grants dropped* (security INFO 1): ECS injects secrets via the
+   execution role; the app never calls Secrets Manager (grep-verified) — task-role
+   grants only widened a compromised process's reach.
+8. *`OIDC_JWKS_URL` https-only* (security L6): plain `http://` on the verifier's trust
+   root was a config foot-gun; local dev uses `OIDC_JWKS_PATH`.
+9. *Dead `MigrationTaskSG` construct deleted* (v2-delta MINOR + contract-verifier N8,
+   convergent): imported-and-discarded SG whose comment claimed deploy.sh used it.
+10. *Test tightening* (Claude correctness M2/N3): the tautological ECS-secret assertion
+    now requires a Secrets Manager reference shape; the fck-nat role test pins
+    single-role + policy. Unused ported imports removed (port-map A.2 step 3 as stated).
+11. *Runbook realignment* (Codex N12 + contract-verifier M1/M2, convergent):
+    DEPLOYMENT.md — Cloud Map row cut, "script doesn't exist" note replaced, § 4
+    rewritten to the as-built order (explicit scale-down, preflight, no-op-deploy
+    exception), failure-recovery + stale-context + SSM-replacement caveats added,
+    RETAIN-semantics corrected (retained pool ≠ identity continuity; `cdk import` to
+    re-adopt), destroy preconditions (deletion protection off, fonts bucket emptied),
+    fresh-account two-pass bootstrap documented. Port-map rows completed (ALB
+    idle_timeout, migration-SG export). verification.md Langfuse bullet + E.3 timezone
+    labels fixed (contract-verifier M3/N7).
+
+**Deferred (docs/deferred.md):**
+- *Deploy lock* (Codex M1): single-operator posture documented; lock seam recorded.
+- *Reauth loop on persistent OIDC callback error* (Codex M8): second facet appended to
+  the existing return-to seam entry.
+- *Return-to router restoration* (Codex M5): **already deferred at E.4** — convergent
+  with the build's own seam entry; no new action.
+
+**Declined (recorded reasons):**
+- *Post-CFN-failure outage* (Codex M2): inherent to the owner-approved template-pinned
+  `desired_count=0` posture; fail-loud + rerun is the design. Recovery steps now in the
+  runbook instead.
+- *SSM coupling / stale-context* (Codex M3/M4): real CDK lifecycle caveats, not defects
+  in scope for a single-env staging deploy — documented in the runbook caveats.
+- *Bootstrap not one-shot* (Codex M7): deliberate fail-loud gate; two-pass flow now
+  documented. Not a defect.
+- *fck-nat SG narrowing* (security L7): a NAT must accept all VPC egress; the
+  SSM-bastion path is the contracted tunnel deliverable (rubric 13). Accepted risk.
+- *JWT clock-skew leeway* (security INFO 5): conformance suite pins exact-expiry
+  semantics; Fargate clock drift is negligible; churn on a live-verified auth path
+  declined. Revisit only if real-world boundary 401s appear.
+- *Coarse authorization* (security INFO 3): **factually wrong** — the API is strictly
+  owner-scoped (`api/routers/_common.py:40`, `projects.py:47`; 025's authz suite).
+- *Sign-out token revocation* (security INFO 4): mitigated by the 24 h refresh validity.
+- *`sslmode=verify-full`* (security INFO 6), *MFA* (INFO 2), *Cognito URL derivation
+  from config* (contract-verifier N10): noted; single-env staging trade-offs, owner may
+  opt in later.
+- *Container-name / class-name renames* (cross-file N): container name is task-def-scoped
+  (no v2 collision possible — the namespacing table's purpose); class renames would add
+  v2-diff noise against copy-first discipline (rubric 9).
+- */simplify + ponytail-review as separate passes*: the finder lanes already surfaced the
+  dead code and unused imports (fixed above); wholesale simplification of live-verified,
+  v2-diffable infra would trade review-provenance for churn. Skipped with this record.
+
+**Build-flagged deviations — each re-examined, none carried silently:**
+1. *Smoke DB isolation* — **confirmed as-is**: disposable `policy_atlas_smoke` is the
+   right shape (the shared-test-DB trap is a knowledge candidate); migration
+   round-trip tests green in this phase's `make verify`.
+2. *Layer-scan OCI layout* — **confirmed empirically**: the correctness lane rebuilt
+   the real image and re-ran the scan (9 layers clean; the 151 `/etc/ssl` exemptions
+   are trust stores, not key material).
+3. *Smoke SSE assertion → "Searching sources"* — **confirmed**: asserting the
+   always-present acquire stage matches the project's characterise-is-discretionary
+   rule; the trace lane re-verified characterise is non-terminal in the live window.
+4. *A.3 exactly-one-Lambda provider exemption* — **confirmed**: CDK's
+   `triggers.Trigger` framework Lambda is real; the exemption is correctly scoped to
+   the provider (re-run green).
+5. *Docker Desktop VM wedge* — **confirmed environmental**: no repo change; knowledge
+   candidate only.
+
+**Knowledge candidates (step 8):** all 16 build candidates adjudicated — 7 new concepts
+authored, 9 folded into new concepts' watch-outs or existing concepts
+(`testing-database`, `synthesise-is-run-terminus`, `macos-swap-presents-as-docker-wedge`),
+zero declined; authored from build candidates **and** stack findings per the 014 retro
+rule (`docs/knowledge/log.md` 2026-07-28 entry).
+
+**Fake-done check on the fixes applied this phase:** no test relaxed or deleted; every
+new invariant is positively asserted (`test_aurora_cluster_is_encrypted_guarded_and_backed_up`,
+client-validity/headers pins); the two tightened assertions are strictly stronger; the
+refresh-validity pin was corrected to CDK's rendered minutes (1440), not loosened.
+`make verify` green at the post-fix tree.
 
 ## Rubric status
 
-(To be added after the review stack; rubric items tied to live evidence are blocked with
-Phase E.)
+All 14 boxes hold at the post-review tree; three needed explicit adjudication:
+
+- **1–7, 9, 10, 13, 14 — hold** (contract-verifier scoreboard, findings above folded).
+- **8 — holds now**: Tier-4 stack ran as recorded above (contract verifier · Claude
+  finder fan-out standing in for `/code-review` · security-auditor lane · Codex
+  adversarial); human deep review = step 9 (PR).
+- **11 — holds, wording adjudicated**: rubric says `desired_count=1`; the as-built,
+  plan-approved (pin 7) encoding is **stronger** — template pins 0, the script owns the
+  scale-to-1 — and the second-deploy invariant was evidenced over an executing walk
+  (E.3). Adopted as satisfying the item's intent.
+- **12 — holds, deviation adjudicated**: "config-only changes" was overtaken by two
+  owner-approved contract stop-condition instances (cold-visit gating, sign-out) —
+  recorded at E.2 with approvals in-session; the stack confirms both fixes as necessary
+  (a cold visit had no authenticated path at all) and correctly scoped.
+- **Evidence locality — discharged in-stack**: the contract asked for smoke screenshots
+  + scrubbed transcript in the task folder; the review session recovered them from the
+  build scratchpad, checked each screenshot for public safety, scrubbed the transcript
+  (zero 12-digit identifiers remain), and landed them in [evidence/](evidence/)
+  (hosted-UI login · SSE timeline · synthesis check-in card · full artefact · run #3's
+  two verbatim 429 cards · post-sign-out re-auth). The stack additionally re-verified
+  the live claims against Langfuse traces. Hosted-zone ID in contract.md is
+  owner-authored, contract-time, and not on the private list — accepted explicitly.
 
 ## Intent & assumptions
 
@@ -176,7 +323,9 @@ Phase E.)
   map anticipated consolidation across consecutive gates.
 - `LOG_LEVEL=INFO` is wired in the task env though no backend reader consumes it yet
   (v2 carry; harmless).
-- `LANGFUSE_BASE_URL` chosen over the `LANGFUSE_HOST` alias (tracing.py accepts both).
+- `LANGFUSE_HOST` is the injected key (the provisioned secret carries v2's key name;
+  tracing.py accepts both aliases — E.1 deviation above). ~~`LANGFUSE_BASE_URL` chosen~~
+  — stale pre-E.1 bullet corrected by the review stack.
 
 ## Known unverified items
 

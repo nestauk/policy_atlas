@@ -64,8 +64,11 @@ def load_settings() -> Settings:
     jwks_path_value = _optional("OIDC_JWKS_PATH")
     if (jwks_url is None) == (jwks_path_value is None):
         raise RuntimeError("set exactly one of OIDC_JWKS_URL or OIDC_JWKS_PATH")
-    if jwks_url is not None and not jwks_url.startswith(("https://", "http://")):
-        raise RuntimeError("OIDC_JWKS_URL must be an HTTP(S) URL")
+    # https only: the JWKS is the verifier's trust root — fetching it over
+    # cleartext would let an on-path attacker mint accepted tokens. Local dev
+    # uses OIDC_JWKS_PATH, never a plain-http URL.
+    if jwks_url is not None and not jwks_url.startswith("https://"):
+        raise RuntimeError("OIDC_JWKS_URL must be an HTTPS URL")
 
     jwks_path = Path(jwks_path_value) if jwks_path_value is not None else None
     if jwks_path is not None and not jwks_path.is_file():

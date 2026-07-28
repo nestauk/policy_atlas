@@ -151,7 +151,9 @@ bootstrap_postconditions() {
 # operator-run but non-interactive: the IAM/SG diff was reviewed at code level,
 # so --require-approval never keeps the script from hanging on a prompt.
 run_cdk() {
-    PATH="$REPO_ROOT/infra/.venv/bin:$PATH" npx cdk "$@" --require-approval never
+    # CLI version pinned (review finding, 026 step 7): an unpinned npx cdk
+    # executes whatever npm serves that day with the operator's credentials.
+    PATH="$REPO_ROOT/infra/.venv/bin:$PATH" npx cdk@2.1133.0 "$@" --require-approval never
 }
 
 deploy_all_stacks() {
@@ -293,8 +295,11 @@ require_production_build_environment() {
     fi
 }
 
-publish_frontend() {
-    local font_file
+# Resolve and validate everything publish_frontend needs. Called from
+# common_tail BEFORE the outage-inducing steps (review finding, 026 step 7): a
+# publish-config problem discovered after stop→migrate would strand a stale
+# SPA on a freshly migrated backend.
+resolve_frontend_publish_config() {
     FRONTEND_BUCKET="$(ssm_value "$SSM_FRONTEND_BUCKET_NAME")"
     FONTS_BUCKET="$(ssm_value "$SSM_FONTS_BUCKET_NAME")"
     DISTRIBUTION_ID="$(ssm_value "$SSM_DISTRIBUTION_ID")"
@@ -307,6 +312,10 @@ publish_frontend() {
     require_value "fonts bucket SSM export" "$FONTS_BUCKET"
     require_value "CloudFront distribution SSM export" "$DISTRIBUTION_ID"
     export VITE_API_BASE_URL VITE_OIDC_AUTHORITY VITE_OIDC_CLIENT_ID
+}
+
+publish_frontend() {
+    local font_file invalidation_id
 
     aws s3 sync "s3://${FONTS_BUCKET}/" "$REPO_ROOT/frontend/public/fonts/"
     if ! font_file="$(find "$REPO_ROOT/frontend/public/fonts" -type f -print -quit)"; then
@@ -322,10 +331,19 @@ publish_frontend() {
         pnpm build
     )
 
-    aws s3 sync "$REPO_ROOT/frontend/dist/" "s3://${FRONTEND_BUCKET}/" --delete
-    aws cloudfront create-invalidation \
+    # Publish without --delete first: an edge still serving the previous cached
+    # index.html can request the previous hashed chunks until the invalidation
+    # propagates — deleting them up front turns that window into broken loads.
+    # Prune the old assets only after the invalidation completes.
+    aws s3 sync "$REPO_ROOT/frontend/dist/" "s3://${FRONTEND_BUCKET}/"
+    invalidation_id="$(aws cloudfront create-invalidation \
         --distribution-id "$DISTRIBUTION_ID" \
-        --paths "/*" >/dev/null
+        --paths "/*" \
+        --query 'Invalidation.Id' --output text)"
+    aws cloudfront wait invalidation-completed \
+        --distribution-id "$DISTRIBUTION_ID" \
+        --id "$invalidation_id"
+    aws s3 sync "$REPO_ROOT/frontend/dist/" "s3://${FRONTEND_BUCKET}/" --delete
     echo "PASS: frontend published and invalidated"
 }
 
@@ -339,6 +357,8 @@ common_tail() {
     require_value "private subnet IDs SSM export" "$PRIVATE_SUBNET_IDS"
     require_value "migration security-group ID SSM export" "$MIGRATION_SG_ID"
     require_value "migration task-definition ARN SSM export" "$MIGRATION_TASK_DEF_ARN"
+
+    resolve_frontend_publish_config
 
     scale_down_service
     wait_for_service_to_stop

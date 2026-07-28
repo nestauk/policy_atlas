@@ -1,6 +1,6 @@
 """Cognito resources for the Policy Atlas v3 single-page application."""
 
-from aws_cdk import Stack, RemovalPolicy, aws_cognito as cognito, aws_ssm as ssm
+from aws_cdk import Duration, Stack, RemovalPolicy, aws_cognito as cognito, aws_ssm as ssm
 from constructs import Construct
 
 
@@ -30,6 +30,12 @@ class CognitoAuth(Construct):
             "SpaClient",
             user_pool=self.user_pool,
             generate_secret=False,
+            # Review-stack hardening (026 step 7): short refresh lifetime
+            # (silent renew hides it from users; XSS-exfiltrated tokens die in
+            # a day, not 30) and no user-enumeration oracle on the hosted UI.
+            access_token_validity=Duration.minutes(60),
+            refresh_token_validity=Duration.hours(24),
+            prevent_user_existence_errors=True,
             o_auth=cognito.OAuthSettings(
                 flows=cognito.OAuthFlows(authorization_code_grant=True),
                 scopes=[

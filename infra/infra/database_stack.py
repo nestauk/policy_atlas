@@ -9,8 +9,6 @@ from aws_cdk import (
     RemovalPolicy,
     aws_rds as rds,
     aws_ec2 as ec2,
-    aws_iam as iam,
-    aws_secretsmanager as secretsmanager,
     aws_ssm as ssm,
     aws_lambda as _lambda,
     triggers,
@@ -61,7 +59,13 @@ class DatabaseStack(Stack):
             default_database_name="policy_atlas_db",
             credentials=rds.Credentials.from_generated_secret("dbadmin"),
             removal_policy=RemovalPolicy.SNAPSHOT,
-            deletion_protection=False,
+            # Review-stack hardening (026 step 7): encryption at rest, delete
+            # guard, 7-day backups. NB StorageEncrypted cannot be toggled in
+            # place — CloudFormation REPLACES the cluster on the next deploy
+            # (adopted while the DB holds smoke data only).
+            storage_encrypted=True,
+            deletion_protection=True,
+            backup=rds.BackupProps(retention=Duration.days(7)),
             vpc=vpc,
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS),
             cluster_identifier="policy-atlas-v3-db-cluster",
