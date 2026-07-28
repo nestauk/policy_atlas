@@ -8,7 +8,10 @@
 setup:
 	docker compose up -d db
 	@echo "Waiting for Postgres to be healthy..."
-	@until docker compose exec db pg_isready -U policy_atlas -q; do sleep 1; done
+	@# pg_isready alone races the postgres image's init-phase temporary server
+	@# (it answers ready, then shuts down for the real start — seen in CI).
+	@# Probe the actual database with a real query instead.
+	@until docker compose exec -T db psql -U policy_atlas -d policy_atlas -tc "SELECT 1" >/dev/null 2>&1; do sleep 1; done
 	@echo "DB ready."
 	@docker compose exec -T db psql -U policy_atlas -tc \
 		"SELECT 1 FROM pg_database WHERE datname='policy_atlas_test'" | grep -q 1 \
