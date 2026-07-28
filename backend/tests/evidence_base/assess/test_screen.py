@@ -499,7 +499,9 @@ def test_screen_context_from_jsonb(conn: Connection) -> None:
 
     plan = Plan(component="screen", evidence_scope_id=scope_id)
     config = compile(plan)
-    run_harness(conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider())
+    run_harness(
+        conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider()
+    )
 
     # Verify the JSONB round-trips through the harness DB load path (harness.py: dict(row.context))
     row = conn.execute(
@@ -744,7 +746,9 @@ def test_harness_screen_component(conn: Connection) -> None:
     plan = Plan(component="screen", evidence_scope_id=scope_id)
     config = compile(plan)
 
-    run_harness(conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider())
+    outcome = run_harness(
+        conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider()
+    )
 
     # Two result rows
     result_rows = conn.execute(
@@ -752,18 +756,15 @@ def test_harness_screen_component(conn: Connection) -> None:
     ).fetchall()
     assert len(result_rows) == 2
 
-    # component.completed payload has the stage-1 summary keys
-    log_entries = events.read(conn, pid)
-    completed = [e for e in log_entries if e["event_type"] == "component.completed"]
-    assert len(completed) == 1
-    payload = completed[0]["payload"]
+    summary = outcome["summary"]
+    assert summary is not None
     expected_keys = {
         "component", "screened", "relevant", "not_relevant",
         "failed", "excluded_retracted", "title_abstract", "title_only", "unsure_reps",
         "non_unanimous", "rep_failures", "tie_broken", "retries",
         "usage_totals", "screen_generation", "rescreen",
     }
-    assert set(payload.keys()) == expected_keys
+    assert set(summary.keys()) == expected_keys - {"component"}
 
     # Run ended as succeeded
     run_row = conn.execute(select(runs).where(runs.c.run_id == rid)).one()

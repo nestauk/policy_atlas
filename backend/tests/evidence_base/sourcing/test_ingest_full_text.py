@@ -1531,7 +1531,7 @@ def test_harness_roundtrip_and_events(conn: Connection) -> None:
     project_id, run_id, scope_id = seed_small_corpus(conn)
     ingest_run_id = seed_run(conn, project_id)
     config = compile(Plan(component="ingest_full_text", evidence_scope_id=scope_id))
-    run_harness(
+    outcome = run_harness(
         conn, config=config, project_id=project_id, run_id=ingest_run_id,
         provider=StubEchoProvider(),
     )
@@ -1544,17 +1544,13 @@ def test_harness_roundtrip_and_events(conn: Connection) -> None:
     assert "run.completed" in types
     assert not any(t.startswith(("source.", "fulltext.")) for t in types)
 
-    completed = [e["payload"] for e in run_events if e["event_type"] == "component.completed"]
-    assert len(completed) == 1
-    assert completed[0]["component"] == "ingest_full_text"
-    assert completed[0]["eligible"] == 4
-    assert completed[0]["ingested"] == 2
-    assert completed[0]["fetch_failed"] == 1
-    assert completed[0]["parse_failed"] == 1
-    assert completed[0]["by_reason"] == {"not_found": 1, "thin_text": 1}
-
-    started = [e for e in run_events if e["event_type"] == "component.started"]
-    assert len(started) == 1
+    summary = outcome["summary"]
+    assert summary is not None
+    assert summary["eligible"] == 4
+    assert summary["ingested"] == 2
+    assert summary["fetch_failed"] == 1
+    assert summary["parse_failed"] == 1
+    assert summary["by_reason"] == {"not_found": 1, "thin_text": 1}
 
     assert _full_text_snapshot_count(conn, project_id) == 2
 

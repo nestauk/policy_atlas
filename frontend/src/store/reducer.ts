@@ -94,6 +94,14 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
         }),
       };
 
+    // Phase B.1 adds these durable frames to the generated union. Phase D.1
+    // owns their live-section state/rendering; retain them as applied no-ops
+    // meanwhile so the existing stream reducer stays exhaustive and replay-safe.
+    case "artefact.skeleton":
+    case "artefact.section_started":
+    case "artefact.section_completed":
+      return base;
+
     case "checkin.pending":
       return { ...base, pendingCheckIn: frame.check_in };
 

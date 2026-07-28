@@ -29,6 +29,9 @@ from policy_atlas.api.contract import (
     SseFrame,
 )
 from policy_atlas.api.contract.sse import (
+    ArtefactSectionCompletedFrame,
+    ArtefactSectionStartedFrame,
+    ArtefactSkeletonFrame,
     CheckinPendingFrame,
     CheckinResolvedFrame,
     PlanUpdatedFrame,
@@ -241,6 +244,43 @@ def test_stage_failed_frame_discriminates() -> None:
         }
     )
     assert isinstance(model, StageFailedFrame)
+
+
+def test_artefact_frames_discriminate_with_whole_section_prose() -> None:
+    """The three live-artefact frame shapes retain their display identity."""
+    skeleton = _adapter().validate_python(
+        {
+            "type": "artefact.skeleton",
+            "sequence": 5,
+            "occurred_at": _now().isoformat(),
+            "sections": [
+                {"index": 0, "title": "Key findings", "focus": "Headlines"},
+                {"index": 1, "title": "Evidence", "focus": "What changed"},
+            ],
+        }
+    )
+    started = _adapter().validate_python(
+        {
+            "type": "artefact.section_started",
+            "sequence": 6,
+            "occurred_at": _now().isoformat(),
+            "index": 1,
+        }
+    )
+    completed = _adapter().validate_python(
+        {
+            "type": "artefact.section_completed",
+            "sequence": 7,
+            "occurred_at": _now().isoformat(),
+            "index": 1,
+            "title": "Evidence",
+            "prose": "Whole completed section prose.",
+        }
+    )
+    assert isinstance(skeleton, ArtefactSkeletonFrame)
+    assert isinstance(started, ArtefactSectionStartedFrame)
+    assert isinstance(completed, ArtefactSectionCompletedFrame)
+    assert completed.prose == "Whole completed section prose."
 
 
 def test_checkin_pending_frame_discriminates() -> None:

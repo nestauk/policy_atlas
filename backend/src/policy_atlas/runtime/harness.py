@@ -95,6 +95,7 @@ from policy_atlas.evidence_base.synthesis.synthesise import (
     SynthesiseFailure,
     synthesise_scope,
 )
+from policy_atlas.runtime.progress import ProgressEmitter
 from policy_atlas.runtime.run_spec import Config
 
 log = structlog.get_logger()
@@ -125,6 +126,8 @@ class HarnessState(TypedDict):
     synthesis_backend: SynthesisBackend
     grounding_judge_backend: GroundingJudgeBackend
     block_ids: dict[str, Any]
+    summary: dict[str, Any] | None
+    progress_emitter: ProgressEmitter | None
     error: str | None
 
 
@@ -138,13 +141,6 @@ def _run_scope_component(
     project_id = state["project_id"]
     run_id = state["run_id"]
     config = state["config"]
-
-    events.append(
-        conn, project_id=project_id, run_id=run_id,
-        event_type="component.started",
-        payload={"component": config.component},
-    )
-    log.info("component.started", component=config.component)
 
     row = conn.execute(
         select(evidence_scope)
@@ -188,13 +184,7 @@ def _run_scope_component(
         )
         return {**state, "error": err}
 
-    events.append(
-        conn, project_id=project_id, run_id=run_id,
-        event_type="component.completed",
-        payload={"component": config.component, **counts},
-    )
-    log.info("component.completed", component=config.component, **counts)
-    return state
+    return {**state, "summary": counts}
 
 
 def _run_acquire(state: HarnessState) -> HarnessState:
@@ -332,13 +322,6 @@ def _run_characterise(state: HarnessState) -> HarnessState:
     run_id = state["run_id"]
     config = state["config"]
 
-    events.append(
-        conn, project_id=project_id, run_id=run_id,
-        event_type="component.started",
-        payload={"component": config.component},
-    )
-    log.info("component.started", component=config.component)
-
     row = conn.execute(
         select(evidence_scope)
         .where(evidence_scope.c.evidence_scope_id == config.evidence_scope_id)
@@ -389,13 +372,7 @@ def _run_characterise(state: HarnessState) -> HarnessState:
         )
         return {**state, "error": err}
 
-    events.append(
-        conn, project_id=project_id, run_id=run_id,
-        event_type="component.completed",
-        payload={"component": config.component, **summary},
-    )
-    log.info("component.completed", component=config.component)
-    return state
+    return {**state, "summary": summary}
 
 
 def _run_synthesise(state: HarnessState) -> HarnessState:
@@ -409,15 +386,6 @@ def _run_synthesise(state: HarnessState) -> HarnessState:
     project_id = state["project_id"]
     run_id = state["run_id"]
     config = state["config"]
-
-    events.append(
-        conn,
-        project_id=project_id,
-        run_id=run_id,
-        event_type="component.started",
-        payload={"component": config.component},
-    )
-    log.info("component.started", component=config.component)
 
     row = conn.execute(
         select(evidence_scope)
@@ -457,6 +425,7 @@ def _run_synthesise(state: HarnessState) -> HarnessState:
             synthesis_backend=state["synthesis_backend"],
             grounding_judge_backend=state["grounding_judge_backend"],
             embedding_backend=state["embedding_backend"],
+            progress_emitter=state["progress_emitter"],
         )
     except SynthesiseFailure as exc:
         events.append(
@@ -484,15 +453,7 @@ def _run_synthesise(state: HarnessState) -> HarnessState:
         )
         return {**state, "error": err}
 
-    events.append(
-        conn,
-        project_id=project_id,
-        run_id=run_id,
-        event_type="component.completed",
-        payload={"component": config.component, **summary},
-    )
-    log.info("component.completed", component=config.component)
-    return state
+    return {**state, "summary": summary}
 
 
 def _dispatch(state: HarnessState) -> str:
@@ -621,6 +582,7 @@ def run_harness(
     group_clustering_backend: GroupClusteringBackendFactory | None = None,
     synthesis_backend: SynthesisBackend | None = None,
     grounding_judge_backend: GroundingJudgeBackend | None = None,
+    progress_emitter: ProgressEmitter | None = None,
 ) -> dict[str, Any]:
     """Run the compiled harness graph for one run, persisting its output.
 
@@ -684,7 +646,8 @@ def run_harness(
             defaults to ``StubGroundingJudgeBackend()`` — no default egress.
 
     Returns:
-        Persisted IDs written by the executed component, if any.
+        Harness outcome with ``summary`` populated only after successful
+        component work; the runner owns the matching lifecycle append.
 
     Raises:
         ValueError: If ``run_id`` is unknown or belongs to another project.
@@ -768,6 +731,8 @@ def run_harness(
             else StubGroundingJudgeBackend()
         ),
         "block_ids": {},
+        "summary": None,
+        "progress_emitter": progress_emitter,
         "error": None,
     }
     # Bind run/component correlation once for every log call this component
@@ -775,10 +740,9 @@ def run_harness(
     # instead of hand-threading project_id/run_id through each log call. This is
     # the innermost boundary that sees exactly one component execution: each
     # run_harness call dispatches to exactly one node (routed by config.component),
-    # and it's the direct caller of node-level log events (e.g. component.started)
-    # that today never carry project_id/run_id.
+    # and it is the direct caller of node-level component work.
     with project_liveness(project_id), structlog.contextvars.bound_contextvars(
         project_id=str(project_id), run_id=str(run_id), component=config.component,
     ):
         final: HarnessState = graph.invoke(initial)
-    return dict(final.get("block_ids", {}))
+    return {"summary": final.get("summary"), "error": final.get("error")}

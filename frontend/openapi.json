@@ -54,6 +54,136 @@
         "title": "ArtefactOut",
         "type": "object"
       },
+      "ArtefactSectionCompletedFrame": {
+        "description": "A live-artefact section's whole prose is available.",
+        "properties": {
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "prose": {
+            "title": "Prose",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "artefact.section_completed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "occurred_at",
+          "type",
+          "index",
+          "title",
+          "prose"
+        ],
+        "title": "ArtefactSectionCompletedFrame",
+        "type": "object"
+      },
+      "ArtefactSectionSkeleton": {
+        "description": "One planned live-artefact section in presentation order.",
+        "properties": {
+          "focus": {
+            "title": "Focus",
+            "type": "string"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "title",
+          "focus"
+        ],
+        "title": "ArtefactSectionSkeleton",
+        "type": "object"
+      },
+      "ArtefactSectionStartedFrame": {
+        "description": "A live-artefact section has started generation.",
+        "properties": {
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "type": {
+            "const": "artefact.section_started",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "occurred_at",
+          "type",
+          "index"
+        ],
+        "title": "ArtefactSectionStartedFrame",
+        "type": "object"
+      },
+      "ArtefactSkeletonFrame": {
+        "description": "Presentation-only outline for an artefact being synthesised.",
+        "properties": {
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/ArtefactSectionSkeleton"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "type": {
+            "const": "artefact.skeleton",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "occurred_at",
+          "type",
+          "sections"
+        ],
+        "title": "ArtefactSkeletonFrame",
+        "type": "object"
+      },
       "BlockOut": {
         "description": "One prose block within an artefact section.\n\nArgs:\n    block_id: The block's identity.\n    prose: The block's final persisted prose.\n    claims: Span-anchored claim annotations over `prose`.\n    gaps: Named coverage gaps surfaced for this block.",
         "properties": {
@@ -2338,6 +2468,9 @@
       "SseFrame": {
         "discriminator": {
           "mapping": {
+            "artefact.section_completed": "#/components/schemas/ArtefactSectionCompletedFrame",
+            "artefact.section_started": "#/components/schemas/ArtefactSectionStartedFrame",
+            "artefact.skeleton": "#/components/schemas/ArtefactSkeletonFrame",
             "checkin.pending": "#/components/schemas/CheckinPendingFrame",
             "checkin.resolved": "#/components/schemas/CheckinResolvedFrame",
             "plan.updated": "#/components/schemas/PlanUpdatedFrame",
@@ -2362,6 +2495,15 @@
           },
           {
             "$ref": "#/components/schemas/StageFailedFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ArtefactSkeletonFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ArtefactSectionStartedFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ArtefactSectionCompletedFrame"
           },
           {
             "$ref": "#/components/schemas/CheckinPendingFrame"

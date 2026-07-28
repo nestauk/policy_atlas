@@ -866,7 +866,7 @@ def test_harness_acquire_component(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
     config = compile(Plan(component="acquire", evidence_scope_id=scope_id))
-    run_harness(
+    outcome = run_harness(
         conn,
         config=config,
         project_id=pid,
@@ -886,15 +886,11 @@ def test_harness_acquire_component(conn: Connection) -> None:
     assert read_coverage(conn, rid) is not None
     log = events.read(conn, pid)
     assert sum(1 for e in log if e["event_type"] == "search.executed") == 2
-    completed = [
-        e["payload"] for e in log
-        if e["event_type"] == "component.completed"
-        and e["payload"].get("component") == "acquire"
-    ]
-    assert len(completed) == 1
-    assert completed[0]["acquired"] == 24
-    assert set(completed[0]["by_backend"]) == {"openalex", "overton"}
-    assert completed[0]["coverage_record_id"]
+    summary = outcome["summary"]
+    assert summary is not None
+    assert summary["acquired"] == 24
+    assert set(summary["by_backend"]) == {"openalex", "overton"}
+    assert summary["coverage_record_id"]
 
 
 def test_harness_acquire_completes_on_backend_error(conn: Connection) -> None:
@@ -902,13 +898,13 @@ def test_harness_acquire_completes_on_backend_error(conn: Connection) -> None:
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
     config = compile(Plan(component="acquire", evidence_scope_id=scope_id))
-    run_harness(
+    outcome = run_harness(
         conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider(),
         search_backends=[FakeBackend(exc=RuntimeError("down")), OvertonFixtureBackend()],
     )
     log = events.read(conn, pid)
     types = [e["event_type"] for e in log]
-    assert "component.completed" in types
+    assert outcome["summary"] is not None
     assert "component.failed" not in types
     assert "run.completed" in types
 

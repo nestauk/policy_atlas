@@ -484,6 +484,82 @@ export interface components {
             title: string;
         };
         /**
+         * ArtefactSectionCompletedFrame
+         * @description A live-artefact section's whole prose is available.
+         */
+        ArtefactSectionCompletedFrame: {
+            /** Index */
+            index: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Prose */
+            prose: string;
+            /** Sequence */
+            sequence: number;
+            /** Title */
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.section_completed";
+        };
+        /**
+         * ArtefactSectionSkeleton
+         * @description One planned live-artefact section in presentation order.
+         */
+        ArtefactSectionSkeleton: {
+            /** Focus */
+            focus: string;
+            /** Index */
+            index: number;
+            /** Title */
+            title: string;
+        };
+        /**
+         * ArtefactSectionStartedFrame
+         * @description A live-artefact section has started generation.
+         */
+        ArtefactSectionStartedFrame: {
+            /** Index */
+            index: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Sequence */
+            sequence: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.section_started";
+        };
+        /**
+         * ArtefactSkeletonFrame
+         * @description Presentation-only outline for an artefact being synthesised.
+         */
+        ArtefactSkeletonFrame: {
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Sections */
+            sections: components["schemas"]["ArtefactSectionSkeleton"][];
+            /** Sequence */
+            sequence: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.skeleton";
+        };
+        /**
          * BlockOut
          * @description One prose block within an artefact section.
          *
@@ -1742,7 +1818,7 @@ export interface components {
             /** Title */
             title: string;
         };
-        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["ProjectUpdatedFrame"] | components["schemas"]["TickFrame"];
+        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["ProjectUpdatedFrame"] | components["schemas"]["TickFrame"];
         /**
          * StageCompletedFrame
          * @description A component reached its terminal (successful) outcome.

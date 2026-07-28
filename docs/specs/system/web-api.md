@@ -201,6 +201,9 @@ Frame vocabulary (discriminated union, `type` names are contract):
 | `stage.started` | `{stage, label, blurb}` | component run start |
 | `stage.completed` | `{stage, label, summary, seconds}` | component terminal |
 | `stage.failed` | `{stage, label, reason, skipped}` | component failure/skip |
+| `artefact.skeleton` | `{sections: [{index, title, focus}]}` in presentation order | synthesise presentation progress |
+| `artefact.section_started` | `{index}` | synthesise presentation progress |
+| `artefact.section_completed` | `{index, title, prose}` | synthesise presentation progress |
 | `checkin.pending` | the full check-in resource | `steering.pause` |
 | `checkin.resolved` | `{check_in_id, response, decided_by}` | `steering.decision` |
 | `plan.updated` | `{plan, version}` | plan row supersession |
@@ -214,6 +217,18 @@ may change. Nothing else internal (module names, model ids, raw payload
 keys) is observable. The frontend store must rebuild idempotently from
 replay alone — mid-run refresh, server restart with a parked pending
 check-in, and reconnect-mid-stream are the tested cases.
+
+`artefact.*` frames are durable presentation/progress records, not partial
+artefact reads or authoritative artefact content: whole-section prose is sent
+for live rendering, while the evidence-base artefact of record is committed
+only when synthesis completes. The skeleton's display `index` is the identity
+used by every artefact frame; it includes key findings first (although that
+section is generated last) and conclusions last. An empty key-findings pass
+still closes its slot with `artefact.section_completed` and empty prose.
+Stage lifecycle events commit at phase boundaries: `stage.started` commits
+before its component transaction opens and `stage.completed` commits after it,
+so a tail sees real in-flight work and a rolled-back component retains its
+started→failed trail.
 
 ## Deployment posture (v1)
 

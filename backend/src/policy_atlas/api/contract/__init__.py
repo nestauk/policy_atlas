@@ -84,6 +84,10 @@ from .read_models import (
 from .runs import RunCreate, RunOut, RunStatus
 from .sse import (
     STAGE_KEYS,
+    ArtefactSectionCompletedFrame,
+    ArtefactSectionSkeleton,
+    ArtefactSectionStartedFrame,
+    ArtefactSkeletonFrame,
     CheckinPendingFrame,
     CheckinResolvedFrame,
     DecidedBy,
@@ -103,6 +107,10 @@ __all__ = [
     "PAGE_SIZE_MAX",
     "PROJECT_NAME_MAX",
     "STAGE_KEYS",
+    "ArtefactSectionCompletedFrame",
+    "ArtefactSectionSkeleton",
+    "ArtefactSectionStartedFrame",
+    "ArtefactSkeletonFrame",
     "AbortResponse",
     "AnalysisDepth",
     "ArtefactOut",
