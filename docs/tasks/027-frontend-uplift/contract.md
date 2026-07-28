@@ -1,10 +1,11 @@
 # Task contract: 027-frontend-uplift
 
-> **Status:** drafted 2026-07-28, rev 2/2.1/2.2 same day. Contract approved
-> (before planning): **2026-07-28 · owner** ("a contract is approved. You can
-> move on to the adversarial review") — adversarial lane runs post-approval
-> per the Tier-3 standard; material findings reopen this gate. · Plan approved
-> (before implementation): _pending_ ·
+> **Status:** drafted 2026-07-28, revs 2–3.3 same day. Contract approved
+> (before planning): **2026-07-28 · owner** — initial approval at rev 2.2;
+> adversarial lane ran post-approval (Tier-3 standard); reopened gate items
+> (rev 3 a–d, explained and re-approved: "Sounds good. I approve all of
+> these") + owner amendments 3.1–3.3 all in. **CONTRACT FINAL FOR
+> PLANNING.** · Plan approved (before implementation): _pending_ ·
 > ADR: _due — transcript durability model + artefact SSE vocabulary_.
 >
 > **rev 3 (2026-07-28): contract-stage adversarial lane DONE** (codex-rescue
