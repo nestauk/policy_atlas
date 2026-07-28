@@ -1,8 +1,9 @@
 import { useParams } from "react-router";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts";
 
-import { useFunnel, useGroups, useLandscape } from "../api/queries";
+import { useFunnel, useGroups, useLandscape, useProject } from "../api/queries";
 import { scrub } from "../lib/scrub";
+import { useDocumentTitle } from "../lib/title";
 import { Card, Divider, PaneHeading } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 
@@ -83,6 +84,8 @@ function DistributionChart({
  */
 export function LandscapeView() {
   const { projectId = "" } = useParams();
+  const project = useProject(projectId);
+  useDocumentTitle(project.data?.name, "Landscape");
   const landscape = useLandscape(projectId);
   const funnel = useFunnel(projectId);
   const groups = useGroups(projectId);

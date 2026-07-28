@@ -1,6 +1,7 @@
 import { useParams } from "react-router";
 
 import { useProject } from "../api/queries";
+import { useDocumentTitle } from "../lib/title";
 import { useRunStream } from "../store";
 import { NotFoundView } from "../ui/feedback/NotFoundView";
 import { PlanningPane } from "./workspace/PlanningPane";
@@ -21,6 +22,7 @@ export function WorkspaceView() {
   const stream = useRunStream(projectId);
   const hasRun = stream.run !== null;
   const rail = useRail(hasRun ? "35%" : "55%");
+  useDocumentTitle(project.data?.name, "Workspace");
 
   // Query errors are the raw envelope body ({error: {code}}), thrown as-is.
   const errorCode = (project.error as { error?: { code?: string } } | null)?.error?.code;

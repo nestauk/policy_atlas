@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useParams } from "react-router";
 
-import { useDecisions } from "../api/queries";
+import { useDecisions, useProject } from "../api/queries";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
+import { useDocumentTitle } from "../lib/title";
 import { Card } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
@@ -36,6 +37,8 @@ const KIND_LABELS: Record<string, string> = {
 /** Decision log: friendly client-allowlisted detail and grouped search terms. */
 export function DecisionsView() {
   const { projectId = "" } = useParams();
+  const project = useProject(projectId);
+  useDocumentTitle(project.data?.name, "Decision log");
   const decisions = useDecisions(projectId, { page_size: 200 });
   const [open, setOpen] = useState<number | null>(null);
   const entries = decisions.data ? groupSearchDecisions(decisions.data.data) : [];

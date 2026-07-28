@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { components } from "../../api/gen/types";
 import type { CheckInOut, StageEntry } from "../../store/types";
+import { ToastProvider } from "../../ui/radix/Toast";
 import { CheckInCard } from "./CheckInCard";
 
 type CheckInOption = components["schemas"]["CheckInOption"];
@@ -48,7 +49,11 @@ function option(overrides: Partial<CheckInOption> = {}): CheckInOption {
 }
 
 function renderCard(checkIn: CheckInOut, stages: StageEntry[] = []) {
-  return render(<CheckInCard projectId={PROJECT_ID} checkIn={checkIn} stages={stages} />);
+  return render(
+    <ToastProvider>
+      <CheckInCard projectId={PROJECT_ID} checkIn={checkIn} stages={stages} />
+    </ToastProvider>,
+  );
 }
 
 describe("CheckInCard — option parameters", () => {
@@ -123,5 +128,29 @@ describe("CheckInCard — stage chip", () => {
 
     const header = screen.getByText("Waiting on your input").parentElement;
     expect(header?.children).toHaveLength(1);
+  });
+});
+
+describe("CheckInCard — toast on failure (027 strand 14)", () => {
+  it("shows an error toast alongside the inline notice when the answer mutation errors", async () => {
+    mutate.mockReset();
+    mutate.mockImplementation(
+      (_vars: unknown, options?: { onError?: (error: unknown) => void }) => {
+        options?.onError?.({ code: "already_answered" });
+      },
+    );
+    const user = userEvent.setup();
+    renderCard(baseCheckIn());
+
+    await user.click(screen.getByRole("button", { name: "Stop the analysis" }));
+
+    // Toast complements the inline notice — both carry the same message,
+    // rendered in two places (the toast surfaces even off-screen).
+    expect(await screen.findByText("Check-in update failed")).toBeInTheDocument();
+    const messages = screen.getAllByText(
+      "This check-in has already been answered. Refresh to see the recorded decision.",
+    );
+    expect(messages).toHaveLength(2);
+    expect(screen.getByRole("alert")).toHaveTextContent("already been answered");
   });
 });

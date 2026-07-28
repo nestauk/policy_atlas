@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 
-import { useEvidence, useFindings, useSourceDossier } from "../api/queries";
+import { useEvidence, useFindings, useProject, useSourceDossier } from "../api/queries";
 import type { components } from "../api/gen/types";
 import { errorCode } from "../lib/errors";
 import { safeHref } from "../lib/safeHref";
 import { scrub } from "../lib/scrub";
+import { useDocumentTitle } from "../lib/title";
 import { Card, Divider, PaneHeading } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
@@ -35,6 +36,8 @@ const STATUS_FILTERS = [
 /** Sources: collection-true server filters and a URL-addressable source dossier. */
 export function SourcesView() {
   const { projectId = "" } = useParams();
+  const project = useProject(projectId);
+  useDocumentTitle(project.data?.name, "Sources");
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedStatus = searchParams.get("status");
   const statusFilter = STATUS_FILTERS.find((filter) => filter.key === requestedStatus)?.key ?? "all";

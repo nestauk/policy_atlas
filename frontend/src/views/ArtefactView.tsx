@@ -2,10 +2,11 @@ import { useMemo } from "react";
 import { useParams, useSearchParams } from "react-router";
 
 import type { components } from "../api/gen/types";
-import { useApiClient, useArtefact, useCoverage, useEvidence, useFindings, useSourceDossier } from "../api/queries";
+import { useApiClient, useArtefact, useCoverage, useEvidence, useFindings, useProject, useSourceDossier } from "../api/queries";
 import { useQuery } from "@tanstack/react-query";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
+import { useDocumentTitle } from "../lib/title";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
 import { Card } from "../ui/brand/Card";
@@ -169,7 +170,7 @@ function CitationMarker({
           <button
             type="button"
             aria-label={`Citation ${citation.n}: ${citation.source_title}`}
-            className="mx-0.5 cursor-pointer align-super text-[10.5px] font-bold text-blue hover:underline focus-visible:outline-2 focus-visible:outline-blue"
+            className="citation-marker mx-0.5 cursor-pointer align-super text-[10.5px] font-bold text-blue hover:underline focus-visible:outline-2 focus-visible:outline-blue"
           >
             [{citation.n}]
           </button>
@@ -498,7 +499,7 @@ export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
     (section: LiveSection) => !(section.state === "filled" && (section.prose ?? "") === ""),
   );
   return (
-    <main className="anim-rise mx-auto my-8 max-w-[780px] bg-paper px-10 py-9 shadow-sm ring-1 ring-line">
+    <main className="artefact-page anim-rise mx-auto my-8 max-w-[780px] bg-paper px-10 py-9 shadow-sm ring-1 ring-line">
       {terminalPartial ? (
         <div
           role="alert"
@@ -551,11 +552,13 @@ export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
  *  while synthesis writes. */
 export function ArtefactView() {
   const { projectId = "" } = useParams();
+  const project = useProject(projectId);
   const artefact = useArtefact(projectId);
   const coverage = useCoverage(projectId);
   const stream = useRunStream(projectId);
   const [searchParams, setSearchParams] = useSearchParams();
   const dossierSource = searchParams.get("source");
+  useDocumentTitle(project.data?.name, "Evidence base");
 
   const openDossier = (title: string) => {
     setSearchParams((current) => {
@@ -657,7 +660,7 @@ export function ArtefactView() {
   }
 
   return (
-    <main className="anim-rise mx-auto my-8 max-w-[780px] bg-paper px-10 py-9 shadow-sm ring-1 ring-line">
+    <main className="artefact-page anim-rise mx-auto my-8 max-w-[780px] bg-paper px-10 py-9 shadow-sm ring-1 ring-line">
       <header className="mb-8">
         <p className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-grey">
           Evidence base

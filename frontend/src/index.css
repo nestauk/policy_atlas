@@ -200,6 +200,41 @@
   }
 }
 
+/* Print stylesheet (027 strand 14) — the evidence-base page only. Honest
+   browser-print behaviour: no dedicated share/export CTA (that seam stays
+   deferred), just what's already on screen made print-legible. */
+@media print {
+  nav,
+  [data-radix-popper-content-wrapper] {
+    display: none !important;
+  }
+  .artefact-page button:not(.citation-marker) {
+    display: none !important;
+  }
+  body {
+    background: #fff !important;
+  }
+  .artefact-page {
+    margin: 0 !important;
+    max-width: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+  .artefact-page,
+  .artefact-page * {
+    color: #000 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  .citation-marker {
+    color: #000 !important;
+    text-decoration: none !important;
+  }
+  @page {
+    margin: 2cm;
+  }
+}
+
 @layer base {
   html {
     scrollbar-gutter: stable;

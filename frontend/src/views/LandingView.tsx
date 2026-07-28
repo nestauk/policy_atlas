@@ -5,9 +5,11 @@ import { useArchiveProject, useCreateProject, useUpdateProject } from "../api/mu
 import { useProjects } from "../api/queries";
 import type { components } from "../api/gen/types";
 import { scrub } from "../lib/scrub";
+import { useDocumentTitle } from "../lib/title";
 import { Button } from "../ui/brand/Button";
 import { Card, StatusDot } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
+import { useToast } from "../ui/radix/Toast";
 import { cancelledRenameState } from "./landingPresentation";
 
 type LatestRun = { status: string } | null | undefined;
@@ -53,6 +55,7 @@ function NewProjectForm({ onDone }: { onDone: () => void }) {
 
 /** Landing: project cards expose rename/archive actions beside run-derived presentation. */
 export function LandingView() {
+  useDocumentTitle("Projects");
   const projects = useProjects();
   const [creating, setCreating] = useState(false);
   return (
@@ -92,6 +95,7 @@ function ProjectCard({ project, delayMs }: { project: Project; delayMs: number }
   const [draftName, setDraftName] = useState(project.name);
   const update = useUpdateProject(project.project_id);
   const archive = useArchiveProject(project.project_id);
+  const toast = useToast();
   const presentation = runPresentation(project.latest_run);
   const cancelRename = () => {
     const reset = cancelledRenameState(project.name);
@@ -101,7 +105,18 @@ function ProjectCard({ project, delayMs }: { project: Project; delayMs: number }
   const saveRename = () => {
     const name = draftName.trim();
     if (!name) return;
-    update.mutate({ name }, { onSuccess: () => setEditing(false) });
+    update.mutate(
+      { name },
+      {
+        onSuccess: () => setEditing(false),
+        onError: () =>
+          toast.toast({
+            title: "Rename failed",
+            description: "The project couldn't be renamed. Try again.",
+            tone: "error",
+          }),
+      },
+    );
   };
   return (
     <li className="anim-rise" style={{ animationDelay: `${delayMs}ms` }}>
@@ -117,7 +132,25 @@ function ProjectCard({ project, delayMs }: { project: Project; delayMs: number }
           <>
             <div className="absolute right-3 top-3 flex gap-1">
               <Button size="sm" variant="ghost" onClick={() => { setDraftName(project.name); setEditing(true); }}>Rename project</Button>
-              <Button size="sm" variant={confirmingArchive ? "primary" : "ghost"} onClick={() => { if (confirmingArchive) archive.mutate(); else setConfirmingArchive(true); }} disabled={archive.isPending}>
+              <Button
+                size="sm"
+                variant={confirmingArchive ? "primary" : "ghost"}
+                onClick={() => {
+                  if (confirmingArchive) {
+                    archive.mutate(undefined, {
+                      onError: () =>
+                        toast.toast({
+                          title: "Archive failed",
+                          description: "The project couldn't be archived. Try again.",
+                          tone: "error",
+                        }),
+                    });
+                  } else {
+                    setConfirmingArchive(true);
+                  }
+                }}
+                disabled={archive.isPending}
+              >
                 {confirmingArchive ? "Confirm archive" : "Archive project"}
               </Button>
             </div>

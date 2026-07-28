@@ -73,7 +73,14 @@ export function useApiClient() {
   return useMemo(() => createAuthedApiClient(auth), [auth]);
 }
 
-/** `GET /api/v1/projects` — paginated, owner-scoped. */
+const ACTIVE_RUN_STATUSES = new Set(["running", "paused"]);
+
+/** `GET /api/v1/projects` — paginated, owner-scoped. Live landing statuses
+ *  (contract strand 14): while any listed project's `latest_run.status` is
+ *  non-terminal, the list refetches on a modest interval so a card never
+ *  keeps showing "Analysing"/"Paused" after the run has actually moved on.
+ *  `refetchIntervalInBackground` defaults to `false`, so this only polls
+ *  while the tab is visible. */
 export function useProjects(query?: { status?: "active" | "archived" | "all"; page?: number; page_size?: number }) {
   const client = useApiClient();
   return useQuery({
@@ -82,6 +89,14 @@ export function useProjects(query?: { status?: "active" | "archived" | "all"; pa
       const { data, error } = await client.GET("/api/v1/projects", { params: { query } });
       if (error) throw error;
       return data;
+    },
+    refetchInterval: (activeQuery) => {
+      const hasActiveRun = activeQuery.state.data?.data.some((project) =>
+        project.latest_run !== null &&
+        project.latest_run !== undefined &&
+        ACTIVE_RUN_STATUSES.has(project.latest_run.status),
+      );
+      return hasActiveRun ? 15_000 : false;
     },
   });
 }
@@ -105,9 +120,15 @@ export function useProject(projectId: string) {
 /**
  * `GET /api/v1/projects/{project_id}/check-ins` — the derived pending card
  * (`status=pending`, the default) or the durable steering history
- * (`status=all`).
+ * (`status=all`). `options.enabled`/`options.refetchInterval` let a caller
+ * outside the workspace (the AppShell nav badge) poll cheaply for a pending
+ * check-in without a live-run stream connection of its own.
  */
-export function useCheckIns(projectId: string, status?: "pending" | "all") {
+export function useCheckIns(
+  projectId: string,
+  status?: "pending" | "all",
+  options?: { enabled?: boolean; refetchInterval?: number | false },
+) {
   const client = useApiClient();
   return useQuery({
     queryKey: queryKeys.checkIns(projectId, status),
@@ -118,7 +139,8 @@ export function useCheckIns(projectId: string, status?: "pending" | "all") {
       if (error) throw error;
       return data;
     },
-    enabled: Boolean(projectId),
+    enabled: Boolean(projectId) && (options?.enabled ?? true),
+    refetchInterval: options?.refetchInterval,
   });
 }
 

@@ -44,7 +44,10 @@ export function useUpdateProject(projectId: string) {
       if (data === undefined) raise(error, response.status);
       return data;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.projectRoot(projectId) }),
+    // The bare "projects" root covers BOTH this project's detail key and the
+    // projects-list key (["projects", "list", …]) — a rename must refresh the
+    // landing card, not just the workspace header (F.2 finding, 2026-07-29).
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
   });
 }
 

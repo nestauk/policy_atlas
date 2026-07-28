@@ -7,6 +7,7 @@ import type { CheckInOut, StageEntry } from "../../store/types";
 import { Button } from "../../ui/brand/Button";
 import { Card } from "../../ui/brand/Card";
 import { Chip } from "../../ui/brand/Chip";
+import { useToast } from "../../ui/radix/Toast";
 import { triggerCopy } from "./checkInPresentation";
 
 interface CompiledSteer {
@@ -44,6 +45,7 @@ export function CheckInCard({
   stages: StageEntry[];
 }) {
   const answer = useAnswerCheckIn(projectId);
+  const toast = useToast();
   const [freeText, setFreeText] = useState("");
   const [changeModeOpen, setChangeModeOpen] = useState(false);
   const [changeModeValue, setChangeModeValue] = useState<ChangeModeValue>("moderate");
@@ -51,13 +53,16 @@ export function CheckInCard({
   const [notice, setNotice] = useState<string | null>(null);
   const freeTextRef = useRef<HTMLInputElement>(null);
 
+  // Toast complements the inline `notice` below — it doesn't replace it: the
+  // inline copy is load-bearing right where the user is looking, the toast
+  // makes the failure visible even if they've scrolled away from the card.
   const conflictNotice = (error: unknown) => {
     const code = (error as { code?: string }).code;
-    setNotice(
-      isConflictCode(code)
-        ? conflictSentences[code]
-        : "That couldn't be applied. The check-in is still waiting.",
-    );
+    const message = isConflictCode(code)
+      ? conflictSentences[code]
+      : "That couldn't be applied. The check-in is still waiting.";
+    setNotice(message);
+    toast.toast({ title: "Check-in update failed", description: message, tone: "error" });
   };
 
   const sendOption = (optionId: string, params?: Record<string, unknown>) => {

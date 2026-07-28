@@ -2,9 +2,10 @@ import { Fragment, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
 import type { components } from "../api/gen/types";
-import { useFindings, useGroups } from "../api/queries";
+import { useFindings, useGroups, useProject } from "../api/queries";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
+import { useDocumentTitle } from "../lib/title";
 import { Card } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
@@ -299,6 +300,8 @@ function FindingRow({
  */
 export function FindingsView() {
   const { projectId = "" } = useParams();
+  const project = useProject(projectId);
+  useDocumentTitle(project.data?.name, "Findings");
   const [searchParams, setSearchParams] = useSearchParams();
   const profileParam = searchParams.get("profile");
   const profile = profileParam === "iof" || profileParam === "icf" ? profileParam : undefined;

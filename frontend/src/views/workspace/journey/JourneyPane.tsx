@@ -208,7 +208,7 @@ function Timeline({ stages, plan }: { stages: StageEntry[]; plan: PlanDraft | nu
     return [...stages, ...pending];
   }, [plan?.steps, stages]);
   if (rows.length === 0) return <p className="text-[12.5px] text-grey">Stages will appear as the analysis begins.</p>;
-  return <ol className="space-y-2.5">{rows.map((entry, index) => {
+  return <ol aria-label="Stage timeline" className="space-y-2.5">{rows.map((entry, index) => {
     const reason = typeof entry.summary?.reason === "string" ? entry.summary.reason : null;
     const summary = timelineSummary(entry);
     const tooltip = <div className="space-y-1 text-[12px] text-navy"><p>{scrub(entry.blurb ?? entry.label)}</p>{entry.status === "completed" && typeof entry.seconds === "number" && <p className="text-grey">Took {elapsed(entry.seconds)}</p>}{reason !== null && <p className="text-red">{scrub(reason)}</p>}</div>;
