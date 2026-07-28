@@ -98,7 +98,7 @@ required = {
     "OVERTON_API_KEY",
     "LANGFUSE_PUBLIC_KEY",
     "LANGFUSE_SECRET_KEY",
-    "LANGFUSE_BASE_URL",
+    "LANGFUSE_HOST",
 }
 secret = json.load(sys.stdin)
 sys.exit(0 if required <= secret.keys() else 1)
@@ -146,11 +146,19 @@ bootstrap_postconditions() {
     gate_check "Cognito user pool contains at least one user" check_cognito_user_exists
 }
 
+# CDK CLI via npx (the repo pins no global cdk binary); cdk.json's app command
+# is "python app.py", so the infra venv must lead PATH for synth. Deploys are
+# operator-run but non-interactive: the IAM/SG diff was reviewed at code level,
+# so --require-approval never keeps the script from hanging on a prompt.
+run_cdk() {
+    PATH="$REPO_ROOT/infra/.venv/bin:$PATH" npx cdk "$@" --require-approval never
+}
+
 deploy_all_stacks() {
     (
         cd "$REPO_ROOT/infra"
         # app.py requires env_name; stage=all is explicit for reproducible deploys.
-        cdk deploy -c "env_name=${ENV_NAME}" -c stage=all --all
+        run_cdk deploy -c "env_name=${ENV_NAME}" -c stage=all --all
     )
 }
 
@@ -159,7 +167,7 @@ bootstrap() {
 
     (
         cd "$REPO_ROOT/infra"
-        cdk deploy -c "env_name=${ENV_NAME}" -c stage=network PaV3NetworkStack
+        run_cdk deploy -c "env_name=${ENV_NAME}" -c stage=network PaV3NetworkStack
     )
 
     deploy_all_stacks

@@ -61,7 +61,7 @@ Before the first `cdk deploy` of any kind, all of the following must hold.
 
 3. **App secret provisioned.** Secrets Manager secret `policy_atlas_v3/app`
    must exist with exactly these JSON keys (see § 5 for consumers):
-   - `LANGFUSE_BASE_URL`
+   - `LANGFUSE_HOST`
    - `LANGFUSE_PUBLIC_KEY`
    - `LANGFUSE_SECRET_KEY`
    - `OPENAI_API_KEY`
@@ -153,8 +153,8 @@ Abort at the first non-zero step.
 
 Generated from `settings.py`'s required/optional calls plus the direct
 `os.environ` readers (`api/deps.py`, `core/tracing.py`,
-`evidence_base/sourcing/search_live.py`). `LANGFUSE_HOST` is an accepted tracing
-alias; deployment deliberately supplies the canonical `LANGFUSE_BASE_URL` field
+`evidence_base/sourcing/search_live.py`). `LANGFUSE_HOST` is what the provisioned
+secret carries (v2's key name); tracing accepts it natively, so deployment injects it
 instead. `POLICY_ATLAS_*` tuning and the fixture corpus are intentionally
 omitted from the deployed task.
 
@@ -164,8 +164,8 @@ omitted from the deployed task.
 | `DATABASE_URL` | Secrets Manager field: DB secret `db_connection_string` | `api/settings.py`, `core/db.py` |
 | `DB_MAX_OVERFLOW` | config value: `backend.db_max_overflow` | `api/settings.py` |
 | `DB_POOL_SIZE` | config value: `backend.db_pool_size` | `api/settings.py` |
-| `LANGFUSE_BASE_URL` | Secrets Manager field: `policy_atlas_v3/app` `LANGFUSE_BASE_URL` | `core/tracing.py` |
-| `LANGFUSE_HOST` | omitted (accepted alias for `LANGFUSE_BASE_URL`) | `core/tracing.py` |
+| `LANGFUSE_HOST` | Secrets Manager field: `policy_atlas_v3/app` `LANGFUSE_HOST` | `core/tracing.py` |
+| `LANGFUSE_BASE_URL` | omitted (equivalent alias of `LANGFUSE_HOST`) | `core/tracing.py` |
 | `LANGFUSE_PUBLIC_KEY` | Secrets Manager field: `policy_atlas_v3/app` `LANGFUSE_PUBLIC_KEY` | `core/tracing.py` |
 | `LANGFUSE_SECRET_KEY` | Secrets Manager field: `policy_atlas_v3/app` `LANGFUSE_SECRET_KEY` | `core/tracing.py` |
 | `LOG_LEVEL` | config value: `INFO` | container runtime (no current backend reader) |

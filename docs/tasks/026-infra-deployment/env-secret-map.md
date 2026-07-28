@@ -2,8 +2,8 @@
 
 Task B.3 inventory, generated from the required command plus every
 `_required`/`_optional` call in `backend/src/policy_atlas/api/settings.py`.
-`LANGFUSE_HOST` is an accepted tracing alias; deployment deliberately supplies
-the canonical `LANGFUSE_BASE_URL` field instead.  `POLICY_ATLAS_*` tuning and
+`LANGFUSE_HOST` is what the provisioned secret carries (v2's key name); tracing
+accepts it natively, so deployment injects it directly (E.1 deviation).  `POLICY_ATLAS_*` tuning and
 the fixture corpus are intentionally omitted from the deployed task.
 
 | Var | Source | Consumer file |
@@ -12,8 +12,8 @@ the fixture corpus are intentionally omitted from the deployed task.
 | `DATABASE_URL` | Secrets Manager field: DB secret `db_connection_string` | `api/settings.py`, `core/db.py` |
 | `DB_MAX_OVERFLOW` | config value: `backend.db_max_overflow` | `api/settings.py` |
 | `DB_POOL_SIZE` | config value: `backend.db_pool_size` | `api/settings.py` |
-| `LANGFUSE_BASE_URL` | Secrets Manager field: `policy_atlas_v3/app` `LANGFUSE_BASE_URL` | `core/tracing.py` |
-| `LANGFUSE_HOST` | omitted (accepted alias for `LANGFUSE_BASE_URL`) | `core/tracing.py` |
+| `LANGFUSE_HOST` | Secrets Manager field: `policy_atlas_v3/app` `LANGFUSE_HOST` | `core/tracing.py` |
+| `LANGFUSE_BASE_URL` | omitted (equivalent alias of `LANGFUSE_HOST`) | `core/tracing.py` |
 | `LANGFUSE_PUBLIC_KEY` | Secrets Manager field: `policy_atlas_v3/app` `LANGFUSE_PUBLIC_KEY` | `core/tracing.py` |
 | `LANGFUSE_SECRET_KEY` | Secrets Manager field: `policy_atlas_v3/app` `LANGFUSE_SECRET_KEY` | `core/tracing.py` |
 | `LOG_LEVEL` | config value: `INFO` | container runtime (no current backend reader) |

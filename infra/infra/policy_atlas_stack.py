@@ -181,7 +181,10 @@ class PolicyAtlasStack(Stack):
                 "OVERTON_API_KEY": ecs.Secret.from_secrets_manager(app_secret, field="OVERTON_API_KEY"),
                 "LANGFUSE_PUBLIC_KEY": ecs.Secret.from_secrets_manager(app_secret, field="LANGFUSE_PUBLIC_KEY"),
                 "LANGFUSE_SECRET_KEY": ecs.Secret.from_secrets_manager(app_secret, field="LANGFUSE_SECRET_KEY"),
-                "LANGFUSE_BASE_URL": ecs.Secret.from_secrets_manager(app_secret, field="LANGFUSE_BASE_URL"),
+                # LANGFUSE_HOST, not LANGFUSE_BASE_URL: tracing.py accepts both;
+                # the provisioned secret carries v2's key name (E.1 deviation,
+                # verification.md) — adapting here beats patching a live secret.
+                "LANGFUSE_HOST": ecs.Secret.from_secrets_manager(app_secret, field="LANGFUSE_HOST"),
             },
             port_mappings=[ecs.PortMapping(
                 container_port=be_config["internal_port"],
