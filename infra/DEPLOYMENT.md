@@ -57,9 +57,26 @@ Before the first `cdk deploy` of any kind, all of the following must hold.
    cdk bootstrap aws://$CDK_DEFAULT_ACCOUNT/us-east-1
    ```
 
-   (`us-east-1` is needed solely for `PaV3CertStack`.)
+   (`us-east-1` is needed solely for `PaV3CertStack`.) Bootstrapping creates
+   IAM roles, so it needs an IAM-capable principal — **PowerUserAccess cannot
+   run it** (E.1 finding, 2026-07-28). Day-to-day deploys work under
+   PowerUser because CloudFormation executes through the bootstrap roles.
 
-3. **App secret provisioned.** Secrets Manager secret `policy_atlas_v3/app`
+3. **Deploying principal can pass the ECS task roles.** The migration step
+   (`aws ecs run-task`) requires `iam:PassRole` on the task and execution
+   roles, which PowerUserAccess denies. The operator's permission set needs
+   (E.1 finding, same date):
+
+   ```json
+   {
+     "Effect": "Allow",
+     "Action": "iam:PassRole",
+     "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/PaV3AppStack-*",
+     "Condition": { "StringEquals": { "iam:PassedToService": "ecs-tasks.amazonaws.com" } }
+   }
+   ```
+
+4. **App secret provisioned.** Secrets Manager secret `policy_atlas_v3/app`
    must exist with exactly these JSON keys (see § 5 for consumers):
    - `LANGFUSE_HOST`
    - `LANGFUSE_PUBLIC_KEY`
@@ -69,7 +86,7 @@ Before the first `cdk deploy` of any kind, all of the following must hold.
    - `OPENALEX_EMAIL`
    - `OVERTON_API_KEY`
 
-4. **`CDK_DEFAULT_ACCOUNT` exported** in the operator's shell:
+5. **`CDK_DEFAULT_ACCOUNT` exported** in the operator's shell:
 
    ```bash
    export CDK_DEFAULT_ACCOUNT=<account-id>
