@@ -5,7 +5,13 @@
 > adjudicated in**; the two load-bearing refutations — the emitter deadlock
 > via in-transaction `component.started` (harness.py:413, lead-verified) and
 > the death of decisions-polling for the live search card — reshaped pins
-> 1–3 and annex D‑1). Plan approval (before implementation): _pending_.
+> 1–3 and annex D‑1). **Plan APPROVED —
+> 2026-07-28 · owner ("Approved"), incl. the three named sign-off items:
+> the lifecycle-placement runner delta · the live-search-card honest
+> redefinition · sizing ~19–21 days. ADR 0027 Accepted same date. DESIGN
+> PHASE COMPLETE — build opens in a fresh conversation with
+> `task-cycle-build`** (re-ground from: contract.md · this plan · the
+> annexes; run `make verify` first, T0.1).
 > Contract: [contract.md](contract.md) (FINAL). Annexes:
 > [rehydration-mapping.md](rehydration-mapping.md) (rev 2) ·
 > [read-model-additions.md](read-model-additions.md) (rev 2) ·

@@ -5,8 +5,10 @@
 > adversarial lane ran post-approval (Tier-3 standard); reopened gate items
 > (rev 3 a–d, explained and re-approved: "Sounds good. I approve all of
 > these") + owner amendments 3.1–3.3 all in. **CONTRACT FINAL FOR
-> PLANNING.** · Plan approved (before implementation): _pending_ ·
-> ADR: _due — transcript durability model + artefact SSE vocabulary_.
+> PLANNING.** · Plan approved (before implementation): **2026-07-28 · owner**
+> (plan rev 2 + the three named sign-off items) ·
+> ADR: **0027** (durable planning transcript + artefact streaming +
+> lifecycle-placement delta), Accepted 2026-07-28.
 >
 > **rev 3 (2026-07-28): contract-stage adversarial lane DONE** (codex-rescue
 > job task-ms4x604a-q7oq9s; 21 findings, 17 MAJOR, all adjudicated in — the
