@@ -201,10 +201,16 @@ un-flagged ERROR observations in the window.
    `wait invalidation-completed` → pruning sync.
 3. *Aurora at-rest encryption* (security, MEDIUM — the only MEDIUM+): `storage_encrypted=True`
    + `deletion_protection=True` + 7-day backups; template-pinned by a new synth test.
-   ⚠️ **StorageEncrypted forces cluster REPLACEMENT on the next deploy** — adopted now
-   deliberately, while the DB holds smoke data only (flagged in the PR).
-4. *Cognito client hardening* (security L3/L8): access 60 min explicit, refresh 24 h
-   (was default 30 d in sessionStorage), `prevent_user_existence_errors` — synth-pinned.
+   ⚠️ Encryption cannot be enabled in place, and the pinned cluster identifier means a
+   plain deploy FAILS on name collision rather than replacing — applied via the
+   one-time destroy→redeploy recipe in DEPLOYMENT.md § 4 (owner-corrected wording
+   2026-07-28; scheduled while the DB holds smoke data only).
+4. *Cognito client hardening* (security L3/L8): access 60 min explicit,
+   `prevent_user_existence_errors` — synth-pinned. **Owner adjudication (2026-07-28):
+   the 24 h refresh-token cut was reverted to 30 d** — month-long sessions match user
+   expectations for a web app; the XSS-exfiltration-window argument is partially
+   mitigated by the new CloudFront security headers, and sessionStorage bounds
+   cross-tab persistence regardless. Recorded as an explicit owner risk acceptance.
 5. *CloudFront security headers* (security L2): managed `SECURITY_HEADERS` response
    policy on both behaviors — synth-pinned.
 6. *Supply-chain pinning* (security L5 + Codex M11, **convergent across families**):

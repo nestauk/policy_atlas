@@ -177,6 +177,25 @@ restore service manually with
 `aws ecs update-service --cluster policy-atlas-v3-cluster --service policy-atlas-v3-api-service --desired-count 1`
 (only if the migration step had already passed).
 
+**One-time pending step — encrypting the Aurora cluster (026 review hardening).**
+The committed template sets `StorageEncrypted` (+ deletion protection, 7-day
+backups), but the *live* cluster predates it and encryption cannot be enabled in
+place; with the pinned cluster identifier, a plain deploy will fail on a name
+collision rather than replace. Run once, **before real data lands** (the recreated
+cluster starts empty — today it holds only smoke-run data; the destroy takes an
+automatic final snapshot):
+
+```bash
+(cd infra && PATH="$PWD/.venv/bin:$PATH" npx cdk@2.1133.0 destroy \
+   -c env_name=staging -c stage=all PaV3DatabaseStack)   # live cluster has no delete protection yet
+bash scripts/deploy.sh update        # recreates the cluster encrypted
+(cd infra && PATH="$PWD/.venv/bin:$PATH" npx cdk@2.1133.0 deploy \
+   -c env_name=staging -c stage=all PaV3AppStack --force --require-approval never)
+   # --force: the app stack template is unchanged, but it must re-resolve the
+   # recreated DB security-group ID from SSM (see the SSM-coupling caveat below)
+bash scripts/deploy.sh update        # migrate → scale → publish on the fresh DB
+```
+
 **Operational caveats (verbatim from the contract):**
 
 - Deploys interrupt executing runs — deploy in quiet windows. The hard-kill

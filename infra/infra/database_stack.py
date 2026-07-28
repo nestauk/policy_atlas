@@ -61,8 +61,11 @@ class DatabaseStack(Stack):
             removal_policy=RemovalPolicy.SNAPSHOT,
             # Review-stack hardening (026 step 7): encryption at rest, delete
             # guard, 7-day backups. NB StorageEncrypted cannot be toggled in
-            # place — CloudFormation REPLACES the cluster on the next deploy
-            # (adopted while the DB holds smoke data only).
+            # place, and the pinned cluster/instance identifiers mean
+            # CloudFormation cannot swap in a replacement either (the
+            # create-before-delete collides on the name — the update FAILS).
+            # Apply via the one-time destroy→redeploy in DEPLOYMENT.md § 4,
+            # scheduled while the DB holds smoke data only.
             storage_encrypted=True,
             deletion_protection=True,
             backup=rds.BackupProps(retention=Duration.days(7)),

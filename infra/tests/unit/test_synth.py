@@ -297,10 +297,11 @@ def test_cognito_spa_client_is_public_code_flow_with_exact_redirects():
     assert properties["AllowedOAuthScopes"] == ["openid", "email", "profile"]
     assert properties["CallbackURLs"] == urls
     assert properties["LogoutURLs"] == urls
-    # Review-stack hardening pins (026 step 7): day-scoped refresh tokens and
-    # no user-enumeration oracle.
+    # Review-stack pins (026 step 7; refresh length is the owner's call —
+    # 30 d kept, 2026-07-28): explicit token validities and no
+    # user-enumeration oracle.
     assert properties["AccessTokenValidity"] == 60
-    assert properties["RefreshTokenValidity"] == 1440  # 24 h, rendered in minutes
+    assert properties["RefreshTokenValidity"] == 43200  # 30 d, rendered in minutes
     assert properties["TokenValidityUnits"] == {
         "AccessToken": "minutes",
         "RefreshToken": "minutes",

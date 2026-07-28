@@ -30,11 +30,15 @@ class CognitoAuth(Construct):
             "SpaClient",
             user_pool=self.user_pool,
             generate_secret=False,
-            # Review-stack hardening (026 step 7): short refresh lifetime
-            # (silent renew hides it from users; XSS-exfiltrated tokens die in
-            # a day, not 30) and no user-enumeration oracle on the hosted UI.
+            # Review-stack hardening (026 step 7) + owner adjudication
+            # (2026-07-28): 30-day refresh kept — normal web-app session
+            # expectations beat the shorter-exfiltration-window argument for
+            # this audience. NB tokens live in sessionStorage, so a new tab
+            # re-runs the hosted-UI round-trip regardless; 30 days mainly
+            # keeps a long-lived open tab renewing silently. Explicit values
+            # so the synth test pins them; no user-enumeration oracle.
             access_token_validity=Duration.minutes(60),
-            refresh_token_validity=Duration.hours(24),
+            refresh_token_validity=Duration.days(30),
             prevent_user_existence_errors=True,
             o_auth=cognito.OAuthSettings(
                 flows=cognito.OAuthFlows(authorization_code_grant=True),
