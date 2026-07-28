@@ -49,3 +49,8 @@ caught. The mistake recurred across multiple slices before being captured here
   metadata envelopes can mint; a demo/smoke must seed at least one full-text
   document. A spec/contract line saying a chain "synthesises over metadata
   envelopes" is written against intent, not the as-built rule.
+- **UI/spec assertions must target always-present stages** (026 smoke spec, the
+  pitfall's first bite in a committed spec): a browser test asserting the
+  characterise stage label ("Mapping the landscape") races orchestrator
+  discretion; assert the acquire stage ("Searching sources"), which every chain
+  contains and which persists in the timeline.

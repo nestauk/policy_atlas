@@ -1727,8 +1727,22 @@ first-class vocabulary. What follows is what it deliberately left out.
   the OIDC sign-in callback restores the stashed path via `history.replaceState`, which
   react-router never observes: after any auth round-trip the URL may show the deep link
   while the landing route renders. Cosmetic (a reload or click recovers); fix is a
-  router-level navigate in `onSigninCallback` — next frontend-touching slice.
+  router-level navigate in `onSigninCallback` — next frontend-touching slice. Same
+  seam, second facet (026 review, Codex adversarial): a *persistent* OIDC callback
+  error mounts the unauthenticated shell, whose 401-driven `ReauthRedirect` starts
+  another redirect without consulting the standing error — a denied-authorization
+  user can bounce login↔app until the error clears. Same fix site (the provider's
+  error/redirect interplay).
 - **Rename/archive controls in the UI** (025 live check) — the PATCH/archive mutations
   exist, are authz-tested and envelope-conformant; no view exposes them yet. Ingest also
   presents under the acquire stage label ("Searching sources" while reading documents) —
   both are workspace-surface polish for the next frontend-touching slice.
+
+## Infra deployment (task 026 seams)
+
+- **No deploy lock** (026 review, Codex adversarial, 2026-07-28) — `scripts/deploy.sh`
+  assumes one operator: two concurrent runs can interleave stop→migrate→scale (parallel
+  Alembic runs, one deploy booting the API mid-migration of the other). Acceptable while
+  deploys are one team member on staging (DEPLOYMENT.md § 1 states the rule); a real
+  lock (S3 conditional-put lease or DynamoDB lock, plus an Alembic advisory lock) is the
+  seam when a second operator or CI-driven deploys appear.

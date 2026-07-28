@@ -1,5 +1,20 @@
 # Knowledge update log
 
+## 2026-07-28
+* **Creation**: Added [cdk-poweruser-deploy-boundaries](cdk-poweruser-deploy-boundaries.md),
+  [noop-deploys-dont-reassert-template-pins](noop-deploys-dont-reassert-template-pins.md),
+  [live-idp-cold-path-and-signout](live-idp-cold-path-and-signout.md),
+  [docker-save-layout-image-store](docker-save-layout-image-store.md),
+  [cdk-synth-tests-lookups-and-hidden-lambdas](cdk-synth-tests-lookups-and-hidden-lambdas.md),
+  [pyjwt-aud-verified-by-default](pyjwt-aud-verified-by-default.md),
+  [uv-src-layout-image-pattern](uv-src-layout-image-pattern.md) — task 026 (infra deployment):
+  build knowledge candidates + review-stack findings, authored from both sources (014 retro rule).
+* **Update**: [testing-database](testing-database.md) — persisting harnesses need a disposable
+  per-harness DB (026 smoke); [synthesise-is-run-terminus](synthesise-is-run-terminus.md) — UI/spec
+  assertions target the acquire stage, never characterise (026 smoke spec bite);
+  [macos-swap-presents-as-docker-wedge](macos-swap-presents-as-docker-wedge.md) — second wedge
+  family: VM network path, full process kill required (026 E).
+
 ## 2026-07-15 (task 023 step-9 riders)
 * **Retirement**: [citation-flag-dont-drop](citation-flag-dont-drop.md) marked RETIRED — its mechanism (`produce_grounded_block`'s pre-raise citation/annotation writes) was deleted when the owner directed dissolving `grounding.py` at the step-9 gate (`content_hash` → `core/hashing.py`; the production-dead grounded-block leg + tests removed). The flag-don't-drop principle stays spec-level and lives in the extract-side verification chain.
 
