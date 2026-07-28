@@ -92,6 +92,21 @@ function OidcAuthAdapter({ children }: { children: ReactNode }) {
       : "unauthenticated";
   const sub = oidc.user?.profile.sub;
 
+  // Cold-visit gating (026 live-check finding, 2026-07-28): a first
+  // unauthenticated entry previously rendered the app shell, whose queries
+  // 401'd forever with no path to sign-in — only mid-session expiry (the
+  // ReauthRedirect views) ever reached `signinRedirect`. Mirror the
+  // dev-token provider's own behaviour: the PROVIDER gates, sending cold
+  // visits straight to the hosted UI with the route preserved.
+  const shouldRedirect =
+    !oidc.isLoading && !oidc.isAuthenticated && !oidc.activeNavigator && !oidc.error;
+  useEffect(() => {
+    if (!shouldRedirect) return;
+    const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    sessionStorage.setItem(AUTH_RETURN_TO_KEY, returnTo);
+    void oidcRef.current.signinRedirect();
+  }, [shouldRedirect]);
+
   const value: AuthApi = useMemo(
     () => ({
       getAccessToken,
@@ -103,6 +118,18 @@ function OidcAuthAdapter({ children }: { children: ReactNode }) {
     }),
     [getAccessToken, signIn, signOut, onUnauthenticated, sub, status],
   );
+
+  // While signing in (loading, redirecting, or about to redirect) the app
+  // shell must not mount — its queries would fire tokenless and 401. An
+  // OIDC error falls through to the shell, whose per-view error states are
+  // the existing surface for a broken session.
+  if (!oidc.isAuthenticated && !oidc.error) {
+    return (
+      <p role="status" className="text-sm text-grey">
+        Taking you to sign in…
+      </p>
+    );
+  }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
