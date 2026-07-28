@@ -188,11 +188,15 @@ automatic final snapshot):
 ```bash
 (cd infra && PATH="$PWD/.venv/bin:$PATH" npx cdk@2.1133.0 destroy \
    -c env_name=staging -c stage=all PaV3DatabaseStack)   # live cluster has no delete protection yet
-bash scripts/deploy.sh update        # recreates the cluster encrypted
+(cd infra && PATH="$PWD/.venv/bin:$PATH" npx cdk@2.1133.0 deploy \
+   -c env_name=staging -c stage=all --all --require-approval never)
+   # recreates the cluster encrypted; the app stack is a no-op here
 (cd infra && PATH="$PWD/.venv/bin:$PATH" npx cdk@2.1133.0 deploy \
    -c env_name=staging -c stage=all PaV3AppStack --force --require-approval never)
    # --force: the app stack template is unchanged, but it must re-resolve the
-   # recreated DB security-group ID from SSM (see the SSM-coupling caveat below)
+   # recreated DB security-group ID + secret name from SSM (SSM-coupling caveat
+   # below) BEFORE anything scales the API up — its Aurora ingress rule still
+   # points at the destroyed security group until this runs
 bash scripts/deploy.sh update        # migrate → scale → publish on the fresh DB
 ```
 
