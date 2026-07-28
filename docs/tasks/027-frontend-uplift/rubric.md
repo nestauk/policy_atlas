@@ -7,8 +7,9 @@ The task is **done only if every box holds** — otherwise it is in progress, no
        `pnpm e2e` (updated mock journey) and `make fe-api-smoke` pass; the pinned
        live check ran and is narrated in [verification.md](verification.md).
 3. [ ] No approval-gated change snuck in unapproved — the additive read-model list
-       matches what the plan 🛑 approved; no schema, auth, SSE-vocabulary, deps,
-       CI, or production-config changes beyond it.
+       matches what the plan 🛑 approved; schema = exactly the one transcript
+       migration; SSE additions = exactly the approved `artefact.*` set; no auth,
+       deps, CI, or production-config changes.
 4. [ ] No generated files (`src/api/gen/`, `openapi.json`) or secrets edited by hand.
 5. [ ] No tests deleted, skipped or weakened without written justification — the
        substrate test files (auth, sse, authMiddleware, reducer, scrub, feedback,
@@ -38,3 +39,12 @@ The task is **done only if every box holds** — otherwise it is in progress, no
 14. [ ] **Vocabulary:** archive (never delete) on landing; appraisal labels never
         numbers; tags grouped by asserter never merged; the publication-country
         caveat renders with that distribution.
+15. [ ] **Transcript durability:** a planning turn persists in the same
+        transaction as the turn; the thread survives navigation and an API
+        restart (live-check evidence); transcript endpoints are owner-scoped
+        (cross-owner → 404); migration up/down tested against a populated DB.
+16. [ ] **Streaming honesty:** artefact sections render only from durable
+        `artefact.*` events (replay after reconnect shows exactly the committed
+        sections — test evidence); the active section is marked as writing; the
+        annotations-attach-at-commit footer shows while streaming; streamed
+        prose passes through `scrub()`.
