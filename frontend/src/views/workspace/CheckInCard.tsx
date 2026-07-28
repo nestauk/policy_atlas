@@ -7,6 +7,7 @@ import type { CheckInOut, StageEntry } from "../../store/types";
 import { Button } from "../../ui/brand/Button";
 import { Card } from "../../ui/brand/Card";
 import { Chip } from "../../ui/brand/Chip";
+import { triggerCopy } from "./checkInPresentation";
 
 interface CompiledSteer {
   render: string;
@@ -131,12 +132,23 @@ export function CheckInCard({
     );
   }
 
+  const triggerLines = triggerCopy(checkIn.triggers);
+  const orchestratorSuggested = (checkIn.options ?? []).some((option) => option.suggested);
+
   return (
-    <Card aria-live="polite" className="border-l-2 border-l-orange p-5">
+    <Card aria-live="polite" className="anim-glow border-l-2 border-l-orange p-5">
+      {orchestratorSuggested && (
+        <p className="mb-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-grey">
+          Suggested by the orchestrator
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <Chip tone="yellow">Waiting on your input</Chip>
         {stageLabel !== null && <Chip tone="soft">{scrub(stageLabel)}</Chip>}
       </div>
+      {triggerLines.length > 0 && (
+        <p className="mt-2 text-[12px] leading-relaxed text-grey">{triggerLines.join(" ")}</p>
+      )}
       <pre className="mt-3 overflow-x-auto whitespace-pre-wrap border border-line bg-paper-2 p-3 font-sans text-[12.5px] leading-relaxed text-ink">
         {scrub(checkIn.render)}
       </pre>

@@ -18,17 +18,20 @@ export const queryKeys = {
     ["projects", projectId, "check-ins", status] as const,
   funnel: (projectId: string) => ["projects", projectId, "funnel"] as const,
   landscape: (projectId: string) => ["projects", projectId, "landscape"] as const,
-  evidence: (projectId: string, page?: number, pageSize?: number) =>
-    ["projects", projectId, "evidence", page, pageSize] as const,
-  findings: (projectId: string, page?: number, pageSize?: number) =>
-    ["projects", projectId, "findings", page, pageSize] as const,
+  evidence: (projectId: string, query?: EvidenceQuery) =>
+    ["projects", projectId, "evidence", query?.page, query?.page_size, query?.status, query?.cited] as const,
+  findings: (projectId: string, query?: FindingsQuery) =>
+    ["projects", projectId, "findings", query?.page, query?.page_size, query?.profile, query?.facet, query?.group, query?.group_id, query?.source_id] as const,
   decisions: (projectId: string, page?: number, pageSize?: number) =>
     ["projects", projectId, "decisions", page, pageSize] as const,
   planningTurns: (projectId: string, page?: number, pageSize?: number) =>
     ["projects", projectId, "planning-turns", page, pageSize] as const,
+  plan: (projectId: string) => ["projects", projectId, "plan"] as const,
   runs: (projectId: string, page?: number, pageSize?: number) =>
     ["projects", projectId, "runs", page, pageSize] as const,
   artefact: (projectId: string) => ["projects", projectId, "artefact"] as const,
+  sourceDossier: (projectId: string, sourceId: string) =>
+    ["projects", projectId, "source-dossier", sourceId] as const,
 };
 
 /** Shared shape for the paginated read models (`evidence`, `findings`,
@@ -37,6 +40,31 @@ export const queryKeys = {
 interface PageQuery {
   page?: number;
   page_size?: number;
+}
+
+type EvidenceStatusFilter =
+  | "found"
+  | "screened_out"
+  | "relevant"
+  | "not_selected"
+  | "selected"
+  | "read_in_full"
+  | "findings_extracted"
+  | "cited"
+  | "unavailable"
+  | "Included";
+
+export interface EvidenceQuery extends PageQuery {
+  status?: EvidenceStatusFilter[];
+  cited?: boolean;
+}
+
+export interface FindingsQuery extends PageQuery {
+  profile?: "iof" | "icf";
+  facet?: string;
+  group?: string;
+  group_id?: string;
+  source_id?: string;
 }
 
 /** One authed `openapi-fetch` client per active `AuthApi` identity. */
@@ -142,10 +170,10 @@ export function useLandscape(projectId: string) {
 
 /** `GET /api/v1/projects/{project_id}/evidence` — paginated source list
  *  with the status ladder. */
-export function useEvidence(projectId: string, query?: PageQuery) {
+export function useEvidence(projectId: string, query?: EvidenceQuery) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.evidence(projectId, query?.page, query?.page_size),
+    queryKey: queryKeys.evidence(projectId, query),
     queryFn: async () => {
       const { data, error } = await client.GET("/api/v1/projects/{project_id}/evidence", {
         params: { path: { project_id: projectId }, query },
@@ -159,10 +187,10 @@ export function useEvidence(projectId: string, query?: PageQuery) {
 
 /** `GET /api/v1/projects/{project_id}/findings` — paginated IOF/ICF
  *  findings. */
-export function useFindings(projectId: string, query?: PageQuery) {
+export function useFindings(projectId: string, query?: FindingsQuery) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.findings(projectId, query?.page, query?.page_size),
+    queryKey: queryKeys.findings(projectId, query),
     queryFn: async () => {
       const { data, error } = await client.GET("/api/v1/projects/{project_id}/findings", {
         params: { path: { project_id: projectId }, query },
@@ -171,6 +199,25 @@ export function useFindings(projectId: string, query?: PageQuery) {
       return data;
     },
     enabled: Boolean(projectId),
+  });
+}
+
+/** `GET /api/v1/projects/{project_id}/sources/{source_id}` — one source's
+ * provenance, latest citations and dossier detail. */
+export function useSourceDossier(projectId: string, sourceId: string | null) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.sourceDossier(projectId, sourceId ?? ""),
+    queryFn: async () => {
+      if (!sourceId) return undefined;
+      const { data, error } = await client.GET(
+        "/api/v1/projects/{project_id}/sources/{source_id}",
+        { params: { path: { project_id: projectId, source_id: sourceId } } },
+      );
+      if (error) throw error;
+      return data;
+    },
+    enabled: Boolean(projectId && sourceId),
   });
 }
 
@@ -203,6 +250,25 @@ export function usePlanningTurns(projectId: string, query?: PageQuery) {
       });
       if (error) throw error;
       return data;
+    },
+    enabled: Boolean(projectId),
+  });
+}
+
+/** `GET .../plan` — the approved plan or the latest durable draft. A 404 is a
+ * normal pre-conversation state and resolves to `null`, never an error. */
+export function usePlan(projectId: string) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.plan(projectId),
+    queryFn: async () => {
+      const { data, error, response } = await client.GET(
+        "/api/v1/projects/{project_id}/plan",
+        { params: { path: { project_id: projectId } } },
+      );
+      if (response.status === 404) return null;
+      if (error) throw error;
+      return data ?? null;
     },
     enabled: Boolean(projectId),
   });

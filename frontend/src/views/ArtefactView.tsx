@@ -2,19 +2,22 @@ import { useMemo } from "react";
 import { useParams, useSearchParams } from "react-router";
 
 import type { components } from "../api/gen/types";
-import { useApiClient, useArtefact, useCoverage, useEvidence } from "../api/queries";
+import { useApiClient, useArtefact, useCoverage, useEvidence, useFindings, useSourceDossier } from "../api/queries";
 import { useQuery } from "@tanstack/react-query";
 import { errorCode } from "../lib/errors";
-import { safeHref } from "../lib/safeHref";
 import { scrub } from "../lib/scrub";
+import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
+import type { LiveSection, RunStreamState } from "../store";
 import { Card } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { Tooltip } from "../ui/radix/Tooltip";
+import { SourceDossierBody } from "./SourcesView";
 
 type CitationOut = components["schemas"]["CitationOut"];
+type GapOut = components["schemas"]["GapOut"];
 
 // Structural view of the artefact's blocks/claims: the generated schema
 // renders `span` as `number[]` in the inlined response type, so the view
@@ -25,11 +28,112 @@ interface ClaimLike {
   text: string;
   span?: number[] | null;
   citations?: CitationOut[];
+  gap?: GapOut | null;
+  weakly_grounded?: boolean | null;
 }
 interface BlockLike {
   block_id: string;
   prose: string;
   claims?: ClaimLike[];
+}
+interface SectionLike {
+  title: string;
+  role?: "key_findings" | "standard" | "conclusions";
+  focus?: string | null;
+  blocks?: BlockLike[];
+}
+
+/* --- typed annotation vocabulary (strand 5): claim breadth beyond
+   citation/gap — reasoning · pattern/theme · source-check, styled per type
+   with inline chips. Unknown types render as plain prose (honest absence). */
+
+const SPAN_STYLE: Partial<Record<ClaimLike["claim_type"], string>> = {
+  citation: "border-b border-dotted border-line-2",
+  gap: "border-b border-dashed border-orange",
+  reasoning: "border-b border-dashed border-line-2",
+  pattern: "border-b border-dotted border-violet",
+  theme: "border-b border-dotted border-violet",
+  unspanned_assertion: "border-b border-dotted border-orange",
+};
+
+const TYPE_LABEL: Partial<Record<ClaimLike["claim_type"], string>> = {
+  gap: "gap",
+  reasoning: "reasoning",
+  pattern: "pattern",
+  theme: "theme",
+  unspanned_assertion: "source check",
+};
+
+const TYPE_HINT: Partial<Record<ClaimLike["claim_type"], string>> = {
+  gap: "This is a recorded evidence gap: the analysis looked and found the base thin here. Gaps are part of the answer, never glossed over.",
+  reasoning: "Reasoning from the evidence — not a quoted source.",
+  pattern: "A computed pattern across the evidence.",
+  theme: "The clustering's reading of the corpus.",
+  unspanned_assertion: "A source-check flag from the grounding review.",
+};
+
+/**
+ * Present sections key-findings-first with conclusions last (strand 5). The
+ * server's block order within a section is preserved untouched.
+ */
+export function orderSections<T extends SectionLike>(sections: T[]): T[] {
+  const rank = (section: T) =>
+    section.role === "key_findings" ? 0 : section.role === "conclusions" ? 2 : 1;
+  return [...sections].sort((a, b) => rank(a) - rank(b));
+}
+
+type HighlightParts =
+  | { kind: "highlight"; before: string; match: string; after: string }
+  | { kind: "degrade"; quote: string; text: string };
+
+/**
+ * Locate `quote` inside `text` for highlighting: exact match first, then a
+ * whitespace-normalised remap, then the honest degrade (quote shown above
+ * the unhighlighted text) — never a broken panel (strand 5).
+ */
+export function highlightParts(text: string, quote: string): HighlightParts {
+  let start = text.indexOf(quote);
+  let end = start + quote.length;
+  if (start < 0 && quote.trim().length > 0) {
+    const squash = (value: string) => value.replace(/\s+/g, " ");
+    const index = squash(text).indexOf(squash(quote));
+    if (index >= 0) {
+      let raw = 0;
+      let squashed = 0;
+      while (squashed < index && raw < text.length) {
+        raw += 1;
+        squashed = squash(text.slice(0, raw)).length;
+      }
+      start = raw;
+      end = Math.min(start + quote.length + 20, text.length);
+    }
+  }
+  if (start < 0) return { kind: "degrade", quote, text };
+  return {
+    kind: "highlight",
+    before: text.slice(0, start),
+    match: text.slice(start, end),
+    after: text.slice(end),
+  };
+}
+
+function HighlightedContext({ text, quote }: { text: string; quote: string }) {
+  const parts = highlightParts(text, quote);
+  if (parts.kind === "degrade") {
+    return (
+      <>
+        <span className="mb-1 block italic text-grey">“{scrub(parts.quote)}”</span>
+        {scrub(parts.text)}
+      </>
+    );
+  }
+  return (
+    <>
+      {scrub(parts.before)}
+      <mark className="bg-yellow-tint font-medium text-navy">{scrub(parts.match)}</mark>
+      {scrub(parts.after)}
+    </>
+  );
 }
 
 /** Fetch one citation's clamped chunk context on demand (the click rung). */
@@ -72,11 +176,7 @@ function CitationMarker({
         </PopoverTrigger>
       </Tooltip>
       <PopoverContent>
-        <CitationDetail
-          projectId={projectId}
-          citation={citation}
-          onOpenDossier={onOpenDossier}
-        />
+        <CitationDetail projectId={projectId} citation={citation} onOpenDossier={onOpenDossier} />
       </PopoverContent>
     </Popover>
   );
@@ -92,9 +192,15 @@ function CitationDetail({
   onOpenDossier: (title: string) => void;
 }) {
   const context = useChunkContext(projectId, citation.citation_id);
+  const meta = [context.data?.year, context.data?.venue].filter(
+    (value): value is string | number => value !== null && value !== undefined && value !== "",
+  );
   return (
     <div>
       <p className="text-[12.5px] font-bold text-navy">{scrub(citation.source_title)}</p>
+      {meta.length > 0 && (
+        <p className="mt-0.5 text-[11.5px] text-grey">{meta.map((m) => scrub(String(m))).join(" · ")}</p>
+      )}
       <div className="mt-1.5 flex flex-wrap gap-1.5">
         {citation.grounding_tier !== null && citation.grounding_tier !== undefined && (
           <Chip tone="soft">{scrub(citation.grounding_tier)}</Chip>
@@ -103,28 +209,28 @@ function CitationDetail({
           <Chip tone="soft">{scrub(citation.appraisal_label)}</Chip>
         )}
       </div>
-      <blockquote className="mt-2 border-l-2 border-l-blue bg-blue-tint-2 px-3 py-2 text-[12.5px] italic leading-relaxed text-ink">
-        “{scrub(citation.quote)}”
-      </blockquote>
       {context.isPending && (
         <p role="status" className="mt-2 animate-pulse text-[11.5px] text-grey">
           Loading surrounding context…
         </p>
       )}
       {context.data !== undefined && (
-        <details className="mt-2">
-          <summary className="cursor-pointer text-[11.5px] font-semibold text-blue">
-            In its surrounding context{context.data.clamped ? " (excerpt)" : ""}
-          </summary>
-          <p className="mt-1.5 max-h-52 overflow-y-auto whitespace-pre-wrap text-[11.5px] leading-relaxed text-grey">
-            {scrub(context.data.context)}
+        <div className="mt-2 max-h-60 space-y-1.5 overflow-y-auto text-[11.5px] leading-relaxed">
+          {typeof context.data.previous === "string" && context.data.previous !== "" && (
+            <p className="text-grey">{scrub(context.data.previous)}</p>
+          )}
+          <p className="text-navy">
+            <HighlightedContext text={context.data.context} quote={citation.quote} />
           </p>
-        </details>
+          {typeof context.data.next === "string" && context.data.next !== "" && (
+            <p className="text-grey">{scrub(context.data.next)}</p>
+          )}
+        </div>
       )}
       {context.isError && (
-        <p className="mt-2 text-[11.5px] text-grey">
-          The source passage couldn't be anchored for a wider excerpt.
-        </p>
+        <blockquote className="mt-2 border-l-2 border-l-blue bg-blue-tint-2 px-3 py-2 text-[12.5px] italic leading-relaxed text-ink">
+          “{scrub(citation.quote)}”
+        </blockquote>
       )}
       <button
         type="button"
@@ -137,11 +243,111 @@ function CitationDetail({
   );
 }
 
+/** The type-specific explainer callout a typed (non-citation) claim opens. */
+function ClaimExplainer({
+  projectId,
+  claim,
+  onOpenDossier,
+}: {
+  projectId: string;
+  claim: ClaimLike;
+  onOpenDossier: (title: string) => void;
+}) {
+  const hint = TYPE_HINT[claim.claim_type];
+  const gap = claim.gap ?? null;
+  return (
+    <div className="space-y-2.5">
+      <p className="border-l-2 border-l-blue pl-2.5 text-[12.5px] font-medium leading-snug text-navy">
+        {scrub(claim.text)}
+      </p>
+      {claim.claim_type === "gap" && (
+        <div className="border-l-2 border-l-yellow bg-yellow-tint px-3 py-2 text-[12px] leading-relaxed text-navy">
+          <p>{TYPE_HINT.gap}</p>
+          {gap !== null && (
+            <p className="mt-1.5 text-[11.5px] text-grey">
+              {[
+                typeof gap.grade === "string" ? `Graded ${scrub(gap.grade)}` : null,
+                typeof gap.caveat?.search_space === "string" ? scrub(gap.caveat.search_space) : null,
+                typeof gap.caveat?.adequacy_verdict === "string"
+                  ? scrub(gap.caveat.adequacy_verdict)
+                  : null,
+              ]
+                .filter((part): part is string => part !== null)
+                .join(" · ")}
+            </p>
+          )}
+        </div>
+      )}
+      {claim.claim_type === "unspanned_assertion" && (
+        <p className="border-l-2 border-l-orange bg-orange-tint px-3 py-2 text-[12px] text-navy">
+          {TYPE_HINT.unspanned_assertion}
+        </p>
+      )}
+      {claim.claim_type !== "gap" &&
+        claim.claim_type !== "unspanned_assertion" &&
+        hint !== undefined && <p className="text-[12px] text-grey">{hint}</p>}
+      {claim.weakly_grounded === true && (
+        <p className="border-l-2 border-l-orange bg-orange-tint px-3 py-2 text-[12px] text-navy">
+          The grounding review could not fully verify this claim against its source — read it
+          with that in mind.
+        </p>
+      )}
+      {(claim.citations ?? []).map((citation) => (
+        <CitationDetail
+          key={citation.citation_id}
+          projectId={projectId}
+          citation={citation}
+          onOpenDossier={onOpenDossier}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** A typed claim span: tooltip hint on hover, explainer popover on click. */
+function TypedClaimSpan({
+  projectId,
+  claim,
+  text,
+  onOpenDossier,
+}: {
+  projectId: string;
+  claim: ClaimLike;
+  text: string;
+  onOpenDossier: (title: string) => void;
+}) {
+  const label = claim.weakly_grounded === true ? "source check" : TYPE_LABEL[claim.claim_type];
+  return (
+    <span>
+      <Popover>
+        <Tooltip
+          content={<span className="text-xs">{TYPE_HINT[claim.claim_type] ?? "Claim"}</span>}
+        >
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={`cursor-pointer text-left align-baseline text-inherit ${SPAN_STYLE[claim.claim_type] ?? ""} hover:bg-ground focus-visible:outline-2 focus-visible:outline-blue`}
+            >
+              {scrub(text)}
+            </button>
+          </PopoverTrigger>
+        </Tooltip>
+        <PopoverContent>
+          <ClaimExplainer projectId={projectId} claim={claim} onOpenDossier={onOpenDossier} />
+        </PopoverContent>
+      </Popover>
+      {label !== undefined && (
+        <Chip tone={claim.claim_type === "gap" ? "yellow" : "soft"}>{label}</Chip>
+      )}
+    </span>
+  );
+}
+
 /**
  * Render a block's prose with its annotation layer IN the text: span-anchored
- * claims wrap their exact prose span; citation claims carry [n] markers; gap
- * claims get the gap chip. No callout cards, no per-block detail footer
- * (RETRO §2.5, ADR 0015).
+ * claims wrap their exact prose span (overlapping/oversize spans are skipped
+ * honestly — flag, don't mis-render); citation claims carry [n] markers;
+ * typed claims get their style + chip and open the explainer.
  */
 function AnnotatedProse({
   projectId,
@@ -160,7 +366,8 @@ function AnnotatedProse({
           claim.span !== null &&
           claim.span !== undefined &&
           claim.span[0] >= 0 &&
-          claim.span.length === 2 && claim.span[1] <= prose.length &&
+          claim.span.length === 2 &&
+          claim.span[1] <= prose.length &&
           claim.span[0] < claim.span[1],
       )
       .sort((a, b) => a.span[0] - b.span[0]);
@@ -192,41 +399,40 @@ function AnnotatedProse({
             return <span key={index}>{scrub(segment.text)}</span>;
           }
           const { claim } = segment;
-          if (claim.claim_type === "gap") {
+          if (claim.claim_type === "citation" && claim.weakly_grounded !== true) {
             return (
-              <span key={index}>
-                <span className="border-b border-dashed border-orange">
-                  {scrub(segment.text)}
-                </span>{" "}
-                <Chip tone="yellow">Evidence gap</Chip>
+              <span key={index} className={SPAN_STYLE.citation}>
+                {scrub(segment.text)}
+                {(claim.citations ?? []).map((citation) => (
+                  <CitationMarker
+                    key={citation.citation_id}
+                    projectId={projectId}
+                    citation={citation}
+                    onOpenDossier={onOpenDossier}
+                  />
+                ))}
               </span>
             );
           }
           return (
-            <span
+            <TypedClaimSpan
               key={index}
-              className={
-                claim.claim_type === "citation"
-                  ? "border-b border-dotted border-line-2"
-                  : undefined
-              }
-            >
-              {scrub(segment.text)}
-              {(claim.citations ?? []).map((citation) => (
-                <CitationMarker
-                  key={citation.citation_id}
-                  projectId={projectId}
-                  citation={citation}
-                  onOpenDossier={onOpenDossier}
-                />
-              ))}
-            </span>
+              projectId={projectId}
+              claim={claim}
+              text={segment.text}
+              onOpenDossier={onOpenDossier}
+            />
           );
         })}
       </p>
       {unspanned.map((claim) => (
         <p key={claim.claim_id} className="mt-2 text-[12.5px] text-grey">
           {scrub(claim.text)}
+          {claim.claim_type !== "citation" && TYPE_LABEL[claim.claim_type] !== undefined && (
+            <Chip tone={claim.claim_type === "gap" ? "yellow" : "soft"}>
+              {TYPE_LABEL[claim.claim_type]}
+            </Chip>
+          )}
           {(claim.citations ?? []).map((citation) => (
             <CitationMarker
               key={citation.citation_id}
@@ -252,6 +458,8 @@ function SourceDossier({
 }) {
   const evidence = useEvidence(projectId, { page_size: 200 });
   const source = evidence.data?.data.find((item) => item.title === sourceTitle);
+  const dossier = useSourceDossier(projectId, source?.source_id ?? null);
+  const findings = useFindings(projectId, source ? { page_size: 200, source_id: source.source_id } : undefined);
   return (
     <Sheet
       open
@@ -265,71 +473,87 @@ function SourceDossier({
             Loading the dossier…
           </p>
         )}
-        {source !== undefined && (
-          <dl className="space-y-3 text-[12.5px]">
-            <div className="flex flex-wrap gap-1.5">
-              <Chip tone="blue">{source.status.replaceAll("_", " ")}</Chip>
-              {source.appraisal_tier !== null && source.appraisal_tier !== undefined && (
-                <Chip tone="soft">{scrub(source.appraisal_tier)}</Chip>
-              )}
-              {source.cited && <Chip tone="green">Cited</Chip>}
-            </div>
-            {(
-              [
-                ["Year", source.year],
-                ["Published in", source.venue],
-                ["Origin", source.origin],
-                ["Evidence type", source.evidence_type],
-              ] as const
-            )
-              .filter(([, value]) => value !== null && value !== undefined)
-              .map(([label, value]) => (
-                <div key={label}>
-                  <dt className="font-semibold text-grey">{label}</dt>
-                  <dd className="mt-0.5 text-ink">{scrub(String(value))}</dd>
-                </div>
-              ))}
-            {source.status_reason !== null && source.status_reason !== undefined && (
-              <div>
-                <dt className="font-semibold text-grey">Status detail</dt>
-                <dd className="mt-0.5 text-ink">{scrub(source.status_reason)}</dd>
-              </div>
-            )}
-            {source.url !== null && source.url !== undefined && (
-              <div>
-                <dt className="font-semibold text-grey">Link</dt>
-                <dd className="mt-0.5 break-all">
-                  {(() => {
-                    const href = safeHref(source.url);
-                    return href !== undefined ? (
-                      <a href={href} target="_blank" rel="noreferrer">
-                        {scrub(href)}
-                      </a>
-                    ) : (
-                      <span>{scrub(source.url)}</span>
-                    );
-                  })()}
-                </dd>
-              </div>
-            )}
-          </dl>
-        )}
+        {dossier.isPending && <p role="status" className="animate-pulse text-[12.5px] text-grey">Loading the dossier…</p>}
+        {dossier.isError && <p role="alert" className="text-[12.5px] text-navy">This source dossier couldn't be loaded.</p>}
+        {dossier.data && <SourceDossierBody source={dossier.data} findings={findings.data?.data} findingsPending={findings.isPending} />}
         {evidence.data !== undefined && source === undefined && (
-          <p className="text-[12.5px] text-grey">
-            This source isn't in the evidence list yet.
-          </p>
+          <p className="text-[12.5px] text-grey">This source isn't in the evidence list yet.</p>
         )}
       </SheetContent>
     </Sheet>
   );
 }
 
-/** The evidence base: annotated prose, citation ladder, shared dossier.
- *  The dossier is URL-addressable (?source=…) — deep-linkable, refresh-safe. */
+/**
+ * The artefact-in-progress (strand 13): all planned section headings with
+ * focus placeholders, "Writing this section now…" on the active one, prose
+ * filling in place as each completes — whole-section grain. If the run ends
+ * badly with sections already streamed, they stay visible under an explicit
+ * terminal banner: drafted sections, not the evidence base.
+ */
+export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
+  const sections = Object.values(stream.liveSections).sort((a, b) => a.index - b.index);
+  const terminalPartial = hasTerminalPartialLiveArtefact(stream);
+  const visible = sections.filter(
+    (section: LiveSection) => !(section.state === "filled" && (section.prose ?? "") === ""),
+  );
+  return (
+    <main className="anim-rise mx-auto my-8 max-w-[780px] bg-paper px-10 py-9 shadow-sm ring-1 ring-line">
+      {terminalPartial ? (
+        <div
+          role="alert"
+          className="border-l-[3px] border-l-red bg-red-tint px-3.5 py-2.5 text-[12.5px] leading-relaxed text-navy"
+        >
+          <p className="font-bold">This run ended before the write-up completed.</p>
+          <p className="mt-0.5">
+            The sections below are drafted text from the interrupted run — not the checked
+            evidence base. Citations were never attached. Start a fresh run to produce the full
+            artefact.
+          </p>
+        </div>
+      ) : (
+        <p role="status" className="flex items-center gap-2 text-[12.5px] text-grey">
+          <span aria-hidden="true" className="anim-breathe inline-block h-2 w-2 bg-blue" />
+          Being written now — sections appear as they are drafted
+        </p>
+      )}
+      {visible.map((section) => (
+        <section key={section.index} className="mt-9">
+          <h2 className="font-display text-lg font-bold text-navy">{scrub(section.title)}</h2>
+          {section.state === "filled" && (section.prose ?? "") !== "" ? (
+            <p className="anim-rise mt-2 whitespace-pre-line text-[14px] leading-[1.75] text-ink">
+              {scrub(section.prose ?? "")}
+            </p>
+          ) : section.state === "writing" && !terminalPartial ? (
+            <p role="status" className="anim-breathe mt-2 text-[13px] text-grey">
+              Writing this section now…
+            </p>
+          ) : (
+            <p className="mt-2 text-[13px] italic text-grey">
+              {section.focus !== "" ? scrub(section.focus) : "Waiting to be written."}
+            </p>
+          )}
+        </section>
+      ))}
+      {!terminalPartial && (
+        <p className="mt-10 border-t border-line pt-4 text-[12px] text-grey">
+          Citations and source provenance are attached when the write-up completes and is
+          checked.
+        </p>
+      )}
+    </main>
+  );
+}
+
+/** The evidence base: A4 page frame, coverage snapshot, key-findings-first
+ *  ordering, typed annotated prose, citation ladder, shared dossier
+ *  (?source=… — deep-linkable, refresh-safe), and the live streaming state
+ *  while synthesis writes. */
 export function ArtefactView() {
   const { projectId = "" } = useParams();
   const artefact = useArtefact(projectId);
   const coverage = useCoverage(projectId);
+  const stream = useRunStream(projectId);
   const [searchParams, setSearchParams] = useSearchParams();
   const dossierSource = searchParams.get("source");
 
@@ -383,12 +607,15 @@ export function ArtefactView() {
   }
 
   if (artefact.isError || artefact.data === undefined) {
+    // No committed artefact: show the in-progress skeleton when sections are
+    // streaming (or streamed before a bad ending) — otherwise the empty state.
+    if (Object.keys(stream.liveSections).length > 0) {
+      return <LiveArtefactBody stream={stream} />;
+    }
     return (
       <main className="mx-auto max-w-3xl px-6 py-10">
         <Card role="status" className="p-8 text-center">
-          <h1 className="font-display text-lg font-bold text-navy">
-            No evidence base yet
-          </h1>
+          <h1 className="font-display text-lg font-bold text-navy">No evidence base yet</h1>
           <p className="mt-1.5 text-[13px] text-grey">
             The evidence base appears here once an analysis reaches synthesis.
           </p>
@@ -398,14 +625,57 @@ export function ArtefactView() {
   }
 
   const data = artefact.data;
+  // A fresh run re-writing the artefact supersedes the committed page while
+  // it streams (the reducer clears sections when a different run starts).
+  if (stream.run?.status === "running" && Object.keys(stream.liveSections).length > 0) {
+    return <LiveArtefactBody stream={stream} />;
+  }
+
+  const snapshot = data.coverage_snapshot;
+  const studyTypes = Object.entries(snapshot?.study_types ?? {}).sort(([, a], [, b]) => b - a);
+  const shownTypes = studyTypes.slice(0, 3);
+  const sections = orderSections((data.sections ?? []) as SectionLike[]);
+
+  const snapshotCells: Array<[string, string]> = [];
+  if (typeof snapshot?.source_count === "number" && typeof snapshot?.included === "number") {
+    // Transcription trap 3: `source_count` is the cited/reference count —
+    // never "found".
+    snapshotCells.push(["Sources", `${snapshot.source_count} cited · ${snapshot.included} included`]);
+  }
+  if (shownTypes.length > 0) {
+    snapshotCells.push([
+      "Study types",
+      shownTypes.map(([key, count]) => `${count} ${key.toLowerCase()}`).join(" · ") +
+        (studyTypes.length > 3 ? ` · +${studyTypes.length - 3} more` : ""),
+    ]);
+  }
+  if (snapshot?.year_range !== null && snapshot?.year_range !== undefined) {
+    snapshotCells.push(["Years", `${snapshot.year_range[0]}–${snapshot.year_range[1]}`]);
+  }
+  if (typeof snapshot?.screened_out === "number") {
+    snapshotCells.push(["Screened out", `${snapshot.screened_out} — all listed with reasons`]);
+  }
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
+    <main className="anim-rise mx-auto my-8 max-w-[780px] bg-paper px-10 py-9 shadow-sm ring-1 ring-line">
       <header className="mb-8">
-        <h1 className="font-display text-[28px] font-extrabold leading-tight tracking-[-0.5px] text-navy">
+        <p className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-grey">
+          Evidence base
+        </p>
+        <h1 className="mt-1 font-display text-[26px] font-extrabold leading-tight tracking-[-0.5px] text-navy">
           {scrub(data.title)}
         </h1>
         <p className="mt-2 text-[13.5px] text-grey">{scrub(data.question)}</p>
+        {snapshotCells.length > 0 && (
+          <div className="mt-5 grid grid-cols-2 border border-line sm:grid-cols-4">
+            {snapshotCells.map(([label, value]) => (
+              <div key={label} className="border-r border-line p-3 last:border-r-0">
+                <p className="text-[10.5px] font-bold uppercase tracking-wider text-grey">{label}</p>
+                <p className="mt-1 text-[12.5px] font-medium leading-snug text-navy">{value}</p>
+              </div>
+            ))}
+          </div>
+        )}
         {coverage.data !== undefined && (
           <p className="mt-3 border-l-2 border-l-blue bg-blue-tint-2 px-3 py-2 text-[12.5px] leading-relaxed text-navy">
             {scrub(coverage.data.sentence)}
@@ -413,11 +683,12 @@ export function ArtefactView() {
         )}
       </header>
 
-      {(data.sections ?? []).map((section, index) => (
-        <section key={index} className="mb-9">
-          <h2 className="mb-3 font-display text-lg font-bold text-navy">
-            {scrub(section.title)}
-          </h2>
+      {sections.map((section, index) => (
+        <section
+          key={index}
+          className={section.role === "conclusions" ? "mb-9 border-t border-line pt-6" : "mb-9"}
+        >
+          <h2 className="mb-3 font-display text-lg font-bold text-navy">{scrub(section.title)}</h2>
           <div className="space-y-4">
             {(section.blocks ?? []).map((block) => (
               <AnnotatedProse
@@ -460,11 +731,7 @@ export function ArtefactView() {
       )}
 
       {dossierSource !== null && (
-        <SourceDossier
-          projectId={projectId}
-          sourceTitle={dossierSource}
-          onClose={closeDossier}
-        />
+        <SourceDossier projectId={projectId} sourceTitle={dossierSource} onClose={closeDossier} />
       )}
     </main>
   );

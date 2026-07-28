@@ -10,6 +10,7 @@ import {
   mockFunnel,
   mockLandscape,
   mockProject,
+  mockSourceDossiers,
   MOCK_CHECK_IN_ID,
   MOCK_PROJECT_ID,
   MOCK_RUN_ID,
@@ -55,8 +56,25 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}`)) return json(mockProject);
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/funnel`)) return json(mockFunnel);
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/landscape`)) return json(mockLandscape);
-  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/evidence`)) return json(page(mockEvidence));
-  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/findings`)) return json(page(mockFindings));
+  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/evidence`)) {
+    const statuses = url.searchParams.getAll("status");
+    const cited = url.searchParams.get("cited");
+    const rows = mockEvidence.filter((item) => {
+      const included = ["relevant", "not_selected", "selected", "read_in_full", "findings_extracted", "cited", "unavailable"];
+      const statusMatches = statuses.length === 0 || statuses.some((status) => status === item.status || (status === "Included" && included.includes(item.status)));
+      return statusMatches && (cited !== "true" || item.cited);
+    });
+    return json(page(rows));
+  }
+  if (method === "GET" && path.includes(`/api/v1/projects/${MOCK_PROJECT_ID}/sources/`)) {
+    const sourceId = path.split("/").at(-1) ?? "";
+    const source = mockSourceDossiers[sourceId];
+    return source ? json(source) : json({ detail: "resource not found" }, 404);
+  }
+  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/findings`)) {
+    const sourceId = url.searchParams.get("source_id");
+    return json(page(sourceId ? mockFindings.filter((finding) => finding.source_id === sourceId) : mockFindings));
+  }
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/decisions`)) return json(page(mockDecisions));
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/artefact`)) return json(mockArtefact);
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/coverage`)) return json(mockCoverage);

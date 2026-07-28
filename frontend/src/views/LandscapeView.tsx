@@ -16,6 +16,31 @@ const FUNNEL_ORDER = [
   ["cited", "Cited"],
 ] as const;
 
+const CHART_TOKENS = {
+  grid: "var(--color-line)",
+  text: "var(--color-grey)",
+  navy: "var(--color-navy)",
+  blue: "var(--color-blue)",
+} as const;
+
+const COUNTRY_ALIASES: Record<string, string> = {
+  GB: "United Kingdom",
+  UK: "United Kingdom",
+  "UNITED KINGDOM": "United Kingdom",
+  US: "United States",
+  USA: "United States",
+  "UNITED STATES": "United States",
+};
+
+/** Normalise mixed ISO and name geography inputs before chart labels render. */
+export function normaliseGeographies(data: Record<string, number>): Record<string, number> {
+  return Object.entries(data).reduce<Record<string, number>>((normalised, [rawLabel, count]) => {
+    const key = rawLabel.trim().toUpperCase();
+    const label = COUNTRY_ALIASES[key] ?? rawLabel.trim();
+    return { ...normalised, [label]: (normalised[label] ?? 0) + count };
+  }, {});
+}
+
 function DistributionChart({
   title,
   data,
@@ -24,7 +49,7 @@ function DistributionChart({
   data: Record<string, number>;
 }) {
   const rows = Object.entries(data)
-    .map(([label, count]) => ({ label, count }))
+    .map(([label, count]) => ({ label: scrub(label), count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 12);
   if (rows.length === 0) return null;
@@ -35,15 +60,15 @@ function DistributionChart({
       <div className="h-64 p-4">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={rows} layout="vertical" margin={{ left: 8, right: 24 }}>
-            <CartesianGrid horizontal={false} stroke="#e4e4e7" />
-            <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: "#646363" }} />
+            <CartesianGrid horizontal={false} stroke={CHART_TOKENS.grid} />
+            <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: CHART_TOKENS.text }} />
             <YAxis
               type="category"
               dataKey="label"
               width={150}
-              tick={{ fontSize: 11, fill: "#0f294a" }}
+              tick={{ fontSize: 11, fill: CHART_TOKENS.navy }}
             />
-            <Bar dataKey="count" fill="#0000FF" isAnimationActive={false} barSize={14} />
+            <Bar dataKey="count" fill={CHART_TOKENS.blue} isAnimationActive={false} barSize={14} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -105,19 +130,19 @@ export function LandscapeView() {
             <div className="h-64 p-4">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={funnelRows} layout="vertical" margin={{ left: 8, right: 24 }}>
-                  <CartesianGrid horizontal={false} stroke="#e4e4e7" />
+                  <CartesianGrid horizontal={false} stroke={CHART_TOKENS.grid} />
                   <XAxis
                     type="number"
                     allowDecimals={false}
-                    tick={{ fontSize: 11, fill: "#646363" }}
+                    tick={{ fontSize: 11, fill: CHART_TOKENS.text }}
                   />
                   <YAxis
                     type="category"
                     dataKey="label"
                     width={120}
-                    tick={{ fontSize: 11, fill: "#0f294a" }}
+                    tick={{ fontSize: 11, fill: CHART_TOKENS.navy }}
                   />
-                  <Bar dataKey="count" fill="#0F294A" isAnimationActive={false} barSize={14} />
+                  <Bar dataKey="count" fill={CHART_TOKENS.navy} isAnimationActive={false} barSize={14} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -137,10 +162,8 @@ export function LandscapeView() {
           landscape.data?.geographies !== undefined &&
           Object.keys(landscape.data.geographies).length > 0 && (
             <div className="lg:col-span-2">
-              <DistributionChart
-                title="Where published (not where conducted)"
-                data={landscape.data.geographies ?? {}}
-              />
+              <DistributionChart title="Where sources were published" data={normaliseGeographies(landscape.data.geographies ?? {})} />
+              <p className="mt-2 text-[11.5px] text-grey">Where sources were published, not where the studies were conducted.</p>
             </div>
           )}
       </div>

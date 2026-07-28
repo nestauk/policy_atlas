@@ -42,8 +42,8 @@ export const mockLandscape: components["schemas"]["LandscapeOut"] = {
 
 export const mockEvidence: components["schemas"]["EvidenceItemOut"][] = [
   { source_id: "10000000-0000-4000-8000-000000000001", title: "Childhood obesity prevention in urban primary schools", year: 2024, venue: "Public Health Nutrition", origin: "OpenAlex", status: "found", cited: false },
-  { source_id: "10000000-0000-4000-8000-000000000002", title: "Borough food strategy consultation", year: 2023, venue: "Tower Hamlets Council", origin: "Overton", status: "screened_out", status_reason: "Not an evaluative source", cited: false },
-  { source_id: "10000000-0000-4000-8000-000000000003", title: "Universal breakfast clubs and diet quality", year: 2022, venue: "BMJ Open", origin: "OpenAlex", status: "relevant", evidence_type: "Cohort study", cited: false },
+  { source_id: "10000000-0000-4000-8000-000000000002", title: "Borough food strategy consultation", year: 2023, venue: "Tower Hamlets Council", origin: "Overton", status: "screened_out", screen_status: "excluded_retracted", screen_confidence: 1, status_reason: "The record was retracted", cited: false },
+  { source_id: "10000000-0000-4000-8000-000000000003", title: "Universal breakfast clubs and diet quality", year: 2022, venue: "BMJ Open", origin: "OpenAlex", status: "relevant", evidence_type: "Cohort study", appraisal_tier: "Moderate confidence", screen_confidence: 0.91, screen_basis: "title_abstract", screen_stage: 2, url: "https://example.org/universal-breakfast", cited: false },
   { source_id: "10000000-0000-4000-8000-000000000004", title: "Healthy High Streets programme review", year: 2023, venue: "London Assembly", origin: "Overton", status: "not_selected", status_reason: "Lower transferability", cited: false },
   { source_id: "10000000-0000-4000-8000-000000000005", title: "School meals and child weight outcomes", year: 2021, venue: "The Lancet Child & Adolescent Health", origin: "OpenAlex", status: "selected", evidence_type: "Systematic review", cited: false },
   { source_id: "10000000-0000-4000-8000-000000000006", title: "Neighbourhood food access and family choices", year: 2020, venue: "Health & Place", origin: "OpenAlex", status: "read_in_full", evidence_type: "Qualitative study", cited: false },
@@ -51,6 +51,26 @@ export const mockEvidence: components["schemas"]["EvidenceItemOut"][] = [
   { source_id: "10000000-0000-4000-8000-000000000008", title: "Making healthy choices easier near schools", year: 2023, venue: "Nesta", origin: "Uploaded", status: "cited", evidence_type: "Policy analysis", cited: true },
   { source_id: "10000000-0000-4000-8000-000000000009", title: "Children's food environment survey", year: null, venue: null, origin: "Uploaded", status: "unavailable", status_reason: "Full text could not be obtained", cited: false },
 ];
+
+export const mockSourceDossiers: Record<string, components["schemas"]["SourceDossierOut"]> = {
+  [mockEvidence[2].source_id]: {
+    ...mockEvidence[2],
+    abstract: "A cohort study of universal breakfast provision and regular breakfast consumption.",
+    abstract_source: "provider",
+    publisher: "BMJ",
+    record_type: "Journal article",
+    language: "English",
+    doi: "10.0000/example.breakfast",
+    cited_by_count: 14,
+    fwci: 1.2,
+    tags: [
+      { tag: "School food", tag_type: "topic", asserted_by: "OpenAlex" },
+      { tag: "Cohort study", tag_type: "method", asserted_by: "OpenAlex" },
+      { tag: "School food", tag_type: "topic", asserted_by: "Analyst" },
+    ],
+    cited_in: [{ claim: "Universal breakfast provision can support consistent breakfast consumption.", quote: "Breakfast participation increased when provision was universal.", section_title: "What appears to help" }],
+  },
+};
 
 export const mockFindings: components["schemas"]["FindingOut"][] = [
   {

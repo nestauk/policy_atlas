@@ -4,6 +4,7 @@ import { useProject } from "../api/queries";
 import { useRunStream } from "../store";
 import { NotFoundView } from "../ui/feedback/NotFoundView";
 import { PlanningPane } from "./workspace/PlanningPane";
+import { PlanPane } from "./workspace/PlanPane";
 import { RailToggle, useRail } from "./workspace/rail";
 import { RunPane } from "./workspace/RunPane";
 
@@ -37,7 +38,7 @@ export function WorkspaceView() {
           <RailToggle collapsed={rail.collapsed} toggleProps={rail.toggleProps} />
         </div>
         <div id={rail.regionId} hidden={rail.collapsed}>
-          <PlanningPane projectId={projectId} />
+          <PlanningPane projectId={projectId} runStatus={stream.run?.status} />
         </div>
         {!rail.collapsed && (
           <div
@@ -47,7 +48,11 @@ export function WorkspaceView() {
         )}
       </div>
       <div className="bg-ground">
-        <RunPane projectId={projectId} stream={stream} />
+        {hasRun ? (
+          <RunPane projectId={projectId} stream={stream} />
+        ) : (
+          <PlanPane projectId={projectId} />
+        )}
       </div>
     </main>
   );

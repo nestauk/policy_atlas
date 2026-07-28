@@ -69,12 +69,12 @@ test.describe("mock evidence-base journey", () => {
     await page.getByRole("button", { name: "Close panel" }).click();
     await expect(page).not.toHaveURL(/[?&]source=/);
 
-    // (g) Sources view lists rows with status chips.
+    // (g) Sources view lists rows with status chips in the collection-true table.
     await page.getByRole("link", { name: "Sources" }).click();
-    const sourceRows = page.getByRole("list").locator("li");
+    const sourceRows = page.getByRole("row");
     await expect(sourceRows.first()).toBeVisible();
-    await expect(sourceRows).toHaveCount(9);
-    await expect(page.getByText("screened out", { exact: true }).first()).toBeVisible();
+    await expect(sourceRows).toHaveCount(10);
+    await expect(page.getByText("Excluded — retracted", { exact: true })).toBeVisible();
 
     // (h) Landscape renders at least one chart.
     await page.getByRole("link", { name: "Landscape" }).click();
