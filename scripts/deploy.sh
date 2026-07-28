@@ -174,6 +174,19 @@ bootstrap() {
     bootstrap_postconditions
 }
 
+# The template pins DesiredCount=0, but CloudFormation only re-asserts it when
+# the stack actually changes — a no-change deploy (e.g. frontend-only) leaves
+# the scaled-up service running and the stop-wait times out (E.2 finding,
+# 2026-07-28). Explicitly aligning to the template value is idempotent and
+# keeps stop-old-before-migrate deterministic on every path.
+scale_down_service() {
+    aws ecs update-service \
+        --region "$DEPLOY_REGION" \
+        --cluster "$CLUSTER_ARN" \
+        --service "$ECS_SERVICE_NAME" \
+        --desired-count 0 >/dev/null
+}
+
 wait_for_service_to_stop() {
     local deadline running_count running_tasks
     deadline=$((SECONDS + SERVICE_STOP_TIMEOUT_SECONDS))
@@ -327,6 +340,7 @@ common_tail() {
     require_value "migration security-group ID SSM export" "$MIGRATION_SG_ID"
     require_value "migration task-definition ARN SSM export" "$MIGRATION_TASK_DEF_ARN"
 
+    scale_down_service
     wait_for_service_to_stop
     run_migrations
     scale_up_service
