@@ -145,18 +145,36 @@ PR landing the uplifted `frontend/src/views/**` (+ supporting `ui/` primitives,
    (exact match → whitespace-normalised remap → quote-above-text degrade, never
    a broken panel). Keep prod's three-rung ladder (tooltip → popover → dossier)
    and `?source=` addressability.
-6. **Findings view**: facet filter chips · table (intervention / outcome /
-   direction chip with tooltip / grouped-as / source link) · expandable rows
-   with "Reported numbers" and "The exact words" (verified-quote) panels. The
-   demo-validated expansion field set is named in full (finding 10): the
-   statistics (effect size, CI, SE, p, n, k, I², τ²) **plus** comparator,
-   estimate level, causality, the primary-outcome marker, stratum qualifier
-   chips, and the 020 v2 `effect_basis` + `study_geography`.
+6. **Findings view — both finding kinds** (owner amendment, 2026-07-28: the
+   demo never rendered ICF findings; this slice adds them). The view is
+   **kind-aware** over the already-kind-typed findings list (`profile`
+   discriminates; the enriched rows follow the web-api typed-variants pin —
+   a discriminated union, so the client narrows on kind):
+   - **IOF rows** (demo-validated shape): table columns intervention /
+     outcome / direction chip with tooltip / grouped-as / source link;
+     expandable rows with "Reported numbers" and "The exact words"
+     (verified-quote) panels. The expansion field set named in full
+     (finding 10): the statistics (effect size, CI, SE, p, n, k, I², τ²)
+     **plus** comparator, estimate level, causality, the primary-outcome
+     marker, stratum qualifier chips, and the 020 v2 `effect_basis` +
+     `study_geography`.
+   - **ICF rows** (no demo precedent — designed in-slice from the 021
+     schema/artifacts; taste-bearing, lead-owned at plan time): an
+     implementation-context claim about a named intervention — rendered
+     with its `context_type` (labelled, never the raw enum), claim,
+     intervention, context label, and the populated subset of
+     population/setting/study geography/design, claim level/basis, and
+     resource/workforce requirements (`field_coverage` honesty: absent
+     fields omit, never render "not extracted" as data) — with the same
+     "The exact words" verified-quote panel (shared grounding shape).
+   - The view lets the user tell and filter the kinds apart (kind filter
+     alongside the facet chips); mixed lists label kind per row.
 7. **Sources + dossier depth**: status-ladder labels with screening-detail
    tooltips (confidence, read basis, stage-2 confirmation, reason) · venue /
    strength / cited columns · dossier sections (About · what-happened ladder ·
    quality · details · tags **grouped by asserter, never merged** · cited-in ·
-   findings-from-source). Appraisal renders labels, never 1–5 numbers.
+   findings-from-source covering **both finding kinds**, kind-labelled).
+   Appraisal renders labels, never 1–5 numbers.
 8. **Landing**: wire the existing-but-unconsumed `useUpdateProject` /
    `useArchiveProject` into card UI (inline rename with cancel-restores;
    archive with two-step confirm — **archive vocabulary, not delete**) ·
@@ -312,7 +330,8 @@ seams recorded) · `verification.md`.
 ## Constraints & approval gates
 
 - **Public interface:** several demo surfaces show data the production API
-  may not yet serve (findings stats/metadata/quote fields · dossier detail
+  may not yet serve (kind-typed IOF **and ICF** finding detail fields — the
+  discriminated-union enrichment of the flat `FindingOut` · dossier detail
   fields · coverage `backends_detail` · claim types beyond citation/gap ·
   screening-detail fields on evidence rows). Where the durable record
   already holds the data, the read models gain **additive-only fields, one
