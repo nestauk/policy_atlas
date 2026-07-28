@@ -1727,12 +1727,12 @@ first-class vocabulary. What follows is what it deliberately left out.
   the OIDC sign-in callback restores the stashed path via `history.replaceState`, which
   react-router never observes: after any auth round-trip the URL may show the deep link
   while the landing route renders. Cosmetic (a reload or click recovers); fix is a
-  router-level navigate in `onSigninCallback` — next frontend-touching slice. Same
-  seam, second facet (026 review, Codex adversarial): a *persistent* OIDC callback
-  error mounts the unauthenticated shell, whose 401-driven `ReauthRedirect` starts
-  another redirect without consulting the standing error — a denied-authorization
-  user can bounce login↔app until the error clears. Same fix site (the provider's
-  error/redirect interplay).
+  router-level navigate in `onSigninCallback` — next frontend-touching slice.
+  (A second facet — a persistent OIDC callback error mounting the shell tokenless,
+  flagged by the 026 review's Codex lane — bit the owner live the same day and was
+  **fixed in-slice**: on error the provider renders a "Sign in again" retry that
+  strips consumed `code`/`state` params before stashing the return path; the shell
+  never mounts. Only the router-navigate restoration above remains open.)
 - **Rename/archive controls in the UI** (025 live check) — the PATCH/archive mutations
   exist, are authz-tested and envelope-conformant; no view exposes them yet. Ingest also
   presents under the acquire stage label ("Searching sources" while reading documents) —

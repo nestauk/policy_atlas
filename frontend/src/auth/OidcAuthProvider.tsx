@@ -85,6 +85,20 @@ function OidcAuthAdapter({ children }: { children: ReactNode }) {
     void oidcRef.current.signinRedirect();
   }, []);
 
+  // Manual retry after a sign-in error. `code`/`state` are dropped from the
+  // stashed return path so the retry can't restore a consumed callback URL
+  // and error again (the usual cause: a restored tab or back-navigation to
+  // the post-login URL).
+  const retrySignIn = useCallback(() => {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("code");
+    params.delete("state");
+    const search = params.size > 0 ? `?${params.toString()}` : "";
+    const returnTo = `${window.location.pathname}${search}${window.location.hash}`;
+    sessionStorage.setItem(AUTH_RETURN_TO_KEY, returnTo);
+    void oidcRef.current.signinRedirect();
+  }, []);
+
   const status: AuthStatus = oidc.isLoading
     ? "loading"
     : oidc.isAuthenticated
@@ -119,11 +133,29 @@ function OidcAuthAdapter({ children }: { children: ReactNode }) {
     [getAccessToken, signIn, signOut, onUnauthenticated, sub, status],
   );
 
+  // A persistent OIDC error (e.g. a stale sign-in callback) must not mount
+  // the shell tokenless — every query 401s with no visible path back to
+  // sign-in (026 live incident; the redirect gate above deliberately stands
+  // down on error to avoid a redirect loop). Surface the failure with a
+  // manual retry instead.
+  if (!oidc.isAuthenticated && oidc.error) {
+    return (
+      <div role="alert" className="text-sm text-grey">
+        <p>Sign-in didn&apos;t complete: {oidc.error.message}</p>
+        <button
+          type="button"
+          onClick={retrySignIn}
+          className="cursor-pointer text-[13px] text-grey underline hover:text-navy"
+        >
+          Sign in again
+        </button>
+      </div>
+    );
+  }
+
   // While signing in (loading, redirecting, or about to redirect) the app
-  // shell must not mount — its queries would fire tokenless and 401. An
-  // OIDC error falls through to the shell, whose per-view error states are
-  // the existing surface for a broken session.
-  if (!oidc.isAuthenticated && !oidc.error) {
+  // shell must not mount — its queries would fire tokenless and 401.
+  if (!oidc.isAuthenticated) {
     return (
       <p role="status" className="text-sm text-grey">
         Taking you to sign in…

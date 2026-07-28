@@ -229,10 +229,18 @@ un-flagged ERROR observations in the window.
     idle_timeout, migration-SG export). verification.md Langfuse bullet + E.3 timezone
     labels fixed (contract-verifier M3/N7).
 
+12. *OIDC-error sign-in affordance* (Codex m8 — initially deferred, then **promoted
+    to a fix the same day when the owner hit it live**: a stale sign-in callback set
+    `oidc.error`, the redirect gate stood down, the shell mounted tokenless, and every
+    query 401'd with no sign-in prompt — confirmed against live API logs: all 401s
+    header-less, zero `token_rejected`). On error the provider now renders a
+    "Sign in again" retry instead of the shell, stripping consumed `code`/`state`
+    params from the stashed return path so the retry can't restore the poisoned
+    callback URL (`OidcAuthProvider.tsx` + test; the superseded test had pinned the
+    buggy shell-mounts-on-error behaviour). `make frontend-verify` green.
+
 **Deferred (docs/deferred.md):**
 - *Deploy lock* (Codex M1): single-operator posture documented; lock seam recorded.
-- *Reauth loop on persistent OIDC callback error* (Codex M8): second facet appended to
-  the existing return-to seam entry.
 - *Return-to router restoration* (Codex M5): **already deferred at E.4** — convergent
   with the build's own seam entry; no new action.
 
