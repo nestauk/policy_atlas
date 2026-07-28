@@ -30,6 +30,7 @@ STAGE_PRESENTATION: dict[StageKey, tuple[str, str]] = {
 STAGE_BY_REGISTRY: dict[str, StageKey] = {
     "acquire": "acquire",
     "screen": "screen",
+    "screen_full": "screen",
     "classify": "classify",
     "appraise": "appraise",
     "ingest_full_text": "acquire",

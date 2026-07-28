@@ -28,9 +28,15 @@ from policy_atlas.api.contract import (
 )
 from policy_atlas.api.deps import get_current_user, get_engine, get_planner_backend
 from policy_atlas.api.routers._common import owned_project
+from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION
 from policy_atlas.core.schema import capability_run, orchestration_plan, planning_transcript
 from policy_atlas.runtime.orchestrate import build_plan, persist_approved_plan
-from policy_atlas.runtime.orchestration_plan import OrchestrationPlan, compose
+from policy_atlas.runtime.orchestration_plan import (
+    TIME_BANDS,
+    OrchestrationPlan,
+    compose,
+    registry_component_for,
+)
 from policy_atlas.runtime.planner import PlannerBackend
 from policy_atlas.runtime.planner_prompt import PlanDraftWire
 
@@ -85,6 +91,9 @@ def _draft_from_wire(draft: PlanDraftWire, *, ready: bool) -> PlanDraft:
     if constraints:
         values["scope_constraints"] = constraints
     values.pop("steer_point_defaults", None)
+    effort, depth = values.get("search_effort"), values.get("analysis_depth")
+    if effort in {"rapid", "standard", "deep"} and depth in {"landscape", "standard", "deep"}:
+        values["time_band"] = TIME_BANDS[(effort, depth)]
     values["ready"] = ready
     return PlanDraft.model_validate(values)
 
@@ -93,10 +102,17 @@ def _draft_from_plan(plan: OrchestrationPlan) -> PlanDraft:
     """Project a validated runtime plan into the API's approved draft shape."""
     values = plan.model_dump(mode="json")
     values.pop("steer_point_defaults", None)
-    values["steps"] = [
-        PlanStep(label=step.component.replace("_", " ").title(), blurb="", stage=step.component)
-        for step in compose(plan).steps
-    ]
+    steps: list[PlanStep] = []
+    seen_stages: set[str] = set()
+    for step in compose(plan).steps:
+        registry_component = registry_component_for(step.component)
+        stage = STAGE_BY_REGISTRY[registry_component]
+        if stage in seen_stages:
+            continue
+        seen_stages.add(stage)
+        label, blurb = STAGE_PRESENTATION[stage]
+        steps.append(PlanStep(label=label, blurb=blurb, stage=stage))
+    values["steps"] = steps
     values["ready"] = True
     return PlanDraft.model_validate(values)
 

@@ -172,14 +172,46 @@ artefact, groups) are whole-object.
 
 `funnel` · `landscape` (distributions over the screened-in set only) ·
 `groups` · `evidence` (paginated source list with status ladder) ·
-`findings` (paginated; carries run-scoped B2′ relevance marks
-`priority | normal` when the run has them) · `decisions` (paginated
+`findings` (paginated discriminated `profile: iof | icf` records; carries
+run-scoped B2′ relevance marks `priority | normal` when the run has them) ·
+`sources/{source_id}` (optional dossier: source metadata, tags, and claims
+cited by the latest artefact only) · `decisions` (paginated
 decision log from `steering_history` + allowlisted events) · `artefact`
 (sections, span-anchored claims, citations; the chunk-context read model
 clamps context to a character window around the cited span — the 008
 seam's named consumer) · `coverage` (the composed one-line coverage
 sentence: stop condition + adequacy, composed server-side). Read models
 render honest absence: missing stages are `null`/absent, never faked.
+
+The C.1 additions enrich these records additively: coverage exposes public
+backend names and post-run query detail; evidence exposes effective-screen
+detail; finding profiles carry their stored typed fields and grounding; and
+artefact claims/sections/chunk context expose their durable presentation
+detail. Collection filter query parameters land separately in C.2, so C.1
+keeps existing paginated-list parameters unchanged.
+
+The C.2 additions add collection filters to `evidence` and `findings`, on
+top of the existing `page`/`page_size`. All filter params are optional,
+repeatable where noted, and combinable; every filtered response's
+`total_items` is collection-true — it reflects the filtered collection,
+never the unfiltered project total or the returned page's length.
+Evidence status is still derived server-side in Python project-wide before
+filtering and paging (the `funnel_out` precedent — bounded to one
+project's rows).
+
+- `GET .../evidence`: `status` (repeatable; any evidence status ladder
+  value, plus the aggregate shortcut `Included` = the 7 ladder positions
+  reached once a source is screened in — i.e. every status except `found`
+  and `screened_out`) · `cited` (bool). An unrecognised `status` value is
+  422.
+- `GET .../findings`: `profile` (`iof | icf`; 422 if unrecognised) ·
+  `facet`+`group` (both required together — a facet name and an exact
+  group label within it; an unknown facet/group pair returns an empty
+  page, not an error) · `group_id` (the group's qualified id,
+  `<facet>:gNN`, as an alternative to `facet`+`group` — combining it with
+  either is 422; an unknown `group_id` returns an empty page) ·
+  `source_id` (the evidence row's source id; no match returns an empty
+  page).
 
 ### SSE
 

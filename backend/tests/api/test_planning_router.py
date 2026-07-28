@@ -18,8 +18,9 @@ from policy_atlas.core.schema import (
     orchestration_plan,
     planning_transcript,
 )
+from policy_atlas.runtime.orchestration_plan import TIME_BANDS, OrchestrationPlan
 from policy_atlas.runtime.planner import StubPlannerBackend
-from policy_atlas.runtime.planner_prompt import PlannerTurnWire
+from policy_atlas.runtime.planner_prompt import PlanDraftWire, PlannerTurnWire
 from tests.api.resource_support import api_client, create_project
 
 
@@ -89,6 +90,36 @@ def _pending_values(
         "created_at": created_at,
         "completed_at": datetime.now(UTC) if status == "failed" else None,
     }
+
+
+def test_draft_projection_derives_time_band_and_deduplicates_public_stages() -> None:
+    """Drafts gain an honest time band; approved steps use presentation vocabulary."""
+    draft = planning._draft_from_wire(
+        PlanDraftWire(search_effort="rapid", analysis_depth="standard"), ready=False
+    )
+    assert draft.time_band == TIME_BANDS[("rapid", "standard")]
+    plan = OrchestrationPlan(
+        title="Evidence review",
+        question="What does the evidence show?",
+        backend_scope="both",
+        search_effort="deep",
+        analysis_depth="deep",
+        components=["screen_full", "characterise", "select", "extract", "group"],
+        component_rationale={
+            "screen_full": "Confirm relevance from the full text",
+            "characterise": "Map the evidence base",
+            "select": "Choose sources for close reading",
+            "extract": "Extract findings",
+            "group": "Group related findings",
+        },
+        grouping_facets=["intervention"],
+        steering_mode="moderate",
+    )
+    projected = planning._draft_from_plan(plan)
+    assert [step.stage for step in projected.steps].count("acquire") == 1
+    assert [step.stage for step in projected.steps].count("screen") == 1
+    assert projected.steps[0].label == "Searching sources"
+    assert projected.steps[1].blurb == "Every title and abstract, against your question."
 
 
 def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(

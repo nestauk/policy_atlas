@@ -17,11 +17,14 @@ from policy_atlas.api.contract import (
     CoverageOut,
     DecisionOut,
     EvidenceItemOut,
+    EvidenceStatusFilter,
+    ExtractProfile,
     FindingOut,
     FunnelOut,
     GroupsOut,
     LandscapeOut,
     Page,
+    SourceDossierOut,
 )
 from policy_atlas.api.deps import get_conn, get_current_user
 from policy_atlas.api.readmodels import repository
@@ -79,10 +82,14 @@ def evidence(
     conn: Annotated[Connection, Depends(get_conn)],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
+    status: Annotated[list[EvidenceStatusFilter] | None, Query()] = None,
+    cited: Annotated[bool | None, Query()] = None,
 ) -> Page[EvidenceItemOut]:
-    """Return a bounded page from the evidence status ladder."""
+    """Return a bounded page from the evidence status ladder, optionally filtered."""
     _owned(conn, project_id, user)
-    return repository.evidence_page(conn, project_id, page, page_size)
+    return repository.evidence_page(
+        conn, project_id, page, page_size, statuses=status, cited=cited
+    )
 
 
 @router.get("/{project_id}/findings", response_model=Page[FindingOut])
@@ -92,10 +99,46 @@ def findings(
     conn: Annotated[Connection, Depends(get_conn)],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
+    profile: Annotated[ExtractProfile | None, Query()] = None,
+    facet: Annotated[str | None, Query()] = None,
+    group: Annotated[str | None, Query()] = None,
+    group_id: Annotated[str | None, Query()] = None,
+    source_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> Page[FindingOut]:
-    """Return a bounded page of IOF and ICF findings."""
+    """Return a bounded page of IOF and ICF findings, optionally filtered."""
     _owned(conn, project_id, user)
-    return repository.findings_page(conn, project_id, page, page_size)
+    if group_id is not None and (facet is not None or group is not None):
+        raise HTTPException(
+            status_code=422, detail="group_id cannot be combined with facet/group"
+        )
+    if (facet is None) != (group is None):
+        raise HTTPException(status_code=422, detail="facet and group must be provided together")
+    return repository.findings_page(
+        conn,
+        project_id,
+        page,
+        page_size,
+        profile=profile,
+        facet=facet,
+        group=group,
+        group_id=group_id,
+        source_id=source_id,
+    )
+
+
+@router.get("/{project_id}/sources/{source_id}", response_model=SourceDossierOut)
+def source_dossier(
+    project_id: uuid.UUID,
+    source_id: uuid.UUID,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> SourceDossierOut:
+    """Return one owner-scoped source dossier or an indistinguishable 404."""
+    _owned(conn, project_id, user)
+    result = repository.source_dossier_out(conn, project_id, source_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="resource not found")
+    return result
 
 
 @router.get("/{project_id}/decisions", response_model=Page[DecisionOut])

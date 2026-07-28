@@ -55,6 +55,21 @@ GroupingFacet = Literal[
 #: Steering mode. Mirrors `orchestration_plan.SteeringMode`.
 SteeringMode = Literal["frequent", "moderate", "minimal", "unattended"]
 
+# Mirrors ``sse.StageKey`` without importing it: the SSE module itself carries
+# ``PlanDraft`` frames, so a direct import would make the standalone contract
+# package circular.
+PlanStageKey = Literal[
+    "acquire",
+    "screen",
+    "classify",
+    "appraise",
+    "characterise",
+    "select",
+    "extract",
+    "group",
+    "synthesise",
+]
+
 #: Country-group membership provenance. Mirrors
 #: `orchestration_plan.CountryGroupAuthorship`.
 CountryGroupAuthorship = Literal["pinned-table", "planner-proposed", "user-amended"]
@@ -106,7 +121,7 @@ class PlanStep(BaseModel):
 
     label: str
     blurb: str
-    stage: str
+    stage: PlanStageKey
 
 
 class PlanDraft(BaseModel):

@@ -53,8 +53,29 @@ export const mockEvidence: components["schemas"]["EvidenceItemOut"][] = [
 ];
 
 export const mockFindings: components["schemas"]["FindingOut"][] = [
-  { finding_id: "20000000-0000-4000-8000-000000000001", statement: "Universal breakfast provision was associated with more consistent breakfast consumption where schools paired it with non-stigmatising access.", source_id: mockEvidence[2].source_id, source_title: mockEvidence[2].title, profile: "iof", relevance: "priority" },
-  { finding_id: "20000000-0000-4000-8000-000000000002", statement: "Active-travel offers were more durable when routes felt safe to families and schools coordinated arrival routines.", source_id: mockEvidence[6].source_id, source_title: mockEvidence[6].title, profile: "icf", relevance: "normal" },
+  {
+    finding_id: "20000000-0000-4000-8000-000000000001",
+    statement: "Universal breakfast provision was associated with more consistent breakfast consumption where schools paired it with non-stigmatising access.",
+    source_id: mockEvidence[2].source_id,
+    source_title: mockEvidence[2].title,
+    profile: "iof",
+    relevance: "priority",
+    intervention: "Universal breakfast provision",
+    outcome: "Breakfast consumption",
+    effect_direction: "increase",
+    statistics: {},
+  },
+  {
+    finding_id: "20000000-0000-4000-8000-000000000002",
+    statement: "Active-travel offers were more durable when routes felt safe to families and schools coordinated arrival routines.",
+    source_id: mockEvidence[6].source_id,
+    source_title: mockEvidence[6].title,
+    profile: "icf",
+    relevance: "normal",
+    context_type: "implementation_condition",
+    claim: "Active-travel offers were more durable when routes felt safe to families and schools coordinated arrival routines.",
+    intervention: "Active-travel offers",
+  },
 ];
 
 export const mockDecisions: components["schemas"]["DecisionOut"][] = [

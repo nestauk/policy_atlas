@@ -224,7 +224,7 @@ export interface paths {
         };
         /**
          * Evidence
-         * @description Return a bounded page from the evidence status ladder.
+         * @description Return a bounded page from the evidence status ladder, optionally filtered.
          */
         get: operations["evidence_api_v1_projects__project_id__evidence_get"];
         put?: never;
@@ -244,7 +244,7 @@ export interface paths {
         };
         /**
          * Findings
-         * @description Return a bounded page of IOF and ICF findings.
+         * @description Return a bounded page of IOF and ICF findings, optionally filtered.
          */
         get: operations["findings_api_v1_projects__project_id__findings_get"];
         put?: never;
@@ -395,6 +395,26 @@ export interface paths {
          * @description Return one owned project's capability run, or the opaque 404.
          */
         get: operations["get_run_api_v1_projects__project_id__runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/sources/{source_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Source Dossier
+         * @description Return one owner-scoped source dossier or an indistinguishable 404.
+         */
+        get: operations["source_dossier_api_v1_projects__project_id__sources__source_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -567,7 +587,8 @@ export interface components {
          *         block_id: The block's identity.
          *         prose: The block's final persisted prose.
          *         claims: Span-anchored claim annotations over `prose`.
-         *         gaps: Named coverage gaps surfaced for this block.
+         *         gaps: Deprecated legacy coverage gaps. New structured gaps are carried
+         *             by `ClaimOut.gap`; this field remains empty for new artefacts.
          */
         BlockOut: {
             /**
@@ -766,10 +787,18 @@ export interface components {
             clamped: boolean;
             /** Context */
             context: string;
+            /** Next */
+            next?: string | null;
+            /** Previous */
+            previous?: string | null;
             /** Span End */
             span_end: number;
             /** Span Start */
             span_start: number;
+            /** Venue */
+            venue?: string | null;
+            /** Year */
+            year?: number | null;
         };
         /**
          * CitationOut
@@ -802,6 +831,18 @@ export interface components {
             source_title: string;
         };
         /**
+         * CitedInOut
+         * @description One latest-artefact claim which cites a source.
+         */
+        CitedInOut: {
+            /** Claim */
+            claim: string;
+            /** Quote */
+            quote: string;
+            /** Section Title */
+            section_title: string;
+        };
+        /**
          * ClaimOut
          * @description One span-anchored claim annotation within a block.
          *
@@ -826,6 +867,7 @@ export interface components {
              * @enum {string}
              */
             claim_type: "citation" | "gap" | "reasoning" | "pattern" | "theme" | "unspanned_assertion";
+            gap?: components["schemas"]["GapOut"] | null;
             /** Span */
             span?: [
                 number,
@@ -833,6 +875,8 @@ export interface components {
             ] | null;
             /** Text */
             text: string;
+            /** Weakly Grounded */
+            weakly_grounded?: boolean | null;
         };
         /**
          * CountryGroupDraft
@@ -862,6 +906,23 @@ export interface components {
             label: string | null;
         };
         /**
+         * CoverageBackendDetailOut
+         * @description Post-run source counts for one public backend.
+         *
+         *     ``relevant`` is deliberately project-wide in C.1; per-query relevance
+         *     was not recorded and is therefore absent.
+         */
+        CoverageBackendDetailOut: {
+            /** Backend */
+            backend: string;
+            /** Queries */
+            queries?: components["schemas"]["CoverageQueryOut"][];
+            /** Relevant */
+            relevant: number;
+            /** Results */
+            results: number;
+        };
+        /**
          * CoverageOut
          * @description The `coverage` read model — the composed one-line coverage sentence.
          *
@@ -870,12 +931,26 @@ export interface components {
          *         base: Structured basis the sentence was composed from.
          */
         CoverageOut: {
+            /** Backends */
+            backends?: string[];
+            /** Backends Detail */
+            backends_detail?: components["schemas"]["CoverageBackendDetailOut"][];
             /** Base */
             base?: {
                 [key: string]: unknown;
             };
             /** Sentence */
             sentence: string;
+        };
+        /**
+         * CoverageQueryOut
+         * @description One completed query and its result count for a public backend.
+         */
+        CoverageQueryOut: {
+            /** Query */
+            query: string;
+            /** Results */
+            results: number;
         };
         /**
          * CoverageSnapshotOut
@@ -966,6 +1041,14 @@ export interface components {
              * @enum {string}
              */
             origin: "OpenAlex" | "Overton" | "Uploaded";
+            /** Screen Basis */
+            screen_basis?: string | null;
+            /** Screen Confidence */
+            screen_confidence?: number | null;
+            /** Screen Stage */
+            screen_stage?: number | null;
+            /** Screen Status */
+            screen_status?: ("relevant" | "not_relevant" | "excluded_retracted") | null;
             /**
              * Source Id
              * Format: uuid
@@ -1004,41 +1087,7 @@ export interface components {
             /** Ungrouped */
             ungrouped: number;
         };
-        /**
-         * FindingOut
-         * @description One row of the paginated findings list.
-         *
-         *     Args:
-         *         finding_id: The finding's identity.
-         *         statement: The finding's text/claim statement.
-         *         source_id: Identity of the source the finding was extracted from.
-         *         source_title: Title of that source.
-         *         profile: Extraction profile the finding came from.
-         *         relevance: Run-scoped B2' relevance mark, when the run has them.
-         */
-        FindingOut: {
-            /**
-             * Finding Id
-             * Format: uuid
-             */
-            finding_id: string;
-            /**
-             * Profile
-             * @enum {string}
-             */
-            profile: "iof" | "icf";
-            /** Relevance */
-            relevance?: ("priority" | "normal") | null;
-            /**
-             * Source Id
-             * Format: uuid
-             */
-            source_id: string;
-            /** Source Title */
-            source_title: string;
-            /** Statement */
-            statement: string;
-        };
+        FindingOut: components["schemas"]["IofFindingOut"] | components["schemas"]["IcfFindingOut"];
         /**
          * FreeTextCompileOut
          * @description The 202 body returned for a `free_text` check-in response.
@@ -1129,6 +1178,29 @@ export interface components {
             selected?: number | null;
         };
         /**
+         * GapCaveatOut
+         * @description The evidence-coverage caveat accompanying a gap claim.
+         */
+        GapCaveatOut: {
+            /** Adequacy Verdict */
+            adequacy_verdict?: string | null;
+            /** Search Space */
+            search_space?: string | null;
+            /** Verdict Origin */
+            verdict_origin?: string | null;
+        };
+        /**
+         * GapOut
+         * @description A structured gap explanation attached to one claim.
+         */
+        GapOut: {
+            caveat?: components["schemas"]["GapCaveatOut"] | null;
+            /** Grade */
+            grade?: string | null;
+            /** Inferred */
+            inferred?: boolean | null;
+        };
+        /**
          * GroupOut
          * @description One group within a grouping facet.
          *
@@ -1160,6 +1232,159 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * IcfFindingOut
+         * @description An implementation-context finding, discriminated by ``profile='icf'``.
+         */
+        IcfFindingOut: {
+            /** Claim */
+            claim: string;
+            /** Claim Basis */
+            claim_basis?: string | null;
+            /** Claim Level */
+            claim_level?: string | null;
+            /** Context Label */
+            context_label?: string | null;
+            /** Context Type */
+            context_type: string;
+            /**
+             * Finding Id
+             * Format: uuid
+             */
+            finding_id: string;
+            /** Groups */
+            groups?: {
+                [key: string]: string;
+            };
+            /** Intervention */
+            intervention: string;
+            /** Level */
+            level?: string | null;
+            /** Outcome */
+            outcome?: string | null;
+            /** Population */
+            population?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            profile: "icf";
+            /** Quote */
+            quote?: string | null;
+            /** Quote Verified */
+            quote_verified?: boolean | null;
+            /** Relevance */
+            relevance?: ("priority" | "normal") | null;
+            /** Resource Requirements */
+            resource_requirements?: string | null;
+            /** Setting */
+            setting?: string | null;
+            /**
+             * Source Id
+             * Format: uuid
+             */
+            source_id: string;
+            /** Source Title */
+            source_title: string;
+            /** Statement */
+            statement: string;
+            /** Study Design */
+            study_design?: string | null;
+            /** Study Geography */
+            study_geography?: string | null;
+            /** Workforce Requirements */
+            workforce_requirements?: string | null;
+        };
+        /**
+         * IofFindingOut
+         * @description An intervention-outcome finding, discriminated by ``profile='iof'``.
+         */
+        IofFindingOut: {
+            /** Causality By Design */
+            causality_by_design?: string | null;
+            /** Comparator */
+            comparator?: string | null;
+            /** Effect Basis */
+            effect_basis?: string | null;
+            /** Effect Direction */
+            effect_direction: string;
+            /** Estimate Level */
+            estimate_level?: string | null;
+            /**
+             * Finding Id
+             * Format: uuid
+             */
+            finding_id: string;
+            /** Groups */
+            groups?: {
+                [key: string]: string;
+            };
+            /** Intervention */
+            intervention: string;
+            /** Is Primary */
+            is_primary?: boolean | null;
+            /** Outcome */
+            outcome: string;
+            /** Population */
+            population?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            profile: "iof";
+            /** Quote */
+            quote?: string | null;
+            /** Quote Verified */
+            quote_verified?: boolean | null;
+            /** Relevance */
+            relevance?: ("priority" | "normal") | null;
+            /** Setting */
+            setting?: string | null;
+            /**
+             * Source Id
+             * Format: uuid
+             */
+            source_id: string;
+            /** Source Title */
+            source_title: string;
+            /** Statement */
+            statement: string;
+            statistics: components["schemas"]["IofStatisticsOut"];
+            /** Stratum Qualifiers */
+            stratum_qualifiers?: {
+                [key: string]: string;
+            }[];
+            /** Study Design */
+            study_design?: string | null;
+            /** Study Geography */
+            study_geography?: string | null;
+        };
+        /**
+         * IofStatisticsOut
+         * @description Reported IOF statistics, with authentic nulls for absent values.
+         */
+        IofStatisticsOut: {
+            /** Ci Lower */
+            ci_lower?: number | null;
+            /** Ci Upper */
+            ci_upper?: number | null;
+            /** Effect Size */
+            effect_size?: number | null;
+            /** Effect Size Type */
+            effect_size_type?: string | null;
+            /** I Squared */
+            i_squared?: number | null;
+            /** K */
+            k?: number | null;
+            /** N */
+            n?: number | null;
+            /** P Value */
+            p_value?: number | null;
+            /** Standard Error */
+            standard_error?: number | null;
+            /** Tau2 */
+            tau2?: number | null;
         };
         /**
          * LandscapeOut
@@ -1454,8 +1679,11 @@ export interface components {
             blurb: string;
             /** Label */
             label: string;
-            /** Stage */
-            stage: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise";
         };
         /**
          * PlanUpdatedFrame
@@ -1810,6 +2038,8 @@ export interface components {
         SectionOut: {
             /** Blocks */
             blocks?: components["schemas"]["BlockOut"][];
+            /** Focus */
+            focus?: string | null;
             /**
              * Role
              * @enum {string}
@@ -1817,6 +2047,83 @@ export interface components {
             role: "key_findings" | "standard" | "conclusions";
             /** Title */
             title: string;
+        };
+        /**
+         * SourceDossierOut
+         * @description The optional source dossier, including provenance and latest citations.
+         */
+        SourceDossierOut: {
+            /** Abstract */
+            abstract?: string | null;
+            /** Abstract Source */
+            abstract_source?: ("provider" | "llm_description") | null;
+            /** Appraisal Tier */
+            appraisal_tier?: string | null;
+            /** Cited */
+            cited: boolean;
+            /** Cited By Count */
+            cited_by_count?: number | null;
+            /** Cited In */
+            cited_in?: components["schemas"]["CitedInOut"][];
+            /** Doi */
+            doi?: string | null;
+            /** Evidence Type */
+            evidence_type?: string | null;
+            /** Fwci */
+            fwci?: number | null;
+            /** Language */
+            language?: string | null;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "OpenAlex" | "Overton" | "Uploaded";
+            /** Publisher */
+            publisher?: string | null;
+            /** Record Type */
+            record_type?: string | null;
+            /** Screen Basis */
+            screen_basis?: string | null;
+            /** Screen Confidence */
+            screen_confidence?: number | null;
+            /** Screen Stage */
+            screen_stage?: number | null;
+            /** Screen Status */
+            screen_status?: ("relevant" | "not_relevant" | "excluded_retracted") | null;
+            /**
+             * Source Id
+             * Format: uuid
+             */
+            source_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "found" | "screened_out" | "relevant" | "not_selected" | "selected" | "read_in_full" | "findings_extracted" | "cited" | "unavailable";
+            /** Status Reason */
+            status_reason?: string | null;
+            /** Tags */
+            tags?: components["schemas"]["SourceTagOut"][];
+            /** Title */
+            title: string;
+            /** Url */
+            url?: string | null;
+            /** Venue */
+            venue?: string | null;
+            /** Year */
+            year?: number | null;
+        };
+        /**
+         * SourceTagOut
+         * @description One source tag assertion and its provenance.
+         */
+        SourceTagOut: {
+            /** Asserted By */
+            asserted_by: string;
+            /** Tag */
+            tag: string;
+            /** Tag Type */
+            tag_type: string;
         };
         SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["ProjectUpdatedFrame"] | components["schemas"]["TickFrame"];
         /**
@@ -2380,6 +2687,8 @@ export interface operations {
             query?: {
                 page?: number;
                 page_size?: number;
+                status?: ("found" | "screened_out" | "relevant" | "not_selected" | "selected" | "read_in_full" | "findings_extracted" | "cited" | "unavailable" | "Included")[] | null;
+                cited?: boolean | null;
             };
             header?: never;
             path: {
@@ -2414,6 +2723,11 @@ export interface operations {
             query?: {
                 page?: number;
                 page_size?: number;
+                profile?: ("iof" | "icf") | null;
+                facet?: string | null;
+                group?: string | null;
+                group_id?: string | null;
+                source_id?: string | null;
             };
             header?: never;
             path: {
@@ -2724,6 +3038,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    source_dossier_api_v1_projects__project_id__sources__source_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceDossierOut"];
                 };
             };
             /** @description Validation Error */
