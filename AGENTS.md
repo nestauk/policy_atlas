@@ -22,33 +22,27 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `026-infra-deployment` (**BUILD COMPLETE THROUGH
-STEP 6, 2026-07-28** — phases 0/A–E all landed on
-`task/026-infra-deployment`; the system is **live** at
-`v3.policyatlas.uk` (staging, same account as v2, parallel `PaV3*`
-stacks): Cognito login end-to-end, Aurora migrated, S3+CloudFront SPA,
-full-chain smoke + deploy-invariant-over-executing-walk + 3-concurrent
-runs evidenced in `docs/tasks/026-infra-deployment/verification.md`.
-**Next: the review stack in a FRESH conversation with
-`task-cycle-review`** (Tier 4; the auth diff and the two owner-approved
-frontend gating fixes are the security lane's primary surfaces). Draft
-PR #33. Known operational state: staging's OpenAI quota exhausted
-2026-07-28 (runs fail honest-429 until billing tops up); operator
-permission set needs the documented scoped `iam:PassRole`.) The slice ports v2's CDK infra
-(`../discovery_policy_atlas/infra` — three stacks: network · database ·
-app) into `infra/` with a **copy-first, targeted-edits** discipline:
-v2 files are copied and diffed, never rewritten. Deltas from v2:
-the Supabase self-host apparatus (Studio, postgres-meta,
-PostgREST+nginx, the JWT-generation Lambda) is deleted not ported
-(the `load_secret` DB-URL-composing Lambda is KEPT, targeted-edited
-— contract F3);
-auth infra is new (Cognito user pool feeding the API's OIDC/JWKS
-envs); the frontend is a static Vite SPA, not a Next.js service;
-migrations run via Alembic; the deploy encodes the
-stop-old-before-boot-new invariant and the one-instance posture
-(web-api.md § Deployment posture). Re-sequenced ahead of the former
-026 (co-pilot Q&A + transcript store), which shifts to 027+.
-Contract: `docs/tasks/026-infra-deployment/contract.md`.
+Implementation — task `027-frontend-uplift` (design phase opened
+2026-07-28): rebuild the demo-validated view layer (`demo-live-run`
+branch, C4 demo surface) on the 025/026 production frontend substrate —
+the demo's UX richness (journey pane, plan pane, evidence-base page,
+findings/sources depth, motion layer) re-implemented over the
+production invariants (auth seam, generated client, SSE reducer, scrub
+discipline, brand tokens). Demo code is UX evidence, never imported;
+`demo-live-run` never merges. Contract:
+`docs/tasks/027-frontend-uplift/contract.md`. Owner re-sequencing
+2026-07-28: the eval slice (former 027 draft) is deferred — its
+contract draft survives at unpushed commit `a5c9708`.
+
+Task `026-infra-deployment` is **in review** (draft PR #33, Tier 4;
+build complete through step 6, 2026-07-28 — system **live** at
+`v3.policyatlas.uk`: Cognito login end-to-end, Aurora migrated,
+S3+CloudFront SPA; evidence in
+`docs/tasks/026-infra-deployment/verification.md`). 027 branches from
+`task/026-infra-deployment` (it depends on 026's frontend auth-gating
+fixes and deploy tooling); its PR re-targets `dev` once 026 merges.
+Known operational state: staging's OpenAI quota exhausted 2026-07-28
+(runs fail honest-429 until billing tops up).
 
 Tasks `001-walking-skeleton` through `025-web-app-foundation` are
 complete (merged — 025 is PR #32, 2026-07-21: monorepo hoist
