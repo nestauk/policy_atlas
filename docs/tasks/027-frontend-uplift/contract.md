@@ -40,11 +40,18 @@ throwaway substrate (no auth, hand-written duplicate types, swallowed errors).
 The production frontend has the inverse shape: industrial substrate, plain views.
 
 **This slice re-implements the demo's UX on the production substrate. It is not a
-code port**: the demo is React 18/Tailwind 3/hand-rolled state; production is
-React 19 + compiler/Tailwind 4/generated client + TanStack Query + event-sourced
-reducer. Demo code is **UX evidence, never imported**; `demo-live-run` never
-merges (standing rule since 018). `demo/RETRO.md` §2 product decisions remain
-binding as in 025 — as-built 019–026 behaviour wins on conflict.
+wholesale code port** — and the reason is wiring, not framework versions: demo
+views are bound to hand-written types, a 16-event SSE vocabulary and a
+hand-rolled store, and they lack the production disciplines (error/loading/empty
+states, auth routing, `scrub()`, the accessibility floor, strict lint). The
+operational rule: the demo's **data, state and primitive layers never cross**
+(no demo types/api/store/Tip/SlideOver; Radix-based primitives stay); its
+**markup, class strings, copy maps and interaction design are the UX spec** —
+transcribing them and rewiring onto the generated client + reducer + scrub +
+a11y substrate is the expected workflow, and demo-derived code gets the same
+review scrutiny as new code. No demo file lands unmodified; `demo-live-run`
+never merges (standing rule since 018). `demo/RETRO.md` §2 product decisions
+remain binding as in 025 — as-built 019–026 behaviour wins on conflict.
 
 **Substrate invariants preserved wholesale** (regression here fails the slice):
 the `AuthApi` seam + 026 OIDC gating fixes · generated client + drift check ·
