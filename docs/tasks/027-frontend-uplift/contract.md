@@ -188,6 +188,19 @@ seams recorded) · `verification.md`.
 - `frontend/README.md` + `docs/specs/system/web-api.md` — the substrate and the
   pinned 9-event SSE vocabulary + read-model surface.
 - `docs/specs/sources/evidence-base-ux/` — brand tokens, `hifi.css`, handoff §7.
+- **The comms shared component library (Figma)** —
+  `figma.com/design/faisD0OmAfv9nhwOUiRw74/Shared-component-library` — the
+  **upstream** of the in-repo brand distillation (025 pin). For this polish
+  slice the plan carries a **brand reconciliation pass**: check our tokens and
+  visual-identity components (buttons/cutout, chips, nav, type scale) against
+  the library's current state and fold any drift back into
+  `nesta-brand-tokens.md` + `index.css` — never as ad-hoc per-component
+  styles. Access is via the owner (agent Figma access currently lacks editor
+  rights on the file; screenshots/values supplied by the owner are an
+  acceptable substitute). The library is the *visual* authority only — it is
+  a Figma library, not a code component library; the 025 owned-primitives
+  decision stands. The public repo carries the distillation, never Figma
+  exports/assets with unclear licensing.
 - 025 contract strand 7 + its state/error matrix (binding precedent).
 
 ## Scope / Out of scope
