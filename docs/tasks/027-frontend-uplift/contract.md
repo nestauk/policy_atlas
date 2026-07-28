@@ -7,6 +7,28 @@
 > (before implementation): _pending_ ·
 > ADR: _due — transcript durability model + artefact SSE vocabulary_.
 >
+> **rev 3 (2026-07-28): contract-stage adversarial lane DONE** (codex-rescue
+> job task-ms4x604a-q7oq9s; 21 findings, 17 MAJOR, all adjudicated in — the
+> two as-built claims underpinning findings 1–5 verified against
+> `planning.py`/`runner.py` by the lead). Material amendments needing owner
+> re-approval at the reopened 🛑: **(a)** strand 12 reshaped — single
+> `planning_turn` table (no thread entity, no speculative `kind`; finding
+> 20), two-phase persistence superseding "both sides one transaction"
+> (finding 2), durable `client_turn_id` idempotency (finding 3), enumerated
+> rehydration mapping (finding 1), run-phase-anchored ordering (finding 4);
+> **(b)** strand 13 pinned — prose-in-event only, no partial-artefact read
+> path (findings 15/21), separate-connection emission with
+> presentation-record semantics (finding 5), full event vocabulary + section
+> identity (finding 17), terminal honesty on failed/aborted/interrupted
+> partial streams (findings 6/8); **(c)** gate expansion — server-side
+> filter query params on paginated lists (finding 7) + the honest-omission
+> scope floor (finding 16); **(d)** live check extended — restart
+> mid-synthesis leg (finding 9), durable-idempotency probe, server-side
+> filter check. Minor folds: live search card named (11), findings field
+> set enumerated (10), composer states + rail interaction floor (18/19),
+> no-backfill semantics (12), web-api.md § Planning turns rewrite (13),
+> transcript pagination (14), spec-floor sweep of rubric/tests.
+>
 > **rev 2 (owner calls, 2026-07-28):** (1) **transcript store IN** — the
 > planning conversation persists durably (strand 12); users' chats must not
 > disappear, mid-session or across restarts; discharges the 025 "transcripts
@@ -80,9 +102,13 @@ PR landing the uplifted `frontend/src/views/**` (+ supporting `ui/` primitives,
    the sources table with reasons" footer) · **coverage card** ("Where I
    looked": per-backend results/relevant + query list + the composed adequacy
    sentence) · **activity feed** (liveness ticks, newest highlighted, duplicate
-   collapse) · **completion card** (outcome-first, counts, CTAs into evidence
-   base/sources) · groups-by-facet card · embedded landscape charts. The
-   demo's 55/45→35/65 animated split already exists in prod (CSS var) — keep it.
+   collapse) · the **live search card** while acquire/screen stages run
+   (per-backend accumulating result counts + recent queries + "preparing
+   queries…" state — honest omission per backend where the tick/coverage data
+   doesn't carry it; finding 11) · **completion card** (outcome-first, counts,
+   CTAs into evidence base/sources) · groups-by-facet card · embedded
+   landscape charts. The demo's 55/45→35/65 animated split already exists in
+   prod (CSS var) — keep it.
 2. **Plan pane**: the forming plan as a first-class right-pane surface
    (question · focus/scoping chips · constraint chips with the demo's
    geography-collapse rule · labelled search-effort/depth/sources/check-in
@@ -96,7 +122,14 @@ PR landing the uplifted `frontend/src/views/**` (+ supporting `ui/` primitives,
    thread pane becomes a **collapsible/resizable rail** (PR #35's IDE-style
    left rail, single-thread for now — the multi-thread/Chats-library UI stays
    with the co-pilot slice). The thread renders from the durable transcript
-   (strand 12), so it survives navigation and restarts.
+   (strand 12), so it survives navigation and restarts. **Composer states
+   pinned** (finding 18 — planning turns 409 while a run executes or parks):
+   enabled during planning and after terminal runs (replanning); while a run
+   executes/parks it disables with honest copy pointing at check-in steering
+   — it never sends guaranteed-409 turns and never implies Q&A. **Rail
+   interaction floor** (finding 19): collapse is a real keyboard-operable
+   button (not drag-only), resize has sane min/max bounds, state is
+   session-local (no persistence requirement).
 4. **Check-in card uplift — presentation only.** The 025/024 behaviour contract
    is untouched: server-supplied options only, compile→confirm ladder with
    `confirm_token`, `requires_user_input` options route to free text, server
@@ -114,8 +147,11 @@ PR landing the uplifted `frontend/src/views/**` (+ supporting `ui/` primitives,
    and `?source=` addressability.
 6. **Findings view**: facet filter chips · table (intervention / outcome /
    direction chip with tooltip / grouped-as / source link) · expandable rows
-   with "Reported numbers" (stat labels incl. the 020 v2 fields) and "The exact
-   words" (verified-quote) panels.
+   with "Reported numbers" and "The exact words" (verified-quote) panels. The
+   demo-validated expansion field set is named in full (finding 10): the
+   statistics (effect size, CI, SE, p, n, k, I², τ²) **plus** comparator,
+   estimate level, causality, the primary-outcome marker, stratum qualifier
+   chips, and the 020 v2 `effect_basis` + `study_geography`.
 7. **Sources + dossier depth**: status-ladder labels with screening-detail
    tooltips (confidence, read basis, stage-2 confirmation, reason) · venue /
    strength / cited columns · dossier sections (About · what-happened ladder ·
@@ -135,45 +171,89 @@ PR landing the uplifted `frontend/src/views/**` (+ supporting `ui/` primitives,
     published, not where the studies were conducted") renders wherever that
     distribution shows.
 12. **Transcript store (backend + frontend).** The planning conversation
-    becomes durable: a schema migration adds transcript tables — shaped for
-    the co-pilot future (a thread table with a `kind`, messages with
-    role/text/timestamps; exactly one `planning` thread per project in this
-    slice, no thread CRUD UI) — and the planning-turn endpoint persists both
-    sides of each turn **in the same transaction as the turn itself**. New
-    read endpoint(s) serve the transcript; the frontend thread renders from
-    it (replacing process-local React state), interleaving the
-    already-durable steering record (check-in answers, free-text steers from
-    `steering_history`) at their chain positions — steering history is
-    referenced, never duplicated into the new tables. **Restart honesty
-    upgrades**: the 025 "in-flight draft conversation is lost on restart"
-    pin is superseded — after a restart the thread re-renders from the
-    store, and the planning moment's context composition gains the stored
-    transcript as a durable source (🟡 rehydration semantics — how much
-    history feeds the planner prompt context — pinned at plan time from the
-    as-built planning moment; no new prompt template, same moment composed
-    from a durable source, consistent with 018's no-provider-sessions rule).
+    becomes durable. **Schema: one table, `planning_turn`** — one row per
+    turn: `project_id`, `client_turn_id` (unique per project — the API's
+    idempotency guarantee becomes durable, surviving restarts, instead of
+    the process-local result cache), `user_message`, `reply`, the
+    `plan_draft` snapshot (JSONB), `suggestions`, turn status
+    (`pending | completed | failed`), `created_at`/`completed_at`. No
+    thread entity and no speculative `kind` column — "model only what
+    behaves"; the co-pilot slice brings its own chat tables when it brings
+    the behaviour (adversarial finding 20: role/text rows would not have
+    future-proofed its context/library semantics anyway). **Two-phase
+    persistence, not one transaction** (finding 2 — the planner LLM call
+    deliberately runs outside any transaction, as-built): the row inserts
+    with the user message on receipt (short transaction, after the
+    authz/409 gate); the reply + draft complete it in a second transaction
+    — the same one that persists the approved plan when the turn reaches
+    `ready`. A crash between the two leaves a `pending` row that renders
+    honestly as an incomplete turn with retry; a retried `client_turn_id`
+    returns the completed row verbatim or re-runs an incomplete one.
+    **Rehydration is an enumerated mapping, not an aspiration**
+    (finding 1, per the 025 context-parity precedent): every
+    `_PlanningSession` field maps to a durable source — `turns` ← the
+    completed rows in order; `previous_draft` ← the latest completed row's
+    snapshot; the idempotency cache ← the rows themselves; `session_id` ←
+    fresh per process (tracing identity, not quality-bearing) — the plan
+    carries the mapping as a checked table against `planning.py` as-built,
+    and a field with no durable source is a stop-condition finding.
+    **Transcript reads paginate** with the standard envelope (finding 14).
+    **Ordering with the steering record is run-phase-anchored, not
+    timestamp-merged** (finding 4): planning turns are 409-fenced while a
+    run executes or parks, so turns and steering decisions can never
+    interleave within a run — the thread renders planning turns between
+    run blocks, and steering decisions inside them ordered by their
+    `event_log` sequence; steering stays referenced from its own record,
+    never duplicated. **No backfill** (finding 12): existing projects
+    simply have zero turn rows; in-memory drafts in flight at deploy time
+    are lost once, honestly (named in verification.md). The 025 "draft
+    conversation is lost on restart" pin is superseded, and
+    `web-api.md` **§ Planning turns is rewritten** to the durable
+    semantics (finding 13) — not just the SSE section.
 13. **Live artefact streaming (backend + frontend).** The SSE vocabulary
-    gains additive `artefact.*` events (skeleton after sectioning ·
-    section-completed per committed section; exact set + payload shape —
-    prose-in-event vs refetch-on-event — pinned at plan time), emitted as
-    durable `event_log` rows from the synthesise stage's per-section loop, so
-    streaming is **replay-safe by construction** (a mid-run reconnect shows
-    exactly the sections completed so far). The evidence-base page renders
-    the demo-validated `LiveArtefact` shape: all planned section headings
-    with focus placeholders, "Writing this section now…" on the active one,
-    prose filling in place as each section completes — **whole-section
-    grain, not token streaming** — with the honest footer that citations and
-    claim annotations attach when the run commits the final artefact.
-    `web-api.md` § SSE updated; the frontend narrow set, reducer and
-    generated types extend accordingly.
+    gains three additive events, **pinned now** (findings 15/17/21, closing
+    the payload-shape question): `artefact.skeleton` (the ordered section
+    list — index, title, focus — including the key-findings and conclusion
+    positions), `artefact.section_started {index}`, and
+    `artefact.section_completed {index, title, prose}` — **prose travels in
+    the event**; sections render *only* from these durable events; there is
+    **no partial-artefact read path**, and the artefact read model remains
+    the bounded final object. Section identity is the skeleton index
+    (duplicate titles are disambiguated by construction); the reducer
+    clears live sections when a different run starts (the existing
+    new-run reset rule extends). **Emission semantics** (finding 5 — the
+    synthesise component runs inside one component-wide transaction
+    as-built): `artefact.*` events append via a **separate
+    connection/transaction** from the synthesise loop, so the SSE tail
+    sees them live and they survive a component rollback. They are
+    **presentation/progress records, never authoritative artefact
+    content**: the artefact of record still lands only at component
+    commit. **Terminal honesty** (findings 6/8): if the run fails, aborts
+    or is interrupted after sections have streamed, the streamed sections
+    stay visible under an explicit terminal banner (drafted sections, not
+    the evidence base; citations never attached) — the streaming footer's
+    "annotations attach at commit" copy must be truthful on every terminal
+    path, a mock fixture exercises the partial-failure state, and
+    restart-mid-synthesis follows 025 semantics unchanged (mid-component
+    death = `interrupted`; streaming adds no resume). The evidence-base
+    page renders the demo-validated `LiveArtefact` shape: all planned
+    section headings with focus placeholders, "Writing this section now…"
+    on the active one, prose filling in place as each completes —
+    **whole-section grain, not token streaming**. `web-api.md` § SSE
+    updated; the frontend narrow set, reducer and generated types extend
+    accordingly.
 
-Plus: the transcript migration (+ downgrade) and endpoints with tests
-(turn-persists-transactionally · transcript round-trip · restart survival ·
-owner-scoped 404) · artefact-event emission with tests (per-section durable
-rows · replay idempotence — a reconnect mid-synthesis rebuilds exactly the
-completed sections · reducer extension) · mock fixtures extended to exercise
-every new surface incl. a paused-mid-synthesis stream (sanitized-fixtures
-policy) · vitest for the judgment-bearing components (annotation slicing with
+Plus: the `planning_turn` migration (+ downgrade) and endpoints with tests
+(two-phase persistence incl. the crash-between-phases pending-turn render ·
+durable `client_turn_id` idempotency across a restart · rehydration parity
+per the enumerated mapping · transcript round-trip + pagination ·
+owner-scoped 404) · artefact-event emission with tests (separate-connection
+visibility — events tail live while the component transaction is open ·
+replay idempotence — a reconnect mid-synthesis rebuilds exactly the
+completed sections · terminal honesty after failure/interruption with
+partial sections · reducer extension incl. new-run reset) · mock fixtures
+extended to exercise every new surface incl. a paused-mid-synthesis stream
+and a failed-after-partial-stream state (sanitized-fixtures policy) · vitest for the judgment-bearing components (annotation slicing with
 overlap/oversize spans, funnel/count-up under reduced motion, plan-pane label
 maps, answered-state render, quote-highlight fallbacks, live-section fill-in) ·
 `e2e/journey.spec.ts` updated to the new surfaces · `e2e/fe-api-smoke.spec.ts`
@@ -227,20 +307,32 @@ seams recorded) · `verification.md`.
 
 ## Constraints & approval gates
 
-- **Public interface (the one expected gate):** several demo surfaces show data
-  the production API may not yet serve (findings stats/direction/quote fields ·
-  dossier detail fields · coverage `backends_detail` · claim types beyond
-  citation/gap · screening-detail fields on evidence rows). Where the durable
-  record already holds the data, the read models gain **additive-only fields
-  (or one additive dossier endpoint)** — the exact list enumerated at plan time
-  from the as-built read models, approved at the plan 🛑; OpenAPI + generated
-  client regenerate through `make drift-check`. Where the data doesn't exist,
-  the surface **honestly omits** (hide, never fake) — no chain/schema changes
-  to manufacture it.
-- **Schema (rev 2 gate, owner-directed):** one migration adding the
-  transcript tables (thread + message, per strand 12), up/down tested against
-  a populated database; **no other table changes** — steering stays on its
-  existing record, artefact streaming is event-log JSONB (zero-schema).
+- **Public interface:** several demo surfaces show data the production API
+  may not yet serve (findings stats/metadata/quote fields · dossier detail
+  fields · coverage `backends_detail` · claim types beyond citation/gap ·
+  screening-detail fields on evidence rows). Where the durable record
+  already holds the data, the read models gain **additive-only fields, one
+  optional additive dossier endpoint, and server-side filter query params
+  on the existing paginated lists** (finding 7 — the demo's facet/status
+  chips filter whole collections; client-side filtering of one page gives
+  false counts at real scale and violates the 025 "filters as query params"
+  pagination pin; the `SourcesView` client-side-filter caveat is
+  discharged, not inherited). The exact list is enumerated at plan time
+  from the as-built read models and approved at the plan 🛑; OpenAPI +
+  generated client regenerate through `make drift-check`. Where the data
+  doesn't exist in the durable record, the surface **honestly omits**
+  (hide, never fake) — no chain/schema changes to manufacture it.
+  **Honest omission is a bounded escape hatch, not a scope dial**
+  (finding 16): the demo-validated surfaces named in strands 1/5/6/7 are
+  the requirement; the plan's field list is reviewed strand-by-strand
+  against them, and a strand losing its headline surface to "the read
+  model doesn't serve it" reopens this contract gate rather than shipping
+  silently thinner.
+- **Schema (rev 2 gate, owner-directed; reshaped rev 3):** one migration
+  adding the single `planning_turn` table (strand 12), up/down tested
+  against a populated database (no backfill — pre-existing projects have
+  zero rows); **no other table changes** — steering stays on its existing
+  record, artefact streaming is event-log JSONB (zero-schema).
 - **SSE vocabulary (rev 2 gate, owner-directed):** the additive `artefact.*`
   event set per strand 13, recorded in `web-api.md`; no other event changes.
 - **No auth changes** (render-level only; the auth seam and 026 fixes are
@@ -298,19 +390,29 @@ would have to bend to fit a demo behaviour · turn/token budget spent.
 - **Live-check pin (contract-time):** one scoped **local** live session
   (dev issuer, real backend, real chain at rapid effort) driven through the
   browser: landing rename/archive → planning conversation with plan pane
-  forming → **restart the API mid-planning; the thread survives and the next
-  turn works** (transcript store) → start → journey pane fills live
-  (timeline · funnel · coverage · activity) → check-in answered
-  (answered-state renders) → **during synthesise, watch at least one section
-  stream into the artefact page in place** (skeleton → writing → filled),
-  then reload mid-synthesis and confirm the completed sections replay →
-  evidence-base page with claim panel + highlighted chunk context + dossier →
-  findings expansion → sources tooltips. Estimated wall ≈ 20–25 min. **No
-  staging deploy in this slice** (026 owns deploy; staging OpenAI quota
-  exhausted) and no full live e2e — the mock journey covers flow breadth.
-- Browser checks: keyboard nav on check-in card, claim spans, dossier;
-  `prefers-reduced-motion` quiets every new animation; no horizontal body
-  scroll at 1280/768.
+  forming → **restart the API mid-planning; the thread survives, a retried
+  `client_turn_id` returns the same turn, and the next turn works**
+  (transcript store) → start → journey pane fills live (timeline · funnel ·
+  coverage · live search card · activity) → check-in answered
+  (answered-state renders; the decision appears in the thread inside its
+  run block) → **during synthesise, watch at least one section stream into
+  the artefact page in place** (skeleton → writing → filled), browser-reload
+  mid-synthesis and confirm the completed sections replay → **on a second
+  run, kill and restart the API mid-synthesis** (finding 9): the run is
+  marked `interrupted` honestly, the streamed sections stay visible under
+  the terminal banner, and the thread is intact → evidence-base page with
+  claim panel + highlighted chunk context + dossier → findings expansion →
+  sources filters (server-side — filtered counts are collection-true) +
+  tooltips. Estimated wall ≈ 25–30 min. The 025 two-user/parked-restart leg
+  is **not** re-run — the parked-pause and continuation machinery is
+  untouched by this slice (strand 13 explicitly keeps 025 interruption
+  semantics); its regression net is the existing test suite. **No staging
+  deploy in this slice** (026 owns deploy; staging OpenAI quota exhausted)
+  and no full live e2e — the mock journey covers flow breadth.
+- Browser checks: keyboard nav on check-in card, claim spans, dossier, **and
+  the rail collapse control** (finding 19); `prefers-reduced-motion` quiets
+  every new animation; no horizontal body scroll at 1280/768 (rail collapsed
+  and expanded).
 
 ## Verification evidence expected
 

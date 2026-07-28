@@ -39,12 +39,21 @@ The task is **done only if every box holds** — otherwise it is in progress, no
 14. [ ] **Vocabulary:** archive (never delete) on landing; appraisal labels never
         numbers; tags grouped by asserter never merged; the publication-country
         caveat renders with that distribution.
-15. [ ] **Transcript durability:** a planning turn persists in the same
-        transaction as the turn; the thread survives navigation and an API
-        restart (live-check evidence); transcript endpoints are owner-scoped
-        (cross-owner → 404); migration up/down tested against a populated DB.
+15. [ ] **Transcript durability:** two-phase turn persistence holds (user
+        message durable on receipt; reply + draft + approved plan complete it;
+        a crash between phases renders an honest incomplete turn — test
+        evidence); `client_turn_id` idempotency survives a restart; the
+        rehydration mapping table is complete against `planning.py` as-built
+        and parity-tested; the thread survives navigation and an API restart
+        (live-check evidence); transcript reads paginate with the standard
+        envelope; endpoints are owner-scoped (cross-owner → 404); migration
+        up/down tested against a populated DB.
 16. [ ] **Streaming honesty:** artefact sections render only from durable
-        `artefact.*` events (replay after reconnect shows exactly the committed
-        sections — test evidence); the active section is marked as writing; the
-        annotations-attach-at-commit footer shows while streaming; streamed
-        prose passes through `scrub()`.
+        `artefact.*` events — prose-in-event, no partial-artefact read path
+        (replay after reconnect shows exactly the completed sections — test
+        evidence); events append outside the component transaction and are
+        presentation records (the artefact of record lands only at commit);
+        the active section is marked as writing; the annotations-attach-at-
+        commit footer shows while streaming **and every terminal path
+        (failed/aborted/interrupted) shows the honest partial-stream banner**;
+        streamed prose passes through `scrub()`.
