@@ -31,6 +31,7 @@ _CONFLICT_CODES = {
     "already_answered",
     "capacity",
     "planning_turn_in_progress",
+    "stale_turn",
 }
 
 

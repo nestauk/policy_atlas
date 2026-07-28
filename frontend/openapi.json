@@ -1339,6 +1339,26 @@
         "title": "Page[FindingOut]",
         "type": "object"
       },
+      "Page_PlanningTranscriptTurnOut_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/PlanningTranscriptTurnOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "title": "Page[PlanningTranscriptTurnOut]",
+        "type": "object"
+      },
       "Page_ProjectOut_": {
         "properties": {
           "data": {
@@ -1730,6 +1750,73 @@
           "version"
         ],
         "title": "PlanUpdatedFrame",
+        "type": "object"
+      },
+      "PlanningTranscriptTurnOut": {
+        "description": "One durable planning-transcript turn shown in chronological order.\n\nArgs:\n    turn_index: Monotonic per-project conversation coordinate.\n    user_message: Submitted user message.\n    reply: Planner reply, absent until a pending turn completes.\n    suggestions: Planner quick-reply suggestions, if the turn completed.\n    status: Durable execution state for this turn.\n    created_at: Receipt timestamp, retained as display metadata.\n    completed_at: Terminal timestamp, absent while still pending.",
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "reply": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "suggestions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          },
+          "turn_index": {
+            "title": "Turn Index",
+            "type": "integer"
+          },
+          "user_message": {
+            "title": "User Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_index",
+          "user_message",
+          "reply",
+          "status",
+          "created_at",
+          "completed_at"
+        ],
+        "title": "PlanningTranscriptTurnOut",
         "type": "object"
       },
       "PlanningTurnCreate": {
@@ -3646,7 +3733,7 @@
     },
     "/api/v1/projects/{project_id}/plan": {
       "get": {
-        "description": "Return the durable approved plan or the surviving local draft session.",
+        "description": "Return the durable approved plan or latest completed durable draft.",
         "operationId": "get_plan_api_v1_projects__project_id__plan_get",
         "parameters": [
           {
@@ -3694,8 +3781,78 @@
       }
     },
     "/api/v1/projects/{project_id}/planning-turns": {
+      "get": {
+        "description": "Return the durable planning transcript in ascending conversation order.",
+        "operationId": "list_planning_turns_api_v1_projects__project_id__planning_turns_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_PlanningTranscriptTurnOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Planning Turns",
+        "tags": [
+          "planning"
+        ]
+      },
       "post": {
-        "description": "Advance one project's real planner conversation once per client turn id.",
+        "description": "Advance one project's durable planner conversation once per client turn id.",
         "operationId": "create_planning_turn_api_v1_projects__project_id__planning_turns_post",
         "parameters": [
           {

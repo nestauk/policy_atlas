@@ -1,22 +1,26 @@
-"""Project-scoped planner turns backed by a bounded process-local session cache."""
+"""Project-scoped planner turns backed by a durable transcript."""
 
 from __future__ import annotations
 
 import threading
 import uuid
-from collections import OrderedDict
-from dataclasses import dataclass, field
-from typing import Annotated, Any
+from datetime import UTC, datetime, timedelta
+from typing import Annotated, Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ValidationError
-from sqlalchemy import select
-from sqlalchemy.engine import Engine
+from sqlalchemy import func, select, update
+from sqlalchemy.engine import Connection, Engine, RowMapping
 
 from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import (
+    PAGE_SIZE_DEFAULT,
+    PAGE_SIZE_MAX,
+    Page,
+    PageMeta,
     PlanDraft,
+    PlanningTranscriptTurnOut,
     PlanningTurnCreate,
     PlanningTurnOut,
     PlanOut,
@@ -24,7 +28,7 @@ from policy_atlas.api.contract import (
 )
 from policy_atlas.api.deps import get_current_user, get_engine, get_planner_backend
 from policy_atlas.api.routers._common import owned_project
-from policy_atlas.core.schema import capability_run, orchestration_plan
+from policy_atlas.core.schema import capability_run, orchestration_plan, planning_transcript
 from policy_atlas.runtime.orchestrate import build_plan, persist_approved_plan
 from policy_atlas.runtime.orchestration_plan import OrchestrationPlan, compose
 from policy_atlas.runtime.planner import PlannerBackend
@@ -36,37 +40,32 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 
-# This is deliberately process-local: approved plans are durable, while a
-# pre-approval conversation honestly vanishes on restart or bounded eviction.
-PLAN_SESSION_CACHE_MAX = 128
-_cache_lock = threading.Lock()
-_sessions: OrderedDict[uuid.UUID, _PlanningSession] = OrderedDict()
+_PENDING_TTL = timedelta(minutes=10)
+_turn_locks_guard = threading.Lock()
+_turn_locks: dict[uuid.UUID, threading.Lock] = {}
 
 
-@dataclass
-class _PlanningSession:
-    """One project's ephemeral planner conversation and idempotent responses."""
-
-    turns: list[dict[str, str]] = field(default_factory=list)
-    previous_draft: dict[str, object] | None = None
-    draft: PlanDraft | None = None
-    results: OrderedDict[uuid.UUID, PlanningTurnOut] = field(default_factory=OrderedDict)
-    session_id: uuid.UUID = field(default_factory=uuid.uuid4)
-    lock: threading.Lock = field(default_factory=threading.Lock)
+def _turn_lock(project_id: uuid.UUID) -> threading.Lock:
+    """Return the process-local concurrency guard for one project's planner turn."""
+    with _turn_locks_guard:
+        return _turn_locks.setdefault(project_id, threading.Lock())
 
 
-def _session(project_id: uuid.UUID) -> _PlanningSession:
-    """Return an LRU-bounded session, evicting only unrecoverable drafts."""
-    with _cache_lock:
-        cached = _sessions.get(project_id)
-        if cached is not None:
-            _sessions.move_to_end(project_id)
-            return cached
-        cached = _PlanningSession()
-        _sessions[project_id] = cached
-        while len(_sessions) > PLAN_SESSION_CACHE_MAX:
-            _sessions.popitem(last=False)
-        return cached
+def _now() -> datetime:
+    """Return a timezone-aware persistence timestamp."""
+    return datetime.now(UTC)
+
+
+def _expire_stale_pending_turns(conn: Connection, project_id: uuid.UUID) -> None:
+    """Terminally fail pending transcript rows older than the retry window."""
+    now = _now()
+    conn.execute(
+        update(planning_transcript)
+        .where(planning_transcript.c.project_id == project_id)
+        .where(planning_transcript.c.status == "pending")
+        .where(planning_transcript.c.created_at < now - _PENDING_TTL)
+        .values(status="failed", completed_at=now)
+    )
 
 
 def _draft_from_wire(draft: PlanDraftWire, *, ready: bool) -> PlanDraft:
@@ -102,6 +101,133 @@ def _draft_from_plan(plan: OrchestrationPlan) -> PlanDraft:
     return PlanDraft.model_validate(values)
 
 
+def _response_from_row(row: RowMapping) -> PlanningTurnOut:
+    """Return a completed turn's stored projected response without recomputing it."""
+    response = row["response"]
+    if response is None:
+        raise RuntimeError("completed planning transcript row has no response")
+    return PlanningTurnOut.model_validate(response)
+
+
+def _planner_inputs(
+    conn: Connection, project_id: uuid.UUID
+) -> tuple[list[dict[str, str]], dict[str, object] | None]:
+    """Rehydrate the exact planner context from completed transcript rows."""
+    rows = conn.execute(
+        select(planning_transcript)
+        .where(planning_transcript.c.project_id == project_id)
+        .where(planning_transcript.c.status == "completed")
+        .order_by(planning_transcript.c.turn_index.asc())
+    ).mappings()
+    turns: list[dict[str, str]] = []
+    previous_draft: dict[str, object] | None = None
+    for row in rows:
+        reply = row["reply"]
+        planner_state = row["planner_state"]
+        if reply is None or planner_state is None:
+            raise RuntimeError("completed planning transcript row is incomplete")
+        turns.extend((
+            {"role": "user", "text": row["user_message"]},
+            {"role": "planner", "text": reply},
+        ))
+        previous_draft = cast("dict[str, object]", planner_state)
+    return turns, previous_draft
+
+
+def _transcript_out(row: RowMapping) -> PlanningTranscriptTurnOut:
+    """Project one durable transcript row into its honest read representation."""
+    return PlanningTranscriptTurnOut(
+        turn_index=row["turn_index"],
+        user_message=row["user_message"],
+        reply=row["reply"],
+        suggestions=row["suggestions"],
+        status=row["status"],
+        created_at=row["created_at"],
+        completed_at=row["completed_at"],
+    )
+
+
+def _phase_one_turn(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    user_id: str,
+    payload: PlanningTurnCreate,
+) -> PlanningTurnOut | uuid.UUID:
+    """Authenticate, fence, and either replay or durably reserve one turn."""
+    owned_project(conn, project_id=project_id, user_id=user_id)
+    _expire_stale_pending_turns(conn, project_id)
+    existing = conn.execute(
+        select(planning_transcript)
+        .where(planning_transcript.c.project_id == project_id)
+        .where(planning_transcript.c.client_turn_id == payload.client_turn_id)
+    ).mappings().one_or_none()
+    if existing is not None:
+        if existing["user_message"] != payload.message:
+            raise ApiConflict(
+                "stale_turn", "client turn id is already bound to a different message"
+            )
+        if existing["status"] == "completed":
+            return _response_from_row(existing)
+
+    active = conn.execute(
+        select(capability_run.c.status)
+        .where(capability_run.c.project_id == project_id)
+        .where(capability_run.c.status.in_(("running", "paused")))
+        .limit(1)
+    ).scalar_one_or_none()
+    if active is not None:
+        raise ApiConflict(
+            "run_active",
+            "finish or stop the current run before replanning; "
+            "use the run's check-ins to steer it",
+        )
+
+    if existing is not None:
+        latest_id = conn.execute(
+            select(planning_transcript.c.id)
+            .where(planning_transcript.c.project_id == project_id)
+            .order_by(planning_transcript.c.turn_index.desc())
+            .limit(1)
+        ).scalar_one()
+        if latest_id != existing["id"]:
+            raise ApiConflict("stale_turn", "only the latest planning turn may be retried")
+        return cast(uuid.UUID, existing["id"])
+
+    pending = conn.execute(
+        select(planning_transcript.c.id)
+        .where(planning_transcript.c.project_id == project_id)
+        .where(planning_transcript.c.status == "pending")
+        .limit(1)
+    ).scalar_one_or_none()
+    if pending is not None:
+        raise ApiConflict("planning_turn_in_progress", "a planning turn is already running")
+
+    max_turn_index = conn.execute(
+        select(func.coalesce(func.max(planning_transcript.c.turn_index), -1)).where(
+            planning_transcript.c.project_id == project_id
+        )
+    ).scalar_one()
+    transcript_id = uuid.uuid4()
+    conn.execute(
+        planning_transcript.insert().values(
+            id=transcript_id,
+            project_id=project_id,
+            client_turn_id=payload.client_turn_id,
+            turn_index=int(max_turn_index) + 1,
+            user_message=payload.message,
+            reply=None,
+            planner_state=None,
+            response=None,
+            suggestions=[],
+            status="pending",
+            created_at=_now(),
+            completed_at=None,
+        )
+    )
+    return transcript_id
+
+
 @router.post("/{project_id}/planning-turns", response_model=PlanningTurnOut)
 def create_planning_turn(
     project_id: uuid.UUID,
@@ -110,55 +236,42 @@ def create_planning_turn(
     engine: Annotated[Engine, Depends(get_engine)],
     planner: Annotated[PlannerBackend, Depends(get_planner_backend)],
 ) -> PlanningTurnOut:
-    """Advance one project's real planner conversation once per client turn id."""
-    session = _session(project_id)
-    existing = session.results.get(payload.client_turn_id)
-    if existing is not None:
-        return existing
-    if not session.lock.acquire(blocking=False):
+    """Advance one project's durable planner conversation once per client turn id."""
+    lock = _turn_lock(project_id)
+    if not lock.acquire(blocking=False):
         raise ApiConflict("planning_turn_in_progress", "a planning turn is already running")
     try:
-        existing = session.results.get(payload.client_turn_id)
-        if existing is not None:
-            return existing
-        # Authz + run-state gate in a short read transaction. Planning turns
-        # 409 while a walk is running or parked (adjudicated review decision
-        # codex-2, 2026-07-21): steering is the sanctioned mid-run plan
-        # channel, and fencing approvals here is what makes the continuation
-        # reducer's latest-approved plan selection provably the walk's own
-        # lineage (amendments supersede within it).
+        # Phase 1 is deliberately short. The planner call below must remain
+        # OUTSIDE any transaction: holding the project row lock (and a pool
+        # connection) across a live LLM call blocked every mutation on the
+        # project — and via the global dispatch lock, run creation process-wide
+        # (review finding I2, 2026-07-21).
+        with engine.begin() as conn:
+            phase_one = _phase_one_turn(
+                conn,
+                project_id=project_id,
+                user_id=user.user_id,
+                payload=payload,
+            )
+        if isinstance(phase_one, PlanningTurnOut):
+            return phase_one
+
         with engine.connect() as conn:
-            owned_project(conn, project_id=project_id, user_id=user.user_id)
-            active = conn.execute(
-                select(capability_run.c.status)
-                .where(capability_run.c.project_id == project_id)
-                .where(capability_run.c.status.in_(("running", "paused")))
-                .limit(1)
-            ).scalar_one_or_none()
-        if active is not None:
-            raise ApiConflict(
-                "run_active",
-                "finish or stop the current run before replanning; "
-                "use the run's check-ins to steer it",
-            )
-        # The planner call runs OUTSIDE any transaction: holding the project
-        # row lock (and a pool connection) across a live LLM call blocked every
-        # mutation on the project — and via the global dispatch lock, run
-        # creation process-wide (review finding I2, 2026-07-21).
-        session.turns.append({"role": "user", "text": payload.message})
+            turns, previous_draft = _planner_inputs(conn, project_id)
+        turns.append({"role": "user", "text": payload.message})
         try:
-            turn = planner.plan_turn(
-                session.turns,
-                session.previous_draft,
-                session_id=session.session_id,
-            )
+            turn = planner.plan_turn(turns, previous_draft, session_id=uuid.uuid4())
         except Exception:
-            # A failed turn must not leave the dangling user message feeding
-            # the planner duplicate turns on retry (review finding m4).
-            session.turns.pop()
+            with engine.begin() as conn:
+                conn.execute(
+                    update(planning_transcript)
+                    .where(planning_transcript.c.id == phase_one)
+                    .where(planning_transcript.c.project_id == project_id)
+                    .where(planning_transcript.c.status.in_(("pending", "failed")))
+                    .values(status="failed", completed_at=_now())
+                )
             raise
-        session.turns.append({"role": "planner", "text": turn.reply})
-        session.previous_draft = turn.plan_draft.model_dump()
+
         ready = turn.ready
         approved: OrchestrationPlan | None = None
         if ready:
@@ -169,22 +282,70 @@ def create_planning_turn(
         draft = _draft_from_plan(approved) if approved is not None else _draft_from_wire(
             turn.plan_draft, ready=ready
         )
-        if approved is not None:
-            with engine.begin() as conn:
-                owned_project(conn, project_id=project_id, user_id=user.user_id, for_update=True)
-                persist_approved_plan(conn, project_id=project_id, plan=approved)
         result = PlanningTurnOut(
             reply=turn.reply,
             plan=draft,
             suggestions=turn.suggested_answers or [],
         )
-        session.draft = draft
-        session.results[payload.client_turn_id] = result
-        while len(session.results) > PLAN_SESSION_CACHE_MAX:
-            session.results.popitem(last=False)
+        phase_two_values = {
+            "reply": turn.reply,
+            "planner_state": turn.plan_draft.model_dump(mode="json"),
+            "response": result.model_dump(mode="json"),
+            "suggestions": result.suggestions,
+            "status": "completed",
+            "completed_at": _now(),
+        }
+        # Phase 2 joins plan approval in the same transaction, so an approved
+        # plan can never commit without the transcript turn that approved it.
+        with engine.begin() as conn:
+            if approved is not None:
+                owned_project(conn, project_id=project_id, user_id=user.user_id, for_update=True)
+            completed = conn.execute(
+                update(planning_transcript)
+                .where(planning_transcript.c.id == phase_one)
+                .where(planning_transcript.c.project_id == project_id)
+                # A fresh turn completes from "pending"; a retried latest turn
+                # re-runs in place from "failed" (retry rules, plan pin 2).
+                .where(planning_transcript.c.status.in_(("pending", "failed")))
+                .values(**phase_two_values)
+            )
+            if completed.rowcount != 1:
+                raise RuntimeError("planning transcript turn was not open at phase two")
+            if approved is not None:
+                persist_approved_plan(conn, project_id=project_id, plan=approved)
         return result
     finally:
-        session.lock.release()
+        lock.release()
+
+
+@router.get("/{project_id}/planning-turns", response_model=Page[PlanningTranscriptTurnOut])
+def list_planning_turns(
+    project_id: uuid.UUID,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    engine: Annotated[Engine, Depends(get_engine)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
+) -> Page[PlanningTranscriptTurnOut]:
+    """Return the durable planning transcript in ascending conversation order."""
+    with engine.begin() as conn:
+        owned_project(conn, project_id=project_id, user_id=user.user_id)
+        _expire_stale_pending_turns(conn, project_id)
+        total_items = conn.execute(
+            select(func.count())
+            .select_from(planning_transcript)
+            .where(planning_transcript.c.project_id == project_id)
+        ).scalar_one()
+        rows = conn.execute(
+            select(planning_transcript)
+            .where(planning_transcript.c.project_id == project_id)
+            .order_by(planning_transcript.c.turn_index.asc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        ).mappings().all()
+    return Page(
+        data=[_transcript_out(row) for row in rows],
+        pagination=PageMeta(page=page, page_size=page_size, total_items=total_items),
+    )
 
 
 @router.get("/{project_id}/plan", response_model=PlanOut)
@@ -193,9 +354,10 @@ def get_plan(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
 ) -> PlanOut:
-    """Return the durable approved plan or the surviving local draft session."""
-    with engine.connect() as conn:
+    """Return the durable approved plan or latest completed durable draft."""
+    with engine.begin() as conn:
         owned_project(conn, project_id=project_id, user_id=user.user_id)
+        _expire_stale_pending_turns(conn, project_id)
         row = conn.execute(
             select(orchestration_plan)
             .where(orchestration_plan.c.project_id == project_id)
@@ -203,13 +365,23 @@ def get_plan(
             .order_by(orchestration_plan.c.version.desc())
             .limit(1)
         ).mappings().one_or_none()
+        if row is None:
+            draft_row = conn.execute(
+                select(planning_transcript.c.response)
+                .where(planning_transcript.c.project_id == project_id)
+                .where(planning_transcript.c.status == "completed")
+                .order_by(planning_transcript.c.turn_index.desc())
+                .limit(1)
+            ).mappings().one_or_none()
+        else:
+            draft_row = None
     if row is not None:
         return PlanOut(
             plan=_draft_from_plan(OrchestrationPlan.model_validate(row["payload"])),
             version=row["version"],
             status=row["status"],
         )
-    session = _sessions.get(project_id)
-    if session is None or session.draft is None:
+    if draft_row is None or draft_row["response"] is None:
         raise HTTPException(status_code=404, detail="resource not found")
-    return PlanOut(plan=session.draft, version=0, status="draft")
+    response = PlanningTurnOut.model_validate(draft_row["response"])
+    return PlanOut(plan=response.plan, version=0, status="draft")

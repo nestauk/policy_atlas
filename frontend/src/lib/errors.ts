@@ -1,7 +1,12 @@
 /** Machine-readable conflict conditions surfaced by the API (the real
  *  `ApiConflict` codes raised by the backend — see `runs.py`,
  *  `planning.py`, `check_ins.py`). */
-export type ConflictCode = "run_active" | "capacity" | "planning_turn_in_progress" | "already_answered";
+export type ConflictCode =
+  | "run_active"
+  | "capacity"
+  | "planning_turn_in_progress"
+  | "stale_turn"
+  | "already_answered";
 
 /** Human-readable, trigger-local conflict copy — the one place this
  *  copy lives; call sites wire it in rather than inlining their own. */
@@ -9,6 +14,7 @@ export const conflictSentences: Record<ConflictCode, string> = {
   run_active: "A run is already active for this project. Refresh to see its current progress.",
   capacity: "This run cannot start yet because the workspace is at capacity. Try again shortly.",
   planning_turn_in_progress: "That planning turn is still being prepared. Refresh to see the completed turn.",
+  stale_turn: "That planning turn is no longer the latest one. Refresh the planning conversation and try again.",
   already_answered: "This check-in has already been answered. Refresh to see the recorded decision.",
 };
 

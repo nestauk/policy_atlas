@@ -16,6 +16,7 @@ trust an optional field as "finalised".
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -188,6 +189,28 @@ class PlanningTurnOut(BaseModel):
     reply: str
     plan: PlanDraft
     suggestions: list[str] = Field(default_factory=list)
+
+
+class PlanningTranscriptTurnOut(BaseModel):
+    """One durable planning-transcript turn shown in chronological order.
+
+    Args:
+        turn_index: Monotonic per-project conversation coordinate.
+        user_message: Submitted user message.
+        reply: Planner reply, absent until a pending turn completes.
+        suggestions: Planner quick-reply suggestions, if the turn completed.
+        status: Durable execution state for this turn.
+        created_at: Receipt timestamp, retained as display metadata.
+        completed_at: Terminal timestamp, absent while still pending.
+    """
+
+    turn_index: int
+    user_message: str
+    reply: str | None
+    suggestions: list[str] = Field(default_factory=list)
+    status: Literal["pending", "completed", "failed"]
+    created_at: datetime
+    completed_at: datetime | None
 
 
 class PlanOut(BaseModel):

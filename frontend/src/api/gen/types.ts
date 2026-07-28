@@ -324,7 +324,7 @@ export interface paths {
         };
         /**
          * Get Plan
-         * @description Return the durable approved plan or the surviving local draft session.
+         * @description Return the durable approved plan or latest completed durable draft.
          */
         get: operations["get_plan_api_v1_projects__project_id__plan_get"];
         put?: never;
@@ -342,11 +342,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Planning Turns
+         * @description Return the durable planning transcript in ascending conversation order.
+         */
+        get: operations["list_planning_turns_api_v1_projects__project_id__planning_turns_get"];
         put?: never;
         /**
          * Create Planning Turn
-         * @description Advance one project's real planner conversation once per client turn id.
+         * @description Advance one project's durable planner conversation once per client turn id.
          */
         post: operations["create_planning_turn_api_v1_projects__project_id__planning_turns_post"];
         delete?: never;
@@ -1206,6 +1210,12 @@ export interface components {
             data: components["schemas"]["FindingOut"][];
             pagination: components["schemas"]["PageMeta"];
         };
+        /** Page[PlanningTranscriptTurnOut] */
+        Page_PlanningTranscriptTurnOut_: {
+            /** Data */
+            data: components["schemas"]["PlanningTranscriptTurnOut"][];
+            pagination: components["schemas"]["PageMeta"];
+        };
         /** Page[ProjectOut] */
         Page_ProjectOut_: {
             /** Data */
@@ -1391,6 +1401,41 @@ export interface components {
             type: "plan.updated";
             /** Version */
             version: number;
+        };
+        /**
+         * PlanningTranscriptTurnOut
+         * @description One durable planning-transcript turn shown in chronological order.
+         *
+         *     Args:
+         *         turn_index: Monotonic per-project conversation coordinate.
+         *         user_message: Submitted user message.
+         *         reply: Planner reply, absent until a pending turn completes.
+         *         suggestions: Planner quick-reply suggestions, if the turn completed.
+         *         status: Durable execution state for this turn.
+         *         created_at: Receipt timestamp, retained as display metadata.
+         *         completed_at: Terminal timestamp, absent while still pending.
+         */
+        PlanningTranscriptTurnOut: {
+            /** Completed At */
+            completed_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Reply */
+            reply: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "completed" | "failed";
+            /** Suggestions */
+            suggestions?: string[];
+            /** Turn Index */
+            turn_index: number;
+            /** User Message */
+            user_message: string;
         };
         /**
          * PlanningTurnCreate
@@ -2433,6 +2478,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_planning_turns_api_v1_projects__project_id__planning_turns_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_PlanningTranscriptTurnOut_"];
                 };
             };
             /** @description Validation Error */

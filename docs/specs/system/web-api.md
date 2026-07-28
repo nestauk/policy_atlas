@@ -77,19 +77,47 @@ artefact, groups) are whole-object.
 
 - `POST /api/v1/projects/{id}/planning-turns`
   `{message, client_turn_id}` → `{reply, plan, suggestions[]}` — one real
-  planner turn. `client_turn_id` (UUID, caller-minted) makes double-submit
-  idempotent (the same turn is returned, not re-run). A concurrent turn on
-  the same project → 409 `planning_turn_in_progress` (per-project lock).
+  planner turn. Every turn is durable in the per-project
+  `planning_transcript`: its monotonic `turn_index`, assigned when the user
+  message is received, is the conversation ordering coordinate;
+  `created_at` is display metadata only. The short first transaction follows
+  the owner/run-active gate and creates a `pending` row; the LLM call runs
+  outside any transaction (I2); a second transaction writes its reply, raw
+  planner-state snapshot, projected response and suggestions as `completed`.
+  When the turn approves a plan, that second transaction also persists the
+  plan, atomically. Planner failure marks the row `failed`; a process crash
+  between phases leaves an honest `pending` row.
+  `client_turn_id` is caller-minted UUID idempotency durable across API
+  restarts: retrying a completed row with the same message returns its stored
+  projected response verbatim. Only the latest `turn_index` may be retried;
+  it re-runs in place with the same index. A reused id with a different
+  message, or a non-latest unfinished retry, → 409 `stale_turn`. A new id
+  while a `pending` row is younger than ten minutes → 409
+  `planning_turn_in_progress`; reading after ten minutes terminally marks the
+  pending row `failed`. The process-local per-project turn lock remains a
+  belt-and-braces concurrency guard under the one-instance posture.
   A turn while the project's walk is running or parked → 409 `run_active`:
   steering is the sanctioned mid-run plan channel, and the fence guarantees
   the latest-approved plan is always the active walk's own lineage
   (review adjudication, 2026-07-21).
   The draft `plan` mirrors `OrchestrationPlan` field-by-field with every
-  field optional while drafting + `steps[]` + `ready`; planner session
-  state is process-local and bounded — an in-flight draft conversation is
-  lost on restart, honestly (the approved plan object is durable).
+  field optional while drafting + `steps[]` + `ready`. Planner context
+  rehydrates from completed rows in `turn_index` order (each contributes the
+  user message then planner reply); the raw `planner_state` from the latest
+  completed row becomes `previous_draft`. Stored HTTP projections are never
+  fed back to the planner. A fresh tracing session id per request is correct:
+  conversation quality depends solely on that durable composition.
 - `GET /api/v1/projects/{id}/plan` → the current plan (draft or approved,
-  with `version`/`status`), whole-object.
+  with `version`/`status`), whole-object. It returns the approved plan when
+  one exists; otherwise the latest completed transcript row's stored
+  `response.plan` without recomputation. It is 404 only when neither exists,
+  so drafts survive API restarts.
+- `GET /api/v1/projects/{id}/planning-turns` → the owner-scoped durable
+  transcript in ascending `turn_index`, paginated in the standard
+  `{data, pagination}` envelope. Each row exposes `turn_index`,
+  `user_message`, `reply`, `suggestions`, `status`, `created_at` and
+  `completed_at`; pending and failed rows remain visibly incomplete. There
+  is no backfill: projects predating the table simply have zero turns.
 
 ### Runs
 
