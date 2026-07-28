@@ -108,6 +108,31 @@ tag → `AWS-StartPortForwardingSessionToRemoteHost` → `psql` over TLS →
 `pg_stat_activity` + `alembic_version` queried. (session-manager-plugin installed
 user-local, no sudo.)
 
+## Post-review redeploy (2026-07-28, owner-directed)
+
+The one-time Aurora-encryption migration (DEPLOYMENT.md § 4 recipe) ran live, plus a
+full redeploy of the review-stack changes:
+
+- `cdk destroy PaV3DatabaseStack` (final snapshot auto-taken) → full stack redeploy.
+  **Observed:** the app stack updated in the same pass — CloudFormation re-resolves
+  SSM-typed parameters on update, so the recipe's `--force` step proved unnecessary;
+  all three 5432 ingress rules (API, migration, fck-nat) confirmed on the *new* DB SG
+  before any scale-up.
+- New cluster verified live: `StorageEncrypted: true · DeletionProtection: true ·
+  BackupRetentionPeriod: 7 · Status: available` (rds describe-db-clusters).
+- `deploy.sh update`: 4/4 PASS (stop → migrate on the fresh cluster → scale →
+  publish with the new waited-invalidation ordering); `/readyz` 200.
+- **Single-project live smoke** on the encrypted cluster (smoke user): cold visit →
+  hosted-UI redirect (new bundle's gate) → empty project list (fresh DB) → project
+  → planner (2 turns) → run: acquire 17 s (52 acquired) → screen (18/52 relevant) →
+  classify → appraise (12) → ingest (13 full texts) → characterise → synthesise
+  431 s → **"The analysis is complete."** — 9-section artefact, 0 failed stages,
+  full chain in Langfuse (13:09–13:2x UTC). Evidence:
+  [45-final-timeline.png](evidence/45-final-timeline.png),
+  [46-artefact.png](evidence/46-artefact.png). Owner independently confirmed the
+  report in-browser.
+- Staging OpenAI quota confirmed restored (pre-deploy probe + the completed run).
+
 ## Diff summary
 
 v2's CDK app ported copy-first into `infra/` ([port-map.md](port-map.md) has the
