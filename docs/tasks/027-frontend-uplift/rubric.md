@@ -8,8 +8,9 @@ The task is **done only if every box holds** — otherwise it is in progress, no
        live check ran and is narrated in [verification.md](verification.md).
 3. [ ] No approval-gated change snuck in unapproved — the additive read-model list
        matches what the plan 🛑 approved; schema = exactly the one transcript
-       migration; SSE additions = exactly the approved `artefact.*` set; no auth,
-       deps, CI, or production-config changes.
+       migration; SSE additions = exactly the approved `artefact.*` set; CI
+       change = exactly the approved mock-journey e2e lane; no auth, deps, or
+       production-config changes.
 4. [ ] No generated files (`src/api/gen/`, `openapi.json`) or secrets edited by hand.
 5. [ ] No tests deleted, skipped or weakened without written justification — the
        substrate test files (auth, sse, authMiddleware, reducer, scrub, feedback,

@@ -29,6 +29,16 @@
 > no-backfill semantics (12), web-api.md § Planning turns rewrite (13),
 > transcript pagination (14), spec-floor sweep of rubric/tests.
 >
+> **rev 3.1–3.3 (owner amendments, 2026-07-28):** table renamed
+> `planning_transcript` (planning-only by design — co-pilot brings its own
+> chat model) · **ICF findings surfaced** (strand 6 kind-aware; ICF row
+> design has no demo precedent — lead-owned) · **strand 14 production
+> hygiene folded in** (live landing statuses · pending check-in badge +
+> title marker · per-view titles + favicon · error boundary + 404 route ·
+> toasts wired, dead exports deleted · signed-in identity · evidence-base
+> print stylesheet (share/export seam stays deferred) · mock-journey e2e
+> into CI — the one approved CI change).
+>
 > **rev 2 (owner calls, 2026-07-28):** (1) **transcript store IN** — the
 > planning conversation persists durably (strand 12); users' chats must not
 > disappear, mid-session or across restarts; discharges the 025 "transcripts
@@ -264,6 +274,25 @@ PR landing the uplifted `frontend/src/views/**` (+ supporting `ui/` primitives,
     **whole-section grain, not token streaming**. `web-api.md` § SSE
     updated; the frontend narrow set, reducer and generated types extend
     accordingly.
+14. **Production hygiene** (owner-approved additions, 2026-07-28): **live
+    landing statuses** (projects list refetches on an interval while any
+    run is non-terminal — a card never lies about "Analysing"/"Paused") ·
+    **pending check-in visibility outside the workspace** (badge on the
+    Workspace nav item + a `document.title` marker while a check-in is
+    pending; no push/email — that stays out) · **per-view `document.title`
+    (project name + view) and the brand favicon**, replacing the Vite
+    defaults · **root error boundary + catch-all 404 route** (one honest
+    render-crash surface; unknown URLs get a real "nothing here" view) ·
+    **toasts wired to mutation failures** (rename/archive/answer errors —
+    consuming the built-but-unused Toast system) **and remaining dead
+    exports deleted** (`useCheckIns` and any other unconsumed surface this
+    slice doesn't claim — no false signals) · **signed-in identity shown
+    beside sign-out** (the existing `jwt.ts` sub/claim read; display only)
+    · **print stylesheet for the evidence-base page** (`@media print` on
+    the already-A4-shaped artefact; owner-ruled honest browser behaviour —
+    the share/export CTA seam stays deferred and undischarged) · **the
+    mock-journey Playwright e2e joins CI** (its own approved CI-gate item —
+    see Constraints).
 
 Plus: the `planning_transcript` migration (+ downgrade) and endpoints with tests
 (two-phase persistence incl. the crash-between-phases pending-turn render ·
@@ -363,8 +392,10 @@ seams recorded) · `verification.md`.
   owner-scoped auth dependency as every data route). **No new dependencies
   expected** — the demo stack is a subset of production's; any exception
   (e.g. an animation need Tailwind utilities can't meet) hits this gate
-  explicitly. **No CI changes** beyond the e2e specs themselves. **No
-  production config / deploy changes** (026 owns those).
+  explicitly. **CI (owner-approved, rev 3.3):** exactly one change — the
+  mock-journey Playwright e2e (`pnpm e2e`) becomes a CI lane (chromium, mock
+  mode, no backend; ~2–3 min); nothing else in CI moves. **No production
+  config / deploy changes** (026 owns those).
 - All model-authored/source-derived strings render through `scrub()`; source
   URLs through `safeHref()`; the lint ban stays.
 - Interactive elements are real `<button>`s with accessible names; the
@@ -424,9 +455,11 @@ would have to bend to fit a demo behaviour · turn/token budget spent.
   run, kill and restart the API mid-synthesis** (finding 9): the run is
   marked `interrupted` honestly, the streamed sections stay visible under
   the terminal banner, and the thread is intact → evidence-base page with
-  claim panel + highlighted chunk context + dossier → findings expansion →
-  sources filters (server-side — filtered counts are collection-true) +
-  tooltips. Estimated wall ≈ 25–30 min. The 025 two-user/parked-restart leg
+  claim panel + highlighted chunk context + dossier → findings expansion
+  (both kinds) → sources filters (server-side — filtered counts are
+  collection-true) + tooltips → hygiene spot-checks: while a check-in is
+  pending, navigate to Sources and confirm the nav badge + title marker;
+  confirm the landing card state updates without a manual refresh. Estimated wall ≈ 25–30 min. The 025 two-user/parked-restart leg
   is **not** re-run — the parked-pause and continuation machinery is
   untouched by this slice (strand 13 explicitly keeps 025 interruption
   semantics); its regression net is the existing test suite. **No staging
