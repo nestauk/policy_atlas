@@ -22,17 +22,19 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `026-infra-deployment` (**DESIGN PHASE COMPLETE
-2026-07-21**: contract approved (15 contract-stage adversarial findings
-adjudicated), plan rev 2 approved (19 plan-stage findings adjudicated),
-ADR 0026 Accepted. **The build opens in a FRESH conversation with
-`task-cycle-build`** — re-ground from contract.md · plan.md rev 2 (its
-17 pins are binding) · port-map discipline; run `make verify` first
-(Phase 0). Key build facts: staged first-deploy bootstrap (network
-stack alone first, `-c stage=network`); `desired_count=0` is
-template-pinned (deploy script owns scale-to-1 after migrations); NS
-delegation for `v3.policyatlas.uk` lands ~2026-07-22 and gates Phase E
-only.) The slice ports v2's CDK infra
+Implementation — task `026-infra-deployment` (**BUILD COMPLETE THROUGH
+STEP 6, 2026-07-28** — phases 0/A–E all landed on
+`task/026-infra-deployment`; the system is **live** at
+`v3.policyatlas.uk` (staging, same account as v2, parallel `PaV3*`
+stacks): Cognito login end-to-end, Aurora migrated, S3+CloudFront SPA,
+full-chain smoke + deploy-invariant-over-executing-walk + 3-concurrent
+runs evidenced in `docs/tasks/026-infra-deployment/verification.md`.
+**Next: the review stack in a FRESH conversation with
+`task-cycle-review`** (Tier 4; the auth diff and the two owner-approved
+frontend gating fixes are the security lane's primary surfaces). Draft
+PR #33. Known operational state: staging's OpenAI quota exhausted
+2026-07-28 (runs fail honest-429 until billing tops up); operator
+permission set needs the documented scoped `iam:PassRole`.) The slice ports v2's CDK infra
 (`../discovery_policy_atlas/infra` — three stacks: network · database ·
 app) into `infra/` with a **copy-first, targeted-edits** discipline:
 v2 files are copied and diffed, never rewritten. Deltas from v2:

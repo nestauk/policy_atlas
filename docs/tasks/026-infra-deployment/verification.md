@@ -1,8 +1,7 @@
 # Verification: 026-infra-deployment
 
-> **Status: phases 0/A/B/C/D complete and verified; Phase E (live deploy + evidence)
-> BLOCKED on three operator preconditions** — see § Known unverified items. Everything
-> below the E sections is final evidence; E sections are pre-structured and empty.
+> **Status: COMPLETE — phases 0/A–E all verified (E landed 2026-07-28 after the three
+> operator preconditions cleared).** The system is live at `v3.policyatlas.uk`.
 
 ## Commands run
 
@@ -16,6 +15,9 @@
 | `make deploy-build-guard-test` | pass | refusal proven per missing VITE_* var |
 | `bash scripts/image_layer_scan.sh` | pass | image builds; 9 layers scanned clean |
 | `bash -n scripts/deploy.sh` | pass | shellcheck not installed locally (noted) |
+| `bash scripts/deploy.sh bootstrap` (2026-07-28) | pass | gates A+B green; all four stacks live |
+| `bash scripts/deploy.sh update` ×3 | pass | stop→migrate→scale→publish, 4/4 PASS each |
+| `make verify` (step-6 exit @ E.4 tree) | pass | full gate, all suites |
 
 ## Checks beyond the build
 
@@ -53,8 +55,53 @@ make fe-api-smoke   # builds SPA w/ dev-issuer token, boots real API (stub mode,
                     # isolated policy_atlas_smoke DB), drives Chromium over real HTTP
 ```
 
-Live-deploy end-to-end (Phase E): `bash scripts/deploy.sh bootstrap` — **not yet run**
-(§ Known unverified items).
+Live-deploy end-to-end (Phase E, ran 2026-07-28):
+
+```bash
+export AWS_PROFILE=pa-dev AWS_REGION=eu-west-2 CDK_DEFAULT_ACCOUNT=<account>
+bash scripts/deploy.sh bootstrap    # first deploy: gates A/B, 4 stacks, migrate, scale, publish
+bash scripts/deploy.sh update       # steady-state redeploys (ran 3×)
+```
+
+**E.2 full-chain smoke** (Playwright/Chromium against the live system; scripts retained
+in the build session's scratchpad; screenshots ditto):
+cold visit → auto-redirect to Cognito hosted UI → login (operator-created smoke user) →
+project created → planner (live LLM) → run started → stage timeline streamed over
+authenticated SSE → **parked/idle stream observed 130 s with zero reconnects and no
+error UI** (ALB idle timeout 120 s never tripped the 15 s-heartbeat stream) →
+hosted-UI sign-out lands on the Cognito domain → **fresh visit redirects to login
+(re-auth required)**. Fonts: `/fonts/Averta-Regular.otf` 200 `font/otf`,
+`/fonts/Zosia-Display.woff2` 200 `font/woff2` via CloudFront; SPA deep-link fallback 200.
+**Artefact**: completed run renders a full synthesised evidence base (9 sections:
+Key findings … Conclusions, References).
+
+**E.2 concurrency** (3 runs planned+started in parallel browser pages, window
+10:30–10:48 UTC): runs #1 and #2 completed end-to-end with artefacts; run #3 parked at
+a real synthesis check-in, was answered live ("Synthesise as proposed"), then failed
+honestly at the synthesis stage with OpenAI **429 quota-exhausted** (account billing
+cap — the two failed-stage cards surface the provider error verbatim; every prior
+stage completed). Measurements (pin 14, 2 vCPU/8192 MB task):
+memory peak 10.2 % (≈ 840 MB) vs idle 4.4 % (≈ 360 MB) → **≈ 160 MB/walk → 10
+concurrent ≈ 1.9 GB, > 4× headroom**; CPU one 1-min burst to 99 % (triple
+acquire/screen overlap), otherwise ≤ 53 % — degrade-to-slower, never wrong; Aurora
+connections high-water **8 of the 25** ceiling (pool 15 + overflow 10) → ~2/walk →
+10 walks ≈ 22 ≤ 25, env-tunable. `pg_stat_activity` cross-checked live over the SSM
+tunnel (9 connections incl. the observer).
+
+**E.3 deploy-invariant over an executing walk** (the sign-out-fix redeploy landed while
+the leg-1 walk was executing): ECS service events show task `ff7a3948…` **stopped
+11:19:44**, drained, steady state at 0; migration PASS between; new task `4cec833a…`
+**started 11:25:59**, steady 11:26:36 — stop-before-boot at the event level. The new
+boot's sweep logged `continuation.sweep_orphan_without_attachment` (10:26:26 UTC) for
+the interrupted project; the UI shows the run `Interrupted`; no boot failure
+(`/healthz`+`/readyz` 200). Bonus negative proof: a **no-change** CFN deploy does NOT
+re-assert `DesiredCount=0` — caught when a frontend-only redeploy timed out at the
+stop-wait; fixed with an explicit `scale_down_service` in the script tail (commit).
+
+**SSM tunnel recipe validated verbatim** (pin 15): fck-nat instance located by stack
+tag → `AWS-StartPortForwardingSessionToRemoteHost` → `psql` over TLS →
+`pg_stat_activity` + `alembic_version` queried. (session-manager-plugin installed
+user-local, no sudo.)
 
 ## Diff summary
 
@@ -71,6 +118,28 @@ contracted edits only — auth congruence (`auth.py`, `dev_issuer.py`, settings 
 `OIDC_AUDIENCE`→`OIDC_CLIENT_ID`) and engine pool sizing. Backend Dockerfile + strict
 `.dockerignore` authored (A.4). CI: `make -C infra test` joined `make verify`;
 new `fe-api-smoke` job.
+
+**Phase-E owner-approved frontend fixes (contract stop-condition instances, both
+approved in-session 2026-07-28):**
+1. **Cold-visit auth gating** (`OidcAuthProvider.tsx` + tests): first unauthenticated
+   entry rendered the shell whose queries 401'd forever — nothing triggered
+   `signinRedirect` (dev-token mode gates in the provider; every prior harness started
+   pre-authenticated). The provider now gates: cold visits auto-redirect to the hosted
+   UI with the route stashed; the shell never mounts tokenless.
+2. **Sign-out control** (`AppShell.tsx`): `AuthApi.signOut` had no UI consumer — Cognito
+   sessions had no exit. Header button added; hosted-UI logout + re-auth-required both
+   asserted live.
+
+**Phase-E operational findings (documented in DEPLOYMENT.md preconditions):**
+- CDK bootstrap needs an IAM-capable principal; PowerUserAccess cannot run it (a failed
+  attempt under PowerUser left a DELETE_FAILED toolkit stack in us-east-1 — cleaned by
+  DevOps with admin creds).
+- `ecs run-task` needs scoped `iam:PassRole` (`PaV3AppStack-*` roles,
+  `iam:PassedToService: ecs-tasks.amazonaws.com`) — added to the operator permission set.
+- The provisioned app secret carried v2's `LANGFUSE_HOST` key; code adapts (tracing
+  accepts it natively) rather than patching a live secret.
+- Staging's OpenAI quota exhausted during E.2 (run #3's 429) — live runs fail honestly
+  until billing tops up.
 
 **Flagged deviations / build findings (minor, resolved in-slice):**
 1. **Smoke DB isolation** — the FE↔API smoke initially reused `policy_atlas_test`; its
@@ -111,29 +180,14 @@ Phase E.)
 
 ## Known unverified items
 
-**Phase E (live deploy + evidence) is blocked on three operator preconditions**
-(checked live 2026-07-21 ~21:30):
-
-1. **NS delegation not live** — `dig NS v3.policyatlas.uk +short` returns nothing;
-   parent `policyatlas.uk` still GoDaddy-only. Devops ETA was ~2026-07-22. Gates both
-   DNS-validated ACM certs (first deploy hangs without it).
-2. **No credentials for the target AWS account** — this machine's sole AWS profile is a
-   different account (under-privileged user; cannot even `DescribeStacks`). The
-   v2/v3 target account has no profile here. Operator must provide access
-   (SSO/profile) before any `cdk` command.
-3. **App secret not provisioned** — `policy_atlas_v3/app` must be created manually in
-   Secrets Manager with the exact keys listed in [env-secret-map.md](env-secret-map.md)
-   (gate A checks this and fails loud).
-
-Ready-to-run once cleared: `scripts/deploy.sh bootstrap` (gates A/B verify the above
-mechanically), then E.2 smoke (login → project → run → SSE → artefact → hosted-UI
-logout; parked SSE ≥ 2 min; 3 concurrent runs + pin-14 measurements) and E.3
-deploy-invariant check over an executing walk. Fonts for gate B are present locally at
-`docs/specs/sources/evidence-base-ux/fonts/` (gitignored, as required).
-
-Also unverified until E: real Cognito hosted-UI flow (the conformance suite covers token
-semantics; the live smoke covers the interactive flow), CloudFront behaviour, migration
-task against real Aurora.
+- Run #3's synthesis completion — blocked on the exhausted OpenAI quota (billing); the
+  failure surface itself is evidence (honest 429 cards after all prior stages passed).
+  Two other runs completed end-to-end with artefacts.
+- A full 10-run live soak — deliberately not an acceptance check (contract): first real
+  multi-user usage is the soak; sizing knobs are env-tunable and the measured headroom
+  is recorded above.
+- shellcheck never ran on deploy.sh (not installed); `bash -n` + three full live
+  executions stand in.
 
 ## Public safety
 
@@ -153,6 +207,28 @@ account-ID-scrubbed before landing here.
 - **Adjudication items:** the 5 flagged deviations above; the auth diff
   (`9f40d32`) is the security lane's primary surface (contract hard gate).
 - **Knowledge candidates** (014 retro — raw list for step 8):
+  - PowerUserAccess and CDK: bootstrap (IAM role creation) and `ecs run-task`
+    (`iam:PassRole`) both exceed it; day-to-day `cdk deploy` is fine because
+    CloudFormation executes through the bootstrap roles. Scope PassRole to the stack's
+    role prefix + `iam:PassedToService`.
+  - CloudFormation only re-asserts a template value on a *changed* deploy: a pinned
+    `DesiredCount=0` does not stop a scaled-up service on a no-op deploy — template
+    pins need script-side alignment for config-only redeploys.
+  - Provider-level auth gating must cover the COLD path, not just expiry: every
+    pre-live harness (mock, dev-token, CI smoke) starts authenticated, so only a real
+    cold visit against the real IdP exercises first-entry 401 handling.
+  - An auth seam without a sign-out consumer passes every test and strands real users —
+    assert the affordance, not just the API.
+  - `history.replaceState` is invisible to react-router: return-to restoration needs a
+    router navigate, not a history patch (deferred seam).
+  - Cognito classic hosted UI duplicates its form for responsive layouts — UI automation
+    needs `:visible` selectors.
+  - oidc sessionStorage sessions don't survive hard reloads, but Cognito's own cookie
+    makes the re-auth round-trip silent (no login form) — looks like a flash of
+    "signing in", not a logout.
+  - `docker save` layout depends on the daemon's image store (containerd OCI
+    `blobs/sha256/*` vs legacy `layer.tar`) — already listed from A.4; confirmed
+    load-bearing again in E.
   - Shared test DBs are a trap for migration round-trip tests: any harness that persists
     real rows (smoke, manual poking) breaks downgrade-with-data tests later and looks
     like a schema bug. Disposable per-harness DBs, always.
