@@ -115,7 +115,9 @@ artefact, groups) are whole-object.
 - `GET /api/v1/projects/{id}/planning-turns` → the owner-scoped durable
   transcript in ascending `turn_index`, paginated in the standard
   `{data, pagination}` envelope. Each row exposes `turn_index`,
-  `user_message`, `reply`, `suggestions`, `status`, `created_at` and
+  `client_turn_id` (the caller's own idempotency key, returned so a
+  reloaded client can retry its incomplete latest turn), `user_message`,
+  `reply`, `suggestions`, `status`, `created_at` and
   `completed_at`; pending and failed rows remain visibly incomplete. There
   is no backfill: projects predating the table simply have zero turns.
 

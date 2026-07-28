@@ -154,6 +154,7 @@ def _transcript_out(row: RowMapping) -> PlanningTranscriptTurnOut:
     """Project one durable transcript row into its honest read representation."""
     return PlanningTranscriptTurnOut(
         turn_index=row["turn_index"],
+        client_turn_id=row["client_turn_id"],
         user_message=row["user_message"],
         reply=row["reply"],
         suggestions=row["suggestions"],

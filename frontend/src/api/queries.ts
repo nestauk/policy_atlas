@@ -24,6 +24,10 @@ export const queryKeys = {
     ["projects", projectId, "findings", page, pageSize] as const,
   decisions: (projectId: string, page?: number, pageSize?: number) =>
     ["projects", projectId, "decisions", page, pageSize] as const,
+  planningTurns: (projectId: string, page?: number, pageSize?: number) =>
+    ["projects", projectId, "planning-turns", page, pageSize] as const,
+  runs: (projectId: string, page?: number, pageSize?: number) =>
+    ["projects", projectId, "runs", page, pageSize] as const,
   artefact: (projectId: string) => ["projects", projectId, "artefact"] as const,
 };
 
@@ -178,6 +182,40 @@ export function useDecisions(projectId: string, query?: PageQuery) {
     queryKey: queryKeys.decisions(projectId, query?.page, query?.page_size),
     queryFn: async () => {
       const { data, error } = await client.GET("/api/v1/projects/{project_id}/decisions", {
+        params: { path: { project_id: projectId }, query },
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: Boolean(projectId),
+  });
+}
+
+/** `GET /api/v1/projects/{project_id}/planning-turns` — the durable,
+ * paginated planning transcript in ascending `turn_index` order. */
+export function usePlanningTurns(projectId: string, query?: PageQuery) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.planningTurns(projectId, query?.page, query?.page_size),
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/projects/{project_id}/planning-turns", {
+        params: { path: { project_id: projectId }, query },
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: Boolean(projectId),
+  });
+}
+
+/** `GET /api/v1/projects/{project_id}/runs` — paginated run blocks for the
+ * planning-thread composition model. */
+export function useRuns(projectId: string, query?: PageQuery) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.runs(projectId, query?.page, query?.page_size),
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/projects/{project_id}/runs", {
         params: { path: { project_id: projectId }, query },
       });
       if (error) throw error;

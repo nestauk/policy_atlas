@@ -249,6 +249,7 @@ def test_failed_turn_retries_in_place_and_stale_rules_are_honest(
         assert listed.json()["data"] == [
             {
                 "turn_index": 0,
+                "client_turn_id": turn_id,
                 "user_message": "Recoverable planner failure",
                 "reply": None,
                 "suggestions": [],

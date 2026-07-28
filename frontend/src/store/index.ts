@@ -1,4 +1,12 @@
-export { reduceRunStreamFrame } from "./reducer";
+export { hasTerminalPartialLiveArtefact, reduceRunStreamFrame } from "./reducer";
+export {
+  initialOptimisticTranscriptState,
+  reduceOptimisticTranscript,
+  retryInputForOptimisticTurn,
+  transcriptRows,
+  usePlanningTranscript,
+} from "./transcript";
+export { composePlanningThread } from "./thread";
 export { useRunStream } from "./useRunStream";
 export {
   createInitialRunStreamState,
@@ -6,6 +14,7 @@ export {
 } from "./types";
 export type {
   CheckInOut,
+  LiveSection,
   PlanDraft,
   PlanState,
   ProjectSummary,
@@ -18,3 +27,17 @@ export type {
   StageName,
   StageStatus,
 } from "./types";
+export type {
+  OptimisticPlanningTurn,
+  OptimisticTranscriptAction,
+  OptimisticTranscriptState,
+  PlanningTranscriptTurn,
+} from "./transcript";
+export type {
+  PlanningThreadDecision,
+  PlanningThreadItem,
+  PlanningThreadRun,
+  PlanningThreadTurn,
+  RunThreadBoundary,
+  RunThreadDecision,
+} from "./thread";

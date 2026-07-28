@@ -1712,6 +1712,8 @@ export interface components {
          *
          *     Args:
          *         turn_index: Monotonic per-project conversation coordinate.
+         *         client_turn_id: The caller's idempotency key for this turn — returned
+         *             so a reloaded client can retry its own incomplete latest turn.
          *         user_message: Submitted user message.
          *         reply: Planner reply, absent until a pending turn completes.
          *         suggestions: Planner quick-reply suggestions, if the turn completed.
@@ -1720,6 +1722,11 @@ export interface components {
          *         completed_at: Terminal timestamp, absent while still pending.
          */
         PlanningTranscriptTurnOut: {
+            /**
+             * Client Turn Id
+             * Format: uuid
+             */
+            client_turn_id: string;
             /** Completed At */
             completed_at: string | null;
             /**

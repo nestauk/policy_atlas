@@ -211,6 +211,8 @@ class PlanningTranscriptTurnOut(BaseModel):
 
     Args:
         turn_index: Monotonic per-project conversation coordinate.
+        client_turn_id: The caller's idempotency key for this turn — returned
+            so a reloaded client can retry its own incomplete latest turn.
         user_message: Submitted user message.
         reply: Planner reply, absent until a pending turn completes.
         suggestions: Planner quick-reply suggestions, if the turn completed.
@@ -220,6 +222,7 @@ class PlanningTranscriptTurnOut(BaseModel):
     """
 
     turn_index: int
+    client_turn_id: uuid.UUID
     user_message: str
     reply: str | None
     suggestions: list[str] = Field(default_factory=list)
