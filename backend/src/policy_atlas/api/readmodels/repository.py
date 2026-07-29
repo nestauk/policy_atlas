@@ -1039,6 +1039,19 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
         "project_source_snapshot_id",
         "appraised_at",
     )
+    # The classified evidence type is the appraisal rubric's scoring input —
+    # surfaced with the label so the UI can say WHY a citation carries a band.
+    citation_classifications = _latest_row_by_id(
+        conn.execute(
+            select(
+                source_classification_result.c.project_source_snapshot_id,
+                source_classification_result.c.primary_evidence_type,
+                source_classification_result.c.classified_at,
+            ).where(source_classification_result.c.project_id == project_id)
+        ).all(),
+        "project_source_snapshot_id",
+        "classified_at",
+    )
     citations_by_annotation: dict[uuid.UUID, list[Any]] = {}
     for row in citation_rows:
         citations_by_annotation.setdefault(row.annotation_id, []).append(row)
@@ -1078,6 +1091,13 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
                     appraisal_label=SCORE_LABELS.get(score_row.quality_score)
                     if score_row
                     else None,
+                    evidence_type=(
+                        classification_row.primary_evidence_type
+                        if pss_id is not None
+                        and (classification_row := citation_classifications.get(pss_id))
+                        is not None
+                        else None
+                    ),
                 )
             )
         claim_type = (

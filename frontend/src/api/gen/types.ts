@@ -816,6 +816,8 @@ export interface components {
          *         grounding_rationale: The grounding judge's recorded reason for the
          *             tier, when one was persisted with the verdict.
          *         appraisal_label: Optional appraisal label.
+         *         evidence_type: The cited document's classified evidence type — the
+         *             input the appraisal rubric scores from.
          */
         CitationOut: {
             /** Appraisal Label */
@@ -825,6 +827,8 @@ export interface components {
              * Format: uuid
              */
             citation_id: string;
+            /** Evidence Type */
+            evidence_type?: string | null;
             /** Grounding Rationale */
             grounding_rationale?: string | null;
             /** Grounding Tier */

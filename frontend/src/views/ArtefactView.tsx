@@ -87,10 +87,11 @@ const GAP_GRADE_TEXT: Record<string, string> = {
   inferred: "Inferred by the analysis from what it read — not established by a recorded search.",
 };
 
-/** One honest sentence for the appraisal chip — explains the scale without
- *  inventing per-band criteria the rubric doesn't state here. */
-const APPRAISAL_HINT =
-  "The cited source's appraised quality — five bands from Weak to Very strong, judged from study design and reporting.";
+/** Fallback for an appraisal chip whose citation carries no classified
+ *  document type (the type is the rubric's scoring input — see the dynamic
+ *  tooltip in CitationCard). */
+const APPRAISAL_FALLBACK_HINT =
+  "The cited source's appraised evidence strength — five bands from Weak to Very strong, scored from its classified document type.";
 
 /** The grounding-tier vocabulary (demo ui.tsx TIER_LABEL/TIER_TEXT — locked;
  *  unknown tier → the raw value never renders, the chip omits). */
@@ -255,7 +256,15 @@ function CitationContext({
           </Tooltip>
         )}
         {citation.appraisal_label !== null && citation.appraisal_label !== undefined && (
-          <Tooltip content={<span className="text-xs">{APPRAISAL_HINT}</span>}>
+          <Tooltip
+            content={
+              <span className="text-xs">
+                {typeof citation.evidence_type === "string"
+                  ? `${scrub(citation.appraisal_label)} evidence strength — appraised from the document type: ${scrub(citation.evidence_type)}.`
+                  : APPRAISAL_FALLBACK_HINT}
+              </span>
+            }
+          >
             <span>
               <Chip tone="blue">{scrub(citation.appraisal_label)}</Chip>
             </span>

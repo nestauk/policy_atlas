@@ -355,6 +355,8 @@ class CitationOut(BaseModel):
         grounding_rationale: The grounding judge's recorded reason for the
             tier, when one was persisted with the verdict.
         appraisal_label: Optional appraisal label.
+        evidence_type: The cited document's classified evidence type — the
+            input the appraisal rubric scores from.
     """
 
     citation_id: uuid.UUID
@@ -365,6 +367,7 @@ class CitationOut(BaseModel):
     grounding_tier: str | None = None
     grounding_rationale: str | None = None
     appraisal_label: str | None = None
+    evidence_type: str | None = None
 
 
 class GapCaveatOut(BaseModel):

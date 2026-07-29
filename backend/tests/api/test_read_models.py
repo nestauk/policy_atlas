@@ -468,6 +468,9 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
             assert citation_out["source_title"] == "Selected trial"
             assert citation_out["source_id"] == cited_source["source_id"]
             assert citation_out["grounding_rationale"] == "Quote matches the source verbatim."
+            # The appraisal band's scoring input rides with the label.
+            assert citation_out["evidence_type"] == "RCTs and Quasi-Experimental Studies"
+            assert citation_out["appraisal_label"] == "Moderate"
             # Reference identity is the document: three citations over three
             # full-text chunks of one source yield exactly one reference entry.
             assert [
