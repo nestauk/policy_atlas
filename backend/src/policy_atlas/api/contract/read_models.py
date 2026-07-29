@@ -377,6 +377,18 @@ class GapOut(BaseModel):
     inferred: bool | None = None
 
 
+class ThemeSourceOut(BaseModel):
+    """One source contributing to a theme or grouping reference.
+
+    Args:
+        source_id: The project's source identity.
+        title: Display title of the source.
+    """
+
+    source_id: uuid.UUID
+    title: str
+
+
 class ThemeRefItemOut(BaseModel):
     """One named durable theme or grouping reference.
 
@@ -385,12 +397,14 @@ class ThemeRefItemOut(BaseModel):
         description: Optional concise description.
         size: Optional number of members.
         facet: Grouping facet, when this is a group reference.
+        sources: Resolved member sources, when member identities are available.
     """
 
     name: str
     description: str | None = None
     size: int | None = None
     facet: str | None = None
+    sources: list[ThemeSourceOut] | None = None
 
 
 class ThemeRefOut(BaseModel):

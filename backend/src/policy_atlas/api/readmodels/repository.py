@@ -43,6 +43,7 @@ from policy_atlas.api.contract import (
     ThemeOut,
     ThemeRefItemOut,
     ThemeRefOut,
+    ThemeSourceOut,
 )
 from policy_atlas.core.schema import (
     GROUPING_FACETS,
@@ -664,25 +665,6 @@ def findings_page(
     collection (collection-true counts), never the unfiltered total.
     """
 
-    def base_join(finding: Any) -> Any:
-        """Join either finding table to its envelope source."""
-        return (
-            finding.join(
-                source_extraction_record,
-                finding.c.extraction_record_id == source_extraction_record.c.extraction_record_id,
-            )
-            .join(
-                project_source_snapshot,
-                project_source_snapshot.c.project_source_snapshot_id
-                == source_extraction_record.c.project_source_snapshot_id,
-            )
-            .join(
-                source_snapshot,
-                source_snapshot.c.source_snapshot_id
-                == project_source_snapshot.c.source_snapshot_id,
-            )
-        )
-
     def where_clauses(finding: Any) -> list[Any]:
         clauses: list[Any] = [finding.c.project_id == project_id]
         if source_id is not None:
@@ -697,7 +679,7 @@ def findings_page(
                 source_snapshot.c.metadata,
                 source_snapshot.c.source_locator,
             )
-            .select_from(base_join(intervention_outcome_finding))
+            .select_from(_finding_source_join(intervention_outcome_finding))
             .where(*where_clauses(intervention_outcome_finding))
         )
         .mappings()
@@ -713,7 +695,7 @@ def findings_page(
                 source_snapshot.c.metadata,
                 source_snapshot.c.source_locator,
             )
-            .select_from(base_join(implementation_context_finding))
+            .select_from(_finding_source_join(implementation_context_finding))
             .where(*where_clauses(implementation_context_finding))
         )
         .mappings()
@@ -787,6 +769,25 @@ def findings_page(
                 )
             )
     return Page(data=items, pagination=PageMeta(page=page, page_size=page_size, total_items=total))
+
+
+def _finding_source_join(finding: Any) -> Any:
+    """Join either finding table to its envelope source."""
+    return (
+        finding.join(
+            source_extraction_record,
+            finding.c.extraction_record_id == source_extraction_record.c.extraction_record_id,
+        )
+        .join(
+            project_source_snapshot,
+            project_source_snapshot.c.project_source_snapshot_id
+            == source_extraction_record.c.project_source_snapshot_id,
+        )
+        .join(
+            source_snapshot,
+            source_snapshot.c.source_snapshot_id == project_source_snapshot.c.source_snapshot_id,
+        )
+    )
 
 
 def _grounding_value(grounding: Any, key: str) -> Any | None:
@@ -1203,6 +1204,16 @@ def _characterisation_theme_refs(
     ).scalar_one_or_none()
     if not isinstance(payload, Mapping) or not isinstance(payload.get("themes"), list):
         return {}
+    source_refs = _theme_sources_for_project_source_snapshots(
+        conn,
+        project_id,
+        {
+            member_id
+            for item in payload["themes"]
+            if isinstance(item, Mapping)
+            for member_id in _uuid_members(item.get("member_ids"))
+        },
+    )
     result: dict[str, ThemeRefItemOut] = {}
     for item in payload["themes"]:
         if not isinstance(item, Mapping) or not isinstance(item.get("name"), str):
@@ -1216,6 +1227,7 @@ def _characterisation_theme_refs(
             name=item["name"],
             description=description if isinstance(description, str) else None,
             size=size if isinstance(size, int) and not isinstance(size, bool) else None,
+            sources=_resolved_theme_sources(item.get("member_ids"), source_refs),
         )
     return result
 
@@ -1230,6 +1242,16 @@ def _grouping_theme_refs(conn: Connection, project_id: uuid.UUID) -> dict[str, T
     ).scalar_one_or_none()
     if not isinstance(payload, Mapping):
         return {}
+    finding_ids = {
+        member_id
+        for facet_payload in payload.values()
+        if isinstance(facet_payload, Mapping)
+        if isinstance(facet_payload.get("groups"), list)
+        for group in facet_payload.get("groups", [])
+        if isinstance(group, Mapping)
+        for member_id in _uuid_members(group.get("member_finding_ids"))
+    }
+    source_refs = _theme_sources_for_findings(conn, project_id, finding_ids)
     result: dict[str, ThemeRefItemOut] = {}
     for facet, facet_payload in payload.items():
         if not isinstance(facet, str) or not isinstance(facet_payload, Mapping):
@@ -1252,6 +1274,99 @@ def _grouping_theme_refs(conn: Connection, project_id: uuid.UUID) -> dict[str, T
                 description=description if isinstance(description, str) else None,
                 size=size if isinstance(size, int) and not isinstance(size, bool) else None,
                 facet=group_facet if isinstance(group_facet, str) else facet,
+                sources=_resolved_theme_sources(group.get("member_finding_ids"), source_refs),
+            )
+    return result
+
+
+def _uuid_members(values: Any) -> list[uuid.UUID]:
+    """Parse the durable UUID member identifiers in their stored order."""
+    if not isinstance(values, list):
+        return []
+    result: list[uuid.UUID] = []
+    for value in values:
+        try:
+            result.append(uuid.UUID(str(value)))
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
+def _resolved_theme_sources(
+    member_ids: Any, source_refs: Mapping[uuid.UUID, ThemeSourceOut]
+) -> list[ThemeSourceOut] | None:
+    """Project resolvable member sources once, preserving stored member order."""
+    if not isinstance(member_ids, list):
+        return None
+    result: list[ThemeSourceOut] = []
+    seen: set[uuid.UUID] = set()
+    for member_id in _uuid_members(member_ids):
+        source = source_refs.get(member_id)
+        if source is None or source.source_id in seen:
+            continue
+        seen.add(source.source_id)
+        result.append(source)
+    return result
+
+
+def _theme_sources_for_project_source_snapshots(
+    conn: Connection, project_id: uuid.UUID, source_ids: set[uuid.UUID]
+) -> dict[uuid.UUID, ThemeSourceOut]:
+    """Map project-source-snapshot ids to the envelope source display details."""
+    if not source_ids:
+        return {}
+    rows = conn.execute(
+        select(
+            project_source_snapshot.c.project_source_snapshot_id,
+            source_snapshot.c.metadata,
+            source_snapshot.c.source_locator,
+        )
+        .select_from(
+            project_source_snapshot.join(
+                source_snapshot,
+                project_source_snapshot.c.source_snapshot_id
+                == source_snapshot.c.source_snapshot_id,
+            )
+        )
+        .where(
+            project_source_snapshot.c.project_id == project_id,
+            project_source_snapshot.c.project_source_snapshot_id.in_(source_ids),
+        )
+    ).all()
+    return {
+        row.project_source_snapshot_id: ThemeSourceOut(
+            source_id=row.project_source_snapshot_id,
+            title=_title(
+                row.metadata if isinstance(row.metadata, Mapping) else {}, row.source_locator
+            ),
+        )
+        for row in rows
+    }
+
+
+def _theme_sources_for_findings(
+    conn: Connection, project_id: uuid.UUID, finding_ids: set[uuid.UUID]
+) -> dict[uuid.UUID, ThemeSourceOut]:
+    """Map finding ids to their sources through the findings read-model join."""
+    if not finding_ids:
+        return {}
+    result: dict[uuid.UUID, ThemeSourceOut] = {}
+    for finding in (intervention_outcome_finding, implementation_context_finding):
+        rows = conn.execute(
+            select(
+                finding.c.finding_id,
+                source_extraction_record.c.project_source_snapshot_id,
+                source_snapshot.c.metadata,
+                source_snapshot.c.source_locator,
+            )
+            .select_from(_finding_source_join(finding))
+            .where(finding.c.project_id == project_id, finding.c.finding_id.in_(finding_ids))
+        ).all()
+        for row in rows:
+            metadata = row.metadata if isinstance(row.metadata, Mapping) else {}
+            result[row.finding_id] = ThemeSourceOut(
+                source_id=row.project_source_snapshot_id,
+                title=_title(metadata, row.source_locator),
             )
     return result
 

@@ -511,7 +511,7 @@ def test_artefact_theme_claim_resolves_durable_references(tmp_path: Path, engine
     """Theme claims resolve named characterisation and grouping references honestly."""
     with api_client(tmp_path) as (client, owner, _):
         project_id = uuid.UUID(create_project(client, owner))
-        _seed_read_model_ladder(engine, project_id)
+        _, found_pss = _seed_read_model_ladder(engine, project_id)
         try:
             with engine.begin() as conn:
                 synthesis = conn.execute(
@@ -520,6 +520,11 @@ def test_artefact_theme_claim_resolves_durable_references(tmp_path: Path, engine
                         synthesis_result.c.run_id,
                     ).where(synthesis_result.c.project_id == project_id)
                 ).one()
+                selected_pss = conn.execute(
+                    select(source_extraction_record.c.project_source_snapshot_id).where(
+                        source_extraction_record.c.project_id == project_id
+                    )
+                ).scalar_one()
                 conn.execute(
                     insert(characterisation_result).values(
                         characterisation_id=uuid.uuid4(),
@@ -535,6 +540,7 @@ def test_artefact_theme_claim_resolves_durable_references(tmp_path: Path, engine
                                     "name": "Access",
                                     "description": "Access to support",
                                     "size": 3,
+                                    "member_ids": [str(selected_pss), str(found_pss)],
                                 }
                             ]
                         },
@@ -579,9 +585,36 @@ def test_artefact_theme_claim_resolves_durable_references(tmp_path: Path, engine
                         "description": "Access to support",
                         "size": 3,
                         "facet": None,
+                        "sources": [
+                            {"source_id": str(selected_pss), "title": "Selected trial"},
+                            {"source_id": str(found_pss), "title": "Unscreened report"},
+                        ],
                     }
                 ],
             }
+
+            with engine.begin() as conn:
+                conn.execute(
+                    update(characterisation_result)
+                    .where(characterisation_result.c.project_id == project_id)
+                    .values(
+                        themes={
+                            "themes": [
+                                {
+                                    "theme_id": "characterisation:access",
+                                    "name": "Access",
+                                    "member_ids": [str(selected_pss), str(uuid.uuid4())],
+                                }
+                            ]
+                        }
+                    )
+                )
+            claim = client.get(f"/api/v1/projects/{project_id}/artefact", headers=owner).json()[
+                "sections"
+            ][0]["blocks"][0]["claims"][0]
+            assert claim["theme"]["items"][0]["sources"] == [
+                {"source_id": str(selected_pss), "title": "Selected trial"}
+            ]
 
             with engine.begin() as conn:
                 conn.execute(
@@ -609,6 +642,9 @@ def test_artefact_theme_claim_resolves_durable_references(tmp_path: Path, engine
                         "description": "Training findings",
                         "size": 2,
                         "facet": "intervention",
+                        "sources": [
+                            {"source_id": str(selected_pss), "title": "Selected trial"}
+                        ],
                     }
                 ],
             }

@@ -151,7 +151,12 @@ test.describe("mock evidence-base journey", () => {
     await page.getByRole("button", { name: "pattern" }).click();
     const themePanel = page.getByRole("dialog", { name: "Where this comes from" });
     await expect(themePanel.getByText("Active-travel offers")).toBeVisible();
-    await expect(themePanel.getByText(/Identified across 5 sources/)).toBeVisible();
+    // The source count is a disclosure: expanding lists the member documents,
+    // each opening its dossier.
+    await themePanel.getByText(/Identified across 2 sources — show them/).click();
+    await expect(
+      themePanel.getByRole("button", { name: /Childhood obesity prevention in urban primary schools/ }),
+    ).toBeVisible();
     await themePanel.getByRole("link", { name: "See the findings in this theme" }).click();
     await expect(page).toHaveURL(/findings\?facet=.*group=/);
     await page.goBack();

@@ -187,8 +187,10 @@ render honest absence: missing stages are `null`/absent, never faked.
 
 - Artefact `ClaimOut.theme` resolves a theme claim's durable characterisation
   or grouping references to named items (`name`, optional `description` and
-  `size`; grouping items also carry their `facet` for deep-linking). Stale or
-  unresolvable references are omitted, and an empty resolution is `null`.
+  `size`; grouping items also carry their `facet` for deep-linking), including
+  their resolved member `sources` (`source_id`, `title`) when member identities
+  are available. Stale or unresolvable references and member sources are
+  omitted, and an empty theme resolution is `null`.
 
 The C.1 additions enrich these records additively: coverage exposes public
 backend names and post-run query detail; evidence exposes effective-screen

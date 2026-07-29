@@ -223,7 +223,7 @@ export const mockArtefact: components["schemas"]["ArtefactOut"] = {
       blocks: [{
         block_id: "30000000-0000-4000-8000-000000000002",
         prose: "Pair school food action with safer active-travel routes and practical family support, while monitoring local reach.",
-        claims: [{ claim_id: "40000000-0000-4000-8000-000000000002", claim_type: "pattern", text: "Pair school food action with safer active-travel routes", span: [0, 56], theme: { source: "grouping", base: "Co-occurrence across the screened-in corpus", items: [{ name: "Active-travel offers", description: "Route-safety and arrival-routine measures that families adopt alongside food provision.", size: 5, facet: "Intervention type" }] } }],
+        claims: [{ claim_id: "40000000-0000-4000-8000-000000000002", claim_type: "pattern", text: "Pair school food action with safer active-travel routes", span: [0, 56], theme: { source: "grouping", base: "Co-occurrence across the screened-in corpus", items: [{ name: "Active-travel offers", description: "Route-safety and arrival-routine measures that families adopt alongside food provision.", size: 5, facet: "Intervention type", sources: [{ source_id: mockEvidence[0].source_id, title: mockEvidence[0].title }, { source_id: mockEvidence[1].source_id, title: mockEvidence[1].title }] }] } }],
       }],
     },
   ],

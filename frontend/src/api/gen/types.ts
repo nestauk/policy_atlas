@@ -2251,6 +2251,7 @@ export interface components {
          *         description: Optional concise description.
          *         size: Optional number of members.
          *         facet: Grouping facet, when this is a group reference.
+         *         sources: Resolved member sources, when member identities are available.
          */
         ThemeRefItemOut: {
             /** Description */
@@ -2261,6 +2262,8 @@ export interface components {
             name: string;
             /** Size */
             size?: number | null;
+            /** Sources */
+            sources?: components["schemas"]["ThemeSourceOut"][] | null;
         };
         /**
          * ThemeRefOut
@@ -2281,6 +2284,23 @@ export interface components {
              * @enum {string}
              */
             source: "characterisation" | "grouping";
+        };
+        /**
+         * ThemeSourceOut
+         * @description One source contributing to a theme or grouping reference.
+         *
+         *     Args:
+         *         source_id: The project's source identity.
+         *         title: Display title of the source.
+         */
+        ThemeSourceOut: {
+            /**
+             * Source Id
+             * Format: uuid
+             */
+            source_id: string;
+            /** Title */
+            title: string;
         };
         /**
          * TickFrame

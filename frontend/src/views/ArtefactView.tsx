@@ -37,6 +37,7 @@ interface ClaimLike {
       description?: string | null;
       size?: number | null;
       facet?: string | null;
+      sources?: Array<{ source_id?: string | null; title?: string | null }> | null;
     }> | null;
   } | null;
   weakly_grounded?: boolean | null;
@@ -324,14 +325,35 @@ function ClaimPanel({
                       {scrub(item.description)}
                     </p>
                   )}
-                  <p className="mt-0.5 text-[11.5px] text-grey">
-                    {typeof item.size === "number" ? `Identified across ${item.size} sources` : null}
-                    {typeof item.size === "number" &&
-                    typeof item.facet === "string" &&
-                    item.facet !== ""
-                      ? " · "
-                      : null}
-                    {typeof item.facet === "string" && item.facet !== "" && item.name ? (
+                  {(item.sources?.length ?? 0) > 0 ? (
+                    <details className="mt-0.5 text-[11.5px] text-grey">
+                      <summary className="cursor-pointer hover:text-navy">
+                        Identified across {item.sources?.length} source
+                        {(item.sources?.length ?? 0) === 1 ? "" : "s"} — show them
+                      </summary>
+                      <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                        {(item.sources ?? []).map((source) =>
+                          typeof source.title === "string" && source.title !== "" ? (
+                            <li key={source.source_id ?? source.title}>
+                              <button
+                                type="button"
+                                className="cursor-pointer text-left text-navy hover:text-blue hover:underline"
+                                onClick={() => onOpenDossier(source.title ?? "")}
+                              >
+                                {scrub(source.title)}
+                              </button>
+                            </li>
+                          ) : null,
+                        )}
+                      </ul>
+                    </details>
+                  ) : typeof item.size === "number" ? (
+                    <p className="mt-0.5 text-[11.5px] text-grey">
+                      Identified across {item.size} sources
+                    </p>
+                  ) : null}
+                  {typeof item.facet === "string" && item.facet !== "" && item.name ? (
+                    <p className="mt-0.5 text-[11.5px]">
                       <Link
                         className="font-semibold text-blue hover:underline"
                         to={`/projects/${projectId}/findings?facet=${encodeURIComponent(item.facet)}&group=${encodeURIComponent(item.name)}`}
@@ -339,8 +361,8 @@ function ClaimPanel({
                       >
                         See the findings in this theme
                       </Link>
-                    ) : null}
-                  </p>
+                    </p>
+                  ) : null}
                 </div>
               ))}
               {typeof claim.theme?.base === "string" && claim.theme.base !== "" && (

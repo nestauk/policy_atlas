@@ -3852,7 +3852,7 @@
         "type": "object"
       },
       "ThemeRefItemOut": {
-        "description": "One named durable theme or grouping reference.\n\nArgs:\n    name: Display name for the theme or group.\n    description: Optional concise description.\n    size: Optional number of members.\n    facet: Grouping facet, when this is a group reference.",
+        "description": "One named durable theme or grouping reference.\n\nArgs:\n    name: Display name for the theme or group.\n    description: Optional concise description.\n    size: Optional number of members.\n    facet: Grouping facet, when this is a group reference.\n    sources: Resolved member sources, when member identities are available.",
         "properties": {
           "description": {
             "anyOf": [
@@ -3890,6 +3890,20 @@
               }
             ],
             "title": "Size"
+          },
+          "sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ThemeSourceOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sources"
           }
         },
         "required": [
@@ -3933,6 +3947,26 @@
           "items"
         ],
         "title": "ThemeRefOut",
+        "type": "object"
+      },
+      "ThemeSourceOut": {
+        "description": "One source contributing to a theme or grouping reference.\n\nArgs:\n    source_id: The project's source identity.\n    title: Display title of the source.",
+        "properties": {
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "title"
+        ],
+        "title": "ThemeSourceOut",
         "type": "object"
       },
       "TickFrame": {
