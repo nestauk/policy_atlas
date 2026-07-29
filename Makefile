@@ -1,4 +1,4 @@
-.PHONY: setup test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test
+.PHONY: setup dev test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test
 
 # Root orchestrator (025 A.2 monorepo hoist): the Python project lives in
 # backend/; this Makefile owns the shared db service + the root-level gates
@@ -18,6 +18,21 @@ setup:
 		|| docker compose exec -T db createdb -U policy_atlas policy_atlas_test
 	@echo "Test DB ready (policy_atlas_test)."
 	$(MAKE) -C backend setup
+
+# Run the whole app locally: API on :8000 + Vite on :5173, one Ctrl-C stops
+# both. Self-contained auth: initialises the dev issuer on first run
+# (backend/.dev-issuer, gitignored), mints a fresh 4h token, and injects it
+# as VITE_DEV_TOKEN so the SPA signs in by itself.
+dev:
+	@test -d backend/.dev-issuer || \
+	  (cd backend && uv run python -m policy_atlas.api.dev_issuer init --dir .dev-issuer)
+	@(trap 'kill 0' INT TERM EXIT; \
+	  $(MAKE) -C backend dev & \
+	  token=$$(cd backend && uv run python -m policy_atlas.api.dev_issuer mint \
+	    --dir .dev-issuer --sub dev-user --client-id policy-atlas-dev \
+	    --ttl 14400 2>/dev/null | tail -1); \
+	  cd frontend && VITE_DEV_TOKEN="$$token" pnpm dev & \
+	  wait)
 
 test:
 	$(MAKE) -C backend test
