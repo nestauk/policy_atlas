@@ -2,11 +2,8 @@ import { useStartRun } from "../../api/mutations";
 import { useCoverage, useFunnel, useGroups, useLandscape, usePlan } from "../../api/queries";
 import type { RunStreamState } from "../../store/types";
 import { Button } from "../../ui/brand/Button";
-import { Chip } from "../../ui/brand/Chip";
-import { Divider, PaneHeading, StatusDot } from "../../ui/brand/Card";
+import { Divider, PaneHeading } from "../../ui/brand/Card";
 import { InterruptedRunCard, ReconnectingBanner } from "../../ui/feedback";
-import { AnsweredCheckIn } from "./AnsweredCheckIn";
-import { CheckInCard } from "./CheckInCard";
 import { JourneyPane } from "./journey/JourneyPane";
 
 /**
@@ -43,31 +40,9 @@ export function RunPane({ projectId, stream }: { projectId: string; stream: RunS
             onStartFreshRun={() => startRun.mutate()}
             plan={stream.plan?.plan ?? plan.data?.plan ?? null}
             funnel={funnel.data}
-            coverage={coverage.data}
+            coverage={coverage.data ?? undefined}
             groups={groups.data}
             landscape={landscape.data}
-            checkIn={
-              <>
-                {runStatus === "paused" && stream.pendingCheckIn === null && (
-                  <div className="px-1 py-1">
-                    <Chip tone="yellow">
-                      <StatusDot tone="paused" /> Paused — loading the check-in…
-                    </Chip>
-                  </div>
-                )}
-                {stream.pendingCheckIn !== null && (
-                  <CheckInCard
-                    key={stream.pendingCheckIn.check_in_id}
-                    projectId={projectId}
-                    checkIn={stream.pendingCheckIn}
-                    stages={stream.stages}
-                  />
-                )}
-                {stream.decisions.map((decision) => (
-                  <AnsweredCheckIn key={decision.checkInId} decision={decision} />
-                ))}
-              </>
-            }
             terminal={
               <>
                 {runStatus === "interrupted" && <InterruptedRunCard onStartFreshRun={() => startRun.mutate()} />}

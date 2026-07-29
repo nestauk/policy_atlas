@@ -71,19 +71,26 @@ test.describe("mock evidence-base journey", () => {
     await page.getByRole("link", { name: mockProject.name }).click();
     await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}`));
 
-    // (c) Plan pane: ready-draft fields render with locked-vocabulary labels
-    // (never a raw enum key like "rapid"). `<PaneHeading>` is a styled div,
-    // not a heading element — the pane's accessible name comes from its
-    // `<section aria-label="Plan">`, which the "region" landmark role picks up.
+    // (c) Plan pane: a compact disclosure card — the header button carries
+    // the question + ready chip, and ready-draft fields with locked-
+    // vocabulary labels (never a raw enum key like "rapid") only render once
+    // expanded. `<PaneHeading>` is a styled div, not a heading element — the
+    // pane's accessible name comes from its `<section aria-label="Plan">`,
+    // which the "region" landmark role picks up.
     await expect(page.getByRole("region", { name: "Plan", exact: true })).toBeVisible();
+    await expect(page.getByText("10-15 minutes").first()).toBeVisible();
+    await page.getByRole("button", { name: "Toggle plan details" }).click();
     await expect(page.getByText("Rapid — top sources, fast pass")).toBeVisible();
     await expect(page.getByText("Geography: United Kingdom (GB)")).toBeVisible();
-    await expect(page.getByText("10-15 minutes").first()).toBeVisible();
 
     // (d) Rail collapse via keyboard-operable button (planning conversation,
-    // left rail — independent of the plan pane's Start CTA on the right).
+    // left rail). Re-expand afterwards — check-ins now render inside this
+    // rail (owner feedback), so it needs to be open for step (f) below.
     await page.getByRole("button", { name: "Collapse the planning rail" }).click();
-    await expect(page.getByRole("button", { name: "Expand the planning rail" })).toBeVisible();
+    const expandRail = page.getByRole("button", { name: "Expand the planning rail" });
+    await expect(expandRail).toBeVisible();
+    await expandRail.click();
+    await expect(page.getByRole("button", { name: "Collapse the planning rail" })).toBeVisible();
 
     // (e) Start the analysis — the journey pane takes over the right column.
     await page.getByRole("button", { name: "Start the analysis" }).click();

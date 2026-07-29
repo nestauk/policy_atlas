@@ -1,5 +1,4 @@
 import { useState } from "react";
-import type { ReactNode } from "react";
 
 import { useStartRun } from "../../api/mutations";
 import { usePlan } from "../../api/queries";
@@ -8,7 +7,7 @@ import { conflictSentences, isConflictCode } from "../../lib/errors";
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
 import { Chip } from "../../ui/brand/Chip";
-import { Divider, PaneHeading } from "../../ui/brand/Card";
+import { Card, Divider, PaneHeading } from "../../ui/brand/Card";
 import {
   ANALYSIS_DEPTH_LABEL,
   COMPONENT_LABEL,
@@ -21,43 +20,21 @@ import {
 
 type PlanDraft = components["schemas"]["PlanDraft"];
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div>
-      <h3 className="text-[11px] font-bold uppercase tracking-wider text-grey">{label}</h3>
-      <div className="mt-2">{children}</div>
-    </div>
-  );
-}
-
-/** A labelled setting row; hides itself entirely when the locked vocabulary
- *  has no label for the key (unknown key → omit, never leak). */
-function Setting({ label, value }: { label: string; value: string | null }) {
-  if (value === null) return null;
-  return (
-    <Field label={label}>
-      <span className="text-sm font-medium text-navy">{value}</span>
-    </Field>
-  );
-}
-
 /**
- * The forming plan as a first-class right-pane surface (contract strand 2),
- * replacing the collapsible plan disclosure: question · focus/scoping chips ·
- * constraint chips (geography-collapse rule) · labelled settings · steps
- * checklist (pre-ready: the planned components; at ready: server-labelled
- * steps) · ready/forming chip · time band · the full-width start CTA with a
- * starting-lock.
+ * The forming plan as a first-class right-pane surface. It uses the in-run
+ * journey recap's compact disclosure grammar, while preserving the pre-run
+ * readiness state, planned components, and start control.
  */
 export function PlanPane({ projectId }: { projectId: string }) {
   const planQuery = usePlan(projectId);
   const startRun = useStartRun(projectId);
   const [startNotice, setStartNotice] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const plan: PlanDraft | null = planQuery.data?.plan ?? null;
 
   if (plan === null || (!plan.question && (plan.steps ?? []).length === 0)) {
     return (
-      <section aria-label="Plan" className="flex h-full flex-col">
+      <section aria-label="Plan" className="flex h-full min-w-0 flex-col">
         <PaneHeading>Plan</PaneHeading>
         <Divider />
         <div className="flex flex-1 items-center justify-center px-6">
@@ -73,100 +50,109 @@ export function PlanPane({ projectId }: { projectId: string }) {
   const screeningCriteria = plan.screening_criteria ?? [];
   const constraints = scopeChips(plan.scope_constraints);
   const steps = plan.steps ?? [];
-  const components_ = plan.components ?? [];
+  const componentLabels = (plan.components ?? [])
+    .map((component) => vocabLabel(COMPONENT_LABEL, component))
+    .filter((label): label is string => label !== null);
+  const settings: Array<[string, string | null]> = [
+    ["Search effort", vocabLabel(SEARCH_EFFORT_LABEL, plan.search_effort)],
+    ["Analysis depth", vocabLabel(ANALYSIS_DEPTH_LABEL, plan.analysis_depth)],
+    ["Sources", vocabLabel(SOURCES_LABEL, plan.backend_scope)],
+    ["Check-ins", vocabLabel(STEERING_MODE_LABEL, plan.steering_mode)],
+  ];
+  const knownSettings = settings.filter((item): item is [string, string] => item[1] !== null);
   const starting = startRun.isPending;
 
   return (
-    <section aria-label="Plan" className="flex h-full flex-col">
-      <div className="flex items-center justify-between pr-4">
-        <PaneHeading>Plan</PaneHeading>
-        <div className="flex items-center gap-2">
-          {plan.time_band !== null && plan.time_band !== "" && (
-            <span className="text-[12px] text-grey">{scrub(plan.time_band)}</span>
-          )}
-          <Chip tone={plan.ready ? "green" : "soft"}>{plan.ready ? "ready" : "forming…"}</Chip>
-        </div>
-      </div>
+    <section aria-label="Plan" className="flex h-full min-w-0 flex-col">
+      <PaneHeading>Plan</PaneHeading>
       <Divider />
-      <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
-        <p className="text-[12.5px] text-grey">
-          Agreed here before anything runs. The analysis follows it.
-        </p>
-
-        <Field label="Question">
-          <p className="text-[15px] font-semibold leading-snug text-navy">
-            {plan.question !== null && plan.question !== "" ? (
-              scrub(plan.question)
-            ) : (
-              <span className="text-grey">Not set yet</span>
+      <div className="min-w-0 flex-1 overflow-y-auto px-5 py-5">
+        <Card className="min-w-0">
+          <button
+            className="flex w-full min-w-0 items-baseline gap-3 px-4 py-3 text-left hover:bg-ground"
+            onClick={() => setDetailsOpen((value) => !value)}
+            aria-expanded={detailsOpen}
+            aria-label="Toggle plan details"
+          >
+            <PaneHeading className="shrink-0 p-0">The plan</PaneHeading>
+            <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-navy">
+              {plan.question !== null && plan.question !== "" ? scrub(plan.question) : "Not set yet"}
+            </span>
+            {plan.time_band !== null && plan.time_band !== "" && (
+              <Chip className="max-w-32 shrink truncate" tone="soft">
+                {scrub(plan.time_band)}
+              </Chip>
             )}
-          </p>
-        </Field>
-
-        {scopingNotes.length > 0 && (
-          <Field label="Focus">
-            <div className="flex flex-wrap gap-2">
-              {scopingNotes.map((note) => (
-                <Chip key={note} tone="soft">
-                  {scrub(note)}
-                </Chip>
-              ))}
-            </div>
-            {screeningCriteria.length > 0 && (
-              <ul className="mt-2 list-disc space-y-0.5 pl-4 text-[12px] text-grey">
-                {screeningCriteria.map((criterion) => (
-                  <li key={criterion}>{scrub(criterion)}</li>
-                ))}
-              </ul>
-            )}
-          </Field>
-        )}
-
-        {constraints.length > 0 && (
-          <Field label="Constraints">
-            <div className="flex flex-wrap gap-2">
-              {constraints.map((chip) => (
-                <Chip key={chip} tone="soft">
-                  {scrub(chip)}
-                </Chip>
-              ))}
-            </div>
-          </Field>
-        )}
-
-        <Setting label="Search effort" value={vocabLabel(SEARCH_EFFORT_LABEL, plan.search_effort)} />
-        <Setting label="Analysis depth" value={vocabLabel(ANALYSIS_DEPTH_LABEL, plan.analysis_depth)} />
-        <Setting label="Sources" value={vocabLabel(SOURCES_LABEL, plan.backend_scope)} />
-        <Setting label="Check-ins" value={vocabLabel(STEERING_MODE_LABEL, plan.steering_mode)} />
-
-        {steps.length > 0 ? (
-          <Field label="Steps">
-            <ol className="space-y-2.5">
-              {steps.map((step) => (
-                <li key={step.stage} className="flex items-start gap-2.5 text-[13px] text-navy">
-                  <span aria-hidden="true" className="mt-0.5 h-3 w-3 shrink-0 border border-line-2" />
-                  <div>
-                    <div>{scrub(step.label)}</div>
-                    {step.blurb !== "" && <div className="text-[12px] text-grey">{scrub(step.blurb)}</div>}
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </Field>
-        ) : (
-          components_.length > 0 && (
-            <Field label="Planned steps">
-              <ul className="space-y-1.5 text-[13px] text-navy">
-                {components_
-                  .map((component) => vocabLabel(COMPONENT_LABEL, component))
-                  .filter((label): label is string => label !== null)
-                  .map((label) => (
-                    <li key={label}>{label}</li>
+            <Chip className="shrink-0" tone={plan.ready ? "green" : "soft"}>
+              {plan.ready ? "ready" : "forming…"}
+            </Chip>
+            <span className="shrink-0 text-[11px] text-grey">{detailsOpen ? "Hide" : "Details"}</span>
+          </button>
+          {detailsOpen && (
+            <div className="anim-rise min-w-0 border-t border-line px-4 pb-4 pt-3">
+              <p className="mb-3 text-[12.5px] text-grey">
+                Agreed here before anything runs. The analysis follows it.
+              </p>
+              {knownSettings.length > 0 && (
+                <div className="grid gap-px border border-line bg-line sm:grid-cols-2">
+                  {knownSettings.map(([label, value]) => (
+                    <div key={label} className="min-w-0 bg-paper px-3 py-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-grey">{label}</p>
+                      <p className="break-words text-[12px] font-medium text-navy">{value}</p>
+                    </div>
                   ))}
-              </ul>
-            </Field>
-          )
-        )}
+                </div>
+              )}
+              {scopingNotes.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {scopingNotes.map((note) => <Chip key={note} tone="soft">{scrub(note)}</Chip>)}
+                </div>
+              )}
+              {constraints.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {constraints.map((chip) => <Chip key={chip} tone="blue">{scrub(chip)}</Chip>)}
+                </div>
+              )}
+              {screeningCriteria.length > 0 && (
+                <div className="mt-3">
+                  <PaneHeading className="p-0">Screening criteria</PaneHeading>
+                  <ul className="mt-1 space-y-1 text-[12px] text-navy">
+                    {screeningCriteria.map((criterion) => <li key={criterion} className="break-words">• {scrub(criterion)}</li>)}
+                  </ul>
+                </div>
+              )}
+              {steps.length > 0 && (
+                <div className="mt-3">
+                  <PaneHeading className="p-0">Agreed steps</PaneHeading>
+                  <ol className="mt-1 space-y-1 text-[12px] text-navy">
+                    {steps.map((step, index) => (
+                      <li key={step.stage} className="break-words">
+                        {index + 1}. {scrub(step.label)}
+                        {step.blurb !== "" && <span className="text-grey"> — {scrub(step.blurb)}</span>}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+              {!plan.ready && componentLabels.length > 0 && (
+                <div className="mt-3">
+                  <PaneHeading className="p-0">Planned components</PaneHeading>
+                  <ul className="mt-1 space-y-1 text-[12px] text-navy">
+                    {componentLabels.map((label) => <li key={label}>{label}</li>)}
+                  </ul>
+                </div>
+              )}
+              {(plan.assumptions ?? []).length > 0 && (
+                <div className="mt-3">
+                  <PaneHeading className="p-0">Assumptions</PaneHeading>
+                  <ul className="mt-1 space-y-1 text-[12px] text-grey">
+                    {plan.assumptions?.map((assumption) => <li key={assumption} className="break-words">• {scrub(assumption)}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
       </div>
 
       {plan.ready && (

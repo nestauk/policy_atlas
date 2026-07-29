@@ -6,6 +6,7 @@ import type { components } from "../../api/gen/types";
 import type { CheckInOut, StageEntry } from "../../store/types";
 import { ToastProvider } from "../../ui/radix/Toast";
 import { CheckInCard } from "./CheckInCard";
+import { presentCheckInRender } from "./checkInPresentation";
 
 type CheckInOption = components["schemas"]["CheckInOption"];
 
@@ -128,6 +129,38 @@ describe("CheckInCard — stage chip", () => {
 
     const header = screen.getByText("Waiting on your input").parentElement;
     expect(header?.children).toHaveLength(1);
+  });
+});
+
+describe("CheckInCard — deterministic completion render", () => {
+  it("presents a machine completion render with locked labels and keeps its raw record disclosed", () => {
+    const render = "characterise: succeeded | wall_clock=12.7s | counts: appraised=12, skipped=2, internal=9";
+    const presented = presentCheckInRender(render, "characterise", []);
+
+    expect(presented).toEqual({
+      stageLabel: "Mapping the landscape",
+      status: "completed",
+      seconds: "12.7",
+      counts: [
+        { label: "Sources quality-appraised", value: "12" },
+        { label: "Skipped", value: "2" },
+      ],
+    });
+    renderCard(baseCheckIn({ render, stage: "characterise" }));
+    expect(screen.getByText("Mapping the landscape")).toBeInTheDocument();
+    expect(screen.getByText("Completed in 12.7s")).toBeInTheDocument();
+    expect(screen.getByText("Sources quality-appraised: 12")).toBeInTheDocument();
+    expect(screen.getByText("Skipped: 2")).toBeInTheDocument();
+    expect(screen.queryByText("Internal: 9")).toBeNull();
+    expect(screen.getByText("Technical detail").closest("details")).not.toHaveAttribute("open");
+  });
+
+  it("keeps a non-machine render as scrubbed prose", () => {
+    const render = "Review the evidence base before deciding.";
+    expect(presentCheckInRender(render, "screen", [])).toBeNull();
+    renderCard(baseCheckIn({ render }));
+    expect(screen.getByText(render)).toBeInTheDocument();
+    expect(screen.queryByText("Technical detail")).toBeNull();
   });
 });
 

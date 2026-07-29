@@ -46,26 +46,6 @@ export function screenedOutFooter(count: number): string {
   return `${count} screened out — kept in the sources table with reasons.`;
 }
 
-export interface ActivityLine {
-  stage: string;
-  note: string;
-  count: number;
-}
-
-/** Collapse consecutive identical tick text while preserving its latest stage. */
-export function collapseActivity(notes: Array<{ stage: string; note: string }>): ActivityLine[] {
-  return notes.reduce<ActivityLine[]>((lines, current) => {
-    const previous = lines.at(-1);
-    if (previous !== undefined && previous.note === current.note) {
-      previous.count += 1;
-      previous.stage = current.stage;
-    } else {
-      lines.push({ ...current, count: 1 });
-    }
-    return lines;
-  }, []);
-}
-
 /** Outcome-first completion language; all other run statuses are non-completion states. */
 export function completionCopy(status: string | undefined): { heading: string; body: string } | null {
   if (status === "succeeded") {

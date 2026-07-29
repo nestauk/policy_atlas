@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { PlanningThreadDecision, PlanningThreadRun, PlanningThreadTurn } from "../../store";
-import { threadInputs } from "./PlanningPane";
+import { presentRunDecisions, threadInputs } from "./PlanningPane";
 
 function turn(index: number, createdAt: string): PlanningThreadTurn {
   return {
@@ -53,5 +53,21 @@ describe("threadInputs", () => {
     const runs = [run("r1", "2026-07-28T09:00:00Z", null)];
     const { boundaries } = threadInputs([turn(0, "2026-07-28T10:00:00Z")], runs, []);
     expect(boundaries[0].afterTurnIndex).toBeNull();
+  });
+});
+
+describe("presentRunDecisions", () => {
+  it("collapses consecutive search echoes with a counter and stage-labels completed components", () => {
+    const entries: PlanningThreadDecision[] = [
+      { kind: "search.executed", sequence: 1, occurred_at: "2026-07-28T10:00:00Z", summary: "Executed a search query." },
+      { kind: "search.executed", sequence: 2, occurred_at: "2026-07-28T10:00:01Z", summary: "Executed a search query." },
+      { kind: "component.completed", sequence: 3, occurred_at: "2026-07-28T10:00:02Z", summary: "Completed an evidence-base step.", detail: { component: "screen_full" } },
+      { kind: "component.completed", sequence: 4, occurred_at: "2026-07-28T10:00:03Z", summary: "Completed an evidence-base step.", detail: { component: "unknown" } },
+    ];
+
+    expect(presentRunDecisions(entries, [])).toEqual([
+      { sequence: 1, summary: "Executed a search query", count: 2 },
+      { sequence: 3, summary: "Completed: Screening for relevance", count: 1 },
+    ]);
   });
 });

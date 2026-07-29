@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { StageEntry } from "../../../store/types";
-import { collapseActivity, completionCopy, funnelBarWidth, screenedOutFooter, timelineSummary } from "./presentation";
+import { completionCopy, funnelBarWidth, screenedOutFooter, timelineSummary } from "./presentation";
 
 describe("journey presentation rules", () => {
   it("uses bounded bar widths and keeps the screened-out footer data separate", () => {
@@ -19,21 +19,6 @@ describe("journey presentation rules", () => {
       summary: { found: 12, quality_checked: 4, internal_counter: 99, reason: "not a count" },
     };
     expect(timelineSummary(stage)).toEqual(["12 found", "4 quality-checked"]);
-  });
-
-  it("collapses consecutive identical activity notes", () => {
-    expect(
-      collapseActivity([
-        { stage: "acquire", note: "Searching OpenAlex" },
-        { stage: "acquire", note: "Searching OpenAlex" },
-        { stage: "screen", note: "Screening sources" },
-        { stage: "acquire", note: "Searching OpenAlex" },
-      ]),
-    ).toEqual([
-      { stage: "acquire", note: "Searching OpenAlex", count: 2 },
-      { stage: "screen", note: "Screening sources", count: 1 },
-      { stage: "acquire", note: "Searching OpenAlex", count: 1 },
-    ]);
   });
 
   it("selects outcome-first completion copy", () => {

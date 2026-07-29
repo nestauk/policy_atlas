@@ -609,7 +609,7 @@ export function ArtefactView() {
     }
   }
 
-  if (artefact.isError || artefact.data === undefined) {
+  if (artefact.isError || artefact.data === undefined || artefact.data === null) {
     // No committed artefact: show the in-progress skeleton when sections are
     // streaming (or streamed before a bad ending) — otherwise the empty state.
     if (Object.keys(stream.liveSections).length > 0) {
@@ -686,7 +686,7 @@ export function ArtefactView() {
             ))}
           </div>
         )}
-        {coverage.data !== undefined && (
+        {coverage.data !== undefined && coverage.data !== null && (
           <p className="mt-3 border-l-2 border-l-blue bg-blue-tint-2 px-3 py-2 text-[12.5px] leading-relaxed text-navy">
             {scrub(coverage.data.sentence)}
           </p>

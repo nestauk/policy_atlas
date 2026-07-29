@@ -30,17 +30,21 @@ export function WorkspaceView() {
     return <NotFoundView />;
   }
 
+  // minmax(0, …) on both grid tracks: a bare 1fr sizes to max-content and
+  // lets long unwrappable content (the plan header row) blow the grid past
+  // the viewport — truncation can never engage (owner feedback, 2026-07-29:
+  // "the workspace expands too wide").
   return (
     <main
-      className="mx-auto grid min-h-[calc(100svh-58px)] max-w-[1440px] grid-cols-1 lg:grid-cols-[var(--chat)_1fr]"
+      className="mx-auto grid min-h-[calc(100svh-58px)] max-w-[1440px] grid-cols-1 lg:grid-cols-[minmax(0,var(--chat))_minmax(0,1fr)]"
       style={{ "--chat": rail.width } as React.CSSProperties}
     >
-      <div className="relative border-r border-line bg-paper">
+      <div className="relative min-w-0 border-r border-line bg-paper">
         <div className="flex justify-end border-b border-line p-1">
           <RailToggle collapsed={rail.collapsed} toggleProps={rail.toggleProps} />
         </div>
         <div id={rail.regionId} hidden={rail.collapsed}>
-          <PlanningPane projectId={projectId} runStatus={stream.run?.status} />
+          <PlanningPane projectId={projectId} runStatus={stream.run?.status} stream={stream} />
         </div>
         {!rail.collapsed && (
           <div
@@ -49,7 +53,7 @@ export function WorkspaceView() {
           />
         )}
       </div>
-      <div className="bg-ground">
+      <div className="min-w-0 bg-ground">
         {hasRun ? (
           <RunPane projectId={projectId} stream={stream} />
         ) : (

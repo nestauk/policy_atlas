@@ -6,6 +6,11 @@ import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
 import { Card, Divider, PaneHeading } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
+import {
+  EvidenceDistributionChart,
+  normaliseGeographies,
+  PublicationYearsChart,
+} from "../ui/charts/EvidenceDistributionChart";
 
 const FUNNEL_ORDER = [
   ["found", "Found"],
@@ -23,59 +28,6 @@ const CHART_TOKENS = {
   navy: "var(--color-navy)",
   blue: "var(--color-blue)",
 } as const;
-
-const COUNTRY_ALIASES: Record<string, string> = {
-  GB: "United Kingdom",
-  UK: "United Kingdom",
-  "UNITED KINGDOM": "United Kingdom",
-  US: "United States",
-  USA: "United States",
-  "UNITED STATES": "United States",
-};
-
-/** Normalise mixed ISO and name geography inputs before chart labels render. */
-export function normaliseGeographies(data: Record<string, number>): Record<string, number> {
-  return Object.entries(data).reduce<Record<string, number>>((normalised, [rawLabel, count]) => {
-    const key = rawLabel.trim().toUpperCase();
-    const label = COUNTRY_ALIASES[key] ?? rawLabel.trim();
-    return { ...normalised, [label]: (normalised[label] ?? 0) + count };
-  }, {});
-}
-
-function DistributionChart({
-  title,
-  data,
-}: {
-  title: string;
-  data: Record<string, number>;
-}) {
-  const rows = Object.entries(data)
-    .map(([label, count]) => ({ label: scrub(label), count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 12);
-  if (rows.length === 0) return null;
-  return (
-    <Card>
-      <PaneHeading>{title}</PaneHeading>
-      <Divider />
-      <div className="h-64 p-4">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={rows} layout="vertical" margin={{ left: 8, right: 24 }}>
-            <CartesianGrid horizontal={false} stroke={CHART_TOKENS.grid} />
-            <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: CHART_TOKENS.text }} />
-            <YAxis
-              type="category"
-              dataKey="label"
-              width={150}
-              tick={{ fontSize: 11, fill: CHART_TOKENS.navy }}
-            />
-            <Bar dataKey="count" fill={CHART_TOKENS.blue} isAnimationActive={false} barSize={14} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    </Card>
-  );
-}
 
 /**
  * Landscape: distributions over the screened-in set ONLY (the funnel is the
@@ -125,7 +77,7 @@ export function LandscapeView() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
         {funnelRows.length > 0 && (
           <Card>
             <PaneHeading>From search to citation</PaneHeading>
@@ -154,18 +106,36 @@ export function LandscapeView() {
 
         {landscape.data !== undefined &&
           Object.keys(landscape.data.evidence_types ?? {}).length > 0 && (
-            <DistributionChart title="Evidence types" data={landscape.data.evidence_types ?? {}} />
+            <Card className="min-w-0">
+              <PaneHeading>Evidence types</PaneHeading>
+              <Divider />
+              <div className="min-w-0 p-4">
+                <EvidenceDistributionChart data={landscape.data.evidence_types ?? {}} />
+              </div>
+            </Card>
           )}
 
         {landscape.data !== undefined && Object.keys(landscape.data.years ?? {}).length > 0 && (
-          <DistributionChart title="Publication years" data={landscape.data.years ?? {}} />
+          <Card className="min-w-0">
+            <PaneHeading>Publication years</PaneHeading>
+            <Divider />
+            <div className="min-w-0 p-4">
+              <PublicationYearsChart data={landscape.data.years ?? {}} />
+            </div>
+          </Card>
         )}
 
         {landscape.data?.geographies !== null &&
           landscape.data?.geographies !== undefined &&
           Object.keys(landscape.data.geographies).length > 0 && (
-            <div className="lg:col-span-2">
-              <DistributionChart title="Where sources were published" data={normaliseGeographies(landscape.data.geographies ?? {})} />
+            <div className="min-w-0 lg:col-span-2">
+              <Card className="min-w-0">
+                <PaneHeading>Where sources were published</PaneHeading>
+                <Divider />
+                <div className="min-w-0 p-4">
+                  <EvidenceDistributionChart data={normaliseGeographies(landscape.data.geographies ?? {})} />
+                </div>
+              </Card>
               <p className="mt-2 text-[11.5px] text-grey">Where sources were published, not where the studies were conducted.</p>
             </div>
           )}

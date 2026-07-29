@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { useDecisions, useRuns } from "../../api/queries";
+import { useCheckIns, useDecisions, useRuns } from "../../api/queries";
 import { scrub } from "../../lib/scrub";
 import { composePlanningThread, usePlanningTranscript } from "../../store";
 import type {
@@ -9,12 +9,19 @@ import type {
   PlanningThreadItem,
   PlanningThreadRun,
   PlanningThreadTurn,
+  ResolvedDecision,
   RunStatus,
+  RunStreamState,
   RunThreadBoundary,
   RunThreadDecision,
+  StageEntry,
 } from "../../store";
 import { Button } from "../../ui/brand/Button";
 import { Divider, PaneHeading } from "../../ui/brand/Card";
+import { groupSearchDecisions } from "../decisionsPresentation";
+import { AnsweredCheckIn } from "./AnsweredCheckIn";
+import { CheckInCard } from "./CheckInCard";
+import { COMPONENT_LABEL } from "./planVocabulary";
 
 /** The server page-size cap; one planning conversation fits comfortably. */
 const TRANSCRIPT_PAGE_SIZE = 200;
@@ -123,8 +130,82 @@ function DurableTurn({
 
 /** A run block in the thread: a quiet divider row naming the run and its
  *  outcome, with any steering decisions echoed inside it. */
-function RunBlock({ run, decisions }: { run: PlanningThreadRun; decisions: PlanningThreadDecision[] }) {
+interface PresentedRunDecision {
+  sequence: number;
+  summary: string;
+  count: number;
+}
+
+/** Convert the decision-log feed into quiet, user-facing thread echoes.
+ * Search grouping delegates to the shared decision presentation helper; the
+ * remaining adjacent duplicate collapse is limited to this compact rail. */
+export function presentRunDecisions(
+  decisions: PlanningThreadDecision[],
+  stages: StageEntry[],
+): PresentedRunDecision[] {
+  const labelled = decisions.flatMap((decision) => {
+    if (decision.kind !== "component.completed") return [decision];
+    const detail = decision.detail;
+    const component =
+      detail !== null && typeof detail === "object" && !Array.isArray(detail)
+        ? [detail.component, detail.stage, detail.registry_component].find(
+            (value): value is string => typeof value === "string",
+          )
+        : undefined;
+    const stageLabel =
+      (component === undefined ? undefined : [...stages].reverse().find((stage) => stage.stage === component)?.label)
+      ?? (component === undefined ? undefined : COMPONENT_LABEL[component]);
+    return stageLabel === undefined ? [] : [{ ...decision, summary: `Completed: ${stageLabel}` }];
+  });
+
+  const searchGrouped: PresentedRunDecision[] = [];
+  for (let index = 0; index < labelled.length; index += 1) {
+    const entry = labelled[index];
+    if (entry.kind !== "search.executed" || labelled[index - 1]?.kind === "search.executed") continue;
+    const consecutive: PlanningThreadDecision[] = [];
+    for (let cursor = index; labelled[cursor]?.kind === "search.executed"; cursor += 1) {
+      consecutive.push(labelled[cursor]);
+    }
+    const grouped = groupSearchDecisions(consecutive)[0];
+    if (grouped !== undefined) {
+      searchGrouped.push({
+        sequence: grouped.sequence,
+        summary: entry.summary.replace(/\.$/, ""),
+        count: consecutive.length,
+      });
+    }
+  }
+  const nonSearch = labelled
+    .filter((entry) => entry.kind !== "search.executed")
+    .map((entry) => ({ sequence: entry.sequence, summary: entry.summary, count: 1 }));
+  const ordered = [...searchGrouped, ...nonSearch].sort((left, right) => left.sequence - right.sequence);
+
+  return ordered.reduce<PresentedRunDecision[]>((entries, entry) => {
+    const previous = entries.at(-1);
+    if (previous !== undefined && previous.summary === entry.summary) {
+      previous.count += entry.count;
+      return entries;
+    }
+    entries.push(entry);
+    return entries;
+  }, []);
+}
+
+function RunBlock({
+  run,
+  decisions,
+  stages,
+  answered,
+  checkIns,
+}: {
+  run: PlanningThreadRun;
+  decisions: PlanningThreadDecision[];
+  stages: StageEntry[];
+  answered: ResolvedDecision[];
+  checkIns: ReturnType<typeof useCheckIns>["data"];
+}) {
   const status = RUN_BLOCK_STATUS[run.status] ?? null;
+  const presentedDecisions = presentRunDecisions(decisions, stages);
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-[11.5px] text-grey">
@@ -132,13 +213,22 @@ function RunBlock({ run, decisions }: { run: PlanningThreadRun; decisions: Plann
         <span>Analysis run{status !== null ? ` — ${status}` : ""}</span>
         <span aria-hidden="true" className="h-px flex-1 bg-line" />
       </div>
-      {decisions.map((decision) => (
+      {presentedDecisions.map((decision) => (
         <div
           key={decision.sequence}
           className="mx-4 border-l-2 border-l-yellow bg-yellow-tint/50 px-3 py-2"
         >
-          <p className="text-[12px] text-ink">{scrub(decision.summary)}</p>
+          <p className="text-[12px] text-ink">
+            {scrub(decision.summary)}{decision.count > 1 ? ` × ${decision.count}` : ""}
+          </p>
         </div>
+      ))}
+      {answered.map((decision) => (
+        <AnsweredCheckIn
+          key={decision.checkInId}
+          decision={decision}
+          checkIn={checkIns?.data.find((checkIn) => checkIn.check_in_id === decision.checkInId)}
+        />
       ))}
     </div>
   );
@@ -154,13 +244,16 @@ function RunBlock({ run, decisions }: { run: PlanningThreadRun; decisions: Plann
 export function PlanningPane({
   projectId,
   runStatus,
+  stream,
 }: {
   projectId: string;
   runStatus: RunStatus | undefined;
+  stream: RunStreamState;
 }) {
   const transcript = usePlanningTranscript(projectId, { page_size: TRANSCRIPT_PAGE_SIZE });
   const runsQuery = useRuns(projectId, { page_size: TRANSCRIPT_PAGE_SIZE });
   const decisionsQuery = useDecisions(projectId, { page_size: TRANSCRIPT_PAGE_SIZE });
+  const checkInsQuery = useCheckIns(projectId, "all");
   const [message, setMessage] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
@@ -212,7 +305,16 @@ export function PlanningPane({
               retryDisabled={composerDisabled}
             />
           ) : (
-            <RunBlock key={`run-${item.run.capability_run_id}`} run={item.run} decisions={item.decisions} />
+            <RunBlock
+              key={`run-${item.run.capability_run_id}`}
+              run={item.run}
+              decisions={item.decisions}
+              stages={stream.stages}
+              answered={
+                item.run.capability_run_id === stream.run?.id ? stream.decisions : []
+              }
+              checkIns={checkInsQuery.data}
+            />
           ),
         )}
 
@@ -259,13 +361,22 @@ export function PlanningPane({
             ))}
           </div>
         )}
+
+        {stream.pendingCheckIn !== null && (
+          <CheckInCard
+            key={stream.pendingCheckIn.check_in_id}
+            projectId={projectId}
+            checkIn={stream.pendingCheckIn}
+            stages={stream.stages}
+          />
+        )}
       </div>
 
       <div className="border-t border-line px-4 py-3">
         {runActive && (
           <p role="status" className="mb-2 text-[11.5px] leading-relaxed text-grey">
             {runStatus === "paused"
-              ? "The analysis is paused at a check-in — answer it in the Analysis pane. Replanning unlocks when the run finishes."
+              ? "The analysis is paused at a check-in above. Replanning unlocks when the run finishes."
               : "The analysis is running — steer it from its check-ins. Replanning unlocks when it finishes."}
           </p>
         )}

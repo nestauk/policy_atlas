@@ -321,11 +321,16 @@ export function useArtefact(projectId: string) {
   return useQuery({
     queryKey: queryKeys.artefact(projectId),
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/projects/{project_id}/artefact", {
-        params: { path: { project_id: projectId } },
-      });
+      const { data, error, response } = await client.GET(
+        "/api/v1/projects/{project_id}/artefact",
+        { params: { path: { project_id: projectId } } },
+      );
+      // No artefact yet is a normal pre-synthesis state, not an error — a
+      // thrown 404 here retries four times and holds a blank skeleton for
+      // ~10s on a fresh project (owner feedback, 2026-07-29).
+      if (response.status === 404) return null;
       if (error) throw error;
-      return data;
+      return data ?? null;
     },
     enabled: Boolean(projectId),
   });
@@ -338,11 +343,14 @@ export function useCoverage(projectId: string) {
   return useQuery({
     queryKey: [...queryKeys.projectRoot(projectId), "coverage"] as const,
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/projects/{project_id}/coverage", {
-        params: { path: { project_id: projectId } },
-      });
+      const { data, error, response } = await client.GET(
+        "/api/v1/projects/{project_id}/coverage",
+        { params: { path: { project_id: projectId } } },
+      );
+      // No coverage record yet (nothing has run) is a normal state.
+      if (response.status === 404) return null;
       if (error) throw error;
-      return data;
+      return data ?? null;
     },
     enabled: Boolean(projectId),
   });

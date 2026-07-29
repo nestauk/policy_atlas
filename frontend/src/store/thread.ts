@@ -4,6 +4,57 @@ export type PlanningThreadTurn = components["schemas"]["PlanningTranscriptTurnOu
 export type PlanningThreadRun = components["schemas"]["RunOut"];
 export type PlanningThreadDecision = components["schemas"]["DecisionOut"];
 
+export interface SessionAnsweredCheckIn {
+  chosenOptionLabel: string;
+  rejectedOptionLabels: string[];
+}
+
+const ANSWERED_CHECK_INS_SESSION_KEY = "policy-atlas.answered-check-ins";
+
+function readSessionAnsweredCheckIns(): Record<string, SessionAnsweredCheckIn> {
+  if (typeof window === "undefined") return {};
+  try {
+    const stored = window.sessionStorage.getItem(ANSWERED_CHECK_INS_SESSION_KEY);
+    if (stored === null) return {};
+    const parsed: unknown = JSON.parse(stored);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).flatMap(([checkInId, value]) => {
+        if (value === null || typeof value !== "object" || Array.isArray(value)) return [];
+        const record = value as Partial<SessionAnsweredCheckIn>;
+        return typeof record.chosenOptionLabel === "string" && Array.isArray(record.rejectedOptionLabels)
+          && record.rejectedOptionLabels.every((label) => typeof label === "string")
+          ? [[checkInId, { chosenOptionLabel: record.chosenOptionLabel, rejectedOptionLabels: record.rejectedOptionLabels }]]
+          : [];
+      }),
+    );
+  } catch {
+    return {};
+  }
+}
+
+/** Record the visible answer labels for this browser session only. The public
+ * durable decision payload does not retain an option id or label. */
+export function recordSessionAnsweredCheckIn(
+  checkInId: string,
+  chosenOptionLabel: string,
+  rejectedOptionLabels: string[],
+): void {
+  if (typeof window === "undefined") return;
+  const entries = readSessionAnsweredCheckIns();
+  entries[checkInId] = { chosenOptionLabel, rejectedOptionLabels };
+  try {
+    window.sessionStorage.setItem(ANSWERED_CHECK_INS_SESSION_KEY, JSON.stringify(entries));
+  } catch {
+    // Private browsing or quota failure only removes this non-durable echo.
+  }
+}
+
+/** Return the session-local option labels, if an answer was made in this tab. */
+export function sessionAnsweredCheckIn(checkInId: string): SessionAnsweredCheckIn | null {
+  return readSessionAnsweredCheckIns()[checkInId] ?? null;
+}
+
 /** A run from the runs read plus its durable run-phase boundary. This
  * boundary deliberately is not inferred from timestamps: planning turns are
  * ordered by `turn_index`, and an active/parked run 409-fences new turns. */

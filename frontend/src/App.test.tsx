@@ -11,7 +11,7 @@ describe("App", () => {
     vi.stubEnv("VITE_DEV_TOKEN", "test-token");
     render(<App />);
     expect(
-      screen.getByRole("heading", { name: "Your evidence projects" }),
+      screen.getByRole("heading", { name: "Projects" }),
     ).toBeInTheDocument();
   });
 });

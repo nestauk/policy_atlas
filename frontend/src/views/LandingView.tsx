@@ -9,8 +9,51 @@ import { useDocumentTitle } from "../lib/title";
 import { Button } from "../ui/brand/Button";
 import { Card, StatusDot } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
+import { Tooltip } from "../ui/radix/Tooltip";
 import { useToast } from "../ui/radix/Toast";
 import { cancelledRenameState } from "./landingPresentation";
+
+/** Pencil icon (rename) — 16px stroke glyph, currentColor, no icon library. */
+function PencilIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M11.5 1.5l3 3-8 8-3.7 0.7.7-3.7 8-8z" />
+    </svg>
+  );
+}
+
+/** Archive-box icon (archive) — 16px stroke glyph, currentColor, no icon library. */
+function ArchiveIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect x="1.5" y="2.5" width="13" height="3" />
+      <path d="M2.5 5.5v7a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-7" />
+      <path d="M6.25 8.5h3.5" />
+    </svg>
+  );
+}
 
 type LatestRun = { status: string } | null | undefined;
 type Project = components["schemas"]["ProjectOut"];
@@ -62,8 +105,7 @@ export function LandingView() {
     <main className="mx-auto max-w-6xl px-6 py-10">
       <header className="mb-8 flex items-end justify-between gap-6">
         <div>
-          <h1 className="font-display text-3xl font-extrabold tracking-[-0.5px] text-navy">Your evidence projects</h1>
-          <p className="mt-1.5 max-w-xl text-[13px] text-grey">Each project turns one policy question into an evidence base you can read, steer and cite.</p>
+          <h1 className="font-display text-3xl font-extrabold tracking-[-0.5px] text-navy">Projects</h1>
         </div>
         {!creating && <Button onClick={() => setCreating(true)}>New project</Button>}
       </header>
@@ -131,28 +173,46 @@ function ProjectCard({ project, delayMs }: { project: Project; delayMs: number }
         ) : (
           <>
             <div className="absolute right-3 top-3 flex gap-1">
-              <Button size="sm" variant="ghost" onClick={() => { setDraftName(project.name); setEditing(true); }}>Rename project</Button>
-              <Button
-                size="sm"
-                variant={confirmingArchive ? "primary" : "ghost"}
-                onClick={() => {
-                  if (confirmingArchive) {
-                    archive.mutate(undefined, {
-                      onError: () =>
-                        toast.toast({
-                          title: "Archive failed",
-                          description: "The project couldn't be archived. Try again.",
-                          tone: "error",
-                        }),
-                    });
-                  } else {
-                    setConfirmingArchive(true);
+              <Tooltip content="Rename project">
+                <button
+                  type="button"
+                  aria-label="Rename project"
+                  onClick={() => { setDraftName(project.name); setEditing(true); }}
+                  className="flex h-8 w-8 cursor-pointer items-center justify-center text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
+                >
+                  <PencilIcon />
+                  <span className="sr-only">Rename project</span>
+                </button>
+              </Tooltip>
+              <Tooltip content={confirmingArchive ? "Confirm archive" : "Archive project"}>
+                <button
+                  type="button"
+                  aria-label={confirmingArchive ? "Confirm archive" : "Archive project"}
+                  onClick={() => {
+                    if (confirmingArchive) {
+                      archive.mutate(undefined, {
+                        onError: () =>
+                          toast.toast({
+                            title: "Archive failed",
+                            description: "The project couldn't be archived. Try again.",
+                            tone: "error",
+                          }),
+                      });
+                    } else {
+                      setConfirmingArchive(true);
+                    }
+                  }}
+                  disabled={archive.isPending}
+                  className={
+                    confirmingArchive
+                      ? "flex h-8 w-8 cursor-pointer items-center justify-center bg-blue text-white hover:bg-[#0000d6] focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-default disabled:bg-line-2"
+                      : "flex h-8 w-8 cursor-pointer items-center justify-center text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-default disabled:text-line-2"
                   }
-                }}
-                disabled={archive.isPending}
-              >
-                {confirmingArchive ? "Confirm archive" : "Archive project"}
-              </Button>
+                >
+                  <ArchiveIcon />
+                  <span className="sr-only">{confirmingArchive ? "Confirm archive" : "Archive project"}</span>
+                </button>
+              </Tooltip>
             </div>
             {archive.isError && <p role="alert" className="pr-36 text-xs text-red">The project couldn't be archived. Try again.</p>}
             <Link to={`/projects/${project.project_id}`} className="block pr-36 no-underline focus-visible:outline-2 focus-visible:outline-blue">

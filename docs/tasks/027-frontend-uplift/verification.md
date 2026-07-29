@@ -228,6 +228,32 @@ values (sanitized-fixtures policy). The dev-issuer keypair stays untracked. Scre
 in `evidence/` show only invented/live-dev data on localhost. The replaced favicon
 removes a possibly Figma-licensed asset from the public repo.
 
+## Owner-feedback round (2026-07-29, post-step-6, pre-review)
+
+The owner reviewed the build hands-on and directed a feedback batch; all landed on the
+branch with the same gates (full verify + mock e2e 4/4 + fe-api-smoke):
+
+- **Steering re-pause loop FIXED (owner-directed scope addition into the pinned 024/025
+  machinery)**: continuation now records the parked pause's boundary+component
+  (`ContinuationState.parked_boundary/parked_component`); a `continue`/`adjust`/
+  `mode_change` resume of a parked **before**-boundary no longer re-presents it
+  (live-path parity). Two new tests in `test_continuation_parity.py`; the full runtime
+  suite (452) green. This discharges the live-check livelock finding.
+- Evidence-base tab on a fresh project: `useArtefact`/`useCoverage` treat 404 as the
+  normal empty state (no retry storm, instant placeholder).
+- Favicon 🌐 · Projects page title "Projects" (subtitle removed) · rename/archive as
+  icon buttons (accessible names unchanged).
+- Check-ins moved into the chat pane; machine completion renders presented friendly
+  (stage label + labelled counts, raw behind a collapsed disclosure); answered state
+  keeps the chosen option visible with an "Other options" disclosure (session-local —
+  the API does not durably expose the chosen option id; named for a future additive
+  field); run feed collapses repeated search echoes into counter lines and re-labels
+  or drops vague component rows.
+- Activity card hidden (chat pane carries run activity); workspace grid blowout fixed
+  (`minmax(0,…)` tracks — the "expands too wide" report); plan pane restyled to the
+  journey recap grammar; publication-years now a shared vertical full-range chart;
+  journey/Landscape share chart components; discovered-themes card added.
+
 ## Review handoff (step-7/8 inputs)
 
 **Executor provenance (family flip):** A.1/A.2, B.1, C.1, D.1, E.2 first-pass, E.5 =

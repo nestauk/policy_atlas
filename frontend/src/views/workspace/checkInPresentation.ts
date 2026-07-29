@@ -1,4 +1,64 @@
-import type { ResolvedDecision } from "../../store";
+import type { ResolvedDecision, StageEntry } from "../../store";
+
+/** Locked labels for deterministic component-completion count fields. Unknown
+ * keys are deliberately omitted rather than converted from implementation
+ * vocabulary. */
+export const CHECK_IN_COUNT_LABELS: Record<string, string> = {
+  acquired: "Sources found",
+  results: "Results returned",
+  relevant: "Relevant sources",
+  not_relevant: "Screened out",
+  classified: "Sources classified",
+  appraised: "Sources quality-appraised",
+  selected: "Sources shortlisted",
+  extracted: "Findings extracted",
+  skipped: "Skipped",
+  failed: "Failed",
+};
+
+/** Public fallback labels for renders received before a stage frame. */
+const STAGE_LABELS: Record<string, string> = {
+  acquire: "Searching sources",
+  screen: "Screening sources",
+  classify: "Classifying evidence",
+  appraise: "Appraising quality",
+  characterise: "Mapping the landscape",
+  synthesise: "Synthesising the evidence",
+};
+
+export interface PresentedCheckInRender {
+  stageLabel: string;
+  status: "completed";
+  seconds: string;
+  counts: Array<{ label: string; value: string }>;
+}
+
+/**
+ * Present the deterministic component-completion render without surfacing its
+ * backend keys. A non-matching render remains prose, so no guessed structure
+ * replaces the durable content of record.
+ */
+export function presentCheckInRender(
+  render: string,
+  stage: string | null,
+  stages: StageEntry[],
+): PresentedCheckInRender | null {
+  const match = /^\s*([^:|]+):\s*([^|]+?)\s*\|\s*wall_clock=([0-9]+(?:\.[0-9]+)?)s\s*\|\s*counts:\s*(.*?)\s*$/.exec(render);
+  if (match === null) return null;
+  const [, component, rawStatus, seconds, rawCounts] = match;
+  if (rawStatus.trim() !== "succeeded") return null;
+  const stageKey = stage ?? component.trim();
+  const stageLabel =
+    [...stages].reverse().find((entry) => entry.stage === stageKey)?.label ?? STAGE_LABELS[stageKey];
+  if (stageLabel === undefined) return null;
+  const counts = rawCounts.split(",").flatMap((part) => {
+    const count = /^\s*([a-z_]+)\s*=\s*(-?[0-9]+(?:\.[0-9]+)?)\s*$/.exec(part);
+    if (count === null) return [];
+    const label = CHECK_IN_COUNT_LABELS[count[1]];
+    return label === undefined ? [] : [{ label, value: count[2] }];
+  });
+  return { stageLabel, status: "completed", seconds, counts };
+}
 
 /** Friendly copy for the known steering-trigger keys
  *  (`runtime/steering_triggers.py`). Unknown trigger → omit (locked
