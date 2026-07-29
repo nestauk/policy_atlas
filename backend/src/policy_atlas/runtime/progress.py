@@ -6,9 +6,12 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
+import structlog
 from sqlalchemy.engine import Engine
 
 from policy_atlas.core import events
+
+log = structlog.get_logger()
 
 
 class ProgressEmitter:
@@ -30,6 +33,7 @@ class ProgressEmitter:
         self._run_id = run_id
         self._sections_by_synthesis_index: list[dict[str, Any]] = []
         self._key_findings: dict[str, Any] | None = None
+        self._disabled = False
 
     def emit_skeleton(self, sections: Sequence[dict[str, str]]) -> None:
         """Emit the presentation-ordered skeleton and establish display indexes.
@@ -63,7 +67,9 @@ class ProgressEmitter:
         Args:
             synthesis_index: Zero-based position in the generation loop.
         """
-        self._append("artefact.section_started", {"index": self._section(synthesis_index)["index"]})
+        payload = self._compose(lambda: {"index": self._section(synthesis_index)["index"]})
+        if payload is not None:
+            self._append("artefact.section_started", payload)
 
     def section_completed(self, synthesis_index: int, *, prose: str) -> None:
         """Record a normal section after its artefact write.
@@ -72,15 +78,21 @@ class ProgressEmitter:
             synthesis_index: Zero-based position in the generation loop.
             prose: Final whole-section prose shown by the live view.
         """
-        section = self._section(synthesis_index)
-        self._append(
-            "artefact.section_completed",
-            {"index": section["index"], "title": section["title"], "prose": prose},
+        payload = self._compose(
+            lambda: {
+                "index": self._section(synthesis_index)["index"],
+                "title": self._section(synthesis_index)["title"],
+                "prose": prose,
+            }
         )
+        if payload is not None:
+            self._append("artefact.section_completed", payload)
 
     def key_findings_started(self) -> None:
         """Record the final-generated, first-presented key-findings pass."""
-        self._append("artefact.section_started", {"index": self._key_findings_section()["index"]})
+        payload = self._compose(lambda: {"index": self._key_findings_section()["index"]})
+        if payload is not None:
+            self._append("artefact.section_started", payload)
 
     def key_findings_completed(self, *, prose: str) -> None:
         """Close the key-findings slot, including the intentional empty case.
@@ -89,11 +101,30 @@ class ProgressEmitter:
             prose: Generated prose, or an empty string when no key-findings
                 block was warranted.
         """
-        section = self._key_findings_section()
-        self._append(
-            "artefact.section_completed",
-            {"index": section["index"], "title": section["title"], "prose": prose},
+        payload = self._compose(
+            lambda: {
+                "index": self._key_findings_section()["index"],
+                "title": self._key_findings_section()["title"],
+                "prose": prose,
+            }
         )
+        if payload is not None:
+            self._append("artefact.section_completed", payload)
+
+    def _compose(self, build: Any) -> dict[str, Any] | None:
+        """Build an event payload, degrading (never raising) on skeleton drift."""
+        if self._disabled:
+            return None
+        try:
+            return dict(build())
+        except RuntimeError:
+            self._disabled = True
+            log.warning(
+                "synthesis_progress_skeleton_inconsistent",
+                run_id=str(self._run_id),
+                exc_info=True,
+            )
+            return None
 
     def _section(self, synthesis_index: int) -> dict[str, Any]:
         try:
@@ -107,11 +138,26 @@ class ProgressEmitter:
         return self._key_findings
 
     def _append(self, event_type: str, payload: dict[str, Any]) -> None:
-        with self._engine.begin() as conn:
-            events.append(
-                conn,
-                project_id=self._project_id,
-                run_id=self._run_id,
+        # Presentation records must never fail the walk (ADR 0027 decision 5):
+        # a DB error on a progress append degrades the live view, not the run.
+        # First failure disables further emission — the live stream is already
+        # incoherent past a gap, and retry noise helps nobody.
+        if self._disabled:
+            return
+        try:
+            with self._engine.begin() as conn:
+                events.append(
+                    conn,
+                    project_id=self._project_id,
+                    run_id=self._run_id,
+                    event_type=event_type,
+                    payload=payload,
+                )
+        except Exception:
+            self._disabled = True
+            log.warning(
+                "synthesis_progress_emission_failed",
+                run_id=str(self._run_id),
                 event_type=event_type,
-                payload=payload,
+                exc_info=True,
             )

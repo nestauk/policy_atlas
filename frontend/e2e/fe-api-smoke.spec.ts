@@ -57,14 +57,8 @@ test.describe.serial("@fe-api-smoke built frontend against real API", () => {
     // "Mapping the landscape"/characterise: the orchestrator may omit them.)
     // The timeline entry persists after the component completes, so this
     // assertion has no race against the stub's near-instant execution.
-    //
-    // FLAGGED (027 F.2): the journey pane's timeline list lost its
-    // "Stage timeline" accessible name in the phase-E rewrite
-    // (`views/workspace/journey/JourneyPane.tsx`'s `Timeline` component
-    // renders a bare `<ol>` with no `aria-label` any more) — this is an
-    // apparent regression, not an intentional rename, so per this task's
-    // brief the assertion is updated here rather than the source touched.
-    // The lead should decide whether to restore the list's accessible name.
-    await expect(page.getByText("Searching sources")).toBeVisible({ timeout: 30_000 });
+    await expect(
+      page.getByRole("list", { name: "Stage timeline" }).getByText("Searching sources"),
+    ).toBeVisible({ timeout: 30_000 });
   });
 });

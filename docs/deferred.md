@@ -1777,3 +1777,20 @@ first-class vocabulary. What follows is what it deliberately left out.
   ever widen (behaviour change, own gate).
 - **Print/share/export CTA** — the evidence-base print stylesheet ships; the share/export
   product seam stays deferred and undischarged.
+- **Project-wide decision-log scoping** (read-model-additions.md rev 2 [D-2], recorded
+  here per its own commitment): the decisions read model derives from every run in the
+  project; the journey card says "attributed across this project". Run-scoped decision
+  views wait on the workspace-cluster IA's run-scoped read models (above).
+- **`DecisionOut.detail` server-side narrowing** (read-model-additions.md rev 2 [D-4],
+  API hygiene): `detail` passes the raw event payload through; the client renders only
+  allowlisted keys. Narrow the server projection when a second consumer appears.
+- **Orphaned `component.started` on hard process death** (027 review, 2026-07-29): the
+  runner commits `component.started` in a standalone transaction before opening the
+  component transaction; a SIGKILL in that gap leaves the pair unclosed on the `runs`
+  row (walk-level recovery via the continuation startup sweep still marks the
+  capability run interrupted, so the user-facing state is honest). A runs-row
+  reconciliation sweep is the seam if that trail ever needs to be self-consistent.
+- **Filter pagination materialises the collection** (027 C.2, by design): evidence and
+  findings pages derive the full project collection per request for collection-true
+  `total_items` (funnel precedent), so a page walk is O(N) per page. Fine at
+  single-project scale; revisit with SQL-level filters if project corpora grow 10×.

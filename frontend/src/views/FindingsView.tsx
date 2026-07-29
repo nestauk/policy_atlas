@@ -218,7 +218,7 @@ function FindingRow({
           <button
             type="button"
             aria-expanded={expanded}
-            aria-label={`${expanded ? "Collapse" : "Expand"} finding: ${finding.intervention}`}
+            aria-label={`${expanded ? "Collapse" : "Expand"} finding: ${scrub(finding.intervention)}`}
             onClick={onToggle}
             className="cursor-pointer text-[11px] text-grey focus-visible:outline-2 focus-visible:outline-blue"
           >

@@ -2806,6 +2806,7 @@
             "type": "string"
           },
           "message": {
+            "maxLength": 10000,
             "minLength": 1,
             "title": "Message",
             "type": "string"

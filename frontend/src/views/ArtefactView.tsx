@@ -155,6 +155,11 @@ export function highlightParts(text: string, quote: string): HighlightParts {
         raw += 1;
         squashed = squash(text.slice(0, raw)).length;
       }
+      // A run of N whitespace chars squashes to length 1, so the loop can
+      // stop inside the run — advance to the match's first real character.
+      if (!squash(quote).startsWith(" ")) {
+        while (raw < text.length && /\s/.test(text.charAt(raw))) raw += 1;
+      }
       start = raw;
       end = Math.min(start + quote.length + 20, text.length);
     }
@@ -332,8 +337,8 @@ function ClaimPanel({
               </p>
               {gap !== null && (
                 <div className="mt-1.5 space-y-0.5 text-[11.5px] text-grey">
-                  {typeof gap.grade === "string" && (
-                    <p>{GAP_GRADE_TEXT[gap.grade] ?? `Graded ${scrub(gap.grade)}`}</p>
+                  {typeof gap.grade === "string" && GAP_GRADE_TEXT[gap.grade] !== undefined && (
+                    <p>{GAP_GRADE_TEXT[gap.grade]}</p>
                   )}
                   {(typeof gap.caveat?.search_space === "string" ||
                     typeof gap.caveat?.adequacy_verdict === "string") && (
@@ -380,7 +385,7 @@ function ClaimPanel({
                               <button
                                 type="button"
                                 className="cursor-pointer text-left text-navy hover:text-blue hover:underline"
-                                onClick={() => onOpenDossier(source.title ?? "")}
+                                onClick={() => onOpenDossier(source.source_id ?? source.title ?? "")}
                               >
                                 {scrub(source.title)}
                               </button>
@@ -554,7 +559,7 @@ function ClaimSpan({
  * honestly — flag, don't mis-render); citation claims carry [n] markers;
  * typed claims get their style + chip and open the explainer.
  */
-function AnnotatedProse({
+export function AnnotatedProse({
   block,
   onOpenClaim,
 }: {
@@ -562,7 +567,10 @@ function AnnotatedProse({
   onOpenClaim: (claim: ClaimLike) => void;
 }) {
   const segments = useMemo(() => {
-    const prose = block.prose;
+    // Span offsets are Python code-POINT indices (the annotator slices `str`);
+    // JS string indexing counts UTF-16 code UNITS, so any astral character
+    // (emoji, some CJK) before a span would shift it. Slice by code points.
+    const prose = Array.from(block.prose);
     const spanned = (block.claims ?? [])
       .filter(
         (claim): claim is ClaimLike & { span: [number, number] } =>
@@ -581,12 +589,16 @@ function AnnotatedProse({
     for (const claim of spanned) {
       if (claim.span[0] < cursor) continue; // overlapping span — keep the first
       if (claim.span[0] > cursor) {
-        parts.push({ kind: "plain", text: prose.slice(cursor, claim.span[0]) });
+        parts.push({ kind: "plain", text: prose.slice(cursor, claim.span[0]).join("") });
       }
-      parts.push({ kind: "claim", text: prose.slice(claim.span[0], claim.span[1]), claim });
+      parts.push({
+        kind: "claim",
+        text: prose.slice(claim.span[0], claim.span[1]).join(""),
+        claim,
+      });
       cursor = claim.span[1];
     }
-    if (cursor < prose.length) parts.push({ kind: "plain", text: prose.slice(cursor) });
+    if (cursor < prose.length) parts.push({ kind: "plain", text: prose.slice(cursor).join("") });
     return parts;
   }, [block]);
 
@@ -862,7 +874,7 @@ export function ArtefactView() {
             {snapshotCells.map(([label, value]) => (
               <div key={label} className="border-r border-line p-3 last:border-r-0">
                 <p className="text-[10.5px] font-bold uppercase tracking-wider text-grey">{label}</p>
-                <p className="mt-1 text-[12.5px] font-medium leading-snug text-navy">{value}</p>
+                <p className="mt-1 text-[12.5px] font-medium leading-snug text-navy">{scrub(value)}</p>
               </div>
             ))}
           </div>

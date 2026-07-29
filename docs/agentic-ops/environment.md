@@ -1,11 +1,13 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–026 — 025 hoists the Python project to `backend/` and adds the `frontend/`
+stands (tasks 001–027 — 025 hoists the Python project to `backend/` and adds the `frontend/`
 web app; 026 adds `infra/` (CDK, own venv from `infra/requirements*.txt`; `make -C infra test`
 joined `make verify` — no AWS/Docker needed) plus `make fe-api-smoke` (real-HTTP Playwright
-smoke against a disposable `policy_atlas_smoke` DB); setup unchanged since 002 *within*
-`backend/`; task 007 adds two dev-time
+smoke against a disposable `policy_atlas_smoke` DB); 027 adds the root `make dev` (backend
+:8000 + frontend :5173 together, self-minting dev-issuer auth) and NB the dev DB is never
+migrated by `make test` — run `alembic upgrade head` against dev after a schema slice;
+setup unchanged since 002 *within* `backend/`; task 007 adds two dev-time
 fixture-recorder scripts needing `OVERTON_API_KEY`/optional OpenAlex vars in `.env` — see
 `.env.example`; task 008 adds parsing deps (pymupdf/pymupdf4llm/trafilatura — arrive via
 `make setup`/`uv sync`) and a keyless dev-time recorder using system `curl`; task 009 adds

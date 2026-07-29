@@ -121,7 +121,9 @@ export function composePlanningThread(
   for (const boundary of orderedRuns) {
     while (
       turnCursor < orderedTurns.length &&
-      (boundary.afterTurnIndex === null || orderedTurns[turnCursor].turn_index <= boundary.afterTurnIndex)
+      // A null boundary means NO turn precedes this run — flush nothing.
+      boundary.afterTurnIndex !== null &&
+      orderedTurns[turnCursor].turn_index <= boundary.afterTurnIndex
     ) {
       items.push({ type: "planning_turn", turn: orderedTurns[turnCursor] });
       turnCursor += 1;

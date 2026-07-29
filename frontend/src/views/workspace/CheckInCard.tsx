@@ -10,6 +10,7 @@ import { Card } from "../../ui/brand/Card";
 import { Chip } from "../../ui/brand/Chip";
 import { useToast } from "../../ui/radix/Toast";
 import { presentCheckInRender, triggerCopy } from "./checkInPresentation";
+import { STEERING_MODE_LABEL, vocabLabel } from "./planVocabulary";
 
 interface CompiledSteer {
   render: string;
@@ -247,11 +248,16 @@ export function CheckInCard({
                   onChange={(event) => setChangeModeValue(event.target.value as ChangeModeValue)}
                   className="flex-1 border border-line-2 bg-paper px-2.5 py-1.5 text-xs focus-visible:outline-2 focus-visible:outline-blue"
                 >
-                  {CHANGE_MODE_VALUES.map((value) => (
-                    <option key={value} value={value}>
-                      {value[0].toUpperCase() + value.slice(1)}
-                    </option>
-                  ))}
+                  {CHANGE_MODE_VALUES.flatMap((value) => {
+                    const label = vocabLabel(STEERING_MODE_LABEL, value);
+                    return label === null
+                      ? []
+                      : [
+                          <option key={value} value={value}>
+                            {label}
+                          </option>,
+                        ];
+                  })}
                 </select>
                 <Button type="submit" size="sm" disabled={answer.isPending}>
                   Send

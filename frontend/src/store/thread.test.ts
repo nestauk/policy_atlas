@@ -72,4 +72,18 @@ describe("composePlanningThread", () => {
       expect(firstBlock.decisions).not.toContain(result[0]);
     }
   });
+
+  it("renders a run with no preceding turn before every turn, not after them", () => {
+    const result = composePlanningThread(
+      [turn(0)],
+      [{ run: run("run-1", "2026-07-28T09:00:00Z"), afterTurnIndex: null }],
+      [],
+    );
+
+    expect(
+      result.map((item) =>
+        item.type === "planning_turn" ? `turn:${item.turn.turn_index}` : `run:${item.run.capability_run_id}`,
+      ),
+    ).toEqual(["run:run-1", "turn:0"]);
+  });
 });

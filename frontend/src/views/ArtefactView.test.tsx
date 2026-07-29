@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import { createInitialRunStreamState } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
-import { highlightParts, LiveArtefactBody, orderSections } from "./ArtefactView";
+import { TooltipProvider } from "../ui/radix/Tooltip";
+import { AnnotatedProse, highlightParts, LiveArtefactBody, orderSections } from "./ArtefactView";
 
 describe("highlightParts", () => {
   it("finds an exact quote", () => {
@@ -21,6 +22,14 @@ describe("highlightParts", () => {
     expect(parts.kind).toBe("highlight");
     if (parts.kind === "highlight") {
       expect(parts.match).toContain("with");
+    }
+  });
+
+  it("starts the remapped match on the word, not inside a collapsed whitespace run", () => {
+    const parts = highlightParts("abc  def ghi", "def ghi");
+    expect(parts.kind).toBe("highlight");
+    if (parts.kind === "highlight") {
+      expect(parts.match.startsWith("def")).toBe(true);
     }
   });
 
@@ -47,7 +56,7 @@ describe("orderSections", () => {
 
 function streamWith(
   sections: LiveSection[],
-  runStatus: "running" | "failed" | "interrupted",
+  runStatus: "running" | "failed" | "aborted" | "interrupted",
 ): RunStreamState {
   const state = createInitialRunStreamState();
   return {
@@ -81,21 +90,41 @@ describe("LiveArtefactBody", () => {
   });
 
   it("streamed strings render scrubbed (adversarial fixture strings)", () => {
-    const { container } = render(<LiveArtefactBody stream={streamWith(sections, "running")} />);
+    const withControlChars: LiveSection[] = [
+      ...sections,
+      {
+        index: 3,
+        title: "Controls",
+        focus: "",
+        state: "filled",
+        prose: "clean\u202Ereversed\u0007bell",
+      },
+    ];
+    const { container } = render(
+      <LiveArtefactBody stream={streamWith(withControlChars, "running")} />,
+    );
     expect(container.querySelector("script")).toBeNull();
     expect(container.querySelector("img")).toBeNull();
+    // scrub() strips control/format characters — React escaping alone would
+    // keep them, so this proves the prose actually passes through scrub.
+    expect(container.textContent).not.toContain("\u202E");
+    expect(container.textContent).not.toContain("\u0007");
+    expect(screen.getByText(/cleanreversedbell/)).toBeInTheDocument();
   });
 
-  it("shows the terminal banner over streamed sections after a bad ending", () => {
-    render(<LiveArtefactBody stream={streamWith(sections, "interrupted")} />);
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "This run ended before the write-up completed.",
-    );
-    // Sections stay visible; the now-false footer and the writing pulse do not.
-    expect(screen.getByText(/Prose arrived/)).toBeInTheDocument();
-    expect(screen.queryByText(/attached when the write-up completes/)).toBeNull();
-    expect(screen.queryByText("Writing this section now…")).toBeNull();
-  });
+  it.each(["failed", "aborted", "interrupted"] as const)(
+    "shows the terminal banner over streamed sections after a %s ending",
+    (runStatus) => {
+      render(<LiveArtefactBody stream={streamWith(sections, runStatus)} />);
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "This run ended before the write-up completed.",
+      );
+      // Sections stay visible; the now-false footer and the writing pulse do not.
+      expect(screen.getByText(/Prose arrived/)).toBeInTheDocument();
+      expect(screen.queryByText(/attached when the write-up completes/)).toBeNull();
+      expect(screen.queryByText("Writing this section now…")).toBeNull();
+    },
+  );
 
   it("drops a closed-empty section slot (hide, never fake)", () => {
     const withEmpty: LiveSection[] = [
@@ -104,5 +133,68 @@ describe("LiveArtefactBody", () => {
     ];
     render(<LiveArtefactBody stream={streamWith(withEmpty, "running")} />);
     expect(screen.queryByText("Empty key findings")).toBeNull();
+  });
+});
+
+describe("AnnotatedProse", () => {
+  const claim = (id: string, span: number[] | null, text = "") => ({
+    claim_id: id,
+    claim_type: "citation" as const,
+    text,
+    span,
+    citations: [],
+  });
+  const noop = () => undefined;
+
+  it("wraps exactly the spanned prose in the claim affordance", () => {
+    render(
+      <TooltipProvider>
+        <AnnotatedProse
+          block={{ block_id: "b1", prose: "Money talks loudly.", claims: [claim("c1", [6, 11])] }}
+          onOpenClaim={noop}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.getByRole("button", { name: /talks/ })).toHaveTextContent("talks");
+  });
+
+  it("slices spans by code points so astral characters never shift offsets", () => {
+    // "🌍🌍 policy works": in code points "policy" is [3, 9]; in UTF-16 code
+    // units it would be [5, 11] — the Python annotator counts code points.
+    render(
+      <TooltipProvider>
+        <AnnotatedProse
+          block={{ block_id: "b1", prose: "🌍🌍 policy works", claims: [claim("c1", [3, 9])] }}
+          onOpenClaim={noop}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.getByRole("button", { name: /policy/ })).toHaveTextContent("policy");
+  });
+
+  it("skips overlapping spans (first wins) and drops invalid spans cleanly", () => {
+    render(
+      <TooltipProvider>
+        <AnnotatedProse
+          block={{
+            block_id: "b1",
+            prose: "Plain prose stays whole.",
+            claims: [
+              claim("c1", [0, 5]),
+              claim("c2", [3, 8]), // overlaps c1 — skipped
+              claim("c3", [10, 999]), // oversize — dropped
+              claim("c4", [-2, 4]), // negative — dropped
+              claim("c5", [7, 7]), // empty — dropped
+            ],
+          }}
+          onOpenClaim={noop}
+        />
+      </TooltipProvider>,
+    );
+    const spans = screen.getAllByRole("button");
+    expect(spans).toHaveLength(1);
+    expect(spans[0]).toHaveTextContent("Plain");
+    // The prose renders complete despite the dropped spans.
+    expect(screen.getByText(/stays whole/)).toBeInTheDocument();
   });
 });

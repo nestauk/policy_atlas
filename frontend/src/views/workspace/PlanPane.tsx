@@ -92,7 +92,7 @@ export function PlanPane({ projectId }: { projectId: string }) {
             <span className="shrink-0 text-[11px] text-grey">{detailsOpen ? "Hide" : "Details"}</span>
           </button>
           {detailsOpen && (
-            <div className="anim-rise min-w-0 border-t border-line px-4 pb-4 pt-3">
+            <div className="min-w-0 border-t border-line px-4 pb-4 pt-3">
               <p className="mb-3 text-[12.5px] text-grey">
                 Agreed here before anything runs. The analysis follows it.
               </p>

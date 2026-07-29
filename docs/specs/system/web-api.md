@@ -80,13 +80,17 @@ artefact, groups) are whole-object.
   planner turn. Every turn is durable in the per-project
   `planning_transcript`: its monotonic `turn_index`, assigned when the user
   message is received, is the conversation ordering coordinate;
-  `created_at` is display metadata only. The short first transaction follows
-  the owner/run-active gate and creates a `pending` row; the LLM call runs
-  outside any transaction (I2); a second transaction writes its reply, raw
-  planner-state snapshot, projected response and suggestions as `completed`.
-  When the turn approves a plan, that second transaction also persists the
-  plan, atomically. Planner failure marks the row `failed`; a process crash
-  between phases leaves an honest `pending` row.
+  `created_at` is display metadata only. `message` caps at 10 000 characters
+  (turns are durable and rehydrated into every later planner call). The short
+  first transaction follows the owner/run-active gate **under the project row
+  lock** and creates a `pending` row; the LLM call runs outside any
+  transaction (I2); a second transaction writes its reply, raw planner-state
+  snapshot, projected response and suggestions as `completed`. When the turn
+  approves a plan, that second transaction re-checks the run fence under the
+  project row lock (a run that started during the planner call fails the turn
+  with 409 `run_active` — no plan lands under a live walk) and then persists
+  the plan, atomically. Planner failure marks the row `failed`; a process
+  crash between phases leaves an honest `pending` row.
   `client_turn_id` is caller-minted UUID idempotency durable across API
   restarts: retrying a completed row with the same message returns its stored
   projected response verbatim. Only the latest `turn_index` may be retried;

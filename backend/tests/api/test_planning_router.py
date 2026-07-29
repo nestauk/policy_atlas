@@ -12,6 +12,7 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.api.deps import get_planner_backend
 from policy_atlas.api.routers import planning
+from policy_atlas.api.stage_vocabulary import stage_for_payload
 from policy_atlas.core.schema import (
     capability_run,
     evidence_scope,
@@ -120,6 +121,9 @@ def test_draft_projection_derives_time_band_and_deduplicates_public_stages() -> 
     assert [step.stage for step in projected.steps].count("screen") == 1
     assert projected.steps[0].label == "Searching sources"
     assert projected.steps[1].blurb == "Every title and abstract, against your question."
+    # The screen_full collapse is a plan-steps presentation rule only: live
+    # stage frames keep the pre-027 behaviour (no second "screen" stage row).
+    assert stage_for_payload({"component": "screen_full", "registry_component": "screen_full"}) is None
 
 
 def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(
@@ -346,6 +350,15 @@ def test_pending_staleness_fresh_pending_and_transcript_ownership(
         assert blocked.status_code == 409
         assert blocked.json()["error"]["code"] == "planning_turn_in_progress"
 
+        # A fresh (in-window) pending row lists honestly as pending — the
+        # crash-between-phases incomplete-turn render depends on it.
+        fresh_read = client.get(f"/api/v1/projects/{project_id}/planning-turns", headers=owner)
+        assert fresh_read.status_code == 200
+        fresh_row = fresh_read.json()["data"][1]
+        assert fresh_row["status"] == "pending"
+        assert fresh_row["reply"] is None
+        assert fresh_row["completed_at"] is None
+
 
 def test_planning_turn_409s_while_walk_active_or_parked(
     engine: Engine, tmp_path: Path
@@ -423,3 +436,85 @@ def test_planning_turn_409s_while_walk_active_or_parked(
                     .where(capability_run.c.capability_run_id == run_id)
                     .values(status="aborted", ended_at=datetime.now(UTC))
                 )
+
+
+def test_run_starting_mid_planner_call_fails_turn_and_persists_no_plan(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Phase two re-checks the run fence: a plan never lands under a live walk."""
+    _reset_turn_locks()
+
+    class RunStartsMidPlanner(CountingPlanner):
+        """Planner double that models a run starting during the LLM call."""
+
+        project_id: str | None = None
+
+        def plan_turn(
+            self,
+            turns: list[dict[str, str]],
+            previous_draft: dict[str, object] | None,
+            *,
+            session_id: uuid.UUID | None = None,
+        ) -> PlannerTurnWire:
+            wire = super().plan_turn(turns, previous_draft, session_id=session_id)
+            if wire.ready and self.project_id is not None:
+                scope_id = uuid.uuid4()
+                with engine.begin() as conn:
+                    conn.execute(
+                        evidence_scope.insert().values(
+                            evidence_scope_id=scope_id,
+                            project_id=uuid.UUID(self.project_id),
+                            intent="mid-call run start",
+                            context={},
+                            created_at=datetime.now(UTC),
+                        )
+                    )
+                    conn.execute(
+                        capability_run.insert().values(
+                            capability_run_id=uuid.uuid4(),
+                            project_id=uuid.UUID(self.project_id),
+                            evidence_scope_id=scope_id,
+                            capability="evidence_base",
+                            plan_id=uuid.uuid4(),
+                            plan_version=1,
+                            status="running",
+                            session_id=None,
+                            started_at=datetime.now(UTC),
+                            ended_at=None,
+                        )
+                    )
+            return wire
+
+    stub = RunStartsMidPlanner()
+    with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
+        project_id = create_project(client, owner)
+        stub.project_id = project_id
+        first = client.post(
+            f"/api/v1/projects/{project_id}/planning-turns",
+            headers=owner,
+            json={"message": "How can cities reduce heat risk?", "client_turn_id": str(uuid.uuid4())},
+        )
+        assert first.status_code == 200
+
+        conflicted = client.post(
+            f"/api/v1/projects/{project_id}/planning-turns",
+            headers=owner,
+            json={"message": "Proceed with the full review.", "client_turn_id": str(uuid.uuid4())},
+        )
+        assert conflicted.status_code == 409
+        assert conflicted.json()["error"]["code"] == "run_active"
+
+        with engine.begin() as conn:
+            plans = conn.execute(
+                select(orchestration_plan.c.plan_id).where(
+                    orchestration_plan.c.project_id == uuid.UUID(project_id)
+                )
+            ).all()
+            assert plans == []
+            last_status = conn.execute(
+                select(planning_transcript.c.status)
+                .where(planning_transcript.c.project_id == uuid.UUID(project_id))
+                .order_by(planning_transcript.c.turn_index.desc())
+                .limit(1)
+            ).scalar_one()
+            assert last_status == "failed"

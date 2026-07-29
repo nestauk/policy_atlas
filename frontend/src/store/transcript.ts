@@ -2,6 +2,7 @@ import { useCallback, useReducer } from "react";
 
 import { usePlanningTurn } from "../api/mutations";
 import { usePlanningTurns } from "../api/queries";
+import { errorCode } from "../lib/errors";
 import type { components } from "../api/gen/types";
 
 export type PlanningTranscriptTurn = components["schemas"]["PlanningTranscriptTurnOut"];
@@ -14,6 +15,8 @@ export interface OptimisticPlanningTurn {
   createdAt: string;
   status: "pending" | "failed";
   errorMessage?: string;
+  /** The API's machine-readable conflict code, when the failure carried one. */
+  errorCode?: string;
 }
 
 export interface OptimisticTranscriptState {
@@ -23,7 +26,8 @@ export interface OptimisticTranscriptState {
 export type OptimisticTranscriptAction =
   | { type: "submitted"; turn: OptimisticPlanningTurn }
   | { type: "reconciled"; clientTurnId: string }
-  | { type: "failed"; clientTurnId: string; errorMessage: string };
+  | { type: "failed"; clientTurnId: string; errorMessage: string; errorCode?: string }
+  | { type: "discarded"; clientTurnId: string };
 
 export const initialOptimisticTranscriptState: OptimisticTranscriptState = { turns: [] };
 
@@ -53,6 +57,7 @@ export function reduceOptimisticTranscript(
           : [...state.turns, action.turn],
       };
     case "reconciled":
+    case "discarded":
       return {
         ...state,
         turns: state.turns.filter((turn) => turn.clientTurnId !== action.clientTurnId),
@@ -62,7 +67,12 @@ export function reduceOptimisticTranscript(
         ...state,
         turns: state.turns.map((turn) =>
           turn.clientTurnId === action.clientTurnId
-            ? { ...turn, status: "failed", errorMessage: action.errorMessage }
+            ? {
+                ...turn,
+                status: "failed",
+                errorMessage: action.errorMessage,
+                errorCode: action.errorCode,
+              }
             : turn,
         ),
       };
@@ -149,6 +159,7 @@ export function usePlanningTranscript(
           type: "failed",
           clientTurnId: input.clientTurnId,
           errorMessage: error instanceof Error ? error.message : "That turn couldn't be processed.",
+          errorCode: errorCode(error),
         });
         throw error;
       }
@@ -165,12 +176,23 @@ export function usePlanningTranscript(
     [optimistic, send],
   );
 
+  const discard = useCallback(
+    (clientTurnId: string) => {
+      // For a stale_turn conflict the same id can never succeed again —
+      // drop the local row and re-read the durable conversation instead.
+      dispatch({ type: "discarded", clientTurnId });
+      void transcript.refetch();
+    },
+    [transcript],
+  );
+
   return {
     ...transcript,
     optimisticTurns: optimistic.turns,
     rows: transcriptRows(transcript.data?.data ?? [], optimistic.turns),
     send,
     retry,
+    discard,
     isSubmitting: planningTurn.isPending,
   };
 }

@@ -919,8 +919,8 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
     )
     if artefact_row is None:
         return None
-    characterisation_themes = _characterisation_theme_refs(conn, project_id)
-    grouping_themes = _grouping_theme_refs(conn, project_id)
+    characterisation_themes = _characterisation_theme_refs(conn, project_id, synthesis)
+    grouping_themes = _grouping_theme_refs(conn, project_id, synthesis)
     scope = conn.execute(
         select(evidence_scope.c.intent).where(
             evidence_scope.c.evidence_scope_id == synthesis["evidence_scope_id"]
@@ -1145,14 +1145,17 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
     for doc_key in reference_order:
         # doc_key is a pss id (envelope via pss_to_envelope) or, for a
         # snapshot with no project edge, the snapshot id itself.
-        ref_meta, ref_locator = meta.get(pss_to_envelope.get(doc_key, doc_key), ({}, "Unknown source"))
+        ref_entry = meta.get(pss_to_envelope.get(doc_key, doc_key))
+        ref_meta, ref_locator = ref_entry if ref_entry is not None else ({}, "Unknown source")
         refs_out.append(
             ReferenceOut(
                 n=refs[doc_key],
                 title=_title(ref_meta, ref_locator),
                 year=_year(ref_meta),
                 venue=_venue(ref_meta),
-                url=_url(ref_meta, ref_locator),
+                # A missed metadata lookup has only the display placeholder —
+                # never let that fall through _url's locator rung as a "URL".
+                url=_url(ref_meta, ref_locator) if ref_entry is not None else None,
             )
         )
     study_types = {
@@ -1222,25 +1225,35 @@ def _gap_out(payload: Any) -> GapOut | None:
     if isinstance(gap.get("grade"), str):
         result["grade"] = gap["grade"]
     if isinstance(caveat, Mapping):
-        result["caveat"] = {
+        caveat_fields = {
             key: caveat[key]
             for key in ("search_space", "adequacy_verdict", "verdict_origin")
             if isinstance(caveat.get(key), str)
         }
+        if caveat_fields:
+            result["caveat"] = caveat_fields
     if isinstance(gap.get("inferred"), bool):
         result["inferred"] = gap["inferred"]
     return GapOut.model_validate(result) if result else None
 
 
 def _characterisation_theme_refs(
-    conn: Connection, project_id: uuid.UUID
+    conn: Connection, project_id: uuid.UUID, synthesis: Mapping[str, Any]
 ) -> dict[str, ThemeRefItemOut]:
-    """Return the latest characterisation themes keyed by their durable ids."""
+    """Return the artefact's own characterisation themes keyed by durable ids.
+
+    Pinned to the synthesis row's (evidence_scope_id, characterisation_run_id)
+    FK — "latest by created_at" let a later run's reused theme ids relabel an
+    older committed artefact (review, 2026-07-29). No characterisation on the
+    synthesis row means no themes to resolve.
+    """
+    if synthesis.get("characterisation_run_id") is None:
+        return {}
     payload = conn.execute(
         select(characterisation_result.c.themes)
         .where(characterisation_result.c.project_id == project_id)
-        .order_by(characterisation_result.c.created_at.desc())
-        .limit(1)
+        .where(characterisation_result.c.evidence_scope_id == synthesis["evidence_scope_id"])
+        .where(characterisation_result.c.run_id == synthesis["characterisation_run_id"])
     ).scalar_one_or_none()
     if not isinstance(payload, Mapping) or not isinstance(payload.get("themes"), list):
         return {}
@@ -1272,13 +1285,21 @@ def _characterisation_theme_refs(
     return result
 
 
-def _grouping_theme_refs(conn: Connection, project_id: uuid.UUID) -> dict[str, ThemeRefItemOut]:
-    """Return the latest facet groups keyed by their durable group ids."""
+def _grouping_theme_refs(
+    conn: Connection, project_id: uuid.UUID, synthesis: Mapping[str, Any]
+) -> dict[str, ThemeRefItemOut]:
+    """Return the artefact's own facet groups keyed by their durable group ids.
+
+    Pinned to the synthesis row's (evidence_scope_id, grouping_run_id) FK for
+    the same reason as `_characterisation_theme_refs`.
+    """
+    if synthesis.get("grouping_run_id") is None:
+        return {}
     payload = conn.execute(
         select(grouping_result.c.groups)
         .where(grouping_result.c.project_id == project_id)
-        .order_by(grouping_result.c.created_at.desc())
-        .limit(1)
+        .where(grouping_result.c.evidence_scope_id == synthesis["evidence_scope_id"])
+        .where(grouping_result.c.run_id == synthesis["grouping_run_id"])
     ).scalar_one_or_none()
     if not isinstance(payload, Mapping):
         return {}
@@ -1712,8 +1733,12 @@ def source_dossier_out(
         doi=_metadata_text(metadata, "doi"),
         cited_by_count=provider.get("cited_by_count")
         if isinstance(provider.get("cited_by_count"), int)
+        and not isinstance(provider.get("cited_by_count"), bool)
         else None,
-        fwci=provider.get("fwci") if isinstance(provider.get("fwci"), (float, int)) else None,
+        fwci=provider.get("fwci")
+        if isinstance(provider.get("fwci"), (float, int))
+        and not isinstance(provider.get("fwci"), bool)
+        else None,
         tags=tags,
         cited_in=_source_cited_in(conn, project_id, source_id),
     )
@@ -1756,6 +1781,7 @@ def _source_cited_in(
             .join(chunk, citation.c.chunk_id == chunk.c.chunk_id)
         )
         .where(annotation.c.block_id.in_(titles), chunk.c.source_snapshot_id.in_(snapshot_ids))
+        .order_by(citation.c.created_at, citation.c.citation_id)
     ).all()
     return [
         CitedInOut(

@@ -564,6 +564,43 @@ def test_artefact_theme_claim_resolves_durable_references(tmp_path: Path, engine
                         created_at=now(),
                     )
                 )
+                # The artefact resolves themes via the synthesis row's pinned
+                # characterisation_run_id — never "latest by created_at".
+                conn.execute(
+                    update(synthesis_result)
+                    .where(synthesis_result.c.project_id == project_id)
+                    .values(characterisation_run_id=synthesis.run_id)
+                )
+                decoy_run_id = uuid.uuid4()
+                conn.execute(
+                    insert(runs).values(
+                        run_id=decoy_run_id,
+                        project_id=project_id,
+                        status="running",
+                        started_at=now(),
+                    )
+                )
+                conn.execute(
+                    insert(characterisation_result).values(
+                        characterisation_id=uuid.uuid4(),
+                        project_id=project_id,
+                        evidence_scope_id=synthesis.evidence_scope_id,
+                        run_id=decoy_run_id,
+                        grouping_provenance={},
+                        coverage={},
+                        themes={
+                            "themes": [
+                                {
+                                    "theme_id": "characterisation:access",
+                                    "name": "DECOY — a later run reused this id",
+                                    "size": 99,
+                                    "member_ids": [],
+                                }
+                            ]
+                        },
+                        created_at=now(),
+                    )
+                )
                 annotation_id = conn.execute(
                     select(annotation.c.annotation_id).where(
                         annotation.c.block_id.in_(

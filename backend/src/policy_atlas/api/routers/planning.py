@@ -49,11 +49,21 @@ router = APIRouter(
 _PENDING_TTL = timedelta(minutes=10)
 _turn_locks_guard = threading.Lock()
 _turn_locks: dict[uuid.UUID, threading.Lock] = {}
+# The registry is keyed by caller-supplied project ids BEFORE authz resolves,
+# so it must stay bounded (the _sessions cache it replaced was LRU-128; the
+# bound was lost in the 027 port — security review, 2026-07-29). Evicting an
+# unheld lock is safe: correctness rests on the phase-1 project row lock and
+# the transcript unique constraints, this lock only single-flights the
+# planner spend.
+_TURN_LOCKS_MAX = 256
 
 
 def _turn_lock(project_id: uuid.UUID) -> threading.Lock:
     """Return the process-local concurrency guard for one project's planner turn."""
     with _turn_locks_guard:
+        if project_id not in _turn_locks and len(_turn_locks) >= _TURN_LOCKS_MAX:
+            for key in [k for k, v in _turn_locks.items() if not v.locked()]:
+                del _turn_locks[key]
         return _turn_locks.setdefault(project_id, threading.Lock())
 
 
@@ -172,7 +182,12 @@ def _phase_one_turn(
     payload: PlanningTurnCreate,
 ) -> PlanningTurnOut | uuid.UUID:
     """Authenticate, fence, and either replay or durably reserve one turn."""
-    owned_project(conn, project_id=project_id, user_id=user_id)
+    # The row lock serialises phase one across processes: without it, two
+    # processes can both read "no pending turn" / the same max turn_index and
+    # the loser's INSERT dies on a unique constraint as a raw 500 (review
+    # finding, 2026-07-29). The transaction is short — the LLM call stays
+    # outside it (finding I2 rule).
+    owned_project(conn, project_id=project_id, user_id=user_id, for_update=True)
     _expire_stale_pending_turns(conn, project_id)
     existing = conn.execute(
         select(planning_transcript)
@@ -314,22 +329,51 @@ def create_planning_turn(
         }
         # Phase 2 joins plan approval in the same transaction, so an approved
         # plan can never commit without the transcript turn that approved it.
+        run_started_meanwhile = False
         with engine.begin() as conn:
             if approved is not None:
                 owned_project(conn, project_id=project_id, user_id=user.user_id, for_update=True)
-            completed = conn.execute(
-                update(planning_transcript)
-                .where(planning_transcript.c.id == phase_one)
-                .where(planning_transcript.c.project_id == project_id)
-                # A fresh turn completes from "pending"; a retried latest turn
-                # re-runs in place from "failed" (retry rules, plan pin 2).
-                .where(planning_transcript.c.status.in_(("pending", "failed")))
-                .values(**phase_two_values)
+                # Re-check the run fence under the project row lock: a run may
+                # have started during the out-of-transaction planner call, and
+                # persisting a new approved plan under a live walk would hand
+                # continuation an unrelated plan (adversarial review,
+                # 2026-07-29). Mirror phase one: fail the turn, same conflict.
+                run_started_meanwhile = (
+                    conn.execute(
+                        select(capability_run.c.status)
+                        .where(capability_run.c.project_id == project_id)
+                        .where(capability_run.c.status.in_(("running", "paused")))
+                        .limit(1)
+                    ).scalar_one_or_none()
+                    is not None
+                )
+            if run_started_meanwhile:
+                conn.execute(
+                    update(planning_transcript)
+                    .where(planning_transcript.c.id == phase_one)
+                    .where(planning_transcript.c.status.in_(("pending", "failed")))
+                    .values(status="failed", completed_at=_now())
+                )
+            else:
+                completed = conn.execute(
+                    update(planning_transcript)
+                    .where(planning_transcript.c.id == phase_one)
+                    .where(planning_transcript.c.project_id == project_id)
+                    # A fresh turn completes from "pending"; a retried latest turn
+                    # re-runs in place from "failed" (retry rules, plan pin 2).
+                    .where(planning_transcript.c.status.in_(("pending", "failed")))
+                    .values(**phase_two_values)
+                )
+                if completed.rowcount != 1:
+                    raise RuntimeError("planning transcript turn was not open at phase two")
+                if approved is not None:
+                    persist_approved_plan(conn, project_id=project_id, plan=approved)
+        if run_started_meanwhile:
+            raise ApiConflict(
+                "run_active",
+                "a run started while this turn was being planned; "
+                "finish or stop it, then retry the turn",
             )
-            if completed.rowcount != 1:
-                raise RuntimeError("planning transcript turn was not open at phase two")
-            if approved is not None:
-                persist_approved_plan(conn, project_id=project_id, plan=approved)
         return result
     finally:
         lock.release()

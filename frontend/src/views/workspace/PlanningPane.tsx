@@ -18,6 +18,8 @@ import type {
 } from "../../store";
 import { Button } from "../../ui/brand/Button";
 import { Divider, PaneHeading } from "../../ui/brand/Card";
+import { conflictSentences, errorCode, isConflictCode } from "../../lib/errors";
+import { ReauthRedirect } from "../../ui/feedback";
 import { groupSearchDecisions } from "../decisionsPresentation";
 import { AnsweredCheckIn } from "./AnsweredCheckIn";
 import { CheckInCard } from "./CheckInCard";
@@ -285,15 +287,38 @@ export function PlanningPane({
       <PaneHeading>Plan the analysis</PaneHeading>
       <Divider />
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-        {thread.length === 0 && transcript.optimisticTurns.length === 0 && (
-          <div role="status" className="text-[12.5px] leading-relaxed text-grey">
-            <p>
-              Describe the policy question you need evidence for. The planner refines it with
-              you into an analysis plan you approve before anything runs.
-            </p>
-            <p className="mt-2 text-[11.5px]">Your conversation is kept — it survives restarts.</p>
+        {transcript.isPending && (
+          <div role="status" className="anim-breathe text-[12.5px] text-grey">
+            Loading your planning conversation…
           </div>
         )}
+        {transcript.isError &&
+          (errorCode(transcript.error) === "unauthenticated" ? (
+            <ReauthRedirect />
+          ) : (
+            <div role="status" className="text-[12.5px] text-grey">
+              <p>Your planning conversation couldn't be loaded.</p>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="mt-2"
+                onClick={() => void transcript.refetch()}
+              >
+                Try again
+              </Button>
+            </div>
+          ))}
+        {transcript.data !== undefined &&
+          thread.length === 0 &&
+          transcript.optimisticTurns.length === 0 && (
+            <div role="status" className="text-[12.5px] leading-relaxed text-grey">
+              <p>
+                Describe the policy question you need evidence for. The planner refines it with
+                you into an analysis plan you approve before anything runs.
+              </p>
+              <p className="mt-2 text-[11.5px]">Your conversation is kept — it survives restarts.</p>
+            </div>
+          )}
 
         {thread.map((item) =>
           item.type === "planning_turn" ? (
@@ -324,17 +349,32 @@ export function PlanningPane({
             {turn.status === "failed" && (
               <div className="mr-8 border border-line bg-paper px-3.5 py-2.5">
                 <p className="text-[12.5px] text-ink">
-                  That turn couldn't be processed. Your draft so far is unchanged.
+                  {isConflictCode(turn.errorCode)
+                    ? conflictSentences[turn.errorCode]
+                    : "That turn couldn't be processed. Your draft so far is unchanged."}
                 </p>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="mt-2"
-                  disabled={composerDisabled}
-                  onClick={() => void transcript.retry(turn.clientTurnId)}
-                >
-                  Retry
-                </Button>
+                {turn.errorCode === "stale_turn" ? (
+                  // Retrying the same client_turn_id can never clear a
+                  // stale_turn conflict — offer the refresh instead.
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="mt-2"
+                    onClick={() => transcript.discard(turn.clientTurnId)}
+                  >
+                    Refresh conversation
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="mt-2"
+                    disabled={composerDisabled}
+                    onClick={() => void transcript.retry(turn.clientTurnId)}
+                  >
+                    Retry
+                  </Button>
+                )}
               </div>
             )}
           </div>

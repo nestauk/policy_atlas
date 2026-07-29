@@ -153,3 +153,32 @@ def test_progress_emitter_does_not_block_on_open_synthesis_like_transaction(
             held.rollback()
             held.close()
         _cleanup(engine, project_id)
+
+
+def test_progress_emitter_failure_degrades_without_raising(engine: Engine) -> None:
+    """ADR 0027 decision 5: a presentation append can never fail the walk."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, run_id = _seed_run(engine)
+        emitter = ProgressEmitter(engine, project_id=project_id, run_id=run_id)
+        emitter.emit_skeleton([{"title": "Evidence", "focus": "What the evidence says"}])
+
+        # Skeleton drift (an index the skeleton never had) degrades quietly.
+        emitter.section_started(99)
+        # Once degraded, every further emission is a silent no-op.
+        emitter.section_completed(0, prose="never recorded")
+        emitter.key_findings_completed(prose="never recorded")
+
+        with engine.begin() as conn:
+            recorded = [entry["event_type"] for entry in events.read(conn, project_id)]
+        assert recorded == ["artefact.skeleton"]
+
+        # A DB failure on append (FK-less run id) also degrades instead of raising.
+        fresh = ProgressEmitter(engine, project_id=project_id, run_id=uuid.uuid4())
+        fresh.emit_skeleton([{"title": "Evidence", "focus": "What the evidence says"}])
+        with engine.begin() as conn:
+            assert [entry["event_type"] for entry in events.read(conn, project_id)] == [
+                "artefact.skeleton"
+            ]
+    finally:
+        _cleanup(engine, project_id)

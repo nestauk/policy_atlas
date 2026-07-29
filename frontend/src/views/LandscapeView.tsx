@@ -2,6 +2,7 @@ import { useParams } from "react-router";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts";
 
 import { useFunnel, useGroups, useLandscape, useProject } from "../api/queries";
+import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
 import { Card, Divider, PaneHeading } from "../ui/brand/Card";
@@ -10,6 +11,7 @@ import {
   EvidenceDistributionChart,
   normaliseGeographies,
   PublicationYearsChart, orderThemes } from "../ui/charts/EvidenceDistributionChart";
+import { ReauthRedirect } from "../ui/feedback";
 
 const FUNNEL_ORDER = [
   ["found", "Found"],
@@ -46,9 +48,21 @@ export function LandscapeView() {
     return typeof count === "number" ? [{ label: label as string, count }] : [];
   });
 
+  // `not_found` is the server's honest shape for "no landscape/funnel yet"
+  // (screening hasn't run) — that's the expected empty state below, not a
+  // failure to surface as an error.
+  const landscapeErrorCode = landscape.isError ? errorCode(landscape.error) : null;
+  const funnelErrorCode = funnel.isError ? errorCode(funnel.error) : null;
+  const isUnauthenticated =
+    landscapeErrorCode === "unauthenticated" || funnelErrorCode === "unauthenticated";
+  const isError =
+    (landscape.isError && landscapeErrorCode !== "not_found") ||
+    (funnel.isError && funnelErrorCode !== "not_found");
+
   const noData =
     !landscape.isPending &&
     !funnel.isPending &&
+    !isError &&
     funnelRows.length === 0 &&
     Object.keys(landscape.data?.evidence_types ?? {}).length === 0;
 
@@ -69,6 +83,25 @@ export function LandscapeView() {
           ))}
         </div>
       )}
+
+      {isError &&
+        (isUnauthenticated ? (
+          <ReauthRedirect />
+        ) : (
+          <Card role="alert" className="p-8 text-center text-[13px] text-navy">
+            The landscape couldn't be loaded.{" "}
+            <button
+              type="button"
+              className="cursor-pointer font-bold text-blue hover:underline"
+              onClick={() => {
+                void landscape.refetch();
+                void funnel.refetch();
+              }}
+            >
+              Retry
+            </button>
+          </Card>
+        ))}
 
       {noData && (
         <Card role="status" className="p-8 text-center text-[13px] text-grey">

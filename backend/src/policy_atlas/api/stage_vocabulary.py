@@ -50,6 +50,12 @@ def stage_for_payload(payload: dict[str, Any]) -> StageKey | None:
     registry_component = payload.get("registry_component")
     if not isinstance(registry_component, str):
         registry_component = registry_component_for(component)
+    if registry_component == "screen_full":
+        # screen_full maps to "screen" only for the approved-plan steps list
+        # (approved item 15's collapse). Live stage frames keep the pre-027
+        # behaviour — emitting a second "Screening for relevance" here put a
+        # duplicate, misdescribed row on deep-depth timelines (review, 2026-07-29).
+        return None
     return STAGE_BY_REGISTRY.get(registry_component)
 
 

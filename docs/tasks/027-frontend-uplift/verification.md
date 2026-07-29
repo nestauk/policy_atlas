@@ -15,8 +15,13 @@ review conversation (step 7).
 | `make verify` (phase E gate) | pass | 101 vitest at that point |
 | verify-fast + `pnpm e2e` + `make fe-api-smoke` (phase F gate) | pass | e2e 4/4 · smoke 3/3 · vitest 114/114 |
 | `make verify` (step-6 exit, 2026-07-29, incl. the three live-check fixes) | pass | phase G commit |
+| full verify + mock e2e 4/4 + fe-api-smoke (each owner-feedback commit, 2026-07-29) | pass | 7 commits, gates asserted per commit message; vitest reached 120/26 |
+| `make verify` (review-stack entry, 2026-07-29) | pass | step-7 self-verify gate |
+| `make verify` + `pnpm e2e` (review-stack exit, 2026-07-29, incl. all adopted fixes) | pass | vitest 127/26 · e2e 5/5 (new rail-keyboard spec) |
 
-Backend suite size at exit ≈ 1950 tests; frontend vitest 114 tests / 25 files.
+Backend suite size at review exit ≈ 1960 tests; frontend vitest 127 tests / 26 files
+(step-6 exit was 114/25; the owner-feedback round took it to 120/26 — the build-exit
+number above is historical, this line is current).
 
 ## Checks beyond the build
 
@@ -181,9 +186,16 @@ Six phase commits on `task/027-frontend-uplift` (branch base 038af93, from
 - **live-027 spec**: committed as an explicitly-excluded acceptance spec
   (`playwright.live-027.config.ts`); never picked up by `pnpm e2e` or CI.
 
-**Additive read-model list as approved vs as landed**: items 1–15 of
-read-model-additions.md rev 2 §2 landed exactly; the one field-level delta is the
-`client_turn_id` addition above (same additive gate, flagged here).
+**Additive read-model list as approved vs as landed** (corrected by the review stack,
+2026-07-29 — the earlier "one field-level delta" statement undercounted): items 1–15 of
+read-model-additions.md rev 2 §2 landed exactly, plus **six** field-level additive
+deltas, each owner-originated but landing outside the rev-2 exhaustive list:
+`PlanningTranscriptTurnOut.client_turn_id` (D.1 retry-after-reload), `ClaimOut.theme` +
+`ThemeRefItemOut` (+`.sources`) (owner feedback, 8169f7e/6fa3ce3),
+`CitationOut.source_id` + `.grounding_rationale` (owner feedback, closed the 025
+deferred.md seam — recorded there), and `CitationOut.evidence_type` (owner feedback
+39aef12, the appraisal-chip tooltip; previously recorded nowhere — PR asks the owner to
+ratify explicitly).
 
 ## Substrate invariants
 
@@ -206,10 +218,11 @@ and SSE replay/pending suites pass **unmodified** across the lifecycle-placement
 
 ## Known unverified items
 
-- The three live-check-driven fixes (upcoming-timeline render, run-again control,
-  terminal-partial precedence over a committed artefact) are proven by the live legs
-  themselves + typecheck/lint but carry no dedicated unit tests yet — named for the
-  review conversation.
+- The three live-check-driven fixes (updated at review): terminal-partial precedence
+  gained stack coverage (banner unit-tested across failed/aborted/interrupted; selector
+  suite stands); the upcoming-timeline render and the run-again control remain proven
+  by the live legs + typecheck/lint only — accepted at review as small presentational
+  branches with live evidence, not test-pinned.
 - Findings rows never rendered against live data (this corpus had no extract stage —
   standard depth); the kind-aware renders rest on unit tests + mock fixtures + mock e2e.
 - ICF rows in a live corpus additionally depend on the planner including the `icf`
@@ -324,3 +337,136 @@ cannot reach localhost Postgres — all DB-backed tests were executed by the lea
   generous turn budget.
 - The planner pins structured extraction to deep analysis depth — a standard-depth run
   has no findings; live checks that need findings rows must ask for deep depth.
+
+## Review findings (step 7, 2026-07-29 — fresh conversation)
+
+Lanes run (Tier-3 baseline, family flip per the provenance map): **contract verifier**
+(pinned Opus, read-only, re-ran gates itself) · **Codex adversarial** (GPT-5, anchored
+the Claude-written surfaces) · **four scoped Claude finder angles** (fast-worker,
+lens-matched pathspecs, anchored the Codex-written surfaces) · **security lane**
+(security-auditor) · lead live-evidence/content review + adjudication. Reviewer diffs
+excluded `frontend/openapi.json`, `src/api/gen/**`, `evidence/*.png`, `docs/tasks/**`.
+Budget: ~250K reasoning-class (contract verifier 232K + Codex) + ~440K fast-worker.
+
+**Convergent across families (high-confidence):** the planning run-fence TOCTOU
+(Codex MAJOR 1 ≡ security MAJOR 1 ≡ planning-finder MAJOR 1, three independent angles
+on the same seam) and the annotation-offset basis (security's code-point/UTF-16 finding
+subsumed Codex's word-boundary MINOR). **Unique-to-one-lane finds that justified the
+lane:** contract verifier — the false "restored at source" e2e comment, the unrecorded
+`CitationOut.evidence_type`, the emitter-failure ADR gap, the transcript pane
+empty/loading/error conflation; Codex — theme refs resolving "latest" instead of the
+synthesis row's pinned run ids, the dossier-by-title click; Claude finders — the
+thread null-boundary inversion, the stale_turn retry dead-end; security — the
+unbounded pre-authz `_turn_locks` registry, the uncapped durable planning message.
+
+### Adopted and fixed on the branch (re-verified green)
+
+Backend: phase-1 turn reservation takes the project row lock (`for_update=True` —
+closes the cross-process turn_index/duplicate-insert 500s); phase 2 re-checks the run
+fence under that lock before persisting an approved plan (a run starting during the
+planner call now fails the turn with 409 `run_active`, tested); theme/group references
+resolve via the synthesis row's `characterisation_run_id`/`grouping_run_id` FKs, never
+latest-by-created_at (decoy-run regression test); `ProgressEmitter` failures degrade
+and disable emission instead of failing the walk (ADR 0027 decision 5 now true as
+built; structlog warning; tested); `stage_for_payload` excludes `screen_full` (the map
+entry is a plan-steps collapse only — the leaked SSE stage frame duplicated deep-depth
+timeline rows and was an unapproved SSE-observable change; pinned by test);
+`_turn_locks` bounded (256, evicts unheld locks — the lost `_sessions` LRU bound);
+`PlanningTurnCreate.message` capped at 10 000 (durable + rehydrated into every later
+prompt); `refs_out` never emits the "Unknown source" placeholder as a URL; bool guards
+on `cited_by_count`/`fwci`; all-null gap caveats omit; `cited_in` gains a deterministic
+ORDER BY; stale harness docstring rewritten; dead `HarnessState.block_ids` deleted;
+fresh-pending rows assert as `pending` in the transcript listing.
+
+Frontend: thread composition renders a no-prior-turn run before the turns, not after
+(condition inverted by a `null` short-circuit; tested); failed composer rows render the
+real conflict copy and a `stale_turn` failure swaps Retry for "Refresh conversation"
+(retrying the same `client_turn_id` could never clear it); the transcript pane
+distinguishes loading/error/empty (was: start-from-scratch copy during load and on
+error); annotation spans slice by **code points** (server offsets are Python `str`
+indices; astral chars shifted every later span — astral unit test); theme-source
+clicks open the dossier by `source_id` (title collisions/>200-row projects resolved
+wrongly); `highlightParts` starts remapped matches on the word, not inside a collapsed
+whitespace run; unknown gap grades and search backends omit instead of raw-rendering;
+check-in mode options use the locked `STEERING_MODE_LABEL`; LandscapeView gains a real
+error branch (error ≠ empty); `finding.intervention` scrubbed in the aria-label;
+coverage-snapshot values scrubbed; 404 view sets a document title; dead `anim-slide-in`
+deleted and `anim-rise` removed from click-toggled disclosures (decoration, not
+data-arrival); e2e specs re-assert `getByRole("list", { name: "Stage timeline" })` and
+the false "regression not fixed at source" comments are gone (the label IS restored at
+source); the reduced-motion spec now also fails on console errors; overflow checks run
+rail-collapsed too; new keyboard spec drives the rail toggle via Enter/Space.
+
+Tests added in-stack: `AnnotatedProse` exported + slicing guards unit-tested (the
+contract's named vitest now exists); terminal-partial banner parametrised over
+failed/aborted/interrupted; the streamed-prose scrub test now proves `scrub()` (control
+/format-char assertions React escaping can't satisfy); emitter-isolation, phase-2
+fence, decoy-run, screen_full-exclusion, thread null-boundary, whitespace-remap tests
+as above.
+
+### Declined (recorded reasons)
+
+- Renderer-side word-boundary expansion of annotation spans (Codex MINOR): offsets are
+  a server data contract; the mid-word fixture was fixed at source in the owner round,
+  and the real cross-boundary defect was the code-point basis (fixed above).
+- `cited_in` dedupe (contract NOTE): multiple citations of one source are distinct
+  provenance occurrences — the fixture asserts three entries deliberately.
+- Authz-before-lock reorder in `create_planning_turn` (security MINOR 2b): project ids
+  are unguessable UUIDs, authz itself is unaffected, and the bounded registry removes
+  the memory vector; the reorder costs an extra ownership query per turn.
+- Keyboard e2e for the check-in card and dossier (contract MINOR 13, partial): both are
+  native buttons/radios with vitest behaviour coverage; the rail toggle (custom
+  control) got the dedicated keyboard spec, claim-span tabbing was already asserted.
+- A second `/simplify` pass: the finder fan-out carried the cleanup lenses and the
+  ponytail-mode lead applied deletion-first fixes (dead CSS/state removed); a
+  same-family re-read would duplicate it.
+
+### Deferred (docs/deferred.md § task 027 seams)
+
+Orphaned `component.started` on hard process death (walk-level recovery keeps the
+user-facing state honest); [D-2] project-wide decision scoping and [D-4]
+`DecisionOut.detail` narrowing (the rev-2 annex committed them to deferred.md — the
+entries were missing, now added); filter pagination's O(N)-per-page collection derive.
+
+### For the owner at PR review
+
+- **`CitationOut.evidence_type` ratification**: owner-directed (39aef12 tooltip) but
+  recorded in no additive list until now — the corrected as-landed list above is the
+  record; please ratify or strike.
+- The runner's boundary-consume suppression has one untested edge (a plan change on
+  resume that reorders the parked component away from `remaining_steps[0]` would
+  re-present a decided question); judged unreachable today because reordering routes
+  through segment reentry — flagged for awareness, not fixed.
+- Evidence screenshots show the operator's own email (already public in git authorship;
+  future screenshots of non-owner sessions must not repeat this).
+
+### Flagged-deviation adjudications (each confirmed or contested explicitly)
+
+T0.2 brand DEFER and G.1 scripted fallback — owner-ruled, stand. `client_turn_id`
+exposure — confirmed (ratified in contract rev 4). Thread run-block receipt-time
+anchoring — confirmed; the Codex lane probed misassignment edges and the null-boundary
+defect it sat on is fixed + tested. Codex A.1 retry fix — confirmed, now also a
+knowledge concept. F.2's two defect fixes — the rename-invalidation stands; the
+"Stage timeline restored" claim was true of the source but the e2e assertions had NOT
+been restored and carried a comment claiming the opposite — fixed in-stack (this was
+the stack's fake-done catch). Favicon replacement and live-027 spec exclusion —
+confirmed (exclusion verified in `playwright.config.ts` + CI lane); **keep** the
+live-027 specs as acceptance evidence tooling. The pending-row UX and
+`AnsweredCheckIn` allowlist — confirmed against code; the fresh-pending listing is now
+test-pinned. The steering re-pause livelock — root-caused in-build, fixed in the owner
+round (4c4a65d); the stack verified the fix consumes only the decided boundary (parity
+tests cover consume + no-over-skip) and the deferred.md record matches shipped code.
+
+### Rubric status after adjudication
+
+1 holds (the missing annotation vitest now exists; strands re-verified) · 2 holds
+(gate table current) · 3 holds **except** the `evidence_type` ratification pending at
+step 9 (corrected additive record above) · 4–7 hold · 8 = this section · 9 holds (the
+two fallback leaks fixed; grep clean) · 10 holds (transcript pane + LandscapeView
+fixed) · 11 holds (aria-label + snapshot cells closed; lint ban intact) · 12 holds
+(decorative anim-rise removed; console listener real) · 13 holds — the three pinned
+params + new filters are URL-backed; claim slide-over, decision-row and finding-row
+expansion are **documented exclusions** (transient reading states, same shape as pin
+8's row-expansion exclusion; `?claim=` deep-linking noted as a future additive) · 14
+holds · 15 holds (crash-between-phases render now evidence-backed both sides) · 16
+holds (terminal-path evidence covers all three; emitter isolation built + tested).

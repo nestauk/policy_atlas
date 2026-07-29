@@ -2,7 +2,9 @@
 
 The StateGraph dispatches components by name from the compiled Config.
 In-process this slice; durable checkpointer is a deferred seam.
-Component completion is modelled as one event (component.completed).
+Lifecycle events: the runner brackets each component with component.started/
+component.completed in standalone transactions (027); harness nodes append
+only component.failed, on their own error paths.
 """
 
 import functools
@@ -125,7 +127,6 @@ class HarnessState(TypedDict):
     group_clustering_backend: GroupClusteringBackendFactory
     synthesis_backend: SynthesisBackend
     grounding_judge_backend: GroundingJudgeBackend
-    block_ids: dict[str, Any]
     summary: dict[str, Any] | None
     progress_emitter: ProgressEmitter | None
     error: str | None
@@ -730,7 +731,6 @@ def run_harness(
             if grounding_judge_backend is not None
             else StubGroundingJudgeBackend()
         ),
-        "block_ids": {},
         "summary": None,
         "progress_emitter": progress_emitter,
         "error": None,

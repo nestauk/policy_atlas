@@ -36,8 +36,9 @@ const BACKEND_LABELS: Record<string, string> = {
   overton: "Overton · policy documents",
 };
 
-function backendLabel(backend: string): string {
-  return BACKEND_LABELS[backend] ?? scrub(backend);
+/** Look a backend key up in the locked map. Unknown key → null (the caller omits). */
+function backendLabel(backend: string): string | null {
+  return BACKEND_LABELS[backend] ?? null;
 }
 
 function elapsed(seconds: number): string {
@@ -145,7 +146,7 @@ function PlanRecap({ plan }: { plan: PlanDraft | null }) {
       {plan.time_band !== null && plan.time_band !== "" && <Chip className="max-w-32 shrink truncate" tone="soft">{scrub(plan.time_band)}</Chip>}
       <span className="shrink-0 text-[11px] text-grey">{open ? "Hide" : "Details"}</span>
     </button>
-    {open && <div className="anim-rise border-t border-line px-4 pb-4 pt-3">
+    {open && <div className="border-t border-line px-4 pb-4 pt-3">
       {settings.length > 0 && <div className="grid gap-px border border-line bg-line sm:grid-cols-2">{settings.map(([label, value]) => <div key={label} className="bg-paper px-3 py-2"><p className="text-[10px] font-bold uppercase tracking-wide text-grey">{label}</p><p className="text-[12px] font-medium text-navy">{value}</p></div>)}</div>}
       {(plan.scoping_notes ?? []).length > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{plan.scoping_notes?.map((note) => <Chip key={note} tone="soft">{scrub(note)}</Chip>)}</div>}
       {constraints.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{constraints.map((chip) => <Chip key={chip} tone="blue">{scrub(chip)}</Chip>)}</div>}
@@ -198,7 +199,7 @@ function FunnelCard({ funnel }: { funnel: Funnel }) {
 
 function CoverageCard({ coverage }: { coverage: Coverage }) {
   const details = coverage.backends_detail ?? [];
-  return <section id="journey-coverage" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Where I looked</PaneHeading>{details.length > 0 ? <div className="grid min-w-0 gap-3 sm:grid-cols-2">{details.map((backend) => <div key={backend.backend} className="min-w-0 border border-line p-3"><div className="flex min-w-0 items-baseline justify-between gap-2"><span className="min-w-0 break-words text-[12px] font-bold text-navy">{backendLabel(backend.backend)}</span><span className="shrink-0 whitespace-nowrap text-[11px] text-grey"><CountUp value={backend.results} className="font-display text-[17px] font-bold text-blue" /> results · <CountUp value={backend.relevant} className="font-display text-[17px] font-bold text-blue" /> relevant</span></div><div className="mt-2 max-h-28 min-w-0 space-y-1 overflow-y-auto">{(backend.queries ?? []).map((query, index) => <div key={`${query.query}-${index}`} className="flex min-w-0 gap-2 text-[11px]"><span className="min-w-0 flex-1 truncate italic text-grey">“{scrub(query.query)}”</span><span className="shrink-0 text-navy">{query.results}</span></div>)}</div></div>)}</div> : <p className="break-words text-[12.5px] text-navy">{(coverage.backends ?? []).map(backendLabel).join(" · ")}</p>}<p className="mt-3 break-words text-[12.5px] text-navy">{scrub(coverage.sentence)}</p><p className="mt-1 text-[11px] text-grey">Relevant counts are attributed across this project; per-query relevance was not recorded.</p></Card></section>;
+  return <section id="journey-coverage" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Where I looked</PaneHeading>{details.length > 0 ? <div className="grid min-w-0 gap-3 sm:grid-cols-2">{details.flatMap((backend) => backendLabel(backend.backend) === null ? [] : [<div key={backend.backend} className="min-w-0 border border-line p-3"><div className="flex min-w-0 items-baseline justify-between gap-2"><span className="min-w-0 break-words text-[12px] font-bold text-navy">{backendLabel(backend.backend)}</span><span className="shrink-0 whitespace-nowrap text-[11px] text-grey"><CountUp value={backend.results} className="font-display text-[17px] font-bold text-blue" /> results · <CountUp value={backend.relevant} className="font-display text-[17px] font-bold text-blue" /> relevant</span></div><div className="mt-2 max-h-28 min-w-0 space-y-1 overflow-y-auto">{(backend.queries ?? []).map((query, index) => <div key={`${query.query}-${index}`} className="flex min-w-0 gap-2 text-[11px]"><span className="min-w-0 flex-1 truncate italic text-grey">“{scrub(query.query)}”</span><span className="shrink-0 text-navy">{query.results}</span></div>)}</div></div>])}</div> : <p className="break-words text-[12.5px] text-navy">{(coverage.backends ?? []).map(backendLabel).filter((label): label is string => label !== null).join(" · ")}</p>}<p className="mt-3 break-words text-[12.5px] text-navy">{scrub(coverage.sentence)}</p><p className="mt-1 text-[11px] text-grey">Relevant counts are attributed across this project; per-query relevance was not recorded.</p></Card></section>;
 }
 
 function CompletionCard({ projectId, status, funnel, coverage, onStartFreshRun }: { projectId: string; status: string | undefined; funnel?: Funnel; coverage?: Coverage; onStartFreshRun?: () => void }) {

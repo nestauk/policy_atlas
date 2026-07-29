@@ -22,6 +22,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 #: Search backend scope. Mirrors `orchestration_plan.BackendScope`.
+PLANNING_MESSAGE_MAX = 10_000
+
 BackendScope = Literal["academic_only", "grey_lit_only", "both"]
 
 #: Acquisition effort rung. Mirrors `orchestration_plan.SearchEffort`.
@@ -187,7 +189,10 @@ class PlanningTurnCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    message: str = Field(min_length=1)
+    # Turns are durable and every prior message re-enters each planner call
+    # (rehydration), so an unbounded message inflates storage AND every future
+    # turn's prompt forever (security review, 2026-07-29).
+    message: str = Field(min_length=1, max_length=PLANNING_MESSAGE_MAX)
     client_turn_id: uuid.UUID
 
 

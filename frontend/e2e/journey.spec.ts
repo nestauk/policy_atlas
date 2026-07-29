@@ -100,10 +100,7 @@ test.describe("mock evidence-base journey", () => {
     // (e) Start the analysis — the journey pane takes over the right column.
     await page.getByRole("button", { name: "Start the analysis" }).click();
     await expect(page.getByRole("heading", { name: "Analysing the evidence…" })).toBeVisible({ timeout: 15_000 });
-    // The timeline list itself lost its "Stage timeline" accessible name in
-    // the phase-E rewrite (flagged for the lead in fe-api-smoke.spec.ts) —
-    // scope by the section id instead.
-    const timeline = page.locator("#journey-timeline");
+    const timeline = page.getByRole("list", { name: "Stage timeline" });
     await expect(timeline.getByText("Finding relevant sources")).toBeVisible({ timeout: 15_000 });
     await expect(timeline.getByText("Synthesising the evidence")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText("Sources found")).toBeVisible();
@@ -231,6 +228,9 @@ test.describe("mock evidence-base journey", () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     const pageErrors: unknown[] = [];
     page.on("pageerror", (error) => pageErrors.push(error));
+    page.on("console", (message) => {
+      if (message.type() === "error") pageErrors.push(message.text());
+    });
 
     await openWorkspaceFromLanding(page);
     await expect(page.getByRole("region", { name: "Plan", exact: true })).toBeVisible();
@@ -256,6 +256,27 @@ test.describe("mock evidence-base journey", () => {
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       ).toBe(true);
+
+      // Same check with the planning rail collapsed — the other rail state.
+      await page.getByRole("button", { name: "Collapse the planning rail" }).click();
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
+      await page.getByRole("button", { name: "Expand the planning rail" }).click();
     }
+  });
+
+  // (n) The rail collapse control is keyboard-operable: focus, activate with
+  // Enter, re-activate with Space — state follows each activation.
+  test("keyboard: the rail collapse control toggles via Enter and Space", async ({ page }) => {
+    await openWorkspaceFromLanding(page);
+    const collapse = page.getByRole("button", { name: "Collapse the planning rail" });
+    await collapse.focus();
+    await page.keyboard.press("Enter");
+    const expand = page.getByRole("button", { name: "Expand the planning rail" });
+    await expect(expand).toBeVisible();
+    await expand.focus();
+    await page.keyboard.press("Space");
+    await expect(page.getByRole("button", { name: "Collapse the planning rail" })).toBeVisible();
   });
 });
