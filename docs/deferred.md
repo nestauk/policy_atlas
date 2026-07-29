@@ -1761,12 +1761,12 @@ first-class vocabulary. What follows is what it deliberately left out.
   IA / per-artifact "Cited in" (PR #35): needs run/artifact-scoped read models. 027's
   journey/evidence components are IA-agnostic and re-mount under it unchanged.
 - **Steering boundary re-pause under FREQUENT mode** (027 live check, 2026-07-29) —
-  with a persisting trigger (thin corpus), the before-select boundary re-routed to user
-  judgement after every proceed decision (event seq 364–388, project 5e08e143…):
-  answer → continuation → re-evaluate → pause again, an unbounded loop burning an
-  orchestrator call per cycle. 024/025 machinery, contract-pinned untouched by 027;
-  needs an owner-adjudicated rule (e.g. a decided before-boundary is not re-raised for
-  the same trigger set, or the check-in offers a standing proceed).
+  **DISCHARGED same day** (owner-directed, commit 4c4a65d): continuation records the
+  parked pause's boundary+component and a continue/adjust/mode_change resume of a
+  decided before-boundary no longer re-presents it (live-path parity; parity tests in
+  test_continuation_parity.py). The original loop: answer → continuation → re-evaluate
+  → pause again, one orchestrator call per cycle (event seq 364–388, project
+  5e08e143…).
 - **Multi-instance turn lock** — the planning 409 primitive is a process-local lock
   registry by design (one-instance posture); LISTEN/NOTIFY stays the 025 scale-out seam.
 - **Live per-backend search counts** (D‑1 rev 2) — `search.executed` events commit with
