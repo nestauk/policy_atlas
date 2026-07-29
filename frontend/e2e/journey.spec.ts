@@ -79,9 +79,14 @@ test.describe("mock evidence-base journey", () => {
     // which the "region" landmark role picks up.
     await expect(page.getByRole("region", { name: "Plan", exact: true })).toBeVisible();
     await expect(page.getByText("10-15 minutes").first()).toBeVisible();
-    await page.getByRole("button", { name: "Toggle plan details" }).click();
+    // Details render expanded by default pre-run (owner, 2026-07-29); the
+    // toggle still works both ways.
     await expect(page.getByText("Rapid — top sources, fast pass")).toBeVisible();
     await expect(page.getByText("Geography: United Kingdom (GB)")).toBeVisible();
+    await page.getByRole("button", { name: "Toggle plan details" }).click();
+    await expect(page.getByText("Rapid — top sources, fast pass")).not.toBeVisible();
+    await page.getByRole("button", { name: "Toggle plan details" }).click();
+    await expect(page.getByText("Rapid — top sources, fast pass")).toBeVisible();
 
     // (d) Rail collapse via keyboard-operable button (planning conversation,
     // left rail). Re-expand afterwards — check-ins now render inside this

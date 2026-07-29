@@ -29,7 +29,10 @@ export function PlanPane({ projectId }: { projectId: string }) {
   const planQuery = usePlan(projectId);
   const startRun = useStartRun(projectId);
   const [startNotice, setStartNotice] = useState<string | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  // Open by default (owner, 2026-07-29): pre-run, the plan IS this pane's
+  // content — the collapsed grammar is borrowed from the in-run recap, where
+  // the journey competes for the same space. Collapsing stays one click away.
+  const [detailsOpen, setDetailsOpen] = useState(true);
   const plan: PlanDraft | null = planQuery.data?.plan ?? null;
 
   if (plan === null || (!plan.question && (plan.steps ?? []).length === 0)) {
