@@ -754,6 +754,16 @@ def _run_plan_impl(
                 return _finish_run(engine, step_outcomes, flagged_events,
                     status=segment_result.run_status, capability_run_id=capability_run_id,
                     project_id=project_id)
+        elif (
+            resume_decision.response in {"continue", "adjust", "mode_change"}
+            and resume_from.parked_boundary == "before_component"
+            and remaining_steps
+            and remaining_steps[0].component == resume_from.parked_component
+        ):
+            # The parked before-boundary was decided by the recorded steering.decision;
+            # re-presenting it re-asks a decided question (live-path parity — a continue
+            # at a before-boundary runs the step).
+            last_check_in_payload = None
 
     while remaining_steps:
         step = remaining_steps.pop(0)
