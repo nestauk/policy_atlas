@@ -639,7 +639,7 @@
         "type": "object"
       },
       "ClaimOut": {
-        "description": "One span-anchored claim annotation within a block.\n\nArgs:\n    claim_id: The claim's identity.\n    claim_type: Annotation type.\n    text: The spanned text.\n    span: Character offsets `[start, end]` into the block's `prose`, or\n        `None`.\n    citations: Citations attached to this claim (citation-type only).",
+        "description": "One span-anchored claim annotation within a block.\n\nArgs:\n    claim_id: The claim's identity.\n    claim_type: Annotation type.\n    text: The spanned text.\n    span: Character offsets `[start, end]` into the block's `prose`, or\n        `None`.\n    citations: Citations attached to this claim (citation-type only).\n    theme: Named themes or groups referenced by a theme claim.",
         "properties": {
           "citations": {
             "items": {
@@ -699,6 +699,16 @@
           "text": {
             "title": "Text",
             "type": "string"
+          },
+          "theme": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThemeRefOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "weakly_grounded": {
             "anyOf": [
@@ -3839,6 +3849,90 @@
           "description"
         ],
         "title": "ThemeOut",
+        "type": "object"
+      },
+      "ThemeRefItemOut": {
+        "description": "One named durable theme or grouping reference.\n\nArgs:\n    name: Display name for the theme or group.\n    description: Optional concise description.\n    size: Optional number of members.\n    facet: Grouping facet, when this is a group reference.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "facet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Facet"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ThemeRefItemOut",
+        "type": "object"
+      },
+      "ThemeRefOut": {
+        "description": "The durable themes or groups a theme claim describes.\n\nArgs:\n    source: Whether the references are characterisation themes or groups.\n    base: Optional source-data basis recorded by synthesis.\n    items: Resolved named references.",
+        "properties": {
+          "base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ThemeRefItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "source": {
+            "enum": [
+              "characterisation",
+              "grouping"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "items"
+        ],
+        "title": "ThemeRefOut",
         "type": "object"
       },
       "TickFrame": {

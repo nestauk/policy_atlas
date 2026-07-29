@@ -41,6 +41,8 @@ from policy_atlas.api.contract import (
     SourceDossierOut,
     SourceTagOut,
     ThemeOut,
+    ThemeRefItemOut,
+    ThemeRefOut,
 )
 from policy_atlas.core.schema import (
     GROUPING_FACETS,
@@ -916,6 +918,8 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
     )
     if artefact_row is None:
         return None
+    characterisation_themes = _characterisation_theme_refs(conn, project_id)
+    grouping_themes = _grouping_theme_refs(conn, project_id)
     scope = conn.execute(
         select(evidence_scope.c.intent).where(
             evidence_scope.c.evidence_scope_id == synthesis["evidence_scope_id"]
@@ -1071,6 +1075,7 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
                 citations=claim_citations,
                 weakly_grounded=_weakly_grounded(row.payload),
                 gap=_gap_out(row.payload),
+                theme=_theme_out(row.payload, characterisation_themes, grouping_themes),
             )
         )
     sections: list[SectionOut] = []
@@ -1184,6 +1189,98 @@ def _gap_out(payload: Any) -> GapOut | None:
     if isinstance(gap.get("inferred"), bool):
         result["inferred"] = gap["inferred"]
     return GapOut.model_validate(result) if result else None
+
+
+def _characterisation_theme_refs(
+    conn: Connection, project_id: uuid.UUID
+) -> dict[str, ThemeRefItemOut]:
+    """Return the latest characterisation themes keyed by their durable ids."""
+    payload = conn.execute(
+        select(characterisation_result.c.themes)
+        .where(characterisation_result.c.project_id == project_id)
+        .order_by(characterisation_result.c.created_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if not isinstance(payload, Mapping) or not isinstance(payload.get("themes"), list):
+        return {}
+    result: dict[str, ThemeRefItemOut] = {}
+    for item in payload["themes"]:
+        if not isinstance(item, Mapping) or not isinstance(item.get("name"), str):
+            continue
+        theme_id = item.get("theme_id") or item.get("id") or item["name"]
+        if not isinstance(theme_id, str) or not theme_id:
+            continue
+        description = item.get("description")
+        size = item.get("size")
+        result[theme_id] = ThemeRefItemOut(
+            name=item["name"],
+            description=description if isinstance(description, str) else None,
+            size=size if isinstance(size, int) and not isinstance(size, bool) else None,
+        )
+    return result
+
+
+def _grouping_theme_refs(conn: Connection, project_id: uuid.UUID) -> dict[str, ThemeRefItemOut]:
+    """Return the latest facet groups keyed by their durable group ids."""
+    payload = conn.execute(
+        select(grouping_result.c.groups)
+        .where(grouping_result.c.project_id == project_id)
+        .order_by(grouping_result.c.created_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if not isinstance(payload, Mapping):
+        return {}
+    result: dict[str, ThemeRefItemOut] = {}
+    for facet, facet_payload in payload.items():
+        if not isinstance(facet, str) or not isinstance(facet_payload, Mapping):
+            continue
+        groups = facet_payload.get("groups")
+        if not isinstance(groups, list):
+            continue
+        for group in groups:
+            if (
+                not isinstance(group, Mapping)
+                or not isinstance(group.get("group_id"), str)
+                or not isinstance(group.get("label"), str)
+            ):
+                continue
+            description = group.get("description")
+            size = group.get("size")
+            group_facet = group.get("facet")
+            result[group["group_id"]] = ThemeRefItemOut(
+                name=group["label"],
+                description=description if isinstance(description, str) else None,
+                size=size if isinstance(size, int) and not isinstance(size, bool) else None,
+                facet=group_facet if isinstance(group_facet, str) else facet,
+            )
+    return result
+
+
+def _theme_out(
+    payload: Any,
+    characterisation_themes: Mapping[str, ThemeRefItemOut],
+    grouping_themes: Mapping[str, ThemeRefItemOut],
+) -> ThemeRefOut | None:
+    """Resolve a theme claim's durable references, omitting stale references."""
+    if not isinstance(payload, Mapping) or not isinstance(payload.get("theme"), Mapping):
+        return None
+    theme = payload["theme"]
+    source = theme.get("source")
+    referenced_ids = theme.get("referenced_ids")
+    if source not in {"characterisation", "grouping"} or not isinstance(referenced_ids, list):
+        return None
+    references = characterisation_themes if source == "characterisation" else grouping_themes
+    items = [
+        references[ref] for ref in referenced_ids if isinstance(ref, str) and ref in references
+    ]
+    if not items:
+        return None
+    base = theme.get("base")
+    return ThemeRefOut(
+        source=source,
+        base=base if isinstance(base, str) else None,
+        items=items,
+    )
 
 
 def coverage_out(conn: Connection, project_id: uuid.UUID) -> CoverageOut | None:

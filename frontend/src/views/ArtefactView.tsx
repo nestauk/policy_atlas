@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useParams, useSearchParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 
 import type { components } from "../api/gen/types";
 import { useApiClient, useArtefact, useCoverage, useEvidence, useFindings, useProject, useSourceDossier } from "../api/queries";
@@ -29,6 +29,16 @@ interface ClaimLike {
   span?: number[] | null;
   citations?: CitationOut[];
   gap?: GapOut | null;
+  theme?: {
+    source?: string | null;
+    base?: string | null;
+    items?: Array<{
+      name?: string | null;
+      description?: string | null;
+      size?: number | null;
+      facet?: string | null;
+    }> | null;
+  } | null;
   weakly_grounded?: boolean | null;
 }
 interface BlockLike {
@@ -304,6 +314,42 @@ function ClaimPanel({
             claim.claim_type !== "unspanned_assertion" &&
             claim.claim_type !== "citation" &&
             hint !== undefined && <p className="text-[12.5px] text-grey">{hint}</p>}
+          {(claim.theme?.items?.length ?? 0) > 0 && (
+            <div className="border-l-[3px] border-violet bg-blue-tint-2 p-3">
+              {(claim.theme?.items ?? []).map((item, index) => (
+                <div key={index} className={index > 0 ? "mt-2.5" : undefined}>
+                  <p className="text-[13px] font-semibold text-navy">{scrub(item.name ?? "")}</p>
+                  {typeof item.description === "string" && item.description !== "" && (
+                    <p className="mt-0.5 text-[12px] leading-relaxed text-navy">
+                      {scrub(item.description)}
+                    </p>
+                  )}
+                  <p className="mt-0.5 text-[11.5px] text-grey">
+                    {typeof item.size === "number" ? `Identified across ${item.size} sources` : null}
+                    {typeof item.size === "number" &&
+                    typeof item.facet === "string" &&
+                    item.facet !== ""
+                      ? " · "
+                      : null}
+                    {typeof item.facet === "string" && item.facet !== "" && item.name ? (
+                      <Link
+                        className="font-semibold text-blue hover:underline"
+                        to={`/projects/${projectId}/findings?facet=${encodeURIComponent(item.facet)}&group=${encodeURIComponent(item.name)}`}
+                        onClick={onClose}
+                      >
+                        See the findings in this theme
+                      </Link>
+                    ) : null}
+                  </p>
+                </div>
+              ))}
+              {typeof claim.theme?.base === "string" && claim.theme.base !== "" && (
+                <p className="mt-2 border-t border-line pt-2 text-[11px] text-grey">
+                  Basis: {scrub(claim.theme.base)}
+                </p>
+              )}
+            </div>
+          )}
           {claim.weakly_grounded === true && (
             <p className="border-l-[3px] border-orange bg-yellow-tint p-3 text-[13px] text-navy">
               The grounding review could not fully verify this claim against its source — read
@@ -355,6 +401,22 @@ function ClaimSpan({
           <p className="text-grey">{TIER_LABEL[tier]}</p>
         )}
         <p className="text-[11px] text-grey">Click to view in context</p>
+      </div>
+    ) : (claim.claim_type === "theme" || claim.claim_type === "pattern") &&
+      (claim.theme?.items?.length ?? 0) > 0 ? (
+      <div className="max-w-[260px] space-y-1 text-[12px] leading-snug">
+        {(claim.theme?.items ?? []).slice(0, 3).map((item, index) => (
+          <div key={index}>
+            <p className="font-semibold text-navy">Theme: {scrub(item.name ?? "")}</p>
+            {typeof item.description === "string" && item.description !== "" && (
+              <p className="text-grey">{scrub(item.description)}</p>
+            )}
+            {typeof item.size === "number" && (
+              <p className="text-[11px] text-grey">{item.size} sources</p>
+            )}
+          </div>
+        ))}
+        <p className="text-[11px] text-grey">Click for detail</p>
       </div>
     ) : (
       <span className="text-xs">{TYPE_HINT[claim.claim_type] ?? "Claim"}</span>

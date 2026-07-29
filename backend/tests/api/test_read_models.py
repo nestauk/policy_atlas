@@ -15,6 +15,7 @@ from policy_atlas.core.schema import (
     annotation,
     artefact,
     block,
+    characterisation_result,
     chunk,
     citation,
     extraction_result,
@@ -501,6 +502,135 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
                 "Cited evidence sentence." in context["context"]
                 for context in (near_start, middle, near_end)
             )
+        finally:
+            with engine.begin() as conn:
+                delete_project_data(conn, project_id)
+
+
+def test_artefact_theme_claim_resolves_durable_references(tmp_path: Path, engine: Engine) -> None:
+    """Theme claims resolve named characterisation and grouping references honestly."""
+    with api_client(tmp_path) as (client, owner, _):
+        project_id = uuid.UUID(create_project(client, owner))
+        _seed_read_model_ladder(engine, project_id)
+        try:
+            with engine.begin() as conn:
+                synthesis = conn.execute(
+                    select(
+                        synthesis_result.c.evidence_scope_id,
+                        synthesis_result.c.run_id,
+                    ).where(synthesis_result.c.project_id == project_id)
+                ).one()
+                conn.execute(
+                    insert(characterisation_result).values(
+                        characterisation_id=uuid.uuid4(),
+                        project_id=project_id,
+                        evidence_scope_id=synthesis.evidence_scope_id,
+                        run_id=synthesis.run_id,
+                        grouping_provenance={},
+                        coverage={},
+                        themes={
+                            "themes": [
+                                {
+                                    "theme_id": "characterisation:access",
+                                    "name": "Access",
+                                    "description": "Access to support",
+                                    "size": 3,
+                                }
+                            ]
+                        },
+                        created_at=now(),
+                    )
+                )
+                annotation_id = conn.execute(
+                    select(annotation.c.annotation_id).where(
+                        annotation.c.block_id.in_(
+                            select(block.c.block_id).where(
+                                block.c.artefact_id
+                                == select(synthesis_result.c.artefact_id)
+                                .where(synthesis_result.c.project_id == project_id)
+                                .scalar_subquery()
+                            )
+                        )
+                    )
+                ).scalar_one()
+                conn.execute(
+                    update(annotation)
+                    .where(annotation.c.annotation_id == annotation_id)
+                    .values(
+                        annotation_type="theme",
+                        payload={
+                            "theme": {
+                                "source": "characterisation",
+                                "referenced_ids": ["characterisation:access"],
+                                "base": "screened",
+                            }
+                        },
+                    )
+                )
+            claim = client.get(f"/api/v1/projects/{project_id}/artefact", headers=owner).json()[
+                "sections"
+            ][0]["blocks"][0]["claims"][0]
+            assert claim["theme"] == {
+                "source": "characterisation",
+                "base": "screened",
+                "items": [
+                    {
+                        "name": "Access",
+                        "description": "Access to support",
+                        "size": 3,
+                        "facet": None,
+                    }
+                ],
+            }
+
+            with engine.begin() as conn:
+                conn.execute(
+                    update(annotation)
+                    .where(annotation.c.annotation_id == annotation_id)
+                    .values(
+                        payload={
+                            "theme": {
+                                "source": "grouping",
+                                "referenced_ids": ["intervention:g01"],
+                                "base": "extracted",
+                            }
+                        }
+                    )
+                )
+            claim = client.get(f"/api/v1/projects/{project_id}/artefact", headers=owner).json()[
+                "sections"
+            ][0]["blocks"][0]["claims"][0]
+            assert claim["theme"] == {
+                "source": "grouping",
+                "base": "extracted",
+                "items": [
+                    {
+                        "name": "Training",
+                        "description": "Training findings",
+                        "size": 2,
+                        "facet": "intervention",
+                    }
+                ],
+            }
+
+            with engine.begin() as conn:
+                conn.execute(
+                    update(annotation)
+                    .where(annotation.c.annotation_id == annotation_id)
+                    .values(
+                        payload={
+                            "theme": {
+                                "source": "grouping",
+                                "referenced_ids": ["intervention:g99"],
+                                "base": "extracted",
+                            }
+                        }
+                    )
+                )
+            claim = client.get(f"/api/v1/projects/{project_id}/artefact", headers=owner).json()[
+                "sections"
+            ][0]["blocks"][0]["claims"][0]
+            assert claim["theme"] is None
         finally:
             with engine.begin() as conn:
                 delete_project_data(conn, project_id)

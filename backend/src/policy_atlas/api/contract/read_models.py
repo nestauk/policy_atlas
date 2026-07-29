@@ -377,6 +377,36 @@ class GapOut(BaseModel):
     inferred: bool | None = None
 
 
+class ThemeRefItemOut(BaseModel):
+    """One named durable theme or grouping reference.
+
+    Args:
+        name: Display name for the theme or group.
+        description: Optional concise description.
+        size: Optional number of members.
+        facet: Grouping facet, when this is a group reference.
+    """
+
+    name: str
+    description: str | None = None
+    size: int | None = None
+    facet: str | None = None
+
+
+class ThemeRefOut(BaseModel):
+    """The durable themes or groups a theme claim describes.
+
+    Args:
+        source: Whether the references are characterisation themes or groups.
+        base: Optional source-data basis recorded by synthesis.
+        items: Resolved named references.
+    """
+
+    source: Literal["characterisation", "grouping"]
+    base: str | None = None
+    items: list[ThemeRefItemOut]
+
+
 class ClaimOut(BaseModel):
     """One span-anchored claim annotation within a block.
 
@@ -387,6 +417,7 @@ class ClaimOut(BaseModel):
         span: Character offsets `[start, end]` into the block's `prose`, or
             `None`.
         citations: Citations attached to this claim (citation-type only).
+        theme: Named themes or groups referenced by a theme claim.
     """
 
     claim_id: uuid.UUID
@@ -396,6 +427,7 @@ class ClaimOut(BaseModel):
     citations: list[CitationOut] = Field(default_factory=list)
     weakly_grounded: bool | None = None
     gap: GapOut | None = None
+    theme: ThemeRefOut | None = None
 
 
 class BlockOut(BaseModel):

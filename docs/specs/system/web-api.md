@@ -185,6 +185,11 @@ seam's named consumer) · `coverage` (the composed one-line coverage
 sentence: stop condition + adequacy, composed server-side). Read models
 render honest absence: missing stages are `null`/absent, never faked.
 
+- Artefact `ClaimOut.theme` resolves a theme claim's durable characterisation
+  or grouping references to named items (`name`, optional `description` and
+  `size`; grouping items also carry their `facet` for deep-linking). Stale or
+  unresolvable references are omitted, and an empty resolution is `null`.
+
 The C.1 additions enrich these records additively: coverage exposes public
 backend names and post-run query detail; evidence exposes effective-screen
 detail; finding profiles carry their stored typed fields and grounding; and

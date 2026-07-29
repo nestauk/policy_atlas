@@ -92,6 +92,8 @@ from .read_models import (
     SourceDossierOut,
     SourceTagOut,
     ThemeOut,
+    ThemeRefItemOut,
+    ThemeRefOut,
 )
 from .runs import RunCreate, RunOut, RunStatus
 from .sse import (
@@ -207,6 +209,8 @@ __all__ = [
     "StageKey",
     "StageStartedFrame",
     "SteeringMode",
+    "ThemeRefItemOut",
+    "ThemeRefOut",
     "ThemeOut",
     "TickFrame",
 ]

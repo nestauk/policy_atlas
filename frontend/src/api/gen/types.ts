@@ -853,6 +853,7 @@ export interface components {
          *         span: Character offsets `[start, end]` into the block's `prose`, or
          *             `None`.
          *         citations: Citations attached to this claim (citation-type only).
+         *         theme: Named themes or groups referenced by a theme claim.
          */
         ClaimOut: {
             /** Citations */
@@ -875,6 +876,7 @@ export interface components {
             ] | null;
             /** Text */
             text: string;
+            theme?: components["schemas"]["ThemeRefOut"] | null;
             /** Weakly Grounded */
             weakly_grounded?: boolean | null;
         };
@@ -2239,6 +2241,46 @@ export interface components {
             name: string;
             /** Size */
             size: number;
+        };
+        /**
+         * ThemeRefItemOut
+         * @description One named durable theme or grouping reference.
+         *
+         *     Args:
+         *         name: Display name for the theme or group.
+         *         description: Optional concise description.
+         *         size: Optional number of members.
+         *         facet: Grouping facet, when this is a group reference.
+         */
+        ThemeRefItemOut: {
+            /** Description */
+            description?: string | null;
+            /** Facet */
+            facet?: string | null;
+            /** Name */
+            name: string;
+            /** Size */
+            size?: number | null;
+        };
+        /**
+         * ThemeRefOut
+         * @description The durable themes or groups a theme claim describes.
+         *
+         *     Args:
+         *         source: Whether the references are characterisation themes or groups.
+         *         base: Optional source-data basis recorded by synthesis.
+         *         items: Resolved named references.
+         */
+        ThemeRefOut: {
+            /** Base */
+            base?: string | null;
+            /** Items */
+            items: components["schemas"]["ThemeRefItemOut"][];
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "characterisation" | "grouping";
         };
         /**
          * TickFrame

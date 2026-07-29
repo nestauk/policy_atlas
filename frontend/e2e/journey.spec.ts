@@ -145,6 +145,17 @@ test.describe("mock evidence-base journey", () => {
     await page.getByRole("button", { name: "Close panel" }).click();
     await expect(page).not.toHaveURL(/[?&]source=/);
 
+    // Theme-referenced claims surface the named theme: the panel shows the
+    // theme's name, description, size, and a deep link into the filtered
+    // findings view.
+    await page.getByRole("button", { name: "pattern" }).click();
+    const themePanel = page.getByRole("dialog", { name: "Where this comes from" });
+    await expect(themePanel.getByText("Active-travel offers")).toBeVisible();
+    await expect(themePanel.getByText(/Identified across 5 sources/)).toBeVisible();
+    await themePanel.getByRole("link", { name: "See the findings in this theme" }).click();
+    await expect(page).toHaveURL(/findings\?facet=.*group=/);
+    await page.goBack();
+
     // (h) Findings: kind filter chips are server-side and URL-addressable;
     // an IOF row expands to "Reported numbers", an ICF row to "Context
     // detail".
