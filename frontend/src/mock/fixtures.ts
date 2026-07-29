@@ -213,7 +213,7 @@ export const mockArtefact: components["schemas"]["ArtefactOut"] = {
       blocks: [{
         block_id: "30000000-0000-4000-8000-000000000001",
         prose: "Universal breakfast provision can support more consistent breakfast consumption when access is non-stigmatising.",
-        claims: [{ claim_id: "40000000-0000-4000-8000-000000000001", claim_type: "citation", text: "support more consistent breakfast consumption", span: [27, 71], citations: [{ citation_id: "50000000-0000-4000-8000-000000000001", n: 1, source_title: mockEvidence[2].title, quote: "Breakfast participation increased when provision was universal.", grounding_tier: "grounded", appraisal_label: "moderate" }] }],
+        claims: [{ claim_id: "40000000-0000-4000-8000-000000000001", claim_type: "citation", text: "support more consistent breakfast consumption", span: [34, 79], citations: [{ citation_id: "50000000-0000-4000-8000-000000000001", n: 1, source_title: mockEvidence[2].title, quote: "Breakfast participation increased when provision was universal.", grounding_tier: "tier_2", appraisal_label: "moderate" }] }],
         gaps: ["Few evaluations report outcomes for recently arrived families."],
       }],
     },

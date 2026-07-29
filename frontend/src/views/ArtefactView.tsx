@@ -361,14 +361,25 @@ function ClaimSpan({
   const citationNumbers = [...new Set((claim.citations ?? []).map((citation) => citation.n))];
   return (
     <span>
+      {/* A real <button> is an ATOMIC inline-block: a sentence-length span
+          could never wrap mid-line and shattered the paragraph flow. The
+          demo's span[role=button] wraps like ordinary prose (keyboard: Enter
+          and Space both activate). */}
       <Tooltip content={tip}>
-        <button
-          type="button"
+        <span
+          role="button"
+          tabIndex={0}
           onClick={() => onOpen(claim)}
-          className={`citation-marker cursor-pointer text-left align-baseline text-inherit transition-colors focus-visible:outline-2 focus-visible:outline-blue ${SPAN_STYLE[claim.claim_type] ?? ""}`}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onOpen(claim);
+            }
+          }}
+          className={`citation-marker cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-blue ${SPAN_STYLE[claim.claim_type] ?? ""}`}
         >
           {scrub(text)}
-        </button>
+        </span>
       </Tooltip>
       {claim.claim_type === "citation" && citationNumbers.length > 0 && (
         <button
