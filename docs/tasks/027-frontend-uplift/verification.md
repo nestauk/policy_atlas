@@ -230,6 +230,18 @@ removes a possibly Figma-licensed asset from the public repo.
 
 ## Owner-feedback round (2026-07-29, post-step-6, pre-review)
 
+**Contract rev 4 records this round's pin-superseding amendments** — the review
+stack judges against rev 4, not rev 3.3. Beyond the first batch below, the round
+continued with: Searching card removed outright (coverage card carries it) ·
+annotations rebuilt to the demo grammar (whole-span click → "Where this comes
+from" slide-over; inline [n] chips; muted styling; locked tier vocabulary;
+paragraph flow restored via inline span[role=button]) · landscape plot polish +
+themes descending · `ClaimOut.theme` + `ThemeRefItemOut.sources` (two further
+additive read-model fields: named theme references and their member documents,
+disclosed in the panel with dossier links) · root `make dev` target. Each landed
+with full gates green; fixture span-offset and tier-value bugs were found by
+visual verification and fixed.
+
 The owner reviewed the build hands-on and directed a feedback batch; all landed on the
 branch with the same gates (full verify + mock e2e 4/4 + fe-api-smoke):
 

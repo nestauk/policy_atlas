@@ -42,6 +42,49 @@
 > print stylesheet (share/export seam stays deferred) · mock-journey e2e
 > into CI — the one approved CI change).
 >
+> **rev 4 (owner-directed post-build feedback round, 2026-07-29 — recorded
+> AFTER step 6, BEFORE the review stack; commits 4c4a65d…6fa3ce3):** the owner
+> exercised the built slice hands-on and directed amendments that supersede
+> named pins. The review stack judges against THIS rev. **(a) Check-ins render
+> in the chat rail, not the journey** (amends strands 3/4's placement): the
+> pending card mounts in the planning thread; the deterministic render stays
+> the content of record but presents friendly (stage label + locked count
+> labels, raw behind a collapsed disclosure); the answered echo keeps the
+> chosen option visible with a rejected-options disclosure (session-local —
+> the durable chosen-option id is a NAMED future additive field); the thread's
+> run feed dedupes repeated search echoes into counter lines and stage-labels
+> or drops vague component rows. **(b) Annotation interaction follows the
+> demo wholesale** (amends strand 5's "keep prod's three-rung
+> tooltip→popover→dossier" at the middle rung): whole claim spans are
+> clickable (inline span[role=button] — a real button broke paragraph flow),
+> hover previews source/quote/tier, click opens the demo's "Where this comes
+> from" slide-over with per-citation highlighted context; muted underline/chip
+> styling; grounding tiers render only through the locked TIER_LABEL/TIER_TEXT
+> vocabulary. **(c) Journey card set amended** (strand 1): the live search
+> card is REMOVED outright (supersedes the D‑1 rev 2 redefinition — the
+> coverage card carries it) and the activity feed card is removed (the chat
+> pane carries run activity); upcoming plan steps render as upcoming, never
+> "skipped"; the completion card gains "Run the analysis again" (a replanned
+> ready plan previously had no start affordance). **(d) Plan pane adopts the
+> journey recap's disclosure grammar** (amends strand 2's presentation, not
+> its content rules). **(e) Additive read-model list extended post-plan**
+> (same additive gate): `PlanningTranscriptTurnOut.client_turn_id` ·
+> `ClaimOut.theme` (named theme/group reference resolved from the durable
+> annotation payload) · `ThemeRefItemOut.sources` (member documents,
+> PSS→source join). **(f) A SECOND approved runner delta** (beyond the
+> lifecycle placement): continuation consumes a decided before-component
+> boundary on resume (fixes the parked re-pause livelock the live check
+> found; parity tests; live-path semantics unchanged). **(g) Hygiene:**
+> favicon = 🌐 (supersedes the blue-square brand favicon) · Projects page
+> title "Projects", subtitle removed, icon rename/archive actions ·
+> landscape charts shared between journey and Landscape tab, publication
+> years as a vertical full-year-range chart, themes ordered by descending
+> count, discovered-themes card in the journey · workspace grid clamped
+> (minmax(0,…)) — no horizontal scroll · fresh-project artefact/coverage
+> 404s are the normal empty state · root `make dev` target (tooling).
+> Evidence for all of the above: verification.md § Owner-feedback round +
+> the phase-G-onward commit trail.
+>
 > **rev 2 (owner calls, 2026-07-28):** (1) **transcript store IN** — the
 > planning conversation persists durably (strand 12); users' chats must not
 > disappear, mid-session or across restarts; discharges the 025 "transcripts
