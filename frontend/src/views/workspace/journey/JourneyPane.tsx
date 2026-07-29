@@ -10,6 +10,7 @@ import { Chip } from "../../../ui/brand/Chip";
 import {
   EvidenceDistributionChart,
   normaliseGeographies,
+  orderThemes,
   PublicationYearsChart,
 } from "../../../ui/charts/EvidenceDistributionChart";
 import { CountUp } from "../../../ui/motion/CountUp";
@@ -260,7 +261,7 @@ function LandscapeEmbed({ landscape }: { landscape: Landscape }) {
   const evidenceTypes = landscape.evidence_types ?? {};
   const years = landscape.years ?? {};
   const geographies = landscape.geographies === null || landscape.geographies === undefined ? {} : normaliseGeographies(landscape.geographies);
-  const themes = landscape.themes ?? [];
+  const themes = orderThemes(landscape.themes ?? []);
   const hasDistributions = Object.keys(evidenceTypes).length > 0 || Object.keys(years).length > 0 || Object.keys(geographies).length > 0;
   return <>{hasDistributions && <section id="journey-landscape" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Evidence landscape</PaneHeading><div className="grid min-w-0 gap-4 lg:grid-cols-2">{Object.keys(evidenceTypes).length > 0 && <div className="min-w-0"><p className="mb-2 text-[12px] font-bold text-navy">Evidence types</p><EvidenceDistributionChart data={evidenceTypes} size="compact" /></div>}{Object.keys(years).length > 0 && <div className="min-w-0"><p className="mb-2 text-[12px] font-bold text-navy">Publication years</p><PublicationYearsChart data={years} size="compact" /></div>}{Object.keys(geographies).length > 0 && <div className="min-w-0 lg:col-span-2"><p className="mb-2 text-[12px] font-bold text-navy">Where sources were published</p><EvidenceDistributionChart data={geographies} size="compact" /><p className="mt-2 text-[11px] text-grey">Where sources were published, not where the studies were conducted.</p></div>}</div></Card></section>}{themes.length > 0 && <section id="journey-themes" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Themes in the evidence</PaneHeading><ul role="list" className="space-y-2.5">{themes.map((theme) => <li key={theme.name} className="flex min-w-0 items-baseline gap-2.5"><Chip tone="blue">{theme.size}</Chip><div className="min-w-0"><p className="break-words text-[13px] font-semibold text-navy">{scrub(theme.name)}</p><p className="break-words text-[12px] text-grey">{scrub(theme.description)}</p></div></li>)}</ul></Card></section>}</>;
 }

@@ -9,8 +9,7 @@ import { Chip } from "../ui/brand/Chip";
 import {
   EvidenceDistributionChart,
   normaliseGeographies,
-  PublicationYearsChart,
-} from "../ui/charts/EvidenceDistributionChart";
+  PublicationYearsChart, orderThemes } from "../ui/charts/EvidenceDistributionChart";
 
 const FUNNEL_ORDER = [
   ["found", "Found"],
@@ -146,7 +145,7 @@ export function LandscapeView() {
           <PaneHeading>Themes in the evidence</PaneHeading>
           <Divider />
           <ul role="list" className="space-y-2.5 p-4">
-            {(landscape.data.themes ?? []).map((theme) => (
+            {orderThemes(landscape.data.themes ?? []).map((theme) => (
               <li key={theme.name} className="flex items-baseline gap-2.5">
                 <Chip tone="blue">{theme.size}</Chip>
                 <div>
