@@ -51,12 +51,14 @@ interface SectionLike {
  *  dashed underlines with a hover tint — the annotation layer lives IN the
  *  text and the whole span is the affordance. */
 const SPAN_STYLE: Partial<Record<ClaimLike["claim_type"], string>> = {
-  citation: "border-b border-dotted border-blue hover:bg-blue-tint-2",
-  gap: "border-b border-dotted border-yellow hover:bg-yellow-tint",
+  // Deliberately quiet (owner, 2026-07-29): the underline is a hint, not a
+  // highlight — muted tones at rest, the tint only on hover.
+  citation: "border-b border-dotted border-blue/30 hover:border-blue/60 hover:bg-blue-tint-2",
+  gap: "border-b border-dotted border-yellow/60 hover:border-yellow hover:bg-yellow-tint",
   reasoning: "border-b border-dashed border-line-2 hover:bg-ground",
-  pattern: "border-b border-dotted border-violet hover:bg-blue-tint-2",
-  theme: "border-b border-dotted border-violet hover:bg-blue-tint-2",
-  unspanned_assertion: "border-b border-dotted border-orange hover:bg-yellow-tint",
+  pattern: "border-b border-dotted border-violet/50 hover:border-violet hover:bg-blue-tint-2",
+  theme: "border-b border-dotted border-violet/50 hover:border-violet hover:bg-blue-tint-2",
+  unspanned_assertion: "border-b border-dotted border-orange/50 hover:border-orange hover:bg-yellow-tint",
 };
 
 /** The grounding-tier vocabulary (demo ui.tsx TIER_LABEL/TIER_TEXT — locked;
@@ -386,7 +388,7 @@ function ClaimSpan({
           type="button"
           aria-label={`Citations ${citationNumbers.join(", ")}`}
           onClick={() => onOpen(claim)}
-          className="citation-marker mx-1 cursor-pointer border border-blue bg-blue-tint px-1.5 align-[2px] text-[10.5px] font-bold text-blue hover:bg-blue-tint-2"
+          className="citation-marker mx-1 cursor-pointer border border-blue/25 bg-blue-tint-2 px-1.5 align-[2px] text-[10.5px] font-semibold text-blue/80 hover:border-blue/60 hover:text-blue"
         >
           [{citationNumbers.join(",")}]
         </button>
@@ -395,10 +397,10 @@ function ClaimSpan({
         <button
           type="button"
           onClick={() => onOpen(claim)}
-          className={`mx-1 cursor-pointer border px-1.5 align-[2px] text-[10px] font-bold ${
+          className={`mx-1 cursor-pointer border px-1.5 align-[2px] text-[10px] font-semibold ${
             claim.claim_type === "gap"
-              ? "border-yellow bg-yellow-tint text-navy"
-              : "border-line bg-ground text-grey"
+              ? "border-yellow/60 bg-yellow-tint/60 text-navy/80 hover:border-yellow"
+              : "border-line bg-ground text-grey hover:border-line-2"
           }`}
         >
           {typeLabel}
