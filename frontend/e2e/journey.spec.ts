@@ -128,11 +128,18 @@ test.describe("mock evidence-base journey", () => {
       page.getByText(/Pair school food action with safer active-travel routes/),
     ).toBeVisible({ timeout: 5_000 });
 
-    const marker = page.getByRole("button", { name: /^Citation 1:/ });
+    // Demo annotation grammar: the citation numbers ride as one inline chip;
+    // clicking it (or the span) opens the "Where this comes from" panel with
+    // the quote highlighted in its source passage.
+    const marker = page.getByRole("button", { name: /^Citations 1/ });
     await expect(marker).toBeVisible();
     await marker.click();
-    await expect(page.getByText(CITATION_QUOTE)).toBeVisible();
-    await page.getByRole("button", { name: "Open the source dossier" }).click();
+    await expect(page.getByText("Where this comes from")).toBeVisible();
+    await expect(page.getByText(CITATION_QUOTE).first()).toBeVisible();
+    await page
+      .getByRole("dialog", { name: "Where this comes from" })
+      .getByRole("button", { name: CITED_SOURCE_TITLE })
+      .click();
     await expect(page).toHaveURL(/[?&]source=/);
     await expect(page.getByRole("dialog", { name: CITED_SOURCE_TITLE })).toBeVisible();
     await page.getByRole("button", { name: "Close panel" }).click();
@@ -192,7 +199,7 @@ test.describe("mock evidence-base journey", () => {
     expect(found).toBe(true);
 
     await page.keyboard.press("Enter");
-    await expect(page.getByText(CITATION_QUOTE)).toBeVisible();
+    await expect(page.getByText(CITATION_QUOTE).first()).toBeVisible();
   });
 
   // (l) `prefers-reduced-motion` emulation runs the workspace — through

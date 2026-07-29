@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 
 import type { components } from "../api/gen/types";
@@ -12,7 +12,6 @@ import type { LiveSection, RunStreamState } from "../store";
 import { Card } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { Tooltip } from "../ui/radix/Tooltip";
 import { SourceDossierBody } from "./SourcesView";
@@ -48,13 +47,34 @@ interface SectionLike {
    citation/gap — reasoning · pattern/theme · source-check, styled per type
    with inline chips. Unknown types render as plain prose (honest absence). */
 
+/** Demo-validated span styling (EvidenceBase.tsx SPAN_STYLE): typed dotted/
+ *  dashed underlines with a hover tint — the annotation layer lives IN the
+ *  text and the whole span is the affordance. */
 const SPAN_STYLE: Partial<Record<ClaimLike["claim_type"], string>> = {
-  citation: "border-b border-dotted border-line-2",
-  gap: "border-b border-dashed border-orange",
-  reasoning: "border-b border-dashed border-line-2",
-  pattern: "border-b border-dotted border-violet",
-  theme: "border-b border-dotted border-violet",
-  unspanned_assertion: "border-b border-dotted border-orange",
+  citation: "border-b border-dotted border-blue hover:bg-blue-tint-2",
+  gap: "border-b border-dotted border-yellow hover:bg-yellow-tint",
+  reasoning: "border-b border-dashed border-line-2 hover:bg-ground",
+  pattern: "border-b border-dotted border-violet hover:bg-blue-tint-2",
+  theme: "border-b border-dotted border-violet hover:bg-blue-tint-2",
+  unspanned_assertion: "border-b border-dotted border-orange hover:bg-yellow-tint",
+};
+
+/** The grounding-tier vocabulary (demo ui.tsx TIER_LABEL/TIER_TEXT — locked;
+ *  unknown tier → the raw value never renders, the chip omits). */
+const TIER_LABEL: Record<string, string> = {
+  tier_1: "Tier 1 · direct quote",
+  tier_2: "Tier 2 · grounded",
+  tier_3: "Tier 3 · supported",
+  tier_4: "Tier 4 · reasoning",
+  unsupported_mis_cited: "Unsupported — flagged",
+};
+
+const TIER_TEXT: Record<string, string> = {
+  tier_1: "Direct quote, verified against the source",
+  tier_2: "Grounded in a specific passage",
+  tier_3: "Supported across passages",
+  tier_4: "Reasoning from the evidence, not a quote",
+  unsupported_mis_cited: "Failed verification — flagged, never hidden",
 };
 
 const TYPE_LABEL: Partial<Record<ClaimLike["claim_type"], string>> = {
@@ -154,36 +174,9 @@ function useChunkContext(projectId: string, citationId: string | null) {
   });
 }
 
-function CitationMarker({
-  projectId,
-  citation,
-  onOpenDossier,
-}: {
-  projectId: string;
-  citation: CitationOut;
-  onOpenDossier: (title: string) => void;
-}) {
-  return (
-    <Popover>
-      <Tooltip content={<span className="text-xs">“{scrub(citation.quote)}”</span>}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-label={`Citation ${citation.n}: ${citation.source_title}`}
-            className="citation-marker mx-0.5 cursor-pointer align-super text-[10.5px] font-bold text-blue hover:underline focus-visible:outline-2 focus-visible:outline-blue"
-          >
-            [{citation.n}]
-          </button>
-        </PopoverTrigger>
-      </Tooltip>
-      <PopoverContent>
-        <CitationDetail projectId={projectId} citation={citation} onOpenDossier={onOpenDossier} />
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-function CitationDetail({
+/** One citation's provenance block in the claim panel (demo CitationContext):
+ *  the quote highlighted inside its surrounding source passage. */
+function CitationContext({
   projectId,
   citation,
   onOpenDossier,
@@ -196,149 +189,209 @@ function CitationDetail({
   const meta = [context.data?.year, context.data?.venue].filter(
     (value): value is string | number => value !== null && value !== undefined && value !== "",
   );
+  const tier = citation.grounding_tier ?? null;
   return (
-    <div>
-      <p className="text-[12.5px] font-bold text-navy">{scrub(citation.source_title)}</p>
+    <div className="border border-line p-4">
+      <p className="text-[13px] font-bold leading-snug text-blue">
+        [{citation.n}]{" "}
+        <button
+          type="button"
+          className="cursor-pointer text-left hover:underline"
+          onClick={() => onOpenDossier(citation.source_title)}
+        >
+          {scrub(citation.source_title)}
+        </button>
+      </p>
       {meta.length > 0 && (
         <p className="mt-0.5 text-[11.5px] text-grey">{meta.map((m) => scrub(String(m))).join(" · ")}</p>
       )}
-      <div className="mt-1.5 flex flex-wrap gap-1.5">
-        {citation.grounding_tier !== null && citation.grounding_tier !== undefined && (
-          <Chip tone="soft">{scrub(citation.grounding_tier)}</Chip>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {tier !== null && TIER_LABEL[tier] !== undefined && (
+          <Tooltip content={<span className="text-xs">{TIER_TEXT[tier]}</span>}>
+            <span>
+              <Chip tone="soft">{TIER_LABEL[tier]}</Chip>
+            </span>
+          </Tooltip>
         )}
         {citation.appraisal_label !== null && citation.appraisal_label !== undefined && (
-          <Chip tone="soft">{scrub(citation.appraisal_label)}</Chip>
+          <Chip tone="blue">{scrub(citation.appraisal_label)}</Chip>
         )}
       </div>
-      {context.isPending && (
-        <p role="status" className="mt-2 animate-pulse text-[11.5px] text-grey">
-          Loading surrounding context…
-        </p>
-      )}
-      {context.data !== undefined && (
-        <div className="mt-2 max-h-60 space-y-1.5 overflow-y-auto text-[11.5px] leading-relaxed">
-          {typeof context.data.previous === "string" && context.data.previous !== "" && (
-            <p className="text-grey">{scrub(context.data.previous)}</p>
-          )}
-          <p className="text-navy">
-            <HighlightedContext text={context.data.context} quote={citation.quote} />
+      <div className="mt-3 space-y-2 text-[12.5px] leading-relaxed">
+        {context.isPending && (
+          <p role="status" className="animate-pulse text-[11.5px] text-grey">
+            Loading surrounding context…
           </p>
-          {typeof context.data.next === "string" && context.data.next !== "" && (
-            <p className="text-grey">{scrub(context.data.next)}</p>
-          )}
-        </div>
-      )}
-      {context.isError && (
-        <blockquote className="mt-2 border-l-2 border-l-blue bg-blue-tint-2 px-3 py-2 text-[12.5px] italic leading-relaxed text-ink">
-          “{scrub(citation.quote)}”
-        </blockquote>
-      )}
-      <button
-        type="button"
-        className="mt-2.5 cursor-pointer text-[11.5px] font-bold text-blue hover:underline"
-        onClick={() => onOpenDossier(citation.source_title)}
-      >
-        Open the source dossier
-      </button>
+        )}
+        {context.data !== undefined && (
+          <>
+            {typeof context.data.previous === "string" && context.data.previous !== "" && (
+              <p className="text-grey">{scrub(context.data.previous)}</p>
+            )}
+            <p className="text-navy">
+              <HighlightedContext text={context.data.context} quote={citation.quote} />
+            </p>
+            {typeof context.data.next === "string" && context.data.next !== "" && (
+              <p className="text-grey">{scrub(context.data.next)}</p>
+            )}
+          </>
+        )}
+        {context.isError && <p className="italic text-grey">“{scrub(citation.quote)}”</p>}
+      </div>
     </div>
   );
 }
 
-/** The type-specific explainer callout a typed (non-citation) claim opens. */
-function ClaimExplainer({
+/** The provenance panel a claim span opens (demo ClaimPanel): the claim, its
+ *  type explainer, and every citation's highlighted source passage. */
+function ClaimPanel({
   projectId,
   claim,
+  onClose,
   onOpenDossier,
 }: {
   projectId: string;
-  claim: ClaimLike;
+  claim: ClaimLike | null;
+  onClose: () => void;
   onOpenDossier: (title: string) => void;
 }) {
+  if (claim === null) return null;
   const hint = TYPE_HINT[claim.claim_type];
   const gap = claim.gap ?? null;
   return (
-    <div className="space-y-2.5">
-      <p className="border-l-2 border-l-blue pl-2.5 text-[12.5px] font-medium leading-snug text-navy">
-        {scrub(claim.text)}
-      </p>
-      {claim.claim_type === "gap" && (
-        <div className="border-l-2 border-l-yellow bg-yellow-tint px-3 py-2 text-[12px] leading-relaxed text-navy">
-          <p>{TYPE_HINT.gap}</p>
-          {gap !== null && (
-            <p className="mt-1.5 text-[11.5px] text-grey">
-              {[
-                typeof gap.grade === "string" ? `Graded ${scrub(gap.grade)}` : null,
-                typeof gap.caveat?.search_space === "string" ? scrub(gap.caveat.search_space) : null,
-                typeof gap.caveat?.adequacy_verdict === "string"
-                  ? scrub(gap.caveat.adequacy_verdict)
-                  : null,
-              ]
-                .filter((part): part is string => part !== null)
-                .join(" · ")}
+    <Sheet
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <SheetContent title="Where this comes from" description="Claim provenance">
+        <div className="space-y-5">
+          <p className="border-l-2 border-l-blue pl-3 text-[13.5px] font-medium leading-snug text-navy">
+            {scrub(claim.text)}
+          </p>
+          {claim.claim_type === "gap" && (
+            <div className="border-l-[3px] border-yellow bg-yellow-tint p-3 text-[13px] leading-relaxed text-navy">
+              <p>
+                This is a recorded evidence gap: the analysis looked and found the base thin
+                here. Gaps are part of the answer, never glossed over.
+              </p>
+              {gap !== null && (
+                <p className="mt-1.5 text-[11.5px] text-grey">
+                  {[
+                    typeof gap.grade === "string" ? `Graded ${scrub(gap.grade)}` : null,
+                    typeof gap.caveat?.search_space === "string"
+                      ? scrub(gap.caveat.search_space)
+                      : null,
+                    typeof gap.caveat?.adequacy_verdict === "string"
+                      ? scrub(gap.caveat.adequacy_verdict)
+                      : null,
+                  ]
+                    .filter((part): part is string => part !== null)
+                    .join(" · ")}
+                </p>
+              )}
+            </div>
+          )}
+          {claim.claim_type === "unspanned_assertion" && (
+            <p className="border-l-[3px] border-orange bg-yellow-tint p-3 text-[13px] text-navy">
+              {TYPE_HINT.unspanned_assertion}
             </p>
           )}
+          {claim.claim_type !== "gap" &&
+            claim.claim_type !== "unspanned_assertion" &&
+            claim.claim_type !== "citation" &&
+            hint !== undefined && <p className="text-[12.5px] text-grey">{hint}</p>}
+          {claim.weakly_grounded === true && (
+            <p className="border-l-[3px] border-orange bg-yellow-tint p-3 text-[13px] text-navy">
+              The grounding review could not fully verify this claim against its source — read
+              it with that in mind.
+            </p>
+          )}
+          {(claim.citations ?? []).map((citation) => (
+            <CitationContext
+              key={citation.citation_id}
+              projectId={projectId}
+              citation={citation}
+              onOpenDossier={onOpenDossier}
+            />
+          ))}
+          <p className="border-t border-line pt-3 text-[11px] text-grey">
+            Every claim links to the exact passage it came from.
+          </p>
         </div>
-      )}
-      {claim.claim_type === "unspanned_assertion" && (
-        <p className="border-l-2 border-l-orange bg-orange-tint px-3 py-2 text-[12px] text-navy">
-          {TYPE_HINT.unspanned_assertion}
-        </p>
-      )}
-      {claim.claim_type !== "gap" &&
-        claim.claim_type !== "unspanned_assertion" &&
-        hint !== undefined && <p className="text-[12px] text-grey">{hint}</p>}
-      {claim.weakly_grounded === true && (
-        <p className="border-l-2 border-l-orange bg-orange-tint px-3 py-2 text-[12px] text-navy">
-          The grounding review could not fully verify this claim against its source — read it
-          with that in mind.
-        </p>
-      )}
-      {(claim.citations ?? []).map((citation) => (
-        <CitationDetail
-          key={citation.citation_id}
-          projectId={projectId}
-          citation={citation}
-          onOpenDossier={onOpenDossier}
-        />
-      ))}
-    </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
-/** A typed claim span: tooltip hint on hover, explainer popover on click. */
-function TypedClaimSpan({
-  projectId,
+/** A claim span in the prose (demo ClaimSpan): the whole span is clickable,
+ *  hover previews the first citation, click opens the provenance panel.
+ *  Citation numbers ride as one inline chip; typed claims carry their label. */
+function ClaimSpan({
   claim,
   text,
-  onOpenDossier,
+  onOpen,
 }: {
-  projectId: string;
   claim: ClaimLike;
   text: string;
-  onOpenDossier: (title: string) => void;
+  onOpen: (claim: ClaimLike) => void;
 }) {
-  const label = claim.weakly_grounded === true ? "source check" : TYPE_LABEL[claim.claim_type];
+  const first = (claim.citations ?? [])[0];
+  const tier = first?.grounding_tier ?? null;
+  const tip =
+    first !== undefined ? (
+      <div className="max-w-[260px] space-y-1.5 text-[12px] leading-snug">
+        <p className="font-semibold text-navy">{scrub(first.source_title)}</p>
+        {first.quote !== "" && (
+          <p className="italic text-grey">
+            “{scrub(first.quote.slice(0, 180))}
+            {first.quote.length > 180 ? "…" : ""}”
+          </p>
+        )}
+        {tier !== null && TIER_LABEL[tier] !== undefined && (
+          <p className="text-grey">{TIER_LABEL[tier]}</p>
+        )}
+        <p className="text-[11px] text-grey">Click to view in context</p>
+      </div>
+    ) : (
+      <span className="text-xs">{TYPE_HINT[claim.claim_type] ?? "Claim"}</span>
+    );
+  const typeLabel = claim.weakly_grounded === true ? "source check" : TYPE_LABEL[claim.claim_type];
+  const citationNumbers = [...new Set((claim.citations ?? []).map((citation) => citation.n))];
   return (
     <span>
-      <Popover>
-        <Tooltip
-          content={<span className="text-xs">{TYPE_HINT[claim.claim_type] ?? "Claim"}</span>}
+      <Tooltip content={tip}>
+        <button
+          type="button"
+          onClick={() => onOpen(claim)}
+          className={`citation-marker cursor-pointer text-left align-baseline text-inherit transition-colors focus-visible:outline-2 focus-visible:outline-blue ${SPAN_STYLE[claim.claim_type] ?? ""}`}
         >
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className={`cursor-pointer text-left align-baseline text-inherit ${SPAN_STYLE[claim.claim_type] ?? ""} hover:bg-ground focus-visible:outline-2 focus-visible:outline-blue`}
-            >
-              {scrub(text)}
-            </button>
-          </PopoverTrigger>
-        </Tooltip>
-        <PopoverContent>
-          <ClaimExplainer projectId={projectId} claim={claim} onOpenDossier={onOpenDossier} />
-        </PopoverContent>
-      </Popover>
-      {label !== undefined && (
-        <Chip tone={claim.claim_type === "gap" ? "yellow" : "soft"}>{label}</Chip>
+          {scrub(text)}
+        </button>
+      </Tooltip>
+      {claim.claim_type === "citation" && citationNumbers.length > 0 && (
+        <button
+          type="button"
+          aria-label={`Citations ${citationNumbers.join(", ")}`}
+          onClick={() => onOpen(claim)}
+          className="citation-marker mx-1 cursor-pointer border border-blue bg-blue-tint px-1.5 align-[2px] text-[10.5px] font-bold text-blue hover:bg-blue-tint-2"
+        >
+          [{citationNumbers.join(",")}]
+        </button>
+      )}
+      {claim.claim_type !== "citation" && typeLabel !== undefined && (
+        <button
+          type="button"
+          onClick={() => onOpen(claim)}
+          className={`mx-1 cursor-pointer border px-1.5 align-[2px] text-[10px] font-bold ${
+            claim.claim_type === "gap"
+              ? "border-yellow bg-yellow-tint text-navy"
+              : "border-line bg-ground text-grey"
+          }`}
+        >
+          {typeLabel}
+        </button>
       )}
     </span>
   );
@@ -351,13 +404,11 @@ function TypedClaimSpan({
  * typed claims get their style + chip and open the explainer.
  */
 function AnnotatedProse({
-  projectId,
   block,
-  onOpenDossier,
+  onOpenClaim,
 }: {
-  projectId: string;
   block: BlockLike;
-  onOpenDossier: (title: string) => void;
+  onOpenClaim: (claim: ClaimLike) => void;
 }) {
   const segments = useMemo(() => {
     const prose = block.prose;
@@ -393,55 +444,20 @@ function AnnotatedProse({
   );
 
   return (
-    <div className="text-[14px] leading-[1.75] text-ink">
-      <p>
+    <div className="text-[14.5px] leading-[1.7] text-ink">
+      <p className="whitespace-pre-line">
         {segments.map((segment, index) => {
           if (segment.kind === "plain") {
             return <span key={index}>{scrub(segment.text)}</span>;
           }
-          const { claim } = segment;
-          if (claim.claim_type === "citation" && claim.weakly_grounded !== true) {
-            return (
-              <span key={index} className={SPAN_STYLE.citation}>
-                {scrub(segment.text)}
-                {(claim.citations ?? []).map((citation) => (
-                  <CitationMarker
-                    key={citation.citation_id}
-                    projectId={projectId}
-                    citation={citation}
-                    onOpenDossier={onOpenDossier}
-                  />
-                ))}
-              </span>
-            );
-          }
           return (
-            <TypedClaimSpan
-              key={index}
-              projectId={projectId}
-              claim={claim}
-              text={segment.text}
-              onOpenDossier={onOpenDossier}
-            />
+            <ClaimSpan key={index} claim={segment.claim} text={segment.text} onOpen={onOpenClaim} />
           );
         })}
       </p>
       {unspanned.map((claim) => (
         <p key={claim.claim_id} className="mt-2 text-[12.5px] text-grey">
-          {scrub(claim.text)}
-          {claim.claim_type !== "citation" && TYPE_LABEL[claim.claim_type] !== undefined && (
-            <Chip tone={claim.claim_type === "gap" ? "yellow" : "soft"}>
-              {TYPE_LABEL[claim.claim_type]}
-            </Chip>
-          )}
-          {(claim.citations ?? []).map((citation) => (
-            <CitationMarker
-              key={citation.citation_id}
-              projectId={projectId}
-              citation={citation}
-              onOpenDossier={onOpenDossier}
-            />
-          ))}
+          <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
         </p>
       ))}
     </div>
@@ -558,6 +574,7 @@ export function ArtefactView() {
   const stream = useRunStream(projectId);
   const [searchParams, setSearchParams] = useSearchParams();
   const dossierSource = searchParams.get("source");
+  const [detailClaim, setDetailClaim] = useState<ClaimLike | null>(null);
   useDocumentTitle(project.data?.name, "Evidence base");
 
   const openDossier = (title: string) => {
@@ -701,12 +718,7 @@ export function ArtefactView() {
           <h2 className="mb-3 font-display text-lg font-bold text-navy">{scrub(section.title)}</h2>
           <div className="space-y-4">
             {(section.blocks ?? []).map((block) => (
-              <AnnotatedProse
-                key={block.block_id}
-                projectId={projectId}
-                block={block}
-                onOpenDossier={openDossier}
-              />
+              <AnnotatedProse key={block.block_id} block={block} onOpenClaim={setDetailClaim} />
             ))}
           </div>
         </section>
@@ -739,6 +751,16 @@ export function ArtefactView() {
           </ol>
         </section>
       )}
+
+      <ClaimPanel
+        projectId={projectId}
+        claim={detailClaim}
+        onClose={() => setDetailClaim(null)}
+        onOpenDossier={(title) => {
+          setDetailClaim(null);
+          openDossier(title);
+        }}
+      />
 
       {dossierSource !== null && (
         <SourceDossier projectId={projectId} sourceTitle={dossierSource} onClose={closeDossier} />
