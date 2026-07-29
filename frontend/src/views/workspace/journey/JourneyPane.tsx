@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 
@@ -52,10 +52,6 @@ function stageTone(status: StageEntry["status"]): "running" | "complete" | "fail
   return "idle";
 }
 
-function isSearchActive(stages: StageEntry[]): boolean {
-  return stages.some((entry) => entry.status === "started" && (entry.stage === "acquire" || entry.stage === "screen"));
-}
-
 /** The right workspace pane during a run: durable read models augment (but
  * never replace) the stream's authoritative status, stages and check-ins. */
 export function JourneyPane({
@@ -84,10 +80,6 @@ export function JourneyPane({
   const runStatus = stream.run?.status;
   const hasLandscape = Object.keys(landscape?.evidence_types ?? {}).length > 0 || Object.keys(landscape?.years ?? {}).length > 0 || Object.keys(landscape?.geographies ?? {}).length > 0 || (landscape?.themes?.length ?? 0) > 0;
   const hasGroups = (groups?.facets?.length ?? 0) > 0;
-  const activeSearch = isSearchActive(stream.stages);
-  // The Activity card is hidden per owner feedback 2026-07-29; live ticks
-  // still supply the compact Searching card while an acquisition is active.
-  const activity = useActivityTicks(stream.run?.id, stream.liveness);
   const heading = runStatus === "succeeded" || runStatus === "degraded" ? "Analysis complete" : runStatus === "aborted" || runStatus === "failed" ? "Analysis stopped" : "Analysing the evidence…";
 
   return (
@@ -107,7 +99,6 @@ export function JourneyPane({
 
       <div className="space-y-5">
         <CompletionCard projectId={projectId} status={runStatus} funnel={funnel} coverage={coverage} onStartFreshRun={onStartFreshRun} />
-        {activeSearch && <LiveSearchCard stages={stream.stages} activity={activity} />}
         {coverage !== undefined && <CoverageCard coverage={coverage} />}
         <section id="journey-timeline" className="scroll-mt-14">
           <Card className="anim-rise p-4">
@@ -123,30 +114,6 @@ export function JourneyPane({
       </div>
     </div>
   );
-}
-
-/** Retain transient ticks for this mounted journey. The reducer intentionally
- * keeps only the last tick per stage; this presentation slice may retain a
- * compact local feed without making ticks durable or state-bearing. */
-function useActivityTicks(runId: string | undefined, liveness: RunStreamState["liveness"]): Array<{ stage: string; note: string }> {
-  const [ticks, setTicks] = useState<Array<{ stage: string; note: string }>>([]);
-  const seen = useRef<Record<string, string>>({});
-  const previousRun = useRef(runId);
-  useEffect(() => {
-    if (previousRun.current !== runId) {
-      previousRun.current = runId;
-      seen.current = {};
-      setTicks([]);
-      return;
-    }
-    const arriving = Object.entries(liveness).flatMap(([stage, tick]) => {
-      if (seen.current[stage] === tick.occurredAt) return [];
-      seen.current[stage] = tick.occurredAt;
-      return [{ stage, note: tick.note }];
-    });
-    if (arriving.length > 0) setTicks((current) => [...current, ...arriving].slice(-24));
-  }, [liveness, runId]);
-  return ticks;
 }
 
 function StatusBanner({ status }: { status: string | undefined }) {
@@ -232,12 +199,6 @@ function FunnelCard({ funnel }: { funnel: Funnel }) {
 function CoverageCard({ coverage }: { coverage: Coverage }) {
   const details = coverage.backends_detail ?? [];
   return <section id="journey-coverage" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Where I looked</PaneHeading>{details.length > 0 ? <div className="grid min-w-0 gap-3 sm:grid-cols-2">{details.map((backend) => <div key={backend.backend} className="min-w-0 border border-line p-3"><div className="flex min-w-0 items-baseline justify-between gap-2"><span className="min-w-0 break-words text-[12px] font-bold text-navy">{backendLabel(backend.backend)}</span><span className="shrink-0 whitespace-nowrap text-[11px] text-grey"><CountUp value={backend.results} className="font-display text-[17px] font-bold text-blue" /> results · <CountUp value={backend.relevant} className="font-display text-[17px] font-bold text-blue" /> relevant</span></div><div className="mt-2 max-h-28 min-w-0 space-y-1 overflow-y-auto">{(backend.queries ?? []).map((query, index) => <div key={`${query.query}-${index}`} className="flex min-w-0 gap-2 text-[11px]"><span className="min-w-0 flex-1 truncate italic text-grey">“{scrub(query.query)}”</span><span className="shrink-0 text-navy">{query.results}</span></div>)}</div></div>)}</div> : <p className="break-words text-[12.5px] text-navy">{(coverage.backends ?? []).map(backendLabel).join(" · ")}</p>}<p className="mt-3 break-words text-[12.5px] text-navy">{scrub(coverage.sentence)}</p><p className="mt-1 text-[11px] text-grey">Relevant counts are attributed across this project; per-query relevance was not recorded.</p></Card></section>;
-}
-
-function LiveSearchCard({ stages, activity }: { stages: StageEntry[]; activity: Array<{ stage: string; note: string }> }) {
-  const active = stages.find((entry) => entry.status === "started" && (entry.stage === "acquire" || entry.stage === "screen"));
-  const notes = activity.filter((tick) => tick.stage === active?.stage).map((tick) => tick.note);
-  return <Card className="anim-rise p-4"><PaneHeading className="mb-2 p-0">Searching</PaneHeading><p className="text-[13px] font-semibold text-navy">{active === undefined ? "Preparing search" : scrub(active.label)}</p><p className="mt-1 text-[12px] italic text-grey">preparing queries…</p>{notes.length > 0 && <ul className="mt-3 space-y-1 text-[12px] text-grey">{notes.map((note, index) => <li key={`${note}-${index}`}>• {scrub(note)}</li>)}</ul>}</Card>;
 }
 
 function CompletionCard({ projectId, status, funnel, coverage, onStartFreshRun }: { projectId: string; status: string | undefined; funnel?: Funnel; coverage?: Coverage; onStartFreshRun?: () => void }) {
