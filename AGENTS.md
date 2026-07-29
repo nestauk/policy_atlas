@@ -22,14 +22,18 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `027-frontend-uplift` (design phase opened
-2026-07-28): rebuild the demo-validated view layer (`demo-live-run`
-branch, C4 demo surface) on the 025/026 production frontend substrate —
-the demo's UX richness (journey pane, plan pane, evidence-base page,
-findings/sources depth, motion layer) re-implemented over the
-production invariants (auth seam, generated client, SSE reducer, scrub
-discipline, brand tokens). Demo code is UX evidence, never imported;
-`demo-live-run` never merges. Contract:
+Implementation — task `027-frontend-uplift` **build complete through
+step 6** (2026-07-29, branch `task/027-frontend-uplift`): the
+demo-validated view layer rebuilt on the 025/026 production substrate —
+durable planning transcript (`planning_transcript`), lifecycle-placement
+runner delta + live `artefact.*` streaming, read-model enrichment +
+server-side filters, plan pane / journey / evidence-base / kind-aware
+findings / sources-dossier / check-in uplift, motion layer, rail,
+strand-14 hygiene, mock-journey CI lane. Live check driven scripted
+(Playwright over the real chain; both restart legs green). Evidence:
+`docs/tasks/027-frontend-uplift/verification.md`. **Next: the review
+stack in a fresh conversation (`task-cycle-review`).** Demo code is UX
+evidence, never imported; `demo-live-run` never merges. Contract:
 `docs/tasks/027-frontend-uplift/contract.md`. Owner re-sequencing
 2026-07-28: the eval slice (former 027 draft) is deferred — its
 contract draft survives at unpushed commit `a5c9708`.

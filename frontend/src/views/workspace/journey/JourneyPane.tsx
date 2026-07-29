@@ -82,6 +82,7 @@ export function JourneyPane({
   landscape,
   checkIn,
   terminal,
+  onStartFreshRun,
 }: {
   projectId: string;
   stream: RunStreamState;
@@ -92,6 +93,7 @@ export function JourneyPane({
   landscape?: Landscape;
   checkIn?: ReactNode;
   terminal?: ReactNode;
+  onStartFreshRun?: () => void;
 }) {
   const runStatus = stream.run?.status;
   const hasLandscape = Object.keys(landscape?.evidence_types ?? {}).length > 0 || Object.keys(landscape?.years ?? {}).length > 0 || Object.keys(landscape?.geographies ?? {}).length > 0;
@@ -117,7 +119,7 @@ export function JourneyPane({
       <StatusBanner status={runStatus} />
 
       <div className="space-y-5">
-        <CompletionCard projectId={projectId} status={runStatus} funnel={funnel} coverage={coverage} />
+        <CompletionCard projectId={projectId} status={runStatus} funnel={funnel} coverage={coverage} onStartFreshRun={onStartFreshRun} />
         {activeSearch && <LiveSearchCard stages={stream.stages} activity={activity} />}
         {coverage !== undefined && <CoverageCard coverage={coverage} />}
         {(activeSearch || activity.length > 0) && <ActivityCard activity={activity} />}
@@ -201,18 +203,33 @@ function PlanRecap({ plan }: { plan: PlanDraft | null }) {
   </Card>;
 }
 
+type TimelineRow = {
+  stage: string;
+  label: string;
+  status: StageEntry["status"] | "upcoming";
+  blurb?: string;
+  summary?: StageEntry["summary"];
+  seconds?: number | null;
+};
+
 function Timeline({ stages, plan }: { stages: StageEntry[]; plan: PlanDraft | null }) {
-  const rows = useMemo(() => {
+  const rows = useMemo<TimelineRow[]>(() => {
     const seen = new Set(stages.map((entry) => entry.stage));
-    const pending = (plan?.steps ?? []).filter((step) => !seen.has(step.stage)).map((step) => ({ stage: step.stage, label: step.label, status: "skipped" as const, blurb: step.blurb, summary: undefined }));
-    return [...stages, ...pending];
+    // Plan steps that haven't emitted yet are UPCOMING — never "skipped".
+    // "Skipped" is the server's word for a stage a prior failure took out;
+    // rendering the future that way is a dishonest surface (live-check
+    // finding, 2026-07-29).
+    const upcoming = (plan?.steps ?? [])
+      .filter((step) => !seen.has(step.stage))
+      .map((step) => ({ stage: step.stage, label: step.label, status: "upcoming" as const, blurb: step.blurb, summary: undefined }));
+    return [...stages, ...upcoming];
   }, [plan?.steps, stages]);
   if (rows.length === 0) return <p className="text-[12.5px] text-grey">Stages will appear as the analysis begins.</p>;
   return <ol aria-label="Stage timeline" className="space-y-2.5">{rows.map((entry, index) => {
     const reason = typeof entry.summary?.reason === "string" ? entry.summary.reason : null;
     const summary = timelineSummary(entry);
     const tooltip = <div className="space-y-1 text-[12px] text-navy"><p>{scrub(entry.blurb ?? entry.label)}</p>{entry.status === "completed" && typeof entry.seconds === "number" && <p className="text-grey">Took {elapsed(entry.seconds)}</p>}{reason !== null && <p className="text-red">{scrub(reason)}</p>}</div>;
-    return <li key={`${entry.stage}-${index}`} className="flex items-start gap-2.5 text-[13px]"><StatusDot className="mt-1" tone={stageTone(entry.status)} /><div className="min-w-0"><Tooltip content={tooltip}><span className={`font-medium ${entry.status === "skipped" ? "text-grey" : "text-navy"}`}>{scrub(entry.label)}</span></Tooltip>{summary.length > 0 && <span className="ml-1.5 text-grey">— {summary.join(" · ")}</span>}{entry.status === "completed" && typeof entry.seconds === "number" && <span className="ml-1.5 text-grey">· {elapsed(entry.seconds)}</span>}{entry.status === "skipped" && <span className="ml-1.5 text-grey">skipped — a prior step failed</span>}{entry.status === "failed" && <span className="ml-1.5 text-red">stopped — recorded, carrying on</span>}{entry.status === "started" && entry.blurb !== undefined && entry.blurb !== "" && <p className="text-[12px] text-grey">{scrub(entry.blurb)}</p>}</div></li>;
+    return <li key={`${entry.stage}-${index}`} className="flex items-start gap-2.5 text-[13px]"><StatusDot className="mt-1" tone={entry.status === "upcoming" ? "idle" : stageTone(entry.status)} /><div className="min-w-0"><Tooltip content={tooltip}><span className={`font-medium ${entry.status === "skipped" || entry.status === "upcoming" ? "text-grey" : "text-navy"}`}>{scrub(entry.label)}</span></Tooltip>{summary.length > 0 && <span className="ml-1.5 text-grey">— {summary.join(" · ")}</span>}{entry.status === "completed" && typeof entry.seconds === "number" && <span className="ml-1.5 text-grey">· {elapsed(entry.seconds)}</span>}{entry.status === "skipped" && <span className="ml-1.5 text-grey">skipped — a prior step failed</span>}{entry.status === "failed" && <span className="ml-1.5 text-red">stopped — recorded, carrying on</span>}{entry.status === "started" && entry.blurb !== undefined && entry.blurb !== "" && <p className="text-[12px] text-grey">{scrub(entry.blurb)}</p>}</div></li>;
   })}</ol>;
 }
 
@@ -243,11 +260,16 @@ function ActivityCard({ activity }: { activity: Array<{ stage: string; note: str
   return <section id="journey-activity" className="scroll-mt-14"><Card className="p-4"><PaneHeading className="mb-2 p-0">Activity</PaneHeading><div aria-live="polite" className="space-y-1">{lines.map((line, index) => <p key={`${line.stage}-${line.note}`} className={`truncate border-l-2 pl-2 text-[12px] ${index === lines.length - 1 ? "anim-glow border-blue text-navy" : "border-transparent text-grey"}`}>{scrub(line.note)}{line.count > 1 && <span className="ml-1 font-semibold text-navy">× {line.count}</span>}</p>)}</div></Card></section>;
 }
 
-function CompletionCard({ projectId, status, funnel, coverage }: { projectId: string; status: string | undefined; funnel?: Funnel; coverage?: Coverage }) {
+function CompletionCard({ projectId, status, funnel, coverage, onStartFreshRun }: { projectId: string; status: string | undefined; funnel?: Funnel; coverage?: Coverage; onStartFreshRun?: () => void }) {
   const copy = completionCopy(status);
   if (copy === null) return null;
   const counts = [typeof funnel?.relevant === "number" ? `${funnel.relevant} sources included` : null, typeof funnel?.cited === "number" ? `${funnel.cited} cited` : null].filter((count): count is string => count !== null);
-  return <Card className={`anim-rise border-l-[3px] p-5 ${status === "degraded" ? "border-l-orange" : "border-l-green"}`}><PaneHeading className="mb-2 p-0">Done</PaneHeading><h3 className="font-display text-[18px] font-semibold text-navy">{copy.heading}</h3><p className="mt-1 text-[13px] text-navy">{counts.length > 0 ? `${counts.join(", ")} — ${copy.body}` : copy.body}</p>{coverage !== undefined && <p className="mt-2 text-[12px] text-grey">{scrub(coverage.sentence)}</p>}<div className="mt-4 flex flex-wrap gap-3"><Link className="cutout bg-blue px-3 py-2 text-[12px] font-bold text-white" to={`/projects/${projectId}/evidence-base`}>Read the evidence base</Link><Link className="border border-line-2 bg-paper px-3 py-2 text-[12px] font-bold text-navy" to={`/projects/${projectId}/sources`}>All sources</Link></div></Card>;
+  return <Card className={`anim-rise border-l-[3px] p-5 ${status === "degraded" ? "border-l-orange" : "border-l-green"}`}><PaneHeading className="mb-2 p-0">Done</PaneHeading><h3 className="font-display text-[18px] font-semibold text-navy">{copy.heading}</h3><p className="mt-1 text-[13px] text-navy">{counts.length > 0 ? `${counts.join(", ")} — ${copy.body}` : copy.body}</p>{coverage !== undefined && <p className="mt-2 text-[12px] text-grey">{scrub(coverage.sentence)}</p>}<div className="mt-4 flex flex-wrap gap-3"><Link className="cutout bg-blue px-3 py-2 text-[12px] font-bold text-white" to={`/projects/${projectId}/evidence-base`}>Read the evidence base</Link><Link className="border border-line-2 bg-paper px-3 py-2 text-[12px] font-bold text-navy" to={`/projects/${projectId}/sources`}>All sources</Link>{onStartFreshRun !== undefined && (
+    // Replanning after a terminal run reaches `ready` in the thread; without
+    // this control a replanned plan has no start affordance (the plan pane
+    // only renders pre-first-run) — live-check finding, 2026-07-29.
+    <button type="button" onClick={onStartFreshRun} className="cursor-pointer border border-line-2 bg-paper px-3 py-2 text-[12px] font-bold text-navy hover:bg-ground focus-visible:outline-2 focus-visible:outline-blue">Run the analysis again</button>
+  )}</div></Card>;
 }
 
 function GroupsCard({ groups }: { groups: Groups }) {

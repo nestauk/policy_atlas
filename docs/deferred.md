@@ -1746,3 +1746,32 @@ first-class vocabulary. What follows is what it deliberately left out.
   deploys are one team member on staging (DEPLOYMENT.md § 1 states the rule); a real
   lock (S3 conditional-put lease or DynamoDB lock, plus an Alembic advisory lock) is the
   seam when a second operator or CI-driven deploys appear.
+
+## Frontend uplift (task 027 seams)
+
+- **025 "draft conversation is lost on restart" pin — DISCHARGED** (027 strand 12,
+  2026-07-29): the planning conversation persists in `planning_transcript` (durable
+  idempotency, rehydration, restart-surviving thread — live-checked). No backfill:
+  pre-027 projects have zero turn rows.
+- **Co-pilot Q&A UI seam** — multi-thread chat, Chats library, per-thread artifact
+  context (PR #35 adjudication): the transcript schema is deliberately single-table/
+  planning-only so the co-pilot slice brings its own thread/context model; the rail is
+  single-thread until then. Q&A needs a lead-authored prompt surface (own slice).
+- **Workspace-cluster IA seam** — artifact gallery / capability picker / multi-artifact
+  IA / per-artifact "Cited in" (PR #35): needs run/artifact-scoped read models. 027's
+  journey/evidence components are IA-agnostic and re-mount under it unchanged.
+- **Steering boundary re-pause under FREQUENT mode** (027 live check, 2026-07-29) —
+  with a persisting trigger (thin corpus), the before-select boundary re-routed to user
+  judgement after every proceed decision (event seq 364–388, project 5e08e143…):
+  answer → continuation → re-evaluate → pause again, an unbounded loop burning an
+  orchestrator call per cycle. 024/025 machinery, contract-pinned untouched by 027;
+  needs an owner-adjudicated rule (e.g. a decided before-boundary is not re-raised for
+  the same trigger set, or the check-in offers a standing proceed).
+- **Multi-instance turn lock** — the planning 409 primitive is a process-local lock
+  registry by design (one-instance posture); LISTEN/NOTIFY stays the 025 scale-out seam.
+- **Live per-backend search counts** (D‑1 rev 2) — `search.executed` events commit with
+  the acquire component, so mid-stage per-backend counts genuinely cannot stream yet;
+  the journey shows tick-based activity until stage completion. Revisit if tick payloads
+  ever widen (behaviour change, own gate).
+- **Print/share/export CTA** — the evidence-base print stylesheet ships; the share/export
+  product seam stays deferred and undischarged.

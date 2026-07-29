@@ -40,6 +40,7 @@ export function RunPane({ projectId, stream }: { projectId: string; stream: RunS
           <JourneyPane
             projectId={projectId}
             stream={stream}
+            onStartFreshRun={() => startRun.mutate()}
             plan={stream.plan?.plan ?? plan.data?.plan ?? null}
             funnel={funnel.data}
             coverage={coverage.data}

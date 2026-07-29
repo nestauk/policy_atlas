@@ -629,8 +629,15 @@ export function ArtefactView() {
 
   const data = artefact.data;
   // A fresh run re-writing the artefact supersedes the committed page while
-  // it streams (the reducer clears sections when a different run starts).
-  if (stream.run?.status === "running" && Object.keys(stream.liveSections).length > 0) {
+  // it streams (the reducer clears sections when a different run starts) —
+  // and if that run dies mid-write, the terminal-partial view stays up in
+  // place of the stale committed page: the user's latest run ended badly and
+  // hiding that behind the old artefact would be dishonest (live-check
+  // adjudication, 2026-07-29). A new run or a fresh mount clears it.
+  if (
+    (stream.run?.status === "running" || hasTerminalPartialLiveArtefact(stream)) &&
+    Object.keys(stream.liveSections).length > 0
+  ) {
     return <LiveArtefactBody stream={stream} />;
   }
 

@@ -27,7 +27,7 @@ export const FUNNEL_STAGES = [
 ] as const;
 
 /** Map an event summary to its approved, human-readable count fragments. */
-export function timelineSummary(entry: StageEntry): string[] {
+export function timelineSummary(entry: Pick<StageEntry, "summary">): string[] {
   if (entry.summary === undefined) return [];
   return Object.entries(entry.summary).flatMap(([key, value]) => {
     const label = SUMMARY_LABELS[key];
