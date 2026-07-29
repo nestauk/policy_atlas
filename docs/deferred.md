@@ -1719,10 +1719,12 @@ first-class vocabulary. What follows is what it deliberately left out.
   `owner_user_id NULL` and are intentionally inaccessible via the strictly owner-scoped
   API (the dev DB's two live-run projects are the known case). Recovery is a documented
   manual UPDATE at the DB; an admin/ownership-claim surface is deliberately unbuilt.
-- **`CitationOut.source_id`** (025 live check, 2026-07-21) — the citation→dossier join is
-  title-keyed; a locator-fallback title misses the evidence row (honest empty state).
-  Adding `source_id` to `CitationOut` is small but a contract change (regen + views);
-  next API-touching slice.
+- **`CitationOut.source_id`** (025 live check, 2026-07-21) — **CLOSED at 027 owner
+  feedback (2026-07-29)**: `source_id` (+ `grounding_rationale`) added to `CitationOut`;
+  citation→dossier opens are id-keyed (title stays as the legacy path for references
+  and theme members). The sibling display bug — full-text-grounded citations showing
+  locator URLs — was the envelope/text-snapshot authority split, fixed at the read
+  model (envelope is the sole bibliographic authority; references keyed by document).
 - **Post-re-auth return-to renders the landing route** (026 live check, 2026-07-28) —
   the OIDC sign-in callback restores the stashed path via `history.replaceState`, which
   react-router never observes: after any auth round-trip the URL may show the deep link

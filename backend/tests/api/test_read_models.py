@@ -295,6 +295,7 @@ def _seed_read_model_ladder(
                 annotation_type="citation",
                 payload={
                     "verdict": "grounded",
+                    "rationale": "Quote matches the source verbatim.",
                     "weakly_grounded": False,
                     "gap": {
                         "grade": "limited",
@@ -459,6 +460,19 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
                 f"/api/v1/projects/{project_id}/evidence?page=1&page_size=3", headers=owner
             ).json()["data"]
             cited_source = next(row for row in all_evidence if row["status"] == "cited")
+            # Envelope authority (027 owner feedback, 2026-07-29): a citation
+            # grounded in an ingested FULL-TEXT chunk still displays the
+            # document's envelope title — never the text snapshot's locator —
+            # and carries the document identity + the judge's rationale.
+            citation_out = artefact["sections"][0]["blocks"][0]["claims"][0]["citations"][0]
+            assert citation_out["source_title"] == "Selected trial"
+            assert citation_out["source_id"] == cited_source["source_id"]
+            assert citation_out["grounding_rationale"] == "Quote matches the source verbatim."
+            # Reference identity is the document: three citations over three
+            # full-text chunks of one source yield exactly one reference entry.
+            assert [
+                (reference["n"], reference["title"]) for reference in artefact["references"]
+            ] == [(1, "Selected trial")]
             dossier = client.get(
                 f"/api/v1/projects/{project_id}/sources/{cited_source['source_id']}", headers=owner
             )

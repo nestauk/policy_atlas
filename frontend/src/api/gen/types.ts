@@ -808,9 +808,13 @@ export interface components {
          *         citation_id: Durable citation identity — the key for the
          *             chunk-context endpoint (`GET .../citations/{citation_id}/context`).
          *         n: Reference number (matches a `ReferenceOut.n`).
-         *         source_title: Cited source's title.
+         *         source_id: The cited document's project source identity, when the
+         *             citation resolves to one (joins to the sources/dossier surface).
+         *         source_title: Cited source's title (envelope metadata).
          *         quote: The quoted span from the source.
          *         grounding_tier: Optional grounding-judge tier label.
+         *         grounding_rationale: The grounding judge's recorded reason for the
+         *             tier, when one was persisted with the verdict.
          *         appraisal_label: Optional appraisal label.
          */
         CitationOut: {
@@ -821,12 +825,16 @@ export interface components {
              * Format: uuid
              */
             citation_id: string;
+            /** Grounding Rationale */
+            grounding_rationale?: string | null;
             /** Grounding Tier */
             grounding_tier?: string | null;
             /** N */
             n: number;
             /** Quote */
             quote: string;
+            /** Source Id */
+            source_id?: string | null;
             /** Source Title */
             source_title: string;
         };

@@ -3,11 +3,15 @@ import { defineConfig, devices } from "@playwright/test";
 /**
  * Mock-mode journey config (task 025 I.1). The dev server is started with
  * `VITE_MOCK=1` so every `/api/v1/*` call is served by `src/mock/api.ts` —
- * no backend, no Postgres, no auth infrastructure required. Vite's own
- * default port (5173) is used as-is; chromium only (owner scope for this
- * slice's acceptance pass).
+ * no backend, no Postgres, no auth infrastructure required. Chromium only
+ * (owner scope for this slice's acceptance pass).
+ *
+ * Own port, never 5173: with `reuseExistingServer` a developer's running
+ * `make dev` server would silently absorb this suite into the REAL app
+ * (the mock-fetch-blindness trap, docs/knowledge) — mock asserts then fail
+ * against real projects, or worse, pass against them.
  */
-const PORT = 5173;
+const PORT = 5199;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -26,7 +30,7 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: "pnpm dev",
+    command: `pnpm dev --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,

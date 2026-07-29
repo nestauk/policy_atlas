@@ -988,6 +988,29 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
         else []
     )
     snapshots = {row.source_snapshot_id for row in citation_rows}
+    # Bibliographic authority is the document's ENVELOPE snapshot; a cited
+    # full-text snapshot is only the textual authority (its metadata carries
+    # fetch facts, never a title). Every display read resolves through the
+    # envelope — unconditionally, not as a fallback.
+    snapshot_to_pss: dict[uuid.UUID, uuid.UUID] = {}
+    pss_to_envelope: dict[uuid.UUID, uuid.UUID] = {}
+    for row in conn.execute(
+        select(
+            project_source_snapshot.c.project_source_snapshot_id,
+            project_source_snapshot.c.source_snapshot_id,
+            project_source_snapshot.c.full_text_snapshot_id,
+        ).where(project_source_snapshot.c.project_id == project_id)
+    ).all():
+        snapshot_to_pss[row.source_snapshot_id] = row.project_source_snapshot_id
+        pss_to_envelope[row.project_source_snapshot_id] = row.source_snapshot_id
+        if row.full_text_snapshot_id is not None:
+            snapshot_to_pss[row.full_text_snapshot_id] = row.project_source_snapshot_id
+
+    def _envelope_id(snapshot_id: uuid.UUID) -> uuid.UUID:
+        pss_id = snapshot_to_pss.get(snapshot_id)
+        return pss_to_envelope.get(pss_id, snapshot_id) if pss_id is not None else snapshot_id
+
+    envelope_ids = {_envelope_id(snapshot_id) for snapshot_id in snapshots}
     meta = (
         {
             row.source_snapshot_id: (
@@ -999,23 +1022,12 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
                     source_snapshot.c.source_snapshot_id,
                     source_snapshot.c.metadata,
                     source_snapshot.c.source_locator,
-                ).where(source_snapshot.c.source_snapshot_id.in_(snapshots))
+                ).where(source_snapshot.c.source_snapshot_id.in_(envelope_ids))
             ).all()
         }
-        if snapshots
+        if envelope_ids
         else {}
     )
-    snapshot_to_pss: dict[uuid.UUID, uuid.UUID] = {}
-    for row in conn.execute(
-        select(
-            project_source_snapshot.c.project_source_snapshot_id,
-            project_source_snapshot.c.source_snapshot_id,
-            project_source_snapshot.c.full_text_snapshot_id,
-        ).where(project_source_snapshot.c.project_id == project_id)
-    ).all():
-        snapshot_to_pss[row.source_snapshot_id] = row.project_source_snapshot_id
-        if row.full_text_snapshot_id is not None:
-            snapshot_to_pss[row.full_text_snapshot_id] = row.project_source_snapshot_id
     appraisal = _latest_row_by_id(
         conn.execute(
             select(
@@ -1040,21 +1052,28 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
         claim_citations: list[CitationOut] = []
         for cited in citations_by_annotation.get(row.annotation_id, []):
             snapshot_id = cited.source_snapshot_id
-            if snapshot_id not in refs:
-                refs[snapshot_id] = len(refs) + 1
-                reference_order.append(snapshot_id)
-            source_meta, locator_text = meta.get(snapshot_id, ({}, "Unknown source"))
             pss_id = snapshot_to_pss.get(snapshot_id)
+            # Reference identity is the DOCUMENT, not the snapshot: abstract-
+            # and full-text-grounded quotes from one source share one entry.
+            doc_key = pss_id if pss_id is not None else snapshot_id
+            if doc_key not in refs:
+                refs[doc_key] = len(refs) + 1
+                reference_order.append(doc_key)
+            source_meta, locator_text = meta.get(_envelope_id(snapshot_id), ({}, "Unknown source"))
             score_row = appraisal.get(pss_id) if pss_id is not None else None
             payload = row.payload if isinstance(row.payload, Mapping) else {}
             claim_citations.append(
                 CitationOut(
                     citation_id=cited.citation_id,
-                    n=refs[snapshot_id],
+                    n=refs[doc_key],
+                    source_id=pss_id,
                     source_title=_title(source_meta, locator_text),
                     quote=cited.quote,
                     grounding_tier=cast(str | None, payload.get("verdict"))
                     if isinstance(payload.get("verdict"), str)
+                    else None,
+                    grounding_rationale=cast(str, payload.get("rationale"))
+                    if isinstance(payload.get("rationale"), str)
                     else None,
                     appraisal_label=SCORE_LABELS.get(score_row.quality_score)
                     if score_row
@@ -1102,19 +1121,20 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
                 ],
             )
         )
-    refs_out = [
-        ReferenceOut(
-            n=refs[snapshot_id],
-            title=_title(
-                meta.get(snapshot_id, ({}, "Unknown source"))[0],
-                meta.get(snapshot_id, ({}, "Unknown source"))[1],
-            ),
-            year=_year(meta.get(snapshot_id, ({}, ""))[0]),
-            venue=_venue(meta.get(snapshot_id, ({}, ""))[0]),
-            url=_url(meta.get(snapshot_id, ({}, ""))[0], meta.get(snapshot_id, ({}, ""))[1]),
+    refs_out = []
+    for doc_key in reference_order:
+        # doc_key is a pss id (envelope via pss_to_envelope) or, for a
+        # snapshot with no project edge, the snapshot id itself.
+        ref_meta, ref_locator = meta.get(pss_to_envelope.get(doc_key, doc_key), ({}, "Unknown source"))
+        refs_out.append(
+            ReferenceOut(
+                n=refs[doc_key],
+                title=_title(ref_meta, ref_locator),
+                year=_year(ref_meta),
+                venue=_venue(ref_meta),
+                url=_url(ref_meta, ref_locator),
+            )
         )
-        for snapshot_id in reference_order
-    ]
     study_types = {
         evidence_type: int(count)
         for evidence_type, count in conn.execute(

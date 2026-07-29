@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
 import type { components } from "../api/gen/types";
-import { useApiClient, useArtefact, useCoverage, useEvidence, useFindings, useProject, useSourceDossier } from "../api/queries";
+import { useApiClient, useArtefact, useEvidence, useFindings, useProject, useSourceDossier } from "../api/queries";
 import { useQuery } from "@tanstack/react-query";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
@@ -64,13 +64,33 @@ interface SectionLike {
 const SPAN_STYLE: Partial<Record<ClaimLike["claim_type"], string>> = {
   // Deliberately quiet (owner, 2026-07-29): the underline is a hint, not a
   // highlight — muted tones at rest, the tint only on hover.
+  // reasoning + unspanned_assertion carry no user-facing detail (owner,
+  // 2026-07-29): they render as plain prose — see UNMARKED_TYPES.
   citation: "border-b border-dotted border-blue/30 hover:border-blue/60 hover:bg-blue-tint-2",
   gap: "border-b border-dotted border-yellow/60 hover:border-yellow hover:bg-yellow-tint",
-  reasoning: "border-b border-dashed border-line-2 hover:bg-ground",
   pattern: "border-b border-dotted border-violet/50 hover:border-violet hover:bg-blue-tint-2",
   theme: "border-b border-dotted border-violet/50 hover:border-violet hover:bg-blue-tint-2",
-  unspanned_assertion: "border-b border-dotted border-orange/50 hover:border-orange hover:bg-yellow-tint",
 };
+
+/** Claim types whose marking is dev-facing only: the judge's source-check
+ *  flags and the writer's connective reasoning have no detail to reveal, so
+ *  their prose renders unmarked (owner, 2026-07-29). */
+const UNMARKED_TYPES: ReadonlySet<ClaimLike["claim_type"]> = new Set([
+  "reasoning",
+  "unspanned_assertion",
+]);
+
+/** Humanised gap grades (the wire vocabulary is GapPayloadWire.grade). */
+const GAP_GRADE_TEXT: Record<string, string> = {
+  corpus_absence: "Searched and not found — a recorded search establishes the material isn't there.",
+  acknowledged_sparsity: "The evidence base is thin here — backed by the coverage counts.",
+  inferred: "Inferred by the analysis from what it read — not established by a recorded search.",
+};
+
+/** One honest sentence for the appraisal chip — explains the scale without
+ *  inventing per-band criteria the rubric doesn't state here. */
+const APPRAISAL_HINT =
+  "The cited source's appraised quality — five bands from Weak to Very strong, judged from study design and reporting.";
 
 /** The grounding-tier vocabulary (demo ui.tsx TIER_LABEL/TIER_TEXT — locked;
  *  unknown tier → the raw value never renders, the chip omits). */
@@ -92,18 +112,14 @@ const TIER_TEXT: Record<string, string> = {
 
 const TYPE_LABEL: Partial<Record<ClaimLike["claim_type"], string>> = {
   gap: "gap",
-  reasoning: "reasoning",
   pattern: "pattern",
   theme: "theme",
-  unspanned_assertion: "source check",
 };
 
 const TYPE_HINT: Partial<Record<ClaimLike["claim_type"], string>> = {
   gap: "This is a recorded evidence gap: the analysis looked and found the base thin here. Gaps are part of the answer, never glossed over.",
-  reasoning: "Reasoning from the evidence — not a quoted source.",
   pattern: "A computed pattern across the evidence.",
   theme: "The clustering's reading of the corpus.",
-  unspanned_assertion: "A source-check flag from the grounding review.",
 };
 
 /**
@@ -210,7 +226,7 @@ function CitationContext({
         <button
           type="button"
           className="cursor-pointer text-left hover:underline"
-          onClick={() => onOpenDossier(citation.source_title)}
+          onClick={() => onOpenDossier(citation.source_id ?? citation.source_title)}
         >
           {scrub(citation.source_title)}
         </button>
@@ -220,14 +236,30 @@ function CitationContext({
       )}
       <div className="mt-2 flex flex-wrap gap-1.5">
         {tier !== null && TIER_LABEL[tier] !== undefined && (
-          <Tooltip content={<span className="text-xs">{TIER_TEXT[tier]}</span>}>
+          <Tooltip
+            content={
+              <div className="max-w-[280px] space-y-1 text-xs">
+                <p>{TIER_TEXT[tier]}</p>
+                {typeof citation.grounding_rationale === "string" &&
+                  citation.grounding_rationale !== "" && (
+                    <p className="text-grey">
+                      Judge: {scrub(citation.grounding_rationale)}
+                    </p>
+                  )}
+              </div>
+            }
+          >
             <span>
               <Chip tone="soft">{TIER_LABEL[tier]}</Chip>
             </span>
           </Tooltip>
         )}
         {citation.appraisal_label !== null && citation.appraisal_label !== undefined && (
-          <Chip tone="blue">{scrub(citation.appraisal_label)}</Chip>
+          <Tooltip content={<span className="text-xs">{APPRAISAL_HINT}</span>}>
+            <span>
+              <Chip tone="blue">{scrub(citation.appraisal_label)}</Chip>
+            </span>
+          </Tooltip>
         )}
       </div>
       <div className="mt-3 space-y-2 text-[12.5px] leading-relaxed">
@@ -290,29 +322,30 @@ function ClaimPanel({
                 here. Gaps are part of the answer, never glossed over.
               </p>
               {gap !== null && (
-                <p className="mt-1.5 text-[11.5px] text-grey">
-                  {[
-                    typeof gap.grade === "string" ? `Graded ${scrub(gap.grade)}` : null,
-                    typeof gap.caveat?.search_space === "string"
-                      ? scrub(gap.caveat.search_space)
-                      : null,
-                    typeof gap.caveat?.adequacy_verdict === "string"
-                      ? scrub(gap.caveat.adequacy_verdict)
-                      : null,
-                  ]
-                    .filter((part): part is string => part !== null)
-                    .join(" · ")}
-                </p>
+                <div className="mt-1.5 space-y-0.5 text-[11.5px] text-grey">
+                  {typeof gap.grade === "string" && (
+                    <p>{GAP_GRADE_TEXT[gap.grade] ?? `Graded ${scrub(gap.grade)}`}</p>
+                  )}
+                  {(typeof gap.caveat?.search_space === "string" ||
+                    typeof gap.caveat?.adequacy_verdict === "string") && (
+                    <p>
+                      {[
+                        typeof gap.caveat?.search_space === "string"
+                          ? `Searched: ${scrub(gap.caveat.search_space)}`
+                          : null,
+                        typeof gap.caveat?.adequacy_verdict === "string"
+                          ? `coverage judged ${scrub(gap.caveat.adequacy_verdict)}`
+                          : null,
+                      ]
+                        .filter((part): part is string => part !== null)
+                        .join(" · ")}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           )}
-          {claim.claim_type === "unspanned_assertion" && (
-            <p className="border-l-[3px] border-orange bg-yellow-tint p-3 text-[13px] text-navy">
-              {TYPE_HINT.unspanned_assertion}
-            </p>
-          )}
           {claim.claim_type !== "gap" &&
-            claim.claim_type !== "unspanned_assertion" &&
             claim.claim_type !== "citation" &&
             hint !== undefined && <p className="text-[12.5px] text-grey">{hint}</p>}
           {(claim.theme?.items?.length ?? 0) > 0 && (
@@ -407,6 +440,9 @@ function ClaimSpan({
   text: string;
   onOpen: (claim: ClaimLike) => void;
 }) {
+  // Dev-facing markings (source-check flags, connective reasoning) carry no
+  // user-facing detail: their prose renders unmarked (owner, 2026-07-29).
+  if (UNMARKED_TYPES.has(claim.claim_type)) return <span>{scrub(text)}</span>;
   const first = (claim.citations ?? [])[0];
   const tier = first?.grounding_tier ?? null;
   const tip =
@@ -440,10 +476,19 @@ function ClaimSpan({
         ))}
         <p className="text-[11px] text-grey">Click for detail</p>
       </div>
+    ) : claim.claim_type === "gap" ? (
+      <div className="max-w-[260px] space-y-1 text-[12px] leading-snug">
+        <p className="font-semibold text-navy">Evidence gap</p>
+        <p className="text-grey">
+          {(typeof claim.gap?.grade === "string" ? GAP_GRADE_TEXT[claim.gap.grade] : undefined) ??
+            TYPE_HINT.gap}
+        </p>
+        <p className="text-[11px] text-grey">Click for the coverage detail</p>
+      </div>
     ) : (
       <span className="text-xs">{TYPE_HINT[claim.claim_type] ?? "Claim"}</span>
     );
-  const typeLabel = claim.weakly_grounded === true ? "source check" : TYPE_LABEL[claim.claim_type];
+  const typeLabel = TYPE_LABEL[claim.claim_type];
   const citationNumbers = [...new Set((claim.citations ?? []).map((citation) => citation.n))];
   return (
     <span>
@@ -561,19 +606,30 @@ function AnnotatedProse({
   );
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function SourceDossier({
   projectId,
-  sourceTitle,
+  sourceRef,
   onClose,
 }: {
   projectId: string;
-  sourceTitle: string;
+  /** A source id (citations carry one) or a display title (references,
+   *  theme members — the legacy title-keyed path). */
+  sourceRef: string;
   onClose: () => void;
 }) {
+  const byId = UUID_RE.test(sourceRef);
   const evidence = useEvidence(projectId, { page_size: 200 });
-  const source = evidence.data?.data.find((item) => item.title === sourceTitle);
-  const dossier = useSourceDossier(projectId, source?.source_id ?? null);
-  const findings = useFindings(projectId, source ? { page_size: 200, source_id: source.source_id } : undefined);
+  const source = byId
+    ? evidence.data?.data.find((item) => item.source_id === sourceRef)
+    : evidence.data?.data.find((item) => item.title === sourceRef);
+  const sourceId = byId ? sourceRef : (source?.source_id ?? null);
+  const dossier = useSourceDossier(projectId, sourceId);
+  const findings = useFindings(
+    projectId,
+    sourceId !== null ? { page_size: 200, source_id: sourceId } : undefined,
+  );
   return (
     <Sheet
       open
@@ -581,7 +637,10 @@ function SourceDossier({
         if (!open) onClose();
       }}
     >
-      <SheetContent title={scrub(sourceTitle)} description="Source dossier">
+      <SheetContent
+        title={scrub(byId ? (dossier.data?.title ?? source?.title ?? "Source") : sourceRef)}
+        description="Source dossier"
+      >
         {evidence.isPending && (
           <p role="status" className="animate-pulse text-[12.5px] text-grey">
             Loading the dossier…
@@ -590,7 +649,7 @@ function SourceDossier({
         {dossier.isPending && <p role="status" className="animate-pulse text-[12.5px] text-grey">Loading the dossier…</p>}
         {dossier.isError && <p role="alert" className="text-[12.5px] text-navy">This source dossier couldn't be loaded.</p>}
         {dossier.data && <SourceDossierBody source={dossier.data} findings={findings.data?.data} findingsPending={findings.isPending} />}
-        {evidence.data !== undefined && source === undefined && (
+        {!byId && evidence.data !== undefined && source === undefined && (
           <p className="text-[12.5px] text-grey">This source isn't in the evidence list yet.</p>
         )}
       </SheetContent>
@@ -667,7 +726,6 @@ export function ArtefactView() {
   const { projectId = "" } = useParams();
   const project = useProject(projectId);
   const artefact = useArtefact(projectId);
-  const coverage = useCoverage(projectId);
   const stream = useRunStream(projectId);
   const [searchParams, setSearchParams] = useSearchParams();
   const dossierSource = searchParams.get("source");
@@ -800,11 +858,8 @@ export function ArtefactView() {
             ))}
           </div>
         )}
-        {coverage.data !== undefined && coverage.data !== null && (
-          <p className="mt-3 border-l-2 border-l-blue bg-blue-tint-2 px-3 py-2 text-[12.5px] leading-relaxed text-navy">
-            {scrub(coverage.data.sentence)}
-          </p>
-        )}
+        {/* Coverage banner removed (owner, 2026-07-29): the adequacy verdict
+            surfaces where it matters — inside each gap claim's detail. */}
       </header>
 
       {sections.map((section, index) => (
@@ -860,7 +915,7 @@ export function ArtefactView() {
       />
 
       {dossierSource !== null && (
-        <SourceDossier projectId={projectId} sourceTitle={dossierSource} onClose={closeDossier} />
+        <SourceDossier projectId={projectId} sourceRef={dossierSource} onClose={closeDossier} />
       )}
     </main>
   );
