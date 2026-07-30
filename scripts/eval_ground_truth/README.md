@@ -3,15 +3,86 @@
 Measures the search + screen pipeline's precision/recall against a real
 systematic review's reference list.
 
+This is also expanded into conducting the same comparison over 15 real systematic reviews.
 
+## Method
 
+The methodology is:
+- Gather the references list for the systematic review or reviews using OpenAlex metadata. These are treated as the ground truth dataset i.e. True Positives (TP).
+- Deterministically extract "intent" from the title of the systematic review. Because the reviews chosen are ones with "systematic review" or similar in the title, we use deterministic rules to strip the ": a systematic review" part from the title, leaving just the main content of the title. On the assumption that the title accurately defines the scope of the research, this is treated as the "intent". This is important because it means we're bypassing the Planner, so it's not totally faithful to how a real search in Policy Atlas happens. In the app, the Planner turns the user's raw text into an "intent".
+- Feed the extracted "intent" to the search step of the workflow. This is just the rapid search at present. The logic for this is that the rapid search is the simplest type of search. We need to calculate recall on just the simplest form of search as a baseline, and then from there we can measure how much the more advanced types of searches improve recall (standard search where there is one round of reformulation; deep search, where there is reformulation, diversity and citation snowballing). **IMPORTANT**: once the bug with the search quota is fixed, we should do a modified version of rapid search here - 1 round of searching, but maybe with a larger cap than 100.
+- The screening step proceeds as normal.
+- Recall is calculated both at the search stage and at the screening stage. This is because if we just calculated recall after screening, we wouldn't know if recall was low because screening had filtered out too many relevant papers (i.e. screening was to blame for False Negatives (FN)), or if the search had failed to find TP.
+
+Some other points worth knowing:
+- At present this only evaluates against academic reviews - **still need to add a policy source(s) of ground truth**
+- The date cut off is `<date review published> - 1 month`. The OpenAlex date cut off is inclusive so if the date of publication is used directly, you can end up accidentally including the source review itself. We put the cut off 1 month behind that to be on the safe side, as anything published less than a month before the review's publication is highly unlikely to make it into te systematic review.
+
+## How to run
+
+### Gather ground truth
+
+Gather a single review and run metrics:
+```
+uv run --project backend --env-file backend/.env python scripts/eval_ground_truth/run_and_score.py \
+  --title "<review title>" --doi "10.xxxx/yyyy"
+```
+
+Gather the top 15 reviews from the OpenAlex query below:
+```
+uv run --project backend python scripts/eval_ground_truth/fetch_review_corpus.py --limit 15
+```
+OpenAlex Query in OQL:
+```
+works where title/abstract has (systematic review and policy)
+      and year > (2022)
+      and title has (
+        systematic review
+        or rapid evidence
+        or evidence assessment
+        or evidence review
+      )
+      and citation count > (50)
+      and open access is (true)
+```
+
+### Generate metrics
 At present you can run the evaluation for either one single systematic review with:
 ```
+uv run --project backend --env-file backend/.env python scripts/eval_ground_truth/run_and_score.py \
+  --title "<review title>" --doi "10.xxxx/yyyy"
+```
+or run it over the set of 15 systematic reviews:
 
 ```
-or run it over a set of 15 systematic reviews.
+uv run --project backend --env-file backend/.env python scripts/eval_ground_truth/run_and_score.py \
+  --corpus scripts/eval_ground_truth/results/corpus.json
+```
 
-## Methodology [as written by Claude Code]
+
+### Downstream analysis
+
+A snippet of code for getting started analysing the data:
+```
+import json, pandas as pd
+
+raw = json.load(open('results/corpus.json'))
+
+# one row per review
+reviews = pd.json_normalize(raw['reviews']).rename(columns={'doi': 'review_doi'})
+# → title, review_doi, publication_date, abstract,
+#   ground_truth.dois (list), ground_truth.resolvable_fraction, ground_truth.n_unresolved
+
+# one row per (review, cited paper) — the shape you want for recall
+pairs = reviews.explode('ground_truth.dois').rename(columns={'ground_truth.dois': 'cited_doi'})
+```
+
+NB the column `ground_truth.resolvable_fraction` refers to the proportion of works cited by the systematic review that can be found in the OpenAlex catalogue. `ground_truth.n_unresolved` is the number of works cited in the systematic review that could not be found in OpenAlex. This is important to know because we need to know if the search step in the pipeline ever had a chance at retrieving all the ground truth references.
+
+
+---------------------------------------------------------------------------------
+
+## Methodology [written by Claude Code]
 
 1. **Ground truth = the review's full reference list** (`ground_truth.py`).
    In `--doi` mode this comes straight from OpenAlex's `referenced_works` — no
