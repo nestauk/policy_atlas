@@ -432,7 +432,7 @@ entries were missing, now added); filter pagination's O(N)-per-page collection d
 
 - **`CitationOut.evidence_type` ratification**: owner-directed (39aef12 tooltip) but
   recorded in no additive list until now — the corrected as-landed list above is the
-  record; please ratify or strike.
+  record. **Ratified by the owner at PR-open (2026-07-30).**
 - The runner's boundary-consume suppression has one untested edge (a plan change on
   resume that reorders the parked component away from `remaining_steps[0]` would
   re-present a decided question); judged unreachable today because reordering routes
