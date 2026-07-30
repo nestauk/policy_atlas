@@ -123,7 +123,9 @@ def test_draft_projection_derives_time_band_and_deduplicates_public_stages() -> 
     assert projected.steps[1].blurb == "Every title and abstract, against your question."
     # The screen_full collapse is a plan-steps presentation rule only: live
     # stage frames keep the pre-027 behaviour (no second "screen" stage row).
-    assert stage_for_payload({"component": "screen_full", "registry_component": "screen_full"}) is None
+    assert (
+        stage_for_payload({"component": "screen_full", "registry_component": "screen_full"}) is None
+    )
 
 
 def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(
@@ -170,20 +172,27 @@ def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(
         assert persisted.status_code == 200
         assert persisted.json()["status"] == "approved"
     with engine.connect() as conn:
-        rows = conn.execute(
-            select(planning_transcript)
-            .where(planning_transcript.c.project_id == uuid.UUID(project_id))
-            .order_by(planning_transcript.c.turn_index)
-        ).mappings().all()
+        rows = (
+            conn.execute(
+                select(planning_transcript)
+                .where(planning_transcript.c.project_id == uuid.UUID(project_id))
+                .order_by(planning_transcript.c.turn_index)
+            )
+            .mappings()
+            .all()
+        )
         assert [row["turn_index"] for row in rows] == [0, 1]
         assert rows[0]["planner_state"] != rows[0]["response"]["plan"]
         assert rows[1]["status"] == "completed"
         assert rows[1]["completed_at"] is not None
-        assert conn.execute(
-            select(orchestration_plan.c.plan_id).where(
-                orchestration_plan.c.project_id == uuid.UUID(project_id)
-            )
-        ).one_or_none() is not None
+        assert (
+            conn.execute(
+                select(orchestration_plan.c.plan_id).where(
+                    orchestration_plan.c.project_id == uuid.UUID(project_id)
+                )
+            ).one_or_none()
+            is not None
+        )
 
 
 def test_planning_rehydrates_after_restart_and_get_plan_reads_stored_draft(
@@ -220,11 +229,15 @@ def test_planning_rehydrates_after_restart_and_get_plan_reads_stored_draft(
         )
         assert second.status_code == 200
     with engine.connect() as conn:
-        first_row = conn.execute(
-            select(planning_transcript)
-            .where(planning_transcript.c.project_id == uuid.UUID(project_id))
-            .where(planning_transcript.c.turn_index == 0)
-        ).mappings().one()
+        first_row = (
+            conn.execute(
+                select(planning_transcript)
+                .where(planning_transcript.c.project_id == uuid.UUID(project_id))
+                .where(planning_transcript.c.turn_index == 0)
+            )
+            .mappings()
+            .one()
+        )
     assert stub.calls[1][0] == [
         {"role": "user", "text": "How can cities reduce heat risk?"},
         {"role": "planner", "text": first.json()["reply"]},
@@ -278,24 +291,27 @@ def test_failed_turn_retries_in_place_and_stale_rules_are_honest(
 
         old_id, latest_id = uuid.uuid4(), uuid.uuid4()
         with engine.begin() as conn:
-            conn.execute(planning_transcript.insert(), [
-                _pending_values(
-                    project_id,
-                    client_turn_id=old_id,
-                    turn_index=1,
-                    message="old failed",
-                    created_at=datetime.now(UTC),
-                    status="failed",
-                ),
-                _pending_values(
-                    project_id,
-                    client_turn_id=latest_id,
-                    turn_index=2,
-                    message="latest failed",
-                    created_at=datetime.now(UTC),
-                    status="failed",
-                ),
-            ])
+            conn.execute(
+                planning_transcript.insert(),
+                [
+                    _pending_values(
+                        project_id,
+                        client_turn_id=old_id,
+                        turn_index=1,
+                        message="old failed",
+                        created_at=datetime.now(UTC),
+                        status="failed",
+                    ),
+                    _pending_values(
+                        project_id,
+                        client_turn_id=latest_id,
+                        turn_index=2,
+                        message="latest failed",
+                        created_at=datetime.now(UTC),
+                        status="failed",
+                    ),
+                ],
+            )
         stale = client.post(
             f"/api/v1/projects/{project_id}/planning-turns",
             headers=owner,
@@ -315,15 +331,17 @@ def test_pending_staleness_fresh_pending_and_transcript_ownership(
         project_id = create_project(client, owner)
         old_id = uuid.uuid4()
         with engine.begin() as conn:
-            conn.execute(planning_transcript.insert().values(
-                **_pending_values(
-                    project_id,
-                    client_turn_id=old_id,
-                    turn_index=0,
-                    message="expired pending",
-                    created_at=datetime.now(UTC) - timedelta(minutes=11),
+            conn.execute(
+                planning_transcript.insert().values(
+                    **_pending_values(
+                        project_id,
+                        client_turn_id=old_id,
+                        turn_index=0,
+                        message="expired pending",
+                        created_at=datetime.now(UTC) - timedelta(minutes=11),
+                    )
                 )
-            ))
+            )
         old_read = client.get(f"/api/v1/projects/{project_id}/planning-turns", headers=owner)
         assert old_read.status_code == 200
         assert old_read.json()["data"][0]["status"] == "failed"
@@ -333,15 +351,17 @@ def test_pending_staleness_fresh_pending_and_transcript_ownership(
 
         fresh_id = uuid.uuid4()
         with engine.begin() as conn:
-            conn.execute(planning_transcript.insert().values(
-                **_pending_values(
-                    project_id,
-                    client_turn_id=fresh_id,
-                    turn_index=1,
-                    message="fresh pending",
-                    created_at=datetime.now(UTC),
+            conn.execute(
+                planning_transcript.insert().values(
+                    **_pending_values(
+                        project_id,
+                        client_turn_id=fresh_id,
+                        turn_index=1,
+                        message="fresh pending",
+                        created_at=datetime.now(UTC),
+                    )
                 )
-            ))
+            )
         blocked = client.post(
             f"/api/v1/projects/{project_id}/planning-turns",
             headers=owner,
@@ -360,9 +380,7 @@ def test_pending_staleness_fresh_pending_and_transcript_ownership(
         assert fresh_row["completed_at"] is None
 
 
-def test_planning_turn_409s_while_walk_active_or_parked(
-    engine: Engine, tmp_path: Path
-) -> None:
+def test_planning_turn_409s_while_walk_active_or_parked(engine: Engine, tmp_path: Path) -> None:
     """409 `run_active` fences replanning while a walk is running or parked."""
     _reset_turn_locks()
     stub = CountingPlanner()
@@ -492,7 +510,10 @@ def test_run_starting_mid_planner_call_fails_turn_and_persists_no_plan(
         first = client.post(
             f"/api/v1/projects/{project_id}/planning-turns",
             headers=owner,
-            json={"message": "How can cities reduce heat risk?", "client_turn_id": str(uuid.uuid4())},
+            json={
+                "message": "How can cities reduce heat risk?",
+                "client_turn_id": str(uuid.uuid4()),
+            },
         )
         assert first.status_code == 200
 
