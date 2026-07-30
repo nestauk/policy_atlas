@@ -171,7 +171,13 @@ class _TransportMixin:
     def _default_fetch(self, url: str, params: dict[str, str]) -> Any:
         if self._client is None:
             raise SearchTransportError(status_code=None, host=_host_from_url(url))
-        response = self._client.get(url, params=params)
+        # `params or None`, never a bare `{}`: httpx REPLACES a URL's existing
+        # query string with `params` whenever it is not None, so passing `{}`
+        # silently strips the whole query. The validated Overton
+        # `next_page_url` is a fully-formed URL carrying its own api_key,
+        # squery and page — it must be sent verbatim, so an empty params dict
+        # has to mean "leave the URL alone", not "blank the query".
+        response = self._client.get(url, params=params or None)
         response.raise_for_status()
         return response.json()
 

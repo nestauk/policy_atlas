@@ -634,7 +634,7 @@ def test_zero_result_generated_queries_count_and_openalex_fallback(
     assert openalex_search_events[-1]["result_count"] == 1
 
 
-def test_rapid_result_cap_http_budget_and_wall_clock_stop(
+def test_rapid_result_cap_is_flat_per_call_and_wall_clock_stop(
     conn: Connection,
 ) -> None:
     project_id, run_id = seed_project_and_run(conn)
@@ -642,12 +642,15 @@ def test_rapid_result_cap_http_budget_and_wall_clock_stop(
     generation = ScriptedGenerationBackend(
         queries=[_wire_queries([f"cap query {index}" for index in range(5)])]
     )
-    # The run cap is distributed across the planned fan-out (50 // 15 = 3 per
-    # call) so no single query can consume it — a first-live-check regression:
-    # call #1 returning the full cap silently collapsed the fan-out to one
-    # load-bearing query, the exact decision-14 failure mode.
+    # Each call requests the depth's flat per-call target (100 for rapid) —
+    # not that target divided across the 15-call fan-out. Dividing a shared
+    # cap across a wide fan-out was the bug: quota shrank to ~3-5 per call as
+    # soon as the SR/RCT variant fan-out was reinstated. Every call now gets
+    # its own full-size request regardless of fan-out width.
+    rapid_quota = DEPTH_CONSTANTS["rapid"]["result_cap_per_backend"]
     scripted_pages: list[ScriptResult] = [
-        [oa_record(f"cap-{page}-{index}") for index in range(10)] for page in range(15)
+        [oa_record(f"cap-{page}-{index}") for index in range(rapid_quota + 20)]
+        for page in range(15)
     ]
     capped_backend = ScriptedBackend(scripts={"search": scripted_pages})
 
@@ -661,8 +664,8 @@ def test_rapid_result_cap_http_budget_and_wall_clock_stop(
     )
 
     assert len(capped_backend.calls) == 15
-    assert all(call.max_results == 3 for call in capped_backend.calls)
-    assert capped["results_returned"] == 45
+    assert all(call.max_results == rapid_quota for call in capped_backend.calls)
+    assert capped["results_returned"] == rapid_quota * 15
     assert capped["search"]["queries_executed"]["openalex"] == 15
     # Honest stop attribution (task 019 item 5): capping on the run/http
     # budget is not a wall-clock breach and not an error — a clean completion.
@@ -1031,6 +1034,14 @@ def test_standard_round_two_trims_snowball_and_suggest_arms(
     assert "fetch_references" not in calls_by_verb
     assert "lookup_dois" not in calls_by_verb
     assert "lookup_title" not in calls_by_verb
+
+    # Round 2 gets the depth's full per-call target directly — not whatever
+    # was left of round 1's shared cap (the quota bug: round 2 used to share
+    # round 1's leftovers, which was often almost nothing).
+    reformulate_call = next(
+        call for call in calls_by_verb["search"] if call.query == "reformulated standard query"
+    )
+    assert reformulate_call.max_results == DEPTH_CONSTANTS["standard"]["result_cap_per_backend"]
 
     origins = {payload["query_origin"] for payload in _search_payloads(conn, project_id)}
     assert not origins & {

@@ -102,6 +102,9 @@ SEARCH_TARGET_MAX = 60
 class DepthConstants(TypedDict):
     """Per-depth budget constants used by the search strategy."""
 
+    # Results requested per API call at this depth (not a shared total split
+    # across a fan-out — retrieval is cheap to over-fetch and dedup/screening
+    # trims it downstream; see the 15-way OpenAlex variant fan-out below).
     result_cap_per_backend: int
     wall_clock_s: int
     round_cap: int
@@ -115,37 +118,27 @@ class DepthConstants(TypedDict):
 
 DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
     "rapid": {
-        "result_cap_per_backend": 50,
+        "result_cap_per_backend": 100,
         "wall_clock_s": RAPID_WALL_CLOCK_S,
         "round_cap": 1,
         "http_budget": {"openalex": 20, "overton": 5},
         "arms": frozenset(),
     },
     "standard": {
-        "result_cap_per_backend": 75,
+        "result_cap_per_backend": 250,
         "wall_clock_s": STANDARD_WALL_CLOCK_S,
         "round_cap": 2,
         "http_budget": {"openalex": 30, "overton": 8},
         "arms": frozenset({"reformulate", "diversity"}),
     },
     "deep": {
-        "result_cap_per_backend": 150,
+        "result_cap_per_backend": 500,
         "wall_clock_s": DEEP_WALL_CLOCK_S,
         "round_cap": ROUND_CAP,
         "http_budget": {"openalex": 50, "overton": 15},
         "arms": frozenset({"reformulate", "snowball", "suggest", "diversity"}),
     },
 }
-
-def _distribute_quota(remaining: int, planned_calls: int) -> int:
-    """Per-call share of a result cap across a planned fan-out.
-
-    The companion rule to every result cap (015 live-check lesson): without a
-    per-call quota the first provider call consumes the whole cap and every
-    later query is silently skipped — the single-load-bearing-query failure
-    mode the fan-out exists to avoid.
-    """
-    return max(1, remaining // max(1, planned_calls))
 
 
 SR_CLAUSE = '("systematic review" OR "meta-analysis" OR "narrative synthesis")'
@@ -1317,9 +1310,9 @@ def run_search(
         backend_budget = constants["http_budget"].get(backend.name, 0)
         if http_calls_by_backend[backend.name] >= backend_budget:
             return None
-        remaining = constants["result_cap_per_backend"] - raw_results_by_backend[backend.name]
-        if max_records is not None:
-            remaining = min(remaining, max_records)
+        remaining = (
+            max_records if max_records is not None else constants["result_cap_per_backend"]
+        )
         if remaining <= 0:
             return None
         if clock() - start > constants["wall_clock_s"]:
@@ -1445,19 +1438,9 @@ def run_search(
         queries, overton_paraphrases = validated_queries(wire)
 
         for backend in backends:
-            # Same cap-distribution rule as the rapid fan-out: this round's
-            # search-arm calls share the episode's remaining result cap.
-            episode_remaining = max(
-                1,
-                constants["result_cap_per_backend"] - raw_results_by_backend[backend.name],
-            )
+            quota = constants["result_cap_per_backend"]
             if backend.name == "openalex":
                 variant_count = len(filter_variants_by_backend[backend.name])
-                planned = (
-                    min(len(queries), REFORMULATE_CALL_CAP) * variant_count
-                    + DIVERSITY_CALL_MIN * variant_count
-                )
-                quota = _distribute_quota(episode_remaining, planned)
                 for query in queries[:REFORMULATE_CALL_CAP]:
                     for plan in _with_filter_variants(
                         _PlannedCall(backend.name, query, "generated"),
@@ -1474,8 +1457,6 @@ def run_search(
                     if stop_all:
                         break
             elif backend.name == "overton":
-                planned = min(len(overton_paraphrases), 2)
-                quota = _distribute_quota(episode_remaining, planned)
                 for paraphrase in overton_paraphrases[:2]:
                     for plan in _with_filter_variants(
                         _PlannedCall(backend.name, paraphrase, "paraphrase"),
@@ -1704,9 +1685,10 @@ def run_search(
                 diversity_query = _compose_variant(context.intent, SR_CLAUSE)
                 diversity_origin = "variant_sr"
             if arm_calls["diversity"] < DIVERSITY_CALL_MIN:
-                # The reserve is a bounded FRACTION of the per-backend result
-                # cap (contract decision 15 / rubric 7): without max_records
-                # the un-steered call could drain the episode's remaining cap.
+                # The reserve is a bounded FRACTION of the per-call result
+                # target (contract decision 15 / rubric 7): this is one extra,
+                # un-steered call, so it's deliberately smaller than a full
+                # fan-out call rather than requesting the full per-call target.
                 reserve = max(
                     1, int(constants["result_cap_per_backend"] * DIVERSITY_FRACTION)
                 )
@@ -1749,7 +1731,7 @@ def run_search(
                     len(filter_variants_by_backend[backend.name]),
                 )
             ]
-            quota = _distribute_quota(constants["result_cap_per_backend"], len(plans))
+            quota = constants["result_cap_per_backend"]
             backend_calls: list[ExecutedCall] = []
             generated_groups: dict[str, list[ExecutedCall]] = {}
             for plan in plans:
