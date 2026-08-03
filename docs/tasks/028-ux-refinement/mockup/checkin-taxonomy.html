@@ -244,7 +244,7 @@
         </div>
         <div class="suggested">
           <p>Suggested from this run's results</p>
-          <div class="opt"><b>Recover the missing full documents first</b><span>11 of the 15 documents on the list are abstract-only right now — 8 downloads failed and 3 couldn't be read. Recovering them makes the deep read far stronger.</span></div>
+          <div class="opt"><b>Make sure funding reform is properly covered</b><span>Only 1 of the 15 documents on the list covers funding reform, though it's central to your question. This re-picks the list with that theme prioritised.</span></div>
         </div>
         <div class="freetext">
           <p class="divide">or say it in your own words</p>
@@ -369,7 +369,7 @@
   </div>
 
   <h2>Where "Suggested" comes from</h2>
-  <p class="sub">At every pause, the analysis reviews this run's actual state — the question, the plan, what each step produced, earlier steering decisions — and may author extra suggestions, each with a concrete reason. The mechanism is sound; the copy isn't: the authoring prompt is currently the orchestrator's internal <em>decision</em> prompt reused verbatim, so suggestions arrive in machinery language ("no triggers fired") that no reader owns. The fix is a dedicated authoring prompt (one of this slice's gated revs): plain-language labels, reasons that cite visible facts ("8 downloads failed"), machinery vocabulary banned, endorsements of existing options rendered as a Recommended marker instead of duplicate buttons, and the block honestly titled <b>"Suggested from this run's results"</b>.</p>
+  <p class="sub">At every pause, the analysis reviews this run's actual state — the question, the plan, what each step produced, earlier steering decisions — and may author extra suggestions, each with a concrete reason. The idea is sound; two things aren't. <b>Copy:</b> the authoring prompt is the orchestrator's internal <em>decision</em> prompt reused verbatim, so suggestions arrive in machinery language ("no triggers fired"). <b>Validity:</b> a live authored option was found carrying an <em>invented</em> action (`recover_full_text` — not a real capability; full text is already fetched through every known alternate location on the first pass, and paywall/dead-link failures don't improve on retry). The fix, in this slice's gated authoring-prompt rev + code: plain-language labels · reasons citing visible facts · machinery vocabulary banned · <b>authored actions validated against the real steering grammar before they render — an option whose action doesn't compile is dropped and logged, never shown</b> · endorsements of existing options render as the reason under the blue primary · the block titled "Suggested from this run's results".</p>
 
   <h2>Your own words — already built, just hidden</h2>
   <p class="sub">Every check-in already accepts free text: the steering router compiles what you type into concrete changes, shows you exactly what would change, and applies it only on your confirm (task 024's confirm-gate). Today it's a small single-line input at the bottom of a crowded card — most testers never saw it. Proposed: it renders as a composer-style row on <b>every</b> card ("or say it in your own words", as on the P3 card above), and the compile→confirm exchange renders as a mini-thread on the card:</p>

@@ -281,13 +281,18 @@ deferred.md updates · verification.md.
   prompt part-by-part rev (fork A) · the key-findings section rev (fork B) ·
   the section-planning flow rev (strand 12) · the summariser + faithfulness
   judge (strand 13, new surfaces) · the **watch-authoring prompt rev**
-  (strand 14a, now definite — owner finding 2026-08-03: authoring reuses
-  the internal decision prompt verbatim, so authored option labels arrive
-  in machinery language; the rev gives authoring its own reader-facing
-  framing: plain-language labels, reasons citing visible facts, machinery
-  vocabulary banned, endorse-existing-option signalling, a count cap). No
-  other prompt/template touches; prompt-guard pins update in the same
-  commit.
+  (strand 14a, now definite — owner findings 2026-08-03: (i) authoring
+  reuses the internal decision prompt verbatim, so authored option labels
+  arrive in machinery language; (ii) a live authored option carried an
+  **invented delta** — intent `recover_full_text`, which exists nowhere in
+  the codebase: a button promising an impossible action. The rev gives
+  authoring its own reader-facing framing — plain-language labels, reasons
+  citing visible facts, machinery vocabulary banned, endorse-existing-
+  option signalling, a count cap — and the code path gains **authored-delta
+  validation against the compiled steering grammar: an option whose delta
+  doesn't compile is dropped and logged at authoring time, never
+  rendered**). No other prompt/template touches; prompt-guard pins update
+  in the same commit.
 - **Schema:** additive-only, enumerated: the nullable JSONB part column on
   `planning_transcript` (fork A) + the block-summary column & marker and the
   artefact-summary field & marker (strand 13, per spec). One migration (+
