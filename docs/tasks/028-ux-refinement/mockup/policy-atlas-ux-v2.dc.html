@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+@font-face { font-family: "Averta"; src: url("fonts/Averta-Regular.otf") format("opentype"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Averta"; src: url("fonts/Averta-Semibold.otf") format("opentype"); font-weight: 600; font-display: swap; }
+@font-face { font-family: "Averta"; src: url("fonts/Averta-Bold.otf") format("opentype"); font-weight: 700; font-display: swap; }
+@font-face { font-family: "Averta"; src: url("fonts/Averta-ExtraBold.otf") format("opentype"); font-weight: 800; font-display: swap; }
+@font-face { font-family: "Zosia Display"; src: url("fonts/Zosia-Display.woff2") format("woff2"); font-weight: 400 800; font-display: swap; }
+html, body { margin: 0; height: 100%; }
+body { background: #f4f4f5; color: #1c1c1e; font-family: "Averta", "Manrope", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: #0000ff; text-decoration: none; }
+a:hover { text-decoration: underline; }
+* { box-sizing: border-box; }
+button { font-family: inherit; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+textarea::placeholder, input::placeholder { color: #8a8a8e; }
+</style>
+</helmet>
+<div style="display: flex; flex-direction: column; height: 100vh; overflow: hidden;">
+  <header style="display: flex; align-items: center; justify-content: space-between; height: 58px; flex: none; padding: 0 24px; background: #ffffff; border-bottom: 1px solid #e4e4e7;">
+    <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+      <span style="font-family: 'Zosia Display', 'Archivo', sans-serif; font-weight: 800; font-size: 19px; letter-spacing: -0.3px; color: #0f294a; white-space: nowrap;">Policy <b style="color: #0000ff; font-weight: 800;">Atlas</b></span>
+      <span style="color: #d3d3d8;">/</span>
+      <span style="font-size: 15px; font-weight: 600; color: #0f294a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">School absence in England</span>
+    </div>
+    <nav style="display: flex; align-items: center; gap: 22px;">
+      <sc-for list="{{ navItems }}" as="t" hint-placeholder-count="4">
+        <button onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}<sc-if value="{{ t.badge }}" hint-placeholder-val="{{ false }}"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ff6e47; margin-left: 6px;"></span></sc-if></button>
+      </sc-for>
+    </nav>
+  </header>
+
+  <sc-if value="{{ tabWorkspace }}" hint-placeholder-val="{{ true }}">
+    <div style="flex: 1; min-height: 0; display: flex;">
+      <sc-if value="{{ chatCentred }}" hint-placeholder-val="{{ true }}">
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; background: #ffffff;">
+          <div ref="{{ threadRef }}" style="flex: 1; min-height: 0; width: 100%; overflow-y: auto; display: flex; justify-content: center;">
+            <div style="width: 100%; max-width: 680px; padding: 32px 24px 24px;">
+              <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ true }}">
+                <div style="padding-top: 9vh; text-align: center;">
+                  <p style="margin: 0; font-family: 'Zosia Display', 'Archivo', sans-serif; font-size: 30px; font-weight: 700; color: #0f294a; letter-spacing: -0.5px;">What do you need evidence on?</p>
+                  <p style="margin: 10px 0 0; font-size: 16px; color: #646363;">Type your question below — the planner works it up with you into an analysis plan, here in the conversation.</p>
+                </div>
+              </sc-if>
+              <div style="display: flex; flex-direction: column; gap: 16px;">
+                <sc-for list="{{ thread }}" as="m" hint-placeholder-count="0">
+                  <sc-if value="{{ m.isUser }}" hint-placeholder-val="{{ false }}">
+                    <div style="align-self: flex-end; max-width: 85%; background: #f5f5ff; border: 1px solid #ececff; padding: 12px 16px; animation: rise 420ms cubic-bezier(0.2,0.7,0.3,1) both;">
+                      <p style="margin: 0; font-size: 16px; line-height: 1.55; color: #1c1c1e; white-space: pre-wrap;">{{ m.text }}</p>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ m.isPlanner }}" hint-placeholder-val="{{ false }}">
+                    <div style="max-width: 66ch; animation: rise 420ms cubic-bezier(0.2,0.7,0.3,1) both;">
+                      <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #1c1c1e; white-space: pre-wrap;">{{ m.text }}</p>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ m.isPart }}" hint-placeholder-val="{{ false }}">
+                    <div style="border: 1px solid #d3d3d8; background: #ffffff; box-shadow: 0 1px 3px rgba(15,41,74,0.05); padding: 16px 18px; animation: rise 420ms cubic-bezier(0.2,0.7,0.3,1) both;">
+                      <p style="margin: 0; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #646363;">{{ m.step }}</p>
+                      <p style="margin: 6px 0 0; font-size: 17px; font-weight: 700; color: #0f294a; line-height: 1.4;">{{ m.title }}</p>
+                      <sc-if value="{{ m.body }}" hint-placeholder-val="{{ false }}">
+                        <p style="margin: 6px 0 0; font-size: 14.5px; line-height: 1.55; color: #646363;">{{ m.body }}</p>
+                      </sc-if>
+                      <sc-if value="{{ m.hasChips }}" hint-placeholder-val="{{ false }}">
+                        <div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;">
+                          <sc-for list="{{ m.chips }}" as="c" hint-placeholder-count="3">
+                            <span style="border: 1px solid #c7c7ff; background: #ececff; color: #0000ff; font-size: 13px; font-weight: 600; padding: 4px 10px;">{{ c }}</span>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ m.pending }}" hint-placeholder-val="{{ false }}">
+                        <div style="margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px;">
+                          <sc-for list="{{ m.options }}" as="o" hint-placeholder-count="2">
+                            <button onClick="{{ o.pick }}" style="{{ o.style }}">
+                              <span style="display: block;">{{ o.label }}</span>
+                              <sc-if value="{{ o.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ o.subStyle }}">{{ o.sub }}</span></sc-if>
+                            </button>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ m.confirmed }}" hint-placeholder-val="{{ false }}">
+                        <div style="margin-top: 12px; display: flex; align-items: center; gap: 10px;">
+                          <span style="font-size: 14.5px; font-weight: 700; color: #0c6b5a;">✓ {{ m.confirmed }}</span>
+                          <button onClick="{{ m.change }}" style="cursor: pointer; border: none; background: none; padding: 0; font-size: 13px; font-weight: 600; color: #646363; text-decoration: underline;" style-hover="color: #0f294a;">Change</button>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ m.isPlan }}" hint-placeholder-val="{{ false }}">
+                    <div style="border: 1px solid #0000ff; background: #ffffff; box-shadow: 0 1px 3px rgba(15,41,74,0.08); animation: rise 420ms cubic-bezier(0.2,0.7,0.3,1) both;">
+                      <button onClick="{{ togglePlan }}" style="display: flex; width: 100%; align-items: baseline; gap: 12px; cursor: pointer; border: none; background: none; text-align: left; padding: 14px 18px;">
+                        <span style="flex: none; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #646363;">The plan</span>
+                        <span style="flex: 1; min-width: 0; font-size: 15px; font-weight: 600; color: #0f294a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ planQuestion }}</span>
+                        <span style="flex: none; border: 1px solid #b7e0d8; background: #e7f5f2; color: #0c6b5a; font-size: 12px; font-weight: 700; padding: 2px 8px;">ready</span>
+                        <span style="flex: none; font-size: 13px; color: #646363;">{{ planChev }}</span>
+                      </button>
+                      <sc-if value="{{ planOpen }}" hint-placeholder-val="{{ true }}">
+                        <div style="border-top: 1px solid #e4e4e7; padding: 14px 18px 18px;">
+                          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #e4e4e7; border: 1px solid #e4e4e7;">
+                            <sc-for list="{{ planSettings }}" as="s" hint-placeholder-count="4">
+                              <div style="background: #ffffff; padding: 9px 12px;">
+                                <p style="margin: 0; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #646363;">{{ s.label }}</p>
+                                <p style="margin: 2px 0 0; font-size: 14px; font-weight: 600; color: #0f294a;">{{ s.value }}</p>
+                              </div>
+                            </sc-for>
+                          </div>
+                          <ol style="margin: 14px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 5px;">
+                            <sc-for list="{{ planSteps }}" as="st" hint-placeholder-count="5">
+                              <li style="font-size: 14.5px; color: #0f294a;">{{ st.label }} <span style="color: #646363;">— {{ st.blurb }}</span></li>
+                            </sc-for>
+                          </ol>
+                        </div>
+                      </sc-if>
+                      <div style="border-top: 1px solid #e4e4e7; padding: 14px 18px; display: flex; align-items: center; gap: 14px;">
+                        <sc-if value="{{ preRun }}" hint-placeholder-val="{{ true }}">
+                          <button onClick="{{ startRun }}" style="cursor: pointer; border: none; background: #0000ff; color: #ffffff; font-size: 15px; font-weight: 700; padding: 12px 20px; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);" style-hover="background: #0000d6;">Start the analysis</button>
+                          <span style="font-size: 13.5px; color: #646363;">~10 min · pause or steer at any check-in</span>
+                        </sc-if>
+                        <sc-if value="{{ postRun }}" hint-placeholder-val="{{ false }}">
+                          <span style="font-size: 14px; font-weight: 600; color: #0c6b5a;">✓ Ran {{ runWhen }}</span>
+                        </sc-if>
+                      </div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ m.isDivider }}" hint-placeholder-val="{{ false }}">
+                    <div style="display: flex; align-items: center; gap: 10px; color: #646363; font-size: 13px;">
+                      <span style="height: 1px; flex: 1; background: #e4e4e7;"></span>
+                      <span>{{ m.text }}</span>
+                      <span style="height: 1px; flex: 1; background: #e4e4e7;"></span>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ m.isEcho }}" hint-placeholder-val="{{ false }}">
+                    <div style="margin: 0 16px; border-left: 2px solid #fdb633; background: rgba(255,246,227,0.6); padding: 8px 12px;">
+                      <p style="margin: 0; font-size: 13.5px; color: #1c1c1e;">{{ m.text }}</p>
+                    </div>
+                  </sc-if>
+                </sc-for>
+                <sc-if value="{{ thinking }}" hint-placeholder-val="{{ false }}">
+                  <div style="display: flex; align-items: center; gap: 8px; color: #646363; font-size: 14px; animation: breathe 1.6s ease-in-out infinite;">
+                    <span style="width: 8px; height: 8px; background: #0000ff; display: inline-block;"></span>
+                    Planning…
+                  </div>
+                </sc-if>
+                <sc-if value="{{ checkinPending }}" hint-placeholder-val="{{ false }}">
+                  <div style="border: 1px solid #e4e4e7; border-left: 3px solid #ff6e47; background: #ffffff; box-shadow: 0 1px 3px rgba(15,41,74,0.05); padding: 16px 18px; animation: rise 420ms cubic-bezier(0.2,0.7,0.3,1) both;">
+                    <span style="border: 1px solid #f3d99a; background: #fff6e3; color: #8a5a00; font-size: 12px; font-weight: 700; padding: 3px 9px;">Check-in · waiting on you</span>
+                    <p style="margin: 12px 0 0; font-size: 16px; font-weight: 700; color: #0f294a; line-height: 1.45;">Evidence looks thin on primary schools</p>
+                    <p style="margin: 5px 0 0; font-size: 14.5px; line-height: 1.55; color: #646363;">Only 6 of 168 relevant sources cover ages 5–11. The rest is secondary-school evidence.</p>
+                    <div style="margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px;">
+                      <button onClick="{{ checkinContinue }}" style="cursor: pointer; border: none; background: #0000ff; color: #ffffff; font-size: 14px; font-weight: 700; padding: 10px 16px; clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);" style-hover="background: #0000d6;">Continue as planned</button>
+                      <button onClick="{{ checkinBroaden }}" style="cursor: pointer; border: 1px solid #d3d3d8; background: #ffffff; color: #0f294a; font-size: 14px; font-weight: 600; padding: 10px 16px;" style-hover="border-color: #0000ff; color: #0000ff;">Broaden to UK-wide</button>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </div>
+          </div>
+          <div style="flex: none; width: 100%; display: flex; justify-content: center; border-top: 1px solid #e4e4e7; background: #ffffff;">
+            <div style="width: 100%; max-width: 680px; padding: 14px 24px 18px;">
+              <sc-if value="{{ composerNote }}" hint-placeholder-val="{{ false }}">
+                <p style="margin: 0 0 8px; font-size: 13px; color: #646363;">{{ composerNote }}</p>
+              </sc-if>
+              <div style="{{ composerWrapStyle }}">
+                <textarea ref="{{ composerRef }}" value="{{ composerValue }}" onChange="{{ composerChange }}" onKeyDown="{{ composerKey }}" rows="3" placeholder="{{ composerPlaceholder }}" disabled="{{ composerDisabled }}" style="flex: 1; resize: none; border: none; outline: none; background: transparent; font-family: inherit; font-size: 16px; line-height: 1.5; color: #1c1c1e; padding: 4px 0; min-height: 72px; max-height: 200px; overflow-y: auto;"></textarea>
+                <button onClick="{{ sendClick }}" disabled="{{ composerDisabled }}" style="{{ sendStyle }}">Send</button>
+              </div>
+              <p style="margin: 6px 0 0; font-size: 12.5px; color: #8a8a8e;">Enter to send · Shift+Enter for a new line</p>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ showPlanPane }}" hint-placeholder-val="{{ false }}">
+        <div style="flex: 1; min-width: 0; background: #f4f4f5; border-left: 1px solid #e4e4e7; overflow-y: auto;">
+          <div style="max-width: 520px; margin: 0 auto; padding: 24px 28px 40px;">
+            <p style="margin: 0; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #646363;">Plan</p>
+            <sc-if value="{{ planPaneEmpty }}" hint-placeholder-val="{{ true }}">
+              <p style="margin: 48px auto 0; max-width: 280px; text-align: center; font-size: 14.5px; line-height: 1.55; color: #646363;">Forms here as you talk. Nothing runs until you approve it.</p>
+            </sc-if>
+            <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 10px;">
+              <sc-for list="{{ planPaneItems }}" as="p" hint-placeholder-count="0">
+                <div style="border: 1px solid #d3d3d8; background: #ffffff; padding: 12px 15px; animation: rise 420ms cubic-bezier(0.2,0.7,0.3,1) both;">
+                  <p style="margin: 0; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #646363;">{{ p.label }}</p>
+                  <p style="margin: 4px 0 0; font-size: 14.5px; font-weight: 600; color: #0f294a; line-height: 1.45;">{{ p.value }}</p>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ showJourney }}" hint-placeholder-val="{{ false }}">
+        <div style="{{ journeyStyle }}">
+          <div style="max-width: 620px; margin: 0 auto; padding: 24px 28px 40px;">
+            <p style="margin: 0; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #646363;">Analysis</p>
+            <h2 style="margin: 8px 0 0; font-family: 'Zosia Display', 'Archivo', sans-serif; font-size: 24px; font-weight: 700; color: #0f294a; letter-spacing: -0.3px;">{{ journeyHeading }}</h2>
+            <div style="margin-top: 16px; display: flex; gap: 4px;">
+              <sc-for list="{{ stagesBar }}" as="b" hint-placeholder-count="6">
+                <span style="{{ b.style }}"></span>
+              </sc-for>
+            </div>
+            <div style="margin-top: 20px; border: 1px solid #d3d3d8; background: #ffffff; box-shadow: 0 1px 3px rgba(15,41,74,0.05); padding: 16px 18px;">
+              <p style="margin: 0 0 12px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #646363;">{{ timelineTitle }}</p>
+              <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 11px;">
+                <sc-for list="{{ stages }}" as="st" hint-placeholder-count="6">
+                  <li style="display: flex; align-items: baseline; gap: 10px;">
+                    <span style="{{ st.dotStyle }}"></span>
+                    <span style="{{ st.labelStyle }}">{{ st.label }}</span>
+                    <sc-if value="{{ st.note }}" hint-placeholder-val="{{ false }}">
+                      <span style="font-size: 13.5px; color: #646363;">{{ st.note }}</span>
+                    </sc-if>
+                  </li>
+                </sc-for>
+              </ol>
+            </div>
+            <sc-if value="{{ funnelOn }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top: 16px; border: 1px solid #d3d3d8; background: #ffffff; box-shadow: 0 1px 3px rgba(15,41,74,0.05); padding: 16px 18px; animation: rise 420ms cubic-bezier(0.2,0.7,0.3,1) both;">
+                <p style="margin: 0 0 12px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #646363;">From sources to evidence</p>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  <sc-for list="{{ funnelRows }}" as="f" hint-placeholder-count="4">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                      <span style="width: 90px; flex: none; text-align: right; font-size: 13.5px; font-weight: 600; color: #0f294a;">{{ f.label }}</span>
+                      <span style="height: 12px; flex: 1; background: #f4f4f5;"><span style="{{ f.barStyle }}"></span></span>
+                      <span style="width: 36px; flex: none; font-size: 13.5px; font-weight: 700; color: #0f294a;">{{ f.value }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ runDone }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top: 16px; border: 1px solid #d3d3d8; border-left: 3px solid #18a48c; background: #ffffff; box-shadow: 0 1px 3px rgba(15,41,74,0.05); padding: 18px 20px; animation: rise 420ms cubic-bezier(0.2,0.7,0.3,1) both;">
+                <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: #0f294a;">The evidence base is ready</h3>
+                <p style="margin: 6px 0 0; font-size: 14.5px; color: #646363;">57 sources included, 41 cited. Every claim traces to its source.</p>
+                <div style="margin-top: 14px; display: flex; gap: 10px;">
+                  <button onClick="{{ openEvidence }}" style="cursor: pointer; border: none; background: #0000ff; color: #ffffff; font-size: 14px; font-weight: 700; padding: 11px 18px; clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);" style-hover="background: #0000d6;">Read the evidence base</button>
+                  <button onClick="{{ openSources }}" style="cursor: pointer; border: 1px solid #d3d3d8; background: #ffffff; color: #0f294a; font-size: 14px; font-weight: 600; padding: 11px 16px;" style-hover="border-color: #0000ff; color: #0000ff;">All sources</button>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ tabEvidence }}" hint-placeholder-val="{{ false }}">
+    <div ref="{{ artRef }}" onScroll="{{ artScroll }}" style="flex: 1; min-height: 0; overflow-y: auto;">
+      <sc-if value="{{ artefactTopbar }}" hint-placeholder-val="{{ false }}">
+        <div style="position: sticky; top: 0; z-index: 20; background: rgba(244,244,245,0.96); backdrop-filter: blur(4px); border-bottom: 1px solid #e4e4e7; padding: 10px 24px; display: flex; flex-wrap: wrap; gap: 4px 18px;">
+          <sc-for list="{{ tocItems }}" as="t" hint-placeholder-count="6">
+            <button onClick="{{ t.go }}" style="{{ t.topStyle }}">{{ t.label }}</button>
+          </sc-for>
+        </div>
+      </sc-if>
+      <div style="display: flex; justify-content: center; gap: 40px; padding: 32px 24px 80px;">
+        <sc-if value="{{ artefactSidebar }}" hint-placeholder-val="{{ true }}">
+          <nav style="width: 220px; flex: none; position: sticky; top: 24px; align-self: flex-start;">
+            <p style="margin: 0 0 10px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #646363;">Contents</p>
+            <div style="display: flex; flex-direction: column;">
+              <sc-for list="{{ tocItems }}" as="t" hint-placeholder-count="6">
+                <button onClick="{{ t.go }}" style="{{ t.sideStyle }}">{{ t.label }}</button>
+              </sc-for>
+            </div>
+          </nav>
+        </sc-if>
+        <article style="width: 100%; max-width: 720px; background: #ffffff; border: 1px solid #e4e4e7; box-shadow: 0 1px 3px rgba(15,41,74,0.05), 0 8px 24px rgba(15,41,74,0.04); padding: 44px 52px 56px;">
+          <p style="margin: 0; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #646363;">Evidence base · v1</p>
+          <h1 style="margin: 8px 0 0; font-family: 'Zosia Display', 'Archivo', sans-serif; font-size: 32px; font-weight: 800; line-height: 1.15; letter-spacing: -0.5px; color: #0f294a;">Reducing persistent school absence</h1>
+          <p style="margin: 10px 0 0; font-size: 17px; line-height: 1.5; color: #646363;">What works to reduce persistent absence in English schools, 2015–2025?</p>
+          <div style="margin-top: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); border: 1px solid #e4e4e7;">
+            <sc-for list="{{ snapshot }}" as="s" hint-placeholder-count="4">
+              <button onClick="{{ s.go }}" style="{{ s.style }}" style-hover="background: #f5f5ff;">
+                <p style="margin: 0; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #646363;">{{ s.label }}</p>
+                <p style="margin: 5px 0 0; font-size: 14px; font-weight: 600; line-height: 1.4; color: #0f294a;">{{ s.value }} <span style="color: #0000ff;">→</span></p>
+              </button>
+            </sc-for>
+          </div>
+          <div style="margin-top: 36px; display: flex; flex-direction: column; gap: 10px;">
+            <sc-for list="{{ sections }}" as="s" hint-placeholder-count="5">
+              <section ref="{{ s.refFn }}" style="border-top: 1px solid #e4e4e7; padding-top: 18px;">
+                <button onClick="{{ s.toggle }}" aria-expanded="{{ s.open }}" style="display: flex; width: 100%; align-items: baseline; gap: 12px; cursor: pointer; border: none; background: none; padding: 0; text-align: left;">
+                  <h2 style="margin: 0; flex: 1; font-family: 'Zosia Display', 'Archivo', sans-serif; font-size: 22px; font-weight: 700; color: #0f294a; letter-spacing: -0.2px;">{{ s.title }}</h2>
+                  <span style="flex: none; font-size: 14px; font-weight: 600; color: #0000ff;">{{ s.chev }}</span>
+                </button>
+                <p style="margin: 6px 0 0; font-size: 15px; line-height: 1.55; color: #646363;">{{ s.summary }}</p>
+                <sc-if value="{{ s.open }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top: 14px; animation: rise 300ms cubic-bezier(0.2,0.7,0.3,1) both;">
+                    <sc-if value="{{ s.hasBullets }}" hint-placeholder-val="{{ false }}">
+                      <ul style="margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px;">
+                        <sc-for list="{{ s.bullets }}" as="b" hint-placeholder-count="4">
+                          <li style="font-size: 16px; line-height: 1.6; color: #1c1c1e;">{{ b.text }} <button onClick="{{ goRefs }}" style="cursor: pointer; border: 1px solid rgba(0,0,255,0.25); background: #f5f5ff; color: rgba(0,0,255,0.85); font-size: 12px; font-weight: 700; padding: 0 6px; vertical-align: 2px;" style-hover="border-color: rgba(0,0,255,0.6);">[{{ b.refs }}]</button><sc-if value="{{ b.tag }}" hint-placeholder-val="{{ false }}"> <span style="{{ b.tagStyle }}">{{ b.tag }}</span></sc-if></li>
+                        </sc-for>
+                      </ul>
+                    </sc-if>
+                    <sc-if value="{{ s.hasParas }}" hint-placeholder-val="{{ false }}">
+                      <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <sc-for list="{{ s.paras }}" as="p" hint-placeholder-count="2">
+                          <p style="margin: 0; font-size: 16px; line-height: 1.65; color: #1c1c1e; max-width: 68ch;">{{ p }}</p>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ s.isLandscape }}" hint-placeholder-val="{{ false }}">
+                      <div style="display: flex; flex-direction: column; gap: 20px;">
+                        <div>
+                          <p style="margin: 0 0 10px; font-size: 13px; font-weight: 700; color: #0f294a;">From sources to evidence</p>
+                          <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <sc-for list="{{ funnelRows }}" as="f" hint-placeholder-count="4">
+                              <div style="display: flex; align-items: center; gap: 12px;">
+                                <span style="width: 90px; flex: none; text-align: right; font-size: 13.5px; font-weight: 600; color: #0f294a;">{{ f.label }}</span>
+                                <span style="height: 12px; flex: 1; background: #f4f4f5;"><span style="{{ f.barStyle }}"></span></span>
+                                <span style="width: 36px; flex: none; font-size: 13.5px; font-weight: 700; color: #0f294a;">{{ f.value }}</span>
+                              </div>
+                            </sc-for>
+                          </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                          <div>
+                            <p style="margin: 0 0 10px; font-size: 13px; font-weight: 700; color: #0f294a;">Evidence types (cited)</p>
+                            <div style="display: flex; flex-direction: column; gap: 7px;">
+                              <sc-for list="{{ typeBars }}" as="t" hint-placeholder-count="5">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                  <span style="width: 120px; flex: none; text-align: right; font-size: 12.5px; color: #0f294a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ t.label }}</span>
+                                  <span style="height: 10px; flex: 1; background: #f4f4f5;"><span style="{{ t.barStyle }}"></span></span>
+                                  <span style="width: 22px; flex: none; font-size: 12.5px; font-weight: 700; color: #0f294a;">{{ t.count }}</span>
+                                </div>
+                              </sc-for>
+                            </div>
+                          </div>
+                          <div>
+                            <p style="margin: 0 0 10px; font-size: 13px; font-weight: 700; color: #0f294a;">Publication years (cited)</p>
+                            <div style="display: flex; align-items: flex-end; gap: 6px; height: 72px;">
+                              <sc-for list="{{ yearCols }}" as="y" hint-placeholder-count="8">
+                                <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%;">
+                                  <span style="{{ y.colStyle }}"></span>
+                                </div>
+                              </sc-for>
+                            </div>
+                            <div style="display: flex; gap: 6px; margin-top: 4px;">
+                              <sc-for list="{{ yearCols }}" as="y" hint-placeholder-count="8">
+                                <span style="flex: 1; text-align: center; font-size: 10.5px; color: #646363;">{{ y.year }}</span>
+                              </sc-for>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ s.isThemes }}" hint-placeholder-val="{{ false }}">
+                      <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <sc-for list="{{ themes }}" as="th" hint-placeholder-count="4">
+                          <div style="display: flex; align-items: baseline; gap: 14px; border: 1px solid #e4e4e7; padding: 13px 16px;">
+                            <div style="flex: 1; min-width: 0;">
+                              <p style="margin: 0; font-size: 16px; font-weight: 700; color: #0f294a;">{{ th.name }}</p>
+                              <p style="margin: 4px 0 0; font-size: 14.5px; line-height: 1.5; color: #646363;">{{ th.desc }}</p>
+                            </div>
+                            <button onClick="{{ th.go }}" style="flex: none; cursor: pointer; border: 1px solid #c7c7ff; background: #ececff; color: #0000ff; font-size: 13px; font-weight: 700; padding: 5px 11px;" style-hover="background: #f5f5ff;">{{ th.count }} documents →</button>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                  </div>
+                </sc-if>
+              </section>
+            </sc-for>
+          </div>
+          <section ref="{{ refsRef }}" style="margin-top: 36px; border-top: 1px solid #e4e4e7; padding-top: 20px;">
+            <h2 style="margin: 0 0 14px; font-family: 'Zosia Display', 'Archivo', sans-serif; font-size: 19px; font-weight: 700; color: #0f294a;">References</h2>
+            <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px;">
+              <sc-for list="{{ references }}" as="r" hint-placeholder-count="6">
+                <li style="display: flex; gap: 10px; font-size: 14.5px; line-height: 1.5;">
+                  <span style="flex: none; font-weight: 700; color: #0000ff;">[{{ r.n }}]</span>
+                  <span style="color: #1c1c1e;">{{ r.title }} <span style="color: #646363;">({{ r.year }}) · {{ r.venue }}</span></span>
+                </li>
+              </sc-for>
+            </ol>
+          </section>
+        </article>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ tabSources }}" hint-placeholder-val="{{ false }}">
+    <div style="flex: 1; min-height: 0; overflow-y: auto;">
+      <div style="max-width: 1080px; margin: 0 auto; padding: 32px 24px 60px;">
+        <h1 style="margin: 0; font-family: 'Zosia Display', 'Archivo', sans-serif; font-size: 26px; font-weight: 800; color: #0f294a; letter-spacing: -0.3px;">Sources</h1>
+        <p style="margin: 6px 0 0; font-size: 15px; color: #646363;">Every source the analysis touched — what happened to it, and why.</p>
+        <div style="margin-top: 18px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+          <sc-for list="{{ sourceFilters }}" as="f" hint-placeholder-count="4">
+            <button onClick="{{ f.pick }}" style="{{ f.style }}">{{ f.label }}</button>
+          </sc-for>
+        </div>
+        <div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+          <label for="theme-select" style="font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #646363;">Theme</label>
+          <select id="theme-select" value="{{ themeSelectValue }}" onChange="{{ themeSelectChange }}" style="border: 1px solid #d3d3d8; background: #ffffff; color: #0f294a; font-family: inherit; font-size: 13.5px; font-weight: 600; padding: 6px 10px; cursor: pointer;">
+            <sc-for list="{{ themeOptions }}" as="o" hint-placeholder-count="5">
+              <option value="{{ o.value }}">{{ o.label }}</option>
+            </sc-for>
+          </select>
+        </div>
+        <div style="margin-top: 16px; background: #ffffff; border: 1px solid #d3d3d8; box-shadow: 0 1px 3px rgba(15,41,74,0.05); overflow-x: auto;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; min-width: 760px;">
+            <thead>
+              <tr style="border-bottom: 1px solid #e4e4e7; background: #fafafa;">
+                <sc-for list="{{ sourceCols }}" as="c" hint-placeholder-count="5">
+                  <th style="padding: 12px 14px;">
+                    <sc-if value="{{ c.sortable }}" hint-placeholder-val="{{ true }}">
+                      <button onClick="{{ c.sort }}" style="{{ c.style }}">{{ c.label }} <span style="font-size: 10px;">{{ c.arrow }}</span></button>
+                    </sc-if>
+                    <sc-if value="{{ c.plain }}" hint-placeholder-val="{{ false }}">
+                      <span style="font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #646363;">{{ c.label }}</span>
+                    </sc-if>
+                  </th>
+                </sc-for>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{ sourceRows }}" as="r" hint-placeholder-count="8">
+                <tr style="border-bottom: 1px solid #e4e4e7; vertical-align: top;">
+                  <td style="padding: 12px 14px; max-width: 380px;">
+                    <p style="margin: 0; font-size: 15px; font-weight: 600; line-height: 1.4; color: #0f294a;">{{ r.title }}</p>
+                    <p style="margin: 3px 0 0; font-size: 13px; color: #646363;">{{ r.venue }}</p>
+                  </td>
+                  <td style="padding: 12px 14px; font-size: 14.5px; color: #0f294a;">{{ r.year }}</td>
+                  <td style="padding: 12px 14px;"><span style="border: 1px solid #e4e4e7; background: #f4f4f5; color: #646363; font-size: 12.5px; font-weight: 600; padding: 3px 9px; white-space: nowrap;">{{ r.origin }}</span></td>
+                  <td style="padding: 12px 14px; font-size: 13.5px; color: #0f294a; white-space: nowrap;">{{ r.type }}</td>
+                  <td style="padding: 12px 14px;"><sc-if value="{{ r.strength }}" hint-placeholder-val="{{ true }}"><span style="border: 1px solid #e4e4e7; background: #f4f4f5; color: #0f294a; font-size: 12.5px; font-weight: 600; padding: 3px 9px; white-space: nowrap;">{{ r.strength }}</span></sc-if></td>
+                  <td style="padding: 12px 14px;"><span style="{{ r.statusStyle }}">{{ r.status }}</span></td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin: 12px 0 0; font-size: 13.5px; color: #646363;">{{ sourceCount }}</p>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ tabFindings }}" hint-placeholder-val="{{ false }}">
+    <div style="flex: 1; min-height: 0; overflow-y: auto;">
+      <div style="max-width: 1080px; margin: 0 auto; padding: 32px 24px 60px;">
+        <h1 style="margin: 0; font-family: 'Zosia Display', 'Archivo', sans-serif; font-size: 26px; font-weight: 800; color: #0f294a; letter-spacing: -0.3px;">Findings</h1>
+        <p style="margin: 6px 0 0; font-size: 15px; color: #646363;">What each source found, in the exact words it rests on.</p>
+        <sc-if value="{{ findingsGated }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top: 24px; border: 1px solid #d3d3d8; background: #ffffff; box-shadow: 0 1px 3px rgba(15,41,74,0.05); padding: 28px 32px; text-align: center;">
+            <p style="margin: 0; font-size: 16px; font-weight: 700; color: #0f294a;">No findings for this analysis</p>
+            <p style="margin: 8px auto 0; max-width: 44ch; font-size: 14.5px; line-height: 1.55; color: #646363;">Structured findings are extracted on deep searches only. Rerun the analysis with Deep search to see them here.</p>
+          </div>
+        </sc-if>
+        <sc-if value="{{ findingsOn }}" hint-placeholder-val="{{ true }}">
+        <div style="margin-top: 18px; display: flex; flex-wrap: wrap; gap: 8px;">
+          <sc-for list="{{ findingFilters }}" as="f" hint-placeholder-count="3">
+            <button onClick="{{ f.pick }}" style="{{ f.style }}">{{ f.label }}</button>
+          </sc-for>
+        </div>
+        <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 10px;">
+          <sc-for list="{{ findingRows }}" as="f" hint-placeholder-count="6">
+            <div style="background: #ffffff; border: 1px solid #d3d3d8; box-shadow: 0 1px 3px rgba(15,41,74,0.05); padding: 15px 18px;">
+              <div style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;">
+                <span style="{{ f.dirStyle }}">{{ f.direction }}</span>
+                <span style="border: 1px solid #e4e4e7; background: #f4f4f5; color: #646363; font-size: 12.5px; font-weight: 600; padding: 3px 9px;">{{ f.kind }}</span>
+              </div>
+              <p style="margin: 9px 0 0; font-size: 16px; line-height: 1.55; color: #1c1c1e; max-width: 78ch;"><b style="color: #0f294a;">{{ f.intervention }}</b> — {{ f.statement }}</p>
+              <p style="margin: 7px 0 0; font-size: 13.5px; color: #646363;">{{ f.source }}</p>
+            </div>
+          </sc-for>
+        </div>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;planningLayout&quot;: { &quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;Centred chat&quot;, &quot;options&quot;: [&quot;Centred chat&quot;, &quot;Split with plan pane&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Planning stage&quot; },
+  &quot;runSplit&quot;: { &quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;50 / 50&quot;, &quot;options&quot;: [&quot;50 / 50&quot;, &quot;35 / 65&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Run stage&quot; },
+  &quot;artefactNav&quot;: { &quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;Contents sidebar&quot;, &quot;options&quot;: [&quot;Contents sidebar&quot;, &quot;Sticky top bar&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Evidence base&quot; }
+}">
+class Component extends DCLogic {
+  state = {
+    tab: "workspace", phase: "empty", thread: [], composer: "", script: 0,
+    thinking: false, planOpen: true, checkinPending: false, checkinDone: false,
+    stageIdx: -1, funnelOn: false, runDone: false, runWhen: "",
+    searchChoice: null, checkinChoice: null,
+    openSecs: { key: true }, activeSec: "key",
+    srcFilter: "all", themeFilter: null, sort: { key: "status", dir: 1 },
+    findFilter: "all",
+  };
+
+  componentDidMount() { this.secEls = {}; }
+  componentDidUpdate() {
+    if (this.threadEl && this.state.tab === "workspace") this.threadEl.scrollTop = this.threadEl.scrollHeight;
+  }
+
+  push(items) { this.setState((s) => ({ thread: [...s.thread, ...items] })); }
+
+  plannerReply(step) {
+    this.setState({ thinking: true });
+    setTimeout(() => {
+      this.setState({ thinking: false });
+      if (step === 0) this.push([
+        { kind: "planner", text: "Let's shape this into a plan you approve, one piece at a time." },
+        { kind: "part", id: "q", step: "Plan · 1 of 4", title: "What works to reduce persistent absence in English schools?", body: "Your question, tightened so results stay comparable.", options: [{ label: "Confirm the question", primary: true }, { label: "Refine it", edit: "Refine the question: " }], confirmed: null },
+      ]);
+      if (step === 1) this.push([
+        { kind: "part", id: "scope", step: "Plan · 2 of 4", title: "Scope", chips: ["England", "2015–2025", "School-age (5–16)"], options: [{ label: "Looks right", primary: true }, { label: "Add a constraint", edit: "Add a constraint: " }], confirmed: null },
+      ]);
+      if (step === 2) this.push([
+        { kind: "part", id: "search", step: "Plan · 3 of 4", title: "How wide should the search go?", options: [{ label: "Quick search", sub: "Top sources · ~10 min", primary: true }, { label: "Deep search", sub: "Comprehensive · ~40 min" }], confirmed: null },
+      ]);
+      if (step === 3) this.push([
+        { kind: "part", id: "checkins", step: "Plan · 4 of 4", title: "How often should we check in?", options: [{ label: "Major decisions only", primary: true }, { label: "Every stage" }, { label: "Run unattended" }], confirmed: null },
+      ]);
+      if (step === 4) this.push([
+        { kind: "planner", text: "That's everything. Review the plan — nothing runs until you start it." },
+        { kind: "plan" },
+      ]);
+    }, 700);
+  }
+
+  send(text) {
+    const t = (text ?? this.state.composer).trim();
+    if (t.length === 0 || this.state.phase === "running") return;
+    const step = this.state.script;
+    this.setState({ composer: "", phase: "planning", script: step >= 4 ? step : step });
+    if (this.composerEl) this.composerEl.style.height = "auto";
+    this.push([{ kind: "user", text: t }]);
+    if (step === 0) { this.setState({ script: 0 }); this.plannerReply(0); }
+    else if (step >= 4) {
+      this.setState({ thinking: true });
+      setTimeout(() => { this.setState({ thinking: false }); this.push([{ kind: "planner", text: "Noted — I've folded that in. The plan below is updated." }]); }, 700);
+    } else this.plannerReply(step);
+  }
+
+  confirmPart(index, label) {
+    this.setState((s) => {
+      const thread = s.thread.map((m, i) => (i === index ? { ...m, confirmed: label } : m));
+      const part = s.thread[index];
+      return { thread, script: s.script + 1, searchChoice: part?.id === "search" ? label : s.searchChoice };
+    });
+    setTimeout(() => this.plannerReply(this.state.script), 150);
+  }
+
+  startRun = () => {
+    this.setState({ phase: "running", planOpen: false, stageIdx: 0 });
+    this.push([{ kind: "divider", text: "Analysis run — started" }]);
+    this.tick(0);
+  };
+
+  tick(i) {
+    this.timer = setTimeout(() => {
+      if (i === 1 && !this.state.checkinDone) {
+        this.setState({ stageIdx: 2, checkinPending: true, funnelOn: true });
+        return;
+      }
+      const next = i + 1;
+      if (next >= 6) {
+        this.setState({ stageIdx: 6, runDone: true, phase: "done", runWhen: "just now" });
+        this.push([{ kind: "planner", text: "The evidence base is ready — 41 sources cited. Open it from the Evidence base tab, or ask me follow-ups here." }]);
+        return;
+      }
+      this.setState({ stageIdx: next });
+      this.tick(next);
+    }, 1500);
+  }
+
+  answerCheckin(choice) {
+    this.setState({ checkinPending: false, checkinDone: true, checkinChoice: choice, stageIdx: 3 });
+    this.push([{ kind: "echo", text: `You chose: ${choice}. The run carried on.` }]);
+    this.tick(3);
+  }
+
+  goTab(tab) { this.setState({ tab }); }
+
+  scrollToSec(key) {
+    const el = key === "refs" ? this.refsEl : this.secEls?.[key];
+    if (el && this.artEl) this.artEl.scrollTo({ top: el.offsetTop - (this.props.artefactNav === "Sticky top bar" ? 130 : 60), behavior: "smooth" });
+  }
+
+  renderVals() {
+    const s = this.state;
+    const P = this.props;
+    const navy = "#0f294a", grey = "#646363", blue = "#0000ff";
+    const chatCentred = (P.planningLayout ?? "Centred chat") === "Centred chat" || s.phase === "running" || s.phase === "done";
+    const showJourney = s.phase === "running" || s.phase === "done";
+    const fifty = (P.runSplit ?? "50 / 50") === "50 / 50";
+
+    const tabs = [
+      ["workspace", "Workspace"], ["evidence", "Evidence base"], ["findings", "Findings"], ["sources", "Sources"],
+    ];
+    const navItems = tabs.map(([key, label]) => ({
+      label, badge: key === "workspace" && s.checkinPending && s.tab !== "workspace",
+      go: () => this.goTab(key),
+      style: `cursor:pointer;border:none;background:none;padding:0 0 4px;font-size:15px;font-weight:${s.tab === key ? 800 : 600};color:${s.tab === key ? navy : grey};border-bottom:2px solid ${s.tab === key ? blue : "transparent"};`,
+    }));
+
+    const btnPrimary = "cursor:pointer;border:none;background:#0000ff;color:#fff;font-size:14px;font-weight:700;padding:10px 16px;text-align:left;clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,0 100%);";
+    const btnSecondary = "cursor:pointer;border:1px solid #d3d3d8;background:#fff;color:#0f294a;font-size:14px;font-weight:600;padding:10px 16px;text-align:left;";
+
+    const thread = s.thread.map((m, index) => {
+      const base = {
+        isUser: m.kind === "user", isPlanner: m.kind === "planner", isPart: m.kind === "part",
+        isPlan: m.kind === "plan", isDivider: m.kind === "divider", isEcho: m.kind === "echo",
+        text: m.text, step: m.step, title: m.title, body: m.body,
+        chips: m.chips ?? [], hasChips: (m.chips ?? []).length > 0,
+        confirmed: m.confirmed, pending: m.kind === "part" && !m.confirmed,
+      };
+      if (m.kind === "part") {
+        base.options = (m.options ?? []).map((o) => ({
+          label: o.label, sub: o.sub,
+          style: (o.primary ? btnPrimary : btnSecondary),
+          subStyle: `display:block;margin-top:2px;font-size:12px;font-weight:400;color:${o.primary ? "rgba(255,255,255,0.8)" : grey};`,
+          pick: () => {
+            if (o.edit) { this.setState({ composer: o.edit }); this.composerEl?.focus(); return; }
+            this.confirmPart(index, o.label);
+          },
+        }));
+        base.change = () => { this.setState({ composer: `Change "${m.title}": ` }); this.composerEl?.focus(); };
+      }
+      return base;
+    });
+
+    const stageDefs = [
+      ["Search", "OpenAlex · Overton — 412 found"],
+      ["Screen", "168 relevant · 111 screened out with reasons"],
+      ["Appraise", "Evidence strength per source"],
+      ["Extract findings", "57 sources read in full"],
+      ["Cluster themes", "4 themes across the evidence"],
+      ["Write up", "Citations attached and checked"],
+    ];
+    const stages = stageDefs.map(([label, note], i) => {
+      const st = i < s.stageIdx ? "done" : i === s.stageIdx && !s.runDone ? "running" : s.runDone ? "done" : "up";
+      const paused = s.checkinPending && i === 2;
+      return {
+        label, note: st === "done" ? note : paused ? "Paused — waiting on your check-in" : null,
+        dotStyle: `flex:none;width:9px;height:9px;border-radius:50%;background:${st === "done" ? "#18a48c" : st === "running" ? (paused ? "#ff6e47" : "#fdb633") : "#d3d3d8"};${st === "running" && !paused ? "animation:breathe 1.6s ease-in-out infinite;" : ""}`,
+        labelStyle: `font-size:15px;font-weight:600;color:${st === "up" ? grey : navy};white-space:nowrap;`,
+      };
+    });
+    const stagesBar = stageDefs.map((_, i) => ({
+      style: `height:4px;flex:1;background:${i < s.stageIdx || s.runDone ? blue : i === s.stageIdx ? "#a5a5ff" : "#e4e4e7"};${i === s.stageIdx && !s.runDone && !s.checkinPending ? "animation:breathe 1.6s ease-in-out infinite;" : ""}`,
+    }));
+
+    const funnelData = [["Found", 412], ["Relevant", 168], ["Included", 57], ["Cited", 41]];
+    const funnelRows = funnelData.map(([label, value]) => ({
+      label, value,
+      barStyle: `display:block;height:100%;background:#0000ff;width:${Math.max(3, Math.round((value / 412) * 100))}%;transition:width 700ms cubic-bezier(0.2,0.7,0.3,1);`,
+    }));
+
+    const planSettings = [
+      { label: "Search effort", value: s.searchChoice ?? "Quick search" },
+      { label: "Analysis depth", value: "Standard synthesis" },
+      { label: "Sources", value: "Academic + policy" },
+      { label: "Check-ins", value: "Major decisions only" },
+    ];
+    const planSteps = [
+      { label: "Search", blurb: "academic and policy databases" },
+      { label: "Screen", blurb: "against the agreed criteria" },
+      { label: "Appraise", blurb: "evidence strength per source" },
+      { label: "Extract & cluster", blurb: "findings and themes" },
+      { label: "Write up", blurb: "with checked citations" },
+    ];
+
+    // Evidence base ----------------------------------------------------
+    const secDefs = [
+      { key: "key", title: "Key findings", summary: "Five headline findings, strongest evidence first.", bullets: [
+        { text: "Attendance-focused mentoring shows the most consistent positive effect — moderate gains across 8 studies, strongest for persistent absentees.", refs: "1,4" },
+        { text: "Text-message nudges to parents produce small but reliable reductions in absence, at very low cost.", refs: "2" },
+        { text: "Breakfast clubs improve attendance in primary settings; the effect fades in secondary schools.", refs: "3,5" },
+        { text: "Fines and prosecution show no consistent effect on persistent absence — and may worsen engagement for the poorest families.", refs: "6" },
+        { text: "Evidence on post-pandemic interventions is thin — most studies predate 2020.", refs: "", tag: "gap" },
+      ]},
+      { key: "compare", title: "How interventions compare", summary: "Relational approaches outperform punitive ones across every comparable outcome.", paras: [
+        "Across the 57 included studies, interventions that build a relationship between school and family — mentoring, home visits, named attendance leads — consistently outperform enforcement-led approaches. Effect sizes are moderate but robust to study design.",
+        "Low-cost information interventions (attendance letters, text nudges) deliver smaller effects but scale cheaply, making them the strongest value-for-money option in the base.",
+      ]},
+      { key: "sanctions", title: "Sanctions and fines", summary: "No consistent effect; contested evidence on harms.", paras: [
+        "Six studies examine penalty notices and prosecution. None finds a consistent reduction in persistent absence. Two qualitative studies report worsened family–school relationships following enforcement — the evidence here is contested rather than settled.",
+      ]},
+      { key: "themes", title: "Key themes", summary: "Four themes across the corpus — each links to its documents.", isThemes: true },
+      { key: "landscape", title: "How the evidence was gathered", summary: "The search funnel and the shape of the cited evidence.", isLandscape: true },
+      { key: "gaps", title: "Gaps in the evidence", summary: "Where the base is thin — recorded, not glossed over.", bullets: [
+        { text: "Post-2020 evidence: most included studies predate the pandemic-era rise in absence.", refs: "", tag: "gap" },
+        { text: "Primary-school interventions: only 6 of 168 relevant sources cover ages 5–11.", refs: "", tag: "gap" },
+        { text: "Cost-effectiveness data is reported in fewer than a quarter of studies.", refs: "", tag: "gap" },
+      ]},
+      { key: "conclusions", title: "Conclusions", summary: "Prioritise relational interventions; treat enforcement as unevidenced.", paras: [
+        "The evidence supports investment in relational, school-led attendance work, with cheap information nudges as a complement. Enforcement-led approaches lack supporting evidence and carry documented risks. New evidence on post-pandemic absence should be commissioned before major policy commitments.",
+      ]},
+    ];
+    const gapTag = "border:1px solid #f3d99a;background:#fff6e3;color:#8a5a00;font-size:11.5px;font-weight:700;padding:1px 7px;";
+    const sections = secDefs.map((d) => ({
+      title: d.title, summary: d.summary, key: d.key,
+      open: !!s.openSecs[d.key], chev: s.openSecs[d.key] ? "Hide −" : "Expand +",
+      toggle: () => this.setState((st) => ({ openSecs: { ...st.openSecs, [d.key]: !st.openSecs[d.key] } })),
+      refFn: (el) => { if (!this.secEls) this.secEls = {}; this.secEls[d.key] = el; },
+      hasBullets: (d.bullets ?? []).length > 0,
+      bullets: (d.bullets ?? []).map((b) => ({ ...b, refs: b.refs, tagStyle: gapTag })),
+      hasParas: (d.paras ?? []).length > 0, paras: d.paras ?? [],
+      isThemes: !!d.isThemes, isLandscape: !!d.isLandscape,
+    }));
+    const typeData = [["RCT", 9], ["Quasi-experimental", 14], ["Qualitative", 8], ["Review", 6], ["Cohort study", 4]];
+    const typeMax = 14;
+    const typeBars = typeData.map(([label, count]) => ({
+      label, count,
+      barStyle: `display:block;height:100%;background:#0000ff;width:${Math.round((count / typeMax) * 100)}%;transition:width 700ms cubic-bezier(0.2,0.7,0.3,1);`,
+    }));
+    const yearData = [["2016", 2], ["2017", 3], ["2018", 4], ["2019", 6], ["2020", 5], ["2021", 7], ["2022", 8], ["2023", 6]];
+    const yearMax = 8;
+    const yearCols = yearData.map(([year, count]) => ({
+      year, count,
+      colStyle: `width:100%;background:#a5a5ff;height:${Math.round((count / yearMax) * 72)}px;`,
+    }));
+    const tocItems = [...secDefs.map((d) => ({ key: d.key, label: d.title })), { key: "refs", label: "References" }].map((t) => ({
+      label: t.label, go: () => this.scrollToSec(t.key),
+      sideStyle: `cursor:pointer;border:none;background:none;text-align:left;padding:7px 0 7px 12px;font-size:14.5px;font-weight:${s.activeSec === t.key ? 700 : 400};color:${s.activeSec === t.key ? blue : navy};border-left:3px solid ${s.activeSec === t.key ? blue : "#e4e4e7"};`,
+      topStyle: `cursor:pointer;border:none;background:none;padding:4px 0;font-size:13.5px;font-weight:${s.activeSec === t.key ? 700 : 600};color:${s.activeSec === t.key ? blue : grey};border-bottom:2px solid ${s.activeSec === t.key ? blue : "transparent"};`,
+    }));
+    const deepSearch = s.searchChoice === "Deep search";
+    const snapshotCells = [
+      ["Sources cited", "41", () => this.setState({ tab: "sources", srcFilter: "cited", themeFilter: null })],
+      ["Study types", "9 RCT · 14 quasi-exp · 8 qual", () => this.setState({ tab: "sources", srcFilter: "cited", themeFilter: null })],
+      ["Years", "2016–2023", () => this.setState({ tab: "sources", srcFilter: "cited", themeFilter: null })],
+      ...(deepSearch ? [["Findings", "112 extracted", () => this.goTab("findings")]] : []),
+      ["All sources", "412 screened · 168 relevant", () => this.setState({ tab: "sources", srcFilter: "all", themeFilter: null })],
+    ];
+    const snapshot = snapshotCells.map(([label, value, go], i) => ({
+      label, value, go,
+      style: `cursor:pointer;border:none;background:none;text-align:left;padding:12px 14px;${i < snapshotCells.length - 1 ? "border-right:1px solid #e4e4e7;" : ""}`,
+    }));
+
+    const themeDefs = [
+      { name: "Family engagement", desc: "Mentoring, home visits and named attendance leads.", count: 12 },
+      { name: "Information & nudges", desc: "Letters and text messages to parents.", count: 9 },
+      { name: "School environment", desc: "Breakfast clubs, belonging and pastoral support.", count: 8 },
+      { name: "Enforcement", desc: "Penalty notices, prosecution and attendance orders.", count: 7 },
+    ];
+    const themes = themeDefs.map((t) => ({
+      ...t, go: () => this.setState({ tab: "sources", themeFilter: t.name, srcFilter: "all" }),
+    }));
+    const references = [
+      { n: 1, title: "Mentoring for persistent absentees: a randomised trial", year: 2022, venue: "Education Endowment Foundation" },
+      { n: 2, title: "Texting parents: attendance nudge trial", year: 2019, venue: "J. Public Economics" },
+      { n: 3, title: "Breakfast clubs and attendance in primary schools", year: 2021, venue: "IFS Working Paper" },
+      { n: 4, title: "Named attendance leads: a quasi-experimental study", year: 2023, venue: "British Educational Research J." },
+      { n: 5, title: "School belonging and absence: cohort evidence", year: 2020, venue: "DfE Research Report" },
+      { n: 6, title: "Penalty notices and persistent absence", year: 2018, venue: "Oxford Rev. of Education" },
+    ];
+
+    // Sources ----------------------------------------------------------
+    const chipTone = {
+      cited: "border:1px solid #b7e0d8;background:#e7f5f2;color:#0c6b5a;",
+      included: "border:1px solid #c7c7ff;background:#ececff;color:#0000ff;",
+      out: "border:1px solid #e4e4e7;background:#f4f4f5;color:#646363;",
+      unavailable: "border:1px solid #f3d99a;background:#fff6e3;color:#8a5a00;",
+    };
+    const strengthRank = { "Very strong": 5, Strong: 4, Moderate: 3, Weak: 2 };
+    const statusRank = { Cited: 0, "Findings extracted": 1, Selected: 2, "Screened out": 3, Unavailable: 4 };
+    const srcData = [
+      { title: "Mentoring for persistent absentees: a randomised trial", venue: "Education Endowment Foundation", year: 2022, origin: "OpenAlex", type: "RCT", status: "Cited", tone: "cited", strength: "Very strong", cited: true, themes: ["Family engagement"] },
+      { title: "Texting parents: attendance nudge trial", venue: "J. Public Economics", year: 2019, origin: "OpenAlex", type: "RCT", status: "Cited", tone: "cited", strength: "Strong", cited: true, themes: ["Information & nudges"] },
+      { title: "Breakfast clubs and attendance in primary schools", venue: "IFS Working Paper", year: 2021, origin: "Overton", type: "Quasi-experimental", status: "Cited", tone: "cited", strength: "Strong", cited: true, themes: ["School environment"] },
+      { title: "Named attendance leads: a quasi-experimental study", venue: "British Educational Research J.", year: 2023, origin: "OpenAlex", type: "Quasi-experimental", status: "Cited", tone: "cited", strength: "Moderate", cited: true, themes: ["Family engagement"] },
+      { title: "School belonging and absence: cohort evidence", venue: "DfE Research Report", year: 2020, origin: "Overton", type: "Cohort study", status: "Cited", tone: "cited", strength: "Moderate", cited: true, themes: ["School environment"] },
+      { title: "Penalty notices and persistent absence", venue: "Oxford Rev. of Education", year: 2018, origin: "OpenAlex", type: "Quasi-experimental", status: "Cited", tone: "cited", strength: "Moderate", cited: true, themes: ["Enforcement"] },
+      { title: "Attendance orders in two local authorities", venue: "J. Education Policy", year: 2017, origin: "OpenAlex", type: "Case study", status: "Findings extracted", tone: "included", strength: "Weak", cited: false, themes: ["Enforcement"] },
+      { title: "Parental attitudes to school fines: interviews", venue: "Children & Society", year: 2019, origin: "OpenAlex", type: "Qualitative", status: "Selected", tone: "included", strength: "Weak", cited: false, themes: ["Enforcement", "Family engagement"] },
+      { title: "Absence statistics dashboard methodology", venue: "gov.uk", year: 2024, origin: "Overton", type: "Guidance", status: "Screened out", tone: "out", strength: null, cited: false, reason: "No intervention studied", themes: [] },
+      { title: "Truancy sweeps evaluation (unpublished)", venue: "Local authority report", year: 2016, origin: "Overton", type: "Grey literature", status: "Unavailable", tone: "unavailable", strength: null, cited: false, themes: ["Enforcement"] },
+    ];
+    let filtered = srcData.filter((r) =>
+      s.srcFilter === "all" ? true : s.srcFilter === "included" ? ["cited", "included"].includes(r.tone) : s.srcFilter === "out" ? r.tone === "out" : r.cited,
+    );
+    if (s.themeFilter) filtered = filtered.filter((r) => r.themes.includes(s.themeFilter));
+    const { key: sortKey, dir } = s.sort;
+    filtered = [...filtered].sort((a, b) => {
+      let va, vb;
+      if (sortKey === "title") { va = a.title; vb = b.title; }
+      else if (sortKey === "year") { va = a.year; vb = b.year; }
+      else if (sortKey === "type") { va = a.type ?? "zz"; vb = b.type ?? "zz"; }
+      else if (sortKey === "strength") { va = -(strengthRank[a.strength] ?? 0); vb = -(strengthRank[b.strength] ?? 0); }
+      else { va = statusRank[a.status] ?? 9; vb = statusRank[b.status] ?? 9; }
+      return (va < vb ? -1 : va > vb ? 1 : 0) * dir;
+    });
+    const sourceRows = filtered.map((r) => ({
+      ...r, statusStyle: `${chipTone[r.tone]}font-size:12.5px;font-weight:600;padding:3px 9px;white-space:nowrap;`,
+    }));
+    const sortBy = (key) => this.setState((st) => ({ sort: { key, dir: st.sort.key === key ? -st.sort.dir : 1 } }));
+    const thBtn = "cursor:pointer;border:none;background:none;padding:0;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:#646363;";
+    const sourceCols = [
+      { label: "Source", key: "title" }, { label: "Year", key: "year" }, { label: "Origin" },
+      { label: "Evidence type", key: "type" }, { label: "Evidence strength", key: "strength" }, { label: "Status", key: "status" },
+    ].map((c) => ({
+      label: c.label, sortable: !!c.key, plain: !c.key,
+      arrow: c.key === sortKey ? (dir === 1 ? "▲" : "▼") : "",
+      style: thBtn + (c.key === sortKey ? "color:#0000ff;" : ""),
+      sort: () => sortBy(c.key),
+    }));
+    const filterBtn = (active) => `cursor:pointer;border:1px solid ${active ? blue : "#d3d3d8"};background:${active ? "#ececff" : "#fff"};color:${active ? blue : grey};font-size:13.5px;font-weight:600;padding:6px 12px;`;
+    const sourceFilters = [["all", "All"], ["included", "Included"], ["out", "Screened out"], ["cited", "Cited"]].map(([key, label]) => ({
+      label, style: filterBtn(s.srcFilter === key), pick: () => this.setState({ srcFilter: key }),
+    }));
+    const themeOptions = [{ value: "", label: "All themes" }, ...themeDefs.map((t) => ({ value: t.name, label: t.name }))];
+
+    // Findings ----------------------------------------------------------
+    const dirTone = {
+      Positive: "border:1px solid #b7e0d8;background:#e7f5f2;color:#0c6b5a;",
+      "No effect": "border:1px solid #e4e4e7;background:#f4f4f5;color:#646363;",
+      Mixed: "border:1px solid #f3d99a;background:#fff6e3;color:#8a5a00;",
+      Context: "border:1px solid #c7c7ff;background:#ececff;color:#0000ff;",
+    };
+    const findData = [
+      { intervention: "Attendance mentoring", statement: "reduced persistent absence by 4.2 percentage points over one year (RCT, n=1,204).", direction: "Positive", kind: "Intervention–outcome", source: "Mentoring for persistent absentees (2022)" },
+      { intervention: "Parent text nudges", statement: "cut absences by 0.5 days per term at £1.20 per pupil.", direction: "Positive", kind: "Intervention–outcome", source: "Texting parents (2019)" },
+      { intervention: "Breakfast clubs", statement: "improved primary attendance; no measurable effect in secondary settings.", direction: "Mixed", kind: "Intervention–outcome", source: "Breakfast clubs and attendance (2021)" },
+      { intervention: "Named attendance leads", statement: "associated with moderate attendance gains where the role was full-time.", direction: "Positive", kind: "Intervention–outcome", source: "Named attendance leads (2023)" },
+      { intervention: "Penalty notices", statement: "no consistent effect on persistent absence across six studies.", direction: "No effect", kind: "Intervention–outcome", source: "Penalty notices and persistent absence (2018)" },
+      { intervention: "Enforcement", statement: "families report withdrawing from school contact after fines — a barrier to re-engagement.", direction: "Context", kind: "Implementation context", source: "Parental attitudes to school fines (2019)" },
+    ];
+    const findingRows = findData
+      .filter((f) => s.findFilter === "all" ? true : s.findFilter === "iof" ? f.kind === "Intervention–outcome" : f.kind === "Implementation context")
+      .map((f) => ({ ...f, dirStyle: `${dirTone[f.direction]}font-size:12.5px;font-weight:700;padding:3px 9px;` }));
+    const findingFilters = [["all", "All kinds"], ["iof", "Intervention–outcome"], ["icf", "Implementation context"]].map(([key, label]) => ({
+      label, style: filterBtn(s.findFilter === key), pick: () => this.setState({ findFilter: key }),
+    }));
+
+    const composerDisabled = s.phase === "running";
+    const partLabels = { q: "Question", scope: "Scope", search: "Search effort", checkins: "Check-ins" };
+    const planPaneItems = s.thread
+      .filter((m) => m.kind === "part" && m.confirmed)
+      .map((m) => ({ label: partLabels[m.id] ?? "Agreed", value: m.id === "q" ? m.title : m.confirmed === "Looks right" ? (m.chips ?? []).join(" · ") : m.confirmed }));
+    const showPlanPane = (P.planningLayout ?? "Centred chat") === "Split with plan pane" && !showJourney;
+    return {
+      showPlanPane, planPaneItems, planPaneEmpty: planPaneItems.length === 0,
+      navItems, thread, thinking: s.thinking,
+      tabWorkspace: s.tab === "workspace", tabEvidence: s.tab === "evidence",
+      tabSources: s.tab === "sources", tabFindings: s.tab === "findings",
+      isEmpty: s.phase === "empty", chatCentred: true, showJourney,
+      journeyStyle: `flex:${fifty ? 1 : 1.6};min-width:0;background:#f4f4f5;border-left:1px solid #e4e4e7;overflow-y:auto;`,
+      journeyHeading: s.runDone ? "Analysis complete" : s.checkinPending ? "Paused at a check-in" : "Analysing the evidence…",
+      timelineTitle: s.runDone ? "How it got there" : "The plan in motion",
+      stages, stagesBar, funnelOn: s.funnelOn, funnelRows, runDone: s.runDone, runWhen: s.runWhen,
+      preRun: s.phase !== "running" && s.phase !== "done", postRun: s.phase === "done",
+      planOpen: s.planOpen, planChev: s.planOpen ? "Hide −" : "Details +",
+      togglePlan: () => this.setState((st) => ({ planOpen: !st.planOpen })),
+      planQuestion: "What works to reduce persistent absence in English schools?",
+      planSettings, planSteps, startRun: this.startRun,
+      checkinPending: s.checkinPending,
+      checkinContinue: () => this.answerCheckin("Continue as planned"),
+      checkinBroaden: () => this.answerCheckin("Broaden to UK-wide"),
+      composerValue: s.composer, composerDisabled,
+      composerPlaceholder: s.phase === "empty" ? "What do you need evidence on?" : composerDisabled ? "Steer from the check-ins while the analysis runs" : "Reply to the planner…",
+      composerNote: composerDisabled && !s.checkinPending ? "The analysis is running — steering happens at check-ins." : null,
+      composerWrapStyle: `display:flex;align-items:flex-end;gap:10px;border:1px solid ${composerDisabled ? "#e4e4e7" : "#d3d3d8"};background:${composerDisabled ? "#f4f4f5" : "#fff"};padding:8px 8px 8px 14px;`,
+      composerChange: (e) => {
+        this.setState({ composer: e.target.value });
+        e.target.style.height = "auto";
+        e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
+      },
+      composerKey: (e) => {
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); this.send(); }
+      },
+      composerRef: (el) => { this.composerEl = el; },
+      threadRef: (el) => { this.threadEl = el; },
+      sendClick: () => this.send(),
+      sendStyle: `cursor:pointer;border:none;background:${s.composer.trim() && !composerDisabled ? blue : "#d3d3d8"};color:#fff;font-size:14px;font-weight:700;padding:10px 18px;clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,0 100%);`,
+      // evidence
+      artefactSidebar: (P.artefactNav ?? "Contents sidebar") === "Contents sidebar",
+      artefactTopbar: (P.artefactNav ?? "Contents sidebar") === "Sticky top bar",
+      artRef: (el) => { this.artEl = el; },
+      refsRef: (el) => { this.refsEl = el; },
+      artScroll: () => {
+        if (!this.artEl || !this.secEls) return;
+        const top = this.artEl.scrollTop + 140;
+        let active = "key";
+        for (const [key, el] of Object.entries(this.secEls)) if (el && el.offsetTop <= top) active = key;
+        if (this.refsEl && this.refsEl.offsetTop <= top) active = "refs";
+        if (active !== s.activeSec) this.setState({ activeSec: active });
+      },
+      goRefs: () => this.scrollToSec("refs"),
+      tocItems, snapshot, sections, themes, references,
+      openEvidence: () => this.goTab("evidence"),
+      openSources: () => this.setState({ tab: "sources", themeFilter: null }),
+      typeBars, yearCols,
+      // sources
+      sourceFilters, sourceCols, sourceRows, themeOptions,
+      themeSelectValue: s.themeFilter ?? "",
+      themeSelectChange: (e) => this.setState({ themeFilter: e.target.value === "" ? null : e.target.value }),
+      sourceCount: `${sourceRows.length} of 168 sources shown — the rest were screened out at search.`,
+      themeFilterLabel: s.themeFilter,
+      clearTheme: () => this.setState({ themeFilter: null }),
+      // findings
+      findingFilters, findingRows, findingsGated: !deepSearch, findingsOn: deepSearch,
+    };
+  }
+}
+</script>
+</body>
+</html>
