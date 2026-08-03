@@ -1,8 +1,10 @@
 # Task contract: 028-ux-refinement
 
-> **Status:** drafted 2026-08-03. Contract approved (before planning): _pending_ ·
-> Plan approved (before implementation): _pending_ · ADR: _0028 expected
-> (sequential plan-building), written at step 4 if the fork lands IN_.
+> **Status:** drafted 2026-08-03, owner-shaped across ~30 design rounds.
+> **Contract approved (before planning): 2026-08-04 · owner ("Approved,
+> proceed")** · Plan approved (before implementation): _pending_ ·
+> ADR: _0028 (sequential plan-building + steering taxonomy), written at
+> step 4_.
 >
 > **Branching:** branches from `task/027-frontend-uplift` (stacked — 026 PR #33
 > and 027 PR #36 are both at step 9, awaiting owner review/merge). The PR
