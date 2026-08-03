@@ -93,7 +93,19 @@ PR landing, as strands:
      synthesis section cap; Quick look compiles a short report (~4
      sections, ~5–10 min). The `time_band` derivation extends to the new
      lever — internal rungs (rapid/deep, landscape) never render; free
-     text compiles custom mixes. planner_v6 also **drops the default
+     text compiles custom mixes. Four audit pins from the as-built prompt
+     (2026-08-04): **the thoroughness card is intent-aware** (the findings
+     chain doesn't fit non-intervention questions at any depth — Deep
+     re-describes honestly there, never promising a findings database the
+     planner won't compose) · **the planner may mark an off-diagonal mix as
+     the primary** with its reason (the prompt already composes off the
+     diagonal for intent-fit) · **assumptions attach to the parts they
+     concern** (they are interpretation declarations, never a buried list;
+     full set on the plan card) · **custom country-group lists ratify on
+     the scope card** (proposed chips + the definitional choice named —
+     the prompt's existing confirm mandate gets its surface). planner_v6
+     also **deletes the steer-point walk instruction** (the located source
+     of the 5-turn ready pathology) and **drops the default
      `published_before` bound** (live plans pin it to the plan date, so
      re-runs would exclude newer documents) and renders the recency floor
      as a visible scope chip, never a silent constraint. The binding design
