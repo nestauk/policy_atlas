@@ -101,7 +101,7 @@
       <p class="step">Plan · 2 of 4 · scope</p>
       <h3>What counts as in-scope?</h3>
       <div class="chips"><span>Any country</span><span>No date limit</span><span>Policy &amp; service-delivery evidence</span></div>
-      <p class="body">These become the screening rules.</p>
+      <p class="body">Dates filter the search itself; setting and population become screening rules judged per document.</p>
       <div class="opts"><span class="b p">Looks right</span><span class="b s">Add or change a constraint</span></div>
     </div>
     <div class="userbub" style="margin-top:12px">can you make it uk only, with uk comparator countries (US, the scandis, canada, australia - and others that look particularly good)</div>
@@ -138,7 +138,8 @@
         <div><p>Thoroughness</p><b>Standard review</b></div>
         <div><p>Check-ins</p><b>Unattended</b></div>
         <div><p>Sources</p><b>Academic + policy</b></div>
-        <div><p>Scope</p><b>UK primary · comparators US/Nordics/CA/AU · no date limit</b></div>
+        <div><p>Screening rules</p><b>UK primary · comparators US/Nordics/CA/AU</b></div>
+        <div><p>Search filters</p><b>No date limit</b></div>
       </div>
       <div class="foot"><span class="go">Start the analysis</span><span class="band">~20 min · it runs without pausing</span></div>
     </div>
@@ -165,7 +166,7 @@
   <table class="map">
     <tr><th>Part (asked)</th><th>Real plan fields it settles</th><th>Never asked — compiled or shown on the card only</th></tr>
     <tr><td><b>1 · Question</b></td><td>`question`, `title`</td><td rowspan="4">`steer_point_defaults` (compiled from mode — the five-turn walk dies) · `components` + `component_rationale` (orchestrator discretion) · `expected_artefact_shape`, `time_band` (derived) · `assumptions` (shown on the card's details) · `extract_profiles`, `grouping_facets` (depth defaults) · `screening_criteria` detail beyond the scope chips (drafted by the planner, shown on the card)</td></tr>
-    <tr><td><b>2 · Scope</b></td><td>`scoping_notes`, `screening_criteria`, `scope_constraints` (dates · geography)</td></tr>
+    <tr><td><b>2 · Scope</b></td><td>`scope_constraints` — dates/geography <b>search filters</b>, applied at the backends · `screening_criteria` + `scoping_notes` — <b>screening rules</b>, judged per document (setting, population). One question; the planner routes each constraint to the right mechanism.</td></tr>
     <tr><td><b>3 · Thoroughness</b></td><td>`search_effort` × `analysis_depth` (see the fork below)</td></tr>
     <tr><td><b>4 · Check-ins</b></td><td>`steering_mode` (default: unattended, per the strand-14 ruling)</td></tr>
   </table>
