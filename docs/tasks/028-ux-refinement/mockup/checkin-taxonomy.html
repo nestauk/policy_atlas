@@ -103,13 +103,14 @@
       <span class="comp big"><span class="box">write report</span></span>
     </div>
     <div class="pins">
-      <span class="pin ghost"><span class="dot"></span><span class="lbl">P1 · exception only</span><span class="q">"The search came back thin"</span></span>
+      <span class="pin ghost"><span class="dot"></span><span class="lbl">P1 · failure only</span><span class="q">"The search itself failed or found nothing usable"</span></span>
       <span class="pin" style="flex:3"></span>
-      <span class="pin" style="flex:2"><span class="dot"></span><span class="lbl">P2 + P3 — back to back</span><span class="q">before &amp; after select</span></span>
+      <span class="pin" style="flex:2"><span class="dot"></span><span class="lbl">P2 + P3 — back to back</span><span class="q">after themes exist, around select</span></span>
       <span class="pin" style="flex:2"></span>
       <span class="pin"><span class="dot"></span><span class="lbl">P4</span><span class="q">"How should the report be organised?"</span></span>
     </div>
     <p class="maplegend">● orange = pauses in the default (moderate) mode · grey = fires only on an exception. Watch-mode boundary check-ins (continue / change frequency / stop) can additionally fire at every step in frequent mode — unchanged by this proposal.</p>
+    <div class="backtoback" style="border-left-color:#c7c7ff;background:#f5f5ff">ℹ <b>Where "thin evidence" is actually judged:</b> P1 fires only on mechanical failure (backend errors, zero usable results — no point screening nothing). The <em>"is the evidence thin now we know what's relevant?"</em> judgment already lives at P2: its triggers are post-screen and post-appraisal signals (too few relevant · classification collapse · ≥70% weak-quality · screening quality collapse). The old "search exception" naming invited the misreading — the proposal renames both honestly. And note <b>theme mapping runs before P2</b> — so P2 is also the natural theme-review moment (below).</div>
     <div class="backtoback">⚠ The blur you noticed: <b>P2 and P3 both pause around the same component</b>, and today P3 ("deepening selection") carries options that really answer P2's question — scope to themes, exclude documents. Two adjacent pauses, overlapping subjects, 4 + 9 options.</div>
   </div>
 
@@ -135,7 +136,17 @@
       <div class="checkin">
         <span class="badge">Check-in · waiting on you</span>
         <h3>Your evidence base is assembled — is it the right one?</h3>
-        <p class="ctx">168 documents screened, 24 relevant across 6 themes. Next: choosing what gets read in full.</p>
+        <p class="ctx">168 documents screened, 24 relevant. The themes it found (rename inline · sizes are documents):</p>
+        <div class="shortlist">
+          <p>Themes in the evidence · 5</p>
+          <ul>
+            <li>Workforce capacity, pay and quality <em>· 6</em> <em style="color:var(--blue)">✎ rename</em></li>
+            <li>Targeted access for disadvantaged families <em>· 5</em> <em style="color:var(--blue)">✎ rename</em></li>
+            <li>Funding reform and system sustainability <em>· 5</em> <em style="color:var(--blue)">✎ rename</em></li>
+            <li>Integrated early years and family support <em>· 4</em> <em style="color:var(--blue)">✎ rename</em></li>
+            <li>Monitoring, evaluation and data on inclusion <em>· 4</em> <em style="color:var(--blue)">✎ rename</em></li>
+          </ul>
+        </div>
         <div class="optwall">
           <div class="opt primary"><b>Looks right — go on to choose the reading list</b><span>Nothing changes; the run continues.</span></div>
           <details class="optgroup">
@@ -143,7 +154,7 @@
             <div class="inner">
               <div class="opt"><b>Search for more on a subtopic</b><span>You say what to look for; new documents are added — nothing already assessed is redone.</span></div>
               <div class="opt"><b>Change the inclusion criteria and re-assess</b><span>You set new criteria; every document is re-assessed against them, replacing today's decisions.</span></div>
-              <div class="opt"><b>Re-map the themes</b><span>You guide how the evidence is grouped into themes; the current map is replaced.</span></div>
+              <div class="opt"><b>Re-map the themes</b><span>Regenerate the theme map — plain regenerate, or guided by your instructions. The current map is replaced.</span></div>
             </div>
           </details>
           <details class="optgroup">
@@ -225,8 +236,11 @@
     </div>
   </div>
 
-  <h2>P1 and P4 — unchanged</h2>
-  <div class="unchanged"><b>P1 "The search came back thin"</b> (exception only) — deepen · rescope filters · guide queries · accept and continue · stop. Already one subject, five options. Gets the copy polish and grouped render, nothing moves.</div>
+  <h2>P2 as the theme-review moment</h2>
+  <p class="note" style="margin-top:8px">Theme mapping (characterise) runs <em>before</em> P2, so the themes exist when it pauses — P2 already carries "re-characterise with guidance". What the proposal adds: <b>the card shows the theme map</b> (names + document counts — read-model data we have), the re-map option covers both plain regenerate and custom instructions, and <b>✎ rename</b> lets you fix a theme's name without rerunning anything. Rename is the one genuinely <em>new</em> capability here (a durable edit to the theme record that everything downstream then uses — new delta + audit event, gate-listed if ruled in).</p>
+
+  <h2>P1 and P4 — copy fix / unchanged</h2>
+  <div class="unchanged"><b>P1 renames: "The search itself failed"</b> (fires only on backend errors or zero usable results — mechanical failure, not a thinness judgment; thin-evidence signals fire at P2 where screening and appraisal have happened). Options unchanged: deepen · rescope filters · guide queries · accept and continue · stop.</div>
   <div class="unchanged"><b>P4 "How should the report be organised?"</b> — as proposed · edit sections · emphasise stronger evidence · regroup (coarser/finer · guided). Already one subject. Copy polish only (kills the "(D8)"/"(B3)" leaks).</div>
 
   <h2>The open question: should P2 and P3 both pause by default?</h2>
