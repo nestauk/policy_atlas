@@ -274,14 +274,14 @@
   </div>
 
   <h2>P4 — before the report is written</h2>
-  <p class="sub">Today the card asks about "synthesis shape" with internal design references in the copy — and doesn't show the proposed sections. Proposed: the card leads with the section list (it's in the payload already) and asks one question about it.</p>
+  <p class="sub">Today the card asks about "synthesis shape" with internal design references in the copy, doesn't show the proposed sections — and offers the regroup options <b>unconditionally, even on standard runs where findings were never extracted or grouped</b> (dead levers; confirmed in code and in a live standard-run payload). Proposed: the card leads with the section list, and the regroup options exist <b>only on deep runs</b> — where P4 is in fact the post-grouping boundary and the sections are drawn from the groups, so regrouping is judged through the plan it redraws.</p>
   <div class="duo">
     <div class="col today">
       <p class="collabel">Today — "synthesis_shape" (5 options, flat, verbatim copy)</p>
       <div class="checkin">
         <span class="badge">Check-in · waiting on you</span>
         <h3>Synthesis shape</h3>
-        <p class="ctx">(Proposed sections live in the bundle but render as raw JSON in the disclosure.)</p>
+        <p class="ctx">(Proposed sections live in the bundle but render as raw JSON in the disclosure. This was a <b>standard</b> run — no findings were extracted or grouped — yet both re-group options render anyway.)</p>
         <div class="optwall">
           <div class="opt"><b>Synthesise as proposed</b><span>Proceed with the proposed synthesis plan unchanged.</span></div>
           <div class="opt"><b>Edit the synthesis sections</b><span>Set the synthesis sections yourself. Provide the section titles and focus.</span></div>
@@ -292,10 +292,11 @@
       </div>
     </div>
     <div class="col proposed">
-      <p class="collabel">Proposed — "Here's the report plan" (sections shown, grouped)</p>
+      <p class="collabel">Proposed — "Here's the report plan" (options match what the run actually did)</p>
       <div class="checkin">
         <span class="badge">Check-in · waiting on you</span>
         <h3>The report will have 8 sections — here's the plan</h3>
+        <p class="ctx" style="font-size:12.5px"><b>Standard analysis</b> — sections drawn from the theme map; no findings extraction ran, so no regroup options exist.</p>
         <div class="shortlist">
           <p>Proposed sections</p>
           <ul>
@@ -303,10 +304,29 @@
             <li>What the evidence shows on interventions to reduce childhood obesity</li>
             <li>Family-based lifestyle treatment in clinical and community settings</li>
             <li>Early-life, parent-focused and early care prevention</li>
-            <li>School-based multicomponent prevention and physical activity programmes</li>
-            <li>Digital, mobile, telephone and web-supported delivery models</li>
           </ul>
-          <p class="more">…and 3 more, then Conclusions →</p>
+          <p class="more">…and 5 more, then Conclusions →</p>
+        </div>
+        <div class="optwall">
+          <div class="opt primary"><b>Write the report with these sections</b><span>Nothing changes; writing starts.</span></div>
+          <div class="opt"><b>Set the sections yourself</b><span>You write the section titles and what each should cover.</span></div>
+          <div class="opt"><b>Lean on the strongest evidence</b><span>The writing draws more heavily on the highest-quality studies.</span></div>
+        </div>
+        <div class="metarow"><button>Change how often I'm asked</button><button>Stop the run</button></div>
+      </div>
+      <div class="checkin" style="margin-top:14px">
+        <span class="badge">Check-in · waiting on you</span>
+        <h3>The report will have 8 sections — here's the plan</h3>
+        <p class="ctx" style="font-size:12.5px"><b>Deep analysis</b> — the sections are drawn from 12 finding groups; regrouping redraws the plan from its root. P4 is the only pause after grouping, and the section list is how you see what the groups produced.</p>
+        <div class="shortlist">
+          <p>Proposed sections · drawn from 12 finding groups</p>
+          <ul>
+            <li>Key findings <em>· always first</em></li>
+            <li>Family-based lifestyle treatment in clinical and community settings</li>
+            <li>Early-life, parent-focused and early care prevention</li>
+            <li>School-based multicomponent prevention and physical activity programmes</li>
+          </ul>
+          <p class="more">…and 5 more, then Conclusions →</p>
         </div>
         <div class="optwall">
           <div class="opt primary"><b>Write the report with these sections</b><span>Nothing changes; writing starts.</span></div>
@@ -314,7 +334,7 @@
             <summary>Change the report's shape <span class="chev"><span class="o">3 options +</span><span class="c">−</span></span></summary>
             <div class="inner">
               <div class="opt"><b>Set the sections yourself</b><span>You write the section titles and what each should cover.</span></div>
-              <div class="opt"><b>Broader or narrower themes</b><span>Regroups the findings into fewer, broader themes — or more, narrower ones. The section plan is redrawn.</span></div>
+              <div class="opt"><b>Broader or narrower groupings</b><span>Regroups the extracted findings into fewer, broader clusters — or more, narrower ones — and the section plan is redrawn from them.</span></div>
               <div class="opt"><b>Regroup around my guidance</b><span>You describe the grouping you want; the findings are regrouped and the section plan redrawn.</span></div>
             </div>
           </details>
@@ -326,6 +346,7 @@
         </div>
         <div class="metarow"><button>Change how often I'm asked</button><button>Stop the run</button></div>
       </div>
+      <p class="quiet" style="margin-top:8px">Alternative considered: a separate groups checkpoint between extract/group and synthesise. Rejected in this proposal — it adds a third pause in the deep tail (P3 → groups → P4), and reviewing clusters in the abstract is harder than reviewing them through the section plan they produce. If the groups themselves need review independent of the report, that's a future Findings-view affordance, not a pause.</p>
     </div>
   </div>
 
