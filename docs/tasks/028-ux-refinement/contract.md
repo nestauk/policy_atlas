@@ -82,8 +82,16 @@ PR landing, as strands:
      each preset says what you get (cited overview across the whole screened
      corpus · cited report focused on the strongest full-text-checked
      documents · + findings database — every depth mints a cited report;
-     full texts ingest at every depth) with its
-     time band — internal rungs (rapid/deep, landscape) never render; free
+     full texts ingest at every depth) with its honest time band. **Presets
+     compile a third lever — report length** (owner, 2026-08-04, from real
+     timing data: synthesise medians 580s and scales with section count
+     while screen_full+select cost ~13s combined — length is the only lever
+     that moves the clock): an **additive optional section-budget field on
+     the plan payload** (no migration — plan payload is versioned JSONB),
+     honoured by the strand-12 sections-planning rev and enforced as the
+     synthesis section cap; Quick look compiles a short report (~4
+     sections, ~5–10 min). The `time_band` derivation extends to the new
+     lever — internal rungs (rapid/deep, landscape) never render; free
      text compiles custom mixes. planner_v6 also **drops the default
      `published_before` bound** (live plans pin it to the plan date, so
      re-runs would exclude newer documents) and renders the recency floor
@@ -183,7 +191,8 @@ PR landing, as strands:
     prompt** (`synthesise_sections_v2` → v3, lead-authored, versioned) so
     the planned section list reads as a coherent narrative — the overview
     section explicitly frames the sections it opens (or the plan drops a
-    redundant overview), titles form a visible hierarchy. Render support
+    redundant overview), titles form a visible hierarchy — and **honours
+    the plan's section budget** (strand 3's report-length lever). Render support
     only if the plan finds it necessary (e.g. contents-sidebar grouping) —
     no invented structure the synthesis didn't produce. The exact prompt
     design is plan-time lead work; one live before/after section-list

@@ -117,9 +117,9 @@
       <p class="step">Plan · 3 of 3 · thoroughness</p>
       <h3>How thorough should this be?</h3>
       <div class="opts">
-        <span class="b s">Quick look<small>a cited overview report across everything relevant the search found · ~10 min</small></span>
-        <span class="b p">Standard review<small>a cited report focused on the strongest documents, relevance-checked in full text · ~10–20 min</small></span>
-        <span class="b s">Deep analysis<small>the focused report, plus every finding extracted into a browsable database · ~45 min</small></span>
+        <span class="b s">Quick look<small>a short cited overview (~4 sections) from a focused search · ~5–10 min</small></span>
+        <span class="b p">Standard review<small>a full cited report from a wider search, focused on the strongest documents · ~15–20 min</small></span>
+        <span class="b s">Deep analysis<small>the full report, plus every finding extracted into a browsable database · ~45 min</small></span>
       </div>
       <p class="body" style="margin-top:8px">Or describe what you need — a custom mix compiles from free text.</p>
     </div>
@@ -161,7 +161,8 @@
     <b>The planner drafts rich screening criteria from one line</b> — the ECEC opening became 9 include/exclude rules; the scope card summarises them, the plan card carries the full list. ·
     <b>The planner silently pins dates</b> — every plan got `published_after` ≈ 10 years and `published_before` = the plan date. The upper bound makes later re-runs exclude newer documents: <b>planner_v6 drops the default upper bound</b>, and the recency floor becomes a visible scope chip the user can veto. ·
     <b>The steer-point walk churned 11 plan versions</b> on one project — the same pathology, seen from the plan table. ·
-    Real time band, standard/standard: <b>~10–20 min</b>.
+    Real component timings (medians): <b>synthesise 580s</b> · ingest 131s · classify 45s · everything else ≤23s — <b>screen_full + select cost ~13s combined</b>, so skipping them (the old landscape "speed-up") saved nothing. ·
+    <b>The real speed lever is report length</b> (owner, 2026-08-04): synthesis scales with section count (~60–70s/section) — Quick look compiles a <b>short report (~4 sections)</b> and lands in ~5–10 min.
   </div>
   <p class="note"><b>Ruled (owner, 2026-08-04): thoroughness stays part 3</b> — its cost/time consequences warrant one question — with <b>outcome-first option copy</b>: each preset says what you get and what gets read, never method adjectives (a new user can't weigh "rapid" against "deep"). Internal rungs (rapid/standard/deep · landscape/standard/deep) never render.</p>
 
@@ -170,12 +171,12 @@
     <tr><th>Part (asked)</th><th>Real plan fields it settles</th><th>Never asked — compiled or shown on the card only</th></tr>
     <tr><td><b>1 · Question</b></td><td>`question`, `title`</td><td rowspan="3">`steering_mode` — unattended, set only when the user asks for check-ins (owner: requested, not offered) · `steer_point_defaults` (compiled from mode — the five-turn walk dies) · `components` + `component_rationale` (orchestrator discretion) · `expected_artefact_shape`, `time_band` (derived) · `assumptions` (shown on the card's details) · `extract_profiles`, `grouping_facets` (depth defaults) · `screening_criteria` detail beyond the scope chips (drafted by the planner, shown on the card)</td></tr>
     <tr><td><b>2 · Scope</b></td><td>`scope_constraints` — dates/geography <b>search filters</b>, applied at the backends · `screening_criteria` + `scoping_notes` — <b>screening rules</b>, judged per document (setting, population). One question; the planner routes each constraint to the right mechanism.</td></tr>
-    <tr><td><b>3 · Thoroughness</b></td><td>`search_effort` × `analysis_depth` (see the fork below)</td></tr>
+    <tr><td><b>3 · Thoroughness</b></td><td>`search_effort` × `analysis_depth` × <b>section budget</b> (new additive plan field)</td></tr>
   </table>
   <p class="note"><b>Sources scope is not a part:</b> defaults to academic + policy, shows on the plan card, changes via free text or Change.</p>
 
   <h2>How "how thorough?" is asked — ruled</h2>
-  <p class="sub">One question, three outcome-labelled presets + free-text custom mixes (owner, 2026-08-04). The machinery's two axes (search effort · analysis depth) compile from the preset; free text reaches any mix.</p>
+  <p class="sub">One question, three outcome-labelled presets + free-text custom mixes (owner, 2026-08-04). Each preset compiles <b>three</b> levers: search effort · analysis depth · <b>report length</b> (new — the plan carries a section budget the sections-planning prompt honours; timing data shows length is the only lever that moves the clock). Free text reaches any mix.</p>
   <div class="duo">
     <div>
       <p class="collabel">Option A — one question, three presets + customise (recommended)</p>
