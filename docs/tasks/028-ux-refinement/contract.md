@@ -120,7 +120,11 @@ PR landing, as strands:
      canned message naming the option) — no new endpoints, no new SSE events.
    - **Frontend:** part cards in the thread (options → primary/secondary
      buttons; "Refine"-style options prefill the composer; confirmed state
-     renders ✓ + Change); planning stage renders as a **centred single-column
+     renders ✓ + Change); **scope chips edit directly** (owner, 2026-08-04:
+     ✎ inline editor — native range picker for dates — · × remove ·
+     + add), batched into a single ordinary planning turn; the planner
+     routes each edit to search filter vs screening rule — chips never
+     write plan fields raw; planning stage renders as a **centred single-column
      chat** (the plan pane no longer shows during planning); when the draft
      reaches ready, the plan renders as an **inline expandable chat card**
      (settings + steps + Start CTA + time band — details open by default
