@@ -109,7 +109,7 @@
     <div class="lane">
       <span class="comp"><span class="box">search</span></span>
       <span class="flow"></span>
-      <span class="gapmark"><span class="dot"></span><span class="lbl">P1 · search review</span><span class="q">"Here's what the search collected" · was failure-only</span></span>
+      <span class="gapmark"><span class="dot"></span><span class="lbl">P1 · search review · always</span><span class="q">"Here's what the search collected" · was failure-only</span></span>
       <span class="flow"></span>
       <span class="comp"><span class="box">screen</span></span>
       <span class="flow"></span>
@@ -117,21 +117,21 @@
       <span class="flow"></span>
       <span class="comp"><span class="box">map themes</span></span>
       <span class="flow"></span>
-      <span class="gapmark"><span class="dot"></span><span class="lbl">P2</span><span class="q">"Is this the right evidence base?" · themes reviewed here</span></span>
+      <span class="gapmark ghost"><span class="dot"></span><span class="lbl">P2 · fired</span><span class="q">"Is this the right evidence base?" · themes reviewed here</span></span>
       <span class="flow"></span>
       <span class="comp big"><span class="box">select</span></span>
       <span class="flow"></span>
-      <span class="gapmark"><span class="dot"></span><span class="lbl">P3</span><span class="q">"This is what will be read in full"</span></span>
+      <span class="gapmark ghost"><span class="dot"></span><span class="lbl">P3 · fired</span><span class="q">"This is what will be read in full"</span></span>
       <span class="flow"></span>
       <span class="comp"><span class="box">read in full</span></span>
       <span class="flow"></span>
       <span class="comp"><span class="box">group findings</span></span>
       <span class="flow"></span>
-      <span class="gapmark"><span class="dot"></span><span class="lbl">Groups → P4</span><span class="q">one stop, two questions: "are the groups right?" then "is the report plan right?"</span><span class="dep">groups card: deep runs only</span></span>
+      <span class="gapmark"><span class="dot"></span><span class="lbl">Groups → P4</span><span class="q">one stop: "is the report plan right?" (+ "are the groups right?" when grouping flags fired)</span><span class="dep">groups card: deep runs only</span></span>
       <span class="flow"></span>
       <span class="comp big"><span class="box">write report</span></span>
     </div>
-    <p class="maplegend">◆ orange = pauses in the default (moderate) mode. "read in full" and "group findings" run on deep analyses only — on standard runs the report is written from the theme-mapped corpus and the Groups card never exists. Watch-mode boundary check-ins (continue / change frequency / stop) can additionally fire at every boundary in frequent mode — unchanged by this proposal.</p>
+    <p class="maplegend">◆ orange = stops on every run in the default (moderate) mode · ◇ grey = stops only when its warning signals fire (or the watch promotes). "read in full" and "group findings" run on deep analyses only — on standard runs the report is written from the theme-mapped corpus and the Groups card never exists. Frequent mode turns every ◇ solid and adds generic boundary check-ins between the other components.</p>
     <div class="backtoback" style="border-left-color:#c7c7ff;background:#f5f5ff">ℹ <b>Where "thin evidence" is actually judged:</b> P1 fires only on mechanical failure (backend errors, zero usable results — no point screening nothing). The <em>"is the evidence thin now we know what's relevant?"</em> judgment already lives at P2: its triggers are post-screen and post-appraisal signals (too few relevant · classification collapse · ≥70% weak-quality · screening quality collapse). The old "search exception" naming invited the misreading — the proposal renames both honestly. And note <b>theme mapping runs before P2</b> — so P2 is also the natural theme-review moment (below).</div>
     <div class="backtoback">⚠ The blur you noticed: <b>P2 and P3 both pause around the same component</b>, and today P3 ("deepening selection") carries options that really answer P2's question — scope to themes, exclude documents. Two adjacent pauses, overlapping subjects, 4 + 9 options.</div>
   </div>
@@ -407,15 +407,15 @@
   <h2>What "fired" means</h2>
   <p class="sub"><b>always</b> = every run stops at this point. <b>fired</b> = the run stops only when one of the point's pre-declared warning signals went off — deterministic checks over persisted records, with fixed thresholds — or when the orchestrator's boundary review promotes the stop. <b>off</b> = never stops (unattended). The signal sets per point: <b>P1</b> — the search itself failed (database errors / zero usable documents). <b>P2</b> — too few relevant documents survived screening · ≥70% of appraised documents scored weak · screening quality collapsed (≥20% failed or ≥50% demoted). <b>P3</b> — a large theme was excluded from the reading list · something you nominated didn't make it · the pool was thin. <b>Groups</b> — the grouping run raised flags. Every boundary also checks the universal signal: an upstream step failed or was skipped. A "fired" cell therefore means: healthy runs flow through silently; a run with something off stops and shows you why.</p>
 
-  <h2>The open question: how many stops in the default mode?</h2>
-  <p class="sub">With P1 upgraded to a standing search review, a moderate-mode run would stop at P1 · P2 · P3 · (Groups+P4) — four interruptions on a standard run, five questions on a deep one. Each is now small and single-subject, so this may be right ("more, smaller, clearer decisions"). The alternative trims P2 to fired-only in moderate: it pauses only when its triggers fire (too few relevant · quality collapse), since P1 now covers "search more" early and P3 carries an escape hatch back to reshaping the evidence base — but healthy runs would then lose the routine theme-review moment. One cell to rule on:</p>
+  <h2>The mode table — ruled (owner, 2026-08-03)</h2>
+  <p class="sub">Moderate's shape: <b>review the input and the output plan on every run; everything in between speaks only when something's off.</b> A healthy standard run in moderate = two stops (search review · report plan); the middle points pause only on their fired signals or a watch promotion. Frequent stops at every lattice point <em>and</em> adds the generic boundary check-ins between all other components.</p>
   <table class="modes">
     <tr><th>Steer point</th><th>Frequent</th><th>Moderate (default)</th><th>Minimal</th></tr>
-    <tr><td>P1 search review <span class="quiet">(was failure-only)</span></td><td class="always">always</td><td class="change">fired → always?</td><td class="fired">fired</td></tr>
-    <tr><td>P2 evidence base + themes</td><td class="always">always</td><td class="change">always → fired?</td><td class="fired">fired</td></tr>
-    <tr><td>P3 reading list</td><td class="always">always</td><td class="always">always</td><td class="fired">fired</td></tr>
-    <tr><td>Groups <span class="quiet">(deep only · new)</span></td><td class="always">always</td><td class="always">always</td><td class="fired">fired (grouping flags)</td></tr>
-    <tr><td>P4 report plan</td><td class="always">always</td><td class="always">always</td><td class="fired">fired</td></tr>
+    <tr><td>P1 search review <span class="quiet">(was failure-only)</span></td><td class="always">always</td><td class="change">always</td><td class="fired">fired</td></tr>
+    <tr><td>P2 evidence base + themes</td><td class="always">always</td><td class="change">fired</td><td class="fired">fired</td></tr>
+    <tr><td>P3 reading list</td><td class="always">always</td><td class="change">fired</td><td class="fired">fired</td></tr>
+    <tr><td>Groups <span class="quiet">(deep only · new)</span></td><td class="always">always</td><td class="change">fired (grouping flags)</td><td class="fired">fired</td></tr>
+    <tr><td>P4 report plan</td><td class="always">always</td><td class="change">always</td><td class="fired">fired</td></tr>
   </table>
-  <p class="note">Trade-off: fewer interruptions on healthy runs vs. users losing the routine "is my evidence base right?" moment. If P2 goes fired-only, the P3 card carries the P2 escape hatch ("something's wrong with the evidence base itself → reshape it") so the decision isn't locked away.</p>
+  <p class="note">Consequences worth knowing: in moderate, the routine theme-review moment only appears when P2's signals fire (or the watch promotes it) — theme review on demand lives in frequent mode or via "Change how often I'm asked" on any card. And since the P4 stop is guaranteed, the deep-run Groups question rides that stop only when grouping flags fired — a healthy deep run in moderate is still two stops.</p>
 </div>
