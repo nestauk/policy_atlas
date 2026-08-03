@@ -120,3 +120,19 @@ data-driven component, no fake artefact section), and the fork-C mock-up
 rebuilt on the real attendance artefact (`mockup/tab-ia-options.html` rev 2).
 Any 028 mock-up or fixture work uses real or sanitized-real section lists,
 not invented ones.
+
+## 4. Owner feedback on mock-up rev 2 (2026-08-03) → rev 3 + contract
+
+- **Summaries always visible:** the one-line summary shows in the collapsed
+  state; expanding reveals the full cited prose (contract strand 5).
+- **Key findings never collapses** — always rendered in full (strand 5).
+- **Section-flow root cause named:** interviewees' confusion came from not
+  knowing whether the overview "What the evidence shows…" section connects
+  to the per-theme sections that follow — the overview→theme transition
+  jars. Owner: likely a prompt fix at section planning, or a section
+  organisation rethink → contract strand 12 (scoped
+  `synthesise_sections` rev, third gated prompt surface).
+- **Fork C direction (🟡 hybrid):** the report's "How the evidence was
+  gathered" section shows **cited-only** plots (relevant to the page it's
+  on); the **Landscape tab stays** for the overall evidence base. Six tabs.
+  Mock-up rev 3 shows the ruled design.

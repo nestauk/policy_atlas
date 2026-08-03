@@ -15,10 +15,15 @@
 > **(B) Key-findings bullets: scoped prompt rev IN** — owner ruling: the eval
 > slice is much deferred; build without the pre-eval prompt-freeze constraint
 > (the cost/quality spot-check stays as ordinary verification, not an eval
-> proxy). **(C) Tab IA: ❓ REOPENED (owner, 2026-08-03)** — the owner wants a
-> mock-up of the fold before ruling (five tabs with Landscape folded vs six
-> unchanged; Decision log stays either way); decided at this gate after the
-> mock-up review.
+> proxy). **(C) Tab IA: 🟡 HYBRID (owner direction after mock-up rounds 1–2,
+> 2026-08-03; confirm at this gate):** the Landscape tab **stays** as the
+> whole-corpus view; the evidence-base page gains a **cited-scoped** "How the
+> evidence was gathered" section (plots show only what the report cites — the
+> full search landscape stays on the tab). Six tabs. **(D) Section flow
+> (owner, 2026-08-03, from the interview confusion's root cause):** the jar
+> between the overview section and the per-theme sections is addressed at the
+> **section-planning prompt** (a third gated prompt rev) and/or section
+> organisation — see strand 12.
 
 ## Goal
 
@@ -94,6 +99,10 @@ PR landing, as strands:
    across…", which must never render to readers); key findings +
    conclusions default open, the rest collapsed (plan pins the exact
    defaults); expand/collapse are real buttons with `aria-expanded`.
+   **Collapsed state shows title + summary** (owner, 2026-08-03): the
+   one-line summary stays visible when the section is collapsed — expanding
+   reveals the full cited prose; and **Key findings is not collapsible** —
+   it always renders in full (Conclusions stays collapsible, default open).
    Annotation spans keep working on collapsed→expanded prose (render-only
    change).
 6. **Key-findings formatting** (fork B — prompt rev IN): the key-findings
@@ -127,16 +136,32 @@ PR landing, as strands:
    → run); the ready plan card carries the start affordance + expectation
    copy; post-run the completion card CTAs stay the canonical route into the
    outputs. No new surfaces — copy and emphasis on existing ones.
-10. **Tab IA** (fork C — ❓ open pending mock-up review): *option 1* —
-    Landscape folds into the evidence-base page as a "How the evidence was
-    gathered" collapsible section carrying today's six Landscape blocks
-    (funnel · evidence types · publication years · where-published + caveat ·
-    themes · finding groups; the tab retires, its route redirects); five
-    tabs. *Option 2* — six tabs unchanged. Decision log stays either way.
+10. **Tab IA** (fork C — 🟡 hybrid, confirm at gate): **six tabs stay.** The
+    evidence-base page gains a collapsible **cited-scoped** "How the evidence
+    was gathered" section — distributions over the report's cited sources
+    only (evidence types · publication years · where-published + caveat ·
+    key themes with document links), with a pointer to the Landscape tab for
+    the whole corpus; the **Landscape tab remains the whole-evidence-base
+    view** (funnel spanning the full search + screened-in distributions).
+    Cited-scoped distributions may need an **additive scope variant on the
+    landscape read model** (e.g. `scope=cited` query param) — inside the
+    additive gate; enumerated at plan time.
 11. **Small wins.** A bounded sweep listed at plan time and reviewed at the
     plan 🛑 (candidates from the mock-up: snapshot-cell navigation into
     filtered views where missing, findings-tab gated empty-state copy,
     check-in card copy tightening). Nothing lands unlisted.
+12. **Section flow** (owner, 2026-08-03 — the interviews' root confusion:
+    readers can't tell whether the overview "What the evidence shows…"
+    section connects to the per-theme sections that follow; the transition
+    jars). Addressed at the source: a **scoped rev of the section-planning
+    prompt** (`synthesise_sections_v2` → v3, lead-authored, versioned) so
+    the planned section list reads as a coherent narrative — the overview
+    section explicitly frames the sections it opens (or the plan drops a
+    redundant overview), titles form a visible hierarchy. Render support
+    only if the plan finds it necessary (e.g. contents-sidebar grouping) —
+    no invented structure the synthesis didn't produce. The exact prompt
+    design is plan-time lead work; one live before/after section-list
+    comparison joins the acceptance checks.
 
 Plus: migration (+ downgrade) if fork A lands · OpenAPI + generated client
 regenerated through `make drift-check` · mock fixtures extended (sequential
@@ -178,11 +203,11 @@ deferred.md updates · verification.md.
 
 ## Constraints & approval gates
 
-- **Prompt surfaces (owner gate, forks A/B):** exactly two prompt changes,
-  both lead-authored, both new versions never in-place edits: the planning
-  prompt part-by-part rev (fork A) and the key-findings section rev (fork B).
-  No other prompt/template touches; prompt-guard pins update in the same
-  commit.
+- **Prompt surfaces (owner gate, forks A/B/D):** exactly three prompt
+  changes, all lead-authored, all new versions never in-place edits: the
+  planning prompt part-by-part rev (fork A), the key-findings section rev
+  (fork B), and the section-planning flow rev (strand 12). No other
+  prompt/template touches; prompt-guard pins update in the same commit.
 - **Schema:** at most the one additive nullable JSONB column on
   `planning_transcript` (fork A); zero migrations otherwise.
 - **Public interface:** additive-only — the turn read-model part field,
