@@ -211,18 +211,12 @@
         <div class="optwall">
           <div class="opt primary"><b>Read these 15</b><span>The run continues into full-text reading.</span></div>
           <details class="optgroup">
-            <summary>Change what's on the list <span class="chev"><span class="o">3 options +</span><span class="c">−</span></span></summary>
+            <summary>Change what's on the list <span class="chev"><span class="o">4 options +</span><span class="c">−</span></span></summary>
             <div class="inner">
               <div class="opt"><b>Read more (or fewer) documents</b><span>You set the number; the list is re-picked.</span></div>
               <div class="opt"><b>Prefer the strongest evidence</b><span>Re-picks the list, weighting study quality more heavily. Replaces this list.</span></div>
               <div class="opt"><b>Prefer the most relevant</b><span>Re-picks the list, weighting how directly each document meets your question. Replaces this list.</span></div>
-            </div>
-          </details>
-          <details class="optgroup">
-            <summary>Change how they're read <span class="chev"><span class="o">2 options +</span><span class="c">−</span></span></summary>
-            <div class="inner">
-              <div class="opt"><b>Also capture implementation context</b><span>As well as what worked, capture the conditions each study reports — settings, workforce, delivery.</span></div>
-              <div class="opt"><b>Re-read documents that now have full text</b><span>Some findings came from abstracts only; full documents have since arrived.</span></div>
+              <div class="opt"><b>Make sure these are read</b><span>You name themes or documents that must be on the list; it's re-picked around them.</span></div>
             </div>
           </details>
         </div>
@@ -232,16 +226,108 @@
         </div>
         <div class="metarow"><button>Change how often I'm asked</button><button>Stop the run</button></div>
       </div>
-      <p class="quiet" style="margin-top:8px">"Keep only themes I name" and "leave out documents" moved to P2, where the pool is decided. The orchestrator's suggested options keep their <em>why</em> lines — the clearest text in today's payloads — and render apart from the standard set.</p>
+      <p class="quiet" style="margin-top:8px">"Keep only themes I name" and "leave out documents" moved to P2, where the pool is decided. The two "how they're read" options are <b>gone from the floor</b> (owner, 2026-08-03): implementation-context extraction is <em>already the default</em> on deep analyses (as-built depth table extracts both finding kinds), and "refresh extraction" only applies on re-runs where earlier findings were abstract-only — a rare condition the orchestrator's <em>suggested</em> options already surface with a why line when it actually holds. The suggested block keeps that job.</p>
     </div>
   </div>
 
   <h2>P2 as the theme-review moment</h2>
   <p class="note" style="margin-top:8px">Theme mapping (characterise) runs <em>before</em> P2, so the themes exist when it pauses — P2 already carries "re-characterise with guidance". What the proposal adds: <b>the card shows the theme map</b> (names + document counts — read-model data we have), the re-map option covers both plain regenerate and custom instructions, and <b>✎ rename</b> lets you fix a theme's name without rerunning anything. Rename is the one genuinely <em>new</em> capability here (a durable edit to the theme record that everything downstream then uses — new delta + audit event, gate-listed if ruled in).</p>
 
-  <h2>P1 and P4 — copy fix / unchanged</h2>
-  <div class="unchanged"><b>P1 renames: "The search itself failed"</b> (fires only on backend errors or zero usable results — mechanical failure, not a thinness judgment; thin-evidence signals fire at P2 where screening and appraisal have happened). Options unchanged: deepen · rescope filters · guide queries · accept and continue · stop.</div>
-  <div class="unchanged"><b>P4 "How should the report be organised?"</b> — as proposed · edit sections · emphasise stronger evidence · regroup (coarser/finer · guided). Already one subject. Copy polish only (kills the "(D8)"/"(B3)" leaks).</div>
+  <h2>P1 — after search (fires only on failure)</h2>
+  <p class="sub">Fires only when the search mechanically failed — backend errors, or nothing usable came back. Not a thinness judgment (that's P2's). Renamed accordingly.</p>
+  <div class="duo">
+    <div class="col today">
+      <p class="collabel">Today — "search_exception" (5 options, flat, verbatim copy)</p>
+      <div class="checkin">
+        <span class="badge">Check-in · waiting on you</span>
+        <h3>Search exception</h3>
+        <p class="ctx">(Deterministic render of the coverage record.)</p>
+        <div class="optwall">
+          <div class="opt"><b>Deepen the search</b><span>Raise the <span class="jargon">acquisition depth rung</span> to search harder for sources.</span></div>
+          <div class="opt"><b>Rescope the search filters</b><span>Change the recency / geography filters on the search; provide the new filters.</span></div>
+          <div class="opt"><b>Guide the search queries</b><span>Add query guidance and re-search (additive: your evidence base grows). Provide the guidance sentences.</span></div>
+          <div class="opt"><b>Accept the thin evidence base and continue</b><span>Proceed despite the <span class="jargon">coverage exception</span>; the run is flagged.</span></div>
+          <div class="opt"><b>Stop the run here</b><span>Abort the remaining walk; prior component work is preserved.</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="col proposed">
+      <p class="collabel">Proposed — "The search couldn't complete" (same 5, plain + grouped)</p>
+      <div class="checkin">
+        <span class="badge">Check-in · waiting on you</span>
+        <h3>The search couldn't complete properly</h3>
+        <p class="ctx">One source database returned errors, and 3 usable documents came back. There isn't enough here to assess.</p>
+        <div class="optwall">
+          <div class="opt primary"><b>Search harder</b><span>Widens and deepens the search across the same databases.</span></div>
+          <details class="optgroup">
+            <summary>Search differently <span class="chev"><span class="o">2 options +</span><span class="c">−</span></span></summary>
+            <div class="inner">
+              <div class="opt"><b>Change the search scope</b><span>You set new date or geography limits; the search re-runs.</span></div>
+              <div class="opt"><b>Guide the queries</b><span>You describe what to look for; new results are added to what came back.</span></div>
+            </div>
+          </details>
+          <div class="opt"><b>Continue with what came back</b><span>The run carries on; the report will say its evidence base is thin.</span></div>
+        </div>
+        <div class="metarow"><button>Change how often I'm asked</button><button>Stop the run</button></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>P4 — before the report is written</h2>
+  <p class="sub">Today the card asks about "synthesis shape" with internal design references in the copy — and doesn't show the proposed sections. Proposed: the card leads with the section list (it's in the payload already) and asks one question about it.</p>
+  <div class="duo">
+    <div class="col today">
+      <p class="collabel">Today — "synthesis_shape" (5 options, flat, verbatim copy)</p>
+      <div class="checkin">
+        <span class="badge">Check-in · waiting on you</span>
+        <h3>Synthesis shape</h3>
+        <p class="ctx">(Proposed sections live in the bundle but render as raw JSON in the disclosure.)</p>
+        <div class="optwall">
+          <div class="opt"><b>Synthesise as proposed</b><span>Proceed with the proposed synthesis plan unchanged.</span></div>
+          <div class="opt"><b>Edit the synthesis sections</b><span>Set the synthesis sections yourself. Provide the section titles and focus.</span></div>
+          <div class="opt"><b>Boost evidence type / quality tier in synthesis</b><span>Weight the <span class="jargon">synthesis retrieval</span> toward stronger-appraised evidence (type/tier boosts; <span class="jargon">tag boosts are not offered</span>).</span></div>
+          <div class="opt"><b>Re-group at a different granularity (replaces grouping)</b><span>Re-group findings coarser or finer (<span class="jargon">D8</span>); replaces the current grouping.</span></div>
+          <div class="opt"><b>Re-group with guidance (replaces grouping)</b><span>Re-group findings with your guidance (<span class="jargon">B3</span>); replaces the current grouping. Provide the guidance.</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="col proposed">
+      <p class="collabel">Proposed — "Here's the report plan" (sections shown, grouped)</p>
+      <div class="checkin">
+        <span class="badge">Check-in · waiting on you</span>
+        <h3>The report will have 8 sections — here's the plan</h3>
+        <div class="shortlist">
+          <p>Proposed sections</p>
+          <ul>
+            <li>Key findings <em>· always first</em></li>
+            <li>What the evidence shows on interventions to reduce childhood obesity</li>
+            <li>Family-based lifestyle treatment in clinical and community settings</li>
+            <li>Early-life, parent-focused and early care prevention</li>
+            <li>School-based multicomponent prevention and physical activity programmes</li>
+            <li>Digital, mobile, telephone and web-supported delivery models</li>
+          </ul>
+          <p class="more">…and 3 more, then Conclusions →</p>
+        </div>
+        <div class="optwall">
+          <div class="opt primary"><b>Write the report with these sections</b><span>Nothing changes; writing starts.</span></div>
+          <details class="optgroup">
+            <summary>Change the report's shape <span class="chev"><span class="o">3 options +</span><span class="c">−</span></span></summary>
+            <div class="inner">
+              <div class="opt"><b>Set the sections yourself</b><span>You write the section titles and what each should cover.</span></div>
+              <div class="opt"><b>Broader or narrower themes</b><span>Regroups the findings into fewer, broader themes — or more, narrower ones. The section plan is redrawn.</span></div>
+              <div class="opt"><b>Regroup around my guidance</b><span>You describe the grouping you want; the findings are regrouped and the section plan redrawn.</span></div>
+            </div>
+          </details>
+          <div class="opt"><b>Lean on the strongest evidence</b><span>The writing draws more heavily on the highest-quality studies.</span></div>
+        </div>
+        <div class="suggested">
+          <p>Suggested for this run</p>
+          <div class="opt"><b>Keep the drafted 8-section synthesis shape — no triggers fired</b><span>Why: this preserves the proposal exactly as drafted across treatment, prevention, delivery, policy systems and applicability, which is proportionate because the boundary shows no fired triggers.</span></div>
+        </div>
+        <div class="metarow"><button>Change how often I'm asked</button><button>Stop the run</button></div>
+      </div>
+    </div>
+  </div>
 
   <h2>The open question: should P2 and P3 both pause by default?</h2>
   <p class="sub">In moderate (default) mode both pause on every run — two stops around one component. Option: P2 becomes fired-only in moderate (it pauses only when its coverage triggers fire — thin themes, heavy screen-outs), so a routine run has one reading-list stop; a problematic one still gets both.</p>
