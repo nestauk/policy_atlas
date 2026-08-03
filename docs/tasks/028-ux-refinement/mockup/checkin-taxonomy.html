@@ -102,7 +102,7 @@
 <div class="wrap">
   <p class="eyebrow">Task 028 · strand 14 · check-in taxonomy — decision mock-up</p>
   <h1>Which check-ins actually make sense?</h1>
-  <p class="lede">The run pauses at four fixed steer points (task 024). This page shows where they sit, what each card looks like <strong>today</strong> (real options, real copy from live runs), and the <strong>proposed</strong> re-frame: P2 owns "is the evidence base right?", P3 owns "this is what will be read in full" and shows the shortlist. Option content below is verbatim from the dev DB; shortlist titles are the real ECEC selection.</p>
+  <p class="lede">Each stop today (real options, verbatim live copy) against the proposed re-frame. Shortlist titles are the real ECEC selection.</p>
 
   <h2>Where the pauses sit in a run — between components</h2>
   <div class="map">
@@ -137,7 +137,7 @@
   </div>
 
   <h2>P2 — before select</h2>
-  <p class="sub">Today it asks about coverage with 4 options; the proposal makes it own every "shape the pool" decision, including the two moved from P3.</p>
+  <p class="sub">The proposal makes P2 own every "shape the pool" decision, including the two moved from P3.</p>
   <div class="duo">
     <div class="col today">
       <p class="collabel">Today — "evidence_base_coverage" (4 options, flat)</p>
@@ -193,7 +193,7 @@
   </div>
 
   <h2>P3 — after select</h2>
-  <p class="sub">Today: nine flat options mixing pool-shaping, ranking and reading concerns, with internal jargon — and the user can't see what was actually selected. Proposed: the card shows the reading list and asks one question about it.</p>
+  <p class="sub">Today: nine flat options, mixed concerns, no visible shortlist. Proposed: show the reading list, ask one question about it.</p>
   <div class="duo">
     <div class="col today">
       <p class="collabel">Today — "deepening_selection" (9 options, flat, verbatim copy)</p>
@@ -260,7 +260,7 @@
   <p class="note" style="margin-top:8px">Theme mapping (characterise) runs <em>before</em> P2, so the themes exist when it pauses — P2 already carries "re-characterise with guidance". What the proposal adds: <b>the card shows the theme map</b> (names + document counts — read-model data we have), the re-map option covers both plain regenerate and custom instructions, and <b>✎ rename</b> lets you fix a theme's name without rerunning anything. Rename is the one genuinely <em>new</em> capability here — <b>ruled IN (owner, 2026-08-03)</b>: a durable edit-delta on the theme record + steering audit event, P2-only by constraint (downstream references themes by name, so renames happen before anything has consumed them).</p>
 
   <h2>P1 — the search review (owner upgrade: was failure-only)</h2>
-  <p class="sub">Today this stop fires only when the search mechanically failed (backend errors / nothing usable) — on every healthy run, the user's first chance to steer the corpus comes after screening and appraisal have already spent effort on all of it. Upgraded: a <b>standing review of what the search collected</b>, right when redirecting is cheapest. Mechanical failure becomes a context variant of the same stop, not its own species.</p>
+  <p class="sub">Was failure-only. Upgraded: a <b>standing review of what the search collected</b>, when redirecting is cheapest; mechanical failure becomes a context variant of the same stop.</p>
   <div class="duo">
     <div class="col today">
       <p class="collabel">Today — "search_exception" (failure-only, 5 flat options, verbatim copy)</p>
@@ -384,10 +384,10 @@
   </div>
 
   <h2>Where "Suggested" comes from</h2>
-  <p class="sub">At every pause, the analysis reviews this run's actual state — the question, the plan, what each step produced, earlier steering decisions — and may author extra suggestions, each with a concrete reason. The idea is sound; two things aren't. <b>Copy:</b> the authoring prompt is the orchestrator's internal <em>decision</em> prompt reused verbatim, so suggestions arrive in machinery language ("no triggers fired"). <b>Validity:</b> a live authored option was found carrying an <em>invented</em> action (`recover_full_text` — not a real capability; full text is already fetched through every known alternate location on the first pass, and paywall/dead-link failures don't improve on retry). The fix is backend-first (owner ruling): today free text is validated by the steering grammar with honest refusals, but authored options are only parse-checked and their stored deltas apply verbatim — an invented action becomes a <em>silent no-op</em> when picked. This slice closes that asymmetry in the substrate: <b>one grammar, one validator, for all three option producers</b> — authored options compile through the same grammar as free text at authoring time (non-compiling → dropped, logged, evented), the answer route revalidates on apply, and a delta the grammar can't compile is always a refusal with a reason, never a silent no-op. Plus the prompt rev: plain-language labels · reasons citing visible facts · machinery vocabulary banned · endorsements render as the reason under the blue primary · the block titled "Suggested from this run's results".</p>
+  <p class="sub">The analysis reviews the run's state at each pause and may author extra suggestions with reasons. Two defects: <b>Copy:</b> the authoring prompt is the orchestrator's internal <em>decision</em> prompt reused verbatim, so suggestions arrive in machinery language ("no triggers fired"). <b>Validity:</b> a live authored option was found carrying an <em>invented</em> action (`recover_full_text` — not a real capability; full text is already fetched through every known alternate location on the first pass, and paywall/dead-link failures don't improve on retry). The fix is backend-first (owner ruling): today free text is validated by the steering grammar with honest refusals, but authored options are only parse-checked and their stored deltas apply verbatim — an invented action becomes a <em>silent no-op</em> when picked. This slice closes that asymmetry in the substrate: <b>one grammar, one validator, for all three option producers</b> — authored options compile through the same grammar as free text at authoring time (non-compiling → dropped, logged, evented), the answer route revalidates on apply, and a delta the grammar can't compile is always a refusal with a reason, never a silent no-op. Plus the prompt rev: plain-language labels · reasons citing visible facts · machinery vocabulary banned · endorsements render as the reason under the blue primary · the block titled "Suggested from this run's results".</p>
 
   <h2>Your own words — already built, just hidden</h2>
-  <p class="sub">Every check-in already accepts free text: the steering router compiles what you type into concrete changes, shows you exactly what would change, and applies it only on your confirm (task 024's confirm-gate). Today it's a small single-line input at the bottom of a crowded card — most testers never saw it. Proposed: it renders as a composer-style row on <b>every</b> card ("or say it in your own words", as on the P3 card above), and the compile→confirm exchange renders as a mini-thread on the card:</p>
+  <p class="sub">Every check-in already accepts free text (router compiles → shows the changes → applies on confirm), but the input is buried and testers never saw it. Proposed: a composer-style row on every card, with compile→confirm as a mini-thread:</p>
   <div class="checkin" style="max-width:560px">
     <span class="badge">Check-in · your steer</span>
     <div class="compileflow">
