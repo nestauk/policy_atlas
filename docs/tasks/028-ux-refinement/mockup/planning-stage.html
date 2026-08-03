@@ -91,14 +91,14 @@
   <div class="chatcol">
     <div class="userbub">ensuring that our most disadvantaged children have access to high auality ecece</div>
     <div class="part">
-      <p class="step">Plan · 1 of 4 · the question</p>
+      <p class="step">Plan · 1 of 3 · the question</p>
       <h3>What helps disadvantaged children access high-quality early childhood education and care?</h3>
       <p class="body">Read as a policy and service-delivery question — I'll search academic and grey literature.</p>
       <div class="opts"><span class="b p">That's my question</span><span class="b s">Refine it</span></div>
       <div class="confirmed">✓ Confirmed <button>Change</button></div>
     </div>
     <div class="part">
-      <p class="step">Plan · 2 of 4 · scope</p>
+      <p class="step">Plan · 2 of 3 · scope</p>
       <h3>What counts as in-scope?</h3>
       <div class="chips"><span>Any country</span><span>No date limit</span><span>Policy &amp; service-delivery evidence</span></div>
       <p class="body">Dates filter the search itself; setting and population become screening rules judged per document.</p>
@@ -106,7 +106,7 @@
     </div>
     <div class="userbub" style="margin-top:12px">can you make it uk only, with uk comparator countries (US, the scandis, canada, australia - and others that look particularly good)</div>
     <div class="part">
-      <p class="step">Plan · 2 of 4 · scope — updated from your message</p>
+      <p class="step">Plan · 2 of 3 · scope — updated from your message</p>
       <h3>UK as the primary setting, with named comparators</h3>
       <div class="chips"><span>UK primary</span><span>Comparators: US · Nordics · Canada · Australia</span><span>+ other strong systems</span><span>No date limit</span></div>
       <p class="body">No database country filters — they match author affiliation, not where a policy operates. UK-primary is a <b>screening rule</b>, so foreign-published UK evidence still counts.</p>
@@ -114,7 +114,7 @@
       <div class="confirmed">✓ Confirmed <button>Change</button></div>
     </div>
     <div class="part">
-      <p class="step">Plan · 3 of 4 · thoroughness</p>
+      <p class="step">Plan · 3 of 3 · thoroughness</p>
       <h3>How thorough should this be?</h3>
       <div class="opts">
         <span class="b s">Quick look<small>survey the landscape · ~10 min</small></span>
@@ -122,21 +122,12 @@
         <span class="b s">Deep analysis<small>findings extracted from full texts · ~45 min</small></span>
       </div>
     </div>
-    <div class="part">
-      <p class="step">Plan · 4 of 4 · check-ins</p>
-      <h3>Should the run pause for your input?</h3>
-      <div class="opts">
-        <span class="b p">Run unattended<small>no pauses — the report just appears</small></span>
-        <span class="b s">Review key stages<small>see the search haul + report plan</small></span>
-        <span class="b s">Every stage<small>maximum control</small></span>
-      </div>
-    </div>
     <div class="planner">Review the plan — nothing runs until you start it.</div>
     <div class="plancard">
       <div class="head"><span class="k">The plan</span><span class="q">What helps disadvantaged children in the UK access high-quality ECEC — with comparator-country lessons?</span><span class="ready">ready</span></div>
       <div class="plangrid">
         <div><p>Thoroughness</p><b>Standard review</b></div>
-        <div><p>Check-ins</p><b>Unattended</b></div>
+        <div><p>Check-ins</p><b>None — ask if you want them</b></div>
         <div><p>Sources</p><b>Academic + policy</b></div>
         <div><p>Screening rules</p><b>UK primary · comparators US/Nordics/CA/AU</b></div>
         <div><p>Search filters</p><b>No date limit</b></div>
@@ -165,10 +156,9 @@
   <h2>The parts, mapped to the real plan surface</h2>
   <table class="map">
     <tr><th>Part (asked)</th><th>Real plan fields it settles</th><th>Never asked — compiled or shown on the card only</th></tr>
-    <tr><td><b>1 · Question</b></td><td>`question`, `title`</td><td rowspan="4">`steer_point_defaults` (compiled from mode — the five-turn walk dies) · `components` + `component_rationale` (orchestrator discretion) · `expected_artefact_shape`, `time_band` (derived) · `assumptions` (shown on the card's details) · `extract_profiles`, `grouping_facets` (depth defaults) · `screening_criteria` detail beyond the scope chips (drafted by the planner, shown on the card)</td></tr>
+    <tr><td><b>1 · Question</b></td><td>`question`, `title`</td><td rowspan="3">`steering_mode` — unattended, set only when the user asks for check-ins (owner: requested, not offered) · `steer_point_defaults` (compiled from mode — the five-turn walk dies) · `components` + `component_rationale` (orchestrator discretion) · `expected_artefact_shape`, `time_band` (derived) · `assumptions` (shown on the card's details) · `extract_profiles`, `grouping_facets` (depth defaults) · `screening_criteria` detail beyond the scope chips (drafted by the planner, shown on the card)</td></tr>
     <tr><td><b>2 · Scope</b></td><td>`scope_constraints` — dates/geography <b>search filters</b>, applied at the backends · `screening_criteria` + `scoping_notes` — <b>screening rules</b>, judged per document (setting, population). One question; the planner routes each constraint to the right mechanism.</td></tr>
     <tr><td><b>3 · Thoroughness</b></td><td>`search_effort` × `analysis_depth` (see the fork below)</td></tr>
-    <tr><td><b>4 · Check-ins</b></td><td>`steering_mode` (default: unattended, per the strand-14 ruling)</td></tr>
   </table>
   <p class="note"><b>Sources scope is not a part:</b> defaults to academic + policy, shows on the plan card, changes via free text or Change.</p>
 

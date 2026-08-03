@@ -74,7 +74,9 @@ PR landing, as strands:
    - **Prompt surface (lead-authored):** the planning prompt gains
      part-by-part behaviour — each turn's reply carries at most one
      **structured part proposal** (id · step label · title · optional body ·
-     optional chips · 2–4 option labels) alongside the existing draft
+     optional chips · 2–4 option labels; parts = question · scope ·
+     thoroughness — no check-in part, steering is unattended unless
+     requested) alongside the existing draft
      snapshot. Versioned as a new prompt (`planner_v6`), never edited in
      place.
    - **Durability:** the part payload persists on the turn row —
@@ -208,8 +210,9 @@ PR landing, as strands:
     design-inputs § 6). The full shape:
     - **Default steering mode = UNATTENDED** (owner ruling): a run started
       without opting into steering never pauses — flagged/honest-fail on
-      problems, never waiting. The fork-A planning part offers the opt-in
-      per run (default answer "Run unattended"). Mode table (lattice
+      problems, never waiting. Check-ins are requested, not offered (owner,
+      2026-08-03): the planning flow asks no check-in question — users who
+      want them ask in the planning chat or switch mode from a card. Mode table (lattice
       policy change): frequent = all always + generic boundary check-ins ·
       moderate = P1 + P4 always, P2/P3/Groups fired · minimal = all fired
       · unattended = all off.
