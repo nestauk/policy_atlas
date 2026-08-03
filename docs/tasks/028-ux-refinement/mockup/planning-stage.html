@@ -86,23 +86,32 @@
   </div>
   <p class="sub" style="margin-top:10px">Two lessons, both binding on <b>planner_v6</b>: <b>(1) steer-point defaults are never a conversation</b> — they compile from the chosen check-in mode (and the ruled default is unattended, so most runs have nothing to walk at all); <b>(2)</b> the scripted opening answered three decisions at once ("Rapid search effort, standard depth, academic-only") — parts already answered must <b>pre-confirm in bulk</b>, never be re-asked. The corpus's <b>two genuinely human conversations</b> back the free-text rules independently: both users wrote compound refinements ("can you make it uk only, with uk comparator countries (US, the scandis, canada, australia…)" · "Please focus on UK") — humans steer in sentences that answer several parts at once, and the part flow must absorb that, never fight it.</p>
 
-  <h2>The slow path — a bare question arrives</h2>
-  <p class="sub">Centred single-column chat (no side pane during planning). One part per turn, button-confirmable, free text always available. Four parts maximum.</p>
+  <h2>The real human session, replayed through the part flow</h2>
+  <p class="sub">This is the corpus's richest human conversation (the ECEC project) — the opening message verbatim, typo included, and the user's real compound follow-up arriving as free text mid-flow. Planner copy is drawn from what the live planner actually replied; the thoroughness and check-in parts are the flow's additions.</p>
   <div class="chatcol">
-    <div class="userbub">What works to reduce persistent school absence?</div>
+    <div class="userbub">ensuring that our most disadvantaged children have access to high auality ecece</div>
     <div class="part">
       <p class="step">Plan · 1 of 4 · the question</p>
-      <h3>What works to reduce persistent absence in English schools?</h3>
-      <p class="body">Your question, tightened so results stay comparable — I've read "school absence" as persistent absence and pinned England unless you say otherwise.</p>
+      <h3>What helps disadvantaged children access high-quality early childhood education and care?</h3>
+      <p class="body">Your question, read as a policy and service-delivery question — so I'd search academic and grey literature both.</p>
       <div class="opts"><span class="b p">That's my question</span><span class="b s">Refine it</span></div>
+      <div class="confirmed">✓ Confirmed <button>Change</button></div>
     </div>
     <div class="part">
       <p class="step">Plan · 2 of 4 · scope</p>
       <h3>What counts as in-scope?</h3>
-      <div class="chips"><span>England</span><span>2015–2025</span><span>School-age 5–16</span><span>Intervention studies</span></div>
+      <div class="chips"><span>Any country</span><span>No date limit</span><span>Policy &amp; service-delivery evidence</span></div>
       <p class="body">These become the screening rules every document is judged against.</p>
       <div class="opts"><span class="b p">Looks right</span><span class="b s">Add or change a constraint</span></div>
-      <div class="confirmed">✓ Looks right <button>Change</button></div>
+    </div>
+    <div class="userbub" style="margin-top:12px">can you make it uk only, with uk comparator countries (US, the scandis, canada, australia - and others that look particularly good)</div>
+    <div class="part">
+      <p class="step">Plan · 2 of 4 · scope — updated from your message</p>
+      <h3>UK as the primary setting, with named comparators</h3>
+      <div class="chips"><span>UK primary</span><span>Comparators: US · Nordics · Canada · Australia</span><span>+ other strong systems</span><span>No date limit</span></div>
+      <p class="body">One honest note: I haven't used database country filters — they'd filter by author affiliation or publisher location, not by the country a policy operates in. UK-primary is a <b>screening rule</b> instead, so foreign-published UK evidence still counts.</p>
+      <div class="opts"><span class="b p">Looks right</span><span class="b s">Add or change a constraint</span></div>
+      <div class="confirmed">✓ Confirmed <button>Change</button></div>
     </div>
     <div class="part">
       <p class="step">Plan · 3 of 4 · thoroughness</p>
@@ -124,21 +133,22 @@
     </div>
     <div class="planner">That's everything — review the plan. Nothing runs until you start it.</div>
     <div class="plancard">
-      <div class="head"><span class="k">The plan</span><span class="q">What works to reduce persistent absence in English schools?</span><span class="ready">ready</span></div>
+      <div class="head"><span class="k">The plan</span><span class="q">What helps disadvantaged children in the UK access high-quality ECEC — with comparator-country lessons?</span><span class="ready">ready</span></div>
       <div class="plangrid">
         <div><p>Thoroughness</p><b>Standard review</b></div>
         <div><p>Check-ins</p><b>Unattended</b></div>
         <div><p>Sources</p><b>Academic + policy</b></div>
-        <div><p>Scope</p><b>England · 2015–2025 · ages 5–16</b></div>
+        <div><p>Scope</p><b>UK primary · comparators US/Nordics/CA/AU · no date limit</b></div>
       </div>
       <div class="foot"><span class="go">Start the analysis</span><span class="band">~20 min · it runs without pausing</span></div>
     </div>
   </div>
+  <p class="note">What the real exchange demonstrates: the human's compound free-text message landed <em>while a different part was open</em> — the flow absorbs it (the scope card re-presents updated, nothing is re-asked), and the planner's honest compilation note (screening rule, not country filter — real copy from the live reply) belongs on the card, not buried in prose. The typo'd opening also shows part 1 earning its place: the question card is where "auality ecece" quietly becomes a well-formed research question the user ratifies.</p>
 
-  <h2>The fast path — the real opening message</h2>
-  <p class="sub">Turn 0 of the real transcript already answered three parts. Answered parts pre-confirm as a single recap; only the gaps get asked.</p>
+  <h2>The fast path — a compound opening</h2>
+  <p class="sub">No human compound opening exists in the corpus yet; the only one is the 027 script's (below, labelled). Answered parts pre-confirm as a single recap; only the gaps get asked.</p>
   <div class="chatcol">
-    <div class="userbub">I need evidence on how school-based interventions affect pupil attendance in the UK. Rapid search effort, standard depth, academic sources only.</div>
+    <div class="userbub">I need evidence on how school-based interventions affect pupil attendance in the UK. Rapid search effort, standard depth, academic sources only. <em style="color:var(--grey);font-size:12px">(scripted live-check opening)</em></div>
     <div class="part">
       <p class="step">Plan · from your message</p>
       <h3>Here's what I've set from that — one question left</h3>
@@ -148,7 +158,7 @@
       <p class="body" style="margin-top:10px">Scope: I've drafted <b>UK as a screening rule</b> (study setting, not publication venue) and <b>no date limit</b>. OK?</p>
       <div class="opts"><span class="b p">Scope's right — show me the plan</span><span class="b s">Add a constraint</span></div>
     </div>
-    <div class="planner" style="color:var(--grey);font-size:13.5px">→ next turn: the ready plan card. Two turns total, versus six in the live transcript.</div>
+    <div class="planner" style="color:var(--grey);font-size:13.5px">→ next turn: the ready plan card. Two turns total, versus the six the live planner took on this same opening.</div>
   </div>
 
   <h2>The parts, mapped to the real plan surface</h2>
