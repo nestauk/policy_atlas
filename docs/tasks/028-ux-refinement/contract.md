@@ -78,7 +78,15 @@ PR landing, as strands:
      thoroughness — no check-in part, steering is unattended unless
      requested) alongside the existing draft
      snapshot. Versioned as a new prompt (`planner_v6`), never edited in
-     place.
+     place. Thoroughness options are **outcome-first** (owner, 2026-08-04):
+     each preset says what you get and what gets read (map from abstracts ·
+     cited report from full texts · report + findings database) with its
+     time band — internal rungs (rapid/deep, landscape) never render; free
+     text compiles custom mixes. planner_v6 also **drops the default
+     `published_before` bound** (live plans pin it to the plan date, so
+     re-runs would exclude newer documents) and renders the recency floor
+     as a visible scope chip, never a silent constraint. The binding design
+     record for this strand is `mockup/planning-stage.html`.
    - **Durability:** the part payload persists on the turn row —
      **at most one additive nullable JSONB column on `planning_transcript`**
      (migration + tested downgrade). Rehydration and thread re-render read it
