@@ -188,3 +188,23 @@ Findings that set the direction:
 - Boundary check-ins' deterministic render is raw machine text
   (`appraise: succeeded | wall_clock=0.332s | counts: …`) — 027 already
   presents these friendly with raw behind a disclosure; no new work.
+
+## 7. Check-in taxonomy rulings (owner, 2026-08-03 — 15 mock-up rounds)
+
+The binding design record is `mockup/checkin-taxonomy.html` (contract
+strand 14 mirrors it). Ruling trail: P2/P3 re-home + single-subject cards →
+P2 shows the theme map (theme-review moment; **rename-without-rerun IN**) →
+P1 relabelled mechanical-failure then **upgraded to a standing search
+review** → Groups split from P4 (one checkpoint steers one component; new
+deep-only lattice point; fixes the unconditional-regroup honesty bug) → P4
+inline per-section edit/remove/add over the existing full-list delta → ICF
+toggle + refresh-extraction dropped from P3's floor (ICF already default at
+deep; refresh is a rare re-run condition for authored suggestions) →
+authored options: hallucinated-delta found (`recover_full_text`) →
+**backend-first validation** (one grammar/one validator at authoring +
+apply, loud refusals) + watch-authoring prompt rev + endorsement-under-
+primary render (no badge) → free text first-class on every card
+(compile→confirm as a mini-thread) → mode table: frequent all-always +
+boundary check-ins · moderate P1+P4 always, rest fired · minimal all fired
+· **default mode = UNATTENDED** (opt-in at planning; nothing ever waits on
+an absent user).

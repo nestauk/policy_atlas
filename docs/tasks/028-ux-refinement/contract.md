@@ -28,6 +28,13 @@
 > stands; the ⏸ **summaries navigation layer** (provenance-grounding
 > § Summaries) folds in as strand 13; **check-in refinement** (option
 > overload + unnoticed pauses, live-testing findings) as strand 14.
+> **(F) Strand-14 taxonomy FULLY RULED (owner, 2026-08-03, across 15
+> mock-up rounds):** default mode unattended · P1 search review · P2
+> evidence base + themes incl. rename-without-rerun IN · P3 reading list ·
+> NEW Groups lattice point · P4 report plan with inline section editing ·
+> authored-delta validation backend-first · free text first-class. The
+> committed artifact `mockup/checkin-taxonomy.html` is the binding design
+> record for strand 14.
 
 ## Goal
 
@@ -195,46 +202,79 @@ PR landing, as strands:
       evidence-strength roll-ups.
     - Two new lead-authored prompt surfaces (summariser + faithfulness
       judge), versioned; per-run cost delta measured in the live check.
-14. **Check-in refinement** (owner, 2026-08-03 — two live-testing findings;
-    direction grounded in a survey of all 48 live `steering.pause` events,
-    owner-directed 2026-08-03 — see design-inputs § 6).
-    (a) **Option overload/clarity.** The live taxonomy: boundary check-ins
-    (3 options, already friendly per 027) · `evidence_base_coverage` (4, the
-    35-occurrence workhorse) · `search_exception` (5) · `synthesis_shape`
-    (5) · `deepening_selection` (9) — **plus up to 4 orchestrator-authored
-    options stacked on top** (observed), so worst cases reach ~13 choices.
-    Three-part fix, none of it a prompt rev by default:
-    - **Copy at source (backend code, not prompt):** the standard option
-      labels/descriptions are static strings in `runtime/steering.py` and
-      leak internal jargon (`weight_emphasis quality x2.0`, `D3 memo
-      refresh`, `(D6)`, `(B3)`) — rewritten in plain reader language;
-      honest semantics stay explicit ("replaces the current selection" in
-      plain words). Ids, deltas and behaviour untouched (the 024/025
-      contract holds: server-supplied options, compile→confirm ladder,
-      `confirm_token`).
-    - **Grouped presentation (frontend):** the proceed action renders first
-      as the primary; the rest group by action class — *change the
-      emphasis (replaces a step)* · *add more evidence (additive)* ·
-      *scope or exclude (you name the targets)* — behind labelled
-      disclosures; *change how often I'm asked* and *stop the run* render
-      as a quiet meta row. Class assignment is a static per-option-id map
-      in the locked vocabulary; an unknown id renders ungrouped and
-      labelled as the server sent it — never dropped.
-    - **Authored options render distinctly** ("Suggested for this run",
-      each with its `why` line — the survey shows these rationales are the
-      clearest text in the payload). All authored options render
-      (flag-don't-drop); if live testing still shows overload from
-      stacking, the **conditional orchestrator composition rev** (gated)
-      tunes their count/dedupe at source — the plan 🛑 confirms or drops
-      it.
-    (b) **Pause salience**: live users didn't realise a check-in was
-    waiting and thought the analysis was still running. The paused state
-    becomes unmissable: journey heading + stage bar + timeline render an
-    explicit paused-waiting-on-you state; a cross-tab banner with a
-    jump-to-check-in affordance; composer state says the run is waiting
-    (not running); the existing nav badge + title marker stay. Exact set
-    pinned at plan time; the mock e2e asserts a paused run is visually
-    distinguished from an executing one on every tab.
+14. **Check-in refinement — the ruled steering taxonomy** (owner-designed
+    across 15 mock-up rounds, 2026-08-03; the committed design record is
+    `mockup/checkin-taxonomy.html` — BINDING; survey grounding in
+    design-inputs § 6). The full shape:
+    - **Default steering mode = UNATTENDED** (owner ruling): a run started
+      without opting into steering never pauses — flagged/honest-fail on
+      problems, never waiting. The fork-A planning part offers the opt-in
+      per run (default answer "Run unattended"). Mode table (lattice
+      policy change): frequent = all always + generic boundary check-ins ·
+      moderate = P1 + P4 always, P2/P3/Groups fired · minimal = all fired
+      · unattended = all off.
+    - **P1 → the search review** (was failure-only): "here's what the
+      search collected" — per-backend counts, queries, sample titles;
+      expand/refine options; mechanical failure is a context variant of
+      the same stop (failure-led copy, "Search harder" primary). Renamed
+      honestly — thin-evidence judgment belongs to P2's post-screen
+      triggers, not P1.
+    - **P2 → evidence base + themes**: shows the theme map (names +
+      document counts); pool-shaping options re-homed here from P3 (scope
+      to strata · exclude documents); re-map covers plain regenerate and
+      guided; **theme rename-without-rerun IN (owner)** — the one new
+      machinery item: a durable edit-delta class (rename on the
+      characterisation record) + steering audit event, **P2-only by
+      constraint** (strata are name-keyed downstream; the plan pins the
+      mechanism and the constraint's enforcement).
+    - **P3 → the reading list**: the card shows the shortlist (titles +
+      strata, browse-all); floor slimmed to proceed + change-count /
+      ranking-emphasis / must-include (pool options moved to P2; "add ICF"
+      dropped — ICF already defaults at deep depth; "refresh extraction"
+      dropped from the floor — a rare re-run condition that belongs to
+      authored suggestions).
+    - **Groups → a NEW deep-only lattice point** (after group; owner
+      principle: one checkpoint steers one component): the regroup options
+      (which re-run `group`) move here off P4's floor — also fixing the
+      found honesty bug (`_p4_options()` offered regrouping unconditionally,
+      incl. standard runs where findings were never extracted). Its fired
+      set already exists (`grouping_flag_triggers`). Groups + P4 share one
+      interruption: two single-subject questions in sequence.
+    - **P4 → the report plan**: shows the proposed sections; options are
+      synthesis-directive only (write-as-planned primary · emphasis);
+      **inline per-section edit/✕ remove/+ add** compose the full edited
+      list into the existing `edit_sections` requires-input delta (grammar
+      unchanged, same confirm ladder); the retype-everything option
+      retires.
+    - **Copy at source**: the static option strings in
+      `runtime/steering.py` rewritten in plain reader language (the
+      jargon leaks — `weight_emphasis x2.0`, `D3/D6/D7/D8/B3` — are code
+      strings, not prompts); honest semantics stay explicit in plain words.
+    - **Authored options ("Suggested from this run's results")**:
+      backend-first validation per the gates (one grammar/one validator,
+      authoring-time compile with drop+log+event, apply-time revalidation,
+      loud refusals — closes the found hallucinated-delta hole,
+      `recover_full_text`) + the watch-authoring prompt rev (reader-facing
+      framing) + render rules: endorsements of a floor option render as
+      the reason under the blue primary (no badge, no duplicate button);
+      only novel suggestions get the block.
+    - **Free text on every card**: the existing 024 free-text→compile→
+      confirm ladder surfaces as a composer-style "or say it in your own
+      words" row on every check-in; the compile→confirm exchange renders
+      as a mini-thread (your words → plain-language compiled changes →
+      apply/discard; partial refusals name which part and why).
+    - **Pause salience** (for opted-in runs): the paused state is
+      unmissable — journey heading + stage bar + timeline render
+      paused-waiting-on-you; a cross-tab banner jumps to the check-in;
+      composer state says waiting, not running; nav badge + title marker
+      stay. The mock e2e asserts a paused run is visually distinct from an
+      executing one on every tab.
+    Behaviour-change inventory for the gates: lattice extension (Groups
+    point) · mode-table changes incl. the unattended default · option
+    re-homes + floor slimming + depth-conditional floors · the rename
+    edit-delta class + audit event · authored-delta validation. The
+    024/025 invariants stay: server-supplied options, compile→confirm
+    ladder, `confirm_token`, steering events on the durable record.
 
 Plus: migration (+ downgrade) if fork A lands · OpenAPI + generated client
 regenerated through `make drift-check` · mock fixtures extended (sequential
@@ -330,7 +370,7 @@ committed without its font/runtime files).
 OpenAI under the approved controls, unchanged. Prompt-bearing changes are
 exactly the gate-listed surfaces (fork A planner rev · fork B key-findings
 rev · strand 12 sections rev · strand 13 summariser + faithfulness judge ·
-the conditional strand-14a composition rev) — lead-only, gated, versioned.
+the strand-14 watch-authoring rev) — lead-only, gated, versioned.
 If planner part-by-part behaviour turns out to need more than a prompt +
 additive payload (e.g. new orchestration state), that's a stop condition,
 not a quiet edit.

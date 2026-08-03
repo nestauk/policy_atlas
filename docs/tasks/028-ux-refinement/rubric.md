@@ -52,8 +52,13 @@ otherwise it is in progress, not done.
         epistemic content, `failed` never renders as a summary, flat
         judging only — with tests; legacy artefacts render on the
         first-sentence fallback.
-17. [ ] Check-in refinement preserves the 024/025 behaviour contract
-        (server-supplied options, compile→confirm ladder, `confirm_token`);
-        a paused run is visually distinct from an executing one on every
-        tab (e2e-asserted); any option-set thinning happened only via the
-        gate-approved composition rev.
+17. [ ] Check-in refinement matches the binding design record
+        (`mockup/checkin-taxonomy.html`): the ruled taxonomy (unattended
+        default · P1 search review · P2 pool + themes + rename · P3
+        reading list · Groups point · P4 report plan with inline section
+        editing) with the 024/025 invariants preserved (server-supplied
+        options, compile→confirm ladder, `confirm_token`); authored
+        options validate against the steering grammar at authoring AND
+        apply time (tested — an invented delta never renders and never
+        silently no-ops); a paused run is visually distinct from an
+        executing one on every tab (e2e-asserted).
