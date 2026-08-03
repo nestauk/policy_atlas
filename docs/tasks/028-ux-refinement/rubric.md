@@ -8,10 +8,11 @@ otherwise it is in progress, not done.
        C five-tab IA).
 2. [ ] `make verify` passes; `pnpm e2e` + `make fe-api-smoke` pass; the pinned
        scoped live check ran and is narrated in verification.md.
-3. [ ] No approval-gated change snuck in unapproved — exactly the named prompt
-       revs (versioned, prompt-guard updated), at most the one additive
-       `planning_transcript` column, additive-only API params/fields; no
-       deps/CI/auth/prod-config/SSE changes.
+3. [ ] No approval-gated change snuck in unapproved — exactly the gate-listed
+       prompt surfaces (versioned, prompt-guard updated), exactly the
+       enumerated additive schema (transcript part column · block summary +
+       marker · artefact summary + marker, one migration), additive-only API
+       params/fields; no deps/CI/auth/prod-config/SSE changes.
 4. [ ] No generated files or secrets edited by hand (client regenerated via
        `make drift-check`).
 5. [ ] No tests deleted, skipped or weakened without written justification;
@@ -46,3 +47,13 @@ otherwise it is in progress, not done.
 15. [ ] The copy diet is recorded: the naming/copy map lands in the
         presentation/vocabulary modules, and no honesty-bearing copy
         (degraded/failed/empty states, coverage bases) was cut.
+16. [ ] Summaries honour the spec (provenance-grounding § Summaries): never
+        detached from drill-down, no citations, carried-with-status
+        epistemic content, `failed` never renders as a summary, flat
+        judging only — with tests; legacy artefacts render on the
+        first-sentence fallback.
+17. [ ] Check-in refinement preserves the 024/025 behaviour contract
+        (server-supplied options, compile→confirm ladder, `confirm_token`);
+        a paused run is visually distinct from an executing one on every
+        tab (e2e-asserted); any option-set thinning happened only via the
+        gate-approved composition rev.

@@ -136,3 +136,24 @@ not invented ones.
   gathered" section shows **cited-only** plots (relevant to the page it's
   on); the **Landscape tab stays** for the overall evidence base. Six tabs.
   Mock-up rev 3 shows the ruled design.
+
+## 5. Owner approval of rev 3 + scope additions (2026-08-03)
+
+Owner: "this looks good now" — fork C hybrid confirmed. Two additions:
+
+- **Summaries navigation layer folds in** (contract strand 13): the ⏸
+  deferred "Block summaries / artefact summary / faithfulness judging"
+  bundle, spec'd and binding at `provenance-grounding.md` § Summaries. The
+  collapsed-section summaries (rev 3's always-visible one-liners) become the
+  verified block summaries; first sentence stays as the honest fallback for
+  legacy/failed.
+- **Check-in refinement** (contract strand 14), two live-testing findings:
+  (a) real check-ins overwhelm — the latest live `steering.pause` bundle
+  carries 9 boostable evidence types, 5 appraisal tiers, screen-confidence
+  bounds and the full proposed-section list in one card, and users can't
+  tell what each option means; (b) users didn't notice a pending check-in —
+  they thought the analysis was still running (badge + title marker proved
+  insufficient). Fix shape: presentation-first (recommended action leads,
+  rest disclosed, plain-language "what this does" lines) + an unmissable
+  cross-tab paused state; option-set thinning at source only via a gated
+  orchestrator composition rev if plan-time payload analysis demands it.

@@ -23,7 +23,11 @@
 > (owner, 2026-08-03, from the interview confusion's root cause):** the jar
 > between the overview section and the per-theme sections is addressed at the
 > **section-planning prompt** (a third gated prompt rev) and/or section
-> organisation — see strand 12.
+> organisation — see strand 12. **(C confirmed + scope additions, owner
+> 2026-08-03, on mock-up rev 3 ("this looks good now")):** fork C hybrid
+> stands; the ⏸ **summaries navigation layer** (provenance-grounding
+> § Summaries) folds in as strand 13; **check-in refinement** (option
+> overload + unnoticed pauses, live-testing findings) as strand 14.
 
 ## Goal
 
@@ -103,8 +107,11 @@ PR landing, as strands:
    one-line summary stays visible when the section is collapsed — expanding
    reveals the full cited prose; and **Key findings is not collapsible** —
    it always renders in full (Conclusions stays collapsible, default open).
-   Annotation spans keep working on collapsed→expanded prose (render-only
-   change).
+   Summary source: the **verified block summary from strand 13** where one
+   exists; the section's own first sentence as the honest fallback
+   (legacy artefacts with no summary rows · `failed` summaries) — never
+   `focus`, never generated at render time. Annotation spans keep working
+   on collapsed→expanded prose.
 6. **Key-findings formatting** (fork B — prompt rev IN): the key-findings
    section emits scannable bullets instead of dense paragraphs — a **scoped
    rev of the synthesise section prompt for the key-findings role only**
@@ -162,6 +169,53 @@ PR landing, as strands:
     no invented structure the synthesis didn't produce. The exact prompt
     design is plan-time lead work; one live before/after section-list
     comparison joins the acceptance checks.
+13. **Summaries navigation layer** (owner fold-in, 2026-08-03 — discharges
+    the ⏸ "Block summaries / artefact summary / faithfulness judging" seam;
+    the spec is `provenance-grounding.md` § Summaries and is **binding**):
+    - **Block summary**: co-versioned nullable second column on the block
+      record, written as a trailing step of block production, excluded from
+      the content hash, with a `pending | verified | failed` marker; no
+      independent staleness. **No backfill** — legacy blocks stay
+      summary-free (strand 5's first-sentence fallback renders them).
+    - **Artefact summary**: a field on the artefact (not a block; accrues no
+      annotations), emphasis anchored on the conclusion-bearing component.
+      The spec's flag-and-propose staleness machinery is trivially satisfied
+      at v1 (blocks don't regenerate yet) — recorded, not built beyond the
+      marker.
+    - **Faithfulness**: LLM judge alone, bounded regenerate-on-fail,
+      flat (always against raw detail + its epistemic annotations —
+      flagged/gap content carried-with-status, never silently promoted;
+      emphasis inherited, never originated). Exhausted retries →
+      `failed`, surfaced honestly (that summary never renders as a
+      summary).
+    - **Display invariant** (spec): a summary never renders detached from
+      its drill-down affordance — the collapsed section IS the drill-down;
+      the artefact summary renders on the report page only (placement at
+      plan time). Summaries carry no citations and stay outside
+      evidence-strength roll-ups.
+    - Two new lead-authored prompt surfaces (summariser + faithfulness
+      judge), versioned; per-run cost delta measured in the live check.
+14. **Check-in refinement** (owner, 2026-08-03 — two live-testing findings).
+    (a) **Option overload/clarity**: real check-ins present too many options
+    with unclear meaning (live payload: 9 boostable evidence types ×
+    5 appraisal tiers × confidence bounds × the full proposed-section list
+    in one card). Presentation-first fix: a recommended/primary action
+    up front, remaining options behind a labelled disclosure, every option
+    carrying a plain-language "what this does" line from the locked
+    vocabulary (server-supplied labels only — the 024/025 behaviour
+    contract stays: server options, compile→confirm ladder, `confirm_token`
+    untouched). If plan-time analysis of real payloads shows the option
+    *set* itself must thin at source, that is a **named orchestrator
+    check-in-composition prompt rev** (gated like the others) — never a
+    silent machinery change. (b) **Pause salience**: live users didn't
+    realise a check-in was waiting and thought the analysis was still
+    running. The paused state becomes unmissable: journey heading + stage
+    bar + timeline render an explicit paused-waiting-on-you state; a
+    cross-tab banner with a jump-to-check-in affordance; composer state
+    says the run is waiting (not running); the existing nav badge + title
+    marker stay. Exact set pinned at plan time; the mock e2e asserts a
+    paused run is visually distinguished from an executing one on every
+    tab.
 
 Plus: migration (+ downgrade) if fork A lands · OpenAPI + generated client
 regenerated through `make drift-check` · mock fixtures extended (sequential
@@ -203,13 +257,18 @@ deferred.md updates · verification.md.
 
 ## Constraints & approval gates
 
-- **Prompt surfaces (owner gate, forks A/B/D):** exactly three prompt
-  changes, all lead-authored, all new versions never in-place edits: the
-  planning prompt part-by-part rev (fork A), the key-findings section rev
-  (fork B), and the section-planning flow rev (strand 12). No other
+- **Prompt surfaces (owner gate, forks A/B/D/E):** the named lead-authored
+  prompt changes only, all new versions never in-place edits: the planning
+  prompt part-by-part rev (fork A) · the key-findings section rev (fork B) ·
+  the section-planning flow rev (strand 12) · the summariser + faithfulness
+  judge (strand 13, new surfaces) · at most one orchestrator
+  check-in-composition rev **if** plan-time analysis shows the option set
+  must thin at source (strand 14a — plan 🛑 confirms or drops it). No other
   prompt/template touches; prompt-guard pins update in the same commit.
-- **Schema:** at most the one additive nullable JSONB column on
-  `planning_transcript` (fork A); zero migrations otherwise.
+- **Schema:** additive-only, enumerated: the nullable JSONB part column on
+  `planning_transcript` (fork A) + the block-summary column & marker and the
+  artefact-summary field & marker (strand 13, per spec). One migration (+
+  tested downgrade); no backfill anywhere; nothing else moves.
 - **Public interface:** additive-only — the turn read-model part field,
   `sort`/`order`/`theme` query params on existing lists. Anything
   non-additive reopens this gate.
@@ -229,10 +288,13 @@ committed without its font/runtime files).
 
 ## Model route
 
-OpenAI under the approved controls, unchanged. Prompt-bearing changes are the
-two named revs above — lead-only, gated, versioned. If planner part-by-part
-behaviour turns out to need more than a prompt + additive payload (e.g. new
-orchestration state), that's a stop condition, not a quiet edit.
+OpenAI under the approved controls, unchanged. Prompt-bearing changes are
+exactly the gate-listed surfaces (fork A planner rev · fork B key-findings
+rev · strand 12 sections rev · strand 13 summariser + faithfulness judge ·
+the conditional strand-14a composition rev) — lead-only, gated, versioned.
+If planner part-by-part behaviour turns out to need more than a prompt +
+additive payload (e.g. new orchestration state), that's a stop condition,
+not a quiet edit.
 
 ## Disciplines binding this slice
 
@@ -264,10 +326,17 @@ conflicting frontend changes (rebase + reassess) · turn/token budget spent.
   run view → artefact: contents sidebar scroll-spy, section collapse/expand,
   key-findings bullets with working claim popovers (fork B) → theme row →
   filtered sources → sort two columns (URL state, collection-true across
-  pages) → composer: Enter/Shift+Enter, growth, disabled-during-run copy.
+  pages) → composer: Enter/Shift+Enter, growth, disabled-during-run copy →
+  **summaries** (strand 13): block summaries mint + verify during the run,
+  collapsed sections show them, a legacy artefact still renders on the
+  first-sentence fallback → **check-in salience** (strand 14): while paused,
+  every tab visibly says so and the banner jumps to the check-in; the
+  check-in card leads with the recommended action and discloses the rest.
   Plus one key-findings cost/quality spot-check on the fork-B rev (same
-  substrate re-run comparison, cost delta named in verification.md). No
-  staging deploy; no full live e2e.
+  substrate re-run comparison) and the **per-run cost delta of the
+  summariser + judge**, both named in verification.md. Plus one live
+  before/after section-list comparison for the strand-12 rev. No staging
+  deploy; no full live e2e.
 - Browser checks: keyboard operation of part-card options, section toggles,
   sortable headers; `prefers-reduced-motion` quiets new animation; no
   horizontal body scroll at 1280/768; type scale holds at both widths.
@@ -283,7 +352,7 @@ public-safety confirmation · known gaps + deferred.md pointers.
 
 ## Risk tier & review focus
 
-**Tier 3** — two prompt-surface revs + one additive migration + additive
+**Tier 3** — five-to-six prompt surfaces + one additive migration + additive
 public-interface changes + broad render paths for model-authored strings.
 Requires: ADR (sequential plan-building, if fork A lands) · migration
 downgrade tested · security lane scoped to the new render paths (part-card
