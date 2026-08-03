@@ -1,0 +1,192 @@
+<title>028 — the planning stage: sequential parts</title>
+<style>
+  :root {
+    --navy: #0f294a; --blue: #0000ff; --grey: #646363; --paper: #f4f4f5;
+    --line: #e4e4e7; --line2: #d3d3d8; --teal: #18a48c; --ink: #1c1c1e;
+    --amber-bg: #fff6e3; --amber-bd: #f3d99a; --amber-ink: #8a5a00;
+  }
+  body { background: var(--paper); color: var(--ink); font-family: system-ui, "Segoe UI", sans-serif; font-size: 16px; line-height: 1.55; margin: 0; }
+  .wrap { max-width: 1150px; margin: 0 auto; padding: 36px 24px 80px; }
+  .eyebrow { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; color: var(--grey); margin: 0; }
+  h1 { font-weight: 800; font-size: 30px; letter-spacing: -0.5px; color: var(--navy); margin: 8px 0 0; text-wrap: balance; }
+  h2 { font-weight: 800; font-size: 20px; letter-spacing: -0.3px; color: var(--navy); margin: 40px 0 4px; }
+  .lede, .sub { max-width: 72ch; color: var(--grey); }
+  .lede { margin: 10px 0 0; } .sub { margin: 2px 0 14px; font-size: 14.5px; }
+  .jargon { background: #ffecec; color: #8a1f1f; padding: 0 3px; }
+
+  /* pathology table */
+  .pathology { background: #fff; border: 1px solid var(--line2); border-left: 3px solid var(--amber-bd); padding: 14px 18px; margin-top: 12px; max-width: 860px; }
+  .pathology .row { display: flex; gap: 10px; font-size: 13.5px; padding: 4px 0; border-top: 1px solid var(--line); }
+  .pathology .row:first-of-type { border-top: none; }
+  .pathology .t { flex: none; width: 46px; font-weight: 800; color: var(--grey); }
+  .pathology .u { flex: none; width: 300px; color: var(--ink); }
+  .pathology .r { flex: 1; color: var(--grey); }
+
+  /* chat column mock */
+  .chatcol { max-width: 620px; background: #fff; border: 1px solid var(--line2); box-shadow: 0 1px 3px rgba(15,41,74,0.06), 0 10px 28px rgba(15,41,74,0.05); padding: 22px 26px 24px; margin-top: 12px; }
+  .userbub { margin-left: 15%; background: #f5f5ff; border: 1px solid #ececff; padding: 10px 14px; font-size: 15px; }
+  .planner { font-size: 15px; max-width: 60ch; margin: 14px 0 0; }
+  .part { border: 1px solid var(--line2); background: #fff; box-shadow: 0 1px 3px rgba(15,41,74,0.05); padding: 14px 16px; margin-top: 12px; }
+  .part .step { margin: 0; font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--grey); }
+  .part h3 { margin: 5px 0 0; font-size: 16.5px; font-weight: 800; color: var(--navy); line-height: 1.4; }
+  .part .body { margin: 5px 0 0; font-size: 14px; color: var(--grey); max-width: 56ch; }
+  .chips { margin-top: 9px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips span { border: 1px solid #c7c7ff; background: #ececff; color: var(--blue); font-size: 13px; font-weight: 600; padding: 3px 10px; }
+  .opts { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .opts .b { font-size: 14px; font-weight: 700; padding: 9px 15px; }
+  .opts .p { background: var(--blue); color: #fff; border: none; clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%); }
+  .opts .s { background: #fff; color: var(--navy); border: 1px solid var(--line2); font-weight: 600; }
+  .opts .b small { display: block; font-weight: 400; font-size: 12px; margin-top: 1px; }
+  .opts .p small { color: rgba(255,255,255,0.85); }
+  .opts .s small { color: var(--grey); }
+  .confirmed { margin-top: 11px; font-size: 14px; font-weight: 700; color: #0c6b5a; }
+  .confirmed button { border: none; background: none; padding: 0; font: inherit; font-size: 13px; font-weight: 600; color: var(--grey); text-decoration: underline; margin-left: 10px; cursor: pointer; }
+
+  /* plan card */
+  .plancard { border: 1px solid var(--blue); background: #fff; box-shadow: 0 1px 3px rgba(15,41,74,0.08); margin-top: 14px; }
+  .plancard .head { display: flex; align-items: baseline; gap: 10px; padding: 12px 16px; }
+  .plancard .head .k { font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--grey); }
+  .plancard .head .q { flex: 1; font-size: 14.5px; font-weight: 600; color: var(--navy); }
+  .plancard .head .ready { border: 1px solid #b7e0d8; background: #e7f5f2; color: #0c6b5a; font-size: 11.5px; font-weight: 700; padding: 2px 8px; }
+  .plangrid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .plangrid div { background: #fff; padding: 8px 12px; }
+  .plangrid p { margin: 0; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--grey); }
+  .plangrid b { font-size: 13.5px; color: var(--navy); }
+  .plancard .foot { border-top: 1px solid var(--line); padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+  .plancard .go { background: var(--blue); color: #fff; border: none; font-size: 14.5px; font-weight: 700; padding: 11px 18px; clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%); }
+  .plancard .band { font-size: 13px; color: var(--grey); }
+
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 12px; align-items: start; }
+  @media (max-width: 920px) { .duo { grid-template-columns: 1fr; } }
+  .collabel { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 8px; color: var(--navy); }
+
+  table.map { border-collapse: collapse; background: #fff; border: 1px solid var(--line2); margin-top: 12px; font-size: 13.5px; }
+  .map th, .map td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; vertical-align: top; }
+  .map th { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--grey); background: #fafafa; }
+  .map td b { color: var(--navy); }
+  .map .quiet { color: var(--grey); font-size: 12.5px; }
+  .note { margin-top: 14px; border-left: 3px solid var(--blue); background: #ececff; padding: 10px 14px; font-size: 14px; max-width: 78ch; }
+  .rulebox { background: #fff; border: 1px solid var(--line2); padding: 14px 18px; margin-top: 12px; max-width: 860px; font-size: 14.5px; }
+  .rulebox b { color: var(--navy); }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">Task 028 · strand 3 (fork A) · planning stage — decision mock-up</p>
+  <h1>Sequential plan-building on the real plan surface</h1>
+  <p class="lede">Grounded in the durable planning transcripts (37 live turns) and the as-built plan model. The parts below map to real plan fields; the conversation shown uses the real attendance project's opening message.</p>
+
+  <h2>What the live data shows the current planner doing</h2>
+  <p class="sub">From the richest real transcript — the user typed the <b>same confirmation five times</b> because the planner walked its unattended steer-point defaults one confirmation per turn:</p>
+  <div class="pathology">
+    <div class="row"><span class="t">turn 1</span><span class="u">"Yes — that's right. Mark the plan ready."</span><span class="r">"…I can't mark the plan fully ready until the remaining unatte…"</span></div>
+    <div class="row"><span class="t">turn 2</span><span class="u">"Yes — that's right. Mark the plan ready."</span><span class="r">"…I still need to walk the remaining unattended steer point…"</span></div>
+    <div class="row"><span class="t">turn 3</span><span class="u">"Yes — that's right. Mark the plan ready."</span><span class="r">"I've taken your confirmation as approval for the evidence-base coverage standing instruction too…"</span></div>
+    <div class="row"><span class="t">turn 4</span><span class="u">"Yes — that's right. Mark the plan ready."</span><span class="r">"I've recorded your confirmation for <span class="jargon">deepening_selection</span> too…"</span></div>
+    <div class="row"><span class="t">turn 5</span><span class="u">"Yes — that's right. Mark the plan ready."</span><span class="r">"Done — I've marked the plan ready."</span></div>
+  </div>
+  <p class="sub" style="margin-top:10px">Two lessons, both binding on <b>planner_v6</b>: <b>(1) steer-point defaults are never a conversation</b> — they compile from the chosen check-in mode (and the ruled default is unattended, so most runs have nothing to walk at all); <b>(2)</b> the same transcript's opening message answered three decisions at once ("Rapid search effort, standard depth, academic-only") — parts already answered must <b>pre-confirm in bulk</b>, never be re-asked.</p>
+
+  <h2>The slow path — a bare question arrives</h2>
+  <p class="sub">Centred single-column chat (no side pane during planning). One part per turn, button-confirmable, free text always available. Four parts maximum.</p>
+  <div class="chatcol">
+    <div class="userbub">What works to reduce persistent school absence?</div>
+    <div class="part">
+      <p class="step">Plan · 1 of 4 · the question</p>
+      <h3>What works to reduce persistent absence in English schools?</h3>
+      <p class="body">Your question, tightened so results stay comparable — I've read "school absence" as persistent absence and pinned England unless you say otherwise.</p>
+      <div class="opts"><span class="b p">That's my question</span><span class="b s">Refine it</span></div>
+    </div>
+    <div class="part">
+      <p class="step">Plan · 2 of 4 · scope</p>
+      <h3>What counts as in-scope?</h3>
+      <div class="chips"><span>England</span><span>2015–2025</span><span>School-age 5–16</span><span>Intervention studies</span></div>
+      <p class="body">These become the screening rules every document is judged against.</p>
+      <div class="opts"><span class="b p">Looks right</span><span class="b s">Add or change a constraint</span></div>
+      <div class="confirmed">✓ Looks right <button>Change</button></div>
+    </div>
+    <div class="part">
+      <p class="step">Plan · 3 of 4 · thoroughness</p>
+      <h3>How thorough should this be?</h3>
+      <div class="opts">
+        <span class="b s">Quick look<small>survey the landscape · ~10 min</small></span>
+        <span class="b p">Standard review<small>screened + assessed evidence base · ~20 min</small></span>
+        <span class="b s">Deep analysis<small>findings extracted from full texts · ~45 min</small></span>
+      </div>
+    </div>
+    <div class="part">
+      <p class="step">Plan · 4 of 4 · check-ins</p>
+      <h3>Should the run pause for your input?</h3>
+      <div class="opts">
+        <span class="b p">Run unattended<small>no pauses — the report just appears</small></span>
+        <span class="b s">Review key stages<small>see the search haul + report plan</small></span>
+        <span class="b s">Every stage<small>maximum control</small></span>
+      </div>
+    </div>
+    <div class="planner">That's everything — review the plan. Nothing runs until you start it.</div>
+    <div class="plancard">
+      <div class="head"><span class="k">The plan</span><span class="q">What works to reduce persistent absence in English schools?</span><span class="ready">ready</span></div>
+      <div class="plangrid">
+        <div><p>Thoroughness</p><b>Standard review</b></div>
+        <div><p>Check-ins</p><b>Unattended</b></div>
+        <div><p>Sources</p><b>Academic + policy</b></div>
+        <div><p>Scope</p><b>England · 2015–2025 · ages 5–16</b></div>
+      </div>
+      <div class="foot"><span class="go">Start the analysis</span><span class="band">~20 min · it runs without pausing</span></div>
+    </div>
+  </div>
+
+  <h2>The fast path — the real opening message</h2>
+  <p class="sub">Turn 0 of the real transcript already answered three parts. Answered parts pre-confirm as a single recap; only the gaps get asked.</p>
+  <div class="chatcol">
+    <div class="userbub">I need evidence on how school-based interventions affect pupil attendance in the UK. Rapid search effort, standard depth, academic sources only.</div>
+    <div class="part">
+      <p class="step">Plan · from your message</p>
+      <h3>Here's what I've set from that — one question left</h3>
+      <div class="confirmed" style="margin-top:8px">✓ Question: school-based interventions and pupil attendance, UK school settings <button>Change</button></div>
+      <div class="confirmed">✓ Thoroughness: quick, standard-depth analysis <button>Change</button></div>
+      <div class="confirmed">✓ Sources: academic only <button>Change</button></div>
+      <p class="body" style="margin-top:10px">Scope: I've drafted <b>UK as a screening rule</b> (study setting, not publication venue) and <b>no date limit</b>. OK?</p>
+      <div class="opts"><span class="b p">Scope's right — show me the plan</span><span class="b s">Add a constraint</span></div>
+    </div>
+    <div class="planner" style="color:var(--grey);font-size:13.5px">→ next turn: the ready plan card. Two turns total, versus six in the live transcript.</div>
+  </div>
+
+  <h2>The parts, mapped to the real plan surface</h2>
+  <table class="map">
+    <tr><th>Part (asked)</th><th>Real plan fields it settles</th><th>Never asked — compiled or shown on the card only</th></tr>
+    <tr><td><b>1 · Question</b></td><td>`question`, `title`</td><td rowspan="4">`steer_point_defaults` (compiled from mode — the five-turn walk dies) · `components` + `component_rationale` (orchestrator discretion) · `expected_artefact_shape`, `time_band` (derived) · `assumptions` (shown on the card's details) · `extract_profiles`, `grouping_facets` (depth defaults) · `screening_criteria` detail beyond the scope chips (drafted by the planner, shown on the card)</td></tr>
+    <tr><td><b>2 · Scope</b></td><td>`scoping_notes`, `screening_criteria`, `scope_constraints` (dates · geography)</td></tr>
+    <tr><td><b>3 · Thoroughness</b></td><td>`search_effort` × `analysis_depth` (see the fork below)</td></tr>
+    <tr><td><b>4 · Check-ins</b></td><td>`steering_mode` (default: unattended, per the strand-14 ruling)</td></tr>
+  </table>
+  <p class="note"><b>Sources scope (`backend_scope`) is deliberately not a part:</b> it defaults to academic + policy ("both"), shows on the plan card, and changes via free text or the card's Change — a fifth question on every run isn't worth what it settles. Say the word if you'd rather it were asked.</p>
+
+  <h2>Fork: how to ask "how thorough?"</h2>
+  <p class="sub">The machinery has two real axes — search effort (rapid · standard · deep) and analysis depth (landscape · standard · deep). The interviews say users think in one thoroughness dial.</p>
+  <div class="duo">
+    <div>
+      <p class="collabel">Option A — one question, three presets + customise (recommended)</p>
+      <div class="rulebox">
+        <b>Quick look</b> = rapid search · landscape depth (~10 min) ·
+        <b>Standard review</b> = standard · standard (~20 min) ·
+        <b>Deep analysis</b> = deep · deep, findings extracted (~45 min).
+        A quiet "customise" affordance exposes the two real axes for the users who want them (the real transcript's author picked <em>rapid search + standard depth</em> — a mix no preset covers, so customise isn't hypothetical). Free text always compiles any mix.
+      </div>
+    </div>
+    <div>
+      <p class="collabel">Option B — two questions (search, then analysis)</p>
+      <div class="rulebox">
+        Honest to the machinery, and the only way every combination is button-reachable — but it's a fifth turn on the slow path, and the distinction ("effort of finding" vs "depth of reading") needs explaining every time. The interviews' overload finding argues against it.
+      </div>
+    </div>
+  </div>
+
+  <h2>Behaviour rules (binding on the build)</h2>
+  <div class="rulebox">
+    <b>Free text beats buttons everywhere</b> — parts are suggestions, not a form; any reply can answer several parts, redirect, or ignore the question asked (the planner re-plans its remaining parts accordingly). ·
+    <b>Change re-opens one part</b> — downstream confirmations survive unless the change invalidates them (the planner says which, and why). ·
+    <b>No part, no card</b> — a turn whose reply carries no structured part renders as plain prose (old transcripts render unchanged; rehydration restores part + confirmed state from the durable column). ·
+    <b>Never re-ask what's answered</b> — compound messages pre-confirm in bulk with Change affordances. ·
+    <b>The plan card is the only start surface</b> — details open by default pre-run (standing ruling), 409 fence and two-phase turn persistence untouched.
+  </div>
+</div>
