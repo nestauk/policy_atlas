@@ -79,8 +79,10 @@ PR landing, as strands:
      requested) alongside the existing draft
      snapshot. Versioned as a new prompt (`planner_v6`), never edited in
      place. Thoroughness options are **outcome-first** (owner, 2026-08-04):
-     each preset says what you get and what gets read (map from abstracts ·
-     cited report from full texts · report + findings database) with its
+     each preset says what you get (cited overview across the whole screened
+     corpus · cited report focused on the strongest full-text-checked
+     documents · + findings database — every depth mints a cited report;
+     full texts ingest at every depth) with its
      time band — internal rungs (rapid/deep, landscape) never render; free
      text compiles custom mixes. planner_v6 also **drops the default
      `published_before` bound** (live plans pin it to the plan date, so
