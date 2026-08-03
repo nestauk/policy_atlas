@@ -4,7 +4,8 @@ Core completion criteria. The task is **done only if every box holds** —
 otherwise it is in progress, not done.
 
 1. [ ] Implementation satisfies [contract.md](contract.md), including the
-       owner-resolved state of forks A/B/C.
+       owner-resolved forks (A full sequential flow · B scoped prompt rev ·
+       C five-tab IA).
 2. [ ] `make verify` passes; `pnpm e2e` + `make fe-api-smoke` pass; the pinned
        scoped live check ran and is narrated in verification.md.
 3. [ ] No approval-gated change snuck in unapproved — exactly the named prompt

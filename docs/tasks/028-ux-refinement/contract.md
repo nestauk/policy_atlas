@@ -9,12 +9,14 @@
 > re-targets `dev` once they merge; if either review changes files this slice
 > touches, this branch rebases before its own review.
 >
-> **Open forks resolved at the contract 🛑 (owner):**
-> **(A) Sequential plan-building** — in or out (recommend IN; it answers the
-> interviews' central confusion finding). **(B) Key-findings bullets** — prompt
-> rev vs render-side vs defer (recommend a scoped prompt rev). **(C) Tab IA** —
-> fold Landscape into the evidence base and keep Decision log (recommend), or
-> keep all six tabs.
+> **Forks resolved (owner, 2026-08-03):**
+> **(A) Sequential plan-building: IN, full flow** (prompt rev `planner_v6` +
+> additive column + part cards + centred planning chat + inline plan card).
+> **(B) Key-findings bullets: scoped prompt rev IN** — owner ruling: the eval
+> slice is much deferred; build without the pre-eval prompt-freeze constraint
+> (the cost/quality spot-check stays as ordinary verification, not an eval
+> proxy). **(C) Tab IA: fold Landscape into the evidence base, keep Decision
+> log** — five tabs.
 
 ## Goal
 
@@ -47,7 +49,7 @@ PR landing, as strands:
    (already the layout — must survive the strand-3 recentring); 027's
    composer-state semantics (disabled + honest copy while a run
    executes/parks) preserved verbatim.
-3. **Sequential plan-building** (fork A — if IN). The planner proposes the
+3. **Sequential plan-building** (fork A — IN). The planner proposes the
    plan one part at a time; the user confirms each part with a button or
    redirects in free text.
    - **Prompt surface (lead-authored):** the planning prompt gains
@@ -85,16 +87,15 @@ PR landing, as strands:
    default open, the rest collapsed (plan pins the exact defaults);
    expand/collapse are real buttons with `aria-expanded`. Annotation spans
    keep working on collapsed→expanded prose (render-only change).
-6. **Key-findings formatting** (fork B — recommend prompt rev): the
-   key-findings section emits scannable bullets instead of dense paragraphs —
-   a **scoped rev of the synthesise section prompt for the key-findings role
-   only** (lead-authored, versioned; other section roles untouched), with the
+6. **Key-findings formatting** (fork B — prompt rev IN): the key-findings
+   section emits scannable bullets instead of dense paragraphs — a **scoped
+   rev of the synthesise section prompt for the key-findings role only**
+   (lead-authored, versioned; other section roles untouched), with the
    renderer treating bullet lines as list items while annotation spans still
    anchor into the same persisted prose (spans crossing a bullet boundary
    degrade honestly, never mis-render). One live cost/quality spot-check
-   pinned in acceptance. *(Alternative if the owner rules the pinned prompt
-   surfaces frozen pre-eval: defer the prompt rev to the eval slice and land
-   render-side improvements only — no fake bullets.)*
+   pinned in acceptance (ordinary verification — owner ruled the pre-eval
+   prompt-freeze concern void, 2026-08-03).
 7. **Sources table.** Sortable columns (Source · Year · Evidence type ·
    Evidence strength · Status) as **additive server-side `sort`/`order` query
    params** on the existing paginated list (client-side sort of one page lies
@@ -113,7 +114,7 @@ PR landing, as strands:
    → run); the ready plan card carries the start affordance + expectation
    copy; post-run the completion card CTAs stay the canonical route into the
    outputs. No new surfaces — copy and emphasis on existing ones.
-10. **Tab IA** (fork C — recommend): **Landscape folds into the evidence-base
+10. **Tab IA** (fork C — ruled): **Landscape folds into the evidence-base
     page** as the "How the evidence was gathered" collapsible section (the
     charts already render there; the tab retires, its route redirects);
     **Decision log stays**. Tabs: Workspace · Evidence base · Findings ·
