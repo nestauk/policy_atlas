@@ -195,27 +195,46 @@ PR landing, as strands:
       evidence-strength roll-ups.
     - Two new lead-authored prompt surfaces (summariser + faithfulness
       judge), versioned; per-run cost delta measured in the live check.
-14. **Check-in refinement** (owner, 2026-08-03 — two live-testing findings).
-    (a) **Option overload/clarity**: real check-ins present too many options
-    with unclear meaning (live payload: 9 boostable evidence types ×
-    5 appraisal tiers × confidence bounds × the full proposed-section list
-    in one card). Presentation-first fix: a recommended/primary action
-    up front, remaining options behind a labelled disclosure, every option
-    carrying a plain-language "what this does" line from the locked
-    vocabulary (server-supplied labels only — the 024/025 behaviour
-    contract stays: server options, compile→confirm ladder, `confirm_token`
-    untouched). If plan-time analysis of real payloads shows the option
-    *set* itself must thin at source, that is a **named orchestrator
-    check-in-composition prompt rev** (gated like the others) — never a
-    silent machinery change. (b) **Pause salience**: live users didn't
-    realise a check-in was waiting and thought the analysis was still
-    running. The paused state becomes unmissable: journey heading + stage
-    bar + timeline render an explicit paused-waiting-on-you state; a
-    cross-tab banner with a jump-to-check-in affordance; composer state
-    says the run is waiting (not running); the existing nav badge + title
-    marker stay. Exact set pinned at plan time; the mock e2e asserts a
-    paused run is visually distinguished from an executing one on every
-    tab.
+14. **Check-in refinement** (owner, 2026-08-03 — two live-testing findings;
+    direction grounded in a survey of all 48 live `steering.pause` events,
+    owner-directed 2026-08-03 — see design-inputs § 6).
+    (a) **Option overload/clarity.** The live taxonomy: boundary check-ins
+    (3 options, already friendly per 027) · `evidence_base_coverage` (4, the
+    35-occurrence workhorse) · `search_exception` (5) · `synthesis_shape`
+    (5) · `deepening_selection` (9) — **plus up to 4 orchestrator-authored
+    options stacked on top** (observed), so worst cases reach ~13 choices.
+    Three-part fix, none of it a prompt rev by default:
+    - **Copy at source (backend code, not prompt):** the standard option
+      labels/descriptions are static strings in `runtime/steering.py` and
+      leak internal jargon (`weight_emphasis quality x2.0`, `D3 memo
+      refresh`, `(D6)`, `(B3)`) — rewritten in plain reader language;
+      honest semantics stay explicit ("replaces the current selection" in
+      plain words). Ids, deltas and behaviour untouched (the 024/025
+      contract holds: server-supplied options, compile→confirm ladder,
+      `confirm_token`).
+    - **Grouped presentation (frontend):** the proceed action renders first
+      as the primary; the rest group by action class — *change the
+      emphasis (replaces a step)* · *add more evidence (additive)* ·
+      *scope or exclude (you name the targets)* — behind labelled
+      disclosures; *change how often I'm asked* and *stop the run* render
+      as a quiet meta row. Class assignment is a static per-option-id map
+      in the locked vocabulary; an unknown id renders ungrouped and
+      labelled as the server sent it — never dropped.
+    - **Authored options render distinctly** ("Suggested for this run",
+      each with its `why` line — the survey shows these rationales are the
+      clearest text in the payload). All authored options render
+      (flag-don't-drop); if live testing still shows overload from
+      stacking, the **conditional orchestrator composition rev** (gated)
+      tunes their count/dedupe at source — the plan 🛑 confirms or drops
+      it.
+    (b) **Pause salience**: live users didn't realise a check-in was
+    waiting and thought the analysis was still running. The paused state
+    becomes unmissable: journey heading + stage bar + timeline render an
+    explicit paused-waiting-on-you state; a cross-tab banner with a
+    jump-to-check-in affordance; composer state says the run is waiting
+    (not running); the existing nav badge + title marker stay. Exact set
+    pinned at plan time; the mock e2e asserts a paused run is visually
+    distinguished from an executing one on every tab.
 
 Plus: migration (+ downgrade) if fork A lands · OpenAPI + generated client
 regenerated through `make drift-check` · mock fixtures extended (sequential

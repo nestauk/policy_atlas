@@ -157,3 +157,34 @@ Owner: "this looks good now" — fork C hybrid confirmed. Two additions:
   rest disclosed, plain-language "what this does" lines) + an unmissable
   cross-tab paused state; option-set thinning at source only via a gated
   orchestrator composition rev if plan-time payload analysis demands it.
+
+## 6. Check-in survey (owner-directed, 2026-08-03: "read a few of them")
+
+All 48 live `steering.pause` events in the dev DB surveyed before fixing the
+strand-14a direction:
+
+| Type | Component | Count | Standard options |
+|---|---|---|---|
+| boundary `check_in` (watch mode) | appraise/characterise/classify/ingest/screen× | 7 | 3 — continue · change mode · stop |
+| `evidence_base_coverage` | select | 35 | 4 — continue · search more · re-screen · re-characterise |
+| `search_exception` | acquire | 2 | 5 — deepen · rescope filters · guide queries · accept thin · stop |
+| `synthesis_shape` | synthesise | 2 | 5 — as proposed · edit sections · emphasis boosts · regroup ×2 |
+| `deepening_selection` | select | 2 | 9 — as proposed · deepen clusters · strongest · most relevant · budget · +ICF profile · refresh extraction · scope strata · exclude docs |
+
+Findings that set the direction:
+- **Standard option copy is static code** (`runtime/steering.py`), and leaks
+  internal jargon to policy users: `weight_emphasis quality x2.0 — a
+  multiplier on the default weight`, `(D3 memo refresh)`, `(D6)`, `(D7)`,
+  `(D8)`, `(B3)`, "characterisation", "document grain". → plain-language
+  rewrite is a **code copy change, no prompt rev**.
+- **Up to 4 orchestrator-authored options stack on top** of the standard
+  set (observed on synthesis_shape and a full-text-recovery boundary), so
+  worst-case ~13 choices. The authored options carry `why` rationales that
+  are the clearest prose in the payload — render them, distinctly.
+- Options classify cleanly: proceed · change-emphasis (replaces) ·
+  additive · scope/exclude (requires input) · meta (mode/stop) — a static
+  per-id class map supports grouped presentation without touching
+  behaviour.
+- Boundary check-ins' deterministic render is raw machine text
+  (`appraise: succeeded | wall_clock=0.332s | counts: …`) — 027 already
+  presents these friendly with raw behind a disclosure; no new work.
