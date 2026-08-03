@@ -79,10 +79,11 @@ PR landing, as strands:
      requested) alongside the existing draft
      snapshot. Versioned as a new prompt (`planner_v6`), never edited in
      place. Thoroughness options are **outcome-first** (owner, 2026-08-04):
-     each preset says what you get (cited overview across the whole screened
-     corpus · cited report focused on the strongest full-text-checked
-     documents · + findings database — every depth mints a cited report;
-     full texts ingest at every depth) with its honest time band. **Presets
+     each preset says what you get (short cited overview from a focused
+     search · full cited report from a wider search · + findings database —
+     every depth mints a cited report; full texts ingest at every depth;
+     selection mechanics stay unstated, they're inherent) with its honest
+     time band. **Presets
      compile a third lever — report length** (owner, 2026-08-04, from real
      timing data: synthesise medians 580s and scales with section count
      while screen_full+select cost ~13s combined — length is the only lever
