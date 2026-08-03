@@ -1,0 +1,317 @@
+<title>028 fork C — Landscape tab: fold or keep?</title>
+<style>
+  :root {
+    --navy: #0f294a; --blue: #0000ff; --grey: #646363; --paper: #f4f4f5;
+    --line: #e4e4e7; --line2: #d3d3d8; --teal: #18a48c; --ink: #1c1c1e;
+    --amber-bg: #fff6e3; --amber-bd: #f3d99a; --amber-ink: #8a5a00;
+    --display: system-ui, "Segoe UI", sans-serif;
+  }
+  body { background: var(--paper); color: var(--ink); font-family: system-ui, "Segoe UI", sans-serif; font-size: 16px; line-height: 1.55; margin: 0; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 36px 24px 80px; }
+  .eyebrow { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; color: var(--grey); margin: 0; }
+  h1 { font-family: var(--display); font-weight: 800; font-size: 30px; letter-spacing: -0.5px; color: var(--navy); margin: 8px 0 0; text-wrap: balance; }
+  .lede { max-width: 68ch; color: var(--grey); margin: 10px 0 0; }
+  .fontnote { font-size: 12.5px; color: var(--grey); margin: 6px 0 0; }
+
+  .toggle { position: sticky; top: 0; z-index: 30; display: flex; gap: 8px; padding: 12px 0; margin-top: 22px; background: var(--paper); border-bottom: 1px solid var(--line); }
+  .toggle button { cursor: pointer; font: inherit; font-size: 14.5px; font-weight: 700; padding: 10px 18px; border: 1px solid var(--line2); background: #fff; color: var(--navy); }
+  .toggle button[aria-pressed="true"] { background: var(--blue); color: #fff; border-color: var(--blue); clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%); }
+  .toggle button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+  .option { display: none; }
+  .option.on { display: block; }
+  .verdict { max-width: 72ch; margin: 18px 0 0; }
+  .verdict p { margin: 0; }
+  .verdict strong { color: var(--navy); }
+
+  /* Browser frame */
+  .frame { margin-top: 18px; border: 1px solid var(--line2); background: #fff; box-shadow: 0 1px 3px rgba(15,41,74,0.06), 0 10px 28px rgba(15,41,74,0.05); }
+  .framebar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--line); background: #fafafa; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line2); }
+  .url { font-size: 12.5px; color: var(--grey); margin-left: 8px; }
+
+  /* Product header */
+  .phead { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 22px; height: 54px; border-bottom: 1px solid var(--line); background: #fff; flex-wrap: wrap; }
+  .brand { font-family: var(--display); font-weight: 800; font-size: 17px; letter-spacing: -0.3px; color: var(--navy); white-space: nowrap; }
+  .brand b { color: var(--blue); }
+  .crumb { color: var(--line2); }
+  .proj { font-size: 14px; font-weight: 600; color: var(--navy); }
+  .tabs { display: flex; gap: 20px; flex-wrap: wrap; }
+  .tabs span { font-size: 14.5px; font-weight: 600; color: var(--grey); padding: 15px 0 13px; border-bottom: 2px solid transparent; }
+  .tabs .active { font-weight: 800; color: var(--navy); border-bottom-color: var(--blue); }
+  .tabs .ghost { color: #b9b9be; text-decoration: line-through; }
+
+  /* Evidence-base page */
+  .page { display: flex; justify-content: center; gap: 32px; padding: 28px 22px 44px; background: var(--paper); }
+  .contents { width: 200px; flex: none; position: sticky; top: 54px; align-self: flex-start; }
+  .contents p { margin: 0 0 8px; font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--grey); }
+  .contents a { display: block; padding: 6px 0 6px 11px; font-size: 13.5px; color: var(--navy); border-left: 3px solid var(--line); text-decoration: none; }
+  .contents a.here { color: var(--blue); font-weight: 700; border-left-color: var(--blue); }
+  .contents a.new { background: #ececff; }
+  article { width: 100%; max-width: 640px; background: #fff; border: 1px solid var(--line); padding: 34px 40px 40px; }
+  article > .eyebrow { color: var(--grey); }
+  article h2 { font-family: var(--display); font-size: 26px; font-weight: 800; letter-spacing: -0.4px; line-height: 1.15; color: var(--navy); margin: 6px 0 0; }
+  .q { color: var(--grey); margin: 8px 0 0; font-size: 15.5px; }
+
+  details { border-top: 1px solid var(--line); }
+  details:first-of-type { margin-top: 26px; }
+  summary { display: flex; align-items: baseline; gap: 12px; cursor: pointer; padding: 14px 0 4px; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary h3 { font-family: var(--display); font-size: 18.5px; font-weight: 800; letter-spacing: -0.2px; color: var(--navy); margin: 0; flex: 1; }
+  summary .chev { font-size: 12.5px; font-weight: 700; color: var(--blue); white-space: nowrap; }
+  details[open] .chev .closed, details:not([open]) .chev .opened { display: none; }
+  .summ { margin: 0 0 12px; font-size: 14px; color: var(--grey); max-width: 62ch; }
+  .body { padding: 2px 0 18px; }
+  .body ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 9px; }
+  .body li { max-width: 62ch; font-size: 15px; }
+  .ref { border: 1px solid rgba(0,0,255,0.25); background: #f5f5ff; color: rgba(0,0,255,0.85); font-size: 11px; font-weight: 700; padding: 0 5px; }
+  .gap { border: 1px solid var(--amber-bd); background: var(--amber-bg); color: var(--amber-ink); font-size: 11px; font-weight: 700; padding: 1px 6px; }
+
+  /* charts */
+  .blocktitle { font-size: 13px; font-weight: 700; color: var(--navy); margin: 0 0 9px; }
+  .bars { display: flex; flex-direction: column; gap: 7px; }
+  .bar { display: flex; align-items: center; gap: 10px; }
+  .bar .lab { width: 118px; flex: none; text-align: right; font-size: 12.5px; font-weight: 600; color: var(--navy); }
+  .bar .track { height: 11px; flex: 1; background: var(--paper); }
+  .bar .fill { display: block; height: 100%; background: var(--blue); }
+  .bar .n { width: 32px; flex: none; font-size: 12.5px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; }
+  .twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 18px; }
+  @media (max-width: 720px) { .twocol { grid-template-columns: 1fr; } .contents { display: none; } article { padding: 24px; } }
+  .years { display: flex; align-items: flex-end; gap: 5px; height: 64px; }
+  .years span { flex: 1; background: #a5a5ff; }
+  .yearlabs { display: flex; gap: 5px; margin-top: 3px; }
+  .yearlabs span { flex: 1; text-align: center; font-size: 10px; color: var(--grey); }
+  .caveat { margin: 8px 0 0; font-size: 12.5px; color: var(--grey); max-width: 56ch; }
+  .lsblock { margin-top: 20px; }
+  .lsblock:first-child { margin-top: 0; }
+  .groups { display: flex; flex-wrap: wrap; gap: 6px; }
+  .groups span { border: 1px solid var(--line2); background: var(--paper); font-size: 12.5px; font-weight: 600; color: var(--navy); padding: 4px 10px; }
+
+  /* landscape standalone page (option 2) */
+  .lspage { padding: 28px 22px 44px; background: var(--paper); }
+  .lspage .inner { max-width: 760px; margin: 0 auto; }
+  .lspage h2 { font-family: var(--display); font-size: 24px; font-weight: 800; letter-spacing: -0.3px; color: var(--navy); margin: 0; }
+  .card { background: #fff; border: 1px solid var(--line2); padding: 16px 18px; margin-top: 14px; }
+
+  .trade { margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .trade { grid-template-columns: 1fr; } }
+  .trade div { background: #fff; border: 1px solid var(--line2); padding: 14px 16px; }
+  .trade p { margin: 0 0 6px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
+  .trade .for p { color: var(--teal); }
+  .trade .against p { color: var(--amber-ink); }
+  .trade ul { margin: 0; padding-left: 18px; font-size: 14px; }
+  .trade li { margin-top: 4px; max-width: 60ch; }
+  .note { margin-top: 16px; border-left: 3px solid var(--blue); background: #ececff; padding: 10px 14px; font-size: 14px; max-width: 72ch; }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">Task 028 · contract fork C · design mock-up</p>
+  <h1>The Landscape tab: fold into the evidence base, or keep?</h1>
+  <p class="lede">Both options below are built from the same project (the school-absence fixture). Sections expand and collapse for real — click the headers. Option 1 folds Landscape's six blocks into the report as one collapsible section; option 2 keeps today's separate tab.</p>
+  <p class="fontnote">Type is a system-font stand-in — the product renders Averta/Zosia, which can't ship in a mock-up file.</p>
+
+  <div class="toggle" role="tablist" aria-label="IA options">
+    <button aria-pressed="true" data-opt="1">Option 1 — five tabs, Landscape folded</button>
+    <button aria-pressed="false" data-opt="2">Option 2 — six tabs, unchanged</button>
+  </div>
+
+  <!-- ============ OPTION 1 ============ -->
+  <section class="option on" id="opt1">
+    <div class="verdict"><p><strong>What changes:</strong> the Landscape tab retires; its funnel, distributions and finding groups become the report's <strong>"How the evidence was gathered"</strong> section — collapsed by default, one click from the contents sidebar. Its theme list merges into the existing <strong>Key themes</strong> section (they are the same themes; two homes today).</p></div>
+
+    <div class="frame">
+      <div class="framebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">v3.policyatlas.uk / projects / school-absence / evidence-base</span></div>
+      <div class="phead">
+        <div><span class="brand">Policy <b>Atlas</b></span> <span class="crumb">/</span> <span class="proj">School absence in England</span></div>
+        <div class="tabs"><span>Workspace</span><span class="active">Evidence base</span><span>Findings</span><span>Sources</span><span>Decision log</span><span class="ghost" title="retired">Landscape</span></div>
+      </div>
+      <div class="page">
+        <nav class="contents" aria-label="Contents">
+          <p>Contents</p>
+          <a class="here" href="#opt1">Key findings</a>
+          <a href="#opt1">How interventions compare</a>
+          <a href="#opt1">Sanctions and fines</a>
+          <a href="#opt1">Key themes</a>
+          <a class="new" href="#opt1">How the evidence was gathered</a>
+          <a href="#opt1">Gaps in the evidence</a>
+          <a href="#opt1">Conclusions</a>
+          <a href="#opt1">References</a>
+        </nav>
+        <article>
+          <p class="eyebrow">Evidence base · v1</p>
+          <h2>Reducing persistent school absence</h2>
+          <p class="q">What works to reduce persistent absence in English schools, 2015–2025?</p>
+
+          <details open>
+            <summary><h3>Key findings</h3><span class="chev"><span class="opened">Hide −</span><span class="closed">Expand +</span></span></summary>
+            <p class="summ">Five headline findings, strongest evidence first.</p>
+            <div class="body">
+              <ul>
+                <li>Attendance-focused mentoring shows the most consistent positive effect — moderate gains across 8 studies. <span class="ref">1, 4</span></li>
+                <li>Text-message nudges to parents produce small but reliable reductions, at very low cost. <span class="ref">2</span></li>
+                <li>Fines and prosecution show no consistent effect on persistent absence. <span class="ref">6</span></li>
+                <li>Evidence on post-pandemic interventions is thin — most studies predate 2020. <span class="gap">gap</span></li>
+              </ul>
+            </div>
+          </details>
+
+          <details>
+            <summary><h3>How interventions compare</h3><span class="chev"><span class="opened">Hide −</span><span class="closed">Expand +</span></span></summary>
+            <p class="summ">Relational approaches outperform punitive ones across every comparable outcome.</p>
+            <div class="body"><ul><li>(Section prose…)</li></ul></div>
+          </details>
+
+          <details>
+            <summary><h3>Key themes</h3><span class="chev"><span class="opened">Hide −</span><span class="closed">Expand +</span></span></summary>
+            <p class="summ">Four themes across the corpus — each links to its documents. (Landscape's theme list merges here.)</p>
+            <div class="body"><ul><li>Family engagement — <span class="ref">12 documents →</span></li><li>Information &amp; nudges — <span class="ref">9 documents →</span></li></ul></div>
+          </details>
+
+          <details open>
+            <summary><h3>How the evidence was gathered</h3><span class="chev"><span class="opened">Hide −</span><span class="closed">Expand +</span></span></summary>
+            <p class="summ">The search funnel and the shape of the evidence — everything the Landscape tab carried, in the report. Shown expanded here; collapsed by default.</p>
+            <div class="body">
+              <div class="lsblock">
+                <p class="blocktitle">From search to citation</p>
+                <div class="bars">
+                  <div class="bar"><span class="lab">Found</span><span class="track"><span class="fill" style="width:100%"></span></span><span class="n">412</span></div>
+                  <div class="bar"><span class="lab">Relevant</span><span class="track"><span class="fill" style="width:41%"></span></span><span class="n">168</span></div>
+                  <div class="bar"><span class="lab">Included</span><span class="track"><span class="fill" style="width:14%"></span></span><span class="n">57</span></div>
+                  <div class="bar"><span class="lab">Cited</span><span class="track"><span class="fill" style="width:10%"></span></span><span class="n">41</span></div>
+                </div>
+              </div>
+              <div class="twocol">
+                <div>
+                  <p class="blocktitle">Evidence types (cited)</p>
+                  <div class="bars">
+                    <div class="bar"><span class="lab">Quasi-exp.</span><span class="track"><span class="fill" style="width:100%"></span></span><span class="n">14</span></div>
+                    <div class="bar"><span class="lab">RCT</span><span class="track"><span class="fill" style="width:64%"></span></span><span class="n">9</span></div>
+                    <div class="bar"><span class="lab">Qualitative</span><span class="track"><span class="fill" style="width:57%"></span></span><span class="n">8</span></div>
+                    <div class="bar"><span class="lab">Review</span><span class="track"><span class="fill" style="width:43%"></span></span><span class="n">6</span></div>
+                  </div>
+                </div>
+                <div>
+                  <p class="blocktitle">Publication years (cited)</p>
+                  <div class="years"><span style="height:25%"></span><span style="height:38%"></span><span style="height:50%"></span><span style="height:75%"></span><span style="height:63%"></span><span style="height:88%"></span><span style="height:100%"></span><span style="height:75%"></span></div>
+                  <div class="yearlabs"><span>16</span><span>17</span><span>18</span><span>19</span><span>20</span><span>21</span><span>22</span><span>23</span></div>
+                </div>
+              </div>
+              <div class="lsblock">
+                <p class="blocktitle">Where sources were published</p>
+                <div class="bars">
+                  <div class="bar"><span class="lab">UK</span><span class="track"><span class="fill" style="width:100%"></span></span><span class="n">29</span></div>
+                  <div class="bar"><span class="lab">US</span><span class="track"><span class="fill" style="width:24%"></span></span><span class="n">7</span></div>
+                  <div class="bar"><span class="lab">Other</span><span class="track"><span class="fill" style="width:17%"></span></span><span class="n">5</span></div>
+                </div>
+                <p class="caveat">Where sources were published, not where the studies were conducted.</p>
+              </div>
+              <div class="lsblock">
+                <p class="blocktitle">Finding groups</p>
+                <div class="groups"><span>Mentoring · 11</span><span>Parental communication · 8</span><span>Enforcement · 7</span><span>School environment · 6</span></div>
+              </div>
+            </div>
+          </details>
+
+          <details>
+            <summary><h3>Gaps in the evidence</h3><span class="chev"><span class="opened">Hide −</span><span class="closed">Expand +</span></span></summary>
+            <p class="summ">Where the base is thin — recorded, not glossed over.</p>
+            <div class="body"><ul><li>Post-2020 evidence <span class="gap">gap</span></li></ul></div>
+          </details>
+
+          <details>
+            <summary><h3>Conclusions</h3><span class="chev"><span class="opened">Hide −</span><span class="closed">Expand +</span></span></summary>
+            <p class="summ">Prioritise relational interventions; treat enforcement as unevidenced.</p>
+            <div class="body"><ul><li>(Section prose…)</li></ul></div>
+          </details>
+        </article>
+      </div>
+    </div>
+
+    <div class="trade">
+      <div class="for"><p>For</p><ul>
+        <li>One home for "what the evidence looks like" — readers meet it in reading order, inside the report they'll share.</li>
+        <li>Five tabs; the nav carries only destinations users named in interviews.</li>
+        <li>The funnel/coverage story sits beside the findings it qualifies — honesty next to the claims.</li>
+      </ul></div>
+      <div class="against"><p>Against</p><ul>
+        <li>The report gets longer; the section is one more thing to scroll past (mitigated: collapsed by default, sidebar jump).</li>
+        <li>Chart-first users lose a one-click destination — it's two clicks (Evidence base → section).</li>
+        <li>During a run there is no artefact yet, so these charts are only in the journey pane until the report exists (true today too — Landscape is empty pre-run).</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- ============ OPTION 2 ============ -->
+  <section class="option" id="opt2">
+    <div class="verdict"><p><strong>What changes:</strong> nothing structural — six tabs stay. The Landscape tab keeps its own page (below, as today, restyled to the 028 type scale); the evidence base keeps Key themes but never shows the funnel or distributions.</p></div>
+
+    <div class="frame">
+      <div class="framebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">v3.policyatlas.uk / projects / school-absence / landscape</span></div>
+      <div class="phead">
+        <div><span class="brand">Policy <b>Atlas</b></span> <span class="crumb">/</span> <span class="proj">School absence in England</span></div>
+        <div class="tabs"><span>Workspace</span><span>Evidence base</span><span>Findings</span><span>Sources</span><span class="active">Landscape</span><span>Decision log</span></div>
+      </div>
+      <div class="lspage">
+        <div class="inner">
+          <h2>Landscape</h2>
+          <p class="caveat">Distributions describe the screened-in sources only; the funnel spans the whole search.</p>
+          <div class="card">
+            <p class="blocktitle">From search to citation</p>
+            <div class="bars">
+              <div class="bar"><span class="lab">Found</span><span class="track"><span class="fill" style="width:100%"></span></span><span class="n">412</span></div>
+              <div class="bar"><span class="lab">Relevant</span><span class="track"><span class="fill" style="width:41%"></span></span><span class="n">168</span></div>
+              <div class="bar"><span class="lab">Included</span><span class="track"><span class="fill" style="width:14%"></span></span><span class="n">57</span></div>
+              <div class="bar"><span class="lab">Cited</span><span class="track"><span class="fill" style="width:10%"></span></span><span class="n">41</span></div>
+            </div>
+          </div>
+          <div class="twocol">
+            <div class="card" style="margin-top:14px">
+              <p class="blocktitle">Evidence types</p>
+              <div class="bars">
+                <div class="bar"><span class="lab">Quasi-exp.</span><span class="track"><span class="fill" style="width:100%"></span></span><span class="n">14</span></div>
+                <div class="bar"><span class="lab">RCT</span><span class="track"><span class="fill" style="width:64%"></span></span><span class="n">9</span></div>
+                <div class="bar"><span class="lab">Qualitative</span><span class="track"><span class="fill" style="width:57%"></span></span><span class="n">8</span></div>
+              </div>
+            </div>
+            <div class="card" style="margin-top:14px">
+              <p class="blocktitle">Publication years</p>
+              <div class="years"><span style="height:25%"></span><span style="height:38%"></span><span style="height:50%"></span><span style="height:75%"></span><span style="height:63%"></span><span style="height:88%"></span><span style="height:100%"></span><span style="height:75%"></span></div>
+              <div class="yearlabs"><span>16</span><span>17</span><span>18</span><span>19</span><span>20</span><span>21</span><span>22</span><span>23</span></div>
+            </div>
+          </div>
+          <div class="card">
+            <p class="blocktitle">Themes in the evidence</p>
+            <div class="groups"><span>Family engagement · 12</span><span>Information &amp; nudges · 9</span><span>School environment · 8</span><span>Enforcement · 7</span></div>
+          </div>
+          <div class="card">
+            <p class="blocktitle">Finding groups</p>
+            <div class="groups"><span>Mentoring · 11</span><span>Parental communication · 8</span><span>Enforcement · 7</span><span>School environment · 6</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="trade">
+      <div class="for"><p>For</p><ul>
+        <li>Zero migration risk — nothing moves, no redirects, no e2e churn.</li>
+        <li>A dedicated one-click home for chart-first users.</li>
+        <li>The report stays shorter.</li>
+      </ul></div>
+      <div class="against"><p>Against</p><ul>
+        <li>Six tabs against the interviews' clutter finding; the mock-up the team reviewed showed four.</li>
+        <li>Theme and distribution content lives in two places (Landscape + the report's Key themes) — the naming pass has to explain the difference.</li>
+        <li>Interviewees never mentioned Landscape as a destination; it competes with the report for the same story.</li>
+      </ul></div>
+    </div>
+    <p class="note">If keeping six tabs, the interviews' clutter finding still wants an answer — likely from the naming pass (clearer tab labels) rather than structure.</p>
+  </section>
+</div>
+
+<script>
+  const opts = document.querySelectorAll(".toggle button");
+  opts.forEach((b) => b.addEventListener("click", () => {
+    opts.forEach((o) => o.setAttribute("aria-pressed", String(o === b)));
+    document.getElementById("opt1").classList.toggle("on", b.dataset.opt === "1");
+    document.getElementById("opt2").classList.toggle("on", b.dataset.opt === "2");
+  }));
+</script>

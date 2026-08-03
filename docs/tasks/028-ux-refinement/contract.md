@@ -15,8 +15,10 @@
 > **(B) Key-findings bullets: scoped prompt rev IN** — owner ruling: the eval
 > slice is much deferred; build without the pre-eval prompt-freeze constraint
 > (the cost/quality spot-check stays as ordinary verification, not an eval
-> proxy). **(C) Tab IA: fold Landscape into the evidence base, keep Decision
-> log** — five tabs.
+> proxy). **(C) Tab IA: ❓ REOPENED (owner, 2026-08-03)** — the owner wants a
+> mock-up of the fold before ruling (five tabs with Landscape folded vs six
+> unchanged; Decision log stays either way); decided at this gate after the
+> mock-up review.
 
 ## Goal
 
@@ -43,12 +45,13 @@ PR landing, as strands:
    redundant explainer copy cut, remaining copy consistent with the naming
    pass (strand 8). Copy/label changes land in the copy maps
    (`*Presentation.ts` / vocabulary files), not inline.
-2. **Composer.** The single-line `<input>` becomes an auto-growing
-   `<textarea>` (bounded max height): Enter sends, Shift+Enter breaks the
-   line, with the hint line; fixed position under the scrolling thread
-   (already the layout — must survive the strand-3 recentring); 027's
-   composer-state semantics (disabled + honest copy while a run
-   executes/parks) preserved verbatim.
+2. **Composer.** The single-line `<input>` becomes a `<textarea>` that is
+   **multi-line by default (~3 rows) and expandable** (owner amendment,
+   2026-08-03): auto-grows with content to a bounded max height; Enter
+   sends, Shift+Enter breaks the line, with the hint line; fixed position
+   under the scrolling thread (already the layout — must survive the
+   strand-3 recentring); 027's composer-state semantics (disabled + honest
+   copy while a run executes/parks) preserved verbatim.
 3. **Sequential plan-building** (fork A — IN). The planner proposes the
    plan one part at a time; the user confirms each part with a button or
    redirects in free text.
@@ -114,11 +117,12 @@ PR landing, as strands:
    → run); the ready plan card carries the start affordance + expectation
    copy; post-run the completion card CTAs stay the canonical route into the
    outputs. No new surfaces — copy and emphasis on existing ones.
-10. **Tab IA** (fork C — ruled): **Landscape folds into the evidence-base
-    page** as the "How the evidence was gathered" collapsible section (the
-    charts already render there; the tab retires, its route redirects);
-    **Decision log stays**. Tabs: Workspace · Evidence base · Findings ·
-    Sources · Decision log.
+10. **Tab IA** (fork C — ❓ open pending mock-up review): *option 1* —
+    Landscape folds into the evidence-base page as a "How the evidence was
+    gathered" collapsible section carrying today's six Landscape blocks
+    (funnel · evidence types · publication years · where-published + caveat ·
+    themes · finding groups; the tab retires, its route redirects); five
+    tabs. *Option 2* — six tabs unchanged. Decision log stays either way.
 11. **Small wins.** A bounded sweep listed at plan time and reviewed at the
     plan 🛑 (candidates from the mock-up: snapshot-cell navigation into
     filtered views where missing, findings-tab gated empty-state copy,
