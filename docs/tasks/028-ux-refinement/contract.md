@@ -280,10 +280,14 @@ deferred.md updates · verification.md.
   prompt changes only, all new versions never in-place edits: the planning
   prompt part-by-part rev (fork A) · the key-findings section rev (fork B) ·
   the section-planning flow rev (strand 12) · the summariser + faithfulness
-  judge (strand 13, new surfaces) · at most one orchestrator
-  check-in-composition rev **if** plan-time analysis shows the option set
-  must thin at source (strand 14a — plan 🛑 confirms or drops it). No other
-  prompt/template touches; prompt-guard pins update in the same commit.
+  judge (strand 13, new surfaces) · the **watch-authoring prompt rev**
+  (strand 14a, now definite — owner finding 2026-08-03: authoring reuses
+  the internal decision prompt verbatim, so authored option labels arrive
+  in machinery language; the rev gives authoring its own reader-facing
+  framing: plain-language labels, reasons citing visible facts, machinery
+  vocabulary banned, endorse-existing-option signalling, a count cap). No
+  other prompt/template touches; prompt-guard pins update in the same
+  commit.
 - **Schema:** additive-only, enumerated: the nullable JSONB part column on
   `planning_transcript` (fork A) + the block-summary column & marker and the
   artefact-summary field & marker (strand 13, per spec). One migration (+

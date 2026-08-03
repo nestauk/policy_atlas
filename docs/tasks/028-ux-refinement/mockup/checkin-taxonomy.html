@@ -243,8 +243,8 @@
           </details>
         </div>
         <div class="suggested">
-          <p>Suggested for this run</p>
-          <div class="opt"><b>Improve text basis first — only 4 of 15 selected records have ingested full text</b><span>Why: the current selection is broad, but the next steps would rely heavily on abstracts because 8 records failed fetch and 3 failed parsing.</span></div>
+          <p>Suggested from this run's results</p>
+          <div class="opt"><b>Recover the missing full documents first</b><span>11 of the 15 documents on the list are abstract-only right now — 8 downloads failed and 3 couldn't be read. Recovering them makes the deep read far stronger.</span></div>
         </div>
         <div class="freetext">
           <p class="divide">or say it in your own words</p>
@@ -357,19 +357,19 @@
           <p class="more">…and 5 more, then Conclusions →</p>
         </div>
         <div class="optwall">
-          <div class="opt primary"><b>Write the report with these sections</b><span>Nothing changes; writing starts.</span></div>
+          <div class="opt primary"><b>Write the report with these sections <span style="border:1px solid rgba(255,255,255,0.5);font-size:10.5px;font-weight:800;padding:1px 6px;margin-left:6px;vertical-align:1px">RECOMMENDED</span></b><span>The plan covers treatment, prevention, delivery and policy — nothing in this run's results argues for changing it.</span></div>
           <div class="opt"><b>Set the sections yourself</b><span>You write the section titles and what each should cover.</span></div>
           <div class="opt"><b>Lean on the strongest evidence</b><span>The writing draws more heavily on the highest-quality studies.</span></div>
         </div>
-        <div class="suggested">
-          <p>Suggested for this run</p>
-          <div class="opt"><b>Keep the drafted 8-section synthesis shape — no triggers fired</b><span>Why: this preserves the proposal exactly as drafted across treatment, prevention, delivery, policy systems and applicability, which is proportionate because the boundary shows no fired triggers.</span></div>
-        </div>
         <div class="metarow"><button>Change how often I'm asked</button><button>Stop the run</button></div>
       </div>
+      <p class="quiet" style="margin-top:8px">The live authored suggestion here ("Keep the drafted 8-section synthesis shape — no triggers fired") was a restatement of "as proposed" in machinery language. Proposed rule: when the run's reviewer endorses an existing option, it renders as a <b>Recommended</b> marker with its reason on that option — never a duplicate button. Only genuinely new suggestions get their own block (as on the P3 card).</p>
       <p class="quiet" style="margin-top:8px">One interruption, two cards in sequence: groups settle first because the section plan is drawn from them; "Keep these groups" flows straight into the report plan. If the user regroups, grouping re-runs and the groups card returns with the new clusters before the plan is drawn. Machinery note: this extends the 024 lattice with a deep-only groups steer point at the after-group boundary (its "fired" triggers already exist — grouping_flag_triggers) and drops the regroup options from P4's floor.</p>
     </div>
   </div>
+
+  <h2>Where "Suggested" comes from</h2>
+  <p class="sub">At every pause, the analysis reviews this run's actual state — the question, the plan, what each step produced, earlier steering decisions — and may author extra suggestions, each with a concrete reason. The mechanism is sound; the copy isn't: the authoring prompt is currently the orchestrator's internal <em>decision</em> prompt reused verbatim, so suggestions arrive in machinery language ("no triggers fired") that no reader owns. The fix is a dedicated authoring prompt (one of this slice's gated revs): plain-language labels, reasons that cite visible facts ("8 downloads failed"), machinery vocabulary banned, endorsements of existing options rendered as a Recommended marker instead of duplicate buttons, and the block honestly titled <b>"Suggested from this run's results"</b>.</p>
 
   <h2>Your own words — already built, just hidden</h2>
   <p class="sub">Every check-in already accepts free text: the steering router compiles what you type into concrete changes, shows you exactly what would change, and applies it only on your confirm (task 024's confirm-gate). Today it's a small single-line input at the bottom of a crowded card — most testers never saw it. Proposed: it renders as a composer-style row on <b>every</b> card ("or say it in your own words", as on the P3 card above), and the compile→confirm exchange renders as a mini-thread on the card:</p>
