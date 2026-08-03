@@ -1,0 +1,242 @@
+<title>028 — which check-ins make sense?</title>
+<style>
+  :root {
+    --navy: #0f294a; --blue: #0000ff; --grey: #646363; --paper: #f4f4f5;
+    --line: #e4e4e7; --line2: #d3d3d8; --teal: #18a48c; --ink: #1c1c1e;
+    --amber-bg: #fff6e3; --amber-bd: #f3d99a; --amber-ink: #8a5a00;
+    --orange: #ff6e47;
+  }
+  body { background: var(--paper); color: var(--ink); font-family: system-ui, "Segoe UI", sans-serif; font-size: 16px; line-height: 1.55; margin: 0; }
+  .wrap { max-width: 1150px; margin: 0 auto; padding: 36px 24px 80px; }
+  .eyebrow { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; color: var(--grey); margin: 0; }
+  h1 { font-weight: 800; font-size: 30px; letter-spacing: -0.5px; color: var(--navy); margin: 8px 0 0; text-wrap: balance; }
+  h2 { font-weight: 800; font-size: 20px; letter-spacing: -0.3px; color: var(--navy); margin: 40px 0 4px; }
+  .lede { max-width: 72ch; color: var(--grey); margin: 10px 0 0; }
+  .sub { max-width: 72ch; color: var(--grey); margin: 2px 0 14px; font-size: 14.5px; }
+
+  /* ---- run map ---- */
+  .map { background: #fff; border: 1px solid var(--line2); padding: 26px 22px 20px; margin-top: 14px; overflow-x: auto; }
+  .lane { display: flex; align-items: center; gap: 0; min-width: 900px; }
+  .comp { flex: 1; text-align: center; position: relative; }
+  .comp .box { display: inline-block; border: 1px solid var(--line2); background: var(--paper); color: var(--navy); font-size: 12.5px; font-weight: 700; padding: 7px 10px; white-space: nowrap; }
+  .comp.big .box { background: #ececff; border-color: #c7c7ff; }
+  .arrow { flex: none; width: 22px; text-align: center; color: var(--line2); font-weight: 700; }
+  .pins { display: flex; min-width: 900px; margin-top: 2px; }
+  .pin { flex: 1; text-align: center; }
+  .pin .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: var(--orange); border: 2px solid #fff; box-shadow: 0 0 0 1.5px var(--orange); }
+  .pin .lbl { font-size: 11.5px; font-weight: 800; color: var(--orange); display: block; margin-top: 3px; }
+  .pin .q { font-size: 12px; color: var(--navy); display: block; max-width: 150px; margin: 2px auto 0; line-height: 1.3; }
+  .pin.ghost .dot { background: var(--line2); box-shadow: 0 0 0 1.5px var(--line2); }
+  .pin.ghost .lbl { color: var(--grey); }
+  .maplegend { font-size: 12.5px; color: var(--grey); margin-top: 14px; }
+  .backtoback { border-left: 3px solid var(--amber-bd); background: var(--amber-bg); padding: 8px 12px; font-size: 13.5px; margin-top: 12px; max-width: 76ch; }
+
+  /* ---- comparison ---- */
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 12px; align-items: start; }
+  @media (max-width: 880px) { .duo { grid-template-columns: 1fr; } }
+  .col > .collabel { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 8px; }
+  .col.today > .collabel { color: var(--amber-ink); }
+  .col.proposed > .collabel { color: var(--teal); }
+
+  /* check-in card (as in the chat thread) */
+  .checkin { border: 1px solid var(--line); border-left: 3px solid var(--orange); background: #fff; box-shadow: 0 1px 3px rgba(15,41,74,0.05); padding: 16px 18px; }
+  .checkin + .checkin { margin-top: 10px; }
+  .badge { display: inline-block; border: 1px solid var(--amber-bd); background: var(--amber-bg); color: var(--amber-ink); font-size: 12px; font-weight: 700; padding: 3px 9px; }
+  .checkin h3 { margin: 11px 0 0; font-size: 16.5px; font-weight: 800; color: var(--navy); line-height: 1.4; }
+  .checkin .ctx { margin: 5px 0 0; font-size: 14px; line-height: 1.5; color: var(--grey); max-width: 58ch; }
+  .optwall { margin-top: 13px; display: flex; flex-direction: column; gap: 7px; }
+  .opt { border: 1px solid var(--line2); background: #fff; padding: 9px 12px; font-size: 13.5px; }
+  .opt b { display: block; color: var(--navy); font-size: 14px; }
+  .opt span { color: var(--grey); font-size: 12.5px; line-height: 1.45; display: block; margin-top: 2px; }
+  .opt .jargon { background: #ffecec; color: #8a1f1f; padding: 0 3px; }
+  .opt.primary { border: none; background: var(--blue); clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%); }
+  .opt.primary b { color: #fff; }
+  .opt.primary span { color: rgba(255,255,255,0.85); }
+  details.optgroup { border: 1px solid var(--line2); background: var(--paper); }
+  details.optgroup summary { cursor: pointer; list-style: none; padding: 9px 12px; font-size: 13.5px; font-weight: 700; color: var(--navy); display: flex; justify-content: space-between; gap: 8px; }
+  details.optgroup summary::-webkit-details-marker { display: none; }
+  details.optgroup summary .chev { color: var(--blue); font-weight: 700; }
+  details.optgroup[open] summary .chev .c, details.optgroup:not([open]) summary .chev .o { display: none; }
+  details.optgroup .inner { padding: 0 10px 10px; display: flex; flex-direction: column; gap: 7px; }
+  details.optgroup .inner .opt { background: #fff; }
+  .metarow { margin-top: 11px; display: flex; gap: 16px; font-size: 12.5px; }
+  .metarow button { border: none; background: none; padding: 0; font: inherit; font-size: 12.5px; color: var(--grey); text-decoration: underline; cursor: pointer; }
+  .shortlist { margin-top: 11px; border: 1px solid var(--line); background: var(--paper); padding: 10px 12px; }
+  .shortlist p { margin: 0 0 6px; font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--grey); }
+  .shortlist ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+  .shortlist li { font-size: 13px; line-height: 1.4; color: var(--navy); display: flex; gap: 8px; }
+  .shortlist li em { flex: none; font-style: normal; color: var(--grey); font-size: 12px; }
+  .shortlist .more { color: var(--grey); font-size: 12.5px; margin-top: 6px; }
+  .suggested { margin-top: 12px; border: 1px solid #c7c7ff; background: #f5f5ff; padding: 10px 12px; }
+  .suggested > p { margin: 0 0 7px; font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--blue); }
+  .note { margin-top: 14px; border-left: 3px solid var(--blue); background: #ececff; padding: 10px 14px; font-size: 14px; max-width: 78ch; }
+  .quiet { color: var(--grey); font-size: 13px; }
+  .unchanged { border: 1px dashed var(--line2); background: #fff; padding: 12px 16px; font-size: 14px; color: var(--grey); margin-top: 10px; }
+  .unchanged b { color: var(--navy); }
+
+  /* mode table */
+  table.modes { border-collapse: collapse; background: #fff; border: 1px solid var(--line2); margin-top: 12px; font-size: 13.5px; }
+  .modes th, .modes td { border: 1px solid var(--line); padding: 8px 14px; text-align: center; }
+  .modes th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--grey); background: #fafafa; }
+  .modes td:first-child, .modes th:first-child { text-align: left; }
+  .modes .always { color: var(--orange); font-weight: 700; }
+  .modes .fired { color: var(--navy); }
+  .modes .off { color: var(--line2); }
+  .modes .change { background: #e7f5f2; outline: 2px solid var(--teal); font-weight: 800; }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">Task 028 · strand 14 · check-in taxonomy — decision mock-up</p>
+  <h1>Which check-ins actually make sense?</h1>
+  <p class="lede">The run pauses at four fixed steer points (task 024). This page shows where they sit, what each card looks like <strong>today</strong> (real options, real copy from live runs), and the <strong>proposed</strong> re-frame: P2 owns "is the evidence base right?", P3 owns "this is what will be read in full" and shows the shortlist. Option content below is verbatim from the dev DB; shortlist titles are the real ECEC selection.</p>
+
+  <h2>Where the pauses sit in a run</h2>
+  <div class="map">
+    <div class="lane">
+      <span class="comp"><span class="box">search</span></span><span class="arrow">→</span>
+      <span class="comp"><span class="box">screen</span></span><span class="arrow">→</span>
+      <span class="comp"><span class="box">appraise</span></span><span class="arrow">→</span>
+      <span class="comp"><span class="box">map themes</span></span><span class="arrow">→</span>
+      <span class="comp big"><span class="box">select</span></span><span class="arrow">→</span>
+      <span class="comp"><span class="box">read in full</span></span><span class="arrow">→</span>
+      <span class="comp"><span class="box">group findings</span></span><span class="arrow">→</span>
+      <span class="comp big"><span class="box">write report</span></span>
+    </div>
+    <div class="pins">
+      <span class="pin ghost"><span class="dot"></span><span class="lbl">P1 · exception only</span><span class="q">"The search came back thin"</span></span>
+      <span class="pin" style="flex:3"></span>
+      <span class="pin" style="flex:2"><span class="dot"></span><span class="lbl">P2 + P3 — back to back</span><span class="q">before &amp; after select</span></span>
+      <span class="pin" style="flex:2"></span>
+      <span class="pin"><span class="dot"></span><span class="lbl">P4</span><span class="q">"How should the report be organised?"</span></span>
+    </div>
+    <p class="maplegend">● orange = pauses in the default (moderate) mode · grey = fires only on an exception. Watch-mode boundary check-ins (continue / change frequency / stop) can additionally fire at every step in frequent mode — unchanged by this proposal.</p>
+    <div class="backtoback">⚠ The blur you noticed: <b>P2 and P3 both pause around the same component</b>, and today P3 ("deepening selection") carries options that really answer P2's question — scope to themes, exclude documents. Two adjacent pauses, overlapping subjects, 4 + 9 options.</div>
+  </div>
+
+  <h2>P2 — before select</h2>
+  <p class="sub">Today it asks about coverage with 4 options; the proposal makes it own every "shape the pool" decision, including the two moved from P3.</p>
+  <div class="duo">
+    <div class="col today">
+      <p class="collabel">Today — "evidence_base_coverage" (4 options, flat)</p>
+      <div class="checkin">
+        <span class="badge">Check-in · waiting on you</span>
+        <h3>Evidence base coverage</h3>
+        <p class="ctx">(Deterministic render of counts and triggers.)</p>
+        <div class="optwall">
+          <div class="opt"><b>Continue to selection</b><span>Proceed to selection over the current evidence base.</span></div>
+          <div class="opt"><b>Add to your evidence base</b><span>Additive re-search on a subtopic — your evidence base grows; nothing already processed is redone. Provide what to search for.</span></div>
+          <div class="opt"><b>Adjust criteria and re-screen (replaces screening)</b><span>Re-screen every document at new criteria; the new screen rows supersede the current ones <span class="jargon">at document grain</span>. Provide the criteria.</span></div>
+          <div class="opt"><b>Re-characterise the evidence (replaces characterisation)</b><span>Redo <span class="jargon">theme discovery</span> with your guidance and theme bounds; replaces the current <span class="jargon">characterisation</span>. Provide the guidance.</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="col proposed">
+      <p class="collabel">Proposed — "Is this the right evidence base?" (6 options, grouped)</p>
+      <div class="checkin">
+        <span class="badge">Check-in · waiting on you</span>
+        <h3>Your evidence base is assembled — is it the right one?</h3>
+        <p class="ctx">168 documents screened, 24 relevant across 6 themes. Next: choosing what gets read in full.</p>
+        <div class="optwall">
+          <div class="opt primary"><b>Looks right — go on to choose the reading list</b><span>Nothing changes; the run continues.</span></div>
+          <details class="optgroup">
+            <summary>Grow or reshape the evidence base <span class="chev"><span class="o">3 options +</span><span class="c">−</span></span></summary>
+            <div class="inner">
+              <div class="opt"><b>Search for more on a subtopic</b><span>You say what to look for; new documents are added — nothing already assessed is redone.</span></div>
+              <div class="opt"><b>Change the inclusion criteria and re-assess</b><span>You set new criteria; every document is re-assessed against them, replacing today's decisions.</span></div>
+              <div class="opt"><b>Re-map the themes</b><span>You guide how the evidence is grouped into themes; the current map is replaced.</span></div>
+            </div>
+          </details>
+          <details class="optgroup">
+            <summary>Narrow what goes forward <span class="chev"><span class="o">2 options + <em style="font-style:normal;color:var(--teal)">← moved from P3</em></span><span class="c">−</span></span></summary>
+            <div class="inner">
+              <div class="opt"><b>Keep only the themes I name</b><span>You name the themes; only their documents go forward to reading.</span></div>
+              <div class="opt"><b>Leave out documents I name</b><span>You name documents to exclude from everything that follows.</span></div>
+            </div>
+          </details>
+        </div>
+        <div class="metarow"><button>Change how often I'm asked</button><button>Stop the run</button></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>P3 — after select</h2>
+  <p class="sub">Today: nine flat options mixing pool-shaping, ranking and reading concerns, with internal jargon — and the user can't see what was actually selected. Proposed: the card shows the reading list and asks one question about it.</p>
+  <div class="duo">
+    <div class="col today">
+      <p class="collabel">Today — "deepening_selection" (9 options, flat, verbatim copy)</p>
+      <div class="checkin">
+        <span class="badge">Check-in · waiting on you</span>
+        <h3>Deepening selection</h3>
+        <p class="ctx">(No shortlist shown — the user decides blind.)</p>
+        <div class="optwall">
+          <div class="opt"><b>Deepen the clusters or documents I name</b><span>Prioritise the themes you name and force-include the documents you name. Provide <span class="jargon">cluster and document ids to fill the template</span>.</span></div>
+          <div class="opt"><b>Favour the strongest-quality evidence</b><span>Doubles the appraisal-quality weight in selection ranking (<span class="jargon">weight_emphasis quality x2.0 — a multiplier on the default weight</span>); re-runs selection, replacing the current one.</span></div>
+          <div class="opt"><b>Favour relevance to my question</b><span>Lifts screen confidence as the closest as-built relevance proxy (<span class="jargon">weight_emphasis screen_confidence x2.5</span>) — an honest proxy, not a true question-relevance signal. Re-runs selection, replacing the current one.</span></div>
+          <div class="opt"><b>Change how many documents are selected</b><span>Change the selection budget; provide the new document budget. Re-runs selection, replacing the current one.</span></div>
+          <div class="opt"><b>Add the ICF extraction profile</b><span>Extract in-context findings (<span class="jargon">ICF</span>) alongside the intervention-outcome findings — <span class="jargon">additive at the profile grain</span>.</span></div>
+          <div class="opt"><b>Refresh extraction for abstract-only docs</b><span>Re-extract documents whose findings were abstract-only now full text has landed (<span class="jargon">D3 memo refresh</span>).</span></div>
+          <div class="opt"><b>Scope selection to named strata</b><span>Restrict selection to (or exclude) named strata/themes (<span class="jargon">D6</span>). Provide the strata to keep.</span></div>
+          <div class="opt"><b>Exclude documents I name</b><span>Remove named documents from the selectable pool (<span class="jargon">D7</span>). Provide the ids.</span></div>
+          <div class="opt"><b>Continue with the current selection</b><span>Proceed with the current selection unchanged.</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="col proposed">
+      <p class="collabel">Proposed — "This is what will be read in full" (5 options, shortlist shown)</p>
+      <div class="checkin">
+        <span class="badge">Check-in · waiting on you</span>
+        <h3>15 documents will be read in full — here's the list</h3>
+        <div class="shortlist">
+          <p>The reading list · 15 of 24 relevant</p>
+          <ul>
+            <li>Free childcare: why, who for and how? <em>· Targeted access</em></li>
+            <li>Building a Stronger Early Education and Childcare Workforce <em>· Workforce</em></li>
+            <li>Expansion of funded early learning and childcare to 1140 hours: national outcomes evaluation <em>· Monitoring</em></li>
+            <li>Building bridges: integrating early education with family support in England and Scotland <em>· Integration</em></li>
+            <li>Written evidence: Early Years Wales (CPW0008) <em>· Funding reform</em></li>
+          </ul>
+          <p class="more">…and 10 more — every theme is represented →</p>
+        </div>
+        <div class="optwall">
+          <div class="opt primary"><b>Read these 15</b><span>The run continues into full-text reading.</span></div>
+          <details class="optgroup">
+            <summary>Change what's on the list <span class="chev"><span class="o">3 options +</span><span class="c">−</span></span></summary>
+            <div class="inner">
+              <div class="opt"><b>Read more (or fewer) documents</b><span>You set the number; the list is re-picked.</span></div>
+              <div class="opt"><b>Prefer the strongest evidence</b><span>Re-picks the list, weighting study quality more heavily. Replaces this list.</span></div>
+              <div class="opt"><b>Prefer the most relevant</b><span>Re-picks the list, weighting how directly each document meets your question. Replaces this list.</span></div>
+            </div>
+          </details>
+          <details class="optgroup">
+            <summary>Change how they're read <span class="chev"><span class="o">2 options +</span><span class="c">−</span></span></summary>
+            <div class="inner">
+              <div class="opt"><b>Also capture implementation context</b><span>As well as what worked, capture the conditions each study reports — settings, workforce, delivery.</span></div>
+              <div class="opt"><b>Re-read documents that now have full text</b><span>Some findings came from abstracts only; full documents have since arrived.</span></div>
+            </div>
+          </details>
+        </div>
+        <div class="suggested">
+          <p>Suggested for this run</p>
+          <div class="opt"><b>Improve text basis first — only 4 of 15 selected records have ingested full text</b><span>Why: the current selection is broad, but the next steps would rely heavily on abstracts because 8 records failed fetch and 3 failed parsing.</span></div>
+        </div>
+        <div class="metarow"><button>Change how often I'm asked</button><button>Stop the run</button></div>
+      </div>
+      <p class="quiet" style="margin-top:8px">"Keep only themes I name" and "leave out documents" moved to P2, where the pool is decided. The orchestrator's suggested options keep their <em>why</em> lines — the clearest text in today's payloads — and render apart from the standard set.</p>
+    </div>
+  </div>
+
+  <h2>P1 and P4 — unchanged</h2>
+  <div class="unchanged"><b>P1 "The search came back thin"</b> (exception only) — deepen · rescope filters · guide queries · accept and continue · stop. Already one subject, five options. Gets the copy polish and grouped render, nothing moves.</div>
+  <div class="unchanged"><b>P4 "How should the report be organised?"</b> — as proposed · edit sections · emphasise stronger evidence · regroup (coarser/finer · guided). Already one subject. Copy polish only (kills the "(D8)"/"(B3)" leaks).</div>
+
+  <h2>The open question: should P2 and P3 both pause by default?</h2>
+  <p class="sub">In moderate (default) mode both pause on every run — two stops around one component. Option: P2 becomes fired-only in moderate (it pauses only when its coverage triggers fire — thin themes, heavy screen-outs), so a routine run has one reading-list stop; a problematic one still gets both.</p>
+  <table class="modes">
+    <tr><th>Steer point</th><th>Frequent</th><th>Moderate (default)</th><th>Minimal</th></tr>
+    <tr><td>P1 search exception</td><td class="always">always</td><td class="fired">fired</td><td class="fired">fired</td></tr>
+    <tr><td>P2 evidence base</td><td class="always">always</td><td class="change">always → fired?</td><td class="fired">fired</td></tr>
+    <tr><td>P3 reading list</td><td class="always">always</td><td class="always">always</td><td class="fired">fired</td></tr>
+    <tr><td>P4 report shape</td><td class="always">always</td><td class="always">always</td><td class="fired">fired</td></tr>
+  </table>
+  <p class="note">Trade-off: fewer interruptions on healthy runs vs. users losing the routine "is my evidence base right?" moment. If P2 goes fired-only, the P3 card carries the P2 escape hatch ("something's wrong with the evidence base itself → reshape it") so the decision isn't locked away.</p>
+</div>
