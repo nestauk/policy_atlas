@@ -76,7 +76,7 @@
   <p class="lede">Grounded in the durable planning transcripts (37 live turns) and the as-built plan model. The parts below map to real plan fields; the conversation shown uses the real attendance project's opening message.</p>
 
   <h2>What the live data shows the current planner doing</h2>
-  <p class="sub">From the richest real transcript — the user typed the <b>same confirmation five times</b> because the planner walked its unattended steer-point defaults one confirmation per turn:</p>
+  <p class="sub">Attribution first (owner correction): the repeated confirmations below came from the <b>027 scripted live-check</b>, not a human — `live-027b.spec.ts` loops a canned confirmation <b>up to 8 attempts</b> until the Start button appears. The loop exists because its author found one confirmation was never enough: the planner demanded <b>5 turns</b> to mark the first plan ready (and <b>9</b> on the replan leg), walking one steer-point default per confirmation. A human hits the same wall:</p>
   <div class="pathology">
     <div class="row"><span class="t">turn 1</span><span class="u">"Yes — that's right. Mark the plan ready."</span><span class="r">"…I can't mark the plan fully ready until the remaining unatte…"</span></div>
     <div class="row"><span class="t">turn 2</span><span class="u">"Yes — that's right. Mark the plan ready."</span><span class="r">"…I still need to walk the remaining unattended steer point…"</span></div>
@@ -84,7 +84,7 @@
     <div class="row"><span class="t">turn 4</span><span class="u">"Yes — that's right. Mark the plan ready."</span><span class="r">"I've recorded your confirmation for <span class="jargon">deepening_selection</span> too…"</span></div>
     <div class="row"><span class="t">turn 5</span><span class="u">"Yes — that's right. Mark the plan ready."</span><span class="r">"Done — I've marked the plan ready."</span></div>
   </div>
-  <p class="sub" style="margin-top:10px">Two lessons, both binding on <b>planner_v6</b>: <b>(1) steer-point defaults are never a conversation</b> — they compile from the chosen check-in mode (and the ruled default is unattended, so most runs have nothing to walk at all); <b>(2)</b> the same transcript's opening message answered three decisions at once ("Rapid search effort, standard depth, academic-only") — parts already answered must <b>pre-confirm in bulk</b>, never be re-asked.</p>
+  <p class="sub" style="margin-top:10px">Two lessons, both binding on <b>planner_v6</b>: <b>(1) steer-point defaults are never a conversation</b> — they compile from the chosen check-in mode (and the ruled default is unattended, so most runs have nothing to walk at all); <b>(2)</b> the scripted opening answered three decisions at once ("Rapid search effort, standard depth, academic-only") — parts already answered must <b>pre-confirm in bulk</b>, never be re-asked. The corpus's <b>two genuinely human conversations</b> back the free-text rules independently: both users wrote compound refinements ("can you make it uk only, with uk comparator countries (US, the scandis, canada, australia…)" · "Please focus on UK") — humans steer in sentences that answer several parts at once, and the part flow must absorb that, never fight it.</p>
 
   <h2>The slow path — a bare question arrives</h2>
   <p class="sub">Centred single-column chat (no side pane during planning). One part per turn, button-confirmable, free text always available. Four parts maximum.</p>
