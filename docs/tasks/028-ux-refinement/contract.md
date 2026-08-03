@@ -285,14 +285,25 @@ deferred.md updates · verification.md.
   reuses the internal decision prompt verbatim, so authored option labels
   arrive in machinery language; (ii) a live authored option carried an
   **invented delta** — intent `recover_full_text`, which exists nowhere in
-  the codebase: a button promising an impossible action. The rev gives
-  authoring its own reader-facing framing — plain-language labels, reasons
-  citing visible facts, machinery vocabulary banned, endorse-existing-
-  option signalling, a count cap — and the code path gains **authored-delta
-  validation against the compiled steering grammar: an option whose delta
-  doesn't compile is dropped and logged at authoring time, never
-  rendered**). No other prompt/template touches; prompt-guard pins update
-  in the same commit.
+  the codebase: a button promising an impossible action. Owner ruling:
+  **fix the substrate, not frontend guardrails.** The rev gives authoring
+  its own reader-facing framing — plain-language labels, reasons citing
+  visible facts, machinery vocabulary banned, endorse-existing-option
+  signalling, a count cap — and the **backend delta pipeline closes the
+  validation asymmetry** (as-built: free text compiles through the
+  router's author-blind grammar with honest refusals, but authored options
+  are only JSON-parse-checked at transport and `_offered_option` applies
+  stored deltas verbatim after shape checks — semantically invalid deltas
+  ride through to a silent no-op): (a) **one grammar, one validator, all
+  three producers** — authored options validate through the same
+  author-blind grammar as free-text fragments **at authoring time**;
+  non-compiling options are dropped, logged and evented, never persisted
+  into the pause payload; (b) **apply-time revalidation** at the answer
+  route for any authored delta (the trust boundary re-checks, cheap since
+  the validator exists); (c) **unknown directive keys are loud** — a delta
+  the grammar can't compile is a refusal with a reason, never a silent
+  no-op). No other prompt/template touches; prompt-guard pins update in
+  the same commit.
 - **Schema:** additive-only, enumerated: the nullable JSONB part column on
   `planning_transcript` (fork A) + the block-summary column & marker and the
   artefact-summary field & marker (strand 13, per spec). One migration (+
