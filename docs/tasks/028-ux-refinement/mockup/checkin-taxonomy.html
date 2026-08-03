@@ -109,7 +109,7 @@
     <div class="lane">
       <span class="comp"><span class="box">search</span></span>
       <span class="flow"></span>
-      <span class="gapmark ghost"><span class="dot"></span><span class="lbl">P1 · failure only</span><span class="q">"The search couldn't complete"</span></span>
+      <span class="gapmark"><span class="dot"></span><span class="lbl">P1 · search review</span><span class="q">"Here's what the search collected" · was failure-only</span></span>
       <span class="flow"></span>
       <span class="comp"><span class="box">screen</span></span>
       <span class="flow"></span>
@@ -131,7 +131,7 @@
       <span class="flow"></span>
       <span class="comp big"><span class="box">write report</span></span>
     </div>
-    <p class="maplegend">◆ orange = pauses in the default (moderate) mode · ◇ grey = fires only on failure. "read in full" and "group findings" run on deep analyses only — on standard runs the report is written from the theme-mapped corpus and the Groups card never exists. Watch-mode boundary check-ins (continue / change frequency / stop) can additionally fire at every boundary in frequent mode — unchanged by this proposal.</p>
+    <p class="maplegend">◆ orange = pauses in the default (moderate) mode. "read in full" and "group findings" run on deep analyses only — on standard runs the report is written from the theme-mapped corpus and the Groups card never exists. Watch-mode boundary check-ins (continue / change frequency / stop) can additionally fire at every boundary in frequent mode — unchanged by this proposal.</p>
     <div class="backtoback" style="border-left-color:#c7c7ff;background:#f5f5ff">ℹ <b>Where "thin evidence" is actually judged:</b> P1 fires only on mechanical failure (backend errors, zero usable results — no point screening nothing). The <em>"is the evidence thin now we know what's relevant?"</em> judgment already lives at P2: its triggers are post-screen and post-appraisal signals (too few relevant · classification collapse · ≥70% weak-quality · screening quality collapse). The old "search exception" naming invited the misreading — the proposal renames both honestly. And note <b>theme mapping runs before P2</b> — so P2 is also the natural theme-review moment (below).</div>
     <div class="backtoback">⚠ The blur you noticed: <b>P2 and P3 both pause around the same component</b>, and today P3 ("deepening selection") carries options that really answer P2's question — scope to themes, exclude documents. Two adjacent pauses, overlapping subjects, 4 + 9 options.</div>
   </div>
@@ -259,15 +259,15 @@
   <h2>P2 as the theme-review moment</h2>
   <p class="note" style="margin-top:8px">Theme mapping (characterise) runs <em>before</em> P2, so the themes exist when it pauses — P2 already carries "re-characterise with guidance". What the proposal adds: <b>the card shows the theme map</b> (names + document counts — read-model data we have), the re-map option covers both plain regenerate and custom instructions, and <b>✎ rename</b> lets you fix a theme's name without rerunning anything. Rename is the one genuinely <em>new</em> capability here (a durable edit to the theme record that everything downstream then uses — new delta + audit event, gate-listed if ruled in).</p>
 
-  <h2>P1 — after search (fires only on failure)</h2>
-  <p class="sub">Fires only when the search mechanically failed — backend errors, or nothing usable came back. Not a thinness judgment (that's P2's). Renamed accordingly.</p>
+  <h2>P1 — the search review (owner upgrade: was failure-only)</h2>
+  <p class="sub">Today this stop fires only when the search mechanically failed (backend errors / nothing usable) — on every healthy run, the user's first chance to steer the corpus comes after screening and appraisal have already spent effort on all of it. Upgraded: a <b>standing review of what the search collected</b>, right when redirecting is cheapest. Mechanical failure becomes a context variant of the same stop, not its own species.</p>
   <div class="duo">
     <div class="col today">
-      <p class="collabel">Today — "search_exception" (5 options, flat, verbatim copy)</p>
+      <p class="collabel">Today — "search_exception" (failure-only, 5 flat options, verbatim copy)</p>
       <div class="checkin">
         <span class="badge">Check-in · waiting on you</span>
         <h3>Search exception</h3>
-        <p class="ctx">(Deterministic render of the coverage record.)</p>
+        <p class="ctx">(Fires only on failure; healthy runs never stop here. Deterministic render of the coverage record.)</p>
         <div class="optwall">
           <div class="opt"><b>Deepen the search</b><span>Raise the <span class="jargon">acquisition depth rung</span> to search harder for sources.</span></div>
           <div class="opt"><b>Rescope the search filters</b><span>Change the recency / geography filters on the search; provide the new filters.</span></div>
@@ -278,24 +278,39 @@
       </div>
     </div>
     <div class="col proposed">
-      <p class="collabel">Proposed — "The search couldn't complete" (same 5, plain + grouped)</p>
+      <p class="collabel">Proposed — "Here's what the search collected" (every run)</p>
       <div class="checkin">
         <span class="badge">Check-in · waiting on you</span>
-        <h3>The search couldn't complete properly</h3>
-        <p class="ctx">One source database returned errors, and 3 usable documents came back. There isn't enough here to assess.</p>
+        <h3>The search collected 64 documents — worth a look before they're assessed</h3>
+        <p class="ctx">OpenAlex 41 · Overton 23, from 6 queries. A sample of what came back:</p>
+        <div class="shortlist">
+          <p>Collected sources · sample of 64</p>
+          <ul>
+            <li>Free childcare: why, who for and how? <em>· OpenAlex</em></li>
+            <li>Expansion of funded early learning and childcare to 1140 hours <em>· Overton</em></li>
+            <li>Building a Stronger Early Education and Childcare Workforce <em>· Overton</em></li>
+            <li>Written evidence: Early Years Wales (CPW0008) <em>· Overton</em></li>
+          </ul>
+          <p class="more">…browse all 64, and the queries used →</p>
+        </div>
         <div class="optwall">
-          <div class="opt primary"><b>Search harder</b><span>Widens and deepens the search across the same databases.</span></div>
+          <div class="opt primary"><b>Looks right — assess these</b><span>Screening starts on what came back.</span></div>
           <details class="optgroup">
-            <summary>Search differently <span class="chev"><span class="o">2 options +</span><span class="c">−</span></span></summary>
+            <summary>Expand or refine the search <span class="chev"><span class="o">3 options +</span><span class="c">−</span></span></summary>
             <div class="inner">
+              <div class="opt"><b>Search deeper</b><span>Widens and deepens the search across the same databases; new results are added.</span></div>
               <div class="opt"><b>Change the search scope</b><span>You set new date or geography limits; the search re-runs.</span></div>
               <div class="opt"><b>Guide the queries</b><span>You describe what to look for; new results are added to what came back.</span></div>
             </div>
           </details>
-          <div class="opt"><b>Continue with what came back</b><span>The run carries on; the report will say its evidence base is thin.</span></div>
+        </div>
+        <div class="freetext">
+          <p class="divide">or say it in your own words</p>
+          <div class="inputrow"><span class="ph">e.g. "too much grey literature — find more academic studies"</span><span class="send">Send</span></div>
         </div>
         <div class="metarow"><button>Change how often I'm asked</button><button>Stop the run</button></div>
       </div>
+      <p class="quiet" style="margin-top:8px">On mechanical failure, the same card leads with the failure instead: "The search couldn't complete properly — one source database returned errors and 3 usable documents came back", the primary becomes <b>Search harder</b>, and "Continue with what came back" carries its flag warning.</p>
     </div>
   </div>
 
@@ -389,11 +404,11 @@
     <p class="ctx" style="margin-top:8px">If part of a steer can't be honoured, the card says which part and why — it never silently drops half your instruction.</p>
   </div>
 
-  <h2>The open question: should P2 and P3 both pause by default?</h2>
-  <p class="sub">In moderate (default) mode both pause on every run — two stops around one component. Option: P2 becomes fired-only in moderate (it pauses only when its coverage triggers fire — thin themes, heavy screen-outs), so a routine run has one reading-list stop; a problematic one still gets both.</p>
+  <h2>The open question: how many stops in the default mode?</h2>
+  <p class="sub">With P1 upgraded to a standing search review, a moderate-mode run would stop at P1 · P2 · P3 · (Groups+P4) — four interruptions on a standard run, five questions on a deep one. Each is now small and single-subject, so this may be right ("more, smaller, clearer decisions"). The alternative trims P2 to fired-only in moderate: it pauses only when its triggers fire (too few relevant · quality collapse), since P1 now covers "search more" early and P3 carries an escape hatch back to reshaping the evidence base — but healthy runs would then lose the routine theme-review moment. One cell to rule on:</p>
   <table class="modes">
     <tr><th>Steer point</th><th>Frequent</th><th>Moderate (default)</th><th>Minimal</th></tr>
-    <tr><td>P1 search failure</td><td class="always">always</td><td class="fired">fired</td><td class="fired">fired</td></tr>
+    <tr><td>P1 search review <span class="quiet">(was failure-only)</span></td><td class="always">always</td><td class="change">fired → always?</td><td class="fired">fired</td></tr>
     <tr><td>P2 evidence base + themes</td><td class="always">always</td><td class="change">always → fired?</td><td class="fired">fired</td></tr>
     <tr><td>P3 reading list</td><td class="always">always</td><td class="always">always</td><td class="fired">fired</td></tr>
     <tr><td>Groups <span class="quiet">(deep only · new)</span></td><td class="always">always</td><td class="always">always</td><td class="fired">fired (grouping flags)</td></tr>
