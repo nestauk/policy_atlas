@@ -92,3 +92,31 @@ repo) never crosses. Notable encoded decisions:
 Where the mock-up and as-built 019–027 behaviour conflict, as-built behaviour
 wins (standing rule); the mock-up's *fictional* data details (stage names,
 counts, copy) are placeholders, not requirements.
+
+## 3. Real artefact shape (owner fidelity correction, 2026-08-03)
+
+The owner flagged that both mock-ups' section lists ("Key findings" · "How
+interventions compare" · "Key themes" · "Gaps in the evidence" …) are **not
+what a live synthesis produces**. Verified against the dev DB (live 027-check
+artefacts, `synthesis_result.blocks`):
+
+- Real shape: `key_findings` ("Key findings") + **~7–8 `standard` sections
+  with long, question-specific analytical titles** + `conclusions`
+  ("Conclusions"). Example (pupil-attendance artefact, 2026-07-29): "Direct
+  attendance support: mentoring, follow-up, and school-home collaboration" ·
+  "Strength and applicability of the evidence base for UK attendance
+  policy" · etc. `SectionRole = key_findings | standard | conclusions`.
+- **No themes / gaps / how-gathered sections exist in artefacts.** Themes are
+  a separate durable read-model surface; gaps are gap-typed claim annotations
+  inside sections.
+- `SectionOut.focus` is the **writing brief** ("Synthesize across UK and
+  comparator evidence on…"), not a reader summary — it must never render.
+  The prose's first sentence is the takeaway by prompt design and serves as
+  the collapsed summary.
+
+Consequences folded into the contract: strand 5 (summary = first sentence,
+never focus; sidebar designed for long real titles), strand 8 (themes as a
+data-driven component, no fake artefact section), and the fork-C mock-up
+rebuilt on the real attendance artefact (`mockup/tab-ia-options.html` rev 2).
+Any 028 mock-up or fixture work uses real or sanitized-real section lists,
+not invented ones.

@@ -84,12 +84,18 @@ PR landing, as strands:
    var change; the resize affordance stays).
 5. **Artefact navigation + progressive disclosure.** Sticky contents sidebar
    with scroll-spy on the evidence-base page (mock-up's sidebar variant; the
-   top-bar variant is not built); sections collapsible with an always-visible
-   one-line summary — `SectionOut.focus` where present, else the section's
-   own first sentence, never generated text; key findings + conclusions
-   default open, the rest collapsed (plan pins the exact defaults);
-   expand/collapse are real buttons with `aria-expanded`. Annotation spans
-   keep working on collapsed→expanded prose (render-only change).
+   top-bar variant is not built). The sidebar must work at the **real
+   section-list shape** (verified against live artefacts, 2026-08-03:
+   ~8–10 long question-specific titles — not the mock-ups' short generic
+   ones). Sections collapsible with an always-visible one-line summary =
+   **the section's own first sentence** (the synthesis prompt mandates
+   opening with the takeaway, so it *is* the summary; `SectionOut.focus` is
+   NOT used — live data shows it is the writing brief, "Synthesize
+   across…", which must never render to readers); key findings +
+   conclusions default open, the rest collapsed (plan pins the exact
+   defaults); expand/collapse are real buttons with `aria-expanded`.
+   Annotation spans keep working on collapsed→expanded prose (render-only
+   change).
 6. **Key-findings formatting** (fork B — prompt rev IN): the key-findings
    section emits scannable bullets instead of dense paragraphs — a **scoped
    rev of the synthesise section prompt for the key-findings role only**
@@ -106,13 +112,17 @@ PR landing, as strands:
    state; "Strength" → **"Evidence strength"**; row cleanup per the mock-up
    (venue under title, chip tones, count footer); **additive `theme` filter
    query param** + a theme select in the filter row.
-8. **Themes → sources + naming.** The artefact's themes section is labelled
-   "Key themes"; each theme row carries a "N documents →" affordance opening
-   the theme-filtered sources view; theme counts labelled "Documents"
-   consistently (journey card + artefact + landscape). One **naming pass**
-   consolidating stage/artefact labels across tabs, cards and empty states
-   (the plan carries the copy map: e.g. plan · analysis · evidence base ·
-   sources vocabulary used identically everywhere).
+8. **Themes → sources + naming.** Real artefacts have **no themes section**
+   (verified 2026-08-03) and none is faked: themes render as a
+   **data-driven page component** from the durable theme/grouping read
+   model, labelled "Key themes", wherever themes show (the journey's
+   discovered-themes card · the Landscape surface or the folded
+   gathered-section per fork C) — each theme row carries a "N documents →"
+   affordance opening the theme-filtered sources view; theme counts
+   labelled "Documents" consistently. One **naming pass** consolidating
+   stage/artefact labels across tabs, cards and empty states (the plan
+   carries the copy map: e.g. plan · analysis · evidence base · sources
+   vocabulary used identically everywhere).
 9. **Signposting.** The planning empty state names the flow (question → plan
    → run); the ready plan card carries the start affordance + expectation
    copy; post-run the completion card CTAs stay the canonical route into the
