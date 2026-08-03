@@ -59,6 +59,20 @@
   details.optgroup[open] summary .chev .c, details.optgroup:not([open]) summary .chev .o { display: none; }
   details.optgroup .inner { padding: 0 10px 10px; display: flex; flex-direction: column; gap: 7px; }
   details.optgroup .inner .opt { background: #fff; }
+  .freetext { margin-top: 12px; }
+  .freetext .divide { display: flex; align-items: center; gap: 10px; color: var(--grey); font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+  .freetext .divide::before, .freetext .divide::after { content: ""; height: 1px; flex: 1; background: var(--line); }
+  .freetext .inputrow { display: flex; gap: 8px; border: 1px solid var(--line2); background: #fff; padding: 8px 8px 8px 12px; }
+  .freetext .inputrow span.ph { flex: 1; color: #8a8a8e; font-size: 14px; padding: 4px 0; }
+  .freetext .inputrow .send { border: none; background: var(--blue); color: #fff; font-size: 13px; font-weight: 700; padding: 8px 14px; clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 0 100%); }
+  .compileflow { margin-top: 10px; border: 1px solid var(--line); background: var(--paper); padding: 10px 12px; }
+  .compileflow .you { font-size: 13.5px; color: var(--ink); background: #f5f5ff; border: 1px solid #ececff; padding: 7px 10px; }
+  .compileflow .them { margin-top: 8px; font-size: 13.5px; }
+  .compileflow .them b { color: var(--navy); display: block; margin-bottom: 4px; }
+  .compileflow .them ul { margin: 0; padding-left: 18px; }
+  .compileflow .btns { margin-top: 9px; display: flex; gap: 8px; }
+  .compileflow .btns .yes { border: none; background: var(--blue); color: #fff; font-size: 12.5px; font-weight: 700; padding: 7px 12px; clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%); }
+  .compileflow .btns .no { border: 1px solid var(--line2); background: #fff; color: var(--navy); font-size: 12.5px; font-weight: 600; padding: 7px 12px; }
   .metarow { margin-top: 11px; display: flex; gap: 16px; font-size: 12.5px; }
   .metarow button { border: none; background: none; padding: 0; font: inherit; font-size: 12.5px; color: var(--grey); text-decoration: underline; cursor: pointer; }
   .shortlist { margin-top: 11px; border: 1px solid var(--line); background: var(--paper); padding: 10px 12px; }
@@ -232,6 +246,10 @@
           <p>Suggested for this run</p>
           <div class="opt"><b>Improve text basis first — only 4 of 15 selected records have ingested full text</b><span>Why: the current selection is broad, but the next steps would rely heavily on abstracts because 8 records failed fetch and 3 failed parsing.</span></div>
         </div>
+        <div class="freetext">
+          <p class="divide">or say it in your own words</p>
+          <div class="inputrow"><span class="ph">e.g. "drop the two US-only studies and read more on funding reform"</span><span class="send">Send</span></div>
+        </div>
         <div class="metarow"><button>Change how often I'm asked</button><button>Stop the run</button></div>
       </div>
       <p class="quiet" style="margin-top:8px">"Keep only themes I name" and "leave out documents" moved to P2, where the pool is decided. The two "how they're read" options are <b>gone from the floor</b> (owner, 2026-08-03): implementation-context extraction is <em>already the default</em> on deep analyses (as-built depth table extracts both finding kinds), and "refresh extraction" only applies on re-runs where earlier findings were abstract-only — a rare condition the orchestrator's <em>suggested</em> options already surface with a why line when it actually holds. The suggested block keeps that job.</p>
@@ -351,6 +369,24 @@
       </div>
       <p class="quiet" style="margin-top:8px">One interruption, two cards in sequence: groups settle first because the section plan is drawn from them; "Keep these groups" flows straight into the report plan. If the user regroups, grouping re-runs and the groups card returns with the new clusters before the plan is drawn. Machinery note: this extends the 024 lattice with a deep-only groups steer point at the after-group boundary (its "fired" triggers already exist — grouping_flag_triggers) and drops the regroup options from P4's floor.</p>
     </div>
+  </div>
+
+  <h2>Your own words — already built, just hidden</h2>
+  <p class="sub">Every check-in already accepts free text: the steering router compiles what you type into concrete changes, shows you exactly what would change, and applies it only on your confirm (task 024's confirm-gate). Today it's a small single-line input at the bottom of a crowded card — most testers never saw it. Proposed: it renders as a composer-style row on <b>every</b> card ("or say it in your own words", as on the P3 card above), and the compile→confirm exchange renders as a mini-thread on the card:</p>
+  <div class="checkin" style="max-width:560px">
+    <span class="badge">Check-in · your steer</span>
+    <div class="compileflow">
+      <div class="you">"drop the two US-only studies and read more on funding reform"</div>
+      <div class="them">
+        <b>Here's what that would change — apply it?</b>
+        <ul>
+          <li>2 named documents leave the pool (Smith 2021, Chen 2020)</li>
+          <li>The reading list is re-picked with "funding reform" prioritised</li>
+        </ul>
+      </div>
+      <div class="btns"><span class="yes">Apply and continue</span><span class="no">Discard — back to the options</span></div>
+    </div>
+    <p class="ctx" style="margin-top:8px">If part of a steer can't be honoured, the card says which part and why — it never silently drops half your instruction.</p>
   </div>
 
   <h2>The open question: should P2 and P3 both pause by default?</h2>
