@@ -404,6 +404,9 @@
     <p class="ctx" style="margin-top:8px">If part of a steer can't be honoured, the card says which part and why — it never silently drops half your instruction.</p>
   </div>
 
+  <h2>What "fired" means</h2>
+  <p class="sub"><b>always</b> = every run stops at this point. <b>fired</b> = the run stops only when one of the point's pre-declared warning signals went off — deterministic checks over persisted records, with fixed thresholds — or when the orchestrator's boundary review promotes the stop. <b>off</b> = never stops (unattended). The signal sets per point: <b>P1</b> — the search itself failed (database errors / zero usable documents). <b>P2</b> — too few relevant documents survived screening · ≥70% of appraised documents scored weak · screening quality collapsed (≥20% failed or ≥50% demoted). <b>P3</b> — a large theme was excluded from the reading list · something you nominated didn't make it · the pool was thin. <b>Groups</b> — the grouping run raised flags. Every boundary also checks the universal signal: an upstream step failed or was skipped. A "fired" cell therefore means: healthy runs flow through silently; a run with something off stops and shows you why.</p>
+
   <h2>The open question: how many stops in the default mode?</h2>
   <p class="sub">With P1 upgraded to a standing search review, a moderate-mode run would stop at P1 · P2 · P3 · (Groups+P4) — four interruptions on a standard run, five questions on a deep one. Each is now small and single-subject, so this may be right ("more, smaller, clearer decisions"). The alternative trims P2 to fired-only in moderate: it pauses only when its triggers fire (too few relevant · quality collapse), since P1 now covers "search more" early and P3 carries an escape hatch back to reshaping the evidence base — but healthy runs would then lose the routine theme-review moment. One cell to rule on:</p>
   <table class="modes">
