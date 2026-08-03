@@ -200,7 +200,10 @@ PR landing, as strands:
 11. **Small wins.** A bounded sweep listed at plan time and reviewed at the
     plan 🛑 (candidates from the mock-up: snapshot-cell navigation into
     filtered views where missing, findings-tab gated empty-state copy,
-    check-in card copy tightening). Nothing lands unlisted.
+    check-in card copy tightening; from the interview list's coverage
+    check: **project settings in the global header** — rename/archive
+    reachable from inside a project, not only from the landing cards).
+    Nothing lands unlisted.
 12. **Section flow** (owner, 2026-08-03 — the interviews' root confusion:
     readers can't tell whether the overview "What the evidence shows…"
     section connects to the per-theme sections that follow; the transition
