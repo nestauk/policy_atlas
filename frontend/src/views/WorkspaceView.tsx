@@ -5,29 +5,37 @@ import { useDocumentTitle } from "../lib/title";
 import { useRunStream } from "../store";
 import { NotFoundView } from "../ui/feedback/NotFoundView";
 import { PlanningPane } from "./workspace/PlanningPane";
-import { PlanPane } from "./workspace/PlanPane";
 import { RailToggle, useRail } from "./workspace/rail";
 import { RunPane } from "./workspace/RunPane";
 
 /**
- * The workspace: planning conversation left, analysis right. The chat pane
- * holds the room while planning (55/45) and settles to an even split once an
- * analysis exists (50/50, 028 strand 4) — driven by run presence, not a
- * toggle. The left pane is a collapsible/resizable rail (027 strand 3); a user resize
- * pins the width for the session, collapse leaves a slim re-open strip.
+ * The workspace. While planning (no run yet) the conversation IS the surface:
+ * a centred single-column chat — parts, scope chips and the ready plan card
+ * all live inline, and no right pane competes for attention (028 strand 3;
+ * the interviews' split-attention finding). Once an analysis exists the
+ * two-pane layout returns: chat left, journey right, defaulting to an even
+ * 50/50 split (028 strand 4) with the 027 collapsible/resizable rail.
  */
 export function WorkspaceView() {
   const { projectId = "" } = useParams();
   const project = useProject(projectId);
   const stream = useRunStream(projectId);
   const hasRun = stream.run !== null;
-  const rail = useRail(hasRun ? "50%" : "55%");
+  const rail = useRail("50%");
   useDocumentTitle(project.data?.name, "Workspace");
 
   // Query errors are the raw envelope body ({error: {code}}), thrown as-is.
   const errorCode = (project.error as { error?: { code?: string } } | null)?.error?.code;
   if (project.isError && errorCode === "not_found") {
     return <NotFoundView />;
+  }
+
+  if (!hasRun) {
+    return (
+      <main className="mx-auto min-h-[calc(100svh-58px)] max-w-[760px] bg-paper lg:border-x lg:border-line">
+        <PlanningPane projectId={projectId} runStatus={stream.run?.status} stream={stream} />
+      </main>
+    );
   }
 
   // minmax(0, …) on both grid tracks: a bare 1fr sizes to max-content and
@@ -54,11 +62,7 @@ export function WorkspaceView() {
         )}
       </div>
       <div className="min-w-0 bg-ground">
-        {hasRun ? (
-          <RunPane projectId={projectId} stream={stream} />
-        ) : (
-          <PlanPane projectId={projectId} />
-        )}
+        <RunPane projectId={projectId} stream={stream} />
       </div>
     </main>
   );

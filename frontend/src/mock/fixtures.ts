@@ -33,13 +33,19 @@ export const mockFunnel: components["schemas"]["FunnelOut"] = {
   cited: 12,
 };
 
-/** Every landscape distribution totals 46: the screened-in, not found, count. */
+export const MOCK_THEME_ID_SCHOOL_FOOD = "30000000-0000-4000-8000-000000000001";
+export const MOCK_THEME_ID_ACTIVE_TRAVEL = "30000000-0000-4000-8000-000000000002";
+
+/** Every landscape distribution totals 46: the screened-in, not found, count.
+ *  "Family support" carries no `theme_id` on purpose — a legacy
+ *  characterisation predating 028 strand 8, which the sources theme filter
+ *  must omit rather than offer a selection that can never round-trip. */
 export const mockLandscape: components["schemas"]["LandscapeOut"] = {
   evidence_types: { "Systematic review": 20, "Local evaluation": 14, "Policy analysis": 12 },
   years: { "2019": 6, "2020": 7, "2021": 9, "2022": 10, "2023": 8, "2024": 6 },
   themes: [
-    { name: "School food environments", size: 19, description: "Meal standards, free breakfast, and food access." },
-    { name: "Active travel", size: 15, description: "Safer walking and cycling for the school journey." },
+    { name: "School food environments", size: 19, description: "Meal standards, free breakfast, and food access.", theme_id: MOCK_THEME_ID_SCHOOL_FOOD },
+    { name: "Active travel", size: 15, description: "Safer walking and cycling for the school journey.", theme_id: MOCK_THEME_ID_ACTIVE_TRAVEL },
     { name: "Family support", size: 12, description: "Affordable cooking and community referral support." },
   ],
   geographies: { "Tower Hamlets": 22, "London": 14, "Comparable UK cities": 10 },
@@ -56,6 +62,18 @@ export const mockEvidence: components["schemas"]["EvidenceItemOut"][] = [
   { source_id: "10000000-0000-4000-8000-000000000008", title: "Making healthy choices easier near schools", year: 2023, venue: "Nesta", origin: "Uploaded", status: "cited", evidence_type: "Policy analysis", cited: true },
   { source_id: "10000000-0000-4000-8000-000000000009", title: "Children's food environment survey", year: null, venue: null, origin: "Uploaded", status: "unavailable", status_reason: "Full text could not be obtained", cited: false },
 ];
+
+/** Theme membership for the mock evidence rows, keyed by theme id — the
+ *  real `EvidenceItemOut` carries no theme field (the server joins against
+ *  `source_tag` internally), so the sources-view theme filter has nothing
+ *  to key off in mock mode without this. `mock/api.ts`'s evidence handler
+ *  reads this to honour the `theme` query param honestly. */
+export const mockEvidenceThemeIds: Record<string, string[]> = {
+  [mockEvidence[2].source_id]: [MOCK_THEME_ID_SCHOOL_FOOD],
+  [mockEvidence[4].source_id]: [MOCK_THEME_ID_SCHOOL_FOOD],
+  [mockEvidence[7].source_id]: [MOCK_THEME_ID_SCHOOL_FOOD],
+  [mockEvidence[6].source_id]: [MOCK_THEME_ID_ACTIVE_TRAVEL],
+};
 
 export const mockSourceDossiers: Record<string, components["schemas"]["SourceDossierOut"]> = {
   [mockEvidence[2].source_id]: {
@@ -191,10 +209,11 @@ export const mockCheckIn: components["schemas"]["CheckInOut"] = {
   stage: "synthesise",
   render: "The screened-in set has strong school-food coverage but fewer local active-travel evaluations. Choose how the synthesis should handle that balance, or add your own free-text steer.",
   options: [
-    { id: "add-local-context", label: "Add local context", description: "Tell us which local programme or neighbourhood context to prioritise.", requires_user_input: true, suggested: false },
-    { id: "suggested-balanced", label: "Use the balanced synthesis", description: "Lead with the strongest evidence and name the local evidence gap.", requires_user_input: false, suggested: true },
+    { id: "add-local-context", label: "Add local context", description: "Tell us which local programme or neighbourhood context to prioritise.", requires_user_input: true, suggested: false, why: null, endorsement: null },
+    { id: "suggested-balanced", label: "Use the balanced synthesis", description: "Lead with the strongest evidence and name the local evidence gap.", requires_user_input: false, suggested: true, why: null, endorsement: null },
   ],
   triggers: [{ trigger: "thin_local_evidence", detail: { local_sources: 5, screened_in: 46 } }],
+  bundle: null,
   segment_reentry_allowed: true,
   rerun_component: "acquire",
   status: "pending",
@@ -331,9 +350,19 @@ export function seedPlanningTurns(): components["schemas"]["PlanningTranscriptTu
       client_turn_id: MOCK_PLANNING_TURN_IDS.first,
       turn_index: 1,
       user_message: "Which local policy approaches reduce childhood obesity for primary-school children?",
-      reply: "I can look at school-food, active-travel and family-support levers for Tower Hamlets. Want me to keep it UK-focused?",
-      suggestions: ["Keep it UK-focused", "Widen to comparable cities"],
-      part: null,
+      reply: "Here's how I've read your question.",
+      suggestions: [],
+      part: {
+        id: "question",
+        step_label: "Plan · 1 of 3 · the question",
+        title: "Which local policy approaches reduce childhood obesity for primary-school children?",
+        body: "Read as a policy and service-delivery question — I'll search academic and grey literature.",
+        chips: null,
+        options: [
+          { id: "confirm", label: "That's my question", sub: null, primary: true, reason: null },
+          { id: "refine", label: "Refine it", sub: null, primary: false, reason: null },
+        ],
+      },
       status: "completed",
       created_at: "2026-07-18T09:02:00Z",
       completed_at: "2026-07-18T09:02:04Z",
@@ -341,10 +370,23 @@ export function seedPlanningTurns(): components["schemas"]["PlanningTranscriptTu
     {
       client_turn_id: MOCK_PLANNING_TURN_IDS.second,
       turn_index: 2,
-      user_message: "Keep it UK-focused, rapid pass, and check both academic and policy sources.",
-      reply: "Plan's ready: a rapid search across academic and policy sources, a standard write-up, and a check-in whenever something needs your judgement.",
+      user_message: "That's my question\n\n[confirm part=question option=confirm]",
+      reply: "What counts as in-scope? Edit any chip directly.",
       suggestions: [],
-      part: null,
+      part: {
+        id: "scope",
+        step_label: "Plan · 2 of 3 · scope",
+        title: "What counts as in-scope?",
+        body: "Dates filter the search itself; setting and population become screening rules judged per document.",
+        chips: [
+          { label: "UK primary", kind: "text", value: "UK as the primary study setting" },
+          { label: "Since 2016", kind: "date_range", value: '{"after": "2016-01-01", "before": null}' },
+        ],
+        options: [
+          { id: "confirm", label: "Looks right", sub: null, primary: true, reason: null },
+          { id: "change", label: "Add or change a constraint", sub: null, primary: false, reason: null },
+        ],
+      },
       status: "completed",
       created_at: "2026-07-18T09:03:10Z",
       completed_at: "2026-07-18T09:03:16Z",

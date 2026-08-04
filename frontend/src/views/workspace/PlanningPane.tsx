@@ -23,6 +23,8 @@ import { ReauthRedirect } from "../../ui/feedback";
 import { groupSearchDecisions } from "../decisionsPresentation";
 import { AnsweredCheckIn } from "./AnsweredCheckIn";
 import { CheckInCard } from "./CheckInCard";
+import { PartCard, type PartState, confirmTarget, derivePartStates } from "./PartCard";
+import { PlanCard } from "./PlanCard";
 import { COMPONENT_LABEL } from "./planVocabulary";
 
 /** The server page-size cap; one planning conversation fits comfortably. */
@@ -153,16 +155,36 @@ function DurableTurn({
   isLatest,
   onRetry,
   retryDisabled,
+  partState,
+  onSend,
+  onPrefill,
 }: {
   turn: PlanningThreadTurn;
   isLatest: boolean;
   onRetry: (input: { message: string; clientTurnId: string }) => void;
   retryDisabled: boolean;
+  partState: PartState | undefined;
+  onSend: (message: string) => void;
+  onPrefill: (message: string) => void;
 }) {
+  // A button-confirm turn's record is the ✓ on its part card — the canned
+  // marker bubble would only duplicate it (binding record: planning-stage).
+  const isConfirmTurn = confirmTarget(turn.user_message) !== null;
   return (
     <div className="space-y-3">
-      <UserBubble text={turn.user_message} />
-      {turn.status === "completed" && turn.reply !== null && <PlannerBubble text={turn.reply} />}
+      {!isConfirmTurn && <UserBubble text={turn.user_message} />}
+      {turn.status === "completed" && turn.reply !== null && turn.reply !== "" && (
+        <PlannerBubble text={turn.reply} />
+      )}
+      {turn.part != null && partState !== undefined && (
+        <PartCard
+          part={turn.part}
+          state={partState}
+          disabled={retryDisabled}
+          onSend={onSend}
+          onPrefill={onPrefill}
+        />
+      )}
       {turn.status === "pending" && (
         <p role="status" className="mr-8 px-3.5 text-caption text-grey">
           This turn didn't finish — it will retry or expire shortly.
@@ -326,6 +348,7 @@ export function PlanningPane({
   const thread: PlanningThreadItem[] = composePlanningThread(durableTurns, boundaries, runDecisions);
   const latestTurnIndex =
     durableTurns.length > 0 ? Math.max(...durableTurns.map((turn) => turn.turn_index)) : null;
+  const partStates = derivePartStates(durableTurns);
 
   const runActive = runStatus === "running" || runStatus === "paused";
   const composerDisabled = runActive || transcript.isSubmitting;
@@ -386,6 +409,9 @@ export function PlanningPane({
               isLatest={item.turn.turn_index === latestTurnIndex}
               onRetry={send}
               retryDisabled={composerDisabled}
+              partState={partStates.get(item.turn.turn_index)}
+              onSend={(text) => send({ message: text, clientTurnId: crypto.randomUUID() })}
+              onPrefill={setMessage}
             />
           ) : (
             <RunBlock
@@ -458,6 +484,10 @@ export function PlanningPane({
               </button>
             ))}
           </div>
+        )}
+
+        {!transcript.isSubmitting && (
+          <PlanCard projectId={projectId} runActive={runActive} />
         )}
 
         {stream.pendingCheckIn !== null && (
