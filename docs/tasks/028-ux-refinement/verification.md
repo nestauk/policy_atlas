@@ -14,9 +14,9 @@ Evidence for the 028 build (steps 5–6). Public-safe. Filled at step 6;
 | `make verify` (phase D + F.1–F.3 exit — runner-adjacent gate) | pass | after the 15-test deliberate fallout fix (below) |
 | backend runtime/api/synthesis/core suites (G.1 exit) | pass | 907 passed; one SSE backlog load-flake, passes isolated (below) |
 | `cd frontend && pnpm typecheck && pnpm lint && pnpm test` | pass | 168/168 after F.5 + naming pass |
-| `pnpm e2e` (mock journey, updated) | pass | see § e2e |
-| `make fe-api-smoke` | pass | see § e2e |
-| `make verify` (step-6 exit) | pass | final gate on the completed tree |
+| `pnpm e2e` (mock journey, updated) | pass | 6/6, twice, under `--workers=1` (default 4-worker mode is load-sensitive on this box — noted below) |
+| `make fe-api-smoke` | pass | 3/3 against the real API in stub mode |
+| `make verify` (step-6 exit) | pass | fully green on the final tree (fourth run; the first three each tripped one load/isolation-sensitive test — see below) |
 
 ## Checks beyond the build
 
@@ -136,10 +136,16 @@ its job):
    answer refusal. Needs a fresh look at useRunStream's reconnect policy —
    flagged, not hot-patched (027 substrate).
 
-After the fix the walk resumed and completed; terminal-state verification
-(edited section title in the artefact, summaries) was completed via the
-API read models rather than re-driving a fresh ~25-min browser leg —
-recorded honestly as the leg's bounded scope.
+After the fix the walk resumed and **succeeded**. Terminal state verified
+via the API read models (bounded scope — no fresh ~25-min browser re-leg):
+the artefact's 7 ordinary section titles **exactly match the submitted
+displayed list** (the fixed P4 submit mechanism proven live end-to-end;
+the clamped list was re-submitted through the `edit_sections` channel after
+the fix, superseding the spec's pre-fix edited list, so the "edited live"
+title itself is pinned by the P4 grammar/vitest coverage rather than this
+run's artefact); **artefact summary `verified`** this leg; 6 verified +
+3 honestly-failed block summaries (the failed ones carry markers and the
+first-sentence fallback).
 
 **Cost spot-checks:**
 - **Summariser + judge per-run delta (leg A, quick look):** summary layer =
@@ -283,6 +289,17 @@ the plan gate.
 - **prompt-guard scope gap** (found, recorded for step 8): the hash guard
   pins files whose NAME contains "prompt"; `synthesis_backend.py` carries
   prompt constants but is guarded only by its version-pin tests.
+- **Suite-level timing sensitivity on this machine** — three tests tripped
+  in full parallel runs and pass isolated: the SSE backlog test and the
+  full-text-ingest timeout test (genuine load-timing; both re-verified
+  green isolated), and the G.1 authored-option drop test (a REAL isolation
+  defect, fixed: `structlog.testing.capture_logs` cannot intercept loggers
+  already bound under the app's cached config, so its assertion was
+  order-dependent — the flaky log assertion was removed in favour of the
+  durable steering-event assertion it duplicated).
+- **Mock e2e worker parallelism** — the journey suite is reliable at
+  `--workers=1` on this box and load-sensitive at the default 4; CI runs on
+  a quieter machine, left as-is with this note.
 
 ## Public safety
 
